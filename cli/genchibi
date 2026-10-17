@@ -22,7 +22,7 @@ guard_exposure() {
 }
 start() {
   guard_exposure
-  if [ "$MODE" = docker ]; then docker compose up -d
+  if [ "$MODE" = docker ]; then docker compose up -d --quiet-pull 2>&1 | grep -vE "Creating|Created|Starting|Network|Container .* (Running|Waiting)" || true
   else
     running_native && { echo "Đang chạy (pid $(cat "$PIDF"))"; return; }
     mkdir -p logs

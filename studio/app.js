@@ -119,6 +119,11 @@
     clear($('actions'));
     clear($('view'));
     $('view').scrollTop = 0;
+    if (updateBadge && r.page !== 'update') {
+      $('view').appendChild(h('div', { class: 'banner acc', style: 'margin-bottom:12px' },
+        h('span', { text: 'Có bản mới ' + updateBadge + '. Dữ liệu được sao lưu trước khi cập nhật; bản mới lỗi sẽ tự chạy lại bản cũ.' }),
+        h('button', { class: 'btn sm', style: 'margin-left:auto', onclick: function () { go({ page: 'update' }); } }, 'Xem và cập nhật')));
+    }
     (PAGES[r.page] || PAGES.characters)(r);
   }
   function crumbs(parts) {
@@ -956,7 +961,7 @@
     function load() { Store.api('GET', 'api/update').then(render).catch(function (e) { clear(box); box.appendChild(h('div', { class: 'panel empty', text: e.message })); }); }
     function render(s) {
       clear(box);
-      updateBadge = !!s.available; renderNav();
+      updateBadge = s.available ? s.latest : false; renderNav();
       var auto = h('input', { type: 'checkbox', checked: !!(s.settings && s.settings.autoUpdate), onchange: function () {
         Store.api('PUT', 'api/settings', { autoUpdate: auto.checked }).then(function () { toast(auto.checked ? 'Đã bật tự cập nhật.' : 'Đã tắt tự cập nhật: chỉ báo khi có bản mới.'); });
       } });
@@ -1015,9 +1020,9 @@
   Store.init().then(function () {
     $('verChip').textContent = Store.mode === 'server' ? 'v' + String(Store.info.version).replace(/^v/, '') : 'xem thử';
     $('modeNote').textContent = Store.mode === 'server' ? 'Đang chạy trên máy · dữ liệu lưu cục bộ' : 'Bản xem thử · lưu trong trình duyệt';
-    if (Store.mode === 'server') Store.api('GET', 'api/update').then(function (s) { updateBadge = !!s.available; renderNav(); }).catch(function () {});
     var r = { page: 'characters' };
     try { var saved = JSON.parse(localStorage.getItem('gc-route') || 'null'); if (saved && PAGES[saved.page] && (saved.page !== 'character' || GC.ASSETS[saved.key])) r = saved; } catch (e) { /* bỏ qua */ }
-    go(r);
+    if (Store.mode === 'server') Store.api('GET', 'api/update').then(function (s) { updateBadge = s.available ? s.latest : false; go(r); }).catch(function () { go(r); });
+    else go(r);
   });
 })();
