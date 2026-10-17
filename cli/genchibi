@@ -26,6 +26,7 @@ start() {
   else
     running_native && { echo "Đang chạy (pid $(cat "$PIDF"))"; return; }
     mkdir -p logs
+    [ -n "${GC_EXTRA_CA:-}" ] && export NODE_EXTRA_CA_CERTS="$GC_EXTRA_CA"
     GC_HOME="$HOME_DIR" GC_PORT="$PORT" nohup node "$HOME_DIR/launcher.js" >> "$LOG" 2>&1 &
     echo $! > "$PIDF"; echo "Đã chạy (pid $!)"
   fi

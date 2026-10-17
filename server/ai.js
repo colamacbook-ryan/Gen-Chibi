@@ -7,6 +7,7 @@ const https = require('https');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { agentFor } = require('./net');
 
 const PROVIDERS = {
   openrouter: { label: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', models: true, keyUrl: 'https://openrouter.ai/keys' },
@@ -20,7 +21,7 @@ function request(method, url, { headers = {}, body, timeout = 90000 } = {}) {
     const u = new URL(url);
     const mod = u.protocol === 'https:' ? https : http;
     const data = body ? Buffer.from(JSON.stringify(body)) : null;
-    const req = mod.request(u, { method, timeout, headers: Object.assign({ 'User-Agent': 'gen-chibi', Accept: 'application/json' }, data ? { 'Content-Type': 'application/json', 'Content-Length': data.length } : {}, headers) }, res => {
+    const req = mod.request(u, { method, timeout, agent: agentFor(url), headers: Object.assign({ 'User-Agent': 'gen-chibi', Accept: 'application/json' }, data ? { 'Content-Type': 'application/json', 'Content-Length': data.length } : {}, headers) }, res => {
       const chunks = [];
       res.on('data', c => chunks.push(c));
       res.on('end', () => {

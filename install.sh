@@ -100,8 +100,19 @@ GC_REPO=$REPO
 # Mở cho máy khác trong mạng: đặt GC_BIND=0.0.0.0, GC_ALLOWED_HOSTS=<tên máy> và GC_API_TOKEN=<chuỗi ngẫu nhiên dài>
 GC_API_TOKEN=
 GC_ALLOWED_HOSTS=
+# Proxy (lấy từ máy lúc cài, nếu có)
+HTTPS_PROXY=${HTTPS_PROXY:-${https_proxy:-}}
+NO_PROXY=${NO_PROXY:-${no_proxy:-}}
+GC_EXTRA_CA=
 EOF
   chmod 600 "$DIR/.env"
+  # chứng chỉ CA bổ sung của proxy công ty (nếu máy có): chép vào thư mục cài để cả Docker lẫn Node đọc được
+  if [ -n "${NODE_EXTRA_CA_CERTS:-}" ] && [ -f "$NODE_EXTRA_CA_CERTS" ]; then
+    mkdir -p "$DIR/certs"; cp "$NODE_EXTRA_CA_CERTS" "$DIR/certs/extra-ca.pem"
+    if [ "$MODE" = docker ]; then CA=/install/certs/extra-ca.pem; else CA="$DIR/certs/extra-ca.pem"; fi
+    sed -i.bak "s#^GC_EXTRA_CA=.*#GC_EXTRA_CA=$CA#" "$DIR/.env" && rm -f "$DIR/.env.bak"
+  fi
+  case "${HTTPS_PROXY:-${https_proxy:-}}" in *127.0.0.1*|*localhost*) [ "$MODE" = docker ] && printf "%s!%s Proxy chạy trên localhost không tới được từ trong Docker; sửa HTTPS_PROXY trong %s/.env nếu cần.\n" "$Y" "$N" "$DIR" ;; esac
   ok "Đã tạo .env (khoá mã hoá riêng cho máy này)"
 else
   sed -i.bak "s/^GC_MODE=.*/GC_MODE=$MODE/" "$DIR/.env" && rm -f "$DIR/.env.bak"

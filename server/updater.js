@@ -9,6 +9,7 @@ const https = require('https');
 const http = require('http');
 const crypto = require('crypto');
 const { extractTarGz } = require('./tar');
+const { agentFor } = require('./net');
 
 const RESTART_CODE = 75;
 
@@ -29,7 +30,7 @@ function newer(a, b) { // a > b ?
 function get(url, { json = false, maxBytes = 200 * 1024 * 1024, redirects = 5 } = {}) {
   return new Promise((resolve, reject) => {
     const mod = url.startsWith('https:') ? https : http;
-    const req = mod.get(url, { headers: { 'User-Agent': 'gen-chibi-updater', Accept: json ? 'application/vnd.github+json' : '*/*' }, timeout: 30000 }, res => {
+    const req = mod.get(url, { agent: agentFor(url), headers: { 'User-Agent': 'gen-chibi-updater', Accept: json ? 'application/vnd.github+json' : '*/*' }, timeout: 30000 }, res => {
       if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location && redirects > 0) {
         res.resume();
         return resolve(get(new URL(res.headers.location, url).toString(), { json, maxBytes, redirects: redirects - 1 }));

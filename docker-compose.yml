@@ -20,6 +20,10 @@ services:
       GC_API_TOKEN: ${GC_API_TOKEN:-}
       GC_ALLOWED_HOSTS: ${GC_ALLOWED_HOSTS:-}
       GC_REPO: ${GC_REPO:-colamacbook-ryan/Gen-Chibi}
+      # mạng công ty có proxy: đặt trong .env
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-}
+      NODE_EXTRA_CA_CERTS: ${GC_EXTRA_CA:-}
     ports:
       - "${GC_BIND:-127.0.0.1}:${GC_PORT:-7480}:7480"
     volumes:
