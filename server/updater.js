@@ -1,0 +1,183 @@
+// gen-chibi — bộ cập nhật: kiểm GitHub Releases, tải, kiểm SHA-256, giải nén, backup, chuyển phiên bản.
+// © 2026 Afi Labs — All rights reserved.
+// Không cầm docker.sock: app chỉ đổi con trỏ `current` rồi thoát mã 75; launcher khởi động lại,
+// tự kiểm sức khoẻ và rollback nếu bản mới hỏng (STD-06: auto-update + rollback).
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const https = require('https');
+const http = require('http');
+const crypto = require('crypto');
+const { extractTarGz } = require('./tar');
+
+const RESTART_CODE = 75;
+
+function semver(v) {
+  const m = String(v || '').replace(/^v/, '').match(/^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?/);
+  return m ? [+m[1], +m[2], +m[3], m[4] || ''] : null;
+}
+function newer(a, b) { // a > b ?
+  const x = semver(a), y = semver(b);
+  if (!x || !y) return false;
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i];
+  if (x[3] === y[3]) return false;
+  if (!x[3]) return true;   // bản chính thức > bản thử cùng số
+  if (!y[3]) return false;
+  return x[3] > y[3];
+}
+
+function get(url, { json = false, maxBytes = 200 * 1024 * 1024, redirects = 5 } = {}) {
+  return new Promise((resolve, reject) => {
+    const mod = url.startsWith('https:') ? https : http;
+    const req = mod.get(url, { headers: { 'User-Agent': 'gen-chibi-updater', Accept: json ? 'application/vnd.github+json' : '*/*' }, timeout: 30000 }, res => {
+      if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location && redirects > 0) {
+        res.resume();
+        return resolve(get(new URL(res.headers.location, url).toString(), { json, maxBytes, redirects: redirects - 1 }));
+      }
+      if (res.statusCode !== 200) { res.resume(); return reject(new Error('HTTP ' + res.statusCode + ' khi tải ' + url)); }
+      const chunks = []; let n = 0;
+      res.on('data', c => { n += c.length; if (n > maxBytes) { req.destroy(); reject(new Error('tệp quá lớn')); } else chunks.push(c); });
+      res.on('end', () => {
+        const buf = Buffer.concat(chunks);
+        if (!json) return resolve(buf);
+        try { resolve(JSON.parse(buf.toString('utf8'))); } catch (e) { reject(new Error('phản hồi không phải JSON')); }
+      });
+    });
+    req.on('timeout', () => req.destroy(new Error('hết thời gian chờ mạng')));
+    req.on('error', reject);
+  });
+}
+
+class Updater {
+  constructor({ home, version, repo, feedUrl, log }) {
+    this.home = home;
+    this.version = version;
+    this.repo = repo;
+    this.feedUrl = feedUrl || `https://api.github.com/repos/${repo}/releases/latest`;
+    this.log = log || console.log;
+    this.dataDir = path.join(home, 'data');
+    this.stateFile = path.join(this.dataDir, 'update-state.json');
+    this.historyFile = path.join(this.dataDir, 'update-history.json');
+    this.busy = false;
+    this.skipFile = path.join(this.dataDir, 'update-skip.json');
+    this.state = this.read(this.stateFile, {});
+    this.state.current = version;
+    // trạng thái đọc lại sau khi khởi động: tính lại "có bản mới" theo phiên bản đang chạy
+    this.state.available = !!this.state.latest && newer(this.state.latest, version) && !this.skipped(this.state.latest);
+  }
+  skipped(tag) { return this.read(this.skipFile, []).indexOf(tag) >= 0; }
+  read(f, def) { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return def; } }
+  write(f, v) { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f + '.tmp', JSON.stringify(v, null, 2)); fs.renameSync(f + '.tmp', f); }
+  history() { return this.read(this.historyFile, []); }
+  addHistory(e) { const h = this.history(); h.unshift(Object.assign({ at: new Date().toISOString() }, e)); this.write(this.historyFile, h.slice(0, 50)); }
+
+  status() {
+    const releases = this.listReleases();
+    return Object.assign({}, this.state, {
+      current: this.version, busy: this.busy, history: this.history(),
+      canRollback: !!this.target('previous'), previous: this.target('previous'), installed: releases
+    });
+  }
+  target(link) {
+    try { return path.basename(fs.readlinkSync(path.join(this.home, link))); } catch { return null; }
+  }
+  listReleases() {
+    try { return fs.readdirSync(path.join(this.home, 'releases')).filter(d => /^v\d/.test(d)).sort(); } catch { return []; }
+  }
+
+  async check() {
+    const r = await get(this.feedUrl, { json: true, maxBytes: 2 * 1024 * 1024 });
+    const tag = r.tag_name;
+    if (!semver(tag)) throw new Error('bản phát hành không có số hiệu hợp lệ');
+    const tar = (r.assets || []).find(a => /\.tar\.gz$/.test(a.name));
+    const sums = (r.assets || []).find(a => a.name === 'SHA256SUMS');
+    this.state = Object.assign(this.state, {
+      latest: tag, notes: String(r.body || '').slice(0, 20000), publishedAt: r.published_at || null,
+      lastCheck: new Date().toISOString(), skipped: this.skipped(tag),
+      available: newer(tag, this.version) && !!tar && !!sums && !this.skipped(tag),
+      newer: newer(tag, this.version) && !!tar && !!sums,
+      tarUrl: tar && tar.browser_download_url, tarName: tar && tar.name, sumsUrl: sums && sums.browser_download_url, error: null
+    });
+    this.write(this.stateFile, this.state);
+    return this.status();
+  }
+
+  // Tải + kiểm + giải nén + backup + đổi con trỏ. Trả về true nếu cần khởi động lại.
+  // force: áp cả bản từng bị bỏ qua (do lần trước tự rollback); chỉ dùng khi owner bấm tay
+  async apply({ force = false } = {}) {
+    if (this.busy) throw new Error('đang cập nhật');
+    await this.check();
+    const ok = this.state.available || (force && this.state.newer);
+    if (!ok) return { restart: false, message: this.state.skipped ? 'Bản ' + this.state.latest + ' đã bị bỏ qua vì lần trước chạy lỗi.' : 'Đang dùng bản mới nhất.' };
+    this.busy = true;
+    const tag = this.state.latest;
+    const relDir = path.join(this.home, 'releases', tag);
+    try {
+      const [tarBuf, sumsBuf] = await Promise.all([get(this.state.tarUrl), get(this.state.sumsUrl, { maxBytes: 1024 * 1024 })]);
+      const want = sumsBuf.toString('utf8').split('\n').map(l => l.trim().split(/\s+/)).find(p => p[1] && p[1].replace(/^\*/, '') === this.state.tarName);
+      if (!want) throw new Error('SHA256SUMS không có dòng cho ' + this.state.tarName);
+      const got = crypto.createHash('sha256').update(tarBuf).digest('hex');
+      if (got !== want[0].toLowerCase()) throw new Error('sai checksum: gói tải về không khớp SHA256SUMS');
+      const tmpTar = path.join(this.home, 'releases', '.' + tag + '.tar.gz');
+      const tmpDir = path.join(this.home, 'releases', '.' + tag + '.tmp');
+      fs.mkdirSync(path.dirname(tmpTar), { recursive: true });
+      fs.writeFileSync(tmpTar, tarBuf);
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      extractTarGz(tmpTar, tmpDir);
+      fs.rmSync(tmpTar, { force: true });
+      const ver = fs.readFileSync(path.join(tmpDir, 'VERSION'), 'utf8').trim();
+      if ('v' + ver.replace(/^v/, '') !== tag) throw new Error('VERSION trong gói (' + ver + ') khác tag ' + tag);
+      if (!fs.existsSync(path.join(tmpDir, 'server', 'main.js'))) throw new Error('gói thiếu server/main.js');
+      fs.rmSync(relDir, { recursive: true, force: true });
+      fs.renameSync(tmpDir, relDir);
+      const backup = this.backup('before-' + tag);
+      const previousBefore = this.target('previous');
+      this.switchTo(tag);
+      this.write(path.join(this.dataDir, 'update-pending.json'), { kind: 'update', from: 'v' + this.version.replace(/^v/, ''), to: tag, previousBefore, backup, at: new Date().toISOString() });
+      this.log('[updater] đã chuyển sang ' + tag + ', khởi động lại để chạy bản mới');
+      return { restart: true, message: 'Đã tải ' + tag + '. Đang khởi động lại…' };
+    } catch (e) {
+      this.state.error = e.message;
+      this.write(this.stateFile, this.state);
+      this.addHistory({ kind: 'update', from: this.version, to: tag, ok: false, error: e.message });
+      throw e;
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  rollback() {
+    const prev = this.target('previous');
+    if (!prev) throw new Error('không có bản cũ để chạy lại');
+    const cur = this.target('current');
+    this.backup('before-rollback-' + prev);
+    this.link('current', prev);
+    if (cur) this.link('previous', cur);
+    this.write(path.join(this.dataDir, 'update-pending.json'), { kind: 'rollback', from: cur, to: prev, at: new Date().toISOString() });
+    return { restart: true, message: 'Đang chạy lại ' + prev + '…' };
+  }
+
+  switchTo(tag) {
+    const cur = this.target('current');
+    if (cur && cur !== tag) this.link('previous', cur);
+    this.link('current', tag);
+    // launcher mới (nếu có) được launcher hiện tại tự thay ở lần khởi động con kế tiếp
+  }
+  link(name, tag) {
+    const p = path.join(this.home, name), tmp = p + '.tmp';
+    fs.rmSync(tmp, { force: true });
+    fs.symlinkSync(path.join('releases', tag), tmp);
+    fs.renameSync(tmp, p);
+  }
+  backup(label) {
+    const dir = path.join(this.home, 'backups', new Date().toISOString().replace(/[:.]/g, '-') + '-' + label);
+    fs.mkdirSync(dir, { recursive: true });
+    if (fs.existsSync(this.dataDir)) fs.cpSync(this.dataDir, path.join(dir, 'data'), { recursive: true });
+    // giữ 10 bản backup gần nhất
+    const all = fs.readdirSync(path.join(this.home, 'backups')).sort();
+    all.slice(0, Math.max(0, all.length - 10)).forEach(d => fs.rmSync(path.join(this.home, 'backups', d), { recursive: true, force: true }));
+    return path.basename(dir);
+  }
+}
+
+module.exports = { Updater, newer, semver, RESTART_CODE };

@@ -1,0 +1,11 @@
+<!doctype html><meta charset="utf-8"><title>grid</title>
+<style>body{margin:0;background:#f4f2ec;font:10px sans-serif}.g{display:grid;grid-template-columns:repeat(18,120px);gap:3px;padding:4px}.c{width:120px;height:132px;background:#fff;position:relative}.c span{position:absolute;left:2px;top:1px;z-index:2}</style>
+<div class="g" id="g"></div>
+<script src="../engine/core.js"></script><script src="../engine/render.js"></script>
+<script src="../kinds/character/afi.core.js"></script><script src="../kinds/character/afi.tamquoc.js"></script>
+<script>
+var GC=window.GenChibi;GC.render.injectCSS();var errs=[];var tier=new URLSearchParams(location.search).get('tier')||'image';
+GC.assets().forEach(function(a){GC.LIB.stateOrder.forEach(function(s){var d=document.createElement('div');d.className='c';d.innerHTML='<span>'+a.id.slice(0,8)+'·'+s+'</span>';g.appendChild(d);
+try{GC.render.mount(d,a,s,{tier:tier,force:true,still:true});}catch(e){errs.push(a.id+' '+s+' '+e.message)}})});
+window.__errs=errs;window.__gates=GC.assets().map(function(a){return a.id+': '+GC.gate(a).map(function(x){return x.id+'='+(x.ok?'ok':'FAIL '+x.detail)}).join(' | ')});
+</script>
