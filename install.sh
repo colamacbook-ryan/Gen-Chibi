@@ -132,8 +132,9 @@ for i in $(seq 1 60); do
   if curl -fsS "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1; then
     printf "\n%s✓ gen-chibi %s đang chạy%s\n" "$G" "$VER" "$N"
     printf "  Studio:  %shttp://localhost:%s%s\n" "$B" "$PORT" "$N"
-    printf "  Lệnh:    genchibi start|stop|status|update|logs|backup|restore|mcp|uninstall\n"
+    printf "  Lệnh:    genchibi start|stop|status|update|logs|backup|restore|mcp|expose|link|uninstall\n"
     printf "  MCP:     claude mcp add gen-chibi -- %s mcp\n" "$BIN/genchibi"
+    printf "  MCP qua Internet: genchibi expose <tên-miền>  (in ra link cho agent)\n"
     printf "  Tự cập nhật: bật (tắt trong Studio › Cập nhật)\n"
     exit 0
   fi

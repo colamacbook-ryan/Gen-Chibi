@@ -18,14 +18,23 @@ const VERSION = fs.readFileSync(path.join(APP, 'VERSION'), 'utf8').trim();
 const PORT = +(process.env.GC_PORT || 7480);
 const HOST = process.env.GC_LISTEN || '127.0.0.1';   // trong Docker đặt 0.0.0.0; cổng ngoài vẫn chỉ mở cho 127.0.0.1
 const API_TOKEN = process.env.GC_API_TOKEN || '';
-function tokenOk(t) {
-  const a = Buffer.from(String(t)), b = Buffer.from(API_TOKEN);
+// Link MCP có khoá (https://<tên miền>/mcp/<GC_MCP_KEY>): chỉ cấp quyền MCP, không mở Studio hay /api.
+// Dùng cho agent không đặt được header (Claude web/desktop Connectors). Đổi khoá: genchibi expose --rotate.
+const MCP_KEY = process.env.GC_MCP_KEY || '';
+if (MCP_KEY && !/^[A-Za-z0-9_-]{24,}$/.test(MCP_KEY)) { console.error('GC_MCP_KEY phải dài ít nhất 24 ký tự [A-Za-z0-9_-].'); process.exit(2); }
+const PUBLIC_URL = String(process.env.GC_PUBLIC_URL || '').replace(/\/+$/, '');
+function safeEq(x, y) {
+  const a = Buffer.from(String(x)), b = Buffer.from(String(y));
   return a.length === b.length && require('crypto').timingSafeEqual(a, b);
 }
+function tokenOk(t) { return safeEq(t, API_TOKEN); }
 const IN_DOCKER = process.env.GC_IN_DOCKER === '1';
 const REPO = process.env.GC_REPO || 'colamacbook-ryan/Gen-Chibi';
 const EXTRA_HOSTS = String(process.env.GC_ALLOWED_HOSTS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 const ALLOWED_HOSTS = new Set(['localhost', '127.0.0.1', '::1'].concat(EXTRA_HOSTS));
+// "*.trycloudflare.com" = mọi tên con (tunnel tạm đổi tên mỗi lần chạy). Tên công cộng như vậy không trỏ được về 127.0.0.1 nên không mở lại lỗ DNS rebinding.
+const WILD_HOSTS = EXTRA_HOSTS.filter(h => /^\*\.[a-z0-9.-]+\.[a-z]+$/.test(h)).map(h => h.slice(1));
+function hostAllowed(h) { return ALLOWED_HOSTS.has(h) || WILD_HOSTS.some(suf => h.endsWith(suf) && h.length > suf.length); }
 if (EXTRA_HOSTS.length && !API_TOKEN) { console.error('GC_ALLOWED_HOSTS cần đi kèm GC_API_TOKEN (truy cập từ máy khác phải có token).'); process.exit(2); }
 const DATA = path.join(HOME, 'data');
 const SETTINGS = path.join(DATA, 'settings.json');
@@ -38,7 +47,7 @@ const store = new Store(DATA);
 const engine = loadEngine(APP);
 const updater = new Updater({ home: HOME, version: VERSION, repo: REPO, feedUrl: process.env.GC_FEED_URL, log });
 const ai = new AI({ dataDir: DATA, secrets: new Secrets(DATA), engine });
-const mcp = new MCP({ engine, store, version: VERSION });
+const mcp = new MCP({ engine, store, version: VERSION, system: { updater, restartSoon } });
 
 /* ---------------------------------------------------------------- tiện ích HTTP */
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.md': 'text/markdown; charset=utf-8' };
@@ -85,10 +94,18 @@ function originOK(req) {
 
 async function route(req, res) {
   const url = new URL(req.url, 'http://local');
-  const p = url.pathname, m = req.method;
+  let p = url.pathname;
+  const m = req.method;
+  // Link MCP có khoá: sai khoá trả 404 như đường không tồn tại
+  let viaLink = false;
+  const lm = /^\/mcp\/([A-Za-z0-9_-]+)$/.exec(p);
+  if (lm) {
+    if (!MCP_KEY || !safeEq(lm[1], MCP_KEY)) return fail(res, 404, 'không có');
+    p = '/mcp'; viaLink = true;
+  }
   // Chống DNS rebinding: chỉ phục vụ khi Host là máy cục bộ (hoặc tên được cho phép trong GC_ALLOWED_HOSTS)
   const hostName = String(req.headers.host || '').replace(/:\d+$/, '').replace(/^\[|\]$/g, '').toLowerCase();
-  if (!ALLOWED_HOSTS.has(hostName)) return fail(res, 403, 'Host không được phép');
+  if (!hostAllowed(hostName)) return fail(res, 403, 'Host không được phép');
   // Không có token thì chỉ phục vụ kết nối từ chính máy này (Host có thể bị giả, nên kiểm địa chỉ thật).
   // Trong Docker, cổng ngoài đã khoá 127.0.0.1 và CLI từ chối mở ra mạng khi thiếu token.
   if (!API_TOKEN && !IN_DOCKER && !/^(127\.|::1$|::ffff:127\.)/.test(String(req.socket.remoteAddress || ''))) return fail(res, 403, 'chỉ phục vụ máy cục bộ (đặt GC_API_TOKEN để mở cho máy khác)');
@@ -96,9 +113,9 @@ async function route(req, res) {
   // bằng địa chỉ hay Host (tunnel chạy trên chính máy này, có thể đổi Host thành localhost). Dấu vết duy nhất là
   // header chuyển tiếp: thấy nó mà chưa có token thì từ chối hết — không bao giờ để app mở ra Internet không khoá.
   const viaProxy = !!(req.headers['x-forwarded-for'] || req.headers.forwarded || req.headers['cf-connecting-ip'] || req.headers['x-real-ip']);
-  if (!API_TOKEN && viaProxy) return fail(res, 403, 'đang đi qua tunnel/proxy: phải đặt GC_API_TOKEN trước khi mở ra ngoài');
+  if (!API_TOKEN && viaProxy && !viaLink) return fail(res, 403, 'đang đi qua tunnel/proxy: phải đặt GC_API_TOKEN trước khi mở ra ngoài');
   // Đã đặt token: mọi /api (trừ health) và /mcp đều cần token, bất kể Host hay địa chỉ. Studio đăng nhập bằng token.
-  if (API_TOKEN && (p === '/mcp' || (p.startsWith('/api/') && p !== '/api/health'))) {
+  if (API_TOKEN && !viaLink && (p === '/mcp' || (p.startsWith('/api/') && p !== '/api/health'))) {
     const auth = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '') || String(req.headers['x-gc-token'] || '');
     if (!tokenOk(auth)) return fail(res, 401, 'cần token của bản cài');
   }
@@ -126,7 +143,7 @@ async function route(req, res) {
   }
 
   if (p === '/api/health') return send(res, 200, { ok: true, version: VERSION });
-  if (p === '/api/info') return send(res, 200, { version: VERSION, repo: REPO, home: HOME, port: PORT, settings: settings(), mcp: { http: '/mcp', stdio: 'genchibi mcp' } });
+  if (p === '/api/info') return send(res, 200, { version: VERSION, repo: REPO, home: HOME, port: PORT, settings: settings(), mcp: { http: '/mcp', stdio: 'genchibi mcp', link: PUBLIC_URL && MCP_KEY ? PUBLIC_URL + '/mcp/' + MCP_KEY : null } });
   if (p === '/api/settings' && m === 'PUT') {
     const b = await body(req);
     const s = settings();

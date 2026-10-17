@@ -13,6 +13,7 @@ const INSTRUCTIONS = [
   'gen-chibi dựng nhân vật chibi bằng code từ công thức JSON. Bạn (agent) viết công thức và kịch bản; hệ thống kiểm và dựng.',
   'Quy trình tạo nhân vật: get_catalog → (tuỳ chọn) get_character một nhân vật mẫu → viết asset mới → validate_character → sửa đến khi đạt → save_character → render_character để xem.',
   'Quy trình kịch bản: list_characters → get_director_schema → viết event JSON → validate_event → save_event. Owner mở Studio › Đạo diễn AI để diễn.',
+  'Phiên bản: get_app_version xem bản đang chạy và bản mới trên GitHub; update_app cập nhật ngay (tự rollback nếu bản mới lỗi); rollback_app quay về bản trước.',
   'Luật: chỉ dùng id có trong catalog; màu là mã hex; tham số nằm trong khoảng min–max; nhân vật mới lưu vào thư viện "local.my"; luôn khai báo identity.must (dấu nhận diện bắt buộc). Biểu cảm luôn khoa trương, hài, không máu.'
 ].join('\n');
 
@@ -26,7 +27,10 @@ const TOOLS = [
   { name: 'render_character', title: 'Dựng hình', description: 'Dựng SVG của một nhân vật ở một biểu cảm. Dùng key của nhân vật đã có, hoặc truyền asset chưa lưu để xem thử.', inputSchema: obj({ key: { type: 'string' }, asset: { type: 'object' }, state: { type: 'string', description: 'id biểu cảm, mặc định normal' }, crop: { type: 'boolean', description: 'true = khung avatar (đầu và vai)' } }) , annotations: { readOnlyHint: true } },
   { name: 'get_director_schema', title: 'Schema kịch bản', description: 'JSON Schema + hướng dẫn viết kịch bản sự kiện cho các diễn viên đã chọn.', inputSchema: obj({ cast: { type: 'array', items: { type: 'string' }, description: 'id diễn viên; bỏ trống = tất cả' } }), annotations: { readOnlyHint: true } },
   { name: 'validate_event', title: 'Kiểm kịch bản', description: 'Kiểm một kịch bản sự kiện theo schema (diễn viên, biểu cảm, động tác, hiệu ứng có trong kho).', inputSchema: obj({ event: { type: 'object' }, cast: { type: 'array', items: { type: 'string' } } }, ['event']), annotations: { readOnlyHint: true } },
-  { name: 'save_event', title: 'Lưu kịch bản', description: 'Kiểm rồi lưu kịch bản để owner mở và diễn trong Studio.', inputSchema: obj({ event: { type: 'object' }, author: { type: 'string', description: 'tên agent viết kịch bản' } }, ['event']) }
+  { name: 'save_event', title: 'Lưu kịch bản', description: 'Kiểm rồi lưu kịch bản để owner mở và diễn trong Studio.', inputSchema: obj({ event: { type: 'object' }, author: { type: 'string', description: 'tên agent viết kịch bản' } }, ['event']) },
+  { name: 'get_app_version', title: 'Phiên bản ứng dụng', description: 'Phiên bản đang chạy, bản mới nhất trên GitHub Releases, ghi chú phát hành, bản có thể quay về và lịch sử cập nhật. check=false để không hỏi GitHub.', inputSchema: obj({ check: { type: 'boolean', description: 'hỏi GitHub bản mới nhất (mặc định true)' } }), annotations: { readOnlyHint: true, openWorldHint: true } },
+  { name: 'update_app', title: 'Cập nhật ứng dụng', description: 'Tải bản mới nhất từ GitHub Releases (kiểm SHA-256, sao lưu dữ liệu) rồi khởi động lại. Bản mới lỗi thì launcher tự quay về bản cũ. Kết nối ngắt vài giây; gọi get_app_version sau ~15 giây để xác nhận. force=true áp cả bản từng bị bỏ qua vì lần trước chạy lỗi.', inputSchema: obj({ force: { type: 'boolean' } }), annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: true } },
+  { name: 'rollback_app', title: 'Quay về bản trước', description: 'Chạy lại bản cài trước đó (sao lưu dữ liệu trước khi đổi). Cần confirm = "ROLLBACK".', inputSchema: obj({ confirm: { type: 'string', enum: ['ROLLBACK'] } }, ['confirm']), annotations: { destructiveHint: true } }
 ];
 
 function text(t, extra) { return Object.assign({ content: [{ type: 'text', text: t }] }, extra || {}); }
@@ -35,10 +39,12 @@ function toolError(msg) { return { content: [{ type: 'text', text: msg }], isErr
 function clone(o) { return JSON.parse(JSON.stringify(o)); }
 
 class MCP {
-  constructor({ engine, store, version }) {
+  // system (tuỳ chọn): { updater, restartSoon } — để agent tự kiểm và cập nhật phiên bản
+  constructor({ engine, store, version, system }) {
     this.GC = engine;
     this.store = store;
     this.version = version;
+    this.system = system || null;
     if (!this.GC.PACKS[MY_PACK]) this.GC.pack({ id: MY_PACK, name: 'Của tôi', owner: 'Bạn', group: 'mine', visibility: 'private', license: 'Thuộc người tạo' }, () => {});
   }
   sync() { this.store.listAssets().forEach(a => this.GC.registerAsset(a.pack, clone(a))); }
@@ -158,8 +164,34 @@ class MCP {
         const rec = this.store.saveEvent(args.event, args.author || 'agent qua MCP');
         return json({ saved: true, id: rec.id, studio: 'Mở Studio › Đạo diễn AI › Kịch bản đã lưu › ' + args.event.title });
       }
+      case 'get_app_version': case 'update_app': case 'rollback_app': return this.appTool(name, args);
       default: return null;
     }
+  }
+  async appTool(name, args) {
+    const sys = this.system;
+    if (!sys || !sys.updater) return toolError('Bản chạy này không tự cập nhật được (đang chạy từ mã nguồn, không qua bản cài).');
+    const up = sys.updater;
+    const view = (st) => ({
+      current: 'v' + String(st.current).replace(/^v/, ''), latest: st.latest || null, available: !!st.available, skipped: !!st.skipped,
+      publishedAt: st.publishedAt || null, notes: st.notes ? String(st.notes).slice(0, 4000) : null, lastCheck: st.lastCheck || null, error: st.error || null,
+      previous: st.previous, canRollback: !!st.canRollback, busy: !!st.busy, history: (st.history || []).slice(0, 5)
+    });
+    if (name === 'get_app_version') {
+      if (args.check === false) return json(view(up.status()));
+      try { return json(view(await up.check())); }
+      catch (e) { return json(Object.assign(view(up.status()), { error: 'Không hỏi được GitHub: ' + e.message })); }
+    }
+    if (name === 'update_app') {
+      let r;
+      try { r = await up.apply({ force: args.force === true }); }
+      catch (e) { return toolError('Cập nhật thất bại, vẫn chạy bản hiện tại: ' + e.message); }
+      if (r.restart) sys.restartSoon();
+      return json(Object.assign({}, r, { next: r.restart ? 'Đợi ~15 giây rồi gọi get_app_version để xác nhận bản mới đang chạy.' : null }));
+    }
+    if (args.confirm !== 'ROLLBACK') return toolError('Cần confirm = "ROLLBACK".');
+    try { const r = up.rollback(); sys.restartSoon(); return json(r); }
+    catch (e) { return toolError(e.message); }
   }
   castOf(ids) {
     const all = this.GC.assets();

@@ -35,19 +35,32 @@ claude mcp add gen-chibi -- genchibi mcp                                  # stdi
 claude mcp add --transport http gen-chibi http://localhost:7480/mcp       # HTTP
 ```
 
-Tool: `get_catalog`, `list_characters`, `get_character`, `validate_character`, `save_character`, `render_character`, `get_director_schema`, `validate_event`, `save_event`.
+Tool: `get_catalog`, `list_characters`, `get_character`, `validate_character`, `save_character`, `render_character`, `get_director_schema`, `validate_event`, `save_event`, `get_app_version`, `update_app`, `rollback_app`.
 
-### Mở ra ngoài (tunnel, tên miền riêng)
-Mặc định app chỉ phục vụ chính máy này. Trước khi gắn tunnel (cloudflared, ngrok…) hoặc mở cho mạng LAN, **bắt buộc** đặt trong `~/gen-chibi/.env`:
+### Mở MCP ra Internet — một lệnh, một link
+Cần một tên miền do Cloudflare quản lý DNS (gói miễn phí là đủ).
 
 ```bash
-GC_API_TOKEN=<openssl rand -hex 32>
-GC_ALLOWED_HOSTS=chibi.example.com      # tên miền của tunnel
+genchibi expose chibi.example.com   # lần đầu mở trình duyệt đăng nhập Cloudflare một lần
 ```
 
-rồi `genchibi restart`. Khi có token: mọi `/api` và `/mcp` đều cần `Authorization: Bearer <token>`, Studio hiện màn đăng nhập. Chưa có token mà request đi qua tunnel/proxy (có `X-Forwarded-For`, `Cf-Connecting-Ip`…) thì server từ chối hết. Khuyên dùng: tunnel chỉ chuyển đường `/mcp`, Studio để ở máy.
+Lệnh tự làm hết: tạo Cloudflare Tunnel, trỏ DNS, **chỉ cho đường `/mcp` đi qua** (Studio ở lại máy), sinh khoá, bật token cho Studio, khởi động lại, thử gọi qua Internet, rồi in ra **link MCP**:
 
-Agent ở máy khác: `claude mcp add --transport http gen-chibi https://chibi.example.com/mcp --header "Authorization: Bearer <token>"`.
+```
+https://chibi.example.com/mcp/<khoá>
+```
+
+Agent dán link là nối được — không cần header:
+- Claude Code: `claude mcp add -s user --transport http gen-chibi <link>`
+- Claude web/desktop: Settings › Connectors › Add custom connector › dán link
+- Cursor và client khác: `{"mcpServers":{"gen-chibi":{"url":"<link>"}}}`
+
+Link chỉ cấp quyền MCP (không mở Studio hay cài đặt). Các lệnh khác: `genchibi link` (in lại link) · `genchibi link --check` · `genchibi expose --rotate` (đổi khoá, link cũ chết ngay) · `genchibi expose --off` · `genchibi expose --quick` (link tạm `*.trycloudflare.com`, không cần tài khoản, đổi mỗi lần khởi động lại). Docker: tunnel chạy thành container `gen-chibi-tunnel`, tự bật lại cùng app. Node: cần `cloudflared` trong PATH.
+
+Mở thủ công (tunnel khác, mạng LAN): đặt `GC_API_TOKEN` và `GC_ALLOWED_HOSTS` trong `.env`. Có token thì mọi `/api` và `/mcp` cần `Authorization: Bearer <token>`; chưa có token mà request đi qua tunnel/proxy thì server từ chối hết.
+
+### Agent tự cập nhật app
+Tool MCP `get_app_version` (bản đang chạy, bản mới nhất trên GitHub, ghi chú), `update_app` (tải bản mới, kiểm SHA-256, sao lưu, khởi động lại; bản mới lỗi thì tự quay về bản cũ), `rollback_app` (cần `confirm: "ROLLBACK"`).
 
 ## Core AI (LLM API)
 

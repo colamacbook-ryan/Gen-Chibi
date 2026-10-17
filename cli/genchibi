@@ -4,11 +4,16 @@
 set -euo pipefail
 HOME_DIR="${GC_HOME:-__GC_HOME__}"
 [ -d "$HOME_DIR" ] || { echo "Không thấy thư mục cài $HOME_DIR" >&2; exit 1; }
+# Lệnh đi theo bản cài: chuyển cho cli/genchibi của bản đang chạy, để bản cập nhật mang theo lệnh mới.
+INNER="$HOME_DIR/current/cli/genchibi"
+if [ -z "${GC_CLI_INNER:-}" ] && [ -f "$INNER" ]; then GC_CLI_INNER=1 GC_HOME="$HOME_DIR" exec bash "$INNER" "$@"; fi
 cd "$HOME_DIR"
 set -a; [ -f .env ] && . ./.env; set +a
 MODE="${GC_MODE:-docker}"; PORT="${GC_PORT:-7480}"
 URL="http://127.0.0.1:$PORT"
 PIDF="$HOME_DIR/logs/launcher.pid"; LOG="$HOME_DIR/logs/gen-chibi.log"
+TDIR="$HOME_DIR/tunnel"; TPID="$HOME_DIR/logs/tunnel.pid"; TLOG="$HOME_DIR/logs/tunnel.log"
+CF_IMAGE="${GC_CF_IMAGE:-cloudflare/cloudflared:2026.9.3}"
 
 api() { curl -fsS -X "$1" -H 'X-GC-Request: 1' -H 'Content-Type: application/json' ${GC_API_TOKEN:+-H "Authorization: Bearer $GC_API_TOKEN"} ${3:+-d "$3"} "$URL$2"; }
 running_native() { [ -f "$PIDF" ] && kill -0 "$(cat "$PIDF")" 2>/dev/null; }
@@ -22,24 +27,32 @@ guard_exposure() {
 }
 start() {
   guard_exposure
-  if [ "$MODE" = docker ]; then docker compose up -d --quiet-pull 2>&1 | grep -vE "Creating|Created|Starting|Network|Container .* (Running|Waiting)" || true
+  if [ "$MODE" = docker ]; then sync_compose; docker compose up -d --quiet-pull 2>&1 | grep -vE "Creating|Created|Starting|Network|Container .* (Running|Waiting)" || true
   else
     running_native && { echo "Đang chạy (pid $(cat "$PIDF"))"; return; }
     mkdir -p logs
     [ -n "${GC_EXTRA_CA:-}" ] && export NODE_EXTRA_CA_CERTS="$GC_EXTRA_CA"
     GC_HOME="$HOME_DIR" GC_PORT="$PORT" nohup node "$HOME_DIR/launcher.js" >> "$LOG" 2>&1 &
     echo $! > "$PIDF"; echo "Đã chạy (pid $!)"
+    tunnel_start
   fi
 }
 stop() {
   if [ "$MODE" = docker ]; then docker compose stop
-  elif running_native; then kill "$(cat "$PIDF")"; rm -f "$PIDF"; echo "Đã dừng"
-  else echo "Không chạy"; fi
+  else
+    tunnel_stop
+    if running_native; then kill "$(cat "$PIDF")"; rm -f "$PIDF"; echo "Đã dừng"; else echo "Không chạy"; fi
+  fi
 }
 status() {
   local h; h="$(curl -fsS "$URL/api/health" 2>/dev/null || true)"
   if [ -n "$h" ]; then echo "● đang chạy · v$(echo "$h" | json version | sed 's/^v//') · $URL · chế độ $MODE"; else echo "○ không chạy · chế độ $MODE"; fi
   echo "  bản cài: $(cd releases 2>/dev/null && ls | tr '\n' ' ')· đang dùng $(basename "$(readlink current)")"
+  case "${GC_TUNNEL:-}" in
+    named) echo "  MCP ra ngoài: ${GC_PUBLIC_URL:-?} (genchibi link để xem link nối)" ;;
+    quick) echo "  MCP ra ngoài: tunnel tạm $(quick_url) (genchibi link)" ;;
+    *) echo "  MCP ra ngoài: tắt (genchibi expose <tên-miền> để mở)" ;;
+  esac
 }
 update() {
   echo "Kiểm tra phiên bản…"
@@ -77,10 +90,191 @@ mcp() {
 logs() { if [ "$MODE" = docker ]; then docker compose logs -f --tail 200; else tail -n 200 -f "$LOG"; fi; }
 open_ui() { local u="http://localhost:$PORT"; [ -n "${GC_API_TOKEN:-}" ] && echo "Bản cài có khoá: đăng nhập Studio bằng GC_API_TOKEN trong $HOME_DIR/.env"; (command -v open >/dev/null && open "$u") || (command -v xdg-open >/dev/null && xdg-open "$u") || echo "$u"; }
 
+# ---------------------------------------------------------------- MCP ra ngoài (Cloudflare Tunnel)
+# genchibi expose <tên-miền>: tạo tunnel có tên, trỏ DNS, chỉ cho đường /mcp đi qua, sinh khoá, in link nối.
+sync_compose() {
+  [ "$MODE" = docker ] && [ -f current/docker-compose.yml ] && ! cmp -s current/docker-compose.yml docker-compose.yml && cp current/docker-compose.yml docker-compose.yml
+  return 0
+}
+set_env() { # set_env KHOÁ GIÁ_TRỊ — sửa hoặc thêm dòng trong .env
+  local k="$1" v="$2" tmp; touch .env
+  if grep -q "^$k=" .env; then
+    tmp="$(mktemp)"; awk -v k="$k" -v v="$v" 'index($0, k "=") == 1 { print k "=" v; next } { print }' .env > "$tmp" && cat "$tmp" > .env && rm -f "$tmp"
+  else echo "$k=$v" >> .env; fi
+  export "$k=$v"
+}
+rand_hex() { openssl rand -hex "$1" 2>/dev/null || node -e "console.log(require('crypto').randomBytes($1).toString('hex'))"; }
+allow_host() { case ",${GC_ALLOWED_HOSTS:-}," in *",$1,"*) ;; *) set_env GC_ALLOWED_HOSTS "${GC_ALLOWED_HOSTS:+$GC_ALLOWED_HOSTS,}$1" ;; esac; }
+ensure_keys() {
+  local fresh=""
+  [ -n "${GC_API_TOKEN:-}" ] || { set_env GC_API_TOKEN "$(rand_hex 32)"; fresh=1; }
+  [ -n "${GC_MCP_KEY:-}" ] || set_env GC_MCP_KEY "$(rand_hex 24)"
+  [ -z "$fresh" ] || echo "• Đã đặt GC_API_TOKEN: Studio giờ cần đăng nhập (xem token: grep GC_API_TOKEN $HOME_DIR/.env)"
+}
+CFH() { if [ "$MODE" = docker ]; then echo /work; else echo "$TDIR"; fi; }   # thư mục nhà của cloudflared
+cf() { # chạy cloudflared cho các bước thiết lập
+  mkdir -p "$TDIR/.cloudflared"; chmod 700 "$TDIR"
+  if [ "$MODE" = docker ]; then docker run --rm -i -u "$(id -u):$(id -g)" -e HOME=/work -v "$TDIR:/work" "$CF_IMAGE" "$@"
+  else HOME="$TDIR" cloudflared --no-autoupdate "$@"; fi
+}
+need_cf() {
+  if [ "$MODE" = docker ]; then docker image inspect "$CF_IMAGE" >/dev/null 2>&1 || docker pull -q "$CF_IMAGE" >/dev/null || { echo "Không tải được $CF_IMAGE" >&2; exit 1; }
+  elif ! command -v cloudflared >/dev/null; then
+    echo "Cần cloudflared. Cài rồi chạy lại:" >&2
+    echo "  Fedora/RHEL:  sudo dnf config-manager addrepo --from-repofile=https://pkg.cloudflare.com/cloudflared.repo && sudo dnf install cloudflared" >&2
+    echo "  Ubuntu/Debian: xem https://pkg.cloudflare.com/   ·   macOS: brew install cloudflared" >&2
+    exit 1
+  fi
+}
+origin_url() { if [ "$MODE" = docker ]; then echo "http://app:7480"; else echo "http://127.0.0.1:$PORT"; fi; }
+quick_url() {
+  if [ "$MODE" = docker ]; then docker compose logs --no-log-prefix tunnel-quick 2>/dev/null | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1 || true
+  else grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' "$TLOG" 2>/dev/null | tail -1 || true; fi
+}
+tunnel_start() { # chế độ Node: chạy cloudflared nền (Docker do compose lo)
+  [ "$MODE" = docker ] && return 0
+  [ -n "${GC_TUNNEL:-}" ] || return 0
+  [ -f "$TPID" ] && kill -0 "$(cat "$TPID")" 2>/dev/null && return 0
+  command -v cloudflared >/dev/null || { echo "! Thiếu cloudflared: MCP chưa ra ngoài được"; return 0; }
+  : > "$TLOG"
+  if [ "$GC_TUNNEL" = named ]; then HOME="$TDIR" nohup cloudflared --no-autoupdate tunnel --config "$TDIR/config.yml" run >> "$TLOG" 2>&1 &
+  else HOME="$TDIR" nohup cloudflared --no-autoupdate tunnel --url "$(origin_url)" >> "$TLOG" 2>&1 & fi
+  echo $! > "$TPID"
+}
+tunnel_stop() { [ -f "$TPID" ] && { kill "$(cat "$TPID")" 2>/dev/null || true; rm -f "$TPID"; }; return 0; }
+apply_env() { # khởi động lại để app nhận khoá/tên miền mới
+  if [ "$MODE" = docker ]; then sync_compose; docker compose up -d --quiet-pull 2>&1 | grep -vE "Creating|Created|Starting|Started|Stopping|Stopped|Removing|Removed|Recreate|Network|Container .* (Running|Waiting)" || true
+  else tunnel_stop; stop >/dev/null; start >/dev/null; fi
+}
+link_url() {
+  local base
+  if [ "${GC_TUNNEL:-}" = quick ]; then base="$(quick_url)"; else base="${GC_PUBLIC_URL:-}"; fi
+  [ -n "${GC_TUNNEL:-}" ] && [ -n "$base" ] && [ -n "${GC_MCP_KEY:-}" ] && echo "$base/mcp/$GC_MCP_KEY"
+  return 0
+}
+probe() { # probe <link> → 0 khi MCP trả lời qua Internet
+  curl -fsS -m 10 -X POST -H 'Content-Type: application/json' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"genchibi-check","version":"1"}}}' "$1" 2>/dev/null | grep -q '"gen-chibi"'
+}
+wait_link() {
+  local u="$1" i
+  printf "Chờ link thông qua Internet"
+  for i in $(seq 1 "${GC_LINK_WAIT:-40}"); do probe "$u" && { echo " ✓"; return 0; }; printf "."; sleep 3; done
+  echo " — chưa thông sau 2 phút (DNS mới có thể cần thêm vài phút). Kiểm lại: genchibi link --check"; return 1
+}
+print_link() {
+  local u; u="$(link_url)"
+  [ -n "$u" ] || { echo "MCP chưa mở ra ngoài. Chạy: genchibi expose <tên-miền>   (hoặc genchibi expose --quick để thử nhanh)"; return 1; }
+  cat <<EOF
+
+Link MCP — giữ kín, ai có link là dùng được MCP của bạn (không mở được Studio hay cài đặt):
+  $u
+
+Nối agent:
+  Claude Code      claude mcp add -s user --transport http gen-chibi $u
+  Claude web/app   Settings › Connectors › Add custom connector › dán link
+  Cursor/khác      {"mcpServers":{"gen-chibi":{"url":"$u"}}}
+Lộ link: genchibi expose --rotate (link cũ chết ngay).
+EOF
+}
+expose_named() { # expose_named <tên-miền> [--overwrite-dns]
+  local host="$1" over="${2:-}" name id
+  case "$host" in *.*) ;; *) echo "Tên miền không hợp lệ: $host" >&2; exit 1 ;; esac
+  need_cf
+  ensure_keys
+  if [ ! -f "$TDIR/.cloudflared/cert.pem" ]; then
+    mkdir -p "$TDIR/.cloudflared"; chmod 700 "$TDIR"
+    if [ -f "$HOME/.cloudflared/cert.pem" ]; then cp "$HOME/.cloudflared/cert.pem" "$TDIR/.cloudflared/cert.pem"; echo "• Dùng lại đăng nhập Cloudflare có sẵn trên máy"
+    else echo "• Đăng nhập Cloudflare (một lần): mở link bên dưới, chọn tên miền gốc của $host"; cf tunnel login; fi
+  fi
+  name="gen-chibi-$(hostname -s 2>/dev/null | tr -c 'a-zA-Z0-9\n' '-' || echo may)"   # một tunnel cho mỗi máy
+  if [ ! -f "$TDIR/.cloudflared/creds.json" ]; then
+    cf tunnel create --credentials-file "$(CFH)/.cloudflared/creds.json" "$name" >/dev/null 2>&1 \
+      || cf tunnel token --cred-file "$(CFH)/.cloudflared/creds.json" "$name" >/dev/null \
+      || { echo "Không tạo được tunnel $name" >&2; exit 1; }
+    echo "• Tunnel $name sẵn sàng"
+  fi
+  id="$(json TunnelID < "$TDIR/.cloudflared/creds.json")"
+  [ -n "$id" ] || { echo "Tệp khoá tunnel hỏng: $TDIR/.cloudflared/creds.json" >&2; exit 1; }
+  if ! cf tunnel route dns ${over:+--overwrite-dns} "$id" "$host" >/dev/null 2>"$TDIR/route.err"; then
+    if grep -qi "already" "$TDIR/route.err"; then
+      echo "! $host đã có bản ghi DNS khác trên Cloudflare. Kiểm tra rồi ghi đè bằng: genchibi expose $host --overwrite-dns" >&2
+    else cat "$TDIR/route.err" >&2; fi
+    exit 1
+  fi
+  echo "• DNS: $host → tunnel"
+  allow_host "$host"
+  cat > "$TDIR/config.yml" <<EOF
+# sinh bởi genchibi expose — chỉ cho đường /mcp ra Internet; Studio ở lại máy này
+tunnel: $id
+credentials-file: $(CFH)/.cloudflared/creds.json
+ingress:
+  - hostname: $host
+    path: ^/mcp(/.*)?$
+    service: $(origin_url)
+  - service: http_status:404
+EOF
+  cf tunnel --config "$(CFH)/config.yml" ingress validate >/dev/null || { echo "Cấu hình tunnel không hợp lệ" >&2; exit 1; }
+  set_env GC_TUNNEL named; set_env GC_PUBLIC_URL "https://$host"
+  [ "$MODE" = docker ] && set_env COMPOSE_PROFILES tunnel
+  apply_env
+  wait_link "$(link_url)" || true
+  print_link
+}
+expose_quick() {
+  need_cf
+  ensure_keys; allow_host "*.trycloudflare.com"
+  set_env GC_TUNNEL quick; set_env GC_PUBLIC_URL ""
+  if [ "$MODE" = docker ]; then set_env COMPOSE_PROFILES quick; docker compose rm -sf tunnel >/dev/null 2>&1 || true; fi
+  apply_env
+  local i u=""
+  for i in $(seq 1 30); do u="$(quick_url)"; [ -n "$u" ] && break; sleep 1; done
+  [ -n "$u" ] || { echo "Tunnel tạm không lên — xem: genchibi logs" >&2; exit 1; }
+  wait_link "$(link_url)" || true
+  print_link
+  echo "(Tunnel tạm đổi link mỗi lần khởi động lại. Dùng lâu dài: genchibi expose <tên-miền>)"
+}
+expose_off() {
+  set_env GC_TUNNEL ""; set_env GC_PUBLIC_URL ""
+  if [ "$MODE" = docker ]; then
+    set_env COMPOSE_PROFILES ""
+    docker compose --profile tunnel --profile quick rm -sf tunnel tunnel-quick >/dev/null 2>&1 || true
+  fi
+  apply_env
+  echo "Đã tắt MCP ra ngoài. Giữ khoá và cấu hình tunnel trong $TDIR (mở lại nhanh bằng genchibi expose <tên-miền>)."
+  echo "Bản ghi DNS trên Cloudflare vẫn còn, trỏ vào tunnel đã tắt."
+}
+expose() {
+  case "${1:-}" in
+    --quick) expose_quick ;;
+    --off) expose_off ;;
+    --rotate)
+      [ -n "${GC_TUNNEL:-}" ] || { echo "MCP chưa mở ra ngoài."; exit 1; }
+      set_env GC_MCP_KEY "$(rand_hex 24)"; apply_env; echo "Đã đổi khoá — link cũ không dùng được nữa."
+      wait_link "$(link_url)" || true; print_link ;;
+    ""|-h|--help) cat <<EOF
+genchibi expose <tên-miền>      mở MCP qua tên miền của bạn (Cloudflare quản lý DNS), vd. genchibi expose chibi.example.com
+genchibi expose --quick         link tạm *.trycloudflare.com, không cần tài khoản (đổi link mỗi lần khởi động lại)
+genchibi expose --rotate        đổi khoá trong link
+genchibi expose --off           tắt
+genchibi link [--check]         in link + lệnh nối agent (--check: thử gọi qua Internet)
+EOF
+      ;;
+    -*) echo "Không hiểu tuỳ chọn $1 (genchibi expose --help)" >&2; exit 1 ;;
+    *) [ -z "${2:-}" ] || [ "$2" = --overwrite-dns ] || { echo "Không hiểu tuỳ chọn $2" >&2; exit 1; }; expose_named "$1" "${2:-}" ;;
+  esac
+}
+link_cmd() {
+  if [ "${1:-}" = --check ]; then local u; u="$(link_url)"; [ -n "$u" ] || { print_link; exit 1; }
+    if probe "$u"; then echo "✓ MCP trả lời qua Internet"; else echo "✗ Chưa gọi được $u — xem genchibi status, genchibi logs"; exit 1; fi
+  else print_link; fi
+}
+
 case "${1:-help}" in
   start) start ;; stop) stop ;; restart) stop; start ;; status) status ;; update) update ;;
   logs) logs ;; backup) backup ;; restore) shift; restore "${1:-}" ;; uninstall) uninstall ;;
   mcp) mcp ;; open) open_ui ;; version) status ;;
+  expose) shift; expose "$@" ;; link) shift; link_cmd "$@" ;;
   *) cat <<EOF
 genchibi — quản lý gen-chibi ($HOME_DIR, chế độ $MODE)
   start | stop | restart | status   chạy, dừng, xem trạng thái
@@ -88,6 +282,8 @@ genchibi — quản lý gen-chibi ($HOME_DIR, chế độ $MODE)
   logs                              xem log
   backup | restore <tệp>            sao lưu / khôi phục dữ liệu
   mcp                               cầu MCP (stdio) cho agent: claude mcp add gen-chibi -- genchibi mcp
+  expose <tên-miền> | --quick       mở MCP ra Internet qua Cloudflare Tunnel, in link nối agent (--off, --rotate)
+  link [--check]                    in link MCP + lệnh nối agent
   open                              mở Studio trong trình duyệt
   uninstall                         gỡ (hỏi giữ hay xoá dữ liệu)
 EOF

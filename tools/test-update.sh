@@ -4,6 +4,7 @@
 #   2) gói sai checksum → từ chối, vẫn chạy bản cũ
 #   3) bản v0.1.2 hỏng (server chết) → launcher tự rollback về v0.1.1
 #   4) rollback thủ công (xác nhận 2 bước)
+#   5) agent tự kiểm và cập nhật qua MCP (get_app_version, update_app)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 W="$(mktemp -d)"; FEED="$W/feed"; HOME_DIR="$W/home"; PORT=7499; FPORT=7498
@@ -68,6 +69,15 @@ echo "4) rollback thủ công"
 api POST /api/update/rollback '{}' | grep -q 'xác nhận' && ok "từ chối khi thiếu xác nhận" || bad "không đòi xác nhận"
 api POST /api/update/rollback '{"confirm":"ROLLBACK"}' >/dev/null
 waitver 0.1.0 && ok "chạy lại v0.1.0 theo yêu cầu" || bad "rollback thủ công hỏng"
+
+echo "5) agent cập nhật qua MCP"
+mcpcall() { curl -s -X POST -H 'Content-Type: application/json' -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"$1\",\"arguments\":${2:-{\}}}}" "http://127.0.0.1:$PORT/mcp"; }
+build 0.1.3; feed 0.1.3
+mcpcall get_app_version | grep -q 'available\\": true' && ok "get_app_version thấy v0.1.3" || bad "get_app_version không thấy bản mới"
+mcpcall update_app | grep -q 'restart\\": true' && ok "update_app nhận lệnh" || bad "update_app không chạy"
+waitver 0.1.3 && ok "đang chạy v0.1.3 (do agent yêu cầu)" || bad "không lên v0.1.3"
+sleep 7; mcpcall get_app_version '{"check":false}' | grep -q 'current\\": \\"v0.1.3' && ok "get_app_version xác nhận v0.1.3 sau cửa sổ sức khoẻ" || bad "xác nhận sai"
+mcpcall rollback_app | grep -q 'ROLLBACK' && ok "rollback_app đòi xác nhận" || bad "rollback_app không đòi xác nhận"
 
 echo; echo "Kết quả: $pass đạt, $failn trượt"
 [ $failn -eq 0 ] || { echo "--- launcher.log ---"; tail -40 "$W/launcher.log"; exit 1; }

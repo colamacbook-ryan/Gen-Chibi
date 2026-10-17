@@ -923,10 +923,18 @@
       paintBench();
 
       var port = (Store.info && Store.info.port) || 7480;
+      var link = Store.info && Store.info.mcp && Store.info.mcp.link;
+      function copyBtn(label, t) { return h('button', { class: 'btn sm', text: label, onclick: function () { navigator.clipboard.writeText(t).then(function () { toast('Đã sao chép'); }, function () { toast('Không sao chép được — chọn và copy tay'); }); } }); }
       box.appendChild(h('div', { class: 'panel' }, h('h3', null, 'Nối agent qua MCP', h('span', { class: 'r note', text: 'agent tự viết công thức và kịch bản, không tốn LLM API lõi' })),
         h('div', { class: 'pad stack' },
-          h('div', { class: 'note', text: 'Agent (Claude Code, Claude Desktop, hoặc agent bất kỳ hỗ trợ MCP) gọi 9 tool: tra kho, kiểm, dựng SVG, lưu nhân vật, viết và lưu kịch bản. Kết quả hiện ngay trong Studio.' }),
+          h('div', { class: 'note', text: 'Agent (Claude Code, Claude web/desktop, hoặc agent bất kỳ hỗ trợ MCP) gọi 12 tool: tra kho, kiểm, dựng SVG, lưu nhân vật, viết và lưu kịch bản, kiểm và cập nhật phiên bản. Kết quả hiện ngay trong Studio.' }),
           h('div', { class: 'kv' },
+            h('label', { text: 'Qua Internet' }),
+            link ? h('div', { class: 'stack' },
+              h('pre', { class: 'code', text: link }),
+              h('div', null, copyBtn('Sao chép link', link), ' ', copyBtn('Sao chép lệnh Claude Code', 'claude mcp add -s user --transport http gen-chibi ' + link)),
+              h('div', { class: 'note', text: 'Claude web/desktop: Settings › Connectors › Add custom connector › dán link. Giữ kín link; lộ thì chạy genchibi expose --rotate.' }))
+              : h('div', { class: 'note', text: 'Chưa mở. Trong terminal: genchibi expose <tên-miền> (tên miền do Cloudflare quản lý) hoặc genchibi expose --quick để thử nhanh. Lệnh in ra một link — agent dán link là nối được.' }),
             h('label', { text: 'Claude Code (stdio)' }), h('pre', { class: 'code', text: 'claude mcp add gen-chibi -- genchibi mcp' }),
             h('label', { text: 'Claude Code (HTTP)' }), h('pre', { class: 'code', text: 'claude mcp add --transport http gen-chibi http://localhost:' + port + '/mcp' }),
             h('label', { text: 'Cấu hình JSON' }), h('pre', { class: 'code', text: JSON.stringify({ mcpServers: { 'gen-chibi': { command: 'genchibi', args: ['mcp'] } } }, null, 2) })))));

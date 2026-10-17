@@ -44,10 +44,10 @@ const L = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n")
 const by = id => L.find(r => r.id === id);
 const ok = (c, m) => { if (!c) { console.log("   ✗", m); process.exit(1); } };
 ok(by(1).result.protocolVersion === "2025-06-18", "bắt tay");
-ok(by(2).result.tools.length === 9, "9 tool");
+ok(by(2).result.tools.length === 12, "12 tool");
 ok(!by(3).result.isError && JSON.parse(by(3).result.content[0].text).saved, "lưu nhân vật hợp lệ");
 ok(by(4).result.isError, "chặn linh kiện lạ");
-console.log("   ✓ MCP: bắt tay, 9 tool, lưu hợp lệ, chặn linh kiện lạ");
+console.log("   ✓ MCP: bắt tay, 12 tool, lưu hợp lệ, chặn linh kiện lạ");
 ' "$H/mcp.out"
 kill $SP 2>/dev/null || true
 
