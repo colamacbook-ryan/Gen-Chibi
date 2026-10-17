@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.1 — Góc nghiêng 3/4
+- **Góc nhìn 3/4** (`view: front | left | right`, theo màn hình) cho mọi nhân vật, không vẽ lại linh kiện: quay kiểu parallax trên mặt cầu (x = R·sin(θ − φ)) — mắt xa hẹp lại, mắt gần rộng ra, miệng/râu/mái trượt theo, tóc sau và tai trượt ngược, thân quay ít hơn đầu, phía sau đầu lộ tóc (lưỡi liềm tóc tới ngang tai), tay phía xa lùi ra sau thân khi đang buông.
+- Đang di chuyển mà chưa chọn góc: tự nghiêng 3/4 về hướng đi.
+- Studio › Tư thế & hoạt động: chọn góc nhìn (Tự động · Chính diện · 3/4 trái · 3/4 phải); Đạo diễn AI và MCP `render_character` nhận `view`.
+- Test: 32 hoạt động × mọi nhân vật × 3 thời điểm × 2 hướng × 3 góc nhìn.
+
 ## v0.2.0 — Tư thế & hoạt động (engine 0.3)
 - **Khung xương có chân**: hông, đùi, gối, cổ chân; vạt áo tách khỏi thân trên và co giãn theo tư thế. Thêm khớp sân khấu cho đạo cụ đứng yên.
 - **Ghép 4 trục** như animation layer của game engine: tư thế nền × di chuyển × động tác tay × biểu cảm, cộng đạo cụ và hướng (quay trái/phải).

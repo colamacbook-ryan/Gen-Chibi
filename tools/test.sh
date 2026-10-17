@@ -29,10 +29,10 @@ const acts = GC.LIB.activityOrder;
 GC.assets().forEach(a => {
   const g = GC.gate(a, { poses: true }).find(x => x.id === "poses");
   if (!g || !g.ok) { bad++; console.log("   ✗ hoạt động", a.key, g && g.detail); }
-  acts.forEach(id => [0, 0.21, 0.5].forEach(t => ["left", "right"].forEach(f => {
-    const svg = GC.svgString(a, GC.LIB.activities[id].state || "normal", { director: { activity: id, facing: f }, t });
-    if (/NaN|undefined/.test(svg)) { bad++; console.log("   ✗", a.key, id, "t=" + t, f, "SVG có NaN/undefined"); }
-  })));
+  acts.forEach(id => [0, 0.21, 0.5].forEach(t => ["left", "right"].forEach(f => ["front", "left", "right"].forEach(v => {
+    const svg = GC.svgString(a, GC.LIB.activities[id].state || "normal", { director: { activity: id, facing: f, view: v }, t });
+    if (/NaN|undefined/.test(svg)) { bad++; console.log("   ✗", a.key, id, "t=" + t, f, v, "SVG có NaN/undefined"); }
+  }))));
 });
 // mọi di chuyển có tư thế hợp lệ; mọi hoạt động trỏ tới mục có thật
 acts.forEach(id => { const x = GC.LIB.activities[id];
@@ -46,7 +46,7 @@ const ok = GC.director.validate({ title: "t", steps: [{ actor: cast[0].id, state
 const ko = GC.director.validate({ title: "t", steps: [{ actor: cast[0].id, state: "normal", move: "swim", posture: "stand", say: "a" }, { actor: cast[0].id, state: "normal", activity: "bay-len-troi", say: "b" }] }, cast);
 if (ok.length || ko.length !== 2) { bad++; console.log("   ✗ đạo diễn:", ok, ko); }
 if (bad) process.exit(1);
-console.log("   ✓", acts.length, "hoạt động ×", GC.assets().length, "nhân vật × 3 thời điểm × 2 hướng; kịch bản có hoạt động được kiểm");
+console.log("   ✓", acts.length, "hoạt động ×", GC.assets().length, "nhân vật × 3 thời điểm × 2 hướng × 3 góc nhìn; kịch bản có hoạt động được kiểm");
 '
 
 echo "3) MCP"

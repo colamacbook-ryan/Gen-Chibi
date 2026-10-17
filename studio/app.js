@@ -655,7 +655,7 @@
     crumbs([{ t: 'Tư thế & hoạt động' }]);
     var all = GC.assets();
     var cur = GC.ASSETS[r.key] || all[0];
-    var sel = { activity: r.activity || 'walk', state: null, posture: '', move: '', motion: '', facing: 'right' };
+    var sel = { activity: r.activity || 'walk', state: null, posture: '', move: '', motion: '', facing: 'right', view: '' };
     var selA = h('select', { 'aria-label': 'Nhân vật', onchange: function () { cur = GC.ASSETS[selA.value]; paintGrid(); play(); } });
     all.forEach(function (a) { selA.appendChild(h('option', { value: a.key, text: a.name + ' · ' + a.pack, selected: a === cur })); });
     var grid = h('div', { class: 'stack' });
@@ -676,6 +676,14 @@
     [['right', 'Quay phải'], ['left', 'Quay trái']].forEach(function (f) {
       face.appendChild(h('button', { 'aria-pressed': String(sel.facing === f[0]), onclick: function () { sel.facing = f[0]; Array.prototype.forEach.call(face.children, function (b, i) { b.setAttribute('aria-pressed', String(i === (f[0] === 'right' ? 0 : 1))); }); play(); } }, f[1]));
     });
+    var viewSeg = h('div', { class: 'seg' });
+    [['', 'Tự động'], ['front', 'Chính diện'], ['left', '3/4 trái'], ['right', '3/4 phải']].forEach(function (v) {
+      viewSeg.appendChild(h('button', { 'data-v': v[0], 'aria-pressed': String(sel.view === v[0]), onclick: function () {
+        sel.view = v[0];
+        Array.prototype.forEach.call(viewSeg.children, function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-v') === sel.view)); });
+        play(); paintGrid();
+      } }, v[1]));
+    });
     [[sState, 'state'], [sPost, 'posture'], [sMove, 'move'], [sMot, 'motion']].forEach(function (x) { x[0].onchange = function () { sel[x[1]] = x[0].value; play(); }; });
     var reset = h('button', { class: 'btn sm', onclick: function () { sel.state = null; sel.posture = sel.move = sel.motion = ''; sState.value = sPost.value = sMove.value = sMot.value = ''; play(); } }, 'Bỏ ghép tay');
     var dl = h('button', { class: 'btn sm', onclick: function () {
@@ -695,13 +703,15 @@
               h('label', { text: 'Tư thế nền' }), sPost,
               h('label', { text: 'Di chuyển' }), sMove,
               h('label', { text: 'Động tác (tay)' }), sMot,
-              h('label', { text: 'Hướng' }), face),
+              h('label', { text: 'Hướng' }), face,
+              h('label', { text: 'Góc nhìn' }), viewSeg),
             h('div', { class: 'row' }, reset, dl))))));
     var inst = R.full(stg, cur, 'normal', { force: true });
     onLeave(function () { inst.destroy(); });
     function stateOf() { return sel.state || (LIB.activities[sel.activity] || {}).state || 'normal'; }
     function dirOf() {
       var d = { facing: sel.facing };
+      if (sel.view) d.view = sel.view;
       if (sel.activity) d.activity = sel.activity;
       if (sel.posture) d.posture = sel.posture;
       if (sel.move) d.move = sel.move === 'none' ? null : sel.move;
@@ -713,7 +723,7 @@
       var st = inst.setState(stateOf(), dirOf());
       var act = LIB.activities[sel.activity];
       $('psLabel').textContent = act ? act.label : '';
-      info.textContent = 'Đang diễn: ' + stateLabel(stateOf()) + ' · tư thế ' + (LIB.postures[st.posture] || {}).label + ' · ' +
+      info.textContent = 'Đang diễn: ' + stateLabel(stateOf()) + ' · ' + (st.turn ? (st.turn < 0 ? '3/4 trái' : '3/4 phải') : 'chính diện') + ' · tư thế ' + (LIB.postures[st.posture] || {}).label + ' · ' +
         (st.move ? 'di chuyển ' + LIB.moves[st.move].label : 'đứng yên') + ' · động tác ' + ((LIB.motions[st.motion] || {}).label || st.motion) +
         (st.props.length ? ' · đạo cụ: ' + st.props.map(function (p) { return LIB.props[p].label; }).join(', ') : '');
       Array.prototype.forEach.call(grid.querySelectorAll('.state-cell'), function (c) { c.setAttribute('aria-pressed', String(c.getAttribute('data-a') === sel.activity)); });
@@ -728,7 +738,7 @@
           var a = LIB.activities[id];
           var im = h('div', { class: 'im' });
           var cell = h('button', { class: 'state-cell', 'data-a': id, title: a.hint || '', onclick: function () { sel.activity = id; play(); } }, im, h('div', { class: 'lb', text: a.label }));
-          R.image(im, cur, a.state || 'normal', { director: { activity: id } });
+          R.image(im, cur, a.state || 'normal', { director: sel.view ? { activity: id, view: sel.view } : { activity: id } });
           box.appendChild(cell);
         });
         grid.appendChild(h('div', { class: 'panel' }, h('h3', null, g, h('span', { class: 'r note', text: groups[g].length + ' hoạt động' })), h('div', { class: 'pad' }, box)));
@@ -854,7 +864,7 @@
         Object.keys(cards).forEach(function (k) { if (k !== s.actor) cards[k].classList.add('dim'); });
         cards[s.actor].classList.add('speaking');
         var dir = {};
-        ['motion', 'fx', 'activity', 'posture', 'move', 'facing'].forEach(function (k) { if (s[k]) dir[k] = s[k]; });
+        ['motion', 'fx', 'activity', 'posture', 'move', 'facing', 'view'].forEach(function (k) { if (s[k]) dir[k] = s[k]; });
         insts[s.actor].setState(s.state, Object.keys(dir).length ? dir : undefined);
         cards[s.actor].querySelector('.stage').appendChild(h('div', { class: 'bubble', text: s.say }));
         setTimeout(next, s.hold ? s.hold * 1000 : Math.min(4200, Math.max(1800, s.say.length * 65)));
