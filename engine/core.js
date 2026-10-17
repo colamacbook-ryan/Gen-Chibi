@@ -219,6 +219,7 @@
       if (director.view) st.turn = VIEWS[director.view] !== undefined ? VIEWS[director.view] : 0;
       if (typeof director.turn === 'number' && isFinite(director.turn)) st.turn = Math.max(-1, Math.min(1, director.turn));
       st.viewSet = !!director.view || typeof director.turn === 'number';
+      if (director.view === 'left45' || director.view === 'right45') { st.kind = 'q45'; st.view = director.view; }
       if (director.fx) { st.fx = st.fx.concat(director.fx); st.src.fx = SRC.director; }
     }
     var pz = LIB.postures[st.posture] || {}, mv = st.move && LIB.moves[st.move];
@@ -231,6 +232,9 @@
     if (mv && !st.viewSet && !mv.front) st.turn = st.facing === 'left' ? -1 : 1;
     // góc nhìn tính theo MÀN HÌNH; khi quay trái cả hình bị lật gương nên đổi dấu sang hệ toạ độ của nhân vật
     st.turnLocal = st.facing === 'left' ? -st.turn : st.turn;
+    // lật gương: góc 45° do góc nhìn quyết định (bản chuẩn quay trái); các góc khác theo hướng di chuyển
+    if (st.kind === 'q45') { st.mirror = st.view === 'right45'; st.turnLocal = -1; st.facing = st.mirror ? 'right' : 'left'; }
+    else st.mirror = st.facing === 'left';
     st.fx = st.fx.filter(function (f, i) { return st.fx.indexOf(f) === i; });
     return st;
   }
@@ -239,8 +243,17 @@
   // Quay kiểu parallax (như Live2D/Spine cho chibi): đầu chibi gần như hình cầu nên viền đầu giữ nguyên,
   // các lớp trên mặt trượt theo độ sâu trên cầu: x = R·sin(θ − φ). θ là góc của chi tiết, φ là góc quay.
   // Mắt xa hẹp lại (cos giảm), mắt gần rộng ra; tóc sau, tai trượt ngược; thân quay ít hơn đầu; tay xa ra sau thân.
-  var VIEWS = { front: 0, left: -1, right: 1 };
+  var VIEWS = { front: 0, left: -1, right: 1, left45: -1, right45: 1 };
   var TURN = { phi: 22, R: 48, body: 0.55 };
+  // Góc 45° VẼ THẬT ở mức linh kiện: part.views.q45(C, st, vals). Bản vẽ chuẩn quay mặt sang TRÁI màn hình
+  // (tay phải màn hình ở phía gần); 45° phải = lật gương. Linh kiện chưa có bản vẽ 45° thì engine trượt parallax (phi 32°).
+  // Vị trí mặt 45° (mắt gần/xa, mày, miệng) thuộc engine nên mọi kiểu mắt/mày/miệng đều hưởng.
+  var Q45 = {
+    phi: 32, body: 0.8,
+    eye: { L: { x: 65, sx: 0.62 }, R: { x: 96, sx: 1 } },
+    brow: { L: { x: 66, sx: 0.62 }, R: { x: 96, sx: 1 } },
+    mouth: { dx: -19, sx: 0.85 }
+  };
   function sphereShift(x0, turn, R) {
     var phi = TURN.phi * turn * Math.PI / 180, r = R || TURN.R;
     var th = Math.asin(Math.max(-0.99, Math.min(0.99, (x0 - 100) / r)));
@@ -256,18 +269,53 @@
     ['hairFront', 100, 40, 0.75], ['hat', 100, 46, 0.45], ['fxHead', 100, 48, 0.5],
     ['ears', 100, 48, -0.25], ['hairBack', 100, 48, -0.45]
   ];
-  function applyTurn(out, turn, st, C) {
-    if (!turn) return;
-    // phía sau đầu lộ ra khi quay là TÓC, không phải da: lưỡi liềm = hình đầu − chính nó dịch theo hướng quay, chỉ phần trên tai
-    var crescent = '';
-    if (out.hairFront && C.shape) {
-      var d = sphereShift(100, turn, 40).dx * 1.15, id = 'gcT' + String(C.asset.key || C.asset.id).replace(/[^a-zA-Z0-9]/g, '') + (turn < 0 ? 'l' : 'r');
-      crescent = '<defs><clipPath id="' + id + 'c"><path d="' + C.shape + '"/></clipPath>' +
-        '<mask id="' + id + 'm" maskUnits="userSpaceOnUse" x="0" y="0" width="200" height="200"><path d="M0,0 L200,0 L200,104 C176,104 160,112 150,128 L50,128 C40,112 24,104 0,104 Z" fill="#fff"/>' +
-        '<path transform="translate(' + d.toFixed(2) + ' 0)" d="' + C.shape + '" fill="#000"/></mask></defs>' +
-        '<g clip-path="url(#' + id + 'c)"><g mask="url(#' + id + 'm)"><rect x="0" y="0" width="200" height="200" fill="' + C.P.hair + '"/>' +
-        '<path transform="translate(' + d.toFixed(2) + ' 0)" d="' + C.shape + '" fill="none" stroke="' + INK + '" stroke-width="5"/></g></g>';
+  // Hiệu ứng bám mặt (nước mắt, má hồng…) ở 45°: nửa trái ánh xạ theo mắt xa, nửa phải theo mắt gần — mọi hiệu ứng mặt tự đúng, không vẽ lại
+  function faceRemap(c) {
+    if (!c) return c;
+    var L = Q45.eye.L, R = Q45.eye.R, d = '<defs><clipPath id="gcFaceL"><rect x="-60" y="-60" width="160" height="340"/></clipPath><clipPath id="gcFaceR"><rect x="100" y="-60" width="160" height="340"/></clipPath></defs>';
+    return d + '<g clip-path="url(#gcFaceL)"><g transform="translate(' + L.x + ' 0) scale(' + L.sx + ' 1) translate(-80 0)">' + c + '</g></g>' +
+      '<g clip-path="url(#gcFaceR)"><g transform="translate(' + R.x + ' 0) scale(' + R.sx + ' 1) translate(-120 0)">' + c + '</g></g>';
+  }
+  function layerShift(layer, turn, phi) {
+    var save = TURN.phi; TURN.phi = phi;
+    var r = null;
+    TURN_LAYERS.forEach(function (t) {
+      if (t[0] !== layer) return;
+      var sh = sphereShift(t[1], turn, t[2]);
+      r = { dx: sh.dx * t[3], sx: t[3] > 0 ? 1 - (1 - Math.abs(Math.cos(phi * turn * Math.PI / 180))) * 0.6 : 1, cx: t[1] };
+    });
+    if (!r && (layer === 'body' || layer === 'hem' || layer === 'backItem' || layer === 'head' || layer === 'shade' || layer === 'mask')) {
+      var k = layer === 'body' ? 1 : layer === 'hem' ? 0.6 : layer === 'backItem' ? -0.5 : layer === 'shade' ? 0.3 : 0;
+      var bs = sphereShift(100, turn * (phi === Q45.phi ? Q45.body : TURN.body), 36);
+      r = { dx: bs.dx * k, sx: layer === 'body' || layer === 'hem' ? 0.95 : 1, cx: 100 };
     }
+    TURN.phi = save;
+    return r;
+  }
+  // phía sau đầu lộ ra khi quay là TÓC, không phải da: lưỡi liềm = hình đầu − chính nó dịch theo hướng quay, chỉ phần trên tai
+  function crescentOf(C, turn, phi) {
+    if (!C.shape) return '';
+    var save = TURN.phi; TURN.phi = phi;
+    var d = sphereShift(100, turn, 40).dx * 1.15;
+    TURN.phi = save;
+    var id = 'gcT' + String(C.asset.key || C.asset.id).replace(/[^a-zA-Z0-9]/g, '') + (turn < 0 ? 'l' : 'r') + phi;
+    return '<defs><clipPath id="' + id + 'c"><path d="' + C.shape + '"/></clipPath>' +
+      '<mask id="' + id + 'm" maskUnits="userSpaceOnUse" x="0" y="0" width="200" height="200"><path d="M0,0 L200,0 L200,104 C176,104 160,112 150,128 L50,128 C40,112 24,104 0,104 Z" fill="#fff"/>' +
+      '<path transform="translate(' + d.toFixed(2) + ' 0)" d="' + C.shape + '" fill="#000"/></mask></defs>' +
+      '<g clip-path="url(#' + id + 'c)"><g mask="url(#' + id + 'm)"><rect x="0" y="0" width="200" height="200" fill="' + C.P.hair + '"/>' +
+      '<path transform="translate(' + d.toFixed(2) + ' 0)" d="' + C.shape + '" fill="none" stroke="' + INK + '" stroke-width="5"/></g></g>';
+  }
+  // tay phía xa (phía đang quay về) ra sau thân — chỉ khi tay đó đang buông; tay giơ lên/vươn ra thì vẫn ở trước
+  function farArmBack(out, st, C, far) {
+    var still = poseAt(C.asset, st, 0, true);
+    if (Math.abs(still['arm' + far].rot) >= 50) return;
+    ['arm', 'fore', 'held', 'hand'].forEach(function (k) { out[k + far + 'b'] = out[k + far]; out[k + far] = ''; });
+    st.farArm = far;
+  }
+  function applyTurn(out, turn, st, C) {
+    if (!turn || st.kind === 'q45') return;
+    // phía sau đầu lộ ra khi quay là TÓC, không phải da: lưỡi liềm = hình đầu − chính nó dịch theo hướng quay, chỉ phần trên tai
+    var crescent = out.hairFront ? crescentOf(C, turn, TURN.phi) : '';
     TURN_LAYERS.forEach(function (t) {
       var sh = sphereShift(t[1], turn, t[2]);
       out[t[0]] = turnWrap(out[t[0]], sh.dx * t[3], t[3] > 0 ? 1 - (1 - Math.abs(Math.cos(TURN.phi * turn * Math.PI / 180))) * 0.6 : 1, t[1]);
@@ -278,13 +326,7 @@
     out.body = turnWrap(out.body, bs.dx, 0.95, 100);
     out.hem = turnWrap(out.hem, bs.dx * 0.6, 0.95, 100);
     out.backItem = turnWrap(out.backItem, -bs.dx * 0.5, 1, 100);
-    // tay phía xa (phía đang quay về) ra sau thân — chỉ khi tay đó đang buông; tay giơ lên/vươn ra thì vẫn ở trước
-    var far = turn < 0 ? 'L' : 'R';
-    var still = poseAt(C.asset, st, 0, true), ang = Math.abs(still['arm' + far].rot);
-    if (ang < 50) {
-      ['arm', 'fore', 'held', 'hand'].forEach(function (k) { out[k + far + 'b'] = out[k + far]; out[k + far] = ''; });
-      st.farArm = far;
-    }
+    farArmBack(out, st, C, turn < 0 ? 'L' : 'R');
   }
 
   /* ------------------------------------------------------------ 4. COMPOSE */
@@ -331,17 +373,22 @@
     var head = getPart('head', partRef(asset, 'head'), asset.pack) || getPart('head', 'round');
     var mask = getPart('mask', partRef(asset, 'mask'), asset.pack);
     P.eyeArea = (mask && mask.eyeArea) || P.skin;
-    var C = { P: P, A: RIG.anchors, shape: head.shape, ink: INK, asset: asset, flip: st.facing === 'left', st: st };
+    var Q = st.kind === 'q45';
+    var C = { P: P, A: RIG.anchors, shape: Q && head.shape45 ? head.shape45 : head.shape, ink: INK, asset: asset, flip: !!st.mirror, st: st, view: Q ? 'q45' : 'front' };
     var out = {};
     LAYER_IDS.forEach(function (l) { out[l] = ''; });
 
-    function put(res, wrap) {
+    // fb: linh kiện chưa có bản vẽ 45° → trượt parallax theo lớp
+    function put(res, wrap, fb) {
       if (!res) return;
       for (var layer in res) {
         if (!(layer in out)) throw new Error('lớp lạ: ' + layer);
-        out[layer] += wrap ? '<g transform="' + wrap + '">' + res[layer] + '</g>' : res[layer];
+        var c = wrap ? '<g transform="' + wrap + '">' + res[layer] + '</g>' : res[layer];
+        if (fb && Q && c) { var sh = layerShift(layer, -1, Q45.phi); if (sh) c = turnWrap(c, sh.dx, sh.sx, sh.cx); }
+        out[layer] += c;
       }
     }
+    var fbSlots = [];
 
     Object.keys(LIB.slots).forEach(function (slot) {
       var ref = partRef(asset, slot);
@@ -349,7 +396,10 @@
       var p = getPart(slot, ref, asset.pack);
       if (!p) throw new Error('thiếu linh kiện ' + slot + ':' + ref);
       var vals = p.params ? paramValues(asset, slot, p.params) : {};
-      put(p.draw(C, st, vals), p.params ? paramTransform(p.params, vals) : '');
+      var native = Q && p.views && p.views.q45;
+      var res = (native ? p.views.q45 : p.draw)(C, st, vals);
+      if (Q && !native && res && !/^held[LR]$/.test(slot)) fbSlots.push(slot + ':' + p.id);
+      put(res, p.params ? paramTransform(p.params, vals) : '', Q && !native && !/^held[LR]$/.test(slot));
     });
 
     // đạo cụ của tư thế / di chuyển / động tác / hoạt động
@@ -383,7 +433,7 @@
     [-1, 1].forEach(function (side) {
       var a = side < 0 ? C.A.eyeL : C.A.eyeR;
       var x = a[0] + side * ev.gap, y = a[1] + ev.y;
-      var tw = st.turnLocal ? sphereShift(x, st.turnLocal) : { dx: 0, sx: 1 };
+      var tw = Q ? { dx: Q45.eye[side < 0 ? 'L' : 'R'].x + side * ev.gap - x, sx: Q45.eye[side < 0 ? 'L' : 'R'].sx } : st.turnLocal ? sphereShift(x, st.turnLocal) : { dx: 0, sx: 1 };
       out.eyes += turnWrap('<g transform="translate(' + x + ' ' + y + ') scale(' + ev.size + ') translate(' + (-x) + ' ' + (-y) + ')">' + ep(es, side, x, y, C) + '</g>', tw.dx, tw.sx, x);
     });
     // Chớp mắt chạy trên nhóm con này. KHÔNG đặt animation CSS lên chính nhóm lớp (data-l):
@@ -396,21 +446,30 @@
     var bv = paramValues(asset, 'brows', BROW_PARAMS);
     [-1, 1].forEach(function (side) {
       var bx = (side < 0 ? C.A.browL : C.A.browR)[0];
-      var tw = st.turnLocal ? sphereShift(bx, st.turnLocal, 46) : { dx: 0, sx: 1 };
+      var tw = Q ? { dx: Q45.brow[side < 0 ? 'L' : 'R'].x - bx, sx: Q45.brow[side < 0 ? 'L' : 'R'].sx } : st.turnLocal ? sphereShift(bx, st.turnLocal, 46) : { dx: 0, sx: 1 };
       out.brows += turnWrap(brow(bs, bp, side, C, bv), tw.dx, tw.sx, bx);
     });
 
     var m = LIB.mouths[st.mouth];
     if (!m) throw new Error('thiếu dáng miệng ' + st.mouth);
     var mv = paramValues(asset, 'mouth', MOUTH_PARAMS);
-    out.mouth += '<g transform="translate(0 ' + mv.y + ') translate(100 131) scale(' + mv.size + ') translate(-100 -131)">' + m(C) + '</g>';
+    var mouthG = '<g transform="translate(0 ' + mv.y + ') translate(100 131) scale(' + mv.size + ') translate(-100 -131)">' + m(C) + '</g>';
+    out.mouth += Q ? turnWrap(mouthG, Q45.mouth.dx, Q45.mouth.sx, 100) : mouthG;
 
     st.fx.forEach(function (id) {
       var f = LIB.fx[id];
       if (!f) throw new Error('thiếu hiệu ứng ' + id);
-      put(f.draw(C));
+      if (Q && f.face) { var r = f.draw(C); for (var l in r) out[l] += faceRemap(r[l]); }
+      else put(f.draw(C), '', true);
     });
     applyTurn(out, st.turnLocal, st, C);
+    if (Q) {
+      // tóc chưa có bản vẽ 45°: thêm lưỡi liềm tóc phía sau đầu; tay xa ra sau thân; hiệu ứng nền (bụi, gió) đổi phía
+      if (fbSlots.some(function (x) { return x.indexOf('hair:') === 0; })) out.hairFront = crescentOf(C, -1, Q45.phi) + out.hairFront;
+      farArmBack(out, st, C, 'L');
+      if (out.fxBack) out.fxBack = '<g transform="translate(200 0) scale(-1 1)">' + out.fxBack + '</g>';
+      st.fallback45 = fbSlots;
+    }
     // nằm: cả người xoay theo root; hiệu ứng ở fxFront/fxBack (chữ Zzz, !!, pháo giấy) xoay ngược quanh đầu để luôn đứng thẳng
     var rr = ((LIB.postures[st.posture] || {}).base || {}).root;
     if (rr && rr.rot) ['fxFront', 'fxBack'].forEach(function (l) {
@@ -521,6 +580,10 @@
       } else addTrackJoint(pose, j, m.tracks[j], u);
     }
     if (m.breath !== false && !still && !pz.noBreath) pose.body.sy *= 1 + Math.sin(t * 2.4) * 0.012;
+    if (st.kind === 'q45') {
+      // bản chuẩn 45° quay trái: dữ liệu động tác viết cho hướng phải → đảo x/góc của thân để nghiêng, lắc về phía trước mặt
+      ['root', 'pelvis', 'body', 'head', 'hem'].forEach(function (j) { pose[j].x = -pose[j].x; pose[j].rot = -pose[j].rot; });
+    }
     // "trọng lực" cho đồ cầm tay: nếu động tác không tự điều khiển bàn tay,
     // bàn tay xoay ngược tổng góc các khớp cha để binh khí luôn đứng thẳng
     ['L', 'R'].forEach(function (s) {
@@ -531,14 +594,18 @@
     pose.head.sx *= hs; pose.head.sy *= hs;
     if (st.turnLocal) {
       // thân quay ít hơn đầu: vai và hông trượt về phía quay, vai xa thu vào trong nhiều hơn
-      var tb = st.turnLocal * TURN.body, near = st.turnLocal < 0 ? 'R' : 'L', far = near === 'R' ? 'L' : 'R';
+      var tb = st.turnLocal * (st.kind === 'q45' ? Q45.body : TURN.body), near = st.turnLocal < 0 ? 'R' : 'L', far = near === 'R' ? 'L' : 'R';
       var inward = function (s) { return s === 'L' ? 1 : -1; };
       pose['arm' + far].x += inward(far) * 9 * Math.abs(tb) + tb * -4;
       pose['arm' + near].x += inward(near) * 3 * Math.abs(tb) + tb * -4;
       pose['thigh' + far].x += inward(far) * 4 * Math.abs(tb);
       pose['thigh' + near].x += tb * -2;
+      if (st.kind === 'q45') ['L', 'R'].forEach(function (sd) {
+        var a = Math.abs(pose['arm' + sd].rot);
+        if (a > 110) pose['arm' + sd].x += Q45.mouth.dx * Math.min(1, (a - 110) / 30);
+      });
     }
-    if (st.facing === 'left') pose.root.sx *= -1;
+    if (st.mirror) pose.root.sx *= -1;
     return pose;
   }
   function addTrackJoint(pose, j, chans, u) {
@@ -552,7 +619,7 @@
     var sh = (LIB.postures[st.posture] || {}).shadow || {};
     var lift = Math.max(0, -pose.root.y - (sh.lift0 || 0));
     var k = Math.max(0.3, 1 - lift / 70);
-    return { rx: 46 * (sh.sx || 1) * k, ry: 7 * k, op: (sh.op === undefined ? 1 : sh.op) * k, cx: 100 + (sh.dx || 0) * (st.facing === 'left' ? -1 : 1) };
+    return { rx: 46 * (sh.sx || 1) * k, ry: 7 * k, op: (sh.op === undefined ? 1 : sh.op) * k, cx: 100 + (sh.dx || 0) * (st.mirror ? -1 : 1) };
   }
 
   function jointLocal(j, p) {
@@ -608,7 +675,7 @@
               posture: { enum: Object.keys(LIB.postures) },
               move: { enum: Object.keys(LIB.moves) },
               facing: { enum: ['left', 'right'] },
-              view: { enum: ['front', 'left', 'right'] },
+              view: { enum: ['front', 'left', 'right', 'left45', 'right45'] },
               fx: { type: 'array', maxItems: 3, items: { enum: Object.keys(LIB.fx) } },
               say: { type: 'string', maxLength: 120 },
               hold: { type: 'number', minimum: 0.8, maximum: 6 }
@@ -659,7 +726,7 @@
     LIB.activityOrder.forEach(function (id) { var a = LIB.activities[id]; L.push('- ' + id + ': ' + a.label + (a.hint ? ' — ' + a.hint : '')); });
     L.push('', 'Muốn ghép tự do thì dùng posture (tư thế nền), move (di chuyển), motion (động tác tay), facing (left/right):');
     L.push('- posture: ' + Object.keys(LIB.postures).map(function (k) { return k + ' (' + LIB.postures[k].label + ')'; }).join(', '));
-    L.push('- view: front (chính diện) | left / right (nghiêng 3/4 quay sang trái/phải màn hình — hợp khi hai nhân vật nói chuyện với nhau)');
+    L.push('- view: front (chính diện) | left / right (nghiêng nhẹ 3/4) | left45 / right45 (nghiêng 45° vẽ thật — hợp khi hai nhân vật nói chuyện với nhau)');
     L.push('- move: ' + Object.keys(LIB.moves).map(function (k) { var m = LIB.moves[k]; return k + ' (' + m.label + (m.postures ? '; tư thế: ' + m.postures.join('/') : '') + ')'; }).join(', '));
     L.push('', 'Schema:', JSON.stringify(directorSchema(cast), null, 2), '', 'Sự kiện: <mô tả sự kiện ở đây>');
     return L.join('\n');
@@ -748,6 +815,15 @@
       }
     });
     add('motion', 'Động tác hợp lệ trên khung xương', !mbad.length, mbad.filter(function (x, i, a) { return a.indexOf(x) === i; }).join('; '));
+    // độ phủ 45°: linh kiện nào đã có bản vẽ nghiêng thật (thiếu thì engine trượt parallax) — thông tin, không chặn
+    var cov = [], miss = [];
+    Object.keys(LIB.slots).forEach(function (slot) {
+      var ref = partRef(asset, slot), p = ref && getPart(slot, ref, asset.pack);
+      if (!p || ref === 'none' || /^held[LR]$/.test(slot)) return;
+      (p.views && p.views.q45 ? cov : miss).push(slot + ':' + p.id);
+    });
+    res.push({ id: 'view45', label: 'Bản vẽ nghiêng 45°: ' + cov.length + '/' + (cov.length + miss.length) + ' linh kiện', ok: true, info: true,
+      detail: miss.length ? 'chưa có (dùng trượt): ' + miss.join(', ') : 'đủ — nghiêng 45° vẽ thật' });
     var pbad = [];
     if (opts && opts.poses) LIB.activityOrder.forEach(function (id) {
       var a = LIB.activities[id];

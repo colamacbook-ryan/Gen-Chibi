@@ -49,7 +49,22 @@
           line('M62,71 C82,64 118,64 138,71', 1.2, '#000', 0.3) +
           '<rect x="94" y="59" width="12" height="12" rx="3" fill="' + C.P.accent + '"' + stroke(1.8) + '/><circle cx="100" cy="65" r="2.4" fill="#7ad0a5"/>'
       };
-    }, { params: { height: { label: 'Độ cao khăn', min: 0.85, max: 1.25, step: 0.01, def: 1, type: 'scaleY', pivot: [100, 74] } } });
+    }, { params: { height: { label: 'Độ cao khăn', min: 0.85, max: 1.25, step: 0.01, def: 1, type: 'scaleY', pivot: [100, 74] } },
+      views: { q45: function (C) {
+        // 45°: các đường may hội tụ lệch trái, ngọc đính dịch theo mặt và hẹp lại, hai dải khăn cùng rủ phía gáy (phải)
+        var ribbon = '<path d="M126,70 C144,84 150,110 160,140 C156,141 153,141 150,139 C146,128 144,118 140,110 C142,122 144,132 145,142 L138,141 C136,118 130,94 118,78 Z" fill="' + C.P.hat + '"' + stroke(2.2) + '/>' +
+          line('M130,84 C138,100 144,118 150,136', 1.2, '#fff', 0.2);
+        return {
+          hairBack: ribbon + '<g transform="translate(-9 3)">' + ribbon + '</g>',
+          hat: '<path d="M64,72 C61,50 72,30 96,27 C124,29 139,48 137,72 Z" fill="' + C.P.hat + '"' + stroke(2.8) + '/>' +
+            shadow('M137,72 C139,52 130,36 112,29 C126,40 131,54 130,70 Z', 0.18) +
+            line('M74,70 C72,54 78,40 92,31 M108,70 C112,54 108,40 94,30 M93,30 L88,68', 1.4, '#fff', 0.24) +
+            line('M70,42 C78,34 86,30 94,29', 2.6, '#fff', 0.22) +
+            '<path d="M57,64 C78,56 120,56 142,65 L142,78 C120,70 78,70 57,77 Z" fill="' + C.P.hat + '"' + stroke(2.6) + '/>' +
+            line('M60,70 C80,63 118,63 139,71', 1.2, '#000', 0.3) +
+            '<rect x="75" y="59" width="9" height="12" rx="2.5" fill="' + C.P.accent + '"' + stroke(1.8) + '/><ellipse cx="79.5" cy="65" rx="1.8" ry="2.4" fill="#7ad0a5"/>'
+        };
+      } } });
     part('hat', 'official-cap', 'Mũ quan (miện)', function (C) {
       return { hat: '<path d="M64,72 L68,33 L132,33 L136,72 C120,66 80,66 64,72 Z" fill="' + C.P.hat + '"' + stroke(2.8) + '/>' + shadow('M120,33 L132,33 L136,72 C130,70 126,69 122,69 Z', 0.18) +
         '<rect x="60" y="24" width="80" height="10" rx="2" fill="' + C.P.hat + '"' + stroke(2.6) + '/>' +
@@ -76,7 +91,22 @@
           line('M74,200 q4,-4 8,0 M84,203 q4,-4 8,0 M108,203 q4,-4 8,0 M118,200 q4,-4 8,0', 1.4, '#9d9a90'),
         armL: up, foreL: low, armR: mir(up), foreR: mir(low)
       };
-    }, { params: { width: { label: 'Độ rộng thân', min: 0.88, max: 1.18, step: 0.01, def: 1, type: 'scaleX', pivot: [100, 180] } } });
+    }, { params: { width: { label: 'Độ rộng thân', min: 0.88, max: 1.18, step: 0.01, def: 1, type: 'scaleX', pivot: [100, 180] } },
+      views: { q45: function (C) {
+        // 45°: vạt cổ chéo và đường giữa áo lệch trái theo hướng quay; phía gáy (phải) đổ bóng; tay áo dùng lại bản chính diện
+        var fr = GC.getPart('outfit', 'afi.tamquoc/crane-robe').draw(C);   // tay áo: dùng lại bản chính diện
+        return {
+          body: '<path d="' + H.TORSO_UP + '" fill="' + C.P.robe + '"' + stroke(3) + '/>' + shadow('M108,146 L124,146 L132.7,194 L112,194 Z', 0.1) +
+            '<path d="M80,146 L88,166 L96,146 Z" fill="' + C.P.inner + '"/>' +
+            '<path d="M73,146 L88,176 L104,146 L97,146 L88,162 L80,146 Z" fill="' + C.P.trim + '"/>' +
+            '<path d="M67.6,186 L132.4,186 L133.5,194 L66.5,194 Z" fill="' + C.P.trim + '"' + stroke(2) + '/>' + '<ellipse cx="88" cy="190" rx="3" ry="3.6" fill="' + C.P.accent + '"' + stroke(1.4) + '/>',
+          hem: '<path d="' + H.HEM + '" fill="' + C.P.robe + '"' + stroke(3) + '/>' + shadow('M110,188 L131.6,188 L136,212 C130,215 124,216 116,217 Z', 0.1) +
+            line('M88,194 L86,213', 1.4, '#000', 0.18) +
+            '<path d="M64,207 C80,214 120,214 136,207 L136,212 C120,219 80,219 64,212 Z" fill="' + C.P.trim + '"/>' +
+            line('M66,200 q4,-4 8,0 M76,203 q4,-4 8,0 M98,203 q4,-4 8,0 M110,200 q4,-4 8,0', 1.4, '#9d9a90'),
+          armL: fr.armL, foreL: fr.foreL, armR: fr.armR, foreR: fr.foreR
+        };
+      } } });
 
     /* ---------------- đồ cầm tay ---------------- */
     part('heldL', 'wine-gourd', 'Bầu rượu', function (C) {

@@ -49,8 +49,17 @@
       oval: { label: 'Trái xoan', ex: 54, d: 'M54,98 C54,68 74,54 100,54 C126,54 146,68 146,98 C146,124 128,145 100,149 C72,145 54,124 54,98 Z',
         sh: 'M146,98 C146,124 128,145 100,149 C120,138 138,122 140,98 Z' }
     };
+    // Bản vẽ 45° (quay mặt sang trái màn hình): viền trái = gò má + cằm phía xa, viền phải = gáy; tai phía sau nằm trên mặt đầu.
+    var HEADS45 = {
+      round: { d: 'M146,100 C146,70 126,54 100,54 C74,54 52,68 52,98 C52,122 64,140 80,146 C86,148 92,148 98,147 C126,144 146,128 146,100 Z',
+        sh: 'M146,100 C146,128 126,144 98,147 C120,138 138,124 140,100 Z' },
+      square: { d: 'M146,96 C146,66 126,54 100,54 C74,54 52,66 52,94 L52,116 C52,134 64,146 84,149 C92,150 98,150 104,149 C130,146 146,136 146,118 Z',
+        sh: 'M146,100 L146,118 C146,136 130,146 104,149 C126,140 140,128 140,110 Z' },
+      oval: { d: 'M146,98 C146,68 126,54 100,54 C74,54 54,68 53,96 C52,118 60,136 74,145 C80,149 88,150 94,148 C122,144 146,126 146,98 Z',
+        sh: 'M146,98 C146,126 122,144 94,148 C118,140 138,124 140,98 Z' }
+    };
     Object.keys(HEADS).forEach(function (id) {
-      var h = HEADS[id];
+      var h = HEADS[id], h45 = HEADS45[id];
       part('head', id, h.label, function (C) {
         var ear = '<ellipse cx="' + h.ex + '" cy="110" rx="8" ry="10" fill="' + C.P.skin + '"' + stroke(3) + '/>' +
           line('M' + (h.ex - 2) + ',105 q-3,5 1,10', 2, C.P.skinShade);
@@ -60,7 +69,14 @@
             both('<ellipse cx="69" cy="126" rx="8" ry="4.5" fill="' + C.P.blush + '" fill-opacity=".28"/>'),
           shade: shadow(h.sh, 0.09) + line('M98,120 q2,2 4,0', 2.2, C.P.skinShade)
         };
-      }, { shape: h.d });
+      }, { shape: h.d, shape45: h45.d, views: { q45: function (C) {
+        return {
+          head: '<path d="' + h45.d + '" fill="' + C.P.skin + '"' + stroke(3.2) + '/>' +
+            '<ellipse cx="106" cy="127" rx="8.5" ry="4.5" fill="' + C.P.blush + '" fill-opacity=".28"/><ellipse cx="62" cy="126" rx="4" ry="4" fill="' + C.P.blush + '" fill-opacity=".22"/>',
+          shade: shadow(h45.sh, 0.09) + line('M79,120 q2,2 4,0', 2.2, C.P.skinShade) +
+            '<ellipse cx="129" cy="113" rx="7.5" ry="9.5" fill="' + C.P.skin + '"' + stroke(2.8) + '/>' + line('M131,108 q3,5 -1,10', 2, C.P.skinShade)
+        };
+      } } });
     });
 
     part('mask', 'none', 'Không', function () { return null; });
@@ -73,15 +89,30 @@
         line('M66,70 C76,62 90,60 100,60', 3, '#fff', 0.22) + line('M86,72 q2,6 0,10 M114,72 q-2,6 0,10', 1.4, '#000', 0.25) +
         both('<path d="' + LOCK + '" fill="' + C.P.hair + '"' + stroke(2.4) + '/>');
     }
+    // Mái 45°: đường ngôi lệch về trái theo mặt, khối tóc gáy phủ bên phải xuống ngang trên tai, lọn tóc mai phía xa ở mép trái.
+    var BANGS45 = 'M54,100 C52,70 72,54 100,54 C128,55 148,70 148,100 C146,96 142,93 139,92 C136,100 132,104 126,104 C123,96 119,90 114,86 C106,89 96,87 90,81 C82,86 72,87 64,83 C59,88 56,94 54,100 Z';
+    function bangs45(C) {
+      return '<path d="' + BANGS45 + '" fill="' + C.P.hair + '"' + stroke(2.8) + '/>' +
+        line('M70,68 C80,60 94,58 106,59', 3, '#fff', 0.22) + line('M78,74 q2,6 0,9 M104,74 q-2,6 0,10', 1.4, '#000', 0.25) +
+        '<path d="M53,96 C49,112 51,124 56,132 C57,120 57,108 59,98 Z" fill="' + C.P.hair + '"' + stroke(2.2) + '/>';
+    }
     var HAIR_P = { volume: { label: 'Độ phồng tóc', min: 0.9, max: 1.15, step: 0.01, def: 1, type: 'scale', pivot: [100, 104] } };
-    part('hair', 'neat', 'Mái gọn', function (C) { return { hairFront: bangs(C) }; }, { params: HAIR_P });
+    part('hair', 'neat', 'Mái gọn', function (C) { return { hairFront: bangs(C) }; }, { params: HAIR_P, views: { q45: function (C) { return { hairFront: bangs45(C) }; } } });
     part('hair', 'long-back', 'Tóc dài sau lưng', function (C) {
       return {
         hairBack: '<path d="M50,94 C38,140 42,190 58,214 L142,214 C158,190 162,140 150,94 Z" fill="' + C.P.hair + '"' + stroke(2.8) + '/>' +
           line('M60,140 C58,170 62,196 68,210 M140,140 C142,170 138,196 132,210', 1.6, '#fff', 0.14),
         hairFront: bangs(C)
       };
-    }, { params: { length: { label: 'Độ dài tóc', min: 0.75, max: 1.1, step: 0.01, def: 1, type: 'scaleY', pivot: [100, 94] } } });
+    }, { params: { length: { label: 'Độ dài tóc', min: 0.75, max: 1.1, step: 0.01, def: 1, type: 'scaleY', pivot: [100, 94] } },
+      views: { q45: function (C) {
+        // 45°: khối tóc dài dồn về phía gáy (phải) và rủ sau lưng
+        return {
+          hairBack: '<path d="M58,96 C46,140 52,190 66,214 L150,214 C164,188 166,138 150,92 Z" fill="' + C.P.hair + '"' + stroke(2.8) + '/>' +
+            line('M146,140 C150,170 146,196 140,210 M70,150 C68,176 72,198 76,210', 1.6, '#fff', 0.14),
+          hairFront: bangs45(C)
+        };
+      } } });
     part('hair', 'topknot', 'Búi tó', function (C) {
       return {
         hairFront: '<circle cx="100" cy="44" r="12" fill="' + C.P.hair + '"' + stroke(2.8) + '/>' + line('M93,38 q7,-5 14,0', 2, '#fff', 0.22) + bangs(C) +
@@ -102,7 +133,14 @@
         mustache: line('M84,127 C89,122 95,122 100,125.5 C105,122 111,122 116,127', 2.4, C.P.hair) +
           line('M84,127 q-3,1 -4,4 M116,127 q3,1 4,4', 1.8, C.P.hair)
       };
-    }, { params: { length: { label: 'Độ dài chòm', min: 0.7, max: 1.5, step: 0.05, def: 1, type: 'scaleY', pivot: [100, 141] } } });
+    }, { params: { length: { label: 'Độ dài chòm', min: 0.7, max: 1.5, step: 0.05, def: 1, type: 'scaleY', pivot: [100, 141] } },
+      views: { q45: function (C) {
+        // 45°: chòm râu dưới cằm lệch trái, ria phía xa ngắn lại
+        return {
+          beard: '<path d="M77,142 C76,154 80,164 83,170 C86,163 89,153 88,141 Z" fill="' + C.P.hair + '"' + stroke(1.6) + '/>',
+          mustache: line('M70,127 C73,123 77,123 80,125.5 C85,122 92,122 98,127', 2.4, C.P.hair) + line('M70,127 q-2,1 -3,3 M98,127 q3,1 4,4', 1.8, C.P.hair)
+        };
+      } } });
     part('beard', 'long3', 'Râu dài ba chòm', function (C) {
       var side = '<path d="M70,120 C63,140 65,162 74,180 C77,162 79,140 79,124 Z" fill="' + C.P.hair + '"' + stroke(2.2) + '/>';
       return {
@@ -209,15 +247,21 @@
     part('back', 'cape', 'Áo choàng', function (C) {
       return { backItem: '<path d="M74,150 C58,170 52,200 50,222 L150,222 C148,200 142,170 126,150 Z" fill="' + C.P.cape + '"' + stroke(2.6) + '/>' + shadow('M126,150 C142,170 148,200 150,222 L134,222 C134,196 130,170 120,152 Z', 0.15) };
     });
-    part('legwear', 'pants', 'Quần ống gọn', function (C) {
+    function pants(C) {
       var th = '<rect x="83" y="198" width="14" height="17" rx="5.5" fill="' + C.P.pants + '"' + stroke(2.4) + '/>';
       var sh = '<rect x="83.5" y="208" width="11" height="14" rx="4.5" fill="' + C.P.pants + '"' + stroke(2.2) + '/>' + line('M86,212 q3,1.5 6,0', 1.2, '#000', 0.22);
       return { thighL: th, shinL: sh, thighR: mir(th), shinR: mir(sh) };
-    });
+    }
+    // ống quần chibi nhìn 45° giống chính diện: dùng chung hình, engine dời vị trí hai chân
+    part('legwear', 'pants', 'Quần ống gọn', pants, { views: { q45: pants } });
     part('shoes', 'boots', 'Ủng', function (C) {
       var b = '<ellipse cx="87" cy="221" rx="11" ry="6.5" fill="' + C.P.boots + '"' + stroke(2.4) + '/>' + '<path d="M80,218 q5,-3 10,-1" fill="none" stroke="#fff" stroke-opacity=".25" stroke-width="1.6" stroke-linecap="round"/>';
       return { footL: b, footR: mir(b) };
-    });
+    }, { views: { q45: function (C) {
+      var b = '<path d="M75,222 C74,215 84,214 94,216 C100,218 100,226 94,227.5 L81,227.5 C77,227.5 75,225 75,222 Z" fill="' + C.P.boots + '"' + stroke(2.4) + '/>' +
+        '<path d="M79,219 q5,-3 10,-1" fill="none" stroke="#fff" stroke-opacity=".25" stroke-width="1.6" stroke-linecap="round"/>';
+      return { footL: b, footR: '<g transform="translate(22 -1)">' + b + '</g>' };
+    } } });
 
     part('heldL', 'none', 'Không', function () { return null; });
     part('heldR', 'none', 'Không', function () { return null; });
@@ -544,6 +588,9 @@
       armL: { rot: k(0, 150, 0.5, 162, 1, 150) }, foreL: { rot: k(0, 10, 1, 10) }, armR: { rot: k(0, -150, 0.5, -162, 1, -150) }, foreR: { rot: k(0, -10, 1, -10) } });
     M('deflate', 'Xẹp lép kiệt sức', 3, 0.5, { body: { sy: k(0, 0.9, 0.5, 0.88, 1, 0.9), sx: k(0, 1.04, 1, 1.04) }, head: { y: k(0, 7, 0.5, 8, 1, 7), rot: k(0, -4, 0.5, -6, 1, -4) },
       armL: { rot: k(0, 6, 1, 6) }, armR: { rot: k(0, -6, 1, -6) } });
+
+    // hiệu ứng bám mặt: ở góc 45° engine ánh xạ theo vị trí mắt gần/xa
+    ['tears', 'blush', 'gloomLines', 'snot', 'gum'].forEach(function (id) { if (GC.LIB.fx[id]) GC.LIB.fx[id].face = true; });
 
     /* ================= ENGINE 0.3: TƯ THẾ · DI CHUYỂN · ĐỘNG TÁC · ĐẠO CỤ · HOẠT ĐỘNG =================
      * Một khung hình = tư thế nền × di chuyển × động tác (tay) × biểu cảm (mặt) + đạo cụ.

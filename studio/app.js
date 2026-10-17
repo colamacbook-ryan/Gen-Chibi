@@ -582,7 +582,7 @@
         if (slot === 'hair') r.look.parts.hat = 'none';
         var users = GC.assets().filter(function (a) { var v = GC.partRef(a, slot); return v === p.id || v === p.pack + '/' + p.id; }).map(function (a) { return a.name; });
         t.appendChild(h('tr', null, h('td', { class: 'id', text: 'PT-' + String(n).padStart(4, '0') }), h('td', null, th), h('td', { class: 'k', text: LIB.slots[slot].label }),
-          h('td', { class: 'v', text: p.id }), h('td', { class: 'nw', text: p.label }), h('td', null, h('span', { class: 'tag', text: p.pack })),
+          h('td', { class: 'v', text: p.id }), h('td', { class: 'nw' }, p.label, p.views && p.views.q45 ? h('span', { class: 'tag', style: 'margin-left:6px', title: 'Có bản vẽ nghiêng 45° thật', text: '45°' }) : null), h('td', null, h('span', { class: 'tag', text: p.pack })),
           h('td', { class: 'note', text: p.params ? Object.keys(p.params).map(function (k) { return p.params[k].label; }).join(', ') : '—' }),
           h('td', { class: 'note', text: users.join(', ') || '—' })));
         R.image(th, r, 'normal', { crop: ['head', 'mask', 'hair', 'hat'].indexOf(slot) >= 0, noShadow: true });
@@ -677,7 +677,7 @@
       face.appendChild(h('button', { 'aria-pressed': String(sel.facing === f[0]), onclick: function () { sel.facing = f[0]; Array.prototype.forEach.call(face.children, function (b, i) { b.setAttribute('aria-pressed', String(i === (f[0] === 'right' ? 0 : 1))); }); play(); } }, f[1]));
     });
     var viewSeg = h('div', { class: 'seg' });
-    [['', 'Tự động'], ['front', 'Chính diện'], ['left', '3/4 trái'], ['right', '3/4 phải']].forEach(function (v) {
+    [['', 'Tự động'], ['front', 'Chính diện'], ['left', '3/4 trái'], ['right', '3/4 phải'], ['left45', '45° trái'], ['right45', '45° phải']].forEach(function (v) {
       viewSeg.appendChild(h('button', { 'data-v': v[0], 'aria-pressed': String(sel.view === v[0]), onclick: function () {
         sel.view = v[0];
         Array.prototype.forEach.call(viewSeg.children, function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-v') === sel.view)); });
@@ -723,7 +723,7 @@
       var st = inst.setState(stateOf(), dirOf());
       var act = LIB.activities[sel.activity];
       $('psLabel').textContent = act ? act.label : '';
-      info.textContent = 'Đang diễn: ' + stateLabel(stateOf()) + ' · ' + (st.turn ? (st.turn < 0 ? '3/4 trái' : '3/4 phải') : 'chính diện') + ' · tư thế ' + (LIB.postures[st.posture] || {}).label + ' · ' +
+      info.textContent = 'Đang diễn: ' + stateLabel(stateOf()) + ' · ' + (st.kind === 'q45' ? (st.mirror ? '45° phải' : '45° trái') + (st.fallback45 && st.fallback45.length ? ' (linh kiện chưa vẽ nghiêng: ' + st.fallback45.join(', ') + ')' : ' (vẽ thật đủ bộ)') : st.turn ? (st.turn < 0 ? '3/4 trái' : '3/4 phải') : 'chính diện') + ' · tư thế ' + (LIB.postures[st.posture] || {}).label + ' · ' +
         (st.move ? 'di chuyển ' + LIB.moves[st.move].label : 'đứng yên') + ' · động tác ' + ((LIB.motions[st.motion] || {}).label || st.motion) +
         (st.props.length ? ' · đạo cụ: ' + st.props.map(function (p) { return LIB.props[p].label; }).join(', ') : '');
       Array.prototype.forEach.call(grid.querySelectorAll('.state-cell'), function (c) { c.setAttribute('aria-pressed', String(c.getAttribute('data-a') === sel.activity)); });

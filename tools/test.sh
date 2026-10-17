@@ -29,7 +29,7 @@ const acts = GC.LIB.activityOrder;
 GC.assets().forEach(a => {
   const g = GC.gate(a, { poses: true }).find(x => x.id === "poses");
   if (!g || !g.ok) { bad++; console.log("   ✗ hoạt động", a.key, g && g.detail); }
-  acts.forEach(id => [0, 0.21, 0.5].forEach(t => ["left", "right"].forEach(f => ["front", "left", "right"].forEach(v => {
+  acts.forEach(id => [0, 0.21, 0.5].forEach(t => ["left", "right"].forEach(f => ["front", "left", "right", "left45", "right45"].forEach(v => {
     const svg = GC.svgString(a, GC.LIB.activities[id].state || "normal", { director: { activity: id, facing: f, view: v }, t });
     if (/NaN|undefined/.test(svg)) { bad++; console.log("   ✗", a.key, id, "t=" + t, f, v, "SVG có NaN/undefined"); }
   }))));
@@ -45,8 +45,12 @@ const cast = GC.assets();
 const ok = GC.director.validate({ title: "t", steps: [{ actor: cast[0].id, state: "normal", activity: "eat", say: "a" }, { actor: cast[0].id, state: "panic", move: "run", facing: "left", say: "b" }] }, cast);
 const ko = GC.director.validate({ title: "t", steps: [{ actor: cast[0].id, state: "normal", move: "swim", posture: "stand", say: "a" }, { actor: cast[0].id, state: "normal", activity: "bay-len-troi", say: "b" }] }, cast);
 if (ok.length || ko.length !== 2) { bad++; console.log("   ✗ đạo diễn:", ok, ko); }
+// 45° vẽ thật ở mức linh kiện: bộ của Gia Cát Lượng phủ đủ; nhân vật khác vẫn dựng được (engine trượt phần thiếu)
+const gcl = GC.assets().find(a => a.id === "gia-cat-luong");
+const cov = GC.gate(gcl).find(x => x.id === "view45");
+if (!cov || !/đủ/.test(cov.detail)) { bad++; console.log("   ✗ Gia Cát Lượng chưa đủ bản vẽ 45°:", cov && cov.detail); }
 if (bad) process.exit(1);
-console.log("   ✓", acts.length, "hoạt động ×", GC.assets().length, "nhân vật × 3 thời điểm × 2 hướng × 3 góc nhìn; kịch bản có hoạt động được kiểm");
+console.log("   ✓", acts.length, "hoạt động ×", GC.assets().length, "nhân vật × 3 thời điểm × 2 hướng × 5 góc nhìn; kịch bản có hoạt động được kiểm");
 '
 
 echo "3) MCP"

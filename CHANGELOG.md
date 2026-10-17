@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.2.2 — Góc nghiêng 45° vẽ thật (ở mức linh kiện)
+- **Trục góc nhìn trong hệ linh kiện**: linh kiện có thể kèm bản vẽ `views.q45`; nhân vật phối linh kiện nào cũng tự có 45° (`view: left45 | right45`). Bản chuẩn quay mặt sang trái màn hình, 45° phải = lật gương.
+- Linh kiện chưa có bản 45°: engine tự trượt parallax (φ = 32°) để vẫn dùng được. Cổng kiểm **"Bản vẽ nghiêng 45°: x/y linh kiện"** cho biết còn thiếu linh kiện nào; Thư viện linh kiện gắn nhãn "45°".
+- Vị trí mặt 45° (mắt gần/xa, mày, miệng) thuộc engine → mọi kiểu mắt/mày/miệng đều hưởng. Hiệu ứng bám mặt (nước mắt, má hồng, mặt tái, bong bóng) tự ánh xạ theo mắt gần/xa. Tay đưa lên mặt (che miệng, vuốt râu, uống) tự đi theo miệng.
+- Bản vẽ 45° đã có: dáng đầu tròn / hàm vuông / trái xoan (tai phía gáy nằm trên đầu), mái gọn, tóc dài sau lưng, râu dê, quần ống gọn, ủng, khăn cuốn, áo hạc sưởng → **Gia Cát Lượng đủ bộ 45° vẽ thật**.
+- Studio: chọn góc 45° trái/phải; sân khấu báo linh kiện nào đang dùng bản trượt. MCP: `get_catalog` liệt kê `views` của từng linh kiện, `render_character` nhận `left45/right45`.
+- Test: 32 hoạt động × mọi nhân vật × 3 thời điểm × 2 hướng × 5 góc nhìn; khẳng định bộ Gia Cát Lượng phủ đủ 45°.
+
 ## v0.2.1 — Góc nghiêng 3/4
 - **Góc nhìn 3/4** (`view: front | left | right`, theo màn hình) cho mọi nhân vật, không vẽ lại linh kiện: quay kiểu parallax trên mặt cầu (x = R·sin(θ − φ)) — mắt xa hẹp lại, mắt gần rộng ra, miệng/râu/mái trượt theo, tóc sau và tai trượt ngược, thân quay ít hơn đầu, phía sau đầu lộ tóc (lưỡi liềm tóc tới ngang tai), tay phía xa lùi ra sau thân khi đang buông.
 - Đang di chuyển mà chưa chọn góc: tự nghiêng 3/4 về hướng đi.
