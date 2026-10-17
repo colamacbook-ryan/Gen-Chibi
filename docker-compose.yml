@@ -14,6 +14,7 @@ services:
       GC_HOME: /install
       GC_PORT: "7480"
       GC_LISTEN: 0.0.0.0
+      GC_IN_DOCKER: "1"
       GC_MASTER_KEY: ${GC_MASTER_KEY:?thiếu GC_MASTER_KEY trong .env}
       GC_AUTO_UPDATE: ${GC_AUTO_UPDATE:-1}
       GC_API_TOKEN: ${GC_API_TOKEN:-}

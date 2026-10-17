@@ -14,7 +14,14 @@ api() { curl -fsS -X "$1" -H 'X-GC-Request: 1' -H 'Content-Type: application/jso
 running_native() { [ -f "$PIDF" ] && kill -0 "$(cat "$PIDF")" 2>/dev/null; }
 json() { node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const o=JSON.parse(s);const k=process.argv[1].split(".");let v=o;for(const x of k)v=v==null?v:v[x];console.log(v===undefined?"":typeof v==="object"?JSON.stringify(v):v)})' "$1" 2>/dev/null || sed -n "s/.*\"$1\": *\"\{0,1\}\([^\",}]*\).*/\1/p"; }
 
+guard_exposure() {
+  # đóng khi nghi ngờ: mở ra ngoài máy này mà không có token thì không chạy
+  case "${GC_BIND:-127.0.0.1}" in 127.0.0.1|localhost|::1) ;; *)
+    [ -n "${GC_API_TOKEN:-}" ] || { echo "Từ chối chạy: GC_BIND=$GC_BIND mở ra mạng nhưng chưa có GC_API_TOKEN trong .env." >&2; exit 1; } ;;
+  esac
+}
 start() {
+  guard_exposure
   if [ "$MODE" = docker ]; then docker compose up -d
   else
     running_native && { echo "Đang chạy (pid $(cat "$PIDF"))"; return; }

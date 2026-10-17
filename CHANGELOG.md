@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.1
+- MCP: `get_character` và `render_character` nhận cả id ngắn (vd. `trieu-van`), không bắt buộc key đầy đủ.
+- Bảo mật: không có token thì server chỉ phục vụ kết nối từ chính máy này (kiểm địa chỉ thật, không tin header Host); CLI từ chối chạy khi mở ra mạng mà thiếu `GC_API_TOKEN`.
+- Phát hành tự động khi `VERSION` trên `main` thay đổi.
+
 ## v0.1.0
 Bản MVP đầu tiên.
 - Engine 0.2: khung xương có khuỷu tay, thư viện theo nhóm (pack), kế thừa 4 tầng (kho → trait → nhân vật → đạo diễn), tham số linh kiện.

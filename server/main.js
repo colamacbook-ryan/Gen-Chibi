@@ -18,6 +18,7 @@ const VERSION = fs.readFileSync(path.join(APP, 'VERSION'), 'utf8').trim();
 const PORT = +(process.env.GC_PORT || 7480);
 const HOST = process.env.GC_LISTEN || '127.0.0.1';   // trong Docker đặt 0.0.0.0; cổng ngoài vẫn chỉ mở cho 127.0.0.1
 const API_TOKEN = process.env.GC_API_TOKEN || '';
+const IN_DOCKER = process.env.GC_IN_DOCKER === '1';
 const REPO = process.env.GC_REPO || 'colamacbook-ryan/Gen-Chibi';
 const EXTRA_HOSTS = String(process.env.GC_ALLOWED_HOSTS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 const ALLOWED_HOSTS = new Set(['localhost', '127.0.0.1', '::1'].concat(EXTRA_HOSTS));
@@ -84,6 +85,9 @@ async function route(req, res) {
   // Chống DNS rebinding: chỉ phục vụ khi Host là máy cục bộ (hoặc tên được cho phép trong GC_ALLOWED_HOSTS)
   const hostName = String(req.headers.host || '').replace(/:\d+$/, '').replace(/^\[|\]$/g, '').toLowerCase();
   if (!ALLOWED_HOSTS.has(hostName)) return fail(res, 403, 'Host không được phép');
+  // Không có token thì chỉ phục vụ kết nối từ chính máy này (Host có thể bị giả, nên kiểm địa chỉ thật).
+  // Trong Docker, cổng ngoài đã khoá 127.0.0.1 và CLI từ chối mở ra mạng khi thiếu token.
+  if (!API_TOKEN && !IN_DOCKER && !/^(127\.|::1$|::ffff:127\.)/.test(String(req.socket.remoteAddress || ''))) return fail(res, 403, 'chỉ phục vụ máy cục bộ (đặt GC_API_TOKEN để mở cho máy khác)');
   // Truy cập từ máy khác bắt buộc có token riêng của bản cài
   if (API_TOKEN && (p.startsWith('/api/') || p === '/mcp') && p !== '/api/health') {
     const auth = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '') || req.headers['x-gc-token'] || '';
