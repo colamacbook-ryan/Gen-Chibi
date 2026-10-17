@@ -1,0 +1,32 @@
+# gen-chibi — chạy bằng Docker (install.sh chép tệp này vào thư mục cài, cạnh .env)
+# © 2026 Afi Labs — All rights reserved.
+# Không build image riêng: dùng Node chính chủ, mã chạy nằm ở ./releases/<phiên bản>, con trỏ ./current.
+# Cập nhật = app tự tải bản mới vào ./releases rồi đổi ./current; launcher khởi động lại, tự rollback nếu lỗi.
+name: gen-chibi
+services:
+  app:
+    image: node:22-alpine
+    container_name: gen-chibi
+    working_dir: /install
+    command: ["node", "/install/launcher.js"]
+    user: "${GC_UID:-1000}:${GC_GID:-1000}"
+    environment:
+      GC_HOME: /install
+      GC_PORT: "7480"
+      GC_LISTEN: 0.0.0.0
+      GC_MASTER_KEY: ${GC_MASTER_KEY:?thiếu GC_MASTER_KEY trong .env}
+      GC_AUTO_UPDATE: ${GC_AUTO_UPDATE:-1}
+      GC_API_TOKEN: ${GC_API_TOKEN:-}
+      GC_ALLOWED_HOSTS: ${GC_ALLOWED_HOSTS:-}
+      GC_REPO: ${GC_REPO:-colamacbook-ryan/Gen-Chibi}
+    ports:
+      - "${GC_BIND:-127.0.0.1}:${GC_PORT:-7480}:7480"
+    volumes:
+      - ./:/install
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:7480/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

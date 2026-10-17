@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# gen-chibi — lệnh quản lý trên máy chủ. install.sh thay __GC_HOME__ bằng thư mục cài.
+# © 2026 Afi Labs — All rights reserved.
+set -euo pipefail
+HOME_DIR="${GC_HOME:-__GC_HOME__}"
+[ -d "$HOME_DIR" ] || { echo "Không thấy thư mục cài $HOME_DIR" >&2; exit 1; }
+cd "$HOME_DIR"
+set -a; [ -f .env ] && . ./.env; set +a
+MODE="${GC_MODE:-docker}"; PORT="${GC_PORT:-7480}"
+URL="http://127.0.0.1:$PORT"
+PIDF="$HOME_DIR/logs/launcher.pid"; LOG="$HOME_DIR/logs/gen-chibi.log"
+
+api() { curl -fsS -X "$1" -H 'X-GC-Request: 1' -H 'Content-Type: application/json' ${GC_API_TOKEN:+-H "Authorization: Bearer $GC_API_TOKEN"} ${3:+-d "$3"} "$URL$2"; }
+running_native() { [ -f "$PIDF" ] && kill -0 "$(cat "$PIDF")" 2>/dev/null; }
+json() { node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const o=JSON.parse(s);const k=process.argv[1].split(".");let v=o;for(const x of k)v=v==null?v:v[x];console.log(v===undefined?"":typeof v==="object"?JSON.stringify(v):v)})' "$1" 2>/dev/null || sed -n "s/.*\"$1\": *\"\{0,1\}\([^\",}]*\).*/\1/p"; }
+
+start() {
+  if [ "$MODE" = docker ]; then docker compose up -d
+  else
+    running_native && { echo "Đang chạy (pid $(cat "$PIDF"))"; return; }
+    mkdir -p logs
+    GC_HOME="$HOME_DIR" GC_PORT="$PORT" nohup node "$HOME_DIR/launcher.js" >> "$LOG" 2>&1 &
+    echo $! > "$PIDF"; echo "Đã chạy (pid $!)"
+  fi
+}
+stop() {
+  if [ "$MODE" = docker ]; then docker compose stop
+  elif running_native; then kill "$(cat "$PIDF")"; rm -f "$PIDF"; echo "Đã dừng"
+  else echo "Không chạy"; fi
+}
+status() {
+  local h; h="$(curl -fsS "$URL/api/health" 2>/dev/null || true)"
+  if [ -n "$h" ]; then echo "● đang chạy · v$(echo "$h" | json version | sed 's/^v//') · $URL · chế độ $MODE"; else echo "○ không chạy · chế độ $MODE"; fi
+  echo "  bản cài: $(cd releases 2>/dev/null && ls | tr '\n' ' ')· đang dùng $(basename "$(readlink current)")"
+}
+update() {
+  echo "Kiểm tra phiên bản…"
+  api POST /api/update/check >/dev/null || { echo "Không kiểm tra được (app có đang chạy?)"; exit 1; }
+  local r; r="$(api POST /api/update/apply '{}')" || { echo "Cập nhật thất bại; vẫn chạy bản hiện tại."; exit 1; }
+  echo "$r" | json message
+  if echo "$r" | grep -q '"restart":true'; then
+    for i in $(seq 1 60); do sleep 1; curl -fsS "$URL/api/health" >/dev/null 2>&1 && break; done
+    sleep 2; status
+  fi
+}
+backup() {
+  mkdir -p backups; local f="backups/thu-cong-$(date +%Y%m%d-%H%M%S).tar.gz"
+  tar -czf "$f" data && echo "Đã sao lưu: $HOME_DIR/$f"
+}
+restore() {
+  local f="${1:-}"; [ -f "$f" ] || { echo "Dùng: genchibi restore <tệp .tar.gz trong backups/>"; exit 1; }
+  read -r -p "Thay dữ liệu hiện tại bằng $f? (gõ 'dong y') " a; [ "$a" = "dong y" ] || { echo "Huỷ."; exit 1; }
+  backup; stop; rm -rf data.restore && mkdir data.restore && tar -xzf "$f" -C data.restore
+  rm -rf data && mv data.restore/data data && rm -rf data.restore; start; echo "Đã khôi phục."
+}
+uninstall() {
+  read -r -p "Gỡ gen-chibi. Giữ lại dữ liệu (nhân vật, kịch bản, backup)? [C/k] " a
+  stop || true
+  [ "$MODE" = docker ] && docker compose down || true
+  rm -f "$HOME/.local/bin/genchibi"
+  if [ "$a" = "k" ] || [ "$a" = "K" ]; then cd / && rm -rf "$HOME_DIR"; echo "Đã gỡ và xoá toàn bộ dữ liệu."
+  else rm -rf "$HOME_DIR/releases" "$HOME_DIR/current" "$HOME_DIR/previous" "$HOME_DIR/launcher.js" "$HOME_DIR/docker-compose.yml"; echo "Đã gỡ. Dữ liệu giữ ở $HOME_DIR/data và $HOME_DIR/backups."; fi
+}
+mcp() {
+  # cầu stdio cho agent (Claude Code, Claude Desktop…)
+  if [ "$MODE" = docker ]; then exec docker compose exec -T app node /install/current/server/mcp-stdio.js
+  else GC_PORT="$PORT" exec node "$HOME_DIR/current/server/mcp-stdio.js"; fi
+}
+logs() { if [ "$MODE" = docker ]; then docker compose logs -f --tail 200; else tail -n 200 -f "$LOG"; fi; }
+open_ui() { local u="http://localhost:$PORT"; (command -v open >/dev/null && open "$u") || (command -v xdg-open >/dev/null && xdg-open "$u") || echo "$u"; }
+
+case "${1:-help}" in
+  start) start ;; stop) stop ;; restart) stop; start ;; status) status ;; update) update ;;
+  logs) logs ;; backup) backup ;; restore) shift; restore "${1:-}" ;; uninstall) uninstall ;;
+  mcp) mcp ;; open) open_ui ;; version) status ;;
+  *) cat <<EOF
+genchibi — quản lý gen-chibi ($HOME_DIR, chế độ $MODE)
+  start | stop | restart | status   chạy, dừng, xem trạng thái
+  update                            kiểm tra và cập nhật ngay (tự rollback nếu bản mới lỗi)
+  logs                              xem log
+  backup | restore <tệp>            sao lưu / khôi phục dữ liệu
+  mcp                               cầu MCP (stdio) cho agent: claude mcp add gen-chibi -- genchibi mcp
+  open                              mở Studio trong trình duyệt
+  uninstall                         gỡ (hỏi giữ hay xoá dữ liệu)
+EOF
+  ;;
+esac

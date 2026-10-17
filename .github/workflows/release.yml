@@ -1,0 +1,31 @@
+# Phát hành: đẩy tag vX.Y.Z → kiểm thử → đóng gói → GitHub Release (gói + SHA256SUMS + ghi chú).
+# Bản cài trên máy người dùng đọc Release này để tự cập nhật.
+name: release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Tag khớp VERSION
+        run: |
+          test "v$(tr -d ' \n' < VERSION)" = "$GITHUB_REF_NAME" || { echo "VERSION ($(cat VERSION)) khác tag $GITHUB_REF_NAME"; exit 1; }
+      - name: Kiểm thử
+        run: bash tools/test.sh
+      - name: Đóng gói
+        run: bash tools/package.sh dist
+      - name: Ghi chú phát hành từ CHANGELOG.md
+        run: |
+          awk -v t="## $GITHUB_REF_NAME" '$0==t{f=1;next} /^## /{if(f)exit} f' CHANGELOG.md > notes.md
+          test -s notes.md || echo "Phát hành $GITHUB_REF_NAME" > notes.md
+      - name: Tạo Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/SHA256SUMS --title "gen-chibi $GITHUB_REF_NAME" --notes-file notes.md

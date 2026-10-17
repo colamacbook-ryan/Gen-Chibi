@@ -7,7 +7,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 W="$(mktemp -d)"; FEED="$W/feed"; HOME_DIR="$W/home"; PORT=7499; FPORT=7498
-trap 'kill $LPID $FPID 2>/dev/null || true; rm -rf "$W"' EXIT
+trap 'kill $LPID $FPID 2>/dev/null || true; [ -n "${KEEP:-}" ] || rm -rf "$W"' EXIT
 mkdir -p "$FEED" "$HOME_DIR/releases"
 pass=0; failn=0
 ok()  { echo "  ✓ $1"; pass=$((pass+1)); }
@@ -32,6 +32,7 @@ api() { curl -s -X "$1" -H 'X-GC-Request: 1' -H 'Content-Type: application/json'
 ver() { curl -s "http://127.0.0.1:$PORT/api/health" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).version)}catch{console.log("down")}})'; }
 waitver() { for i in $(seq 1 40); do [ "$(ver)" = "$1" ] && return 0; sleep 0.5; done; return 1; }
 
+for p in $PORT $FPORT; do (echo > /dev/tcp/127.0.0.1/$p) 2>/dev/null && { echo "Cổng $p đang bị tiến trình khác chiếm — dừng nó rồi chạy lại."; exit 1; }; done
 echo "Dựng các bản thử…"
 build 0.1.0; build 0.1.1; build 0.1.2 broken
 ( cd "$FEED" && python3 -m http.server $FPORT >/dev/null 2>&1 ) & FPID=$!
