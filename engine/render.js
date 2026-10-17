@@ -197,7 +197,7 @@
     '@keyframes gc-blink{0%{opacity:0}94%{opacity:1}97%{opacity:0}}',
     '.gc-full{overflow:visible;display:block;width:100%;height:100%}',
     '.gc-shadow{fill:rgba(20,24,22,.16)}',
-    '.gc-full [data-l="eyes"]{transform-box:view-box;transform-origin:100px 108px;animation:chb-blink 4.2s infinite}',
+    '.gc-full .gc-eyes{transform-box:fill-box;transform-origin:50% 50%;animation:chb-blink 4.2s infinite}',
     '@keyframes chb-blink{0%,93%,100%{transform:scaleY(1)}95.5%{transform:scaleY(.12)}}',
     '.chb-flow{animation:chb-flow .5s linear infinite}@keyframes chb-flow{to{stroke-dashoffset:-24}}',
     '.chb-drip{transform-box:fill-box;transform-origin:50% 0;animation:chb-drip 1.4s ease-in infinite}@keyframes chb-drip{0%{transform:scaleY(.4)}70%{transform:scaleY(1.15)}100%{transform:scaleY(.4)}}',

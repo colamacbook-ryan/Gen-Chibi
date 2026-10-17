@@ -269,6 +269,9 @@
       var x = a[0] + side * ev.gap, y = a[1] + ev.y;
       out.eyes += '<g transform="translate(' + x + ' ' + y + ') scale(' + ev.size + ') translate(' + (-x) + ' ' + (-y) + ')">' + ep(es, side, x, y, C) + '</g>';
     });
+    // Chớp mắt chạy trên nhóm con này. KHÔNG đặt animation CSS lên chính nhóm lớp (data-l):
+    // thuộc tính CSS transform sẽ đè transform của khung xương và lớp đó đứng yên khi đầu chuyển động.
+    out.eyes = '<g class="gc-eyes">' + out.eyes + '</g>';
 
     var bs = LIB.browStyles[asset.look.brows] || LIB.browStyles.normal;
     var bp = LIB.browPoses[st.brows];

@@ -88,8 +88,10 @@ async function route(req, res) {
   // Không có token thì chỉ phục vụ kết nối từ chính máy này (Host có thể bị giả, nên kiểm địa chỉ thật).
   // Trong Docker, cổng ngoài đã khoá 127.0.0.1 và CLI từ chối mở ra mạng khi thiếu token.
   if (!API_TOKEN && !IN_DOCKER && !/^(127\.|::1$|::ffff:127\.)/.test(String(req.socket.remoteAddress || ''))) return fail(res, 403, 'chỉ phục vụ máy cục bộ (đặt GC_API_TOKEN để mở cho máy khác)');
-  // Truy cập từ máy khác bắt buộc có token riêng của bản cài
-  if (API_TOKEN && (p.startsWith('/api/') || p === '/mcp') && p !== '/api/health') {
+  // Đã đặt token: /mcp luôn cần token; /api cần token khi đi qua tên miền ngoài (tunnel, mạng LAN).
+  // Studio mở bằng localhost vẫn dùng bình thường.
+  const localHost = hostName === 'localhost' || hostName === '127.0.0.1' || hostName === '::1';
+  if (API_TOKEN && (p === '/mcp' || (p.startsWith('/api/') && p !== '/api/health' && !localHost))) {
     const auth = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '') || req.headers['x-gc-token'] || '';
     if (auth !== API_TOKEN) return fail(res, 401, 'cần token của bản cài');
   }

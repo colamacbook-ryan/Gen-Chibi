@@ -11,6 +11,9 @@ echo "1) cú pháp"
 for f in $(git ls-files '*.js' 2>/dev/null || find engine kinds server studio -name '*.js') launcher.js; do node --check "$f"; done
 bash -n install.sh; bash -n cli/genchibi; bash -n tools/package.sh
 echo "   ✓ cú pháp"
+# luật cấu trúc: không đặt animation/transform CSS lên nhóm lớp của khung xương (lỗi mắt đứng yên v0.1.3)
+if grep -nE "\[data-l=[^]]*\][^{]*\{[^}]*(animation|transform)" engine/render.js studio/*.css 2>/dev/null; then echo "   ✗ CSS đặt transform/animation lên nhóm lớp [data-l]"; exit 1; fi
+echo "   ✓ không có CSS đè transform của khung xương"
 
 echo "2) cổng kiểm thư viện"
 node -e '
