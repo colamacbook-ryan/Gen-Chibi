@@ -21,6 +21,8 @@ c 200 "có token: tunnel /mcp đúng token"                -H 'Host: mcp.example
 c 200 "có token: link /mcp/<key> qua tunnel tạm"      -H 'Host: ab-cd.trycloudflare.com' -H 'Cf-Connecting-Ip: 1.2.3.4' "${J[@]}" "http://127.0.0.1:7493/mcp/$K"
 c 404 "có token: link sai khoá"                         -H 'Host: mcp.example.com' -H 'Cf-Connecting-Ip: 1.2.3.4' "${J[@]}" "http://127.0.0.1:7493/mcp/${K}x"
 c 401 "có token: link không mở /api"                    -H 'Host: mcp.example.com' -H 'Cf-Connecting-Ip: 1.2.3.4' "http://127.0.0.1:7493/api/info?k=$K"
+t() { curl -s -H 'Host: mcp.example.com' -H 'Content-Type: application/json' -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"$1\",\"arguments\":$2}}" "http://127.0.0.1:7493/mcp/$K"; }
+if t rollback_app '{"confirm":"ROLLBACK"}' | grep -q 'Qua link MCP' && t update_app '{"force":true}' | grep -q 'Qua link MCP'; then echo "   ✓ link không được rollback/force"; else echo "   ✗ link vượt quyền rollback/force"; F=1; fi
 c 403 "có token: Host lạ"                               -H 'Host: evil.example.net' "${J[@]}" "http://127.0.0.1:7493/mcp/$K"
 c 403 "có token: wildcard không khớp tên gốc"           -H 'Host: trycloudflare.com' "${J[@]}" "http://127.0.0.1:7493/mcp/$K"
 c 200 "chưa token: localhost dùng bình thường"          http://localhost:7494/api/info

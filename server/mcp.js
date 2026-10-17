@@ -45,6 +45,7 @@ class MCP {
     this.store = store;
     this.version = version;
     this.system = system || null;
+    this.restarting = false;
     if (!this.GC.PACKS[MY_PACK]) this.GC.pack({ id: MY_PACK, name: 'Của tôi', owner: 'Bạn', group: 'mine', visibility: 'private', license: 'Thuộc người tạo' }, () => {});
   }
   sync() { this.store.listAssets().forEach(a => this.GC.registerAsset(a.pack, clone(a))); }
@@ -105,7 +106,7 @@ class MCP {
     return hits.filter(a => a.pack === MY_PACK)[0] || hits[0] || null;
   }
 
-  async callTool(name, args) {
+  async callTool(name, args, ctx) {
     const GC = this.GC;
     args = args || {};
     switch (name) {
@@ -164,14 +165,19 @@ class MCP {
         const rec = this.store.saveEvent(args.event, args.author || 'agent qua MCP');
         return json({ saved: true, id: rec.id, studio: 'Mở Studio › Đạo diễn AI › Kịch bản đã lưu › ' + args.event.title });
       }
-      case 'get_app_version': case 'update_app': case 'rollback_app': return this.appTool(name, args);
+      case 'get_app_version': case 'update_app': case 'rollback_app': return this.appTool(name, args, ctx || {});
       default: return null;
     }
   }
-  async appTool(name, args) {
+  async appTool(name, args, ctx) {
     const sys = this.system;
     if (!sys || !sys.updater) return toolError('Bản chạy này không tự cập nhật được (đang chạy từ mã nguồn, không qua bản cài).');
     const up = sys.updater;
+    // Link có khoá chỉ được kiểm và cập nhật lên bản mới bình thường. Rollback và force (ép chạy bản từng hỏng)
+    // cần token chủ máy hoặc stdio: lặp rollback qua link sẽ đẩy hết backup cũ ra khỏi vòng giữ 10 bản.
+    if (ctx.viaLink && (name === 'rollback_app' || (name === 'update_app' && args.force === true)))
+      return toolError('Qua link MCP chỉ được kiểm và cập nhật bình thường. Rollback/force: dùng Studio, genchibi, hoặc MCP có token chủ máy.');
+    if (name !== 'get_app_version' && this.restarting) return toolError('Đang khởi động lại để đổi phiên bản — gọi get_app_version sau ~15 giây.');
     const view = (st) => ({
       current: 'v' + String(st.current).replace(/^v/, ''), latest: st.latest || null, available: !!st.available, skipped: !!st.skipped,
       publishedAt: st.publishedAt || null, notes: st.notes ? String(st.notes).slice(0, 4000) : null, lastCheck: st.lastCheck || null, error: st.error || null,
@@ -186,11 +192,12 @@ class MCP {
       let r;
       try { r = await up.apply({ force: args.force === true }); }
       catch (e) { return toolError('Cập nhật thất bại, vẫn chạy bản hiện tại: ' + e.message); }
-      if (r.restart) sys.restartSoon();
+      if (r.restart) { this.restarting = true; sys.restartSoon(); }
       return json(Object.assign({}, r, { next: r.restart ? 'Đợi ~15 giây rồi gọi get_app_version để xác nhận bản mới đang chạy.' : null }));
     }
     if (args.confirm !== 'ROLLBACK') return toolError('Cần confirm = "ROLLBACK".');
-    try { const r = up.rollback(); sys.restartSoon(); return json(r); }
+    if (up.busy) return toolError('Đang cập nhật, thử lại sau.');
+    try { const r = up.rollback(); this.restarting = true; sys.restartSoon(); return json(r); }
     catch (e) { return toolError(e.message); }
   }
   castOf(ids) {
@@ -200,7 +207,8 @@ class MCP {
   }
 
   // Xử lý một thông điệp JSON-RPC. Trả về phản hồi, hoặc null với notification.
-  async handle(msg) {
+  // ctx.viaLink: gọi qua link có khoá (/mcp/<key>) — quyền hẹp hơn token chủ máy
+  async handle(msg, ctx) {
     if (!msg || msg.jsonrpc !== '2.0' || typeof msg.method !== 'string') {
       return { jsonrpc: '2.0', id: msg && msg.id !== undefined ? msg.id : null, error: { code: -32600, message: 'Invalid Request' } };
     }
@@ -223,7 +231,7 @@ class MCP {
         case 'tools/list': return ok({ tools: TOOLS });
         case 'tools/call': {
           const p = msg.params || {};
-          const r = await this.callTool(p.name, p.arguments);
+          const r = await this.callTool(p.name, p.arguments, ctx || {});
           if (!r) return err(-32602, 'Không có tool: ' + p.name);
           return ok(r);
         }

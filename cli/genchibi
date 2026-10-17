@@ -152,9 +152,9 @@ link_url() {
   [ -n "${GC_TUNNEL:-}" ] && [ -n "$base" ] && [ -n "${GC_MCP_KEY:-}" ] && echo "$base/mcp/$GC_MCP_KEY"
   return 0
 }
-probe() { # probe <link> → 0 khi MCP trả lời qua Internet
-  curl -fsS -m 10 -X POST -H 'Content-Type: application/json' \
-    -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"genchibi-check","version":"1"}}}' "$1" 2>/dev/null | grep -q '"gen-chibi"'
+probe() { # probe <link> → 0 khi MCP trả lời qua Internet. Link đưa qua stdin, không lộ trong `ps`.
+  printf 'url = "%s"\n' "$1" | curl -fsS -m 10 -K - -X POST -H 'Content-Type: application/json' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"genchibi-check","version":"1"}}}' 2>/dev/null | grep -q '"gen-chibi"'
 }
 wait_link() {
   local u="$1" i
@@ -179,30 +179,37 @@ EOF
 }
 expose_named() { # expose_named <tên-miền> [--overwrite-dns]
   local host="$1" over="${2:-}" name id
-  case "$host" in *.*) ;; *) echo "Tên miền không hợp lệ: $host" >&2; exit 1 ;; esac
+  [[ "$host" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,}$ ]] || { echo "Tên miền không hợp lệ: $host" >&2; exit 1; }
   need_cf
   ensure_keys
-  if [ ! -f "$TDIR/.cloudflared/cert.pem" ]; then
+  # cert.pem là chứng chỉ cấp tài khoản (tạo/xoá tunnel, sửa DNS cả tên miền): chỉ dùng lúc thiết lập rồi xoá.
+  # Lúc chạy, tunnel chỉ cần creds.json của chính nó. Lần sau cùng tên miền thì không cần đăng nhập lại.
+  if [ -f "$TDIR/.cloudflared/creds.json" ] && grep -qxF "  - hostname: $host" "$TDIR/config.yml" 2>/dev/null; then
+    echo "• Dùng lại tunnel và DNS đã có cho $host"
+  else
     mkdir -p "$TDIR/.cloudflared"; chmod 700 "$TDIR"
-    if [ -f "$HOME/.cloudflared/cert.pem" ]; then cp "$HOME/.cloudflared/cert.pem" "$TDIR/.cloudflared/cert.pem"; echo "• Dùng lại đăng nhập Cloudflare có sẵn trên máy"
-    else echo "• Đăng nhập Cloudflare (một lần): mở link bên dưới, chọn tên miền gốc của $host"; cf tunnel login; fi
-  fi
-  name="gen-chibi-$(hostname -s 2>/dev/null | tr -c 'a-zA-Z0-9\n' '-' || echo may)"   # một tunnel cho mỗi máy
-  if [ ! -f "$TDIR/.cloudflared/creds.json" ]; then
-    cf tunnel create --credentials-file "$(CFH)/.cloudflared/creds.json" "$name" >/dev/null 2>&1 \
-      || cf tunnel token --cred-file "$(CFH)/.cloudflared/creds.json" "$name" >/dev/null \
-      || { echo "Không tạo được tunnel $name" >&2; exit 1; }
-    echo "• Tunnel $name sẵn sàng"
+    if [ -f "$HOME/.cloudflared/cert.pem" ]; then cp "$HOME/.cloudflared/cert.pem" "$TDIR/.cloudflared/cert.pem"; echo "• Dùng đăng nhập Cloudflare có sẵn trên máy"
+    else echo "• Đăng nhập Cloudflare: mở link bên dưới, chọn tên miền gốc của $host"; cf tunnel login; fi
+    trap 'rm -f "$TDIR/.cloudflared/cert.pem"' EXIT
+    name="gen-chibi-$(hostname -s 2>/dev/null | tr -c 'a-zA-Z0-9\n' '-' || echo may)"   # một tunnel cho mỗi máy
+    if [ ! -f "$TDIR/.cloudflared/creds.json" ]; then
+      cf tunnel create --credentials-file "$(CFH)/.cloudflared/creds.json" "$name" >/dev/null 2>&1 \
+        || cf tunnel token --cred-file "$(CFH)/.cloudflared/creds.json" "$name" >/dev/null \
+        || { echo "Không tạo được tunnel $name" >&2; exit 1; }
+      echo "• Tunnel $name sẵn sàng"
+    fi
+    id="$(json TunnelID < "$TDIR/.cloudflared/creds.json")"
+    [ -n "$id" ] || { echo "Tệp khoá tunnel hỏng: $TDIR/.cloudflared/creds.json" >&2; exit 1; }
+    if ! cf tunnel route dns ${over:+--overwrite-dns} "$id" "$host" >/dev/null 2>"$TDIR/route.err"; then
+      if grep -qi "already" "$TDIR/route.err"; then
+        echo "! $host đã có bản ghi DNS khác trên Cloudflare. Kiểm tra rồi ghi đè bằng: genchibi expose $host --overwrite-dns" >&2
+      else cat "$TDIR/route.err" >&2; fi
+      exit 1
+    fi
+    rm -f "$TDIR/.cloudflared/cert.pem" "$TDIR/route.err"
+    echo "• DNS: $host → tunnel (đã xoá chứng chỉ tài khoản khỏi máy chủ app)"
   fi
   id="$(json TunnelID < "$TDIR/.cloudflared/creds.json")"
-  [ -n "$id" ] || { echo "Tệp khoá tunnel hỏng: $TDIR/.cloudflared/creds.json" >&2; exit 1; }
-  if ! cf tunnel route dns ${over:+--overwrite-dns} "$id" "$host" >/dev/null 2>"$TDIR/route.err"; then
-    if grep -qi "already" "$TDIR/route.err"; then
-      echo "! $host đã có bản ghi DNS khác trên Cloudflare. Kiểm tra rồi ghi đè bằng: genchibi expose $host --overwrite-dns" >&2
-    else cat "$TDIR/route.err" >&2; fi
-    exit 1
-  fi
-  echo "• DNS: $host → tunnel"
   allow_host "$host"
   cat > "$TDIR/config.yml" <<EOF
 # sinh bởi genchibi expose — chỉ cho đường /mcp ra Internet; Studio ở lại máy này
@@ -222,6 +229,7 @@ EOF
   print_link
 }
 expose_quick() {
+  mkdir -p "$TDIR"; chmod 700 "$TDIR"   # tạo trước, không để Docker tạo thư mục mang chủ root
   need_cf
   ensure_keys; allow_host "*.trycloudflare.com"
   set_env GC_TUNNEL quick; set_env GC_PUBLIC_URL ""

@@ -127,10 +127,10 @@ async function route(req, res) {
     if (!/^application\/json\b/i.test(String(req.headers['content-type'] || ''))) return fail(res, 415, 'MCP cần Content-Type: application/json');
     const msg = await body(req, 2 * 1024 * 1024);
     if (Array.isArray(msg)) {
-      const out = (await Promise.all(msg.map(x => mcp.handle(x)))).filter(Boolean);
+      const out = (await Promise.all(msg.map(x => mcp.handle(x, { viaLink })))).filter(Boolean);
       return out.length ? send(res, 200, out) : send(res, 202, '');
     }
-    const r = await mcp.handle(msg);
+    const r = await mcp.handle(msg, { viaLink });
     return r ? send(res, 200, r) : send(res, 202, '');
   }
 
