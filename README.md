@@ -37,6 +37,18 @@ claude mcp add --transport http gen-chibi http://localhost:7480/mcp       # HTTP
 
 Tool: `get_catalog`, `list_characters`, `get_character`, `validate_character`, `save_character`, `render_character`, `get_director_schema`, `validate_event`, `save_event`.
 
+### Mở ra ngoài (tunnel, tên miền riêng)
+Mặc định app chỉ phục vụ chính máy này. Trước khi gắn tunnel (cloudflared, ngrok…) hoặc mở cho mạng LAN, **bắt buộc** đặt trong `~/gen-chibi/.env`:
+
+```bash
+GC_API_TOKEN=<openssl rand -hex 32>
+GC_ALLOWED_HOSTS=chibi.example.com      # tên miền của tunnel
+```
+
+rồi `genchibi restart`. Khi có token: mọi `/api` và `/mcp` đều cần `Authorization: Bearer <token>`, Studio hiện màn đăng nhập. Chưa có token mà request đi qua tunnel/proxy (có `X-Forwarded-For`, `Cf-Connecting-Ip`…) thì server từ chối hết. Khuyên dùng: tunnel chỉ chuyển đường `/mcp`, Studio để ở máy.
+
+Agent ở máy khác: `claude mcp add --transport http gen-chibi https://chibi.example.com/mcp --header "Authorization: Bearer <token>"`.
+
 ## Core AI (LLM API)
 
 Studio › Cài đặt AI: chọn OpenRouter, DeepSeek, MiniMax hoặc địa chỉ tuỳ chỉnh chuẩn OpenAI, dán API key (mã hoá AES-256-GCM trên máy, không bao giờ trả về trình duyệt). "Kiểm tra model" chạy một kịch bản thử và chấm: JSON đúng chuẩn, số lần phải sửa, độ trễ, token.

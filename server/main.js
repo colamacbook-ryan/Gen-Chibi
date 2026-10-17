@@ -18,6 +18,10 @@ const VERSION = fs.readFileSync(path.join(APP, 'VERSION'), 'utf8').trim();
 const PORT = +(process.env.GC_PORT || 7480);
 const HOST = process.env.GC_LISTEN || '127.0.0.1';   // trong Docker đặt 0.0.0.0; cổng ngoài vẫn chỉ mở cho 127.0.0.1
 const API_TOKEN = process.env.GC_API_TOKEN || '';
+function tokenOk(t) {
+  const a = Buffer.from(String(t)), b = Buffer.from(API_TOKEN);
+  return a.length === b.length && require('crypto').timingSafeEqual(a, b);
+}
 const IN_DOCKER = process.env.GC_IN_DOCKER === '1';
 const REPO = process.env.GC_REPO || 'colamacbook-ryan/Gen-Chibi';
 const EXTRA_HOSTS = String(process.env.GC_ALLOWED_HOSTS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
@@ -88,12 +92,15 @@ async function route(req, res) {
   // Không có token thì chỉ phục vụ kết nối từ chính máy này (Host có thể bị giả, nên kiểm địa chỉ thật).
   // Trong Docker, cổng ngoài đã khoá 127.0.0.1 và CLI từ chối mở ra mạng khi thiếu token.
   if (!API_TOKEN && !IN_DOCKER && !/^(127\.|::1$|::ffff:127\.)/.test(String(req.socket.remoteAddress || ''))) return fail(res, 403, 'chỉ phục vụ máy cục bộ (đặt GC_API_TOKEN để mở cho máy khác)');
-  // Đã đặt token: /mcp luôn cần token; /api cần token khi đi qua tên miền ngoài (tunnel, mạng LAN).
-  // Studio mở bằng localhost vẫn dùng bình thường.
-  const localHost = hostName === 'localhost' || hostName === '127.0.0.1' || hostName === '::1';
-  if (API_TOKEN && (p === '/mcp' || (p.startsWith('/api/') && p !== '/api/health' && !localHost))) {
-    const auth = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '') || req.headers['x-gc-token'] || '';
-    if (auth !== API_TOKEN) return fail(res, 401, 'cần token của bản cài');
+  // Request đi qua tunnel/reverse proxy (cloudflared, ngrok, nginx…) không phân biệt được với máy cục bộ
+  // bằng địa chỉ hay Host (tunnel chạy trên chính máy này, có thể đổi Host thành localhost). Dấu vết duy nhất là
+  // header chuyển tiếp: thấy nó mà chưa có token thì từ chối hết — không bao giờ để app mở ra Internet không khoá.
+  const viaProxy = !!(req.headers['x-forwarded-for'] || req.headers.forwarded || req.headers['cf-connecting-ip'] || req.headers['x-real-ip']);
+  if (!API_TOKEN && viaProxy) return fail(res, 403, 'đang đi qua tunnel/proxy: phải đặt GC_API_TOKEN trước khi mở ra ngoài');
+  // Đã đặt token: mọi /api (trừ health) và /mcp đều cần token, bất kể Host hay địa chỉ. Studio đăng nhập bằng token.
+  if (API_TOKEN && (p === '/mcp' || (p.startsWith('/api/') && p !== '/api/health'))) {
+    const auth = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '') || String(req.headers['x-gc-token'] || '');
+    if (!tokenOk(auth)) return fail(res, 401, 'cần token của bản cài');
   }
 
   // ---- MCP (Streamable HTTP, trả JSON). Chống CSRF: bắt buộc Content-Type JSON (trang khác gửi kiểu này phải qua preflight, server không cho)

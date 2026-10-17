@@ -43,16 +43,44 @@
 
   var Store = {
     mode: 'browser', info: null,
+    // Bản cài có GC_API_TOKEN: Studio đăng nhập bằng token, giữ trong trình duyệt này.
+    token: function () { try { return localStorage.getItem('gc-token') || ''; } catch (e) { return ''; } },
+    headers: function () {
+      var hd = { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, t = this.token();
+      if (t) hd.Authorization = 'Bearer ' + t;
+      return hd;
+    },
     api: function (method, url, body) {
-      return fetch(url, { method: method, headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: body ? JSON.stringify(body) : undefined })
-        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.error || ('Lỗi ' + r.status)); return j; }); });
+      var self = this;
+      return fetch(url, { method: method, headers: this.headers(), body: body ? JSON.stringify(body) : undefined })
+        .then(function (r) {
+          if (r.status === 401) { self.login(); throw new Error('Cần đăng nhập bằng token'); }
+          return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.error || ('Lỗi ' + r.status)); return j; });
+        });
+    },
+    login: function (wrong) {
+      if (document.getElementById('gcLogin')) return new Promise(function () {});
+      var inp = h('input', { type: 'password', placeholder: 'GC_API_TOKEN', autocomplete: 'current-password', style: 'width:100%;margin:10px 0' });
+      var form = h('form', { class: 'panel', style: 'width:380px;padding:18px 20px', onsubmit: function (ev) {
+        ev.preventDefault();
+        try { localStorage.setItem('gc-token', inp.value.trim()); } catch (e) { /* bỏ qua */ }
+        location.reload();
+      } },
+        h('div', { style: 'font-weight:600;font-size:14px', text: 'Đăng nhập gen-chibi' }),
+        h('div', { style: 'color:var(--fg2);margin-top:4px', text: wrong ? 'Token không đúng. Nhập lại token trong ~/gen-chibi/.env.' : 'Bản cài này có khoá. Nhập GC_API_TOKEN trong ~/gen-chibi/.env.' }),
+        inp, h('button', { class: 'btn primary', type: 'submit', text: 'Đăng nhập' }));
+      document.body.appendChild(h('div', { id: 'gcLogin', style: 'position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:var(--bg)' }, form));
+      inp.focus();
+      return new Promise(function () {});
     },
     init: function () {
       var self = this;
-      return fetch('api/info').then(function (r) { if (!r.ok) throw 0; return r.json(); })
-        .then(function (info) { self.mode = 'server'; self.info = info; return self.api('GET', 'api/assets'); })
-        .then(function (list) { (list || []).forEach(function (a) { GC.registerAsset(a.pack, a); }); })
-        .catch(function () {
+      return fetch('api/info', { headers: this.headers() }).then(function (r) {
+        if (r.status === 401) return self.login(!!self.token());
+        if (!r.ok) throw 0;
+        return r.json().then(function (info) { self.mode = 'server'; self.info = info; return self.api('GET', 'api/assets'); })
+          .then(function (list) { (list || []).forEach(function (a) { GC.registerAsset(a.pack, a); }); });
+      }).catch(function () {
           self.mode = 'browser';
           try { JSON.parse(localStorage.getItem('gc-assets') || '[]').forEach(function (a) { GC.registerAsset(a.pack, a); }); } catch (e) { /* bỏ qua */ }
         });
