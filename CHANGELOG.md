@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.1.7
+- Sửa: cài đặt và tự cập nhật lỗi 403 khi GitHub API hết lượt gọi của IP (giới hạn 60 lượt/giờ, mạng dùng chung IP hay gặp). Giờ tự chuyển sang đọc bản mới nhất từ trang `github.com/.../releases/latest` và tải gói trực tiếp; vẫn kiểm SHA-256 như cũ.
+
 ## v0.1.6
 - **`genchibi expose <tên-miền>`**: một lệnh mở MCP ra Internet qua Cloudflare Tunnel — tạo tunnel, trỏ DNS (không ghi đè bản ghi có sẵn trừ khi thêm `--overwrite-dns`), chỉ cho đường `/mcp` đi qua, sinh khoá, khởi động lại, thử gọi qua Internet và in link. Thêm `--quick` (link tạm trycloudflare), `--rotate`, `--off`; `genchibi link [--check]`. Docker: tunnel là container `gen-chibi-tunnel` tự bật lại cùng app.
 - **Link MCP có khoá** `/mcp/<GC_MCP_KEY>`: agent dán link là nối được, không cần header (Claude web/desktop Connectors, Cursor…). Link chỉ cấp quyền MCP; sai khoá trả 404. Qua link chỉ được kiểm và cập nhật bình thường; `rollback_app` và `force` cần token chủ máy hoặc stdio (chống xoá vòng backup bằng rollback lặp).

@@ -61,10 +61,19 @@ if [ -n "${GC_TARBALL:-}" ]; then
   cp "$GC_TARBALL" "$TMP/"; cp "$(dirname "$GC_TARBALL")/SHA256SUMS" "$TMP/"; TARNAME="$(basename "$GC_TARBALL")"
 else
   step "Tìm bản phát hành ${WANT:-mới nhất}…"
-  API="https://api.github.com/repos/$REPO/releases/${WANT:+tags/}${WANT:-latest}"
-  META="$(curl -fsSL -H 'Accept: application/vnd.github+json' "$API")" || die "Không đọc được bản phát hành từ GitHub ($API)."
-  TARURL="$(printf '%s' "$META" | grep -o '"browser_download_url": *"[^"]*\.tar\.gz"' | head -1 | sed 's/.*"\(https[^"]*\)"/\1/')"
-  SUMURL="$(printf '%s' "$META" | grep -o '"browser_download_url": *"[^"]*SHA256SUMS"' | head -1 | sed 's/.*"\(https[^"]*\)"/\1/')"
+  API="${GC_GITHUB_API:-https://api.github.com}/repos/$REPO/releases/${WANT:+tags/}${WANT:-latest}"
+  META="$(curl -fsSL -H 'Accept: application/vnd.github+json' "$API" 2>/dev/null)" || META=""
+  if [ -n "$META" ]; then
+    TARURL="$(printf '%s' "$META" | grep -o '"browser_download_url": *"[^"]*\.tar\.gz"' | head -1 | sed 's/.*"\(https[^"]*\)"/\1/')"
+    SUMURL="$(printf '%s' "$META" | grep -o '"browser_download_url": *"[^"]*SHA256SUMS"' | head -1 | sed 's/.*"\(https[^"]*\)"/\1/')"
+  else
+    # API GitHub giới hạn 60 lượt/giờ cho mỗi IP (mạng dùng chung IP hay hết lượt) → hỏi thẳng trang phát hành
+    printf "%s!%s GitHub API từ chối (thường do hết lượt gọi của IP) — tải trực tiếp từ trang phát hành\n" "$Y" "$N"
+    TAG="${WANT:-$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest" | sed -n 's#.*/releases/tag/\(v[^/?]*\).*#\1#p')}"
+    [ -n "$TAG" ] || die "Không đọc được bản phát hành từ GitHub."
+    TARURL="https://github.com/$REPO/releases/download/$TAG/gen-chibi-$TAG.tar.gz"
+    SUMURL="https://github.com/$REPO/releases/download/$TAG/SHA256SUMS"
+  fi
   [ -n "$TARURL" ] && [ -n "$SUMURL" ] || die "Bản phát hành thiếu gói hoặc SHA256SUMS."
   TARNAME="$(basename "$TARURL")"
   step "Tải $TARNAME"

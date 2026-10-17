@@ -49,11 +49,26 @@ function get(url, { json = false, maxBytes = 200 * 1024 * 1024, redirects = 5 } 
   });
 }
 
+function latestTagByRedirect(url) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { agent: agentFor(url), headers: { 'User-Agent': 'gen-chibi-updater' }, timeout: 30000 }, res => {
+      res.resume();
+      const m = /\/releases\/tag\/(v[^/?#]+)/.exec(res.headers.location || '');
+      if ([301, 302, 303, 307, 308].includes(res.statusCode) && m) resolve(decodeURIComponent(m[1]));
+      else reject(new Error('không đọc được bản mới nhất (HTTP ' + res.statusCode + ')'));
+    });
+    req.on('timeout', () => req.destroy(new Error('hết thời gian chờ mạng')));
+    req.on('error', reject);
+  });
+}
+
 class Updater {
   constructor({ home, version, repo, feedUrl, log }) {
     this.home = home;
     this.version = version;
     this.repo = repo;
+    this.repo = repo;
+    this.apiFeed = !feedUrl;
     this.feedUrl = feedUrl || `https://api.github.com/repos/${repo}/releases/latest`;
     this.log = log || console.log;
     this.dataDir = path.join(home, 'data');
@@ -86,8 +101,21 @@ class Updater {
     try { return fs.readdirSync(path.join(this.home, 'releases')).filter(d => /^v\d/.test(d)).sort(); } catch { return []; }
   }
 
+  // API GitHub giới hạn 60 lượt/giờ cho mỗi IP (mạng dùng chung IP hay hết lượt): khi bị từ chối thì đọc tag
+  // mới nhất từ chuyển hướng của trang /releases/latest và dựng link tải theo quy ước tên gói. Checksum vẫn kiểm như cũ.
+  async feed() {
+    try { return await get(this.feedUrl, { json: true, maxBytes: 2 * 1024 * 1024 }); }
+    catch (e) {
+      if (!this.apiFeed) throw e;
+      const tag = await latestTagByRedirect('https://github.com/' + this.repo + '/releases/latest');
+      const base = 'https://github.com/' + this.repo + '/releases/download/' + tag + '/';
+      return { tag_name: tag, body: 'Ghi chú phát hành: https://github.com/' + this.repo + '/releases/tag/' + tag, published_at: null,
+        assets: [{ name: 'gen-chibi-' + tag + '.tar.gz', browser_download_url: base + 'gen-chibi-' + tag + '.tar.gz' }, { name: 'SHA256SUMS', browser_download_url: base + 'SHA256SUMS' }] };
+    }
+  }
+
   async check() {
-    const r = await get(this.feedUrl, { json: true, maxBytes: 2 * 1024 * 1024 });
+    const r = await this.feed();
     const tag = r.tag_name;
     if (!semver(tag)) throw new Error('bản phát hành không có số hiệu hợp lệ');
     const tar = (r.assets || []).find(a => /\.tar\.gz$/.test(a.name));
