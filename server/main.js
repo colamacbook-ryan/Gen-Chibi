@@ -6,6 +6,9 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { Updater, RESTART_CODE } = require('./updater');
+const { Secrets } = require('./secrets');
+const { AI } = require('./ai');
+const { loadEngine } = require('./engine-node');
 
 const APP = path.resolve(__dirname, '..');                       // thư mục phiên bản đang chạy
 const HOME = process.env.GC_HOME || (path.basename(path.dirname(APP)) === 'releases' ? path.resolve(APP, '..', '..') : path.join(APP, '.home'));
@@ -13,6 +16,7 @@ const VERSION = fs.readFileSync(path.join(APP, 'VERSION'), 'utf8').trim();
 const PORT = +(process.env.GC_PORT || 7480);
 const HOST = process.env.GC_LISTEN || '0.0.0.0';
 const REPO = process.env.GC_REPO || 'colamacbook-ryan/Gen-Chibi';
+const ALLOWED_HOSTS = new Set(['localhost', '127.0.0.1', '::1'].concat(String(process.env.GC_ALLOWED_HOSTS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean)));
 const DATA = path.join(HOME, 'data');
 const ASSET_DIR = path.join(DATA, 'assets');
 const VER_DIR = path.join(DATA, 'versions');
@@ -29,6 +33,7 @@ function settings() {
 }
 
 const updater = new Updater({ home: HOME, version: VERSION, repo: REPO, feedUrl: process.env.GC_FEED_URL, log });
+const ai = new AI({ dataDir: DATA, secrets: new Secrets(DATA), engine: loadEngine(APP) });
 
 /* ---------------------------------------------------------------- tiện ích HTTP */
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.md': 'text/markdown; charset=utf-8' };
@@ -99,11 +104,16 @@ function restartSoon() { setTimeout(() => { log('[server] thoát để launcher 
 async function route(req, res) {
   const url = new URL(req.url, 'http://local');
   const p = url.pathname, m = req.method;
+  // Chống DNS rebinding: chỉ phục vụ khi Host là máy cục bộ (hoặc tên được cho phép trong GC_ALLOWED_HOSTS)
+  const hostName = String(req.headers.host || '').replace(/:\d+$/, '').replace(/^\[|\]$/g, '').toLowerCase();
+  if (!ALLOWED_HOSTS.has(hostName)) return fail(res, 403, 'Host không được phép');
   if (!p.startsWith('/api/')) return m === 'GET' ? serveStatic(req, res, p) : fail(res, 405, 'không hỗ trợ');
-  // chặn gọi API từ trang web khác (app chỉ nghe máy cục bộ, nhưng vẫn phòng CSRF)
+  // Chống CSRF: mọi lệnh thay đổi phải có header riêng (form của trang khác không gửi được;
+  // fetch từ nguồn khác bị preflight chặn vì server không trả CORS) và Origin (nếu có) phải trùng Host
   if (m !== 'GET') {
+    if (req.headers['x-gc-request'] !== '1') return fail(res, 403, 'thiếu header X-GC-Request');
     const origin = req.headers.origin;
-    if (origin && new URL(origin).host !== req.headers.host) return fail(res, 403, 'yêu cầu từ nguồn lạ bị chặn');
+    if (origin && origin !== 'null' && new URL(origin).host !== req.headers.host) return fail(res, 403, 'yêu cầu từ nguồn lạ bị chặn');
   }
 
   if (p === '/api/health') return send(res, 200, { ok: true, version: VERSION });
@@ -132,6 +142,19 @@ async function route(req, res) {
     if (b.confirm !== 'ROLLBACK') return fail(res, 400, 'cần xác nhận hai bước');
     try { const r = updater.rollback(); send(res, 200, r); restartSoon(); return; }
     catch (e) { return fail(res, 400, e.message); }
+  }
+
+  // ---- core AI (LLM qua API chuẩn OpenAI; key mã hoá, không trả về trình duyệt)
+  if (p === '/api/ai' && m === 'GET') return send(res, 200, ai.publicConfig());
+  if (p === '/api/ai' && m === 'PUT') return send(res, 200, ai.setConfig(await body(req)));
+  if (p === '/api/ai/models' && m === 'GET') {
+    try { return send(res, 200, await ai.models()); } catch (e) { return fail(res, e.code || 502, 'Không lấy được danh sách model: ' + e.message); }
+  }
+  if (p === '/api/ai/bench' && m === 'GET') return send(res, 200, ai.bench());
+  if (p === '/api/ai/test' && m === 'POST') { const b = await body(req); return send(res, 200, await ai.test(typeof b.model === 'string' ? b.model : '')); }
+  if (p === '/api/ai/director' && m === 'POST') {
+    const b = await body(req);
+    try { return send(res, 200, await ai.director(b, listAssets())); } catch (e) { return fail(res, e.code || 502, e.message); }
   }
 
   if (p === '/api/assets' && m === 'GET') return send(res, 200, listAssets());

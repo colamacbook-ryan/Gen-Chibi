@@ -28,7 +28,7 @@ feed() { # feed <ver> [badsum]
  {"name":"SHA256SUMS","browser_download_url":"http://127.0.0.1:$FPORT/$1/SHA256SUMS"}]}
 JSON
 }
-api() { curl -s -X "$1" -H 'Content-Type: application/json' ${3:+-d "$3"} "http://127.0.0.1:$PORT$2"; }
+api() { curl -s -X "$1" -H 'X-GC-Request: 1' -H 'Content-Type: application/json' ${3:+-d "$3"} "http://127.0.0.1:$PORT$2"; }
 ver() { curl -s "http://127.0.0.1:$PORT/api/health" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).version)}catch{console.log("down")}})'; }
 waitver() { for i in $(seq 1 40); do [ "$(ver)" = "$1" ] && return 0; sleep 0.5; done; return 1; }
 
