@@ -27,8 +27,9 @@ function request(method, url, { headers = {}, body, timeout = 90000 } = {}) {
         const text = Buffer.concat(chunks).toString('utf8');
         let json = null; try { json = JSON.parse(text); } catch { /* không phải JSON */ }
         if (res.statusCode >= 400) {
-          const msg = (json && (json.error && (json.error.message || json.error) || json.message)) || text.slice(0, 300);
-          return reject(Object.assign(new Error('Nhà cung cấp trả lỗi ' + res.statusCode + ': ' + (typeof msg === 'string' ? msg : JSON.stringify(msg))), { status: res.statusCode }));
+          // chỉ lấy dòng thông báo lỗi chuẩn, không chép nguyên phản hồi của nhà cung cấp
+          const msg = json && json.error && typeof json.error.message === 'string' ? json.error.message.slice(0, 200) : '';
+          return reject(Object.assign(new Error('Nhà cung cấp trả lỗi ' + res.statusCode + (msg ? ': ' + msg : '')), { status: res.statusCode }));
         }
         resolve(json);
       });
@@ -66,21 +67,29 @@ class AI {
   }
   setConfig(b) {
     const c = this.config();
-    if (b.provider && PROVIDERS[b.provider]) { if (b.provider !== c.provider && !b.baseUrl) c.baseUrl = PROVIDERS[b.provider].baseUrl; c.provider = b.provider; }
-    if (typeof b.baseUrl === 'string' && b.baseUrl) {
-      const u = new URL(b.baseUrl);
+    if (b.provider && PROVIDERS[b.provider]) c.provider = b.provider;
+    // nhà cung cấp có tên: địa chỉ cố định; chỉ "custom" được tự đặt địa chỉ
+    if (c.provider !== 'custom') c.baseUrl = PROVIDERS[c.provider].baseUrl;
+    else if (typeof b.baseUrl === 'string' && b.baseUrl) {
+      let u;
+      try { u = new URL(b.baseUrl); } catch { throw Object.assign(new Error('địa chỉ API không hợp lệ'), { code: 400 }); }
       if (u.protocol !== 'https:' && !/^(localhost|127\.0\.0\.1)$/.test(u.hostname)) throw Object.assign(new Error('địa chỉ API phải dùng https (trừ localhost)'), { code: 400 });
-      c.baseUrl = b.baseUrl.replace(/\/+$/, '');
+      const next = b.baseUrl.replace(/\/+$/, '');
+      // key gắn với đúng địa chỉ lúc nhập: đổi sang nơi khác thì key cũ bị xoá, phải nhập lại
+      if (next !== c.baseUrl && !(typeof b.apiKey === 'string' && b.apiKey.trim())) this.secrets.set('llm.custom', '');
+      c.baseUrl = next;
     }
     if (typeof b.model === 'string') c.model = b.model.trim().slice(0, 200);
     if (Number.isFinite(b.temperature) && b.temperature >= 0 && b.temperature <= 1.5) c.temperature = b.temperature;
-    if (typeof b.apiKey === 'string' && b.apiKey.trim()) this.secrets.set('llm.' + c.provider, b.apiKey.trim());
+    if (typeof b.apiKey === 'string' && b.apiKey.trim()) { this.secrets.set('llm.' + c.provider, b.apiKey.trim()); this.secrets.set('llm.' + c.provider + '.origin', new URL(c.baseUrl).origin); }
     if (b.clearKey === true) this.secrets.set('llm.' + c.provider, '');
     this.write(this.file, c);
     return this.publicConfig();
   }
   headers(c) {
     const key = this.secrets.get('llm.' + c.provider);
+    const bound = this.secrets.get('llm.' + c.provider + '.origin');
+    if (key && bound && bound !== new URL(c.baseUrl).origin) throw Object.assign(new Error('API key được nhập cho địa chỉ khác; hãy nhập lại key cho địa chỉ hiện tại'), { code: 400 });
     if (!key) throw Object.assign(new Error('Chưa nhập API key cho ' + (PROVIDERS[c.provider] || {}).label), { code: 400 });
     const h = { Authorization: 'Bearer ' + key };
     if (c.provider === 'openrouter') { h['HTTP-Referer'] = 'https://github.com/colamacbook-ryan/Gen-Chibi'; h['X-Title'] = 'gen-chibi'; }
