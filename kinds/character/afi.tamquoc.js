@@ -23,17 +23,29 @@
       var patch = '<path d="M60,104 C58,86 72,80 85,85 C96,89 97,100 95,111 C93,121 82,125 72,121 C64,118 61,112 60,104 Z" fill="#ffffff"/>';
       return { mask: '<path d="' + C.shape + '" fill="#3b3a47"' + stroke(3.2) + '/>' + both(patch) +
         '<path d="M91,68 Q100,58 109,68 Q100,80 91,68 Z" fill="#ffffff"/><path d="M100,112 l-4,8 h8 z" fill="#ffffff" opacity=".9"/>' };
-    }, { eyeArea: '#ffffff' });
+    }, { eyeArea: '#ffffff', views: { q45: function (C) {
+      var patch = '<path d="M60,104 C58,86 72,80 85,85 C96,89 97,100 95,111 C93,121 82,125 72,121 C64,118 61,112 60,104 Z" fill="#ffffff"/>';
+      return { mask: '<path d="' + C.shape + '" fill="#3b3a47"' + stroke(3.2) + '/>' +
+        H.face45(C, H.both(patch) + '<path d="M91,68 Q100,58 109,68 Q100,80 91,68 Z" fill="#ffffff"/><path d="M100,112 l-4,8 h8 z" fill="#ffffff" opacity=".9"/>', true) };
+    } } });
     part('mask', 'opera-red', 'Mặt đỏ kinh kịch', function (C) {
       return { mask: '<path d="' + C.shape + '" fill="#cf4a35"' + stroke(3.2) + '/>' +
         both('<path d="M58,118 C62,134 74,142 88,145" fill="none" stroke="#a63426" stroke-width="5" stroke-linecap="round" opacity=".55"/>') +
         '<circle cx="113" cy="118" r="1.6" fill="' + INK + '"/>' };
-    }, { eyeArea: '#cf4a35' });
+    }, { eyeArea: '#cf4a35', views: { q45: function (C) {
+      return { mask: '<path d="' + C.shape + '" fill="#cf4a35"' + stroke(3.2) + '/>' +
+        H.face45(C, H.both('<path d="M58,118 C62,134 74,142 88,145" fill="none" stroke="#a63426" stroke-width="5" stroke-linecap="round" opacity=".55"/>') +
+          '<circle cx="113" cy="118" r="1.6" fill="' + INK + '"/>', true) };
+    } } });
     part('mask', 'opera-white', 'Mặt trắng kinh kịch', function (C) {
       return { mask: '<path d="' + C.shape + '" fill="#f8f5ef"' + stroke(3.2) + '/>' +
         both('<path d="M67,102 L55,90" stroke="' + INK + '" stroke-width="3" stroke-linecap="round"/><path d="M88,121 q-4,6 0,12" fill="none" stroke="' + INK + '" stroke-width="1.6" stroke-linecap="round"/>') +
         '<path d="M96,76 L95,88 M104,76 L105,88" stroke="' + INK + '" stroke-width="1.8" stroke-linecap="round"/>' };
-    }, { eyeArea: '#f8f5ef' });
+    }, { eyeArea: '#f8f5ef', views: { q45: function (C) {
+      return { mask: '<path d="' + C.shape + '" fill="#f8f5ef"' + stroke(3.2) + '/>' +
+        H.face45(C, H.both('<path d="M67,102 L55,90" stroke="' + INK + '" stroke-width="3" stroke-linecap="round"/><path d="M88,121 q-4,6 0,12" fill="none" stroke="' + INK + '" stroke-width="1.6" stroke-linecap="round"/>') +
+          '<path d="M96,76 L95,88 M104,76 L105,88" stroke="' + INK + '" stroke-width="1.8" stroke-linecap="round"/>', true) };
+    } } });
 
     /* ---------------- khăn cuốn 綸巾 (chuẩn vàng Gia Cát Lượng) ---------------- */
     part('hat', 'lun-jin', 'Khăn cuốn (綸巾)', function (C) {
@@ -70,7 +82,14 @@
         '<rect x="60" y="24" width="80" height="10" rx="2" fill="' + C.P.hat + '"' + stroke(2.6) + '/>' +
         '<path d="M42,52 L158,52" stroke="' + C.P.accent + '" stroke-width="3.4" stroke-linecap="round"/>' +
         '<path d="M100,40 L107,50 L100,60 L93,50 Z" fill="' + C.P.accent + '"' + stroke(2) + '/>' };
-    }, { params: { height: { label: 'Độ cao mũ', min: 0.85, max: 1.25, step: 0.01, def: 1, type: 'scaleY', pivot: [100, 72] } } });
+    }, { params: { height: { label: 'Độ cao mũ', min: 0.85, max: 1.25, step: 0.01, def: 1, type: 'scaleY', pivot: [100, 72] } },
+      views: { q45: function (C) {
+        return { hat: '<path d="M118,33 L136,36 L140,72 L122,69 Z" fill="' + C.P.hat + '"' + stroke(2.6) + '/>' + shadow('M118,33 L136,36 L140,72 L122,69 Z', 0.22) +
+          '<path d="M62,72 L66,33 L118,33 L122,69 C106,65 78,66 62,72 Z" fill="' + C.P.hat + '"' + stroke(2.8) + '/>' + shadow('M108,33 L118,33 L122,69 C118,68 114,67 110,67 Z', 0.12) +
+          '<path d="M58,24 L120,24 L140,27 L140,36 L120,34 L58,34 Z" fill="' + C.P.hat + '"' + stroke(2.6) + '/>' +
+          '<path d="M38,54 L156,49" stroke="' + C.P.accent + '" stroke-width="3.4" stroke-linecap="round"/>' +
+          '<path d="M90,40 L95,50 L90,60 L85,50 Z" fill="' + C.P.accent + '"' + stroke(2) + '/>' };
+      } } });
 
     /* ---------------- áo hạc sưởng 鶴氅: trắng viền đen, tay áo rộng ---------------- */
     part('outfit', 'crane-robe', 'Áo hạc sưởng', function (C) {

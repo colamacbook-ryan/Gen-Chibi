@@ -564,7 +564,16 @@
       pt.appendChild(h('tr', null, h('td', null, h('b', { text: p.name })), h('td', { class: 'v', text: p.id }), h('td', { text: GROUP[p.group] || p.group }),
         h('td', { text: p.owner }), h('td', { text: VIS[p.visibility] || p.visibility }), h('td', { class: 'v', text: p.version }), h('td', { class: 'note', text: cnt || '—' }), h('td', { class: 'note', text: p.license })));
     });
-    var base = GC.ASSETS['afi.tamquoc/linh-que'];
+    // Ma-nơ-canh chuẩn: mọi bộ phận mặc định của khung, không thuộc nhân vật nào — soát linh kiện trên nền trung tính
+    function mannequin(slot, p) {
+      var m = { id: 'mannequin', name: 'Ma-nơ-canh', pack: 'afi.core', version: 1, kind: 'character',
+        look: { eyes: 'round', brows: 'normal', parts: {}, params: {}, palette: {} }, expressions: {}, identity: { must: [] } };
+      m.key = 'studio/mannequin-' + slot + '-' + p.pack + '-' + p.id;
+      m.look.parts[slot] = p.pack + '/' + p.id;
+      if (slot === 'hair') m.look.parts.hat = 'none';
+      return m;
+    }
+    var bench = h('div', { class: 'stack' });
     var t = h('table', { class: 'grid' });
     var cols = ['', 'Xem', 'Bộ phận', 'Mã', 'Tên', 'Thư viện', 'Tham số', 'Dùng bởi'];
     var lt = h('tr', { class: 'letters' });
@@ -577,20 +586,53 @@
         if (p.id === 'none') return;
         n++;
         var th = h('div', { class: 'thumb' });
-        var r = clone(base); r.pack = base.pack; r.key = 'preview/' + slot + '-' + p.id; r.version = 1;
-        r.look.parts[slot] = p.pack + '/' + p.id;
-        if (slot === 'hair') r.look.parts.hat = 'none';
+        var r = mannequin(slot, p);
         var users = GC.assets().filter(function (a) { var v = GC.partRef(a, slot); return v === p.id || v === p.pack + '/' + p.id; }).map(function (a) { return a.name; });
-        t.appendChild(h('tr', null, h('td', { class: 'id', text: 'PT-' + String(n).padStart(4, '0') }), h('td', null, th), h('td', { class: 'k', text: LIB.slots[slot].label }),
+        t.appendChild(h('tr', { style: 'cursor:pointer', title: 'Bấm để soát trên ma-nơ-canh', onclick: (function (slot0, p0) { return function () { showBench(slot0, p0); }; })(slot, p) }, h('td', { class: 'id', text: 'PT-' + String(n).padStart(4, '0') }), h('td', null, th), h('td', { class: 'k', text: LIB.slots[slot].label }),
           h('td', { class: 'v', text: p.id }), h('td', { class: 'nw' }, p.label, p.views && p.views.q45 ? h('span', { class: 'tag', style: 'margin-left:6px', title: 'Có bản vẽ nghiêng 45° thật', text: '45°' }) : null), h('td', null, h('span', { class: 'tag', text: p.pack })),
           h('td', { class: 'note', text: p.params ? Object.keys(p.params).map(function (k) { return p.params[k].label; }).join(', ') : '—' }),
           h('td', { class: 'note', text: users.join(', ') || '—' })));
         R.image(th, r, 'normal', { crop: ['head', 'mask', 'hair', 'hat'].indexOf(slot) >= 0, noShadow: true });
       });
     });
-    $('view').appendChild(h('div', { class: 'stack' },
-      h('div', { class: 'panel scroll' }, h('h3', null, 'Nhóm thư viện', h('span', { class: 'r note', text: 'Afi Labs lo khung chuẩn và thư viện chính thức; thứ người dùng tạo ra nằm trong thư viện của họ.' })), pt),
-      h('div', { class: 'panel scroll' }, h('h3', null, 'Linh kiện', h('span', { class: 'r note', text: n + ' linh kiện · ' + Object.keys(LIB.slots).length + ' bộ phận' })), t)));
+    // Bàn soát (bước 4 của quy trình tạo lập — docs/QUY-TRINH-LINH-KIEN.md): linh kiện trên ma-nơ-canh × góc nhìn × tình huống
+    var VIEWS = [['front', 'Chính diện'], ['left', '3/4 trái'], ['left45', '45° trái'], ['right45', '45° phải']];
+    var CASES = [['normal', null, 'Đứng'], ['shock', null, 'Kinh ngạc'], ['vow', 'run', 'Chạy'], ['normal', 'sit-floor', 'Ngồi']];
+    function showBench(slot, p) {
+      clear(bench);
+      var m = mannequin(slot, p);
+      var g = h('div', { style: 'display:grid;grid-template-columns:70px repeat(' + VIEWS.length + ',1fr);gap:4px;align-items:center' });
+      g.appendChild(h('div'));
+      VIEWS.forEach(function (v) { g.appendChild(h('div', { class: 'note', style: 'text-align:center', text: v[1] })); });
+      CASES.forEach(function (c) {
+        g.appendChild(h('div', { class: 'note', text: c[2] }));
+        VIEWS.forEach(function (v) {
+          var cell = h('div', { class: 'stage', style: 'height:92px;border-radius:4px;overflow:hidden' });
+          var dir = { view: v[0] }; if (c[1]) dir.activity = c[1];
+          R.image(cell, m, c[0], { director: dir });
+          g.appendChild(cell);
+        });
+      });
+      var has45 = !!(p.views && p.views.q45);
+      var checks = [
+        ['Bản vẽ chính diện', true, 'toạ độ khung 200 × 240, lớp đúng bộ phận'],
+        ['Bản vẽ 45°', has45, has45 ? 'views.q45 — vẽ thật' : 'chưa có: engine đang trượt tạm (bắt buộc với thư viện chính thức)'],
+        ['Tham số', true, p.params ? Object.keys(p.params).map(function (k) { return p.params[k].label + ' ' + p.params[k].min + '–' + p.params[k].max; }).join(', ') : 'không có'],
+        ['License', !!p.license, p.license || 'thiếu'],
+        ['Nguồn', !!p.source, p.source || 'thiếu']
+      ];
+      bench.appendChild(h('div', { class: 'panel' }, h('h3', null, 'Bàn soát · ' + p.label, h('span', { class: 'r mono', text: slot + ':' + p.id })),
+        h('div', { class: 'pad stack' }, g,
+          h('table', { class: 'grid' }, checks.map(function (c) { return h('tr', null, h('td', { text: c[1] ? '✓' : '✗', style: 'color:' + (c[1] ? 'var(--ok, #2e8b57)' : 'var(--danger)') }), h('td', { text: c[0] }), h('td', { class: 'note', text: c[2] })); })),
+          h('div', { class: 'note', text: 'Quy trình: vẽ chính diện → vẽ 45° (face45 / body45 / vẽ tay) → soát ở đây → test → phát hành. Chi tiết: docs/QUY-TRINH-LINH-KIEN.md' }))));
+    }
+    $('view').appendChild(h('div', { class: 'split' },
+      h('div', { class: 'stack' },
+        h('div', { class: 'panel scroll' }, h('h3', null, 'Nhóm thư viện', h('span', { class: 'r note', text: 'Afi Labs lo khung chuẩn và thư viện chính thức; thứ người dùng tạo ra nằm trong thư viện của họ.' })), pt),
+        h('div', { class: 'panel scroll' }, h('h3', null, 'Linh kiện', h('span', { class: 'r note', text: n + ' linh kiện · ' + Object.keys(LIB.slots).length + ' bộ phận · bấm một dòng để soát' })), t)),
+      h('div', { class: 'sticky' }, bench)));
+    var first = GC.partsOfSlot('hat').filter(function (p) { return p.id !== 'none'; })[0];
+    if (first) showBench('hat', first);
   };
 
   /* ============================================================ trang: Biểu cảm & động tác */

@@ -35,6 +35,9 @@ Một khung hình = **biểu cảm** (mặt) × **tư thế nền** (thân dư�
 - Ghép tự do: `{ "state": "panic", "posture": "stand", "move": "run", "motion": "flail", "facing": "left" }`.
 - Studio › Tư thế & hoạt động: xem và ghép thử, tải SVG.
 
+## Quy trình tạo lập linh kiện
+Nhà xưởng giữ giá trị ở **khung sườn + quy trình**; nhân vật chỉ là phối linh kiện. Chuẩn tạo một linh kiện (toạ độ, lớp, góc nhìn chính diện + 45°, công cụ `face45`/`body45`, soát trên ma-nơ-canh, cổng kiểm, phát hành): [`docs/QUY-TRINH-LINH-KIEN.md`](docs/QUY-TRINH-LINH-KIEN.md).
+
 ## Nối agent qua MCP
 
 ```bash

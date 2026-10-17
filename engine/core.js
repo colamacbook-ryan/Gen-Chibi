@@ -250,7 +250,7 @@
   // Vị trí mặt 45° (mắt gần/xa, mày, miệng) thuộc engine nên mọi kiểu mắt/mày/miệng đều hưởng.
   var Q45 = {
     phi: 32, body: 0.8,
-    eye: { L: { x: 65, sx: 0.62 }, R: { x: 96, sx: 1 } },
+    eye: { L: { x: 64, sx: 0.62 }, R: { x: 96, sx: 1 } },   // 64 + 20·0.62 ≈ 96 − 20: hai nửa mặt liền nhau ở giữa
     brow: { L: { x: 66, sx: 0.62 }, R: { x: 96, sx: 1 } },
     mouth: { dx: -19, sx: 0.85 }
   };
@@ -846,7 +846,7 @@
     getPart: getPart, partsOfSlot: partsOfSlot, partRef: partRef, traitsOf: traitsOf,
     resolveState: resolveState, palette: palette, paramValues: paramValues,
     compose: compose, poseAt: poseAt, chainTransforms: chainTransforms, neutralPose: neutralPose, svgString: svgString,
-    shadowOf: shadowOf, handsBusy: handsBusy,
+    shadowOf: shadowOf, handsBusy: handsBusy, Q45: Q45, faceRemap: faceRemap,
     assets: function () { return ASSET_ORDER.map(function (k) { return ASSETS[k]; }); },
     director: { schema: directorSchema, validate: validateEvent, prompt: directorPrompt },
     gate: gate,

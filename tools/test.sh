@@ -49,6 +49,11 @@ if (ok.length || ko.length !== 2) { bad++; console.log("   ✗ đạo diễn:", 
 const gcl = GC.assets().find(a => a.id === "gia-cat-luong");
 const cov = GC.gate(gcl).find(x => x.id === "view45");
 if (!cov || !/đủ/.test(cov.detail)) { bad++; console.log("   ✗ Gia Cát Lượng chưa đủ bản vẽ 45°:", cov && cov.detail); }
+// rào quy trình (docs/QUY-TRINH-LINH-KIEN.md): linh kiện thư viện chính thức phải có bản 45°, license và nguồn
+Object.values(GC.LIB.parts).filter(p => GC.PACKS[p.pack].group === "official" && p.id !== "none" && !/^held[LR]$/.test(p.slot)).forEach(p => {
+  if (!(p.views && p.views.q45)) { bad++; console.log("   ✗ linh kiện chính thức thiếu bản 45°:", p.pack + "/" + p.slot + ":" + p.id); }
+  if (!p.license || !p.source) { bad++; console.log("   ✗ linh kiện thiếu license/nguồn:", p.pack + "/" + p.slot + ":" + p.id); }
+});
 if (bad) process.exit(1);
 console.log("   ✓", acts.length, "hoạt động ×", GC.assets().length, "nhân vật × 3 thời điểm × 2 hướng × 5 góc nhìn; kịch bản có hoạt động được kiểm");
 '

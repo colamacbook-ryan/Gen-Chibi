@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.2.3 — Phủ đủ 45° + quy trình tạo lập linh kiện
+- **Toàn bộ 24 linh kiện chính thức có bản 45° vẽ thật** (thêm: tóc búi, tóc dựng, râu ba chòm, râu hổ, râu dài mảnh, khăn buộc trán, mũ vải mềm, mũ quan, áo bào, giáp trận, áo choàng, 3 mặt nạ kinh kịch) → cả 5 nhân vật tự đủ 45° mà không sửa nhân vật nào.
+- **Công cụ chiếu 45° dùng chung** `GC.helpers.face45` (chi tiết bám mặt, cùng phép chiếu với mắt/miệng của engine) và `body45` (chi tiết trên thân, dồn về đường giữa áo mới).
+- **Quy trình tạo lập linh kiện** thành chuẩn: `docs/QUY-TRINH-LINH-KIEN.md` (khung sườn, góc nhìn, công cụ, 6 bước tạo).
+- **Bàn soát linh kiện** (Studio › Thư viện linh kiện › bấm một linh kiện): mặc lên ma-nơ-canh chuẩn × 4 góc nhìn × đứng/kinh ngạc/chạy/ngồi + bảng kiểm (45°, tham số, license, nguồn). Thư viện xem trước bằng ma-nơ-canh, không dựa vào nhân vật cụ thể.
+- **Rào tự động**: test chặn phát hành khi linh kiện chính thức thiếu bản 45°, license hoặc nguồn.
+
 ## v0.2.2 — Góc nghiêng 45° vẽ thật (ở mức linh kiện)
 - **Trục góc nhìn trong hệ linh kiện**: linh kiện có thể kèm bản vẽ `views.q45`; nhân vật phối linh kiện nào cũng tự có 45° (`view: left45 | right45`). Bản chuẩn quay mặt sang trái màn hình, 45° phải = lật gương.
 - Linh kiện chưa có bản 45°: engine tự trượt parallax (φ = 32°) để vẫn dùng được. Cổng kiểm **"Bản vẽ nghiêng 45°: x/y linh kiện"** cho biết còn thiếu linh kiện nào; Thư viện linh kiện gắn nhãn "45°".
