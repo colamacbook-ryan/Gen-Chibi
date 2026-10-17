@@ -177,6 +177,26 @@ Nối agent:
 Lộ link: genchibi expose --rotate (link cũ chết ngay).
 EOF
 }
+cf_login() { # lấy cert.pem (chứng chỉ tài khoản Cloudflare) vào $TDIR/.cloudflared — chỉ dùng lúc thiết lập
+  local host="$1" dest="$TDIR/.cloudflared/cert.pem" dl f i
+  [ -f "$dest" ] && return 0
+  if [ -f "$HOME/.cloudflared/cert.pem" ]; then cp "$HOME/.cloudflared/cert.pem" "$dest"; echo "• Dùng đăng nhập Cloudflare có sẵn trên máy"; return 0; fi
+  dl="$(xdg-user-dir DOWNLOAD 2>/dev/null || true)"; [ -d "$dl" ] || dl="$HOME/Downloads"
+  pick_download() { # trình duyệt có thể đã tải cert.pem về (trong 2 giờ gần đây)
+    f="$(find "$dl" -maxdepth 1 -name 'cert*.pem' -mmin -120 2>/dev/null | head -1)"
+    [ -n "$f" ] && cp "$f" "$dest" && echo "• Lấy chứng chỉ Cloudflare từ $f (xong việc nên xoá tệp đó: nó cấp quyền cả tài khoản)"
+  }
+  pick_download && return 0
+  for i in 1 2 3; do
+    echo "• Đăng nhập Cloudflare (lần $i/3): mở link dưới đây trong vòng 1 phút, chọn ${host#*.}, bấm Authorize"
+    cf tunnel login 2>&1 | grep --line-buffered -oE 'https://dash\.cloudflare\.com/argotunnel[^ ]*|successfully logged in' | sed 's/^/    /' || true
+    [ -f "$dest" ] && { echo "• Đã đăng nhập Cloudflare"; return 0; }
+    pick_download && return 0
+    [ $i -lt 3 ] && echo "  Chưa nhận được chứng chỉ (hết 1 phút chờ) — thử lại với link mới."
+  done
+  echo "Chưa đăng nhập được Cloudflare. Nếu trình duyệt đã tải tệp cert.pem, chép nó vào $dest rồi chạy lại lệnh này." >&2
+  exit 1
+}
 expose_named() { # expose_named <tên-miền> [--overwrite-dns]
   local host="$1" over="${2:-}" name id
   [[ "$host" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,}$ ]] || { echo "Tên miền không hợp lệ: $host" >&2; exit 1; }
@@ -188,8 +208,7 @@ expose_named() { # expose_named <tên-miền> [--overwrite-dns]
     echo "• Dùng lại tunnel và DNS đã có cho $host"
   else
     mkdir -p "$TDIR/.cloudflared"; chmod 700 "$TDIR"
-    if [ -f "$HOME/.cloudflared/cert.pem" ]; then cp "$HOME/.cloudflared/cert.pem" "$TDIR/.cloudflared/cert.pem"; echo "• Dùng đăng nhập Cloudflare có sẵn trên máy"
-    else echo "• Đăng nhập Cloudflare: mở link bên dưới, chọn tên miền gốc của $host"; cf tunnel login; fi
+    cf_login "$host"
     trap 'rm -f "$TDIR/.cloudflared/cert.pem"' EXIT
     name="gen-chibi-$(hostname -s 2>/dev/null | tr -c 'a-zA-Z0-9\n' '-' || echo may)"   # một tunnel cho mỗi máy
     if [ ! -f "$TDIR/.cloudflared/creds.json" ]; then
