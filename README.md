@@ -55,7 +55,7 @@ tools/        test.sh (CI), test-update.sh, package.sh
 
 ## Phát hành
 
-Sửa `VERSION` + `CHANGELOG.md` → `git tag vX.Y.Z && git push --tags`. Workflow `release` chạy kiểm thử, đóng gói và tạo GitHub Release; mọi bản cài tự nhận trong vòng 6 giờ (hoặc bấm "Kiểm tra phiên bản").
+Sửa `VERSION` + `CHANGELOG.md` rồi đẩy lên `main` (hoặc đẩy tag `vX.Y.Z`). Workflow `release` chạy kiểm thử, đóng gói, tạo tag và GitHub Release; mọi bản cài tự nhận trong vòng 6 giờ (hoặc bấm "Kiểm tra phiên bản").
 
 ## License
 

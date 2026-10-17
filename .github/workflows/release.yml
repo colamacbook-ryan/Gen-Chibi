@@ -1,11 +1,17 @@
-# Phát hành: đẩy tag vX.Y.Z → kiểm thử → đóng gói → GitHub Release (gói + SHA256SUMS + ghi chú).
-# Bản cài trên máy người dùng đọc Release này để tự cập nhật.
+# Phát hành tự động: đổi VERSION trên main (hoặc đẩy tag vX.Y.Z) → kiểm thử → đóng gói → GitHub Release
+# (gói + SHA256SUMS + ghi chú từ CHANGELOG.md). Bản cài trên máy người dùng đọc Release này để tự cập nhật.
 name: release
 on:
   push:
+    branches: [main]
+    paths: [VERSION]
     tags: ['v*']
+  workflow_dispatch:
 permissions:
   contents: write
+concurrency:
+  group: release
+  cancel-in-progress: false
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -14,18 +20,32 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Tag khớp VERSION
-        run: |
-          test "v$(tr -d ' \n' < VERSION)" = "$GITHUB_REF_NAME" || { echo "VERSION ($(cat VERSION)) khác tag $GITHUB_REF_NAME"; exit 1; }
-      - name: Kiểm thử
-        run: bash tools/test.sh
-      - name: Đóng gói
-        run: bash tools/package.sh dist
-      - name: Ghi chú phát hành từ CHANGELOG.md
-        run: |
-          awk -v t="## $GITHUB_REF_NAME" '$0==t{f=1;next} /^## /{if(f)exit} f' CHANGELOG.md > notes.md
-          test -s notes.md || echo "Phát hành $GITHUB_REF_NAME" > notes.md
-      - name: Tạo Release
+      - name: Xác định phiên bản
+        id: ver
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/SHA256SUMS --title "gen-chibi $GITHUB_REF_NAME" --notes-file notes.md
+        run: |
+          TAG="v$(tr -d ' \n' < VERSION)"
+          echo "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' || { echo "VERSION không hợp lệ: $TAG"; exit 1; }
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$GITHUB_REF_NAME" != "$TAG" ]; then echo "Tag $GITHUB_REF_NAME khác VERSION $TAG"; exit 1; fi
+          if gh release view "$TAG" >/dev/null 2>&1; then echo "Đã có Release $TAG — bỏ qua."; echo "skip=1" >> "$GITHUB_OUTPUT"; fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      - name: Kiểm thử
+        if: steps.ver.outputs.skip != '1'
+        run: bash tools/test.sh
+      - name: Đóng gói
+        if: steps.ver.outputs.skip != '1'
+        run: bash tools/package.sh dist
+      - name: Ghi chú phát hành từ CHANGELOG.md
+        if: steps.ver.outputs.skip != '1'
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          awk -v t="## $TAG" '$0==t{f=1;next} /^## /{if(f)exit} f' CHANGELOG.md > notes.md
+          test -s notes.md || echo "Phát hành $TAG" > notes.md
+      - name: Tạo Release (kèm tag)
+        if: steps.ver.outputs.skip != '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: gh release create "$TAG" dist/*.tar.gz dist/SHA256SUMS --target "$GITHUB_SHA" --title "gen-chibi $TAG" --notes-file notes.md
