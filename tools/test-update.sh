@@ -35,7 +35,7 @@ waitver() { for i in $(seq 1 40); do [ "$(ver)" = "$1" ] && return 0; sleep 0.5;
 for p in $PORT $FPORT; do (echo > /dev/tcp/127.0.0.1/$p) 2>/dev/null && { echo "Cổng $p đang bị tiến trình khác chiếm — dừng nó rồi chạy lại."; exit 1; }; done
 echo "Dựng các bản thử…"
 build 0.1.0; build 0.1.1; build 0.1.2 broken
-( cd "$FEED" && python3 -m http.server $FPORT >/dev/null 2>&1 ) & FPID=$!
+python3 -m http.server $FPORT --directory "$FEED" >/dev/null 2>&1 & FPID=$!
 # cài v0.1.0 như install.sh làm
 mkdir -p "$HOME_DIR/releases/v0.1.0"
 tar -xzf "$FEED/0.1.0/gen-chibi-v0.1.0.tar.gz" -C "$HOME_DIR/releases/v0.1.0" --strip-components=1
