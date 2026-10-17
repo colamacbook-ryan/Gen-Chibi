@@ -51,5 +51,8 @@ console.log("   ✓ MCP: bắt tay, 9 tool, lưu hợp lệ, chặn linh kiện 
 ' "$H/mcp.out"
 kill $SP 2>/dev/null || true
 
-echo "4) tự cập nhật"
+echo "4) khoá truy cập"
+bash tools/test-auth.sh || exit 1
+
+echo "5) tự cập nhật"
 bash tools/test-update.sh
