@@ -182,18 +182,21 @@ cf_login() { # lấy cert.pem (chứng chỉ tài khoản Cloudflare) vào $TDIR
   [ -f "$dest" ] && return 0
   if [ -f "$HOME/.cloudflared/cert.pem" ]; then cp "$HOME/.cloudflared/cert.pem" "$dest"; echo "• Dùng đăng nhập Cloudflare có sẵn trên máy"; return 0; fi
   dl="$(xdg-user-dir DOWNLOAD 2>/dev/null || true)"; [ -d "$dl" ] || dl="$HOME/Downloads"
-  pick_download() { # trình duyệt có thể đã tải cert.pem về (trong 2 giờ gần đây)
-    f="$(find "$dl" -maxdepth 1 -name 'cert*.pem' -mmin -120 2>/dev/null | head -1)"
-    [ -n "$f" ] && cp "$f" "$dest" && echo "• Lấy chứng chỉ Cloudflare từ $f (xong việc nên xoá tệp đó: nó cấp quyền cả tài khoản)"
+  local mark="$TDIR/.login-start"; touch "$mark"
+  pick_download() { # chỉ nhận cert.pem trình duyệt tải về SAU khi lần đăng nhập này bắt đầu, và hỏi trước khi dùng
+    f="$(find "$dl" -maxdepth 1 -type f -name 'cert.pem' -newer "$mark" 2>/dev/null | head -1)"
+    [ -n "$f" ] || return 1
+    local a=""; [ -r /dev/tty ] && read -r -p "  Trình duyệt vừa tải $f — dùng làm chứng chỉ Cloudflare? [c/K] " a < /dev/tty
+    case "$a" in c|C) cp "$f" "$dest" && echo "• Đã dùng $f (xong việc nên xoá tệp đó: nó cấp quyền cả tài khoản)" ;; *) return 1 ;; esac
   }
-  pick_download && return 0
   for i in 1 2 3; do
     echo "• Đăng nhập Cloudflare (lần $i/3): mở link dưới đây trong vòng 1 phút, chọn ${host#*.}, bấm Authorize"
     cf tunnel login 2>&1 | grep --line-buffered -oE 'https://dash\.cloudflare\.com/argotunnel[^ ]*|successfully logged in' | sed 's/^/    /' || true
-    [ -f "$dest" ] && { echo "• Đã đăng nhập Cloudflare"; return 0; }
-    pick_download && return 0
+    [ -f "$dest" ] && { rm -f "$mark"; echo "• Đã đăng nhập Cloudflare"; return 0; }
+    pick_download && { rm -f "$mark"; return 0; }
     [ $i -lt 3 ] && echo "  Chưa nhận được chứng chỉ (hết 1 phút chờ) — thử lại với link mới."
   done
+  rm -f "$mark"
   echo "Chưa đăng nhập được Cloudflare. Nếu trình duyệt đã tải tệp cert.pem, chép nó vào $dest rồi chạy lại lệnh này." >&2
   exit 1
 }

@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.1.9
+- Bảo mật `genchibi expose`: chỉ nhận `cert.pem` trình duyệt tải về **sau** khi lần đăng nhập bắt đầu (đúng tên, tệp thường) và hỏi xác nhận trước khi dùng — không còn tự lấy tệp có sẵn trong thư mục Tải xuống (tránh tệp bị cài sẵn đưa tunnel sang tài khoản Cloudflare khác).
+
 ## v0.1.8
 - `genchibi expose`: bước đăng nhập Cloudflare chịu lỗi — tự thử lại 3 lần khi hết 1 phút chờ bấm Authorize, tự nhận `cert.pem` trình duyệt đã tải về (thư mục Tải xuống, 2 giờ gần đây), dùng lại chứng chỉ có sẵn; chỉ in link cần mở, không in đường dẫn bên trong container.
 
