@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.2.0 — Tư thế & hoạt động (engine 0.3)
+- **Khung xương có chân**: hông, đùi, gối, cổ chân; vạt áo tách khỏi thân trên và co giãn theo tư thế. Thêm khớp sân khấu cho đạo cụ đứng yên.
+- **Ghép 4 trục** như animation layer của game engine: tư thế nền × di chuyển × động tác tay × biểu cảm, cộng đạo cụ và hướng (quay trái/phải).
+  - 12 tư thế: đứng, đứng tấn, ngồi ghế, ngồi xếp bằng, quỳ, ngồi xổm, co rúm, nằm, bò, trên không, bay, bơi.
+  - 10 di chuyển: đi, chạy, rón rén, nhảy, bò, bơi, bay lượn, lơ lửng, run rẩy, nhún nhảy.
+  - 15 động tác mới: ăn, uống, đọc, viết, chém, đâm, đỡ, ôm đầu, vẫy, chỉ, cúi chào, ôm quyền, cổ vũ, vung tay, thả lỏng.
+  - 11 đạo cụ (ghế, nệm, chiếu + gối, chăn, bàn, mặt nước, bát, đũa, chén, sách, bút lông) và 5 hiệu ứng (bụi chân, vệt tốc độ, gió, bọt nước, run).
+  - **32 hoạt động đặt sẵn** theo nhóm Tư thế · Di chuyển · Sinh hoạt · Chiến đấu · Cảm xúc · Giao tiếp — agent gọi theo tên (`eat`, `sleep`, `attack`, `flee`…).
+- Bóng đổ co lại khi nhảy/bay, giãn khi nằm; chữ hiệu ứng (Zzz, !!) luôn đứng thẳng và đọc xuôi kể cả khi nằm hoặc quay trái.
+- Studio: trang **Tư thế & hoạt động** — lưới hoạt động theo nhóm, sân khấu ghép tự do từng trục, tải SVG khung hình.
+- Đạo diễn AI và MCP: mỗi cảnh nhận `activity`, `posture`, `move`, `facing`; `get_catalog` liệt kê hoạt động/tư thế/di chuyển/đạo cụ; `render_character` dựng theo hoạt động và theo thời điểm `t` trong chu kỳ.
+- Cổng kiểm "Dựng đủ hoạt động" (chạy ở hồ sơ asset, khi lưu qua MCP, trong test — không chạy ở danh sách để giữ nhanh với hàng trăm nhân vật).
+
 ## v0.1.9
 - Bảo mật `genchibi expose`: chỉ nhận `cert.pem` trình duyệt tải về **sau** khi lần đăng nhập bắt đầu (đúng tên, tệp thường) và hỏi xác nhận trước khi dùng — không còn tự lấy tệp có sẵn trong thư mục Tải xuống (tránh tệp bị cài sẵn đưa tunnel sang tài khoản Cloudflare khác).
 

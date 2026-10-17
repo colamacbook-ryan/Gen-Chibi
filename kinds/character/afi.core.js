@@ -25,13 +25,13 @@
     D.defaults({
       skin: '#f8d7bd', skinShade: '#e3b08e', hair: '#2a2320', iris: '#4a2f22', robe: '#e6e1d6', inner: '#f3efe6',
       trim: '#2b2b2b', accent: '#d4a63c', hat: '#2f3a52', armor: '#9aa5ae', metal: '#d5dbe0', boots: '#2b211d',
-      blush: '#f39aa0', wood: '#7a5532', tassel: '#c8372d', cape: '#7c2d2a'
+      blush: '#f39aa0', wood: '#7a5532', tassel: '#c8372d', cape: '#7c2d2a', pants: '#4a4650'
     });
 
     /* ---------------- SLOT ---------------- */
     [['head', 'Dáng đầu', 'round'], ['mask', 'Mặt nạ / màu mặt', 'none'], ['hair', 'Tóc', 'neat'],
      ['beard', 'Râu', 'none'], ['hat', 'Mũ / khăn', 'none'], ['outfit', 'Trang phục', 'robe'],
-     ['back', 'Sau lưng', 'none'], ['shoes', 'Giày', 'boots'], ['heldL', 'Tay trái cầm', 'none'],
+     ['back', 'Sau lưng', 'none'], ['legwear', 'Quần', 'pants'], ['shoes', 'Giày', 'boots'], ['heldL', 'Tay trái cầm', 'none'],
      ['heldR', 'Tay phải cầm', 'none']].forEach(function (s) { D.slot(s[0], { label: s[1], fallback: s[2] }); });
 
     function part(slot, id, label, draw, extra) {
@@ -151,6 +151,12 @@
     /* ---------------- TRANG PHỤC: thân + tay trên (armL) + tay dưới (foreL) ---------------- */
     var TORSO = 'M76,146 L124,146 L136,212 C120,219 80,219 64,212 Z';
     var TORSO_SH = 'M112,146 L124,146 L136,212 C130,215 124,216 118,217 Z';
+    // Engine 0.3: thân trên (tới thắt lưng, y=194) và vạt áo (khớp hem, co giãn khi ngồi/chạy) tách riêng.
+    // Mép trên của vạt nằm dưới thắt lưng nên không lộ đường nối.
+    var TORSO_UP = 'M76,146 L124,146 L132.7,194 L67.3,194 Z';
+    var TORSO_UP_SH = 'M112,146 L124,146 L132.7,194 L117,194 Z';
+    var HEM = 'M68.4,188 L131.6,188 L136,212 C120,219 80,219 64,212 Z';
+    var HEM_SH = 'M117,188 L131.6,188 L136,212 C130,215 124,216 118,217 Z';
     var UP = 'M69,151 C62,158 61,168 62,181 L86,181 C87,170 87,161 85,153 Z';
     var LOW = 'M62,174 C61,182 60,189 60,196 L86,198 C87,190 87,182 86,174 Z';
     var CUFF = 'M60,191 L86,193 L86,199 L60,197 Z';
@@ -162,16 +168,18 @@
     }
     function res(a, b) { for (var x in b) a[x] = b[x]; return a; }
     GC.helpers.sleeves = sleeves; GC.helpers.TORSO = TORSO; GC.helpers.TORSO_SH = TORSO_SH; GC.helpers.res = res;
+    GC.helpers.TORSO_UP = TORSO_UP; GC.helpers.TORSO_UP_SH = TORSO_UP_SH; GC.helpers.HEM = HEM; GC.helpers.HEM_SH = HEM_SH;
     var BODY_P = { width: { label: 'Độ rộng thân', min: 0.88, max: 1.18, step: 0.01, def: 1, type: 'scaleX', pivot: [100, 180] } };
 
     part('outfit', 'robe', 'Áo bào', function (C) {
       return res({
-        body: '<path d="' + TORSO + '" fill="' + C.P.robe + '"' + stroke(3) + '/>' + shadow(TORSO_SH, 0.1) +
+        body: '<path d="' + TORSO_UP + '" fill="' + C.P.robe + '"' + stroke(3) + '/>' + shadow(TORSO_UP_SH, 0.1) +
           '<path d="M86,146 L100,170 L114,146 Z" fill="' + C.P.inner + '"/>' +
           '<path d="M86,146 L100,170 L114,146" fill="none" stroke="' + C.P.trim + '" stroke-width="5" stroke-linejoin="round"/>' +
-          line('M84,196 C86,204 85,210 82,214 M112,196 C114,204 116,210 118,214', 1.4, '#000', 0.22) +
           '<path d="M68,184 L132,184 L133,194 L67,194 Z" fill="' + C.P.trim + '"' + stroke(2.4) + '/>' +
-          '<rect x="95" y="183" width="10" height="12" rx="2" fill="' + C.P.accent + '"' + stroke(1.8) + '/>' +
+          '<rect x="95" y="183" width="10" height="12" rx="2" fill="' + C.P.accent + '"' + stroke(1.8) + '/>',
+        hem: '<path d="' + HEM + '" fill="' + C.P.robe + '"' + stroke(3) + '/>' + shadow(HEM_SH, 0.1) +
+          line('M84,196 C86,204 85,210 82,214 M112,196 C114,204 116,210 118,214', 1.4, '#000', 0.22) +
           '<path d="M65,206 C80,213 120,213 135,206 L136,212 C120,219 80,219 64,212 Z" fill="' + C.P.trim + '"/>'
       }, sleeves(C, C.P.robe, C.P.trim));
     }, { params: BODY_P });
@@ -184,13 +192,14 @@
         if (x < 120) sc += 'M' + (x - 4) + ',' + y + ' q4,5 8,0 ';
       }
       return res({
-        body: '<path d="' + TORSO + '" fill="' + C.P.robe + '"' + stroke(3) + '/>' + shadow(TORSO_SH, 0.1) +
+        body: '<path d="' + TORSO_UP + '" fill="' + C.P.robe + '"' + stroke(3) + '/>' + shadow(TORSO_UP_SH, 0.1) +
           '<path d="M77,150 L123,150 L127,185 L73,185 Z" fill="' + C.P.armor + '"' + stroke(2.6) + '/>' +
           '<path d="' + sc + '" fill="none" stroke="#000" stroke-opacity=".25" stroke-width="1.5"/>' +
           shadow('M110,150 L123,150 L127,185 L114,185 Z', 0.12) +
           '<circle cx="100" cy="165" r="7.5" fill="' + C.P.metal + '"' + stroke(2.2) + '/>' + '<circle cx="98" cy="163" r="2.2" fill="#fff" fill-opacity=".7"/>' +
           '<path d="M68,185 L132,185 L133,195 L67,195 Z" fill="' + C.P.trim + '"' + stroke(2.4) + '/>' +
-          '<circle cx="100" cy="190" r="6" fill="' + C.P.accent + '"' + stroke(2) + '/>' +
+          '<circle cx="100" cy="190" r="6" fill="' + C.P.accent + '"' + stroke(2) + '/>',
+        hem: '<path d="' + HEM + '" fill="' + C.P.robe + '"' + stroke(3) + '/>' + shadow(HEM_SH, 0.1) +
           '<path d="M70,196 L98,196 L96,211 L66,209 Z M102,196 L130,196 L134,209 L104,211 Z" fill="' + C.P.armor + '"' + stroke(2.2) + '/>' +
           line('M70,203 L97,204 M103,204 L132,203', 1.4, '#000', 0.24)
       }, sleeves(C, C.P.robe, C.P.trim, pad));
@@ -200,8 +209,14 @@
     part('back', 'cape', 'Áo choàng', function (C) {
       return { backItem: '<path d="M74,150 C58,170 52,200 50,222 L150,222 C148,200 142,170 126,150 Z" fill="' + C.P.cape + '"' + stroke(2.6) + '/>' + shadow('M126,150 C142,170 148,200 150,222 L134,222 C134,196 130,170 120,152 Z', 0.15) };
     });
+    part('legwear', 'pants', 'Quần ống gọn', function (C) {
+      var th = '<rect x="83" y="198" width="14" height="17" rx="5.5" fill="' + C.P.pants + '"' + stroke(2.4) + '/>';
+      var sh = '<rect x="83.5" y="208" width="11" height="14" rx="4.5" fill="' + C.P.pants + '"' + stroke(2.2) + '/>' + line('M86,212 q3,1.5 6,0', 1.2, '#000', 0.22);
+      return { thighL: th, shinL: sh, thighR: mir(th), shinR: mir(sh) };
+    });
     part('shoes', 'boots', 'Ủng', function (C) {
-      return { legs: both('<ellipse cx="87" cy="221" rx="11" ry="6.5" fill="' + C.P.boots + '"' + stroke(2.4) + '/>' + '<path d="M80,218 q5,-3 10,-1" fill="none" stroke="#fff" stroke-opacity=".25" stroke-width="1.6" stroke-linecap="round"/>') };
+      var b = '<ellipse cx="87" cy="221" rx="11" ry="6.5" fill="' + C.P.boots + '"' + stroke(2.4) + '/>' + '<path d="M80,218 q5,-3 10,-1" fill="none" stroke="#fff" stroke-opacity=".25" stroke-width="1.6" stroke-linecap="round"/>';
+      return { footL: b, footR: mir(b) };
     });
 
     part('heldL', 'none', 'Không', function () { return null; });
@@ -426,10 +441,14 @@
       var p = function (x, y, dl) { return '<g class="chb-puff" style="animation-delay:' + dl + 's"><circle cx="' + x + '" cy="' + y + '" r="7" fill="#f4f4f2"' + stroke(2) + '/></g>'; };
       return { fxHead: p(42, 84, 0) + p(36, 72, -0.45) + p(158, 84, -0.2) + p(164, 72, -0.65) };
     });
-    function txt(cls, x, y, size, fill, t, dl) {
+    function txt(C, cls, x, y, size, fill, t, dl) {
+      var el = txt0(cls, x, y, size, fill, t, dl);
+      return C && C.flip ? '<g transform="translate(' + (2 * x) + ' 0) scale(-1 1)">' + el + '</g>' : el;
+    }
+    function txt0(cls, x, y, size, fill, t, dl) {
       return '<text class="' + cls + '"' + (dl ? ' style="animation-delay:' + dl + 's"' : '') + ' x="' + x + '" y="' + y + '" font-size="' + size + '" font-weight="900" font-family="Arial Black, Arial, Helvetica, sans-serif" fill="' + fill + '" stroke="' + INK + '" stroke-width="1.4">' + t + '</text>';
     }
-    fx('zzz', 'Zzz', 'fxFront', function () { return { fxFront: txt('chb-zzz', 146, 44, 14, '#6f8fc9', 'z', 0) + txt('chb-zzz', 158, 28, 18, '#6f8fc9', 'z', -0.8) + txt('chb-zzz', 172, 10, 22, '#6f8fc9', 'z', -1.6) }; });
+    fx('zzz', 'Zzz', 'fxFront', function (C) { return { fxFront: txt(C, 'chb-zzz', 146, 44, 14, '#6f8fc9', 'z', 0) + txt(C, 'chb-zzz', 158, 28, 18, '#6f8fc9', 'z', -0.8) + txt(C, 'chb-zzz', 172, 10, 22, '#6f8fc9', 'z', -1.6) }; });
     fx('snot', 'Bong bóng mũi', 'fxHead', function () { return { fxHead: '<circle class="chb-bubble" cx="108" cy="121" r="7" fill="#d4f0ff" fill-opacity=".85" stroke="#5aa9d6" stroke-width="1.8"/>' }; });
     fx('gum', 'Thổi kẹo cao su', 'fxHead', function () { return { fxHead: '<circle class="chb-bubble" cx="112" cy="133" r="9" fill="#ff9ec7" fill-opacity=".9" stroke="#d14d8a" stroke-width="1.8"/><circle cx="109" cy="130" r="2" fill="#fff" fill-opacity=".8"/>' }; });
     fx('dots', 'Bong bóng suy nghĩ', 'fxFront', function () {
@@ -439,8 +458,8 @@
           '<circle cx="166" cy="18" r="2.4" fill="' + INK + '"/><circle cx="175" cy="18" r="2.4" fill="' + INK + '"/><circle cx="184" cy="18" r="2.4" fill="' + INK + '"/></g>'
       };
     });
-    fx('exclaim', 'Chấm than', 'fxFront', function () { return { fxFront: txt('chb-pop', 164, 46, 34, '#e5604d', '!!') }; });
-    fx('question', 'Dấu hỏi', 'fxFront', function () { return { fxFront: txt('chb-pop', 160, 46, 34, '#6fa8dc', '?') + txt('chb-pop', 34, 40, 22, '#6fa8dc', '?', -0.3) }; });
+    fx('exclaim', 'Chấm than', 'fxFront', function (C) { return { fxFront: txt(C, 'chb-pop', 164, 46, 34, '#e5604d', '!!') }; });
+    fx('question', 'Dấu hỏi', 'fxFront', function (C) { return { fxFront: txt(C, 'chb-pop', 160, 46, 34, '#6fa8dc', '?') + txt(C, 'chb-pop', 34, 40, 22, '#6fa8dc', '?', -0.3) }; });
     fx('stars', 'Sao quay quanh đầu', 'fxHead', function () {
       return { fxHead: '<g class="chb-orbit">' + spark(60, 52, 7, 0) + spark(140, 52, 7, 0) + spark(100, 34, 6, 0) + '</g>' };
     });
@@ -451,8 +470,8 @@
           '<g transform="rotate(25 130 124)"><rect x="120" y="119" width="20" height="9" rx="3" fill="#f2d4a6"' + stroke(1.6) + '/></g>'
       };
     });
-    fx('crown', 'Vương miện #1', 'fxFront', function () {
-      return { fxFront: '<g class="chb-bob"><path d="M76,22 L82,2 L92,14 L100,-4 L108,14 L118,2 L124,22 Z" fill="#ffd23a"' + stroke(2.4) + '/><circle cx="100" cy="10" r="3" fill="#e5604d"/>' + txt('', 92, 38, 16, '#ffd23a', '#1') + '</g>' };
+    fx('crown', 'Vương miện #1', 'fxFront', function (C) {
+      return { fxFront: '<g class="chb-bob"><path d="M76,22 L82,2 L92,14 L100,-4 L108,14 L118,2 L124,22 Z" fill="#ffd23a"' + stroke(2.4) + '/><circle cx="100" cy="10" r="3" fill="#e5604d"/>' + txt(C, '', 92, 38, 16, '#ffd23a', '#1') + '</g>' };
     });
     fx('confetti', 'Pháo giấy', 'fxFront', function () {
       var s = '', cols = ['#e5604d', '#ffd23a', '#4cb782', '#6fa8dc', '#b97bd0'];
@@ -526,6 +545,196 @@
     M('deflate', 'Xẹp lép kiệt sức', 3, 0.5, { body: { sy: k(0, 0.9, 0.5, 0.88, 1, 0.9), sx: k(0, 1.04, 1, 1.04) }, head: { y: k(0, 7, 0.5, 8, 1, 7), rot: k(0, -4, 0.5, -6, 1, -4) },
       armL: { rot: k(0, 6, 1, 6) }, armR: { rot: k(0, -6, 1, -6) } });
 
+    /* ================= ENGINE 0.3: TƯ THẾ · DI CHUYỂN · ĐỘNG TÁC · ĐẠO CỤ · HOẠT ĐỘNG =================
+     * Một khung hình = tư thế nền × di chuyển × động tác (tay) × biểu cảm (mặt) + đạo cụ.
+     * Không vẽ tay từng tổ hợp: ghép lớp như animation layer của game engine.
+     * Toạ độ đạo cụ theo sân khấu (stage, không chạy theo nhân vật); mặt đất y = 228.
+     */
+    var WOOD = '#8a5a34', WOOD_D = '#6b4426', CLOTH = '#b5523b', MAT = '#d9c38f', WATER = '#5fb2de';
+
+    /* ---------------- hiệu ứng cho di chuyển ---------------- */
+    fx('dust', 'Bụi chân', 'fxBack', function () {
+      var p = function (x, y, r, dl) { return '<g class="chb-puff" style="animation-delay:' + dl + 's"><circle cx="' + x + '" cy="' + y + '" r="' + r + '" fill="#efe8dc"' + stroke(1.8) + '/></g>'; };
+      return { fxBack: p(44, 222, 8, 0) + p(28, 214, 6, -0.3) + p(56, 226, 5, -0.55) };
+    });
+    fx('speedLines', 'Vệt tốc độ', 'fxBack', function () {
+      return { fxBack: '<g class="chb-flash">' + line('M2,120 L34,120 M-8,146 L30,146 M6,172 L40,172 M-4,196 L28,196', 2.6, INK, 0.45) + '</g>' };
+    });
+    fx('wind', 'Gió (bay)', 'fxBack', function () {
+      return { fxBack: '<g class="chb-flow" stroke-dasharray="10 14">' + line('M-10,150 C20,140 40,160 70,150 M-16,186 C14,176 34,196 60,186 M0,214 C24,206 40,222 66,214', 2.4, '#7fa8c9', 0.8) + '</g>' };
+    });
+    fx('splash', 'Bọt nước', 'fxFront', function () {
+      var d = function (x, y, dl) { return '<g class="chb-sweat" style="animation-delay:' + dl + 's"><path d="M' + x + ',' + y + ' q-4,7 0,9 q4,-2 0,-9 Z" fill="#d4f0ff" stroke="#3c8dbc" stroke-width="1.4"/></g>'; };
+      return { fxFront: d(52, 136, 0) + d(40, 128, -0.5) + d(148, 136, -0.25) + d(160, 128, -0.8) };
+    });
+    fx('tremble', 'Run cầm cập', 'fxBack', function () {
+      return { fxBack: line('M44,120 q-6,8 0,16 q6,8 0,16 M156,120 q6,8 0,16 q-6,8 0,16', 2.2, INK, 0.5) };
+    });
+    D.mouth('chew', function () {
+      return '<path d="M90,128 q5,5 10,0 q5,5 10,0" fill="none" stroke="' + INK + '" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>' +
+        '<circle cx="117" cy="133" r="1.8" fill="#fff" stroke="' + INK + '" stroke-width="1"/>';
+    });
+
+    /* ---------------- đạo cụ ---------------- */
+    function prop(id, label, draw) { D.prop(id, { label: label, draw: draw }); }
+    prop('stool', 'Ghế đẩu', function () {
+      return { propBack: '<rect x="66" y="208" width="7" height="20" rx="2" fill="' + WOOD_D + '"' + stroke(2) + '/><rect x="127" y="208" width="7" height="20" rx="2" fill="' + WOOD_D + '"' + stroke(2) + '/>' +
+        line('M72,220 L128,220', 3, WOOD_D) + '<rect x="58" y="199" width="84" height="11" rx="4" fill="' + WOOD + '"' + stroke(2.4) + '/>' + line('M64,202 L136,202', 1.4, '#fff', 0.25) };
+    });
+    prop('cushion', 'Nệm ngồi', function () {
+      return { propBack: '<ellipse cx="100" cy="225" rx="60" ry="10" fill="' + CLOTH + '"' + stroke(2.4) + '/>' + '<ellipse cx="100" cy="223" rx="44" ry="5" fill="#fff" fill-opacity=".14"/>' };
+    });
+    prop('bedroll', 'Chiếu + gối', function () {
+      var mat = '<rect x="-14" y="214" width="228" height="12" rx="4" fill="' + MAT + '"' + stroke(2.2) + '/>';
+      for (var x = 6; x < 210; x += 18) mat += line('M' + x + ',216 L' + x + ',224', 1.2, '#a88f5c');
+      return { propBack: mat + '<ellipse cx="34" cy="206" rx="34" ry="11" fill="#f4efe3"' + stroke(2.4) + '/>' + line('M10,203 q24,-6 48,0', 1.4, '#c9c0ac') };
+    });
+    // Chăn khớp với tư thế nằm: cổ ở x≈114, thân trải tới chân x≈192, dải y 124–212 (toạ độ sân khấu).
+    // Phủ từ cổ tới chân, mặt trên nhô theo dáng người (ngực rồi bàn chân), mép gấp màu kem ở phía cổ.
+    prop('blanket', 'Chăn', function (C) {
+      var top = 'M110,218 L110,124 C114,110 126,104 140,104 C156,104 164,114 176,118 C184,120 188,112 198,112 C210,112 216,128 216,150 L216,218 Z';
+      return { propFront: '<path d="' + top + '" fill="#7d9fcf"' + stroke(2.8) + '/>' +
+        shadow('M140,202 C164,208 192,208 216,200 L216,218 L110,218 L110,206 Z', 0.12) +
+        line('M150,130 l5,5 m14,-2 l5,5 m-26,22 l5,5 m14,-2 l5,5 m-26,22 l5,5 m14,-2 l5,5 m20,-50 l5,5 m-4,24 l5,5', 1.6, '#fff', 0.45) +
+        // mép chăn gấp: mỏng, mép phải cong mềm
+        '<path d="M106,218 L106,122 C108,110 118,105 128,108 C133,128 130,176 133,218 Z" fill="#f4efe3"' + stroke(2.6) + '/>' +
+        line('M117,116 C120,140 118,180 120,212', 1.2, '#c9c0ac') +
+        // bàn tay nắm mép chăn
+        '<circle cx="131" cy="150" r="7.5" fill="' + C.P.skin + '"' + stroke(2.4) + '/>' + line('M127,147 q3,-2 6,0', 1.4, C.P.skinShade) };
+    });
+    prop('desk', 'Bàn thấp + giấy mực', function () {
+      return { propMid: '<rect x="44" y="206" width="112" height="9" rx="2" fill="' + WOOD_D + '"' + stroke(2.2) + '/>' +
+        '<rect x="50" y="215" width="8" height="13" rx="2" fill="' + WOOD_D + '"' + stroke(2) + '/><rect x="142" y="215" width="8" height="13" rx="2" fill="' + WOOD_D + '"' + stroke(2) + '/>' +
+        '<rect x="36" y="196" width="128" height="11" rx="3" fill="' + WOOD + '"' + stroke(2.6) + '/>' + line('M42,199 L158,199', 1.4, '#fff', 0.25) +
+        '<path d="M76,192 L118,192 L120,198 L74,198 Z" fill="#fbf8f0"' + stroke(1.6) + '/>' + line('M84,194 L84,197 M92,194 L92,197 M100,194 L100,197', 1.2, INK, 0.6) +
+        '<rect x="132" y="190" width="16" height="8" rx="2" fill="#3a3a3a"' + stroke(1.6) + '/>' };
+    });
+    prop('water', 'Mặt nước', function () {
+      return {
+        propBack: '<rect x="-24" y="182" width="248" height="16" fill="#a9daf1"/>',
+        propFront: '<g class="chb-wave"><path d="M-40,188 q12,-7 24,0 t24,0 t24,0 t24,0 t24,0 t24,0 t24,0 t24,0 t24,0 t24,0 t24,0 t24,0 L248,262 L-40,262 Z" fill="' + WATER + '" fill-opacity=".86"' + stroke(2.4) + '/></g>' +
+          line('M10,204 q10,-4 20,0 M150,212 q10,-4 20,0 M80,226 q10,-4 20,0', 2, '#fff', 0.55)
+      };
+    });
+    prop('bowl', 'Bát cơm (tay trái)', function (C) {
+      return { heldL: '<path d="M58,186 L86,186 Q85,200 72,201 Q59,200 58,186 Z" fill="#f1ede3"' + stroke(2.2) + '/>' + line('M60,191 L84,191', 2, '#4f7fbf', 0.85) +
+        '<path d="M59,186 Q72,174 85,186 Z" fill="#fff"' + stroke(1.8) + '/>' };
+    });
+    prop('chopsticks', 'Đũa (tay phải)', function () {
+      return { heldR: line('M126,198 L112,166 M131,197 L119,165', 2.6, '#b07a45') };
+    });
+    prop('cup', 'Chén trà (tay phải)', function () {
+      return { heldR: '<path d="M119,180 L137,180 L134,195 L122,195 Z" fill="#f1ede3"' + stroke(2.2) + '/>' + '<ellipse cx="128" cy="180.5" rx="8.5" ry="2.4" fill="#b98b4a"/>' + line('M121,186 L135,186', 1.6, '#4f7fbf', 0.8) };
+    });
+    prop('book', 'Sách (hai tay)', function () {
+      return { heldL: '<g transform="rotate(-8 72 193)"><path d="M64,170 L100,174 L100,206 L64,202 Z" fill="#c9473b"' + stroke(2.2) + '/><path d="M68,172 L98,175 L98,203 L68,200 Z" fill="#fbf8f0"' + stroke(1.4) + '/>' +
+        line('M72,180 L94,182 M72,186 L94,188 M72,192 L94,194', 1.2, INK, 0.5) + '</g>' };
+    });
+    prop('brush', 'Bút lông (tay phải)', function () {
+      return { heldR: '<path d="M125,196 L117,214" stroke="' + WOOD + '" stroke-width="3.6" stroke-linecap="round"/><path d="M118,210 L114,220 L120,213 Z" fill="' + INK + '"/>' };
+    });
+
+    /* ---------------- tư thế nền (thân dưới + vị trí) ----------------
+     * base: giá trị tuyệt đối trên khớp. handsBusy: tay dùng để bò/bơi, động tác tay bị bỏ qua.
+     * shadow.sx: độ rộng bóng; lift0: độ cao coi như vẫn chạm đất (nằm).
+     */
+    function posture(id, label, base, extra) { var d = { label: label, base: base }; for (var x in (extra || {})) d[x] = extra[x]; D.posture(id, d); }
+    posture('stand', 'Đứng', {});
+    posture('stance', 'Đứng tấn', { root: { y: 3 }, thighL: { rot: 18 }, shinL: { rot: -18 }, thighR: { rot: -18 }, shinR: { rot: 18 }, hem: { sx: 1.08, sy: 0.92 } }, { shadow: { sx: 1.1 } });
+    posture('sit-chair', 'Ngồi ghế', { root: { y: 6 }, thighL: { sy: 0.35, rot: 8 }, thighR: { sy: 0.35, rot: -8 }, shinL: { rot: -8 }, shinR: { rot: 8 }, hem: { sx: 1.12, sy: 0.55 } }, { props: ['stool'] });
+    posture('sit-floor', 'Ngồi xếp bằng', { root: { y: 13 }, thighL: { rot: 62, sy: 0.7 }, shinL: { rot: -122, sy: 0.9 }, thighR: { rot: -62, sy: 0.7 }, shinR: { rot: 122, sy: 0.9 }, hem: { sx: 1.3, sy: 0.6 } }, { props: ['cushion'], shadow: { sx: 1.3 } });
+    posture('kneel', 'Quỳ', { root: { y: 11 }, thighL: { sy: 0.3 }, thighR: { sy: 0.3 }, shinL: { sy: 0.01 }, shinR: { sy: 0.01 }, footL: { sy: 0.01 }, footR: { sy: 0.01 }, hem: { sx: 1.1, sy: 0.72 } }, { shadow: { sx: 1.1 } });
+    posture('squat', 'Ngồi xổm', { root: { y: 10 }, thighL: { rot: 58, sy: 0.9 }, shinL: { rot: -64 }, thighR: { rot: -58, sy: 0.9 }, shinR: { rot: 64 }, hem: { sx: 1.18, sy: 0.5 }, body: { sy: 0.97 } }, { shadow: { sx: 1.2 } });
+    posture('cower', 'Co rúm', { root: { y: 8 }, body: { sy: 0.9, sx: 1.04 }, head: { y: 5 }, thighL: { rot: 14, sy: 0.6 }, shinL: { rot: -14 }, thighR: { rot: -14, sy: 0.6 }, shinR: { rot: 14 }, hem: { sx: 1.1, sy: 0.7 } });
+    posture('lie', 'Nằm', { root: { rot: -90, x: 92, y: -60 }, hem: { sy: 1.02 } }, { props: ['bedroll'], hideHeld: true, shadow: { sx: 2.1, dx: -6, lift0: 60, op: 0.7 }, crop: [6, 120, 132, 132] });
+    posture('crawl', 'Bò', { root: { y: 20 }, body: { sy: 0.88, sx: 1.04 }, head: { y: 4 }, thighL: { sy: 0.2, rot: 30 }, thighR: { sy: 0.2, rot: -30 }, shinL: { sy: 0.3 }, shinR: { sy: 0.3 }, hem: { sx: 1.22, sy: 0.46 },
+      armL: { rot: 22, sy: 1.25 }, foreL: { rot: 8 }, armR: { rot: -22, sy: 1.25 }, foreR: { rot: -8 } }, { handsBusy: true, shadow: { sx: 1.25 } });
+    posture('air', 'Trên không', { root: { y: -26 }, thighL: { rot: 12, sy: 0.7 }, shinL: { rot: -38 }, thighR: { rot: -12, sy: 0.7 }, shinR: { rot: 38 }, hem: { sx: 1.06, sy: 0.9 } });
+    posture('fly', 'Bay', { root: { y: -34 }, body: { rot: 8 }, head: { rot: -4 }, thighL: { rot: 24 }, thighR: { rot: 20 }, shinL: { rot: 10 }, shinR: { rot: 12 }, hem: { rot: 14, sx: 0.96 },
+      armL: { rot: 40 }, armR: { rot: -150 }, foreR: { rot: -10 } });
+    posture('swim', 'Bơi', { root: { y: 46 } }, { props: ['water'], handsBusy: true, shadow: { op: 0 } });
+
+    /* ---------------- di chuyển (chu kỳ cộng dồn lên tư thế) ---------------- */
+    function move(id, label, dur, tracks, extra) { var d = { label: label, dur: dur, tracks: tracks, still: 0.25 }; for (var x in (extra || {})) d[x] = extra[x]; D.move(id, d); }
+    var LIFT = function (a) { return k(0, 1, 0.25, a, 0.5, 1, 1, 1); };
+    var LIFT2 = function (a) { return k(0, 1, 0.5, 1, 0.75, a, 1, 1); };
+    move('walk', 'Đi bộ', 0.8, {
+      root: { y: k(0, 0, 0.25, -2, 0.5, 0, 0.75, -2, 1, 0) }, body: { rot: k(0, -2, 0.5, 2, 1, -2) }, hem: { rot: k(0, -3, 0.5, 3, 1, -3) },
+      thighL: { sy: LIFT(0.55) }, footL: { y: k(0, 0, 0.25, -3, 0.5, 0, 1, 0) }, thighR: { sy: LIFT2(0.55) }, footR: { y: k(0, 0, 0.5, 0, 0.75, -3, 1, 0) },
+      armL: { rot: k(0, -12, 0.5, 14, 1, -12) }, armR: { rot: k(0, -14, 0.5, 12, 1, -14) }
+    }, { postures: ['stand', 'stance'] });
+    move('run', 'Chạy', 0.42, {
+      root: { y: k(0, 0, 0.25, -6, 0.5, 0, 0.75, -6, 1, 0) }, body: { rot: k(0, 7, 0.5, 9, 1, 7) }, head: { rot: k(0, -3, 0.5, -5, 1, -3) },
+      hem: { rot: k(0, -8, 0.5, -2, 1, -8), sy: k(0, 0.9, 1, 0.9) },
+      thighL: { sy: LIFT(0.35), rot: k(0, 0, 0.25, 10, 0.5, 0, 1, 0) }, shinL: { rot: k(0, 0, 0.25, -20, 0.5, 0, 1, 0) },
+      thighR: { sy: LIFT2(0.35), rot: k(0, 0, 0.75, -10, 1, 0) }, shinR: { rot: k(0, 0, 0.75, 20, 1, 0) },
+      armL: { rot: k(0, -34, 0.5, 40, 1, -34) }, foreL: { rot: k(0, -50, 0.5, -30, 1, -50) }, armR: { rot: k(0, -40, 0.5, 34, 1, -40) }, foreR: { rot: k(0, 30, 0.5, 50, 1, 30) }
+    }, { postures: ['stand'], fx: ['dust', 'speedLines'] });
+    move('sneak', 'Rón rén', 1.3, {
+      root: { x: k(0, -2, 0.5, 2, 1, -2), y: k(0, 0, 0.25, -2, 0.5, 0, 0.75, -2, 1, 0) }, body: { rot: k(0, -3, 0.5, 3, 1, -3) },
+      thighL: { sy: LIFT(0.6) }, thighR: { sy: LIFT2(0.6) },
+      armL: { rot: k(0, -40, 1, -40) }, foreL: { rot: k(0, -60, 1, -60) }, armR: { rot: k(0, 40, 1, 40) }, foreR: { rot: k(0, 60, 1, 60) }
+    }, { postures: ['squat', 'stand'] });
+    move('hop', 'Nhảy', 0.75, {
+      root: { y: k(0, 0, 0.14, 5, 0.5, -22, 0.86, 5, 1, 0), sy: k(0, 1, 0.14, 0.9, 0.3, 1.06, 0.5, 1, 0.86, 0.9, 1, 1) },
+      thighL: { rot: k(0, 0, 0.5, 14, 1, 0), sy: k(0, 1, 0.5, 0.7, 1, 1) }, shinL: { rot: k(0, 0, 0.5, -40, 1, 0) },
+      thighR: { rot: k(0, 0, 0.5, -14, 1, 0), sy: k(0, 1, 0.5, 0.7, 1, 1) }, shinR: { rot: k(0, 0, 0.5, 40, 1, 0) },
+      hem: { sy: k(0, 0.9, 0.5, 1.04, 1, 0.9) },
+      armL: { rot: k(0, 20, 0.5, 130, 1, 20) }, armR: { rot: k(0, -20, 0.5, -130, 1, -20) }
+    }, { postures: ['stand'], still: 0.5 });
+    move('crawl', 'Bò', 0.9, {
+      root: { x: k(0, -2, 0.5, 2, 1, -2) }, body: { rot: k(0, -3, 0.5, 3, 1, -3) }, head: { rot: k(0, 3, 0.5, -3, 1, 3) },
+      armL: { sy: k(0, 1, 0.25, 0.82, 0.5, 1, 1, 1), rot: k(0, 0, 0.25, -6, 0.5, 0, 1, 0) }, armR: { sy: k(0, 1, 0.5, 1, 0.75, 0.82, 1, 1), rot: k(0, 0, 0.75, 6, 1, 0) }
+    }, { postures: ['crawl'] });
+    move('swim', 'Bơi', 1.1, {
+      root: { y: k(0, 0, 0.5, -3, 1, 0), rot: k(0, -3, 0.5, 3, 1, -3) }, head: { rot: k(0, 4, 0.5, -4, 1, 4) },
+      armL: { rot: k(0, 20, 0.25, 170, 0.5, 120, 0.75, 20, 1, 20), sy: k(0, 1, 0.25, 1.45, 0.5, 1.2, 0.75, 1, 1, 1) }, foreL: { rot: k(0, 0, 0.25, -10, 0.5, -50, 1, 0) },
+      armR: { rot: k(0, -20, 0.5, -20, 0.75, -170, 0.9, -120, 1, -20), sy: k(0, 1, 0.5, 1, 0.75, 1.45, 0.9, 1.2, 1, 1) }, foreR: { rot: k(0, 0, 0.75, 10, 0.9, 50, 1, 0) }
+    }, { postures: ['swim'], fx: ['splash'], still: 0.25 });
+    move('fly', 'Bay lượn', 1.6, {
+      root: { y: k(0, 0, 0.5, -6, 1, 0) }, body: { rot: k(0, -2, 0.5, 2, 1, -2) }, hem: { rot: k(0, -5, 0.5, 5, 1, -5) },
+      thighL: { rot: k(0, -4, 0.5, 4, 1, -4) }, thighR: { rot: k(0, 4, 0.5, -4, 1, 4) }
+    }, { postures: ['fly'], fx: ['wind'] });
+    move('float', 'Lơ lửng', 1.4, { root: { y: k(0, 0, 0.5, -4, 1, 0) }, hem: { rot: k(0, -3, 0.5, 3, 1, -3) } }, { postures: ['air', 'fly'] });
+    move('tremble', 'Run rẩy', 0.12, { root: { x: k(0, -1.4, 0.5, 1.4, 1, -1.4) } }, { fx: ['tremble'] });
+    move('bounce', 'Nhún nhảy', 0.5, { root: { y: k(0, 0, 0.5, -5, 1, 0) }, body: { rot: k(0, -4, 0.5, 4, 1, -4) }, hem: { rot: k(0, 4, 0.5, -4, 1, 4) } }, { postures: ['stand', 'stance', 'air'] });
+
+    /* ---------------- động tác tay mới (thân trên) ---------------- */
+    M('eat', 'Ăn (bát + đũa)', 0.9, 0.5, { head: { rot: k(0, 2, 0.5, -2, 1, 2) },
+      armL: { rot: k(0, -34, 1, -34) }, foreL: { rot: k(0, -76, 1, -76) },
+      armR: { rot: k(0, 70, 0.45, 146, 0.6, 146, 1, 70) }, foreR: { rot: k(0, 40, 0.45, 6, 0.6, 6, 1, 40) } }, { hold: { L: 'bowl', R: 'chopsticks' } });
+    M('drink', 'Uống (chén)', 1.8, 0.5, { head: { rot: k(0, 0, 0.45, -6, 0.75, -6, 1, 0) },
+      armL: { rot: k(0, 22, 1, 22) }, foreL: { rot: k(0, 60, 1, 60) },
+      armR: { rot: k(0, 70, 0.4, 142, 0.75, 142, 1, 70) }, foreR: { rot: k(0, 40, 0.4, 10, 0.75, 10, 1, 40) } }, { hold: { R: 'cup' } });
+    M('read', 'Đọc sách', 2.6, 0.25, { head: { rot: k(0, 3, 0.5, 5, 1, 3), y: k(0, 2, 1, 2) },
+      armL: { rot: k(0, -30, 1, -30) }, foreL: { rot: k(0, -66, 1, -66) }, armR: { rot: k(0, 30, 1, 30) }, foreR: { rot: k(0, 70, 0.5, 74, 1, 70) } }, { hold: { L: 'book' }, hide: ['heldR'] });
+    M('write', 'Viết (bút lông)', 0.8, 0.25, { head: { rot: k(0, 4, 1, 4), y: k(0, 3, 1, 3) },
+      armL: { rot: k(0, -24, 1, -24) }, foreL: { rot: k(0, -44, 1, -44) },
+      armR: { rot: k(0, 30, 0.5, 38, 1, 30) }, foreR: { rot: k(0, 44, 0.5, 52, 1, 44) } }, { hold: { R: 'brush' }, hide: ['heldL'] });
+    M('slash', 'Chém', 0.6, 0.3, { root: { x: k(0, -2, 0.5, 6, 1, -2) }, body: { rot: k(0, -6, 0.5, 9, 1, -6) }, head: { rot: k(0, -3, 0.5, 4, 1, -3) },
+      armL: { rot: k(0, 40, 0.5, 20, 1, 40) }, foreL: { rot: k(0, 40, 1, 40) },
+      armR: { rot: k(0, -165, 0.35, -170, 0.55, 40, 0.8, 50, 1, -165) }, foreR: { rot: k(0, -20, 0.55, 20, 1, -20) }, handR: { rot: k(0, 150, 0.35, 160, 0.55, 30, 0.8, 20, 1, 150) } });
+    M('thrust', 'Đâm giáo', 0.55, 0.5, { root: { x: k(0, -4, 0.5, 8, 1, -4), y: k(0, 0, 0.5, 2, 1, 0) }, body: { rot: k(0, -4, 0.5, 8, 1, -4) },
+      armL: { rot: k(0, -30, 0.5, -50, 1, -30) }, foreL: { rot: k(0, -50, 1, -50) },
+      armR: { rot: k(0, -40, 0.5, -84, 1, -40) }, foreR: { rot: k(0, -10, 0.5, 0, 1, -10) }, handR: { rot: k(0, 90, 0.5, 90, 1, 90) } });
+    M('block', 'Đỡ đòn', 0.5, 0.25, { root: { x: k(0, 0, 0.5, -1.5, 1, 0) }, head: { y: k(0, 3, 1, 3) },
+      armL: { rot: k(0, -110, 0.5, -106, 1, -110) }, foreL: { rot: k(0, -64, 1, -64) }, armR: { rot: k(0, 110, 0.5, 106, 1, 110) }, foreR: { rot: k(0, 64, 1, 64) } }, { hide: ['tallL', 'tallR'] });
+    M('coverHead', 'Ôm đầu', 0.25, 0.25, { root: { x: k(0, -1.2, 0.5, 1.2, 1, -1.2) }, head: { rot: k(0, -2, 0.5, 2, 1, -2) },
+      armL: { rot: k(0, -168, 1, -168) }, foreL: { rot: k(0, -52, 1, -52) }, armR: { rot: k(0, 168, 1, 168) }, foreR: { rot: k(0, 52, 1, 52) } }, { hide: ['heldL', 'heldR'] });
+    M('wave', 'Vẫy chào', 0.8, 0.25, { head: { rot: k(0, -3, 0.5, 3, 1, -3) }, armL: { rot: k(0, 4, 1, 4) },
+      armR: { rot: k(0, -150, 0.5, -132, 1, -150) }, foreR: { rot: k(0, -24, 0.5, 22, 1, -24) } }, { hide: ['heldR'] });
+    M('point', 'Chỉ tay', 1.4, 0.25, { body: { rot: k(0, 2, 0.5, 3, 1, 2) }, head: { rot: k(0, -2, 1, -2) },
+      armL: { rot: k(0, 26, 1, 26) }, foreL: { rot: k(0, 64, 1, 64) }, armR: { rot: k(0, -96, 0.5, -100, 1, -96) }, foreR: { rot: k(0, -4, 1, -4) } }, { hide: ['heldR'] });
+    M('bow', 'Cúi chào', 1.8, 0.45, { body: { sy: k(0, 1, 0.4, 0.92, 0.7, 0.92, 1, 1) }, head: { y: k(0, 0, 0.4, 9, 0.7, 9, 1, 0), rot: k(0, 0, 0.4, 3, 1, 0) },
+      armL: { rot: k(0, -18, 1, -18) }, foreL: { rot: k(0, -40, 1, -40) }, armR: { rot: k(0, 18, 1, 18) }, foreR: { rot: k(0, 40, 1, 40) } }, { hide: ['heldL', 'heldR'] });
+    M('salute', 'Ôm quyền thi lễ', 1.2, 0.5, { body: { sy: k(0, 1, 0.5, 0.96, 1, 1) }, head: { y: k(0, 0, 0.5, 4, 1, 0) },
+      armL: { rot: k(0, -46, 1, -46) }, foreL: { rot: k(0, -72, 1, -72) }, armR: { rot: k(0, 46, 1, 46) }, foreR: { rot: k(0, 72, 1, 72) } }, { hide: ['heldL', 'heldR'] });
+    M('cheer', 'Cổ vũ', 0.5, 0.25, { head: { rot: k(0, -3, 0.5, 3, 1, -3) },
+      armL: { rot: k(0, 150, 0.5, 120, 1, 150) }, foreL: { rot: k(0, 10, 1, 10) }, armR: { rot: k(0, -120, 0.5, -150, 1, -120) }, foreR: { rot: k(0, -10, 1, -10) } });
+    M('flail', 'Vung tay hoảng loạn', 0.3, 0.25, { head: { rot: k(0, 5, 0.5, -5, 1, 5) },
+      armL: { rot: k(0, 140, 0.5, 170, 1, 140) }, foreL: { rot: k(0, 40, 0.5, 0, 1, 40) }, armR: { rot: k(0, -170, 0.5, -140, 1, -170) }, foreR: { rot: k(0, 0, 0.5, -40, 1, 0) } }, { hide: ['tallL', 'tallR'] });
+    M('rest', 'Thả lỏng', 3, 0.25, { armL: { rot: k(0, 8, 0.5, 10, 1, 8) }, armR: { rot: k(0, -8, 0.5, -10, 1, -8) }, head: { rot: k(0, 0, 0.5, 2, 1, 0) } });
+
     /* ---------------- 18 TRẠNG THÁI = mắt + mày + miệng + hiệu ứng + động tác ---------------- */
     function S(id, label, hint, eyes, brows, mouth, fxs, motion) { D.state(id, { label: label, hint: hint, eyes: eyes, brows: brows, mouth: mouth, fx: fxs, motion: motion }); }
     S('normal', 'Bình thường', 'rảnh hoặc làm việc êm', 'normal', 'neutral', 'smile', [], 'idle');
@@ -546,6 +755,42 @@
     S('exhausted', 'Hết quota', 'cạn sức, hồn lìa khỏi xác', 'empty', 'sad', 'oSmall', ['soul', 'gloomLines'], 'deflate');
     S('lazy', 'Rảnh rỗi lười', 'không có việc, nằm ườn', 'half', 'neutral', 'cat', ['gum'], 'slouch');
     S('sleep', 'Ngủ say', 'ngoài giờ, không có việc', 'closed', 'neutral', 'oSmall', ['zzz', 'snot'], 'doze');
+
+
+    /* ---------------- HOẠT ĐỘNG: tổ hợp đặt tên sẵn (agent gọi theo tên; vẫn ghép tự do được) ---------------- */
+    function A(id, group, label, hint, def) { def.label = label; def.group = group; def.hint = hint; D.activity(id, def); }
+    A('stand', 'Tư thế', 'Đứng', 'đứng yên', { posture: 'stand' });
+    A('sit-chair', 'Tư thế', 'Ngồi ghế', 'ngồi chờ, ngồi nghe', { posture: 'sit-chair', action: 'rest' });
+    A('sit-floor', 'Tư thế', 'Ngồi xếp bằng', 'ngồi thiền, ngồi bệt', { posture: 'sit-floor', action: 'rest' });
+    A('kneel', 'Tư thế', 'Quỳ', 'quỳ chờ lệnh', { posture: 'kneel', action: 'rest' });
+    A('squat', 'Tư thế', 'Ngồi xổm', 'ngồi xổm quan sát', { posture: 'squat', action: 'rest' });
+    A('lie', 'Tư thế', 'Nằm nghỉ', 'nằm nghỉ, nằm ườn', { posture: 'lie', action: 'rest', state: 'lazy' });
+    A('walk', 'Di chuyển', 'Đi bộ', 'đi lại, đi tới', { move: 'walk' });
+    A('run', 'Di chuyển', 'Chạy', 'chạy nhanh, gấp gáp', { move: 'run', state: 'vow' });
+    A('sneak', 'Di chuyển', 'Rón rén', 'lén lút, trinh sát', { posture: 'squat', move: 'sneak', state: 'smug' });
+    A('jump', 'Di chuyển', 'Nhảy', 'nhảy cẫng, nhảy qua', { move: 'hop', face: { eyes: 'happy', mouth: 'laugh' }, state: 'normal' });
+    A('crawl', 'Di chuyển', 'Bò', 'bò qua chỗ hẹp, bò lết', { posture: 'crawl', move: 'crawl', state: 'work' });
+    A('fly', 'Di chuyển', 'Bay', 'bay lượn, khinh công', { posture: 'fly', move: 'fly', state: 'vow' });
+    A('swim', 'Di chuyển', 'Bơi', 'bơi qua sông', { posture: 'swim', move: 'swim', state: 'work' });
+    A('flee', 'Di chuyển', 'Bỏ chạy', 'tháo chạy, chạy trốn', { move: 'run', action: 'flail', state: 'panic' });
+    A('eat', 'Sinh hoạt', 'Ăn cơm', 'ăn uống, liên hoan', { posture: 'sit-floor', action: 'eat', face: { mouth: 'chew' }, state: 'normal' });
+    A('drink', 'Sinh hoạt', 'Uống trà', 'uống trà, uống rượu', { posture: 'sit-chair', action: 'drink', state: 'normal' });
+    A('sleep', 'Sinh hoạt', 'Ngủ', 'ngủ đêm, ngủ trưa', { posture: 'lie', action: 'rest', props: ['blanket'], state: 'sleep' });
+    A('study', 'Sinh hoạt', 'Đọc sách', 'học, đọc binh thư', { posture: 'sit-floor', action: 'read', state: 'think' });
+    A('write', 'Sinh hoạt', 'Viết', 'viết thư, soạn kế, làm việc giấy tờ', { posture: 'sit-floor', action: 'write', props: ['desk'], state: 'work' });
+    A('attack', 'Chiến đấu', 'Tấn công (chém)', 'xông vào chém', { posture: 'stance', action: 'slash', state: 'rage' });
+    A('thrust', 'Chiến đấu', 'Đâm giáo', 'đâm thương, đâm giáo', { posture: 'stance', action: 'thrust', state: 'vow' });
+    A('defend', 'Chiến đấu', 'Phòng thủ', 'đỡ đòn, chống đỡ', { posture: 'squat', action: 'block', state: 'work' });
+    A('charge', 'Chiến đấu', 'Xông lên', 'xung phong', { move: 'run', action: 'spearRaise', state: 'vow' });
+    A('victory', 'Chiến đấu', 'Ăn mừng', 'thắng trận', { move: 'hop', action: 'cheer', state: 'proud' });
+    A('scared', 'Cảm xúc', 'Sợ hãi', 'sợ run, co rúm', { posture: 'cower', move: 'tremble', action: 'coverHead', state: 'panic' });
+    A('faint', 'Cảm xúc', 'Ngất xỉu', 'ngã lăn ra, choáng', { posture: 'lie', action: 'rest', state: 'dizzy' });
+    A('bow', 'Giao tiếp', 'Cúi chào', 'chào hỏi, cảm ơn', { action: 'bow', state: 'normal' });
+    A('salute', 'Giao tiếp', 'Ôm quyền thi lễ', 'bái kiến, nhận lệnh', { action: 'salute', state: 'vow' });
+    A('kowtow', 'Giao tiếp', 'Quỳ lạy', 'xin tha, cầu xin', { posture: 'kneel', action: 'kowtow', state: 'beg' });
+    A('wave', 'Giao tiếp', 'Vẫy chào', 'chào, gọi', { action: 'wave', state: 'normal' });
+    A('point', 'Giao tiếp', 'Chỉ tay ra lệnh', 'ra lệnh, chỉ hướng', { posture: 'stance', action: 'point', state: 'vow' });
+    A('cheer', 'Giao tiếp', 'Cổ vũ', 'reo hò, cổ vũ', { move: 'bounce', action: 'cheer', state: 'proud' });
 
     /* ---------------- TRAIT: hành vi đi theo BỘ PHẬN ---------------- */
     D.trait({ id: 'beard-long', label: 'Râu dài → vuốt râu', if: { beard: ['long3', 'long-thin'] }, over: { normal: { motion: 'strokeBeard' }, think: { motion: 'strokeBeard' } } });

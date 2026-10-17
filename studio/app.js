@@ -116,7 +116,7 @@
 
   /* ============================================================ điều hướng */
   var NAV = [
-    ['Tài nguyên', [['characters', 'Nhân vật'], ['library', 'Thư viện linh kiện'], ['states', 'Biểu cảm & động tác']]],
+    ['Tài nguyên', [['characters', 'Nhân vật'], ['poses', 'Tư thế & hoạt động'], ['library', 'Thư viện linh kiện'], ['states', 'Biểu cảm & động tác']]],
     ['Sản xuất', [['director', 'Đạo diễn AI'], ['export', 'Xuất bản']]],
     ['Hệ thống', [['ai', 'Cài đặt AI'], ['gates', 'Cổng kiểm & hiệu năng'], ['update', 'Cập nhật']]]
   ];
@@ -316,7 +316,7 @@
     function paintGates() {
       clear(gateBox);
       var t = h('table', { class: 'grid' });
-      GC.gate(w).forEach(function (g) {
+      GC.gate(w, { poses: true }).forEach(function (g) {
         t.appendChild(h('tr', null, h('td', { text: g.label }), h('td', { class: g.ok ? 'ok' : 'bad', style: 'font-weight:600', text: g.ok ? 'Đạt' : 'Không đạt' })));
         if (!g.ok) t.appendChild(h('tr', null, h('td', { colspan: '2', class: 'note', text: g.detail })));
       });
@@ -647,6 +647,97 @@
       h('div', { class: 'panel scroll' }, h('h3', null, 'Ma trận mắt', h('span', { class: 'r note', text: styles.length + ' kiểu × ' + poses.length + ' dáng = ' + styles.length * poses.length + ' cặp, không vẽ tay cặp nào' })), mx)));
   };
 
+
+  /* ============================================================ trang: Tư thế & hoạt động */
+  // Một khung hình = biểu cảm (mặt) × tư thế nền × di chuyển × động tác (tay) + đạo cụ + hướng.
+  // Lưới dùng tầng ảnh (cache, 0 chi phí mỗi khung); chỉ sân khấu bên phải diễn đủ.
+  PAGES.poses = function (r) {
+    crumbs([{ t: 'Tư thế & hoạt động' }]);
+    var all = GC.assets();
+    var cur = GC.ASSETS[r.key] || all[0];
+    var sel = { activity: r.activity || 'walk', state: null, posture: '', move: '', motion: '', facing: 'right' };
+    var selA = h('select', { 'aria-label': 'Nhân vật', onchange: function () { cur = GC.ASSETS[selA.value]; paintGrid(); play(); } });
+    all.forEach(function (a) { selA.appendChild(h('option', { value: a.key, text: a.name + ' · ' + a.pack, selected: a === cur })); });
+    var grid = h('div', { class: 'stack' });
+    var stg = h('div', { class: 'stage preview', style: 'height:340px' });
+    var info = h('div', { class: 'note' });
+    function opt(sel0, list, blank) {
+      var s = h('select');
+      if (blank) s.appendChild(h('option', { value: '', text: blank }));
+      list.forEach(function (x) { s.appendChild(h('option', { value: x[0], text: x[1] })); });
+      s.value = sel0 || '';
+      return s;
+    }
+    var sState = opt('', LIB.stateOrder.map(function (id) { return [id, stateLabel(id)]; }), 'Theo hoạt động');
+    var sPost = opt('', Object.keys(LIB.postures).map(function (id) { return [id, LIB.postures[id].label]; }), 'Theo hoạt động');
+    var sMove = opt('', [['none', 'Đứng yên']].concat(Object.keys(LIB.moves).map(function (id) { return [id, LIB.moves[id].label]; })), 'Theo hoạt động');
+    var sMot = opt('', Object.keys(LIB.motions).map(function (id) { return [id, LIB.motions[id].label]; }), 'Theo hoạt động');
+    var face = h('div', { class: 'seg' });
+    [['right', 'Quay phải'], ['left', 'Quay trái']].forEach(function (f) {
+      face.appendChild(h('button', { 'aria-pressed': String(sel.facing === f[0]), onclick: function () { sel.facing = f[0]; Array.prototype.forEach.call(face.children, function (b, i) { b.setAttribute('aria-pressed', String(i === (f[0] === 'right' ? 0 : 1))); }); play(); } }, f[1]));
+    });
+    [[sState, 'state'], [sPost, 'posture'], [sMove, 'move'], [sMot, 'motion']].forEach(function (x) { x[0].onchange = function () { sel[x[1]] = x[0].value; play(); }; });
+    var reset = h('button', { class: 'btn sm', onclick: function () { sel.state = null; sel.posture = sel.move = sel.motion = ''; sState.value = sPost.value = sMove.value = sMot.value = ''; play(); } }, 'Bỏ ghép tay');
+    var dl = h('button', { class: 'btn sm', onclick: function () {
+      var svg = GC.svgString(cur, stateOf(), { director: dirOf() });
+      var a = h('a', { href: URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' })), download: cur.id + '-' + (sel.activity || 'pose') + '.svg' });
+      document.body.appendChild(a); a.click(); a.remove();
+    } }, 'Tải SVG khung này');
+    $('view').appendChild(h('div', { class: 'split' },
+      h('div', { class: 'stack' },
+        h('div', { class: 'row' }, selA, h('span', { class: 'note', text: LIB.activityOrder.length + ' hoạt động · ' + Object.keys(LIB.postures).length + ' tư thế × ' + Object.keys(LIB.moves).length + ' di chuyển × ' + Object.keys(LIB.motions).length + ' động tác × ' + LIB.stateOrder.length + ' biểu cảm' })),
+        grid),
+      h('div', { class: 'sticky stack' },
+        h('div', { class: 'panel' }, h('h3', null, 'Sân khấu', h('span', { class: 'r note', id: 'psLabel' })), stg,
+          h('div', { class: 'pad stack' }, info,
+            h('div', { class: 'kv' },
+              h('label', { text: 'Biểu cảm (mặt)' }), sState,
+              h('label', { text: 'Tư thế nền' }), sPost,
+              h('label', { text: 'Di chuyển' }), sMove,
+              h('label', { text: 'Động tác (tay)' }), sMot,
+              h('label', { text: 'Hướng' }), face),
+            h('div', { class: 'row' }, reset, dl))))));
+    var inst = R.full(stg, cur, 'normal', { force: true });
+    onLeave(function () { inst.destroy(); });
+    function stateOf() { return sel.state || (LIB.activities[sel.activity] || {}).state || 'normal'; }
+    function dirOf() {
+      var d = { facing: sel.facing };
+      if (sel.activity) d.activity = sel.activity;
+      if (sel.posture) d.posture = sel.posture;
+      if (sel.move) d.move = sel.move === 'none' ? null : sel.move;
+      if (sel.motion) d.motion = sel.motion;
+      return d;
+    }
+    function play() {
+      if (inst.asset !== cur) inst.setAsset(cur);
+      var st = inst.setState(stateOf(), dirOf());
+      var act = LIB.activities[sel.activity];
+      $('psLabel').textContent = act ? act.label : '';
+      info.textContent = 'Đang diễn: ' + stateLabel(stateOf()) + ' · tư thế ' + (LIB.postures[st.posture] || {}).label + ' · ' +
+        (st.move ? 'di chuyển ' + LIB.moves[st.move].label : 'đứng yên') + ' · động tác ' + ((LIB.motions[st.motion] || {}).label || st.motion) +
+        (st.props.length ? ' · đạo cụ: ' + st.props.map(function (p) { return LIB.props[p].label; }).join(', ') : '');
+      Array.prototype.forEach.call(grid.querySelectorAll('.state-cell'), function (c) { c.setAttribute('aria-pressed', String(c.getAttribute('data-a') === sel.activity)); });
+    }
+    function paintGrid() {
+      clear(grid);
+      var groups = {};
+      LIB.activityOrder.forEach(function (id) { var g = LIB.activities[id].group || 'Khác'; (groups[g] = groups[g] || []).push(id); });
+      Object.keys(groups).forEach(function (g) {
+        var box = h('div', { class: 'states' });
+        groups[g].forEach(function (id) {
+          var a = LIB.activities[id];
+          var im = h('div', { class: 'im' });
+          var cell = h('button', { class: 'state-cell', 'data-a': id, title: a.hint || '', onclick: function () { sel.activity = id; play(); } }, im, h('div', { class: 'lb', text: a.label }));
+          R.image(im, cur, a.state || 'normal', { director: { activity: id } });
+          box.appendChild(cell);
+        });
+        grid.appendChild(h('div', { class: 'panel' }, h('h3', null, g, h('span', { class: 'r note', text: groups[g].length + ' hoạt động' })), h('div', { class: 'pad' }, box)));
+      });
+    }
+    paintGrid();
+    play();
+  };
+
   /* ============================================================ trang: Đạo diễn AI */
   var SAMPLE = { title: 'Họp giao ban 8 giờ sáng', steps: [
     { actor: 'truong-phi', state: 'sleep', say: 'Khò... rượu ngon... khò...' },
@@ -762,7 +853,9 @@
         prog.textContent = ev.title + ' · cảnh ' + i + '/' + ev.steps.length;
         Object.keys(cards).forEach(function (k) { if (k !== s.actor) cards[k].classList.add('dim'); });
         cards[s.actor].classList.add('speaking');
-        insts[s.actor].setState(s.state, (s.motion || s.fx) ? { motion: s.motion, fx: s.fx } : undefined);
+        var dir = {};
+        ['motion', 'fx', 'activity', 'posture', 'move', 'facing'].forEach(function (k) { if (s[k]) dir[k] = s[k]; });
+        insts[s.actor].setState(s.state, Object.keys(dir).length ? dir : undefined);
         cards[s.actor].querySelector('.stage').appendChild(h('div', { class: 'bubble', text: s.say }));
         setTimeout(next, s.hold ? s.hold * 1000 : Math.min(4200, Math.max(1800, s.say.length * 65)));
       })();
@@ -946,10 +1039,10 @@
     crumbs([{ t: 'Cổng kiểm & hiệu năng' }]);
     var t = h('table', { class: 'grid' });
     var all = GC.assets();
-    var head = GC.gate(all[0]).map(function (g) { return g.label; });
+    var head = GC.gate(all[0], { poses: true }).map(function (g) { return g.label; });
     t.appendChild(h('tr', null, h('th', { text: 'Nhân vật' }), head.map(function (x) { return h('th', { text: x }); }), h('th', { text: 'Xuất' })));
     all.forEach(function (a) {
-      var gs = GC.gate(a), ok = gs.every(function (g) { return g.ok; });
+      var gs = GC.gate(a, { poses: true }), ok = gs.every(function (g) { return g.ok; });
       t.appendChild(h('tr', null, h('td', null, h('span', { class: 'mono note', text: (a.code || '') + ' ' }), a.name),
         gs.map(function (g) { return h('td', { class: g.ok ? 'ok' : 'bad', title: g.detail || '', style: 'font-weight:600', text: g.ok ? 'Đạt' : 'Không đạt' }); }),
         h('td', { class: ok ? 'ok' : 'bad', style: 'font-weight:600', text: ok ? 'Được xuất' : 'Chặn' })));

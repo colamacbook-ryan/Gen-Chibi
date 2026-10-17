@@ -24,6 +24,29 @@ GC.assets().forEach(a => { GC.gate(a).forEach(g => { if (!g.ok) { bad++; console
 GC.assets().forEach(a => GC.LIB.stateOrder.forEach(s => { const svg = GC.svgString(a, s); if (svg.length < 2000) { bad++; console.log("   ✗ SVG rỗng", a.key, s); } }));
 if (bad) process.exit(1);
 console.log("   ✓", GC.assets().length, "nhân vật ×", GC.LIB.stateOrder.length, "biểu cảm");
+// tư thế & hoạt động (engine 0.3): dựng đủ mọi hoạt động, ở nhiều thời điểm, cả hai hướng
+const acts = GC.LIB.activityOrder;
+GC.assets().forEach(a => {
+  const g = GC.gate(a, { poses: true }).find(x => x.id === "poses");
+  if (!g || !g.ok) { bad++; console.log("   ✗ hoạt động", a.key, g && g.detail); }
+  acts.forEach(id => [0, 0.21, 0.5].forEach(t => ["left", "right"].forEach(f => {
+    const svg = GC.svgString(a, GC.LIB.activities[id].state || "normal", { director: { activity: id, facing: f }, t });
+    if (/NaN|undefined/.test(svg)) { bad++; console.log("   ✗", a.key, id, "t=" + t, f, "SVG có NaN/undefined"); }
+  })));
+});
+// mọi di chuyển có tư thế hợp lệ; mọi hoạt động trỏ tới mục có thật
+acts.forEach(id => { const x = GC.LIB.activities[id];
+  if (x.posture && !GC.LIB.postures[x.posture]) { bad++; console.log("   ✗", id, "tư thế lạ", x.posture); }
+  if (x.move && !GC.LIB.moves[x.move]) { bad++; console.log("   ✗", id, "di chuyển lạ", x.move); }
+  if (x.action && !GC.LIB.motions[x.action]) { bad++; console.log("   ✗", id, "động tác lạ", x.action); }
+  (x.props || []).forEach(p => { if (!GC.LIB.props[p]) { bad++; console.log("   ✗", id, "đạo cụ lạ", p); } }); });
+// đạo diễn: kịch bản dùng hoạt động hợp lệ thì đạt, ghép sai thì bị chặn
+const cast = GC.assets();
+const ok = GC.director.validate({ title: "t", steps: [{ actor: cast[0].id, state: "normal", activity: "eat", say: "a" }, { actor: cast[0].id, state: "panic", move: "run", facing: "left", say: "b" }] }, cast);
+const ko = GC.director.validate({ title: "t", steps: [{ actor: cast[0].id, state: "normal", move: "swim", posture: "stand", say: "a" }, { actor: cast[0].id, state: "normal", activity: "bay-len-troi", say: "b" }] }, cast);
+if (ok.length || ko.length !== 2) { bad++; console.log("   ✗ đạo diễn:", ok, ko); }
+if (bad) process.exit(1);
+console.log("   ✓", acts.length, "hoạt động ×", GC.assets().length, "nhân vật × 3 thời điểm × 2 hướng; kịch bản có hoạt động được kiểm");
 '
 
 echo "3) MCP"

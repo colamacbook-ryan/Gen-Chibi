@@ -1,4 +1,4 @@
-/* gen-chibi engine — render 0.2: tầng vẽ có ngân sách hiệu năng
+/* gen-chibi engine — render 0.3: tầng vẽ có ngân sách hiệu năng
  * © 2026 Afi Labs — All rights reserved.
  *
  * Ba tầng (bài học L-42: 300 nhân vật diễn đủ cùng lúc = 1 fps):
@@ -117,7 +117,7 @@
     });
     el.appendChild(svg);
     var inst = {
-      tier: 'full', el: svg, asset: asset, state: null, resolved: null, groups: groups,
+      tier: 'full', el: svg, asset: asset, state: null, resolved: null, groups: groups, shadow: svg.querySelector('.gc-shadow'),
       cur: GC.neutralPose(), t0: performance.now(), popAt: 0, visible: true,
       still: !!opts.still || reduce,
       setState: function (s, director) {
@@ -166,6 +166,11 @@
     });
     var chain = GC.chainTransforms(inst.cur);
     GC.RIG.layers.forEach(function (l) { inst.groups[l[0]].setAttribute('transform', chain[l[1]]); });
+    if (inst.shadow) {
+      var sd = GC.shadowOf(inst.resolved, inst.cur);
+      inst.shadow.setAttribute('cx', sd.cx.toFixed(1)); inst.shadow.setAttribute('rx', sd.rx.toFixed(1)); inst.shadow.setAttribute('ry', sd.ry.toFixed(1));
+      inst.shadow.style.opacity = sd.op.toFixed(2);
+    }
     if (inst.still && moved < 0.01) inst.settled = true;
   }
 
@@ -216,6 +221,7 @@
     '.chb-quiver{transform-box:fill-box;transform-origin:50% 50%;animation:chb-quiver .16s linear infinite alternate}@keyframes chb-quiver{to{transform:scale(1.04,.94)}}',
     '.chb-orbit{transform-box:view-box;transform-origin:100px 62px;animation:chb-orbit 1.6s linear infinite}@keyframes chb-orbit{to{transform:rotate(360deg)}}',
     '.chb-rise{animation:chb-rise 2.2s ease-in-out infinite}@keyframes chb-rise{0%{transform:translateY(6px);opacity:0}25%{opacity:.95}100%{transform:translateY(-26px);opacity:0}}',
+    '.chb-wave{animation:chb-wave 1.6s ease-in-out infinite alternate}@keyframes chb-wave{to{transform:translateX(-24px)}}',
     '.chb-fall{animation:chb-fall 1.6s linear infinite}@keyframes chb-fall{0%{transform:translateY(-14px) rotate(0);opacity:0}15%{opacity:1}100%{transform:translateY(40px) rotate(220deg);opacity:0}}',
     '@media (prefers-reduced-motion: reduce){.gc-full *,.gc-breathe,.gc-blink{animation:none!important}}'
   ].join('\n');

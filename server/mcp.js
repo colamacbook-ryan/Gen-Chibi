@@ -13,6 +13,7 @@ const INSTRUCTIONS = [
   'gen-chibi dựng nhân vật chibi bằng code từ công thức JSON. Bạn (agent) viết công thức và kịch bản; hệ thống kiểm và dựng.',
   'Quy trình tạo nhân vật: get_catalog → (tuỳ chọn) get_character một nhân vật mẫu → viết asset mới → validate_character → sửa đến khi đạt → save_character → render_character để xem.',
   'Quy trình kịch bản: list_characters → get_director_schema → viết event JSON → validate_event → save_event. Owner mở Studio › Đạo diễn AI để diễn.',
+  'Tư thế & hoạt động: mỗi cảnh có thể thêm activity (ăn, ngủ, chạy, tấn công…) hoặc tự ghép posture × move × motion, facing left/right. render_character nhận các khoá này để xem thử.',
   'Phiên bản: get_app_version xem bản đang chạy và bản mới trên GitHub; update_app cập nhật ngay (tự rollback nếu bản mới lỗi); rollback_app quay về bản trước.',
   'Luật: chỉ dùng id có trong catalog; màu là mã hex; tham số nằm trong khoảng min–max; nhân vật mới lưu vào thư viện "local.my"; luôn khai báo identity.must (dấu nhận diện bắt buộc). Biểu cảm luôn khoa trương, hài, không máu.'
 ].join('\n');
@@ -24,7 +25,7 @@ const TOOLS = [
   { name: 'get_character', title: 'Xem công thức nhân vật', description: 'Công thức JSON đầy đủ của một nhân vật (dùng làm mẫu để tạo nhân vật mới).', inputSchema: obj({ key: { type: 'string', description: 'key đầy đủ (vd. afi.tamquoc/quan-vu) hoặc id ngắn (quan-vu)' } }, ['key']), annotations: { readOnlyHint: true } },
   { name: 'validate_character', title: 'Kiểm công thức', description: 'Chạy cổng kiểm (linh kiện, license, tham số, nhận diện, 18 biểu cảm, động tác) trên một công thức chưa lưu.', inputSchema: obj({ asset: { type: 'object', description: 'công thức nhân vật: { id, name, look: { eyes, brows, parts, params, palette }, expressions?, identity, persona? }' } }, ['asset']), annotations: { readOnlyHint: true } },
   { name: 'save_character', title: 'Lưu nhân vật', description: 'Kiểm rồi lưu nhân vật (có phiên bản). Mặc định vào thư viện local.my; nếu key trùng nhân vật đã có thì lưu thành phiên bản mới.', inputSchema: obj({ asset: { type: 'object' }, note: { type: 'string', description: 'ghi chú phiên bản' } }, ['asset']) },
-  { name: 'render_character', title: 'Dựng hình', description: 'Dựng SVG của một nhân vật ở một biểu cảm. Dùng key của nhân vật đã có, hoặc truyền asset chưa lưu để xem thử.', inputSchema: obj({ key: { type: 'string' }, asset: { type: 'object' }, state: { type: 'string', description: 'id biểu cảm, mặc định normal' }, crop: { type: 'boolean', description: 'true = khung avatar (đầu và vai)' } }) , annotations: { readOnlyHint: true } },
+  { name: 'render_character', title: 'Dựng hình', description: 'Dựng SVG của một nhân vật ở một biểu cảm. Dùng key của nhân vật đã có, hoặc truyền asset chưa lưu để xem thử.', inputSchema: obj({ key: { type: 'string' }, asset: { type: 'object' }, state: { type: 'string', description: 'id biểu cảm, mặc định normal' }, activity: { type: 'string', description: 'hoạt động: eat, sleep, run, attack… (get_catalog › activities)' }, posture: { type: 'string' }, move: { type: 'string' }, motion: { type: 'string' }, facing: { type: 'string', enum: ['left', 'right'] }, t: { type: 'number', description: 'giây trong chu kỳ động tác (bỏ trống = khung đại diện)' }, crop: { type: 'boolean', description: 'true = khung avatar (đầu và vai)' } }) , annotations: { readOnlyHint: true } },
   { name: 'get_director_schema', title: 'Schema kịch bản', description: 'JSON Schema + hướng dẫn viết kịch bản sự kiện cho các diễn viên đã chọn.', inputSchema: obj({ cast: { type: 'array', items: { type: 'string' }, description: 'id diễn viên; bỏ trống = tất cả' } }), annotations: { readOnlyHint: true } },
   { name: 'validate_event', title: 'Kiểm kịch bản', description: 'Kiểm một kịch bản sự kiện theo schema (diễn viên, biểu cảm, động tác, hiệu ứng có trong kho).', inputSchema: obj({ event: { type: 'object' }, cast: { type: 'array', items: { type: 'string' } } }, ['event']), annotations: { readOnlyHint: true } },
   { name: 'save_event', title: 'Lưu kịch bản', description: 'Kiểm rồi lưu kịch bản để owner mở và diễn trong Studio.', inputSchema: obj({ event: { type: 'object' }, author: { type: 'string', description: 'tên agent viết kịch bản' } }, ['event']) },
@@ -72,6 +73,11 @@ class MCP {
       states: L.stateOrder.map(id => ({ id, label: L.states[id].label, hint: L.states[id].hint })),
       expressionOverrides: { eyes: Object.keys(L.eyePoses), brows: Object.keys(L.browPoses), mouth: Object.keys(L.mouths), motion: Object.keys(L.motions), fx: Object.keys(L.fx) },
       motions: Object.keys(L.motions).map(id => ({ id, label: L.motions[id].label })),
+      activities: L.activityOrder.map(id => { const a = L.activities[id]; return { id, label: a.label, group: a.group, hint: a.hint, posture: a.posture || 'stand', move: a.move || null, action: a.action || null }; }),
+      postures: Object.keys(L.postures).map(id => ({ id, label: L.postures[id].label, handsBusy: !!L.postures[id].handsBusy })),
+      moves: Object.keys(L.moves).map(id => ({ id, label: L.moves[id].label, postures: L.moves[id].postures || null })),
+      props: Object.keys(L.props).map(id => ({ id, label: L.props[id].label })),
+      composition: 'Khung hình = state (nét mặt) × activity (đặt sẵn) hoặc posture × move × motion, cộng facing left/right.',
       fx: Object.keys(L.fx).map(id => ({ id, label: L.fx[id].label })),
       traits: L.traits.map(t => ({ id: t.id, label: t.label })),
       profiles: Object.keys(L.profiles).map(id => ({ id, label: L.profiles[id].label, map: L.profiles[id].map })),
@@ -121,12 +127,12 @@ class MCP {
       }
       case 'validate_character': {
         let a; try { a = this.prepare(args.asset); } catch (e) { return toolError(e.message); }
-        const g = GC.gate(a);
+        const g = GC.gate(a, { poses: true });
         return json({ ok: g.every(x => x.ok), gates: g });
       }
       case 'save_character': {
         let a; try { a = this.prepare(args.asset); } catch (e) { return toolError(e.message); }
-        const g = GC.gate(a);
+        const g = GC.gate(a, { poses: true });
         const blocking = g.filter(x => !x.ok);
         if (blocking.length) return Object.assign(json({ saved: false, gates: g }), { isError: true });
         const rec = this.store.saveAsset(a.key, a, args.note || 'Lưu qua MCP');
@@ -138,13 +144,19 @@ class MCP {
         if (args.asset) { try { a = this.prepare(args.asset); } catch (e) { return toolError(e.message); } }
         else a = this.findAsset(String(args.key || ''));
         if (!a) return toolError('Cần key của nhân vật đã có hoặc asset để dựng thử.');
-        const state = GC.LIB.states[args.state] ? args.state : 'normal';
+        const act = args.activity && GC.LIB.activities[args.activity];
+        if (args.activity && !act) return toolError('Không có hoạt động ' + args.activity + '. Xem get_catalog › activities.');
+        const state = GC.LIB.states[args.state] ? args.state : (act && act.state) || 'normal';
+        const dir = {};
+        if (act) dir.activity = act.id;
+        ['posture', 'move', 'motion', 'facing'].forEach(k => { if (typeof args[k] === 'string') dir[k] = args[k]; });
         let svg;
-        try { svg = GC.svgString(a, state, { crop: !!args.crop, noShadow: !!args.crop }); } catch (e) { return toolError('Không dựng được: ' + e.message); }
+        try { svg = GC.svgString(a, state, { crop: !!args.crop, noShadow: !!args.crop, director: Object.keys(dir).length ? dir : undefined, t: typeof args.t === 'number' && isFinite(args.t) ? Math.max(0, Math.min(60, args.t)) : undefined }); } catch (e) { return toolError('Không dựng được: ' + e.message); }
+        const label = GC.LIB.states[state].label + (act ? ' · ' + act.label : '');
         return {
           content: [
-            { type: 'text', text: 'SVG của ' + (a.name || a.id) + ' · ' + GC.LIB.states[state].label + ' (' + svg.length + ' ký tự). Mở được trực tiếp trong trình duyệt.' },
-            { type: 'resource', resource: { uri: 'genchibi://render/' + a.key + '/' + state + (args.crop ? '-avatar' : '') + '.svg', mimeType: 'image/svg+xml', text: svg } }
+            { type: 'text', text: 'SVG của ' + (a.name || a.id) + ' · ' + label + ' (' + svg.length + ' ký tự). Mở được trực tiếp trong trình duyệt.' },
+            { type: 'resource', resource: { uri: 'genchibi://render/' + a.key + '/' + state + (act ? '-' + act.id : '') + (args.crop ? '-avatar' : '') + '.svg', mimeType: 'image/svg+xml', text: svg } }
           ]
         };
       }

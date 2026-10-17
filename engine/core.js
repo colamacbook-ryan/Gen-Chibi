@@ -15,15 +15,26 @@
   'use strict';
 
   var INK = '#2b211d';
-  var VERSION = '0.2.0';
+  var VERSION = '0.3.0';
 
   /* ---------------------------------------------------------------- 1. RIG */
   var RIG = {
     box: [-24, -18, 248, 258],
     crop: [34, 20, 132, 132],
+    // stage: sân khấu đứng yên (đạo cụ: ghế, bàn, chiếu, nước). root: cả nhân vật. pelvis: hông.
+    // hem: vạt áo dưới thắt lưng (co giãn khi ngồi, chạy). Chân: đùi → cẳng → bàn chân.
     joints: {
+      stage: { parent: null,    pivot: [100, 228] },
       root:  { parent: null,    pivot: [100, 228] },
-      body:  { parent: 'root',  pivot: [100, 214] },
+      pelvis: { parent: 'root', pivot: [100, 200] },
+      body:  { parent: 'pelvis', pivot: [100, 214] },
+      hem:   { parent: 'pelvis', pivot: [100, 192] },
+      thighL: { parent: 'pelvis', pivot: [90, 203] },
+      shinL: { parent: 'thighL', pivot: [89, 212] },
+      footL: { parent: 'shinL', pivot: [87, 221] },
+      thighR: { parent: 'pelvis', pivot: [110, 203] },
+      shinR: { parent: 'thighR', pivot: [111, 212] },
+      footR: { parent: 'shinR', pivot: [113, 221] },
       head:  { parent: 'body',  pivot: [100, 150] },
       armL:  { parent: 'body',  pivot: [78, 160] },
       foreL: { parent: 'armL',  pivot: [74, 177] },
@@ -37,18 +48,21 @@
       face: [100, 100], crown: [100, 54], forehead: [100, 76],
       eyeL: [80, 108], eyeR: [120, 108], browL: [80, 90], browR: [120, 90],
       mouth: [100, 131], chin: [100, 146], cheekL: [69, 124], cheekR: [131, 124],
-      elbowL: [74, 177], elbowR: [126, 177], gripL: [72, 193], gripR: [128, 193]
+      elbowL: [74, 177], elbowR: [126, 177], gripL: [72, 193], gripR: [128, 193],
+      hipL: [90, 203], hipR: [110, 203], kneeL: [89, 212], kneeR: [111, 212], ankleL: [87, 221], ankleR: [113, 221]
     },
     // [lớp, khớp]. Thứ tự vẽ tách khỏi cây khớp (như slot của Spine).
     layers: [
-      ['fxBack', 'root'], ['hairBack', 'head'], ['backItem', 'body'], ['legs', 'root'],
-      ['body', 'body'], ['ears', 'head'], ['head', 'head'], ['mask', 'head'], ['shade', 'head'],
+      ['propBack', 'stage'], ['fxBack', 'root'], ['hairBack', 'head'], ['backItem', 'body'], ['legs', 'root'],
+      ['thighL', 'thighL'], ['shinL', 'shinL'], ['footL', 'footL'], ['thighR', 'thighR'], ['shinR', 'shinR'], ['footR', 'footR'],
+      ['hem', 'hem'], ['body', 'body'], ['ears', 'head'], ['head', 'head'], ['mask', 'head'], ['shade', 'head'],
       ['cheeks', 'head'], ['eyes', 'head'], ['brows', 'head'], ['beard', 'head'],
       ['mouth', 'head'], ['mustache', 'head'], ['hairFront', 'head'], ['hat', 'head'],
       ['fxHead', 'head'],
+      ['propMid', 'stage'],
       ['armL', 'armL'], ['foreL', 'foreL'], ['heldL', 'handL'], ['handL', 'handL'],
       ['armR', 'armR'], ['foreR', 'foreR'], ['heldR', 'handR'], ['handR', 'handR'],
-      ['fxFront', 'root']
+      ['fxFront', 'root'], ['propFront', 'stage']
     ]
   };
   var JOINT_IDS = Object.keys(RIG.joints);
@@ -59,7 +73,8 @@
   var PACKS = {};
   var LIB = {
     slots: {}, parts: {}, eyeStyles: {}, eyePoses: {}, browStyles: {}, browPoses: {},
-    mouths: {}, fx: {}, motions: {}, states: {}, stateOrder: [], traits: [], defaults: {}, profiles: {}
+    mouths: {}, fx: {}, motions: {}, states: {}, stateOrder: [], traits: [], defaults: {}, profiles: {},
+    postures: {}, moves: {}, props: {}, activities: {}, activityOrder: []
   };
   var ASSETS = {};      // 'pack/id' → asset nhân vật
   var ASSET_ORDER = [];
@@ -90,6 +105,10 @@
       state: function (id, def) { def.id = id; LIB.states[id] = tag(def, 'state'); if (LIB.stateOrder.indexOf(id) < 0) LIB.stateOrder.push(id); },
       trait: function (def) { LIB.traits.push(tag(def, 'trait')); },
       profile: function (id, def) { def.id = id; LIB.profiles[id] = tag(def, 'profile'); },
+      posture: function (id, def) { def.id = id; LIB.postures[id] = tag(def, 'posture'); },
+      move: function (id, def) { def.id = id; LIB.moves[id] = tag(def, 'move'); },
+      prop: function (id, def) { def.id = id; LIB.props[id] = tag(def, 'prop'); },
+      activity: function (id, def) { def.id = id; LIB.activities[id] = tag(def, 'activity'); if (LIB.activityOrder.indexOf(id) < 0) LIB.activityOrder.push(id); },
       defaults: function (pal) { for (var k in pal) LIB.defaults[k] = pal[k]; },
       asset: function (def) { registerAsset(P.id, def); }
     };
@@ -157,7 +176,8 @@
     var st = {
       id: base.id, eyes: base.eyes, brows: base.brows, mouth: base.mouth,
       fx: (base.fx || []).slice(), motion: base.motion, traits: [],
-      src: { eyes: SRC.lib, brows: SRC.lib, mouth: SRC.lib, fx: SRC.lib, motion: SRC.lib }
+      posture: 'stand', move: null, facing: 'right', props: [], activity: null, explicitMotion: false,
+      src: { eyes: SRC.lib, brows: SRC.lib, mouth: SRC.lib, fx: SRC.lib, motion: SRC.lib, posture: SRC.lib, move: SRC.lib }
     };
     traitsOf(asset).forEach(function (t) {
       var o = t.over[base.id];
@@ -173,11 +193,32 @@
       if (ov.fxAdd) { st.fx = st.fx.concat(ov.fxAdd); st.src.fx = SRC.asset; }
       if (ov.fxRemove) { st.fx = st.fx.filter(function (f) { return ov.fxRemove.indexOf(f) < 0; }); st.src.fx = SRC.asset; }
     }
+    // hoạt động = tổ hợp đặt tên sẵn (tư thế + di chuyển + động tác + đạo cụ + nét mặt), đạo diễn vẫn ghi đè từng trục
+    var act = director && director.activity && LIB.activities[director.activity];
+    if (act) {
+      st.activity = act.id;
+      var A = 'Hoạt động · ' + act.label;
+      if (act.posture) { st.posture = act.posture; st.src.posture = A; }
+      if (act.move) { st.move = act.move; st.src.move = A; }
+      if (act.action) { st.motion = act.action; st.src.motion = A; st.explicitMotion = true; }
+      ['eyes', 'brows', 'mouth'].forEach(function (k) { if (act.face && act.face[k]) { st[k] = act.face[k]; st.src[k] = A; } });
+      if (act.fx) st.fx = st.fx.concat(act.fx);
+      if (act.props) st.props = st.props.concat(act.props);
+    }
     if (director) {
       ['eyes', 'brows', 'mouth'].forEach(function (k) { if (director[k]) { st[k] = director[k]; st.src[k] = SRC.director; } });
-      if (director.motion) { st.motion = director.motion; st.src.motion = SRC.director; }
+      if (director.motion) { st.motion = director.motion; st.src.motion = SRC.director; st.explicitMotion = true; }
+      if (director.posture && LIB.postures[director.posture]) { st.posture = director.posture; st.src.posture = SRC.director; }
+      if (director.move !== undefined) { st.move = LIB.moves[director.move] ? director.move : null; st.src.move = SRC.director; }
+      if (director.facing === 'left' || director.facing === 'right') st.facing = director.facing;
       if (director.fx) { st.fx = st.fx.concat(director.fx); st.src.fx = SRC.director; }
     }
+    var pz = LIB.postures[st.posture] || {}, mv = st.move && LIB.moves[st.move];
+    if (mv && mv.postures && mv.postures.indexOf(st.posture) < 0) st.posture = mv.postures[0];   // di chuyển kéo theo tư thế hợp lệ
+    pz = LIB.postures[st.posture] || {};
+    st.props = (pz.props || []).concat(st.props, (mv && mv.props) || [], ((LIB.motions[st.motion] || {}).props) || []);
+    st.props = st.props.filter(function (x, i) { return st.props.indexOf(x) === i && LIB.props[x]; });
+    if (mv && mv.fx) st.fx = st.fx.concat(mv.fx);
     st.fx = st.fx.filter(function (f, i) { return st.fx.indexOf(f) === i; });
     return st;
   }
@@ -226,7 +267,7 @@
     var head = getPart('head', partRef(asset, 'head'), asset.pack) || getPart('head', 'round');
     var mask = getPart('mask', partRef(asset, 'mask'), asset.pack);
     P.eyeArea = (mask && mask.eyeArea) || P.skin;
-    var C = { P: P, A: RIG.anchors, shape: head.shape, ink: INK, asset: asset };
+    var C = { P: P, A: RIG.anchors, shape: head.shape, ink: INK, asset: asset, flip: st.facing === 'left', st: st };
     var out = {};
     LAYER_IDS.forEach(function (l) { out[l] = ''; });
 
@@ -247,13 +288,24 @@
       put(p.draw(C, st, vals), p.params ? paramTransform(p.params, vals) : '');
     });
 
-    // đồ cầm tay: động tác cần tay trống thì cất; đồ dài cất khi tay đưa vào giữa mặt
-    var hide = (LIB.motions[st.motion] || {}).hide || [];
+    // đạo cụ của tư thế / di chuyển / động tác / hoạt động
+    st.props.forEach(function (id) { put(LIB.props[id].draw(C, st)); });
+
+    // đồ cầm tay: động tác cần tay trống thì cất; đồ dài cất khi tay đưa vào giữa mặt;
+    // động tác cầm đạo cụ riêng (bát, sách, bút…) thì thay đồ của nhân vật
+    var mo = LIB.motions[st.motion] || {};
+    var hide = (mo.hide || []).slice();
+    if (handsBusy(st)) hide.push('heldL', 'heldR');
+    ['L', 'R'].forEach(function (s) {
+      var pid = mo.hold && mo.hold[s];
+      if (pid && LIB.props[pid] && !handsBusy(st)) { out['held' + s] = ''; put(LIB.props[pid].draw(C, st, s)); hide = hide.filter(function (x) { return x !== 'held' + s; }); hide.push('keep' + s); }
+    });
     st.upright = {};
     ['L', 'R'].forEach(function (s) {
       var ref = partRef(asset, 'held' + s);
       var p = ref && ref !== 'none' ? getPart('held' + s, ref, asset.pack) : null;
       st.upright[s] = !!p && p.upright !== false;
+      if (hide.indexOf('keep' + s) >= 0) { st.upright[s] = false; return; }
       if (hide.indexOf('held' + s) >= 0 || (p && p.tall && hide.indexOf('tall' + s) >= 0)) out['held' + s] = '';
     });
     out.handL += hand(C, 'L');
@@ -288,6 +340,11 @@
       var f = LIB.fx[id];
       if (!f) throw new Error('thiếu hiệu ứng ' + id);
       put(f.draw(C));
+    });
+    // nằm: cả người xoay theo root; hiệu ứng ở fxFront/fxBack (chữ Zzz, !!, pháo giấy) xoay ngược quanh đầu để luôn đứng thẳng
+    var rr = ((LIB.postures[st.posture] || {}).base || {}).root;
+    if (rr && rr.rot) ['fxFront', 'fxBack'].forEach(function (l) {
+      if (out[l]) out[l] = '<g transform="rotate(' + (-rr.rot) + ' 100 100)">' + out[l] + '</g>';
     });
     return { layers: out, state: st };
   }
@@ -348,22 +405,75 @@
     return keys[keys.length - 1][1];
   }
 
+  function handsBusy(st) { var z = LIB.postures[st.posture] || {}; return !!(z.handsBusy || z.hideHeld); }
+  function isArm(j) { return /^(arm|fore|hand)[LR]$/.test(j); }
+  function phase(def, t, still) {
+    if (still) return def.still || 0;
+    return def.loop === false ? Math.min(1, t / def.dur) : (t % def.dur) / def.dur;
+  }
+  function addTracks(pose, tracks, u, skip) {
+    for (var j in tracks) {
+      if (!pose[j] || (skip && skip(j))) continue;
+      for (var ch in tracks[j]) {
+        var v = sampleKeys(tracks[j][ch], u);
+        if (ch === 'sx' || ch === 'sy') pose[j][ch] *= v; else pose[j][ch] += v;
+      }
+    }
+  }
+
   // Tư thế đích tại thời điểm t (giây). still = khung đứng yên đại diện (dùng cho ảnh cache).
+  // Ghép 4 lớp như animation layer của game engine:
+  //   tư thế nền (đặt giá trị) → di chuyển (cộng dồn) → động tác (tay: thay thế; thân, đầu: cộng dồn) → hướng nhìn.
+  // Tay: động tác thay thế, trừ khi tư thế bận tay (bò, bơi) hoặc động tác chỉ là mặc định của biểu cảm mà di chuyển có vung tay.
   function poseAt(asset, st, t, still) {
     var m = LIB.motions[st.motion] || LIB.motions.idle;
+    var pz = LIB.postures[st.posture] || LIB.postures.stand || {};
+    var mv = st.move && LIB.moves[st.move];
     var pose = neutralPose();
-    var u = still ? (m.still || 0) : (m.loop === false ? Math.min(1, t / m.dur) : (t % m.dur) / m.dur);
-    for (var j in m.tracks) for (var ch in m.tracks[j]) pose[j][ch] = sampleKeys(m.tracks[j][ch], u);
-    if (m.breath !== false && !still) pose.body.sy *= 1 + Math.sin(t * 2.4) * 0.012;
+    var base = pz.base || {};
+    for (var bj in base) for (var bc in base[bj]) if (pose[bj]) pose[bj][bc] = base[bj][bc];
+    var mvArms = false;
+    if (mv) {
+      addTracks(pose, mv.tracks, phase(mv, t, still));
+      mvArms = Object.keys(mv.tracks).some(isArm);
+    }
+    var u = phase(m, t, still);
+    // động tác mặc định của biểu cảm (không ai chọn rõ) nhường tay cho di chuyển; động tác được chọn rõ thì giữ tay
+    var armsOff = pz.handsBusy || (mvArms && !st.explicitMotion);
+    for (var j in m.tracks) {
+      if (!pose[j]) continue;
+      if (isArm(j)) {
+        if (armsOff) continue;
+        for (var ch in m.tracks[j]) {
+          var v = sampleKeys(m.tracks[j][ch], u);
+          pose[j][ch] = (ch === 'sx' || ch === 'sy') ? (base[j] && base[j][ch] !== undefined ? base[j][ch] : 1) * v : (base[j] && base[j][ch] || 0) + v;
+        }
+      } else addTrackJoint(pose, j, m.tracks[j], u);
+    }
+    if (m.breath !== false && !still && !pz.noBreath) pose.body.sy *= 1 + Math.sin(t * 2.4) * 0.012;
     // "trọng lực" cho đồ cầm tay: nếu động tác không tự điều khiển bàn tay,
     // bàn tay xoay ngược tổng góc các khớp cha để binh khí luôn đứng thẳng
     ['L', 'R'].forEach(function (s) {
-      if (!st.upright || !st.upright[s] || (m.tracks['hand' + s] && m.tracks['hand' + s].rot)) return;
-      pose['hand' + s].rot = -(pose['arm' + s].rot + pose['fore' + s].rot + pose.body.rot + pose.root.rot);
+      if (!st.upright || !st.upright[s] || (!armsOff && m.tracks['hand' + s] && m.tracks['hand' + s].rot)) return;
+      pose['hand' + s].rot = -(pose['arm' + s].rot + pose['fore' + s].rot + pose.body.rot + pose.pelvis.rot + pose.root.rot);
     });
     var hs = paramValues(asset, 'rig', HEAD_PARAMS).size;
     pose.head.sx *= hs; pose.head.sy *= hs;
+    if (st.facing === 'left') pose.root.sx *= -1;
     return pose;
+  }
+  function addTrackJoint(pose, j, chans, u) {
+    for (var ch in chans) {
+      var v = sampleKeys(chans[ch], u);
+      if (ch === 'sx' || ch === 'sy') pose[j][ch] *= v; else pose[j][ch] += v;
+    }
+  }
+  // Bóng đổ: co lại khi nhân vật rời mặt đất (nhảy, bay), giãn khi nằm
+  function shadowOf(st, pose) {
+    var sh = (LIB.postures[st.posture] || {}).shadow || {};
+    var lift = Math.max(0, -pose.root.y - (sh.lift0 || 0));
+    var k = Math.max(0.3, 1 - lift / 70);
+    return { rx: 46 * (sh.sx || 1) * k, ry: 7 * k, op: (sh.op === undefined ? 1 : sh.op) * k, cx: 100 + (sh.dx || 0) * (st.facing === 'left' ? -1 : 1) };
   }
 
   function jointLocal(j, p) {
@@ -384,11 +494,15 @@
   function svgString(asset, stateId, opts) {
     opts = opts || {};
     var c = compose(asset, stateId, opts.director);
-    var pose = poseAt(asset, c.state, 0, true);
+    // opts.t: vẽ đúng khung hình tại giây thứ t (xuất sprite sheet, kiểm chuyển động); mặc định khung đứng yên đại diện
+    var pose = poseAt(asset, c.state, opts.t || 0, typeof opts.t !== 'number');
     var chain = chainTransforms(pose);
     var vb = (opts.crop ? RIG.crop : RIG.box).join(' ');
     var s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="' + vb + '"' + (opts.size ? ' width="' + opts.size + '" height="' + opts.size + '"' : '') + '>';
-    if (!opts.noShadow && !opts.crop) s += '<ellipse cx="100" cy="229" rx="46" ry="7" fill="rgba(20,24,22,.16)"/>';
+    if (!opts.noShadow && !opts.crop) {
+      var sd = shadowOf(c.state, pose);
+      s += '<ellipse cx="' + sd.cx.toFixed(1) + '" cy="229" rx="' + sd.rx.toFixed(1) + '" ry="' + sd.ry.toFixed(1) + '" fill="rgba(20,24,22,' + (0.16 * sd.op).toFixed(3) + ')"/>';
+    }
     RIG.layers.forEach(function (l) {
       if (c.layers[l[0]]) s += '<g transform="' + chain[l[1]] + '">' + c.layers[l[0]] + '</g>';
     });
@@ -411,6 +525,10 @@
               actor: { enum: castIds(cast) },
               state: { enum: LIB.stateOrder.slice() },
               motion: { enum: Object.keys(LIB.motions) },
+              activity: { enum: LIB.activityOrder.slice() },
+              posture: { enum: Object.keys(LIB.postures) },
+              move: { enum: Object.keys(LIB.moves) },
+              facing: { enum: ['left', 'right'] },
               fx: { type: 'array', maxItems: 3, items: { enum: Object.keys(LIB.fx) } },
               say: { type: 'string', maxLength: 120 },
               hold: { type: 'number', minimum: 0.8, maximum: 6 }
@@ -433,6 +551,11 @@
       if (S.actor.enum.indexOf(s.actor) < 0) errs.push(n + 'diễn viên "' + s.actor + '" không có trong dàn diễn viên.');
       if (S.state.enum.indexOf(s.state) < 0) errs.push(n + 'trạng thái "' + s.state + '" không có trong kho.');
       if (s.motion !== undefined && S.motion.enum.indexOf(s.motion) < 0) errs.push(n + 'động tác "' + s.motion + '" không có trong kho.');
+      ['activity', 'posture', 'move', 'facing'].forEach(function (k) {
+        if (s[k] !== undefined && S[k].enum.indexOf(s[k]) < 0) errs.push(n + k + ' "' + s[k] + '" không có trong kho.');
+      });
+      var mvd = s.move && LIB.moves[s.move];
+      if (mvd && mvd.postures && s.posture && mvd.postures.indexOf(s.posture) < 0) errs.push(n + 'di chuyển "' + s.move + '" không đi với tư thế "' + s.posture + '" (hợp: ' + mvd.postures.join(', ') + ').');
       if (s.fx !== undefined) {
         if (!Array.isArray(s.fx) || s.fx.length > 3) errs.push(n + 'fx phải là mảng tối đa 3 phần tử.');
         else s.fx.forEach(function (f) { if (S.fx.items.enum.indexOf(f) < 0) errs.push(n + 'hiệu ứng "' + f + '" không có trong kho.'); });
@@ -452,13 +575,19 @@
     cast.forEach(function (a) { L.push('- ' + a.id + ': ' + a.name + ' — ' + (a.persona || '')); });
     L.push('', 'Trạng thái (state):');
     LIB.stateOrder.forEach(function (id) { L.push('- ' + id + ': ' + LIB.states[id].label + ' — ' + LIB.states[id].hint); });
+    L.push('', 'Hoạt động (activity, tuỳ chọn — đặt sẵn tư thế + di chuyển + động tác + đạo cụ; state vẫn quyết định nét mặt):');
+    LIB.activityOrder.forEach(function (id) { var a = LIB.activities[id]; L.push('- ' + id + ': ' + a.label + (a.hint ? ' — ' + a.hint : '')); });
+    L.push('', 'Muốn ghép tự do thì dùng posture (tư thế nền), move (di chuyển), motion (động tác tay), facing (left/right):');
+    L.push('- posture: ' + Object.keys(LIB.postures).map(function (k) { return k + ' (' + LIB.postures[k].label + ')'; }).join(', '));
+    L.push('- move: ' + Object.keys(LIB.moves).map(function (k) { var m = LIB.moves[k]; return k + ' (' + m.label + (m.postures ? '; tư thế: ' + m.postures.join('/') : '') + ')'; }).join(', '));
     L.push('', 'Schema:', JSON.stringify(directorSchema(cast), null, 2), '', 'Sự kiện: <mô tả sự kiện ở đây>');
     return L.join('\n');
   }
 
   /* -------------------------------------------------------------- 7. GATES */
   function finite(n) { return typeof n === 'number' && isFinite(n); }
-  function gate(asset) {
+  // opts.poses: kiểm thêm việc dựng đủ mọi hoạt động (nặng hơn — dùng ở hồ sơ asset, khi lưu qua MCP, trong test; không dùng cho danh sách hàng trăm nhân vật)
+  function gate(asset, opts) {
     var res = [];
     function add(id, label, ok, detail) { res.push({ id: id, label: label, ok: ok, detail: detail || '' }); }
     var look = asset.look || {};
@@ -538,6 +667,18 @@
       }
     });
     add('motion', 'Động tác hợp lệ trên khung xương', !mbad.length, mbad.filter(function (x, i, a) { return a.indexOf(x) === i; }).join('; '));
+    var pbad = [];
+    if (opts && opts.poses) LIB.activityOrder.forEach(function (id) {
+      var a = LIB.activities[id];
+      try {
+        var c = compose(asset, a.state || 'normal', { activity: id });
+        [0, 0.37].forEach(function (t) {
+          var p = poseAt(asset, c.state, t, t === 0);
+          JOINT_IDS.forEach(function (j) { CHANNELS.forEach(function (ch) { if (!finite(p[j][ch])) pbad.push(id + ': ' + j + '.' + ch + ' không phải số'); }); });
+        });
+      } catch (e) { pbad.push(id + ': ' + e.message); }
+    });
+    if (opts && opts.poses) add('poses', 'Dựng đủ ' + LIB.activityOrder.length + ' hoạt động (tư thế × di chuyển × động tác)', !pbad.length, pbad.slice(0, 6).join('; '));
     return res;
   }
 
@@ -548,6 +689,7 @@
     getPart: getPart, partsOfSlot: partsOfSlot, partRef: partRef, traitsOf: traitsOf,
     resolveState: resolveState, palette: palette, paramValues: paramValues,
     compose: compose, poseAt: poseAt, chainTransforms: chainTransforms, neutralPose: neutralPose, svgString: svgString,
+    shadowOf: shadowOf, handsBusy: handsBusy,
     assets: function () { return ASSET_ORDER.map(function (k) { return ASSETS[k]; }); },
     director: { schema: directorSchema, validate: validateEvent, prompt: directorPrompt },
     gate: gate,

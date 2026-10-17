@@ -66,11 +66,12 @@
         line('M60,186 q6,-4 12,0 M70,192 q6,-4 12,0', 1.4, '#b9b5aa') +
         '<path d="M54,195 L90,195 L90,202 L54,202 Z" fill="' + C.P.trim + '"' + stroke(2) + '/>';
       return {
-        body: '<path d="' + H.TORSO + '" fill="' + C.P.robe + '"' + stroke(3) + '/>' + shadow(H.TORSO_SH, 0.08) +
+        body: '<path d="' + H.TORSO_UP + '" fill="' + C.P.robe + '"' + stroke(3) + '/>' + shadow(H.TORSO_UP_SH, 0.08) +
           '<path d="M90,146 L100,166 L110,146 Z" fill="' + C.P.inner + '"/>' +
           '<path d="M84,146 L100,176 L116,146 L109,146 L100,162 L91,146 Z" fill="' + C.P.trim + '"/>' +
-          '<path d="M70,186 L130,186 L131,193 L69,193 Z" fill="' + C.P.trim + '"/>' + '<circle cx="100" cy="189.5" r="3.6" fill="' + C.P.accent + '"' + stroke(1.4) + '/>' +
-          line('M100,193 L100,212', 1.4, '#000', 0.18) +
+          '<path d="M67.6,186 L132.4,186 L133.5,194 L66.5,194 Z" fill="' + C.P.trim + '"' + stroke(2) + '/>' + '<circle cx="100" cy="190" r="3.6" fill="' + C.P.accent + '"' + stroke(1.4) + '/>',
+        hem: '<path d="' + H.HEM + '" fill="' + C.P.robe + '"' + stroke(3) + '/>' + shadow(H.HEM_SH, 0.08) +
+          line('M100,194 L100,212', 1.4, '#000', 0.18) +
           '<path d="M64,207 C80,214 120,214 136,207 L136,212 C120,219 80,219 64,212 Z" fill="' + C.P.trim + '"/>' +
           line('M74,200 q4,-4 8,0 M84,203 q4,-4 8,0 M108,203 q4,-4 8,0 M118,200 q4,-4 8,0', 1.4, '#9d9a90'),
         armL: up, foreL: low, armR: mir(up), foreR: mir(low)
