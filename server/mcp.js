@@ -70,6 +70,8 @@ const TOOLS = [
   { name: 'get_work', title: 'Xem tác phẩm', description: 'Toàn bộ một tác phẩm: kịch bản, danh sách phân cảnh (mô tả, cảnh, dàn diễn viên, lời thoại / diễn xuất).', inputSchema: obj({ id: { type: 'string' } }, ['id']), annotations: { readOnlyHint: true } },
   { name: 'save_work', title: 'Lưu tác phẩm', description: 'Tạo hoặc sửa phần chung của tác phẩm: title, project (dự án chủ đề), logline (một câu), script (kịch bản tổng, văn xuôi). Không đụng phân cảnh. Bỏ id để tạo mới.', inputSchema: obj({ id: { type: 'string' }, title: { type: 'string' }, project: { type: 'string' }, logline: { type: 'string' }, script: { type: 'string' } }) },
   { name: 'save_shot', title: 'Lưu phân cảnh', description: 'Thêm / sửa / bỏ một phân cảnh của tác phẩm. shot = { id? (bỏ trống = thêm mới), title, description (mô tả phân cảnh), scene (key cảnh trong Thư viện, xem list_scenes), cast (≤ 8 nhân vật: id hoặc key, xem list_characters), event? (lời thoại + diễn xuất theo get_director_schema; engine tự đặt event.scene = scene) }. position = vị trí chèn (0 = đầu). remove = true để bỏ phân cảnh. Thiếu nhân vật / cảnh thì tạo ở Xưởng trước (save_character / save_scene với project của tác phẩm).', inputSchema: obj({ work: { type: 'string' }, shot: { type: 'object' }, position: { type: 'integer' }, remove: { type: 'boolean' } }, ['work', 'shot']) },
+  { name: 'export_project', title: 'Xuất gói dự án', description: 'Gói JSON của một dự án chủ đề (gen-chibi.project/1): nhân vật, item, cảnh, linh kiện / phông tự vẽ đang dùng, tác phẩm. Dùng để sao lưu, chuyển máy, bán / chia sẻ bộ asset theo chủ đề.', inputSchema: obj({ id: { type: 'string', description: 'id dự án (list_projects)' } }, ['id']), annotations: { readOnlyHint: true } },
+  { name: 'import_project', title: 'Nhập gói dự án', description: 'Nhập một gói gen-chibi.project/1 vào Thư viện. Mọi linh kiện, item, cảnh, nhân vật, tác phẩm đi qua đúng cổng kiểm như khi tạo mới. Trùng id thì báo danh sách trùng; overwrite = true để lưu đè thành phiên bản mới (bản cũ vẫn giữ trong lịch sử).', inputSchema: obj({ bundle: { type: 'object' }, overwrite: { type: 'boolean' } }, ['bundle']) },
   { name: 'get_app_version', title: 'Phiên bản ứng dụng', description: 'Phiên bản đang chạy, bản mới nhất trên GitHub Releases, ghi chú phát hành, bản có thể quay về và lịch sử cập nhật. check=false để không hỏi GitHub.', inputSchema: obj({ check: { type: 'boolean', description: 'hỏi GitHub bản mới nhất (mặc định true)' } }), annotations: { readOnlyHint: true, openWorldHint: true } },
   { name: 'update_app', title: 'Cập nhật ứng dụng', description: 'Tải bản mới nhất từ GitHub Releases (kiểm SHA-256, sao lưu dữ liệu) rồi khởi động lại. Bản mới lỗi thì launcher tự quay về bản cũ. Kết nối ngắt vài giây; gọi get_app_version sau ~15 giây để xác nhận. force=true áp cả bản từng bị bỏ qua vì lần trước chạy lỗi.', inputSchema: obj({ force: { type: 'boolean' } }), annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: true } },
   { name: 'rollback_app', title: 'Quay về bản trước', description: 'Chạy lại bản cài trước đó (sao lưu dữ liệu trước khi đổi). Cần confirm = "ROLLBACK".', inputSchema: obj({ confirm: { type: 'string', enum: ['ROLLBACK'] } }, ['confirm']), annotations: { destructiveHint: true } }
@@ -243,6 +245,11 @@ class MCP {
       case 'get_part_spec': return json(this.partSpec(args.slot));
       case 'list_projects': { this.sync(); return json(this.projects()); }
       case 'list_works': return json(this.store.listWorks());
+      case 'export_project': { try { return json(this.exportProject(String(args.id || ''))); } catch (e) { return toolError(e.message); } }
+      case 'import_project': {
+        try { return json(this.importProject(args.bundle, { overwrite: args.overwrite === true })); }
+        catch (e) { return Object.assign(json({ imported: false, error: e.message, conflicts: e.conflicts || null }), { isError: true }); }
+      }
       case 'get_work': { const w = this.store.getWork(String(args.id || '')); return w ? json(this.workView(w)) : toolError('Không có tác phẩm ' + args.id + '. Gọi list_works.'); }
       case 'save_work': {
         try { const w = this.saveWorkChecked(args); return json({ saved: true, id: w.id, version: w.version, studio: 'Studio › Tạo tác › Tác phẩm › ' + w.title }); }
@@ -426,6 +433,62 @@ class MCP {
     if (c.errors.length) throw Object.assign(new Error('Cảnh chưa đạt: ' + c.errors.slice(0, 6).join('; ')), { code: 422, errors: c.errors });
     const rec = this.store.saveScene(c.def, note);
     return this.GC.registerScene(MY_PACK, rec).def;
+  }
+  /* ---- GÓI DỰ ÁN (gen-chibi.project/1): xuất / nhập trọn một dự án chủ đề — nền cho bán / chia sẻ bộ asset theo chủ đề ---- */
+  exportProject(id) {
+    const GC = this.GC, S = this.store;
+    this.sync();
+    const P = S.listProjects().find(p => p.id === id) || (id === '' ? { id: '', name: 'Chưa xếp dự án', description: '' } : null);
+    if (!P) throw Object.assign(new Error('Không có dự án ' + id + ' (list_projects)'), { code: 404 });
+    const clean = r => { const o = clone(r); ['version', 'savedAt', 'note', '_note', 'key'].forEach(k => delete o[k]); return o; };
+    const inP = r => (r.project || '') === id;
+    const chars = S.listAssets().filter(a => a.pack === MY_PACK && inP(a)), items = S.listItems().filter(inP), scenes = S.listScenes().filter(inP);
+    const dataParts = S.listParts(), used = {};
+    const usePart = p => { if (p && p.pack === MY_PACK) { const d = dataParts.find(x => x.slot === p.slot && x.id === p.id); if (d) used[d.slot + '~' + d.id] = clean(d); } };
+    chars.forEach(a => Object.keys(GC.LIB.slots).forEach(sl => { const ref = GC.partRef(GC.ASSETS[a.key] || a, sl); usePart(ref && GC.getPart(sl, ref, MY_PACK)); }));
+    items.forEach(x => usePart(GC.getPart(x.equip.slot, x.equip.part)));
+    // trang bị nhân vật đang mặc mà nằm ngoài dự án: kéo theo để gói tự đủ
+    chars.forEach(a => Object.values((a.look && a.look.equip) || {}).forEach(ref => {
+      const it = GC.getItem(ref, MY_PACK);
+      if (it && it.pack === MY_PACK && !items.some(x => x.id === it.id)) { const rec = S.listItems().find(x => x.id === it.id); if (rec) { items.push(rec); usePart(GC.getPart(rec.equip.slot, rec.equip.part)); } }
+    }));
+    scenes.forEach(x => Object.keys(x.layers).map(k => x.layers[k].part).concat((x.deco || []).map(d => d.part)).forEach(ref => {
+      const q = Object.values(GC.LIB.parts).find(p => p.kind === 'scenery' && p.pack + '/' + p.id === ref); usePart(q);
+    }));
+    const works = S.listWorks().map(w => S.getWork(w.id)).filter(w => w && inP(w)).map(w => { const o = clean(w); delete o.chat; return o; });
+    return { format: 'gen-chibi.project/1', license: '© 2026 Gen Labs — engine; asset thuộc người tạo', project: { id: P.id, name: P.name, description: P.description || '' },
+      characters: chars.map(clean), items: items.map(clean), scenes: scenes.map(clean), parts: Object.values(used), works, exportedAt: new Date().toISOString() };
+  }
+  importProject(b, opts) {
+    const GC = this.GC, S = this.store;
+    if (!b || typeof b !== 'object' || b.format !== 'gen-chibi.project/1') throw Object.assign(new Error('Không phải gói gen-chibi.project/1'), { code: 400 });
+    const P = b.project || {}, pid = GC.projectId(P.id);
+    if (!pid) throw Object.assign(new Error('project.id: slug dự án (chữ thường, số, gạch nối)'), { code: 400 });
+    const arr = (x, n, what) => { if (x === undefined) return []; if (!Array.isArray(x)) throw Object.assign(new Error(what + ': cần mảng'), { code: 400 }); if (x.length > n) throw Object.assign(new Error(what + ': tối đa ' + n), { code: 400 }); return x.filter(v => v && typeof v === 'object'); };
+    const parts = arr(b.parts, 300, 'parts'), items = arr(b.items, 500, 'items'), scenes = arr(b.scenes, 200, 'scenes'), chars = arr(b.characters, 500, 'characters'), works = arr(b.works, 50, 'works');
+    this.sync();
+    const conflicts = [];
+    parts.forEach(p => { if (S.listParts().some(x => x.slot === p.slot && x.id === p.id)) conflicts.push('linh kiện ' + p.slot + ':' + p.id); });
+    items.forEach(x => { if (GC.ITEMS[MY_PACK + '/' + x.id]) conflicts.push('item ' + x.id); });
+    scenes.forEach(x => { if (GC.SCENES[MY_PACK + '/' + x.id]) conflicts.push('cảnh ' + x.id); });
+    chars.forEach(a => { if (GC.ASSETS[MY_PACK + '/' + String(a.id || '').toLowerCase()]) conflicts.push('nhân vật ' + a.id); });
+    works.forEach(w => { if (S.getWork(String(w.id || ''))) conflicts.push('tác phẩm ' + w.id); });
+    if (conflicts.length && !(opts && opts.overwrite)) throw Object.assign(new Error('Trùng ' + conflicts.length + ' mục với Thư viện: ' + conflicts.slice(0, 8).join(', ') + (conflicts.length > 8 ? '…' : '') + ' — nhập lại với overwrite để lưu đè thành phiên bản mới'), { code: 409, conflicts });
+    S.saveProject({ id: pid, name: P.name || pid, description: P.description || '' });
+    const note = 'Nhập gói dự án ' + pid, done = { parts: 0, items: 0, scenes: 0, characters: 0, works: 0, shots: 0 }, errors = [];
+    const strip = r => { const o = clone(r); ['version', 'savedAt', 'note', '_note', 'key', 'pack'].forEach(k => delete o[k]); return o; };
+    const step = (kind, id, fn) => { try { fn(); done[kind]++; } catch (e) { errors.push({ kind, id: String(id || '').slice(0, 64), error: String(e.message).slice(0, 300) }); } };
+    // thứ tự phụ thuộc: linh kiện → item (trỏ linh kiện) → cảnh (trỏ phông) → nhân vật (trỏ linh kiện + item) → tác phẩm (trỏ nhân vật + cảnh)
+    parts.forEach(p => step('parts', p.id, () => this.savePartChecked(strip(p), note)));
+    items.forEach(x => step('items', x.id, () => this.saveItemChecked(Object.assign(strip(x), { project: pid }), note)));
+    scenes.forEach(x => step('scenes', x.id, () => this.saveSceneChecked(Object.assign(strip(x), { project: pid }), note)));
+    chars.forEach(a => step('characters', a.id, () => this.saveAssetChecked(Object.assign(strip(a), { pack: MY_PACK, project: pid }), note)));
+    works.forEach(w => step('works', w.id, () => {
+      const rec = this.saveWorkChecked({ id: String(w.id || ''), title: w.title, project: pid, logline: w.logline || '', script: w.script || '' });
+      S.saveWork(Object.assign(S.getWork(rec.id), { shots: [] }));   // nhập = thay trọn danh sách phân cảnh
+      (Array.isArray(w.shots) ? w.shots.slice(0, 40) : []).forEach(s => step('shots', w.id + '/' + (s && s.id), () => this.saveShotChecked({ work: rec.id, shot: { id: s.id, title: s.title, description: s.description, scene: s.scene, cast: s.cast, event: s.event || undefined } })));
+    }));
+    return { imported: true, project: pid, counts: done, errors, conflicts: conflicts.length };
   }
   /* ---- TÁC PHẨM: kịch bản → phân cảnh → lời thoại; mọi phân cảnh chỉ dùng asset có trong Thư viện ---- */
   workView(w) { return Object.assign({}, w, { chat: undefined, chatCount: (w.chat || []).length }); }

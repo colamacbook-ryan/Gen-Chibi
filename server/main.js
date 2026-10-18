@@ -63,7 +63,7 @@ function fail(res, code, message) { send(res, code, { error: message }); }
 function body(req, limit = 1024 * 1024) {
   return new Promise((resolve, reject) => {
     const chunks = []; let n = 0;
-    req.on('data', c => { n += c.length; if (n > limit) { reject(Object.assign(new Error('dữ liệu gửi lên quá lớn (tối đa 1 MB)'), { code: 413 })); req.destroy(); } else chunks.push(c); });
+    req.on('data', c => { n += c.length; if (n > limit) { reject(Object.assign(new Error('dữ liệu gửi lên quá lớn (tối đa ' + Math.round(limit / 1048576 * 10) / 10 + ' MB)'), { code: 413 })); req.destroy(); } else chunks.push(c); });
     req.on('end', () => {
       if (!n) return resolve({});
       try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); } catch { reject(Object.assign(new Error('JSON không hợp lệ'), { code: 400 })); }
@@ -251,6 +251,14 @@ async function route(req, res) {
     return send(res, 200, { reply: r.reply, log: r.log, renders: r.renders, usage: r.usage, model: r.model, work: rec });
   }
   if (p === '/api/projects' && m === 'GET') { mcp.sync(); return send(res, 200, mcp.projects()); }
+  if (p === '/api/projects/export' && m === 'GET') {
+    try { return send(res, 200, mcp.exportProject(new URL(req.url, 'http://local').searchParams.get('id') || '')); } catch (e) { return fail(res, e.code || 400, e.message); }
+  }
+  if (p === '/api/projects/import' && m === 'POST') {
+    const b = await body(req, 8 * 1024 * 1024);
+    try { return send(res, 200, mcp.importProject(b.bundle, { overwrite: b.overwrite === true })); }
+    catch (e) { return send(res, e.code || 400, { error: e.message, conflicts: e.conflicts || null }); }
+  }
   if (p === '/api/projects' && m === 'POST') {
     const b = await body(req);
     try { return send(res, 200, store.saveProject(b)); } catch (e) { return fail(res, e.code || 400, e.message); }

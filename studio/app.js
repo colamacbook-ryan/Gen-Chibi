@@ -256,7 +256,8 @@
           h('div', null, h('b', { text: s.t }), h('span', { class: 'note', text: s.d })),
           h('button', { class: 'btn sm' + (s === next ? ' primary' : ''), onclick: function () { go(s.go); } }, (s.done ? 'Mở ' : 'Làm ngay ở ') + s.app + ' ›')));
       });
-      qs.appendChild(h('div', { class: 'pad' }, ol));
+      qs.appendChild(h('div', { class: 'pad stack' }, ol, Store.mode === 'server' && !Projects.all().some(function (p) { return p.id === DEMO_ID; }) ? h('div', { class: 'row' },
+        h('button', { class: 'btn', onclick: importDemo }, '✨ Mở dự án mẫu "Văn phòng vui"'), h('span', { class: 'note', text: '3 nhân vật · 2 bối cảnh · phim 4 phân cảnh — xem trọn luồng trong 10 giây, sửa và xuất thử thoải mái.' })) : null));
     }
     paintQuick(0);
     if (Store.mode === 'server') Store.api('GET', 'api/works').then(function (l) { paintQuick(l.length); }).catch(function () {});
@@ -1254,100 +1255,134 @@
   /* ============================================================ TẠO TÁC › Tác phẩm (giai đoạn ③) */
   // 5 khu: chat với AI đạo diễn · kịch bản · phân cảnh (mô tả) · cảnh thành phẩm · sân khấu final (ghép mọi phân cảnh thành chuỗi).
   // Mọi ghi đều qua API → cùng cổng với MCP; AI thiếu asset thì tự vào Xưởng tạo (đúng dự án của tác phẩm).
-  var SPOT_FILL = ['midLeft', 'midRight', 'left', 'right', 'center', 'backLeft', 'backRight', 'back'];
-  function shotSpots(shot, sc, castIds) {
-    var spotOf = {};
-    (shot.event && shot.event.steps || []).forEach(function (st) { if (st.spot && !spotOf[st.actor]) spotOf[st.actor] = st.spot; });
-    var free = SPOT_FILL.filter(function (k) { return sc.spots.indexOf(k) >= 0 && !Object.keys(spotOf).some(function (a) { return spotOf[a] === k; }); });
-    castIds.forEach(function (id) { if (!spotOf[id]) spotOf[id] = free.shift() || sc.spots[0]; });
-    return spotOf;
-  }
-  function shotActors(shot) { return (shot.cast || []).map(function (k) { return GC.ASSETS[k] || GC.getAsset(k, MY_PACK); }).filter(Boolean); }
-  // ảnh tĩnh của phân cảnh (cảnh thành phẩm): bối cảnh + dàn diễn viên ở chỗ đứng, nét mặt bước đầu
-  function shotStill(shot) {
-    var sc = shot.scene && GC.getScene(shot.scene), actors = shotActors(shot);
-    if (!sc) return null;
-    var spots = shotSpots(shot, sc, actors.map(function (a) { return a.id; }));
-    var first = {}; (shot.event && shot.event.steps || []).forEach(function (st) { if (!first[st.actor]) first[st.actor] = st; });
-    return svgURL(GC.sceneSvg(sc, { cast: actors.map(function (a) {
-      var st = first[a.id] || {}, c = { character: a.key, spot: spots[a.id], state: st.state || 'normal' };
-      if (st.activity) c.activity = st.activity;
-      return c;
-    }) }));
-  }
-  // Sân khấu: một bối cảnh + diễn viên sống (R.full, ≤ ngân sách) + bóng thoại; diễn một phân cảnh hoặc cả chuỗi
-  function makePlayer(box, prog) {
-    var insts = {}, els = {}, run = 0, sc = null, spotOf = {};
-    function destroy() { Object.keys(insts).forEach(function (k) { insts[k].destroy(); }); insts = {}; els = {}; clear(box); }
-    function place(el, spot) {
-      var sp = GC.SCENE.spots[spot] || GC.SCENE.spots.center, k = sp.k, B = GC.RIG.box;
-      el.style.left = ((sp.x - (100 - B[0]) * k) / GC.SCENE.W * 100) + '%';
-      el.style.top = ((sp.y - (228 - B[1]) * k) / GC.SCENE.H * 100) + '%';
-      el.style.width = (B[2] * k / GC.SCENE.W * 100) + '%';
-      el.style.height = (B[3] * k / GC.SCENE.H * 100) + '%';
-      el.style.zIndex = /^back/.test(spot) ? 1 : 2;
-    }
-    function face(id) { var sp = GC.SCENE.spots[spotOf[id]]; return sp && sp.face && Object.keys(insts).length > 1 ? { view: sp.face > 0 ? 'right45' : 'left45' } : null; }
-    function show(shot) {
-      destroy();
-      sc = shot && shot.scene && GC.getScene(shot.scene);
-      box.className = 'dscene';
-      if (!sc) { box.appendChild(h('div', { class: 'pad note', text: 'Phân cảnh chưa chọn bối cảnh.' })); return false; }
-      var actors = shotActors(shot).slice(0, R.budget);
-      spotOf = shotSpots(shot, sc, actors.map(function (a) { return a.id; }));
-      box.appendChild(h('img', { class: 'bg', alt: sc.name, src: svgURL(GC.sceneSvg(sc, { part: 'back' })) }));
-      actors.forEach(function (a) {
-        var st = h('div', { class: 'stage' }), el = h('div', { class: 'actor', title: a.name }, st);
-        place(el, spotOf[a.id]); box.appendChild(el);
-        els[a.id] = el; insts[a.id] = R.full(st, a, 'normal');
+  // Trình diễn nằm ở engine/player.js (GC.film) — dùng chung với tệp phim xuất ra.
+  function stillURL(shot) { var svg = GC.film.still(shot); return svg ? svgURL(svg) : ''; }
+  // Gói phụ thuộc của một nhóm asset "của tôi": nhân vật + trang bị nhân vật đang mặc + cảnh + linh kiện / phông tự vẽ đang dùng.
+  // Dùng cho: tải gói dự án, xuất phim HTML độc lập (người xem không cần bản cài).
+  function bundleOf(chars, items, scenes) {
+    var ch = {}, it = {}, sc = {}, parts = {};
+    function part(p) { if (p && p.pack === MY_PACK && p.data) parts[(p.kind === 'scenery' ? 'sc:' : '') + p.slot + ':' + p.id] = p.data; }
+    function addItem(x) { if (!x || x.pack !== MY_PACK || it[x.key]) return; it[x.key] = x; part(GC.getPart(x.equip.slot, x.equip.part)); }
+    (chars || []).forEach(function (a) {
+      if (!a || a.pack !== MY_PACK || ch[a.key]) return;
+      ch[a.key] = a;
+      LIB_SLOTS().forEach(function (sl) { var ref = GC.partRef(a, sl); part(ref && GC.getPart(sl, ref, a.pack)); });
+      Object.keys((a.look && a.look.equip) || {}).forEach(function (sl) { addItem(GC.ITEMS[a.look.equip[sl]] || GC.getItem(a.look.equip[sl], MY_PACK)); });
+    });
+    (items || []).forEach(addItem);
+    (scenes || []).forEach(function (x) {
+      if (!x || x.pack !== MY_PACK || sc[x.key]) return;
+      sc[x.key] = x;
+      Object.keys(x.layers).map(function (k) { return x.layers[k].part; }).concat(x.deco.map(function (d) { return d.part; })).forEach(function (ref) {
+        Object.keys(LIB.parts).forEach(function (k) { var q = LIB.parts[k]; if (q.kind === 'scenery' && q.pack + '/' + q.id === ref) part(q); });
       });
-      Object.keys(insts).forEach(function (k) { var d = face(k); if (d) insts[k].setState('normal', d); });
-      box.appendChild(h('img', { class: 'bg fg', alt: '', src: svgURL(GC.sceneSvg(sc, { part: 'front' })) }));
-      return true;
-    }
-    function bubbles() { Object.keys(els).forEach(function (k) { var b = els[k].querySelector('.bubble'); if (b) b.remove(); els[k].classList.remove('speaking', 'dim'); }); }
-    function wait(ms, r) { return new Promise(function (ok, no) { setTimeout(function () { if (r === run) ok(); else no('stop'); }, ms); }); }
-    function steps(shot, r) {
-      var ev = shot.event, i = 0;
-      return (function next() {
-        if (r !== run) return Promise.reject('stop');
-        bubbles();
-        if (!ev || i >= ev.steps.length) return Promise.resolve();
-        var s = ev.steps[i++];
-        prog.textContent = shot.title + ' · ' + i + '/' + ev.steps.length;
-        if (!els[s.actor]) return next();
-        Object.keys(els).forEach(function (k) { if (k !== s.actor) els[k].classList.add('dim'); });
-        els[s.actor].classList.add('speaking');
-        if (s.spot && s.spot !== spotOf[s.actor]) { spotOf[s.actor] = s.spot; place(els[s.actor], s.spot); }
-        var dir = face(s.actor) || {};
-        ['motion', 'fx', 'activity', 'posture', 'move', 'facing', 'view'].forEach(function (k) { if (s[k]) dir[k] = s[k]; });
-        insts[s.actor].setState(s.state, Object.keys(dir).length ? dir : undefined);
-        els[s.actor].querySelector('.stage').appendChild(h('div', { class: 'bubble', text: s.say }));
-        return wait(s.hold ? s.hold * 1000 : Math.min(4200, Math.max(1800, s.say.length * 65)), r).then(next);
-      })();
-    }
-    function card(text, sub, r) {
-      destroy(); box.className = 'dscene';
-      box.appendChild(h('div', { class: 'titlecard' }, h('b', { text: text }), sub ? h('span', { text: sub }) : null));
-      return wait(1400, r);
-    }
-    return {
-      show: function (s) { run++; return show(s); }, destroy: function () { run++; destroy(); },   // show huỷ vòng diễn đang chạy
-      stop: function () { run++; bubbles(); prog.textContent = 'Đã dừng'; },
-      play: function (list, title) {
-        var r = ++run, i = 0;
-        var ready = list.filter(function (s) { return s.scene && s.event; });
-        if (!ready.length) { toast('Chưa có phân cảnh nào đủ bối cảnh + lời thoại.'); return; }
-        (function next() {
-          if (i >= ready.length) { prog.textContent = (title || '') + ' · hết'; return card(title || 'Hết', 'hết', r).catch(function () {}); }
-          var shot = ready[i++];
-          return (ready.length > 1 ? card(shot.title, 'Phân cảnh ' + i + '/' + ready.length, r) : Promise.resolve())
-            .then(function () { show(shot); return wait(500, r); }).then(function () { return steps(shot, r); }).then(function () { return wait(600, r); }).then(next)
-            .catch(function () {});
-        })();
-      }
-    };
+    });
+    var vals = function (o) { return Object.keys(o).map(function (k) { return o[k]; }); };
+    return { characters: vals(ch), items: vals(it), scenes: vals(sc), parts: vals(parts) };
   }
+  /* ---- Xuất thành phẩm của tác phẩm ---- */
+  function xml(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function wrapText(t, n, max) {   // ngắt dòng theo số ký tự (đủ dùng cho tiếng Việt đơn giản), tối đa max dòng
+    var out = [], line = '';
+    String(t || '').replace(/\s+/g, ' ').trim().split(' ').forEach(function (w) {
+      if ((line + ' ' + w).trim().length > n) { out.push(line); line = w; } else line = (line + ' ' + w).trim();
+    });
+    if (line) out.push(line);
+    if (out.length > max) { out = out.slice(0, max); out[max - 1] = out[max - 1].replace(/.{0,2}$/, '…'); }
+    return out;
+  }
+  // Storyboard: một SVG — đầu trang (tên, logline) + lưới 2 cột: ảnh phân cảnh, mô tả, lời thoại
+  function storyboard(W) {
+    var COLS = 2, CW = 560, IH = 315, TH = 150, GAP = 24, M = 32, HEAD = 96;
+    var rows = Math.max(1, Math.ceil(W.shots.length / COLS)), Wd = M * 2 + COLS * CW + (COLS - 1) * GAP, Hd = HEAD + rows * (IH + TH + GAP) + M;
+    var o = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ' + Wd + ' ' + Hd + '" font-family="Arial, Helvetica, sans-serif">' +
+      '<rect width="100%" height="100%" fill="#f6f4ef"/>' +
+      '<text x="' + M + '" y="52" font-size="28" font-weight="700" fill="#1c1b1e">' + xml(W.title) + '</text>' +
+      '<text x="' + M + '" y="80" font-size="14" fill="#5e5a53">' + xml((W.logline || '').slice(0, 140)) + '</text>' +
+      '<text x="' + (Wd - M) + '" y="52" font-size="12" fill="#8e897f" text-anchor="end">Storyboard · ' + W.shots.length + ' phân cảnh · gen-chibi · © 2026 Gen Labs</text>';
+    W.shots.forEach(function (s, i) {
+      var x = M + (i % COLS) * (CW + GAP), y = HEAD + Math.floor(i / COLS) * (IH + TH + GAP), svg = GC.film.still(s);
+      var names = {}; GC.film.actors(s).forEach(function (a) { names[a.id] = a.name; });
+      o += '<rect x="' + x + '" y="' + y + '" width="' + CW + '" height="' + (IH + TH) + '" rx="10" fill="#fff" stroke="#e6e2d9"/>';
+      o += svg ? '<image x="' + (x + 1) + '" y="' + (y + 1) + '" width="' + (CW - 2) + '" height="' + IH + '" preserveAspectRatio="xMidYMid slice" href="data:image/svg+xml;base64,' + b64(svg) + '"/>'
+        : '<rect x="' + (x + 1) + '" y="' + (y + 1) + '" width="' + (CW - 2) + '" height="' + IH + '" fill="#efece5"/><text x="' + (x + CW / 2) + '" y="' + (y + IH / 2) + '" font-size="14" fill="#8e897f" text-anchor="middle">chưa có bối cảnh</text>';
+      o += '<circle cx="' + (x + 22) + '" cy="' + (y + 22) + '" r="14" fill="#2e8b5e"/><text x="' + (x + 22) + '" y="' + (y + 27) + '" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">' + (i + 1) + '</text>';
+      var ty = y + IH + 24;
+      o += '<text x="' + (x + 14) + '" y="' + ty + '" font-size="16" font-weight="700" fill="#1c1b1e">' + xml(s.title) + '</text>';
+      wrapText(s.description, 74, 2).forEach(function (l, k) { o += '<text x="' + (x + 14) + '" y="' + (ty + 20 + k * 17) + '" font-size="12.5" fill="#5e5a53">' + xml(l) + '</text>'; });
+      var lines = (s.event ? s.event.steps : []).slice(0, 4).map(function (st) { return (names[st.actor] || st.actor) + ': ' + st.say; });
+      if (s.event && s.event.steps.length > 4) lines[3] = lines[3] + '  (+' + (s.event.steps.length - 4) + ')';
+      if (!lines.length) lines = ['(chưa có lời thoại)'];
+      lines.forEach(function (l, k) { o += '<text x="' + (x + 14) + '" y="' + (ty + 62 + k * 17) + '" font-size="12" fill="#1c1b1e" font-style="italic">' + xml(l.length > 80 ? l.slice(0, 79) + '…' : l) + '</text>'; });
+    });
+    return o + '</svg>';
+  }
+  function b64(s) { return btoa(unescape(encodeURIComponent(s))); }
+  // Phim HTML độc lập: engine + thư viện đang nạp + asset "của tôi" mà tác phẩm dùng + bộ phát — một tệp, mở bằng trình duyệt là xem
+  function exportFilm(W) {
+    var chars = [], scenes = [];
+    W.shots.forEach(function (s) { chars = chars.concat(GC.film.actors(s)); var sc = GC.film.scene(s); if (sc) scenes.push(sc); });
+    var data = bundleOf(chars, [], scenes);
+    var srcs = Array.prototype.map.call(document.scripts, function (x) { return x.getAttribute('src') || ''; }).filter(function (x) { return /^(engine|kinds)\//.test(x); });
+    if (srcs.indexOf('engine/player.js') < 0) { toast('Thiếu engine/player.js'); return; }
+    toast('Đang đóng gói phim…');
+    Promise.all(srcs.map(function (f) { return fetch(f).then(function (r) { if (!r.ok) throw new Error('Không tải được ' + f); return r.text(); }); }))
+      .then(function (texts) {
+        var film = { title: W.title, logline: W.logline || '', shots: W.shots.map(function (s) { return { id: s.id, title: s.title, description: s.description || '', scene: s.scene, cast: s.cast, event: s.event }; }) };
+        var safe = function (t) { return t.replace(/<\/script/gi, '<\\/script').replace(/<!--/g, '<\\!--'); };
+        var html = '<!doctype html>\n<html lang="vi">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>' + xml(W.title) + ' — gen-chibi</title>\n' +
+          '<meta name="generator" content="gen-chibi ' + xml(String((Store.info || {}).version || '')) + ' · Gen Labs">\n<style>' + FILM_CSS + '</style>\n</head>\n<body>\n' +
+          '<main class="film"><header><div><h1>' + xml(W.title) + '</h1><p>' + xml(W.logline || '') + '</p></div><span class="badge">' + W.shots.length + ' phân cảnh</span></header>\n' +
+          '<div class="screen"><div id="stage"></div><button id="big" class="big" aria-label="Xem phim">▶</button></div>\n' +
+          '<div class="bar"><button id="play">▶ Xem</button><button id="stop">■ Dừng</button><button id="full">⛶ Toàn màn hình</button><span id="prog"></span></div>\n' +
+          '<ol id="chapters"></ol>\n<footer>Làm bằng gen-chibi · © 2026 Gen Labs — All rights reserved</footer></main>\n' +
+          texts.map(function (t, i) { return '<script>/* ' + srcs[i] + ' */\n' + safe(t) + '\n</script>'; }).join('\n') + '\n' +
+          '<script>\nvar DATA = ' + jsonForScript(data) + ';\nvar FILM = ' + jsonForScript(film) + ';\n' + FILM_BOOT + '\n</script>\n</body>\n</html>\n';
+        download(slugify(W.title) + '.html', html, 'text/html');
+        toast('Đã xuất phim "' + W.title + '" (' + Math.round(html.length / 1024) + ' KB) — mở bằng trình duyệt bất kỳ để xem.');
+      }).catch(function (e) { toast(e.message); });
+  }
+  var FILM_CSS = [
+    '*{box-sizing:border-box}html,body{margin:0;background:#121214;color:#ece9e2;font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}',
+    '.film{max-width:min(1200px,96vw);margin:0 auto;padding:24px 0 40px;display:grid;gap:14px}',
+    'header{display:flex;align-items:flex-end;gap:16px}header h1{margin:0;font-size:26px;letter-spacing:-.01em}header p{margin:4px 0 0;color:#a8a49d}',
+    '.badge{margin-left:auto;font-size:12px;color:#a8a49d;border:1px solid #34333a;border-radius:12px;padding:2px 10px;white-space:nowrap}',
+    '.screen{position:relative;border-radius:10px;overflow:hidden;box-shadow:0 20px 60px rgb(0 0 0/.45)}.screen .gcp{border-radius:0}',
+    '.big{position:absolute;inset:0;margin:auto;width:84px;height:84px;border-radius:50%;border:0;background:rgb(255 255 255/.92);color:#121214;font-size:30px;cursor:pointer;z-index:9;box-shadow:0 8px 30px rgb(0 0 0/.35)}',
+    '.big[hidden]{display:none}',
+    '.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.bar button{background:#232227;color:#ece9e2;border:1px solid #34333a;border-radius:6px;padding:6px 12px;font:inherit;cursor:pointer}',
+    '.bar button:hover{background:#2c2b31}#prog{margin-left:auto;color:#a8a49d;font-variant-numeric:tabular-nums}',
+    '#chapters{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}',
+    '#chapters button{width:100%;text-align:left;background:#1b1b1e;color:inherit;border:1px solid #2a2a2f;border-radius:8px;padding:8px 10px;font:inherit;cursor:pointer;display:grid;gap:2px}',
+    '#chapters button:hover{border-color:#4a4950}#chapters b{font-size:13px}#chapters span{font-size:12px;color:#8a857e}',
+    'footer{color:#6f6b64;font-size:12px;text-align:center;margin-top:8px}',
+    ':fullscreen .screen,.screen:fullscreen{display:grid;place-items:center;background:#000}.screen:fullscreen #stage{width:min(100vw,177.78vh)}'
+  ].join('\n');
+  var FILM_BOOT = [
+    '(function () {',
+    '  var GC = window.GenChibi, $ = function (id) { return document.getElementById(id); };',
+    '  GC.pack({ id: "local.my", name: "Của tôi", owner: "Người tạo", group: "mine", license: "Thuộc người tạo" }, function () {});',
+    '  DATA.parts.forEach(function (p) { GC.registerDataPart("local.my", p); });',
+    '  DATA.items.forEach(function (x) { GC.registerItem("local.my", x); });',
+    '  DATA.scenes.forEach(function (x) { GC.registerScene("local.my", x); });',
+    '  DATA.characters.forEach(function (a) { GC.registerAsset(a.pack, a); });',
+    '  var rs = GC.film.readiness(FILM), ready = rs.filter(function (x) { return x.ok; }).map(function (x) { return x.shot; });',
+    '  var player = GC.film.player($("stage"), { onProgress: function (t) { $("prog").textContent = t; }, onEnd: function () { $("big").hidden = false; } });',
+    '  player.show(ready[0] || FILM.shots[0]);',
+    '  function play(from) { $("big").hidden = true; player.play(ready.slice(from || 0), FILM.title); }',
+    '  $("big").onclick = $("play").onclick = function () { play(0); };',
+    '  $("stop").onclick = function () { player.stop(); $("big").hidden = false; };',
+    '  $("full").onclick = function () { var s = document.querySelector(".screen"); (s.requestFullscreen || s.webkitRequestFullscreen || function () {}).call(s); };',
+    '  document.addEventListener("keydown", function (e) { if (e.code === "Space" && e.target === document.body) { e.preventDefault(); if ($("big").hidden) $("stop").onclick(); else play(0); } });',
+    '  ready.forEach(function (s, i) {',
+    '    var li = document.createElement("li"), b = document.createElement("button"), t = document.createElement("b"), d = document.createElement("span");',
+    '    t.textContent = (i + 1) + ". " + s.title; d.textContent = s.description || (s.event.steps.length + " lời thoại");',
+    '    b.appendChild(t); b.appendChild(d); b.onclick = function () { play(i); window.scrollTo({ top: 0, behavior: "smooth" }); };',
+    '    li.appendChild(b); $("chapters").appendChild(li);',
+    '  });',
+    '  if (!ready.length) $("prog").textContent = "Tác phẩm chưa có phân cảnh nào sẵn sàng.";',
+    '})();'
+  ].join('\n');
 
   PAGES.works = function (r) {
     crumbs([{ t: 'Tác phẩm' }]);
@@ -1370,8 +1405,8 @@
     var logline = h('input', { type: 'text', maxlength: 300, placeholder: 'Logline — một câu tóm tắt', style: 'width:100%', oninput: function () { draftScript = { logline: logline.value, script: script.value }; } });
     var script = h('textarea', { rows: 6, maxlength: 8000, placeholder: 'Kịch bản tổng (văn xuôi). AI đạo diễn đọc mục này để chia phân cảnh.', oninput: function () { draftScript = { logline: logline.value, script: script.value }; } });
     var shotsBox = h('div', { class: 'stack' }), stills = h('div', { class: 'stillgrid' });
-    var prog = h('span', { class: 'note mono', text: 'Chưa diễn' }), stage = h('div', { class: 'dscene' });
-    var player = makePlayer(stage, prog);
+    var prog = h('span', { class: 'note mono', text: 'Chưa diễn' }), stage = h('div'), readyBox = h('div', { class: 'ready' });
+    var player = GC.film.player(stage, { onProgress: function (t) { prog.textContent = t; } });
     onLeave(function () { alive = false; player.destroy(); });   // phản hồi đến sau khi rời trang thì bỏ qua (không dựng diễn viên mồ côi)
     var QUICK = [['Viết kịch bản', 'Từ ý tưởng trong kịch bản tổng, viết logline + kịch bản hoàn chỉnh rồi lưu (save_work).'],
       ['Chia phân cảnh', 'Chia kịch bản thành các phân cảnh (save_shot): mỗi cảnh một bối cảnh trong Thư viện + dàn diễn viên. Thiếu thì tạo ở Xưởng.'],
@@ -1387,7 +1422,13 @@
         h('div', { class: 'panel' }, h('h3', null, 'Phân cảnh', h('span', { class: 'r' }, h('button', { class: 'btn sm', onclick: function () { saveShot({ shot: { title: 'Phân cảnh mới', scene: (GC.scenes()[0] || {}).key || '' } }); } }, '+ Phân cảnh'))), h('div', { class: 'pad' }, shotsBox))),
       h('div', { class: 'stack' },
         h('div', { class: 'panel' }, h('h3', null, 'Sân khấu final', h('span', { class: 'r row', style: 'gap:6px' }, prog,
-          h('button', { class: 'btn sm primary', onclick: function () { if (W) player.play(W.shots, W.title); } }, 'Diễn toàn bộ'), h('button', { class: 'btn sm', onclick: function () { player.stop(); } }, 'Dừng'))), h('div', { class: 'pad' }, stage)),
+          h('button', { class: 'btn sm primary', onclick: function () { if (W) player.play(W.shots, W.title); } }, '▶ Diễn toàn bộ'), h('button', { class: 'btn sm', onclick: function () { player.stop(); } }, 'Dừng'))),
+          h('div', { class: 'pad stack' }, stage, readyBox,
+            h('div', { class: 'usebar' }, h('b', { text: 'Xuất' }),
+              h('button', { class: 'btn sm primary', title: 'Một tệp .html chạy được ở mọi trình duyệt, không cần cài gì — gửi cho người xem', onclick: function () { if (W) exportFilm(W); } }, 'Phim (HTML)'),
+              h('button', { class: 'btn sm', title: 'Bảng phân cảnh: ảnh từng cảnh + mô tả + lời thoại', onclick: function () { if (W) download(W.id + '-storyboard.svg', storyboard(W), 'image/svg+xml'); } }, 'Storyboard SVG'),
+              h('button', { class: 'btn sm', onclick: function () { if (!W) return; var sv = storyboard(W), m = sv.match(/viewBox="0 0 (\d+) (\d+)"/); savePng(W.id + '-storyboard.png', svgURL(sv), +m[1], +m[2]); } }, 'Storyboard PNG'),
+              h('button', { class: 'btn sm', title: 'Kịch bản + phân cảnh + lời thoại dạng JSON', onclick: function () { if (W) download(W.id + '.json', JSON.stringify(Object.assign({}, W, { chat: undefined }), null, 2), 'application/json'); } }, 'JSON')))),
         h('div', { class: 'panel' }, h('h3', null, 'Cảnh thành phẩm', h('span', { class: 'r note', text: 'bấm để diễn thử' })), h('div', { class: 'pad' }, stills)))));
 
     function loadList(sel) {
@@ -1468,7 +1509,7 @@
             .then(function () { toast('Đã viết lời thoại cho ' + s.title); })
             .catch(function (e) { if (e) toast(e.message); aiB.disabled = false; aiB.textContent = 'AI viết lời thoại'; });
         } }, 'AI viết lời thoại');
-        shotsBox.appendChild(h('div', { class: 'shot' },
+        shotsBox.appendChild(h('div', { class: 'shot', id: 'shot-' + s.id },
           h('div', { class: 'shot-head' }, h('b', { class: 'stepn', text: String(i + 1) }), t, st),
           d, h('div', { class: 'row' }, sc), cb,
           h('div', { class: 'shot-acts' },
@@ -1478,14 +1519,28 @@
             h('span', { class: 'sp' }), h('button', { class: 'btn sm ic', disabled: i ? null : '', title: 'Lên', onclick: function () { saveShot({ shot: { id: s.id }, position: i - 1 }); } }, '↑'),
             h('button', { class: 'btn sm ic', disabled: i < W.shots.length - 1 ? null : '', title: 'Xuống', onclick: function () { saveShot({ shot: { id: s.id }, position: i + 1 }); } }, '↓'),
             h('button', { class: 'btn sm ic danger', title: 'Bỏ phân cảnh (bản cũ của tác phẩm vẫn được giữ)', 'aria-label': 'Bỏ phân cảnh', onclick: function () { if (window.confirm('Bỏ phân cảnh "' + s.title + '"?')) saveShot({ shot: { id: s.id }, remove: true }); } }, '✕'))));
-        var url = shotStill(s);
+        var url = stillURL(s);
         stills.appendChild(h('button', { class: 'libcard', title: s.title, onclick: function () { if (s.event) player.play([s], s.title); else player.show(s); } },
           h('div', { class: 'im' }, url ? h('img', { src: url, alt: s.title, loading: 'lazy' }) : h('div', { class: 'note', style: 'padding:20px', text: 'chưa có bối cảnh' })),
           h('div', { class: 'lb' }, h('b', { text: (i + 1) + '. ' + s.title }), h('span', { class: 'note', text: s.event ? s.event.steps.length + ' bước thoại' : 'chưa có lời thoại' }))));
       });
       if (!W.shots.length) shotsBox.appendChild(h('div', { class: 'note', text: 'Chưa có phân cảnh. Bấm "+ Phân cảnh" hoặc nhờ AI "Chia phân cảnh".' }));
       var firstReady = W.shots.filter(function (s) { return s.scene; })[0];
-      if (firstReady) player.show(firstReady); else { player.destroy(); stage.appendChild(h('div', { class: 'pad note', text: 'Sân khấu trống — thêm phân cảnh có bối cảnh.' })); }
+      player.show(firstReady || null);
+      paintReady();
+    }
+    // Tình trạng: phân cảnh nào diễn được, còn thiếu gì — bấm để tới đúng phân cảnh (không cần AI)
+    function paintReady() {
+      clear(readyBox);
+      var rs = GC.film.readiness(W), ok = rs.filter(function (x) { return x.ok; }).length;
+      if (!rs.length) return;
+      var bar = h('div', { class: 'readybar' }, h('span', { class: 'meter' }, h('i', { style: 'width:' + Math.round(ok / rs.length * 100) + '%' })),
+        h('b', { text: ok === rs.length ? 'Sẵn sàng diễn cả ' + rs.length + ' phân cảnh' : 'Sẵn sàng ' + ok + '/' + rs.length + ' phân cảnh' }));
+      readyBox.appendChild(bar);
+      rs.filter(function (x) { return !x.ok; }).forEach(function (x) {
+        readyBox.appendChild(h('button', { class: 'readyrow', onclick: function () { var e = document.getElementById('shot-' + x.shot.id); if (e) { e.scrollIntoView({ behavior: 'smooth', block: 'center' }); e.classList.add('flash'); setTimeout(function () { e.classList.remove('flash'); }, 1200); } } },
+          h('span', { class: 'stepn', text: String(x.index + 1) }), h('span', { text: x.shot.title }), h('span', { class: 'note', text: 'thiếu: ' + x.missing.join(', ') }), h('span', { class: 'go', text: 'Sửa ›' })));
+      });
     }
     loadList();
   };
@@ -1858,6 +1913,8 @@
     crumbs([{ t: 'Dự án chủ đề' }]);
     var sel = r.project != null ? r.project : null;
     actions(h('span', { class: 'note', text: 'Asset tạo từ bộ khung chuẩn được xếp theo dự án chủ đề.' }),
+      Store.mode === 'server' ? h('button', { class: 'btn', title: 'Nhập tệp gói dự án (.json) — mọi thứ đi qua cổng kiểm', onclick: pickBundle }, 'Nhập gói…') : null,
+      Store.mode === 'server' && !Projects.all().some(function (p) { return p.id === DEMO_ID; }) ? h('button', { class: 'btn', onclick: importDemo }, '✨ Dự án mẫu') : null,
       h('button', { class: 'btn primary', onclick: function () { go({ page: 'create', project: sel || '' }); } }, '+ Tạo asset mới ›'));
     var listBox = h('div', { class: 'stack' }), detail = h('div', { class: 'stack' });
     var nName = h('input', { type: 'text', placeholder: 'Tên dự án (vd: Tam Quốc)', maxlength: 40, style: 'width:100%' });
@@ -1875,7 +1932,8 @@
       var ps = Projects.all();
       if (mineAll().some(function (x) { return !x.project; })) ps = ps.concat({ id: '', name: 'Chưa xếp dự án', description: 'Asset của tôi chưa gắn dự án nào.' });
       if (sel == null && ps.length) sel = ps[0].id;
-      if (!ps.length) listBox.appendChild(h('div', { class: 'panel pad note lib-empty', text: 'Chưa có dự án chủ đề nào. Tạo một dự án (ví dụ "Tam Quốc") rồi vào Xưởng › Tạo asset mới để dựng nhân vật, trang bị, cảnh từ bộ khung chuẩn.' }));
+      if (!ps.length) listBox.appendChild(h('div', { class: 'panel pad stack lib-empty' }, h('span', { class: 'note', text: 'Chưa có dự án chủ đề nào. Tạo một dự án (ví dụ "Tam Quốc") rồi vào Xưởng › Tạo asset mới để dựng nhân vật, trang bị, cảnh từ bộ khung chuẩn — hoặc mở dự án mẫu để xem trọn luồng ngay.' }),
+        Store.mode === 'server' ? h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: importDemo }, '✨ Mở dự án mẫu "Văn phòng vui"'), h('button', { class: 'btn', onclick: pickBundle }, 'Nhập gói…')) : null));
       var grid = h('div', { class: 'libgrid' });
       ps.forEach(function (p) {
         var c = counts(p.id), first = [].concat(inProject(GC.assets(), p.id), inProject(GC.items(), p.id), inProject(GC.scenes(), p.id))[0];
@@ -1905,18 +1963,54 @@
       body.appendChild(h('div', { class: 'usebar' }, h('b', { text: 'Dùng' }),
         h('button', { class: 'btn sm primary', onclick: function () { go({ page: 'create', project: sel }); } }, '+ Tạo asset trong dự án'),
         h('button', { class: 'btn sm', onclick: function () { setLastProject(sel); go({ page: 'works', project: sel }); } }, 'Làm phim với dự án này ›'),
-        h('button', { class: 'btn sm', title: 'Một tệp JSON: thông tin dự án + công thức mọi nhân vật / trang bị / cảnh + linh kiện tự vẽ đang dùng', onclick: function () { download((sel || 'chua-xep') + '-du-an.json', JSON.stringify(projectBundle(P), null, 2), 'application/json'); } }, 'Tải gói dự án (JSON)')));
+        h('button', { class: 'btn sm', title: 'Một tệp JSON: nhân vật, trang bị, cảnh, linh kiện tự vẽ đang dùng, tác phẩm — nhập lại được ở bản cài khác', onclick: function () { exportBundle(P); } }, 'Tải gói dự án (JSON)')));
       detail.appendChild(h('div', { class: 'panel' }, h('h3', null, P.name, h('span', { class: 'r mono', text: P.id || '—' })), body));
     }
     paint();
   };
+  var DEMO_ID = 'mau-van-phong-vui';
+  function exportBundle(P) {
+    if (Store.mode !== 'server') { download((P.id || 'chua-xep') + '-du-an.json', JSON.stringify(projectBundle(P), null, 2), 'application/json'); return; }
+    Store.api('GET', 'api/projects/export?id=' + encodeURIComponent(P.id)).then(function (b) {
+      download((P.id || 'chua-xep') + '-du-an.json', JSON.stringify(b, null, 2), 'application/json');
+      toast('Đã xuất gói ' + P.name + ': ' + b.characters.length + ' nhân vật · ' + b.items.length + ' trang bị · ' + b.scenes.length + ' cảnh · ' + b.works.length + ' tác phẩm');
+    }).catch(function (e) { toast(e.message); });
+  }
+  // nhập gói: trùng id thì hỏi lưu đè (thành phiên bản mới — bản cũ vẫn trong lịch sử); xong thì nạp lại và mở dự án ở Thư viện
+  function importBundle(bundle, overwrite) {
+    return fetch('api/projects/import', { method: 'POST', headers: Store.headers(), body: JSON.stringify({ bundle: bundle, overwrite: !!overwrite }) })
+      .then(function (r) { return r.json().then(function (j) { return { status: r.status, j: j }; }); })
+      .then(function (x) {
+        if (x.status === 409 && !overwrite) {
+          if (window.confirm(x.j.error + '\n\nLưu đè các mục trùng thành phiên bản mới?')) return importBundle(bundle, true);
+          return null;
+        }
+        if (x.status >= 400) throw new Error(x.j.error || ('Lỗi ' + x.status));
+        var r = x.j, c = r.counts;
+        var msg = 'Đã nhập ' + c.characters + ' nhân vật · ' + c.items + ' trang bị · ' + c.scenes + ' cảnh · ' + c.works + ' tác phẩm (' + c.shots + ' phân cảnh)';
+        if (r.errors.length) window.alert(msg + '\n\n' + r.errors.length + ' mục không qua cổng kiểm:\n' + r.errors.slice(0, 10).map(function (e) { return '• ' + e.kind + ' ' + e.id + ': ' + e.error; }).join('\n'));
+        try { localStorage.setItem('gc-route-thu-vien', JSON.stringify({ page: 'projects', project: r.project })); localStorage.setItem('gc-last-project', r.project); localStorage.setItem('gc-toast', msg); } catch (e) { /* bỏ qua */ }
+        if (APP && APP.id === 'thu-vien') location.reload(); else location.href = appURL('thu-vien');
+        return r;
+      }).catch(function (e) { toast(e.message); });
+  }
+  function pickBundle() {
+    var inp = h('input', { type: 'file', accept: '.json,application/json', style: 'display:none', onchange: function () {
+      var f = inp.files && inp.files[0]; inp.remove();
+      if (!f) return;
+      if (f.size > 8 * 1024 * 1024) { toast('Tệp quá lớn (tối đa 8 MB).'); return; }
+      f.text().then(function (t) { var b; try { b = JSON.parse(t); } catch (e) { toast('Tệp không phải JSON.'); return; } importBundle(b); });
+    } });
+    document.body.appendChild(inp); inp.click();
+  }
+  function importDemo() {
+    toast('Đang dựng dự án mẫu…');
+    fetch('studio/mau/van-phong-vui.json').then(function (r) { if (!r.ok) throw new Error('Không tải được dự án mẫu'); return r.json(); }).then(function (b) { return importBundle(b); }).catch(function (e) { toast(e.message); });
+  }
   function projectBundle(P) {
-    var ch = inProject(GC.assets(), P.id), it = inProject(GC.items(), P.id), sc = inProject(GC.scenes(), P.id), used = {};
-    ch.forEach(function (a) { LIB_SLOTS().forEach(function (s) { var ref = GC.partRef(a, s), p = ref && GC.getPart(s, ref, a.pack); if (p && p.pack === MY_PACK && p.data) used[s + ':' + p.id] = p.data; }); });
-    sc.forEach(function (x) { Object.keys(x.layers).map(function (k) { return x.layers[k].part; }).concat(x.deco.map(function (d) { return d.part; })).forEach(function (ref) {
-      Object.keys(LIB.parts).forEach(function (k) { var p = LIB.parts[k]; if (p.pack === MY_PACK && p.kind === 'scenery' && p.pack + '/' + p.id === ref && p.data) used[p.slot + ':' + p.id] = p.data; }); }); });
-    return { format: 'gen-chibi.project/1', license: '© 2026 Gen Labs — engine; asset thuộc người tạo', project: { id: P.id, name: P.name, description: P.description || '' },
-      characters: ch, items: it, scenes: sc, parts: Object.keys(used).map(function (k) { return used[k]; }), exportedAt: new Date().toISOString() };
+    var b = bundleOf(inProject(GC.assets(), P.id), inProject(GC.items(), P.id), inProject(GC.scenes(), P.id));
+    return Object.assign({ format: 'gen-chibi.project/1', license: '© 2026 Gen Labs — engine; asset thuộc người tạo', project: { id: P.id, name: P.name, description: P.description || '' } },
+      b, { exportedAt: new Date().toISOString() });
   }
   function LIB_SLOTS() { return Object.keys(LIB.slots); }
 
@@ -2587,6 +2681,7 @@
     $('verChip').textContent = Store.mode === 'server' ? 'v' + String(Store.info.version).replace(/^v/, '') : 'xem thử';
     $('modeNote').textContent = Store.mode === 'server' ? 'Đang chạy trên máy · dữ liệu lưu cục bộ' : 'Bản xem thử · lưu trong trình duyệt';
     document.title = 'gen-chibi · ' + (APP ? APP.name : 'Studio');
+    try { var tmsg = localStorage.getItem('gc-toast'); if (tmsg) { localStorage.removeItem('gc-toast'); setTimeout(function () { toast(tmsg); }, 300); } } catch (e) { /* bỏ qua */ }
     $('appName').textContent = APP ? APP.name : 'Studio';
     $('brand').setAttribute('href', appURL(''));
     var r = { page: APP ? APP.home : 'home' };

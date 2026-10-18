@@ -240,6 +240,27 @@ if (bad) process.exit(1);
 console.log("   ✓", GC.scenes().filter(s => ["official", "frame"].indexOf(GC.PACKS[s.pack].group) >= 0).length, "cảnh khung ×", GC.SCENE.timeOrder.length, "giờ ×", GC.SCENE.weatherOrder.length, "thời tiết; ", GC.scenery().length, "phông đều được dùng; chặn dữ liệu xấu; dàn diễn viên; phông dữ liệu; kịch bản có cảnh");
 '
 
+echo "2e) gói dự án: dự án mẫu qua cổng 100% · nhập trùng bị chặn · xuất lại đủ"
+node -e '
+const fs = require("fs"), os = require("os"), path = require("path");
+const { loadEngine } = require("./server/engine-node.js"); const { MCP } = require("./server/mcp.js"); const { Store } = require("./server/store.js");
+const m = new MCP({ engine: loadEngine("."), store: new Store(fs.mkdtempSync(path.join(os.tmpdir(), "gc-b-"))), version: "t", system: {} });
+const b = JSON.parse(fs.readFileSync("studio/mau/van-phong-vui.json", "utf8"));
+const no = (c, msg) => { if (c) { console.log("   ✗", msg); process.exit(1); } };
+const r = m.importProject(b, {});
+no(r.errors.length, "dự án mẫu có mục không qua cổng: " + JSON.stringify(r.errors));
+no(r.counts.characters !== 3 || r.counts.scenes !== 2 || r.counts.items !== 1 || r.counts.shots !== 4, "dự án mẫu thiếu mục: " + JSON.stringify(r.counts));
+let c = null; try { m.importProject(b, {}); } catch (e) { c = e; } no(!c || c.code !== 409 || c.conflicts.length !== 7, "nhập trùng phải trả 409 + danh sách trùng");
+no(m.importProject(b, { overwrite: true }).errors.length, "lưu đè lỗi");
+const ex = m.exportProject("mau-van-phong-vui");
+no(ex.characters.length !== 3 || ex.works.length !== 1 || ex.works[0].shots.length !== 4 || ex.works[0].chat, "xuất gói thiếu / lộ chat");
+for (const bad of [null, { format: "x" }, { format: "gen-chibi.project/1", project: { id: "../x" } }, { format: "gen-chibi.project/1", project: { id: "ok" }, characters: "x" }]) {
+  let e = null; try { m.importProject(bad, {}); } catch (x) { e = x; } no(!e || e.code !== 400, "gói hỏng phải bị chặn: " + JSON.stringify(bad));
+}
+const evil = JSON.parse(JSON.stringify(b)); evil.project.id = "evil"; evil.characters = [{ id: "x-evil", name: "x", look: { eyes: "round", brows: "normal", parts: { hat: "ufo" } } }]; evil.items = evil.scenes = evil.works = [];
+const re = m.importProject(evil, {}); no(!re.errors.length || re.counts.characters, "nhân vật dùng linh kiện lạ phải bị cổng chặn khi nhập");
+console.log("   ✓ dự án mẫu qua cổng 100% (3 nhân vật · 1 item · 2 cảnh · phim 4 cảnh) · nhập trùng → 409 · lưu đè · xuất lại đủ · gói hỏng / asset lạ bị chặn");
+' || exit 1
 echo "3) MCP"
 H="$(mktemp -d)"; PORT=7495
 (echo > /dev/tcp/127.0.0.1/$PORT) 2>/dev/null && { echo "Cổng $PORT đang bị chiếm"; exit 1; }
@@ -284,16 +305,18 @@ printf '%s\n' \
  '{"jsonrpc":"2.0","id":34,"method":"tools/call","params":{"name":"save_shot","arguments":{"work":"phim-mcp","shot":{"title":"Mở đầu","scene":"afi.khung/san-khau-chuan","cast":["ma-no-canh"],"event":{"title":"Mở","steps":[{"actor":"ma-no-canh","state":"vow","spot":"center","say":"Bắt đầu!"}]}}}}}' \
  '{"jsonrpc":"2.0","id":35,"method":"tools/call","params":{"name":"save_shot","arguments":{"work":"phim-mcp","shot":{"title":"Lạ","scene":"afi.khung/khong-co","cast":["ai-do"]}}}}' \
  '{"jsonrpc":"2.0","id":36,"method":"tools/call","params":{"name":"get_work","arguments":{"id":"phim-mcp"}}}' \
+ '{"jsonrpc":"2.0","id":37,"method":"tools/call","params":{"name":"export_project","arguments":{"id":"ci-chu-de"}}}' \
+ '{"jsonrpc":"2.0","id":38,"method":"tools/call","params":{"name":"import_project","arguments":{"bundle":{"format":"gen-chibi.project/1","project":{"id":"ci-chu-de"},"items":[{"id":"ci-proj","name":"x","type":"weapon","rarity":"rare","equip":{"part":"afi.khung/khoi-que-dai"}}]}}}}' \
  | GC_PORT=$PORT node server/mcp-stdio.js > "$H/mcp.out"
 node -e '
 const L = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n").map(JSON.parse);
 const by = id => L.find(r => r.id === id);
 const ok = (c, m) => { if (!c) { console.log("   ✗", m); process.exit(1); } };
 ok(by(1).result.protocolVersion === "2025-06-18", "bắt tay");
-ok(by(2).result.tools.length === 29, "29 tool");
+ok(by(2).result.tools.length === 31, "31 tool");
 ok(!by(3).result.isError && JSON.parse(by(3).result.content[0].text).saved, "lưu nhân vật hợp lệ");
 ok(by(4).result.isError, "chặn linh kiện lạ");
-console.log("   ✓ MCP: bắt tay, 29 tool, lưu hợp lệ, chặn linh kiện lạ");
+console.log("   ✓ MCP: bắt tay, 31 tool, lưu hợp lệ, chặn linh kiện lạ");
 const spec = JSON.parse(by(5).result.content[0].text);
 ok(spec.slots[0].slot === "hat" && spec.example && spec.views.q45, "get_part_spec có khung + ví dụ");
 ok(!by(6).result.isError && /<svg/.test(by(6).result.content[1].resource.text), "preview_part trả bàn soát SVG");
@@ -330,6 +353,10 @@ ok(JSON.parse(by(34).result.content[0].text).hasEvent, "save_shot: phân cảnh 
 ok(by(35).result.isError && /khong-co/.test(by(35).result.content[0].text) && /ai-do/.test(by(35).result.content[0].text), "save_shot chặn bối cảnh / diễn viên không có trong Thư viện");
 const gw = JSON.parse(by(36).result.content[0].text);
 ok(gw.shots.length === 1 && gw.shots[0].event.scene === "afi.khung/san-khau-chuan" && gw.project === "ci-chu-de", "get_work trả tác phẩm đủ phân cảnh");
+const exb = JSON.parse(by(37).result.content[0].text);
+ok(exb.format === "gen-chibi.project/1" && exb.items.some(i => i.id === "ci-proj") && exb.works.some(w => w.id === "phim-mcp"), "export_project đủ item + tác phẩm");
+ok(by(38).result.isError && /ci-proj/.test(by(38).result.content[0].text), "import_project báo trùng thay vì ghi đè lặng lẽ");
+console.log("   ✓ MCP gói dự án: export_project đủ · import_project báo trùng");
 console.log("   ✓ MCP tác phẩm: save_work → save_shot (lời thoại qua cổng đạo diễn) → get_work; chặn asset không có");
 console.log("   ✓ MCP dự án chủ đề: tạo → lưu item / nhân vật vào dự án → đếm; chặn id lạ");
 console.log("   ✓ MCP cảnh: chuẩn phông → soát → lưu phông → phối cảnh → dựng có diễn viên → kịch bản trong cảnh; chặn đè chính thức");

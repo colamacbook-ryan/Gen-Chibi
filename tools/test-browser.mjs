@@ -169,12 +169,50 @@ try {
     await q.goto('http://localhost:7499/tao-tac'); await q.waitForTimeout(900);
     if ((await q.$$('.stillgrid .libcard img')).length !== 2 || (await q.$$('.shot')).length !== 2) throw new Error('trang Tác phẩm thiếu phân cảnh / cảnh thành phẩm');
     await q.click('button:has-text("Diễn toàn bộ")'); await q.waitForTimeout(300);
-    if (!(await q.$('.dscene .titlecard'))) throw new Error('sân khấu final không mở bằng thẻ tiêu đề phân cảnh');
-    await q.waitForSelector('.dscene .actor .bubble', { timeout: 4000 });
+    if (!(await q.$('.gcp .gcp-title'))) throw new Error('sân khấu final không mở bằng thẻ tiêu đề phân cảnh');
+    await q.waitForSelector('.gcp .gcp-actor .gcp-bubble', { timeout: 4000 });
     if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
     console.log('  ✓ Tác phẩm: phân cảnh → cảnh thành phẩm → sân khấu final diễn cả chuỗi (thẻ tiêu đề + diễn viên + thoại)');
+    // Xuất phim HTML độc lập: tải về, mở bằng file:// (KHÔNG có server), bấm xem → phải diễn được thật
+    const [dl] = await Promise.all([q.waitForEvent('download'), q.click('button:has-text("Phim (HTML)")')]);
+    const filmPath = path.join(home4, 'phim.html'); await dl.saveAs(filmPath);
+    const f = await b4.newPage({ viewport: { width: 1280, height: 900 } }); const ferr = [];
+    f.on('pageerror', e => ferr.push(e.message)); f.on('requestfailed', r => ferr.push('mạng: ' + r.url()));
+    await f.goto('file://' + filmPath); await f.waitForTimeout(500);
+    if ((await f.$$('#chapters li')).length !== 2) throw new Error('phim xuất ra thiếu danh sách phân cảnh');
+    await f.click('#big'); await f.waitForSelector('.gcp .gcp-title', { timeout: 3000 }); await f.waitForSelector('.gcp-actor .gcp-bubble', { timeout: 5000 });
+    if (ferr.length) throw new Error('phim xuất ra lỗi: ' + ferr.slice(0, 3).join(' | '));
+    await f.close();
+    const [sb] = await Promise.all([q.waitForEvent('download'), q.click('button:has-text("Storyboard SVG")')]);
+    const sbText = require('fs').readFileSync(await sb.path(), 'utf8');
+    if (!/<image [^>]*href="data:image\/svg\+xml;base64,/.test(sbText) || !/Cảnh Một/.test(sbText)) throw new Error('storyboard thiếu ảnh phân cảnh / tiêu đề');
+    console.log('  ✓ Xuất thành phẩm: phim HTML độc lập mở không cần server và diễn được; storyboard có ảnh + lời thoại');
     console.log('  ✓ Tạo asset mới: chọn khung → soát → cổng → lưu nhân vật / vật phẩm / bối cảnh vào dự án; Thư viện xếp theo dự án chủ đề');
   } catch (e) { fail = 1; console.log('  ✗ Tạo asset mới / dự án:', e.message); }
   finally { await b4.close(); srv4.kill(); }
+}
+// Người dùng mới: màn chọn khu → "Mở dự án mẫu" một chạm → Thư viện có dự án đủ asset → Tạo tác sẵn sàng diễn cả phim
+{
+  const home5 = mkdtempSync(path.join(tmpdir(), 'gc-'));
+  const srv5 = spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home5, GC_PORT: '7494', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' });
+  await new Promise(r => setTimeout(r, 1200));
+  const b5 = await pw.chromium.launch();
+  const q = await b5.newPage({ viewport: { width: 1440, height: 900 } });
+  const errs = []; q.on('pageerror', e => errs.push(e.message));
+  try {
+    await q.goto('http://localhost:7494/'); await q.waitForSelector('.qsteps');
+    await q.click('button:has-text("Mở dự án mẫu")'); await q.waitForURL(/\/thu-vien$/, { timeout: 8000 }); await q.waitForSelector('.libcard.proj');
+    const card = await q.textContent('.libcard.proj');
+    if (!/Văn phòng vui/.test(card) || !/3 nhân vật · 1 trang bị · 2 cảnh/.test(card)) throw new Error('dự án mẫu: ' + card);
+    if (await q.$('button:has-text("Dự án mẫu")')) throw new Error('đã có dự án mẫu mà vẫn mời mở lại');
+    await q.goto('http://localhost:7494/tao-tac'); await q.waitForSelector('.readybar');
+    const rb = await q.textContent('.readybar');
+    if (!/Sẵn sàng diễn cả 4 phân cảnh/.test(rb)) throw new Error('tác phẩm mẫu: ' + rb);
+    await q.goto('http://localhost:7494/'); await q.waitForSelector('.qsteps');
+    if ((await q.$$('.qsteps li.done')).length !== 3) throw new Error('Bắt đầu nhanh chưa đánh dấu đủ 3 bước sau khi mở dự án mẫu');
+    if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
+    console.log('  ✓ Người dùng mới: "Mở dự án mẫu" một chạm → Thư viện đủ asset → Tạo tác sẵn sàng 4/4 phân cảnh → Bắt đầu nhanh 3/3');
+  } catch (e) { fail = 1; console.log('  ✗ dự án mẫu một chạm:', e.message); }
+  finally { await b5.close(); srv5.kill(); }
 }
 process.exit(fail);

@@ -311,3 +311,18 @@ ul.gates li.warn b { color: var(--warn); }
 .qsteps li.done b { color: var(--fg2); }
 .qsteps li.next { border-color: var(--fg); box-shadow: 0 0 0 1px var(--fg); }
 .side-foot a { color: inherit; }
+/* Tạo tác: tình trạng sẵn sàng của tác phẩm */
+.ready { display: grid; gap: 4px; }
+.readybar { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
+.readybar .meter { flex: 0 0 120px; height: 6px; border-radius: 3px; background: var(--sunken); overflow: hidden; }
+.readybar .meter i { display: block; height: 100%; background: var(--ok); border-radius: 3px; transition: width .3s; }
+.readyrow { display: grid; grid-template-columns: 20px minmax(0, auto) minmax(0, 1fr) auto; gap: 8px; align-items: center; text-align: left; border: 1px solid var(--line); background: var(--raised);
+  border-radius: 6px; padding: 4px 8px; font-size: 12.5px; }
+.readyrow:hover { border-color: var(--line-strong); }
+.readyrow .stepn { width: 18px; height: 18px; margin: 0; font-size: 10px; }
+.readyrow .note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.readyrow .go { color: var(--accent); font-weight: 600; }
+.shot.flash { animation: flash 1.2s ease; }
+@keyframes flash { 0%, 60% { box-shadow: 0 0 0 3px var(--accent); } 100% { box-shadow: none; } }
+.works .panel > h3 .r.row { flex-wrap: nowrap; } .works .panel > h3 .r .mono { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (prefers-color-scheme: dark) { body[data-zone] { --on-accent: #141316; } .brand .mark { background: radial-gradient(circle at 35% 50%, #141316 0 2.6px, transparent 3px), radial-gradient(circle at 65% 50%, #141316 0 2.6px, transparent 3px), var(--accent); } }
