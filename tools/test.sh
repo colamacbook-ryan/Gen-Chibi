@@ -87,8 +87,25 @@ const noq = GC.checkDataPart({ id: "x-1", slot: "hat", layers: { hat: "<path d=\
 if (!noq.errors.some(e => /q45/.test(e))) { bad++; console.log("   ✗ không bắt buộc 45°"); }
 const lay = GC.checkDataPart({ id: "x-2", slot: "hat", layers: { propFront: "<path d=\"M0,0\"/>" }, views: { q45: "same" } });
 if (!lay.errors.length) { bad++; console.log("   ✗ cho dùng lớp đạo cụ"); }
+// hồi quy review bảo mật v0.3.0
+const t0 = Date.now();
+GC.sanitizeSvg("<g transform=\"" + ("translate(1)" + " ".repeat(100)).repeat(6) + "x\"></g>");
+GC.sanitizeSvg("<g" + " ".repeat(19000));
+if (Date.now() - t0 > 300) { bad++; console.log("   ✗ ReDoS: lọc mất", Date.now() - t0, "ms"); }
+for (const k of ["<constructor/>", "<path d=\"M0,0\" fill=\"{constructor}\"/>", "<path d=\"M0,0\" constructor=\"x\"/>", "<path d=\"M0,0\" fill=\"#000\" fill=\"#fff\"/>"]) {
+  let r; try { r = GC.sanitizeSvg(k); } catch (e) { r = { errors: [] , thrown: e.message }; }
+  if (!r.errors.length) { bad++; console.log("   ✗ lọt/ném lỗi:", k, r.thrown || ""); }
+}
+if (!GC.checkDataPart({ id: "x-3", slot: "constructor", layers: { hat: "<path d=\"M0,0\"/>" }, views: { q45: "same" } }).errors.length) { bad++; console.log("   ✗ slot constructor lọt"); }
+const { MCP } = require("./server/mcp"); const { Store } = require("./server/store");
+const tmp = require("fs").mkdtempSync(require("os").tmpdir() + "/gc-sec-");
+const mcp = new MCP({ engine: GC, store: new Store(tmp), version: "test" });
+const ow = mcp.saveAssetChecked({ pack: "afi.tamquoc", id: "truong-phi", name: "hacked", look: { eyes: "round", brows: "normal", parts: {} } }, "x");
+if (ow.pack !== "local.my") { bad++; console.log("   ✗ MCP/AI ghi đè được nhân vật chính thức:", ow.key); }
+try { mcp.savePartChecked({ id: "lun-jin", slot: "hat", layers: { hat: "<path d=\"M0,0\"/>" }, views: { q45: "same" } }); bad++; console.log("   ✗ linh kiện trùng id chính thức được lưu"); } catch (e) { /* đúng: bị chặn */ }
 if (bad) process.exit(1);
 console.log("   ✓", Object.keys(attacks).length, "kiểu tấn công bị chặn; SVG hợp lệ qua; 45° bắt buộc; lớp sân khấu bị cấm");
+console.log("   ✓ hồi quy bảo mật: không ReDoS, không tra prototype, không attr trùng, MCP/AI không ghi đè thư viện chính thức, không che id chính thức");
 '
 
 echo "3) MCP"

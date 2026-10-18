@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.3.1 — Vá bảo mật cho tạo linh kiện (review v0.3.0)
+- **ReDoS** (cao): regex kiểm `transform` có thể bị chuỗi ~1 300 ký tự làm treo server (mọi lối ghi, kể cả link MCP). Viết lại không chồng lấn; gộp khoảng trắng trước khi tách thẻ để bộ lọc chạy tuyến tính.
+- **MCP / AI trong chatroom không còn ghi đè được nhân vật của thư viện chính thức** (trước đây truyền `pack: "afi.tamquoc"` là đè được). Chỉ Studio của chủ máy được lưu bản chỉnh trong thư viện chính thức.
+- Bảng tra của bộ lọc không còn dính prototype (`constructor`…); chặn thuộc tính lặp; token màu chỉ nhận hex; lỗi trong tool không làm hỏng cả lượt AI.
+- Linh kiện của người dùng không được trùng id với linh kiện chính thức cùng bộ phận.
+- Test hồi quy cho cả 5 điểm.
+
 ## v0.3.0 — Tạo linh kiện qua MCP + một cổng ghi duy nhất cho mọi agent
 - **Linh kiện dạng dữ liệu**: agent/người dùng tạo linh kiện bằng SVG thuộc tập con an toàn (path, circle, ellipse, rect, line, polyline, polygon, g), màu là hex hoặc token bảng màu `{robe}`. Engine đọc rồi dựng lại SVG — chặn script, on*, url(), style, href, image, text, comment, entity (16 kiểu tấn công trong test). Bắt buộc khai báo 45°: `drawn` | `same` | `face45` | `body45`.
 - **3 tool MCP mới** (15 tool): `get_part_spec` (khung sườn dạng máy đọc + ví dụ), `preview_part` (bàn soát: ma-nơ-canh × 4 góc × 4 tình huống, một ảnh SVG), `save_part` (lưu vào "Của tôi", có phiên bản). Nhân vật dùng ngay qua `look.parts.<slot> = "local.my/<id>"`.

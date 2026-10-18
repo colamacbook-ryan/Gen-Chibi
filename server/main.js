@@ -221,7 +221,7 @@ async function route(req, res) {
     if (m === 'PUT') {
       // Studio ghi qua CÙNG cổng kiểm với MCP và AI (mcp.saveAssetChecked) — không có lối ghi thẳng
       const b = await body(req), sp = key.split('/');
-      try { return send(res, 200, mcp.saveAssetChecked(Object.assign({}, b, { pack: sp[0], id: sp[1] }), b._note || 'Chỉnh trong Studio')); }
+      try { return send(res, 200, mcp.saveAssetChecked(Object.assign({}, b, { pack: sp[0], id: sp[1] }), b._note || 'Chỉnh trong Studio', { allowAnyPack: true })); }
       catch (e) { return send(res, e.code || 400, { error: e.message, gates: e.gates || null }); }
     }
     if (m === 'DELETE') return store.trashAsset(key) ? send(res, 200, { ok: true }) : fail(res, 404, 'chưa có bản lưu');

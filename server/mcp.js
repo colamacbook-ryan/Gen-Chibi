@@ -110,12 +110,14 @@ class MCP {
     };
   }
 
-  prepare(a) {
+  // opts.allowAnyPack: chỉ đường Studio (chủ máy, có token) — MCP và AI trong chatroom chỉ ghi vào thư viện group "mine"
+  prepare(a, opts) {
     if (!a || typeof a !== 'object') throw new Error('asset phải là object');
     const x = clone(a);
     x.id = String(x.id || '').toLowerCase();
     if (!/^[a-z0-9-]{1,64}$/.test(x.id)) throw new Error('id phải gồm chữ thường, số, gạch ngang (1–64 ký tự)');
-    x.pack = x.pack && this.GC.PACKS[x.pack] ? x.pack : MY_PACK;
+    const P = x.pack && Object.prototype.hasOwnProperty.call(this.GC.PACKS, x.pack) ? this.GC.PACKS[x.pack] : null;
+    x.pack = P && (P.group === 'mine' || (opts && opts.allowAnyPack)) && x.pack !== TMP_PACK ? x.pack : MY_PACK;
     x.key = x.pack + '/' + x.id;
     x.look = x.look || {};
     x.look.parts = x.look.parts || {};
@@ -251,8 +253,8 @@ class MCP {
     catch (e) { return toolError(e.message); }
   }
   /* ---- CỔNG GHI DUY NHẤT: MCP, HTTP (Studio) và AI trong chatroom đều ghi qua hai hàm này ---- */
-  saveAssetChecked(raw, note) {
-    const a = this.prepare(raw);
+  saveAssetChecked(raw, note, opts) {
+    const a = this.prepare(raw, opts);
     const gates = this.GC.gate(a, { poses: true });
     const blocking = this.GC.blockingGates(gates, a.status);
     if (blocking.length) throw Object.assign(new Error('Chưa đạt cổng kiểm: ' + blocking.map(g => g.label + (g.detail ? ' (' + g.detail + ')' : '')).join('; ')), { code: 422, gates, blocking: blocking.map(g => g.id) });
@@ -262,6 +264,10 @@ class MCP {
   }
   savePartChecked(part, note) {
     const c = this.GC.checkDataPart(part);
+    if (!c.errors.length) {
+      const clash = this.GC.partsOfSlot(c.def.slot).find(p => p.id === c.def.id && p.pack !== MY_PACK && p.pack !== TMP_PACK);
+      if (clash) c.errors.push('id "' + c.def.id + '" trùng linh kiện của thư viện ' + clash.pack + ' — chọn id khác (ví dụ "' + c.def.id + '-2")');
+    }
     if (c.errors.length) throw Object.assign(new Error('Linh kiện chưa đạt: ' + c.errors.slice(0, 6).join('; ')), { code: 422, errors: c.errors });
     const rec = this.store.savePart(c.def, note);
     this.GC.registerDataPart(MY_PACK, rec);

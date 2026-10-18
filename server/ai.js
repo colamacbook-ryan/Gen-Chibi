@@ -165,7 +165,9 @@ class AI {
         if (!allowed.has(name)) text = 'Tool "' + name + '" không có trong nhà xưởng.';
         else if (!args) text = 'arguments không phải JSON hợp lệ.';
         else {
-          const res = await mcp.callTool(name, args, { channel: 'ui' });
+          let res;
+          try { res = await mcp.callTool(name, args, { channel: 'ui' }); }
+          catch (e) { res = { isError: true, content: [{ type: 'text', text: 'Tool lỗi: ' + String(e.message).slice(0, 300) }] }; }
           ok = !!res && !res.isError;
           const parts = (res && res.content) || [];
           text = parts.map(p => {
