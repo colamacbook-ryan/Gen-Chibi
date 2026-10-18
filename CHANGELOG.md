@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.5.3 — Studio ba lớp: Thư viện · Tạo tác · Xưởng
+- **Thư viện** (xanh dương): hàng mẫu Afi đã duyệt — xem, tải ảnh, chép mã.
+- **Tạo tác** (xanh lá, mới): nhân vật / trang bị / cảnh của tôi, Đạo diễn AI, Trợ lý AI (chat) — nơi người dùng phối và xuất thành phẩm.
+- **Xưởng** (hổ phách): chỉ còn khuôn của Afi — kho linh kiện & phông, khung tư thế & hoạt động, khung biểu cảm & động tác, cổng kiểm.
+- Dòng chảy Xưởng → Thư viện → Tạo tác; `docs/QUY-TRINH-LINH-KIEN.md` mục 8 viết lại theo ba lớp.
+
 ## v0.5.2 — Hỗ trợ repo private: token cập nhật
 - **`GC_GITHUB_TOKEN`** (fine-grained, chỉ Contents: Read-only): bộ cập nhật gọi API GitHub có `Authorization: Bearer`, tải gói và SHA256SUMS qua URL API của asset (`Accept: application/octet-stream`). Token **chỉ gửi tới đúng host đầu tiên** — khi GitHub chuyển hướng sang host lưu trữ, token bị bỏ. Không token thì hành vi cũ giữ nguyên.
 - Repo private mà thiếu / sai token → báo lỗi rõ (nêu cách sửa), vẫn chạy bản cũ; không đoán qua trang công khai.

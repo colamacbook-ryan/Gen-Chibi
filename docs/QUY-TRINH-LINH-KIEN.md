@@ -84,12 +84,14 @@ Một loại asset mới không phải "một bộ vẽ mới" mà là **một c
 - Thứ tự vẽ: trời → (sao khi đêm) → cảnh xa → (sương) → công trình → mặt đất → đạo cụ sau → hàng sau → đạo cụ giữa → hàng trước → đạo cụ trước → tiền cảnh → thời tiết → màu giờ → (đom đóm).
 - Ngân sách (L-42): cảnh là tầng ảnh (SVG tĩnh); diễn viên ≤ 8, đạo cụ ≤ 10, hạt thời tiết ≤ 60; mưa/tuyết sinh bằng số giả ngẫu nhiên có hạt giống → cùng cảnh luôn ra cùng ảnh (cache ổn định).
 
-## 8. Thư viện và Xưởng — hai khu, không trộn
+## 8. Ba lớp: Xưởng · Thư viện · Tạo tác — mỗi lớp một chủ, một nhịp
 
-| | **Thư viện** (thành phẩm · lấy về dùng) | **Xưởng** (tạo lập · phối · kiểm) |
-|---|---|---|
-| Nội dung | Nhân vật, Trang bị, Cảnh — duyệt theo nhóm (Chính thức / Của tôi / Nhóm / Cộng đồng, rồi phe / loại / ngoài trời–trong nhà) | Bàn phối nhân vật / trang bị / cảnh, Kho linh kiện & phông, khung tư thế & biểu cảm, Xưởng AI, Đạo diễn AI, Cổng kiểm |
-| Việc làm | Xem biến thể (biểu cảm, hoạt động, góc, giờ, thời tiết, diễn viên) rồi **lấy về**: ảnh (SVG, PNG, avatar, sprite sheet, thẻ, nền 1920) và mã (mã tham chiếu, lệnh MCP, mã nhúng web, SVG, JSON công thức) | Sửa, phối, soát, lưu qua cổng ghi duy nhất |
-| Cầu nối | "Tạo / sửa trong Xưởng ›" | "Xem trong Thư viện ›" |
+| | **Xưởng** (khuôn) | **Thư viện** (hàng mẫu) | **Tạo tác** (của tôi) |
+|---|---|---|---|
+| Chủ | Afi | Afi tuyển chọn | người dùng / agent |
+| Chứa | khung xương, luật, linh kiện, phông, khung tư thế & biểu cảm, cổng kiểm | các bộ chủ đề đã duyệt: nhân vật, trang bị, cảnh | nhân vật, trang bị, cảnh, kịch bản của riêng mình; Đạo diễn AI, Trợ lý AI |
+| Việc | làm khuôn, soát, kiểm | xem biến thể và **lấy về**: ảnh (SVG, PNG, avatar, sprite, thẻ, cảnh) và mã (tham chiếu, MCP, nhúng web, JSON) | phối, sửa, lưu qua cổng ghi duy nhất, xuất thành phẩm |
+| Nhịp thay đổi | chậm (nền móng) | vừa (thêm theo bộ) | liên tục |
 
-Asset chính thức không sửa tại chỗ: "Phối bản của tôi trong Xưởng" tạo bản riêng trong "Của tôi".
+Dòng chảy một chiều: **Xưởng → (duyệt, xuất bản) → Thư viện → (lấy về phối) → Tạo tác → (xuất) thành phẩm**; tạo tác tốt được Afi duyệt đưa lên Thư viện.
+Asset chính thức không sửa tại chỗ: "Phối bản của tôi" tạo bản riêng trong "Của tôi". Hiện cả ba lớp là ba khu trong cùng Studio (phân theo vai trò); khi có khách thật, Tạo tác mới tách thành không gian riêng từng người.

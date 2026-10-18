@@ -7,7 +7,7 @@
   --accent: #B9741A; --accent-soft: #B9741A14; --on-accent: #FFFFFF;
   --stage: #FBFAF7; --stage-grid: #EFECE5;
   --ok: #2E8B5E; --danger: #C2412F; --warn: #9A7A12; --info: #3F7FB8;
-  --zone-lib: #2F76B5; --zone-fab: #B9741A; --zone-sys: #8E897F;
+  --zone-lib: #2F76B5; --zone-make: #2E8B5E; --zone-fab: #B9741A; --zone-sys: #8E897F;
   --font-ui: 'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
   color-scheme: light;
@@ -20,7 +20,7 @@
     --accent: #E8A33D; --accent-soft: #E8A33D1A; --on-accent: #1C1B1E;
     --stage: #232227; --stage-grid: #2B2A30;
     --ok: #4CB782; --danger: #E5604D; --warn: #E8C547; --info: #6FA8DC;
-    --zone-lib: #6FA8DC; --zone-fab: #E8A33D; --zone-sys: #8A857E;
+    --zone-lib: #6FA8DC; --zone-make: #4CB782; --zone-fab: #E8A33D; --zone-sys: #8A857E;
     color-scheme: dark;
   }
 }
@@ -45,8 +45,10 @@ nav { padding: 8px 0; overflow: auto; flex: 1; }
 .nav-group { padding: 14px 16px 5px; font-size: 11px; color: var(--muted); display: grid; gap: 1px; border-left: 3px solid transparent; }
 .nav-group b { letter-spacing: .06em; text-transform: uppercase; font-weight: 600; }
 .nav-group span { font-size: 10.5px; }
-/* hai khu tách bạch: Thư viện (xanh) — lấy về dùng; Xưởng (hổ phách) — tạo lập */
+/* ba lớp: Thư viện (xanh dương) — hàng mẫu lấy về dùng; Tạo tác (xanh lá) — của tôi; Xưởng (hổ phách) — khuôn của Afi */
 .nav-group.zone-lib { border-left-color: var(--zone-lib); } .nav-group.zone-lib b { color: var(--zone-lib); }
+.nav-group.zone-make { border-left-color: var(--zone-make); margin-top: 6px; } .nav-group.zone-make b { color: var(--zone-make); }
+.nav-item.zone-make[aria-current="page"] { border-left-color: var(--zone-make); }
 .nav-group.zone-fab { border-left-color: var(--zone-fab); margin-top: 6px; } .nav-group.zone-fab b { color: var(--zone-fab); }
 .nav-group.zone-sys { margin-top: 6px; }
 .nav-item.zone-lib[aria-current="page"] { border-left-color: var(--zone-lib); }
@@ -66,6 +68,8 @@ nav { padding: 8px 0; overflow: auto; flex: 1; }
 .crumbs b { font-weight: 600; }
 .zone-tag { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; color: #fff; background: var(--zone-sys); margin-right: 4px; }
 body[data-zone="lib"] .zone-tag { background: var(--zone-lib); }
+body[data-zone="make"] .zone-tag { background: var(--zone-make); }
+body[data-zone="make"] .pagehead { box-shadow: inset 0 3px 0 var(--zone-make); }
 body[data-zone="fab"] .zone-tag { background: var(--zone-fab); }
 body[data-zone="lib"] .pagehead { box-shadow: inset 0 3px 0 var(--zone-lib); }
 body[data-zone="fab"] .pagehead { box-shadow: inset 0 3px 0 var(--zone-fab); }

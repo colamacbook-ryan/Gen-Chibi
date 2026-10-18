@@ -130,13 +130,16 @@
   };
 
   /* ============================================================ điều hướng */
-  // Hai khu tách bạch: THƯ VIỆN = thành phẩm, duyệt theo nhóm và lấy về dùng (ảnh, mã);
-  // XƯỞNG = nơi tạo lập (bàn phối, kho linh kiện, khung chuyển động, AI, cổng kiểm). Không trộn hai việc trên một trang.
+  // Ba lớp, mỗi lớp một chủ và một nhịp thay đổi:
+  //   THƯ VIỆN = hàng mẫu Afi đã duyệt, duyệt theo nhóm và lấy về dùng (ảnh, mã);
+  //   TẠO TÁC  = của người dùng: phối nhân vật / trang bị / cảnh, đạo diễn, trợ lý AI, xuất thành phẩm;
+  //   XƯỞNG    = khuôn của Afi: linh kiện, phông, khung chuyển động, cổng kiểm. Dòng chảy: Xưởng → Thư viện → Tạo tác.
   var NAV = [
-    ['lib', 'Thư viện', 'thành phẩm · lấy về dùng', [['lib-characters', 'Nhân vật'], ['lib-items', 'Trang bị'], ['lib-scenes', 'Cảnh']]],
-    ['fab', 'Xưởng', 'tạo lập · phối · kiểm', [['characters', 'Bàn phối nhân vật'], ['items', 'Bàn phối trang bị'], ['scenes', 'Bàn phối cảnh'],
-      ['library', 'Kho linh kiện & phông'], ['poses', 'Khung tư thế & hoạt động'], ['states', 'Khung biểu cảm & động tác'],
-      ['workshop', 'Xưởng AI (chat)'], ['director', 'Đạo diễn AI'], ['gates', 'Cổng kiểm & hiệu năng']]],
+    ['lib', 'Thư viện', 'hàng mẫu đã duyệt · lấy về dùng', [['lib-characters', 'Nhân vật'], ['lib-items', 'Trang bị'], ['lib-scenes', 'Cảnh']]],
+    ['make', 'Tạo tác', 'của tôi · phối · xuất thành phẩm', [['characters', 'Nhân vật của tôi'], ['items', 'Trang bị của tôi'], ['scenes', 'Cảnh của tôi'],
+      ['director', 'Đạo diễn AI'], ['workshop', 'Trợ lý AI (chat)']]],
+    ['fab', 'Xưởng', 'khuôn · luật · kiểm (Afi)', [['library', 'Kho linh kiện & phông'], ['poses', 'Khung tư thế & hoạt động'], ['states', 'Khung biểu cảm & động tác'],
+      ['gates', 'Cổng kiểm & hiệu năng']]],
     ['sys', 'Hệ thống', '', [['ai', 'Cài đặt AI'], ['update', 'Cập nhật']]]
   ];
   var PAGE_ALIAS = { character: 'characters', export: 'lib-characters' };
@@ -181,7 +184,7 @@
     }
     (PAGES[r.page] || PAGES['lib-characters'])(r);
   }
-  var ZONE_LABEL = { lib: 'Thư viện', fab: 'Xưởng', sys: 'Hệ thống' };
+  var ZONE_LABEL = { lib: 'Thư viện', make: 'Tạo tác', fab: 'Xưởng', sys: 'Hệ thống' };
   function crumbs(parts) {
     var c = clear($('crumbs'));
     c.appendChild(h('span', { class: 'zone-tag', text: ZONE_LABEL[zoneOf(route.page)] }));
@@ -201,7 +204,7 @@
   /* ============================================================ trang: Nhân vật */
   var PAGES = {};
   PAGES.characters = function () {
-    crumbs([{ t: 'Bàn phối nhân vật' }]);
+    crumbs([{ t: 'Nhân vật của tôi' }]);
     actions(h('button', { class: 'btn', onclick: function () { go({ page: 'lib-characters' }); } }, 'Xem trong Thư viện ›'), h('button', { class: 'btn primary', onclick: newCharacter }, '+ Nhân vật mới'));
     var q = '', sel = GC.assets()[0];
     var search = h('input', { type: 'search', placeholder: 'Lọc: tên, phe, thư viện, trạng thái…', style: 'width:320px', oninput: function () { q = search.value.trim().toLowerCase(); paint(); } });
@@ -299,7 +302,7 @@
     var w = clone(orig);       // bản làm việc
     w.pack = orig.pack; w.key = orig.key;
     var dirty = false, pState = 'normal';
-    crumbs([{ t: 'Bàn phối nhân vật', go: { page: 'characters' } }, { t: orig.name }]);
+    crumbs([{ t: 'Nhân vật của tôi', go: { page: 'characters' } }, { t: orig.name }]);
     var saveBtn = h('button', { class: 'btn primary', disabled: true, onclick: save }, 'Lưu phiên bản');
     var undoBtn = h('button', { class: 'btn', disabled: true, onclick: function () { go(r); } }, 'Huỷ thay đổi');
     var official = orig.pack !== MY_PACK;
@@ -512,7 +515,7 @@
     /* ---- Hồ sơ nhận diện */
     function tabProfile() {
       function field(label, key, obj, attrs) {
-        var inp = h(attrs && attrs.area ? 'textarea' : 'input', Object.assign({ type: 'text', 'aria-label': label, rows: '2', oninput: function () { (obj || w)[key] = inp.value; dirty = true; saveBtn.disabled = false; undoBtn.disabled = false; if (key === 'name') crumbs([{ t: 'Bàn phối nhân vật', go: { page: 'characters' } }, { t: inp.value }]); } }));
+        var inp = h(attrs && attrs.area ? 'textarea' : 'input', Object.assign({ type: 'text', 'aria-label': label, rows: '2', oninput: function () { (obj || w)[key] = inp.value; dirty = true; saveBtn.disabled = false; undoBtn.disabled = false; if (key === 'name') crumbs([{ t: 'Nhân vật của tôi', go: { page: 'characters' } }, { t: inp.value }]); } }));
         inp.value = (obj || w)[key] || '';
         return [h('label', { text: label }), inp];
       }
@@ -757,7 +760,7 @@
   // Item = phối: linh kiện có sẵn + bảng màu riêng + chỉ số + độ hiếm. Tự đứng được (icon, thẻ) và mặc được lên nhân vật.
   // Lưu qua cùng cổng ghi với MCP và AI (POST /api/items → mcp.saveItemChecked).
   PAGES.items = function (r) {
-    crumbs([{ t: 'Bàn phối trang bị' }]);
+    crumbs([{ t: 'Trang bị của tôi' }]);
     var I = GC.ITEM, u = function (svg) { return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); };
     var sel = GC.getItem(r.key) || GC.items()[0], who = 'quan-vu', view = 'front';
     var grid = h('div', { class: 'stack' }), insp = h('div', { class: 'stack' });
@@ -942,12 +945,12 @@
   };
 
 
-  /* ============================================================ trang: Xưởng AI (chat) */
+  /* ============================================================ trang: Trợ lý AI (chat) — lớp Tạo tác */
   // AI chạy bằng LLM API của người dùng, nhưng CHỈ tạo/sửa qua bộ tool của nhà xưởng (cùng bộ với MCP)
   // → cùng cổng kiểm, cùng chuẩn với mọi asset khác. Lịch sử chat giữ trong trình duyệt này.
   var chatLog = [];
   PAGES.workshop = function () {
-    crumbs([{ t: 'Xưởng AI (chat)' }]);
+    crumbs([{ t: 'Trợ lý AI (chat)' }]);
     var box = h('div', { class: 'stack', style: 'max-height:62vh;overflow:auto;padding:12px' });
     var input = h('textarea', { rows: 3, placeholder: 'Ví dụ: Vẽ một chiếc nón lá (có bản 45°), rồi tạo nhân vật "Tiểu nhị" đội nón lá, áo bào nâu, đang chạy bưng trà.', style: 'width:100%' });
     var send = h('button', { class: 'btn primary', onclick: go1 }, 'Gửi');
@@ -988,7 +991,7 @@
     input.addEventListener('keydown', function (e) { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) go1(); });
     var off = Store.mode !== 'server';
     $('view').appendChild(h('div', { class: 'stack' },
-      h('div', { class: 'panel' }, h('h3', null, 'Xưởng AI', h('span', { class: 'r note', text: 'cùng bộ tool + cùng cổng kiểm với agent MCP · model: Cài đặt AI' })),
+      h('div', { class: 'panel' }, h('h3', null, 'Trợ lý AI', h('span', { class: 'r note', text: 'cùng bộ tool + cùng cổng kiểm với agent MCP · model: Cài đặt AI' })),
         off ? h('div', { class: 'pad note', text: 'Cần chạy bản cài trên máy (server) và nhập LLM API key ở Cài đặt AI.' }) : box,
         off ? null : h('div', { class: 'pad stack' }, input, h('div', { class: 'row' }, send, clearB, status, h('span', { class: 'note', text: 'Ctrl+Enter để gửi' }))))));
     paint();
@@ -1213,16 +1216,16 @@
   }
   // JSON đặt trong <script> của mã nhúng: escape < > & và U+2028/2029 — tên do agent đặt chứa "</script>" không thoát ra được
   function jsonForScript(x) { return JSON.stringify(x).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029'); }
-  function mcpCall(tool, args) { return '// Agent (MCP) hoặc AI trong Xưởng AI gọi:\n' + tool + ' ' + JSON.stringify(args, null, 2); }
+  function mcpCall(tool, args) { return '// Agent (MCP) hoặc Trợ lý AI trong Studio gọi:\n' + tool + ' ' + JSON.stringify(args, null, 2); }
 
   /* ============================================================ THƯ VIỆN: thành phẩm theo nhóm, lấy về dùng */
   var GROUPS = [['official', 'Chính thức'], ['mine', 'Của tôi'], ['team', 'Nhóm'], ['community', 'Cộng đồng']];
   function groupOf(x) { return (GC.PACKS[x.pack] || {}).group || 'community'; }
-  // cfg: { title, fab (trang Xưởng tương ứng), list(), find(key), sub(x) → nhãn nhóm con, thumb(x) → url, wide?, inspect(x, box) }
+  // cfg: { title, fab (trang Tạo tác tương ứng), list(), find(key), sub(x) → nhãn nhóm con, thumb(x) → url, wide?, inspect(x, box) }
   function libPage(cfg, r) {
     crumbs([{ t: cfg.title }]);
     actions(h('span', { class: 'note', text: 'Thành phẩm đã qua cổng kiểm — chọn, xem, tải ảnh hoặc chép mã.' }),
-      h('button', { class: 'btn', onclick: function () { go({ page: cfg.fab }); } }, 'Tạo / sửa trong Xưởng ›'));
+      h('button', { class: 'btn', onclick: function () { go({ page: cfg.fab }); } }, 'Phối trong Tạo tác ›'));
     var q = '', grp = 'all', sub = 'all', sel = cfg.find(r.key) || cfg.list()[0];
     var search = h('input', { type: 'search', placeholder: 'Tìm: tên, mã, thư viện…', style: 'width:260px', oninput: function () { q = search.value.trim().toLowerCase(); paint(); } });
     var gseg = h('div', { class: 'seg' }), subs = h('div', { class: 'fxchips' });
@@ -1309,7 +1312,7 @@
           h('div', { class: 'usebar' }, h('b', { text: 'Tải mã' }),
             h('button', { class: 'btn sm', onclick: function () { download(a.id + '.json', JSON.stringify(a, null, 2), 'application/json'); } }, 'JSON công thức')),
           code,
-          h('div', { class: 'row' }, h('button', { class: 'btn', onclick: function () { go({ page: 'character', key: a.key, tab: 'look' }); } }, mine ? 'Sửa trong Xưởng ›' : 'Phối bản của tôi trong Xưởng ›'))
+          h('div', { class: 'row' }, h('button', { class: 'btn', onclick: function () { go({ page: 'character', key: a.key, tab: 'look' }); } }, mine ? 'Sửa trong Tạo tác ›' : 'Phối bản của tôi trong Tạo tác ›'))
         ]);
         paintU();
       }
@@ -1365,7 +1368,7 @@
             ['SVG icon', function () { return GC.itemSvg(it, { size: 256 }); }],
             ['JSON item', function () { return JSON.stringify(it, null, 2); }]
           ]),
-          h('div', { class: 'row' }, h('button', { class: 'btn', onclick: function () { go({ page: 'items', key: it.key }); } }, it.pack === MY_PACK ? 'Sửa trong Xưởng ›' : 'Phối bản của tôi trong Xưởng ›'))
+          h('div', { class: 'row' }, h('button', { class: 'btn', onclick: function () { go({ page: 'items', key: it.key }); } }, it.pack === MY_PACK ? 'Sửa trong Tạo tác ›' : 'Phối bản của tôi trong Tạo tác ›'))
         ]);
         paintTry();
       }
@@ -1380,7 +1383,7 @@
     return sceneThumb.get(k);
   }
   function castPicker(onChange, initial) {
-    // hai chỗ đứng hay dùng nhất để xem nhanh; cảnh đầy đủ dàn diễn viên làm ở Xưởng / Đạo diễn AI
+    // hai chỗ đứng hay dùng nhất để xem nhanh; cảnh đầy đủ dàn diễn viên làm ở Tạo tác / Đạo diễn AI
     var cast = initial || [{ id: 'gia-cat-luong', spot: 'midLeft' }, { id: '', spot: 'midRight' }];
     var row = h('div', { class: 'row' });
     cast.forEach(function (c) {
@@ -1433,7 +1436,7 @@
           h('div', { class: 'usebar' }, h('b', { text: 'Tải mã' }),
             h('button', { class: 'btn sm', onclick: function () { download(sc.id + '.json', JSON.stringify(sc, null, 2), 'application/json'); } }, 'JSON cảnh')),
           code,
-          h('div', { class: 'row' }, h('button', { class: 'btn', onclick: function () { go({ page: 'scenes', key: sc.key }); } }, sc.pack === MY_PACK ? 'Sửa trong Xưởng ›' : 'Phối bản của tôi trong Xưởng ›'))
+          h('div', { class: 'row' }, h('button', { class: 'btn', onclick: function () { go({ page: 'scenes', key: sc.key }); } }, sc.pack === MY_PACK ? 'Sửa trong Tạo tác ›' : 'Phối bản của tôi trong Tạo tác ›'))
         ]);
         paintU();
       }
@@ -1444,7 +1447,7 @@
   // Cảnh = phối phông có sẵn theo lớp + đạo cụ + bảng màu + giờ + thời tiết. Lưu qua cùng cổng ghi với MCP (POST /api/scenes → saveSceneChecked).
   PAGES.scenes = function (r) {
     var S = GC.SCENE;
-    crumbs([{ t: 'Bàn phối cảnh' }]);
+    crumbs([{ t: 'Cảnh của tôi' }]);
     var base = GC.getScene(r.key) || GC.scenes()[0];
     var w, mine;
     function load(sc) {

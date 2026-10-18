@@ -2,7 +2,7 @@
 
 Nhà máy nhân vật chibi **vẽ bằng code**: một khung xương chuẩn, kho linh kiện có tham số, 18 biểu cảm khoa trương, động tác là dữ liệu, cổng kiểm tự động. Mỗi nhân vật là một **công thức JSON**; engine dựng ra SVG/PNG/sprite sheet hoặc nhân vật "sống" đổi biểu cảm lúc chạy.
 
-- **Studio** (desktop, kiểu Data Console), hai khu tách bạch: **Thư viện** — thành phẩm (nhân vật, trang bị, cảnh) duyệt theo nhóm, tải ảnh (SVG/PNG/sprite) và chép mã (tham chiếu, MCP, nhúng web, JSON); **Xưởng** — bàn phối, kho linh kiện & phông, khung tư thế/biểu cảm, AI, cổng kiểm.
+- **Studio** (desktop, kiểu Data Console), ba lớp: **Thư viện** — hàng mẫu đã duyệt (nhân vật, trang bị, cảnh) theo nhóm, tải ảnh và chép mã; **Tạo tác** — nhân vật / trang bị / cảnh của tôi, Đạo diễn AI, Trợ lý AI; **Xưởng** — khuôn của Afi: linh kiện, phông, khung tư thế & biểu cảm, cổng kiểm.
 - **Đạo diễn AI**: LLM viết kịch bản sự kiện trong từ vựng đóng của kho; server kiểm và bắt model sửa nếu sai.
 - **MCP server**: agent (Claude Code, Claude Desktop…) nối thẳng vào để tự tạo nhân vật và kịch bản, không tốn LLM API lõi.
 - **Tự cập nhật** từ GitHub Releases: kiểm SHA-256, sao lưu dữ liệu trước khi đổi, tự chạy lại bản cũ nếu bản mới lỗi.

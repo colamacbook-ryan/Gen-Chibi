@@ -75,7 +75,7 @@ try {
     await q.goto('http://localhost:7498/');
     await q.waitForFunction(() => /^v\d/.test(document.getElementById('verChip').textContent), null, { timeout: 5000 });
     const zones = await q.$$eval('.nav-group', els => els.map(e => e.className));
-    if (!zones.some(z => /zone-lib/.test(z)) || !zones.some(z => /zone-fab/.test(z))) throw new Error('thiếu nhóm Thư viện / Xưởng trong điều hướng');
+    if (!['zone-lib', 'zone-make', 'zone-fab'].every(k => zones.some(z => z.indexOf(k) >= 0))) throw new Error('thiếu lớp Thư viện / Tạo tác / Xưởng trong điều hướng');
     const pages = await q.$$eval('.nav-item', els => els.length);
     for (let i = 0; i < pages; i++) {
       const btn = (await q.$$('.nav-item'))[i]; const label = (await btn.textContent()).trim();
@@ -106,7 +106,7 @@ try {
     const dataLine = embed.split('\n').find(l => /registerAsset/.test(l)) || '';
     if (!/xss-ci/.test(dataLine) || /<\//.test(dataLine)) throw new Error('mã nhúng để chữ thoát khỏi <script>: ' + dataLine.slice(0, 120));
     if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
-    console.log('  ✓ Studio: ' + pages + ' trang mở không lỗi; Thư viện (thẻ theo nhóm + tải ảnh + chép mã) tách khỏi Xưởng; đạo diễn diễn trong cảnh; mã nhúng không bị chèn script');
+    console.log('  ✓ Studio: ' + pages + ' trang mở không lỗi; 3 lớp Thư viện / Tạo tác / Xưởng; Thư viện có thẻ theo nhóm + tải ảnh + chép mã; đạo diễn diễn trong cảnh; mã nhúng không bị chèn script');
   } catch (e) { fail = 1; console.log('  ✗ Studio Thư viện/Xưởng:', e.message); }
   finally { await b3.close(); srv3.kill(); }
 }
