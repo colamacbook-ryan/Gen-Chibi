@@ -51,3 +51,5 @@ Giao diện gồm 5 khu: **chat với AI · kịch bản · mô tả phân cản
 | 1c | 8 hướng nhìn (2.5D): 45° · 90° · 135° · sau lưng cho engine + mọi linh kiện khung; sprite 8 hướng | xong — v0.7.0 |
 | 2 | Giao diện tạo asset từ khung (chọn khung → tham số → soát → lưu thư viện theo dự án chủ đề) | xong — v0.8.0 (Xưởng › Tạo asset mới; Thư viện › Dự án chủ đề; MCP `list_projects` / `save_project`) |
 | 3 | Tạo tác: chat AI đạo diễn, kịch bản, phân cảnh, cảnh thành phẩm, sân khấu final; AI tự gọi Xưởng khi thiếu | xong — v0.9.0 (Tạo tác › Tác phẩm; MCP `list_works` / `get_work` / `save_work` / `save_shot`) |
+| 4 | Ba ứng dụng độc lập `/xuong` · `/thu-vien` · `/tao-tac` + luồng người dùng liền mạch (Ryan: "tách 3 lớp ra 3 giao diện quản lý độc lập") | xong — v0.10.0 |
+| 5 | Thành phẩm: xuất phim HTML độc lập, storyboard, bảng tình trạng; gói dự án xuất / nhập qua cổng; dự án mẫu một chạm; gom một lối Tạo tác | xong — v0.11.0 / v0.11.1 |
