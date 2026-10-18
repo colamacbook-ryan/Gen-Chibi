@@ -1,9 +1,11 @@
 # gen-chibi
 
-Nhà máy nhân vật chibi **vẽ bằng code**: một khung xương chuẩn, kho linh kiện có tham số, 18 biểu cảm khoa trương, động tác là dữ liệu, cổng kiểm tự động. Mỗi nhân vật là một **công thức JSON**; engine dựng ra SVG/PNG/sprite sheet hoặc nhân vật "sống" đổi biểu cảm lúc chạy.
+**gen-chibi — nhà máy asset chibi theo chủ đề + làm phim với AI đạo diễn.** Từ một bộ khung chuẩn (ma-nơ-canh, khối vật phẩm, khối bối cảnh) dựng nhân vật / vật phẩm / bối cảnh **bằng code**, cất vào thư viện theo dự án chủ đề, rồi chat với AI đạo diễn để ra phim — xuất thành một tệp HTML xem được ở mọi trình duyệt. Mỗi asset là một **công thức JSON** qua cổng kiểm tự động; engine dựng SVG / PNG / sprite 8 hướng hoặc nhân vật "sống" đổi biểu cảm lúc chạy.
 
-- **Studio** (desktop, kiểu Data Console), ba lớp theo dòng chảy: **Xưởng** — bộ khung chuẩn + **Tạo asset mới** (chọn khung → tham số → soát → cổng kiểm → lưu), bàn chỉnh, linh kiện, khung tư thế & biểu cảm, cổng kiểm; **Thư viện** — asset đã qua cổng xếp theo **dự án chủ đề**, tải ảnh, chép mã, tải gói dự án; **Tạo tác** — **Tác phẩm**: chat với AI đạo diễn, kịch bản, phân cảnh, cảnh thành phẩm, sân khấu final diễn cả chuỗi; AI thiếu nhân vật / bối cảnh thì tự vào Xưởng tạo (đúng dự án).
-- **Đạo diễn AI**: LLM viết kịch bản sự kiện trong từ vựng đóng của kho; server kiểm và bắt model sửa nếu sai.
+**Bắt đầu nhanh:** mở Studio → **✨ Mở dự án mẫu "Văn phòng vui"** → Tạo tác → ▶ Diễn toàn bộ → *Phim (HTML)*. Hướng dẫn đầy đủ: [`docs/HUONG-DAN.md`](docs/HUONG-DAN.md).
+
+- **Studio** — **3 ứng dụng độc lập** `/xuong` · `/thu-vien` · `/tao-tac` (desktop, kiểu Data Console), theo dòng chảy: **Xưởng** — bộ khung chuẩn + **Tạo asset mới** (chọn khung → tham số → soát → cổng kiểm → lưu), bàn chỉnh, linh kiện, khung tư thế & biểu cảm, cổng kiểm; **Thư viện** — asset đã qua cổng xếp theo **dự án chủ đề**, tải ảnh / sprite 8 hướng, chép mã, **tải / nhập gói dự án**; **Tạo tác** — **Tác phẩm**: chat với AI đạo diễn, kịch bản, phân cảnh, bảng tình trạng, cảnh thành phẩm, sân khấu final diễn cả chuỗi, **xuất phim HTML độc lập + storyboard**; AI thiếu nhân vật / bối cảnh thì tự vào Xưởng tạo (đúng dự án).
+- **AI đạo diễn**: LLM viết kịch bản / lời thoại trong từ vựng đóng của kho; server kiểm và bắt model sửa nếu sai.
 - **MCP server**: agent (Claude Code, Claude Desktop…) nối thẳng vào để tự tạo nhân vật và kịch bản, không tốn LLM API lõi.
 - **Tự cập nhật** từ GitHub Releases: kiểm SHA-256, sao lưu dữ liệu trước khi đổi, tự chạy lại bản cũ nếu bản mới lỗi.
 
@@ -44,10 +46,10 @@ Một khung hình = **biểu cảm** (mặt) × **tư thế nền** (thân dư�
 - Ghép tự do: `{ "state": "panic", "posture": "stand", "move": "run", "motion": "flail", "facing": "left" }`.
 - Xưởng › Khung tư thế & hoạt động: xem và ghép thử, tải SVG.
 
-## Item trang bị (loại asset thứ hai)
-Item = phối linh kiện có sẵn + bảng màu riêng + độ hiếm + chỉ số; tự đứng được (icon, thẻ) và mặc được lên nhân vật (`look.equip`). Thư viện › Trang bị (tải icon/thẻ, chép mã), Xưởng › Tạo asset mới / Bàn chỉnh trang bị; mọi vật phẩm bắt đầu từ một khối khung; MCP `list_items` / `validate_item` / `save_item` / `render_item`.
+## Vật phẩm (loại asset thứ hai)
+Item = phối linh kiện có sẵn + bảng màu riêng + độ hiếm + chỉ số; tự đứng được (icon, thẻ) và mặc được lên nhân vật (`look.equip`). Thư viện › Vật phẩm (tải icon/thẻ, chép mã), Xưởng › Tạo asset mới / Bàn chỉnh vật phẩm; mọi vật phẩm bắt đầu từ một khối khung; MCP `list_items` / `validate_item` / `save_item` / `render_item`.
 
-## Cảnh (loại asset thứ ba)
+## Bối cảnh (loại asset thứ ba)
 Cảnh = phối phông có sẵn (trời, cảnh xa, công trình, mặt đất, đạo cụ, tiền cảnh) + bảng màu + giờ (ngày, bình minh, hoàng hôn, đêm) + thời tiết (mưa, tuyết, hoa rơi, lá bay, sương, đom đóm). Nhân vật đứng vào 8 chỗ đứng chuẩn, tự quay 45° về phía nhau. Kịch bản đặt vào cảnh bằng `"scene"` + `"spot"`. MCP `list_scenes` / `validate_scene` / `save_scene` / `render_scene`; phông mới qua `get_part_spec` → `preview_part` → `save_part`.
 
 ## Quy trình tạo lập linh kiện
@@ -60,9 +62,11 @@ claude mcp add gen-chibi -- genchibi mcp                                  # stdi
 claude mcp add --transport http gen-chibi http://localhost:7480/mcp       # HTTP
 ```
 
-Tool: `get_catalog`, `list_characters`, `get_character`, `validate_character`, `save_character`, `render_character`, `get_director_schema`, `validate_event`, `save_event`, `get_part_spec`, `preview_part`, `save_part`, `list_items`, `validate_item`, `save_item`, `render_item`, `list_scenes`, `validate_scene`, `save_scene`, `render_scene`, `get_app_version`, `update_app`, `rollback_app`.
+31 tool: `get_catalog`, `list_characters`, `get_character`, `validate_character`, `save_character`, `render_character`, `get_director_schema`, `validate_event`, `save_event`, `get_part_spec`, `preview_part`, `save_part`, `list_items`, `validate_item`, `save_item`, `render_item`, `list_scenes`, `validate_scene`, `save_scene`, `render_scene`, `list_projects`, `save_project`, `export_project`, `import_project`, `list_works`, `get_work`, `save_work`, `save_shot`, `get_app_version`, `update_app`, `rollback_app`.
 
-Tạo linh kiện: `get_part_spec` → vẽ (SVG an toàn, token màu) → `preview_part` (bàn soát) → `save_part`. AI trong Studio › Xưởng AI dùng đúng bộ tool này — mọi lối ghi đi qua một cổng kiểm (xem `docs/QUY-TRINH-LINH-KIEN.md` mục 6).
+Làm phim: `save_work` → `save_shot` (bối cảnh + dàn diễn viên + lời thoại qua cổng đạo diễn) → owner xem / xuất ở Studio › Tạo tác › Tác phẩm. Gói chủ đề: `export_project` / `import_project` (gen-chibi.project/1, có `requires`).
+
+Tạo linh kiện: `get_part_spec` → vẽ (SVG an toàn, token màu) → `preview_part` (bàn soát) → `save_part`. AI trong Studio (Xưởng › Trợ lý AI tạo asset, Tạo tác › AI đạo diễn) dùng đúng bộ tool này — mọi lối ghi đi qua một cổng kiểm (xem `docs/QUY-TRINH-LINH-KIEN.md` mục 6).
 
 ### Mở MCP ra Internet — một lệnh, một link
 Cần một tên miền do Cloudflare quản lý DNS (gói miễn phí là đủ).
@@ -96,9 +100,9 @@ Studio › Cài đặt AI: chọn OpenRouter, DeepSeek, MiniMax hoặc địa ch
 ## Cấu trúc
 
 ```
-engine/       core.js (khung xương, thư viện, kế thừa 4 tầng, cổng kiểm), render.js (3 tầng vẽ có ngân sách)
+engine/       core.js (khung xương, thư viện, kế thừa 4 tầng, cổng kiểm), render.js (3 tầng vẽ có ngân sách), player.js (trình diễn tác phẩm — dùng chung Studio và phim xuất ra)
 kinds/        character/afi.core.js (khung lõi: khuôn mặt, biểu cảm, chuyển động, thân ma-nơ-canh) · khung/afi.khung.js (khối vật phẩm, khối bối cảnh, ma-nơ-canh, sân khấu chuẩn)
-studio/       giao diện quản lý
+studio/       3 ứng dụng Xưởng / Thư viện / Tạo tác (một bộ mã) · mau/ dự án mẫu
 server/       API cục bộ, updater, core AI, MCP, kho bí mật
 launcher.js   chạy phiên bản hiện tại, canh sức khoẻ sau cập nhật, tự rollback
 install.sh    cài một lệnh · cli/genchibi

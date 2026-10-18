@@ -250,7 +250,7 @@ const no = (c, msg) => { if (c) { console.log("   ✗", msg); process.exit(1); }
 const r = m.importProject(b, {});
 no(r.errors.length, "dự án mẫu có mục không qua cổng: " + JSON.stringify(r.errors));
 no(r.counts.characters !== 3 || r.counts.scenes !== 2 || r.counts.items !== 1 || r.counts.shots !== 4, "dự án mẫu thiếu mục: " + JSON.stringify(r.counts));
-let c = null; try { m.importProject(b, {}); } catch (e) { c = e; } no(!c || c.code !== 409 || c.conflicts.length !== 7, "nhập trùng phải trả 409 + danh sách trùng");
+let c = null; try { m.importProject(b, {}); } catch (e) { c = e; } no(!c || c.code !== 409 || c.conflicts.length !== 8 || !c.conflicts.includes("dự án mau-van-phong-vui"), "nhập trùng phải trả 409 + danh sách trùng (kể cả dự án): " + (c && c.conflicts));
 no(m.importProject(b, { overwrite: true }).errors.length, "lưu đè lỗi");
 const ex = m.exportProject("mau-van-phong-vui");
 no(ex.characters.length !== 3 || ex.works.length !== 1 || ex.works[0].shots.length !== 4 || ex.works[0].chat, "xuất gói thiếu / lộ chat");
@@ -259,6 +259,32 @@ for (const bad of [null, { format: "x" }, { format: "gen-chibi.project/1", proje
 }
 const evil = JSON.parse(JSON.stringify(b)); evil.project.id = "evil"; evil.characters = [{ id: "x-evil", name: "x", look: { eyes: "round", brows: "normal", parts: { hat: "ufo" } } }]; evil.items = evil.scenes = evil.works = [];
 const re = m.importProject(evil, {}); no(!re.errors.length || re.counts.characters, "nhân vật dùng linh kiện lạ phải bị cổng chặn khi nhập");
+// hồi quy review v0.11: ngân sách phân cảnh, id trùng trong gói, dự án rỗng không được tạo, gói tự đủ, không xuất "chưa xếp"
+const big = { format: "gen-chibi.project/1", project: { id: "big" }, works: [{ id: "w", title: "w", shots: Array.from({ length: 201 }, (_, i) => ({ id: "c" + i })) }] };
+let eb = null; try { m.importProject(big, {}); } catch (x) { eb = x; } no(!eb || !/200/.test(eb.message), "gói > 200 phân cảnh phải bị chặn");
+let ed = null; try { m.importProject({ format: "gen-chibi.project/1", project: { id: "dup" }, items: [{ id: "a" }, { id: "a" }] }, {}); } catch (x) { ed = x; } no(!ed || !/trùng/.test(ed.message), "id trùng trong gói phải bị chặn");
+no(m.store.listProjects().some(p => p.id === "evil"), "gói mà mọi mục đều hỏng không được tạo dự án rỗng");
+let e0 = null; try { m.exportProject(""); } catch (x) { e0 = x; } no(!e0 || e0.code !== 400, "không xuất gói \"chưa xếp dự án\"");
+m.store.saveProject({ id: "khac", name: "Khác" });
+m.saveWorkChecked({ id: "phim-khac", title: "Phim khác", project: "khac" });
+m.saveShotChecked({ work: "phim-khac", shot: { title: "x", scene: "local.my/mau-van-phong", cast: ["mau-be-na"] } });
+const ek = m.exportProject("khac");
+no(!ek.characters.some(a => a.id === "mau-be-na") || !ek.scenes.some(x => x.id === "mau-van-phong"), "gói phải tự đủ: kéo theo nhân vật / bối cảnh dự án khác mà phân cảnh dùng");
+// sửa ở bàn chỉnh (không gửi project) không được đẩy asset ra khỏi dự án (CNS-002)
+const it0 = m.GC.ITEMS["local.my/mau-tap-ho-so"];
+m.saveItemChecked({ id: it0.id, name: "Tập hồ sơ (sửa)", type: it0.type, rarity: it0.rarity, equip: it0.equip }, "t");
+no(m.GC.ITEMS["local.my/mau-tap-ho-so"].project !== "mau-van-phong-vui", "sửa item làm rơi dự án");
+const sc0 = m.GC.SCENES["local.my/mau-van-phong"];
+m.saveSceneChecked({ id: sc0.id, name: "VP", layers: sc0.layers, deco: sc0.deco }, "t");
+no(m.GC.SCENES["local.my/mau-van-phong"].project !== "mau-van-phong-vui", "sửa cảnh làm rơi dự án");
+const ch0 = m.saveAssetChecked({ pack: "local.my", id: "mau-be-na", name: "Na", look: { eyes: "round", brows: "normal", parts: {} } }, "t", { allowAnyPack: true });
+no(ch0.project !== "mau-van-phong-vui", "sửa nhân vật làm rơi dự án");
+no(m.saveItemChecked({ id: it0.id, name: "x", type: it0.type, rarity: it0.rarity, equip: it0.equip, project: "" }, "t").project !== "", "đặt project rỗng có chủ đích vẫn phải được");
+no(JSON.stringify(m.exportProject("mau-van-phong-vui").requires.packs) !== JSON.stringify(["afi.khung"]), "gói phải khai báo thư viện cần có (requires.packs)");
+let er = null; try { m.importProject({ format: "gen-chibi.project/1", project: { id: "can" }, requires: { packs: ["afi.tamquoc"] } }, {}); } catch (x) { er = x; } no(!er || !/afi.tamquoc/.test(er.message), "gói cần thư viện chưa cài phải báo rõ");
+// khung không bao giờ bị sửa, kể cả đường Studio (allowAnyPack)
+const fr = m.saveAssetChecked({ pack: "afi.khung", id: "ma-no-canh", name: "Sửa khung", look: { eyes: "round", brows: "normal", parts: {} } }, "t", { allowAnyPack: true });
+no(fr.pack !== "local.my" || m.GC.ASSETS["afi.khung/ma-no-canh"].name !== "Ma-nơ-canh", "lưu vào khung phải thành bản sao trong Của tôi, khung giữ nguyên");
 console.log("   ✓ dự án mẫu qua cổng 100% (3 nhân vật · 1 item · 2 cảnh · phim 4 cảnh) · nhập trùng → 409 · lưu đè · xuất lại đủ · gói hỏng / asset lạ bị chặn");
 ' || exit 1
 echo "3) MCP"

@@ -29,15 +29,17 @@
     return at;
   }
   // phân cảnh diễn được khi: có bối cảnh còn trong Thư viện, có diễn viên còn trong Thư viện, có lời thoại
+  // MỘT định nghĩa "sẵn sàng" cho cả bảng tình trạng, sân khấu Studio và phim xuất ra
+  function issues(s) {
+    var miss = [], sc = scene(s), acts = actors(s);
+    if (!s.scene) miss.push('bối cảnh'); else if (!sc) miss.push('bối cảnh đã bị xoá khỏi Thư viện');
+    if (!(s.cast || []).length) miss.push('diễn viên'); else if (acts.length < s.cast.length) miss.push((s.cast.length - acts.length) + ' diễn viên không còn trong Thư viện');
+    if (!s.event) miss.push('lời thoại');
+    if (sc && acts.length > sc.spots.length) miss.push('dàn diễn viên nhiều hơn chỗ đứng');
+    return miss;
+  }
   function readiness(work) {
-    return (work && work.shots || []).map(function (s, i) {
-      var miss = [], sc = scene(s), acts = actors(s);
-      if (!s.scene) miss.push('bối cảnh'); else if (!sc) miss.push('bối cảnh đã bị xoá khỏi Thư viện');
-      if (!(s.cast || []).length) miss.push('diễn viên'); else if (acts.length < s.cast.length) miss.push((s.cast.length - acts.length) + ' diễn viên không còn trong Thư viện');
-      if (!s.event) miss.push('lời thoại');
-      if (sc && acts.length > sc.spots.length) miss.push('dàn diễn viên nhiều hơn chỗ đứng');
-      return { shot: s, index: i, ok: !miss.length, missing: miss };
-    });
+    return (work && work.shots || []).map(function (s, i) { var miss = issues(s); return { shot: s, index: i, ok: !miss.length, missing: miss }; });
   }
   function still(shot) {
     var sc = scene(shot), acts = actors(shot);
@@ -150,7 +152,7 @@
       // diễn chuỗi: thẻ tiêu đề phân cảnh → bối cảnh + diễn viên → lời thoại; bỏ qua phân cảnh chưa sẵn sàng
       play: function (list, title) {
         stop();
-        var r = run, i = 0, ready = (list || []).filter(function (s) { return scene(s) && s.event && actors(s).length; });
+        var r = run, i = 0, ready = (list || []).filter(function (s) { return !issues(s).length; });
         if (!ready.length) { progress('Chưa có phân cảnh nào đủ bối cảnh + diễn viên + lời thoại'); return false; }
         (function next() {
           if (i >= ready.length) {
@@ -167,5 +169,5 @@
     };
   }
 
-  GC.film = { readiness: readiness, still: still, spots: spots, actors: actors, scene: scene, player: player, injectCSS: injectCSS };
+  GC.film = { readiness: readiness, issues: issues, still: still, spots: spots, actors: actors, scene: scene, player: player, injectCSS: injectCSS };
 })(window.GenChibi);

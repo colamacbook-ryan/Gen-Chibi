@@ -76,6 +76,8 @@ function body(req, limit = 1024 * 1024) {
 const STATIC_ROOTS = ['engine', 'kinds', 'studio'];
 function serveStatic(req, res, urlPath) {
   let rel = decodeURIComponent(urlPath).replace(/^\/+/, '');
+  const slash = rel.match(/^(xuong|thu-vien|tao-tac)\/$/);   // /xuong/ → /xuong (đường dẫn tương đối của trang chỉ đúng khi không có / cuối)
+  if (slash) { res.writeHead(301, { Location: '/' + slash[1] }); return res.end(); }
   if (rel === '' || rel === 'index.html' || rel === 'xuong' || rel === 'thu-vien' || rel === 'tao-tac') rel = 'studio/index.html';   // 3 ứng dụng độc lập dùng chung một bộ mã
   if (rel === 'CHANGELOG.md' || rel === 'VERSION') return send(res, 200, fs.readFileSync(path.join(APP, rel)), MIME[path.extname(rel)] || 'text/plain; charset=utf-8');
   const top = rel.split('/')[0];

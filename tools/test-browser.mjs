@@ -103,10 +103,6 @@ try {
     }
     }
     await q.goto('http://localhost:7498/tao-tac'); await q.waitForSelector('.nav-item');
-    await q.click('.nav-item:has-text("Diễn thử một cảnh")'); await q.waitForTimeout(300);
-    await q.selectOption('select[aria-label="Cảnh"]', 'afi.khung/san-khau-chuan'); await q.click('button:text-is("Diễn")'); await q.waitForTimeout(600);
-    const actors = await q.$$('.dscene .actor'), picked = await q.$$('.fxchips button[aria-pressed="true"]');
-    if (!actors.length || actors.length !== picked.length) throw new Error('sân khấu cảnh: ' + actors.length + ' diễn viên / ' + picked.length + ' được chọn');
     // hồi quy: mã nhúng web không để tên do agent đặt thoát khỏi <script>
     await q.evaluate(async () => {
       const a = JSON.parse(JSON.stringify(window.GenChibi.ASSETS['afi.khung/ma-no-canh']));
@@ -155,8 +151,8 @@ try {
     await q.goto('http://localhost:7499/thu-vien'); await q.waitForSelector('.nav-item');
     await q.click('.nav-item:has-text("Dự án chủ đề")'); await q.waitForTimeout(500);
     const card = await q.textContent('.libcard.proj');
-    if (!/Dự án CI/.test(card) || !/1 nhân vật · 1 trang bị · 1 cảnh/.test(card)) throw new Error('trang dự án: ' + card);
-    await q.click('.nav-item.zone-lib:has-text("Trang bị")'); await q.waitForTimeout(400);
+    if (!/Dự án CI/.test(card) || !/1 nhân vật · 1 vật phẩm · 1 bối cảnh/.test(card)) throw new Error('trang dự án: ' + card);
+    await q.click('.nav-item.zone-lib:has-text("Vật phẩm")'); await q.waitForTimeout(400);
     if (!(await q.$('.seg button:has-text("Dự án · Dự án CI")'))) throw new Error('Thư viện không có mục theo dự án');
     if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
     // Giai đoạn ③: Tác phẩm — phân cảnh (bối cảnh + diễn viên + lời thoại) → cảnh thành phẩm → sân khấu final diễn cả chuỗi
@@ -173,13 +169,24 @@ try {
     await q.waitForSelector('.gcp .gcp-actor .gcp-bubble', { timeout: 4000 });
     if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
     console.log('  ✓ Tác phẩm: phân cảnh → cảnh thành phẩm → sân khấu final diễn cả chuỗi (thẻ tiêu đề + diễn viên + thoại)');
+    // Kịch bản lẻ do agent gửi qua MCP (save_event) → "+ Thành phân cảnh" → tác phẩm thêm 1 phân cảnh sẵn sàng
+    await q.evaluate(async () => {
+      const r = await fetch('api/events', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify({ author: 'agent-ci', event: { title: 'Lẻ CI', scene: 'afi.khung/san-khau-chuan', steps: [{ actor: 'ma-no-canh', state: 'vow', spot: 'center', say: 'Từ agent!' }] } }) });
+      if (!r.ok) throw new Error('save_event ' + r.status);
+    });
+    await q.reload(); await q.waitForSelector('button:has-text("+ Thành phân cảnh")');
+    await q.click('button:has-text("+ Thành phân cảnh")'); await q.waitForTimeout(700);
+    if ((await q.$$('.shot')).length !== 3 || !/Sẵn sàng diễn cả 3 phân cảnh/.test(await q.textContent('.readybar'))) throw new Error('kịch bản lẻ chưa thành phân cảnh sẵn sàng');
+    const redir = await fetch('http://localhost:7499/tao-tac/', { redirect: 'manual' });
+    if (redir.status !== 301 || redir.headers.get('location') !== '/tao-tac') throw new Error('/tao-tac/ phải chuyển về /tao-tac (' + redir.status + ')');
+    console.log('  ✓ Kịch bản lẻ (agent qua MCP) → "+ Thành phân cảnh" → sẵn sàng diễn; /tao-tac/ → /tao-tac');
     // Xuất phim HTML độc lập: tải về, mở bằng file:// (KHÔNG có server), bấm xem → phải diễn được thật
     const [dl] = await Promise.all([q.waitForEvent('download'), q.click('button:has-text("Phim (HTML)")')]);
     const filmPath = path.join(home4, 'phim.html'); await dl.saveAs(filmPath);
     const f = await b4.newPage({ viewport: { width: 1280, height: 900 } }); const ferr = [];
     f.on('pageerror', e => ferr.push(e.message)); f.on('requestfailed', r => ferr.push('mạng: ' + r.url()));
     await f.goto('file://' + filmPath); await f.waitForTimeout(500);
-    if ((await f.$$('#chapters li')).length !== 2) throw new Error('phim xuất ra thiếu danh sách phân cảnh');
+    if ((await f.$$('#chapters li')).length !== 3) throw new Error('phim xuất ra thiếu danh sách phân cảnh');
     await f.click('#big'); await f.waitForSelector('.gcp .gcp-title', { timeout: 3000 }); await f.waitForSelector('.gcp-actor .gcp-bubble', { timeout: 5000 });
     if (ferr.length) throw new Error('phim xuất ra lỗi: ' + ferr.slice(0, 3).join(' | '));
     await f.close();
@@ -203,7 +210,7 @@ try {
     await q.goto('http://localhost:7494/'); await q.waitForSelector('.qsteps');
     await q.click('button:has-text("Mở dự án mẫu")'); await q.waitForURL(/\/thu-vien$/, { timeout: 8000 }); await q.waitForSelector('.libcard.proj');
     const card = await q.textContent('.libcard.proj');
-    if (!/Văn phòng vui/.test(card) || !/3 nhân vật · 1 trang bị · 2 cảnh/.test(card)) throw new Error('dự án mẫu: ' + card);
+    if (!/Văn phòng vui/.test(card) || !/3 nhân vật · 1 vật phẩm · 2 bối cảnh/.test(card)) throw new Error('dự án mẫu: ' + card);
     if (await q.$('button:has-text("Dự án mẫu")')) throw new Error('đã có dự án mẫu mà vẫn mời mở lại');
     await q.goto('http://localhost:7494/tao-tac'); await q.waitForSelector('.readybar');
     const rb = await q.textContent('.readybar');

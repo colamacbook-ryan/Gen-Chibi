@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.11.0 — Thành phẩm: xuất phim, storyboard, gói dự án, dự án mẫu
+- **Xuất phim HTML độc lập** (Tạo tác › Tác phẩm › Xuất): một tệp .html chứa bộ phát + nhân vật + bối cảnh + lời thoại; mở bằng trình duyệt bất kỳ, không cần cài, không cần mạng — thẻ tiêu đề từng phân cảnh, bóng thoại có tên người nói, danh sách phân cảnh, toàn màn hình, phím cách. Chỉ nhúng trường cần để dựng hình; bộ phát mang giấy phép *chỉ để xem phim đó*.
+- **Storyboard SVG / PNG**: ảnh từng phân cảnh + mô tả + lời thoại; an toàn với emoji / ký tự điều khiển. Cùng **JSON** của tác phẩm.
+- **Trình diễn dùng chung** `engine/player.js` (`GC.film`): một định nghĩa "sẵn sàng" cho bảng tình trạng, sân khấu Studio và phim xuất ra; ngân sách ≤ 8 diễn viên sống, hết cảnh là huỷ.
+- **Bảng tình trạng tác phẩm**: "Sẵn sàng x/y phân cảnh" + cảnh nào thiếu gì (bối cảnh, diễn viên, lời thoại, quá chỗ đứng) — bấm để tới đúng phân cảnh.
+- **Gói dự án** `gen-chibi.project/1`: xuất (nhân vật, vật phẩm, bối cảnh, linh kiện tự vẽ, tác phẩm — tự đủ, kéo theo asset dự án khác mà phân cảnh dùng, khai báo `requires`) và **nhập** (mọi mục qua đúng cổng kiểm; trùng id → hỏi lưu đè thành phiên bản mới; gói cần thư viện chưa cài / id trùng trong gói / > 200 phân cảnh bị chặn; không tạo dự án rỗng). MCP thêm `export_project`, `import_project` (31 tool).
+- **Dự án mẫu một chạm** "Văn phòng vui": 3 nhân vật, 1 vật phẩm, 2 bối cảnh, phim 4 phân cảnh — người mới xem trọn luồng trong 10 giây.
+- **Gom luồng Tạo tác**: Tác phẩm là lối vào duy nhất; *Kịch bản lẻ* agent gửi qua MCP (`save_event`) hiện ngay trong Tác phẩm → **+ Thành phân cảnh**. Trang "Diễn thử một cảnh" cũ đã gỡ; *Trợ lý AI tạo asset* chuyển về Xưởng; nút "+ mới" ở bàn chỉnh đi qua Tạo asset mới (luôn có dự án).
+- Thuật ngữ thống nhất: **Vật phẩm**, **Bối cảnh** (asset), **Phân cảnh** (một cảnh của phim).
+- **Sửa (review + cortex):** khung không bao giờ bị sửa — lưu vào khung từ Studio thành bản sao trong "Của tôi"; sửa ở bàn chỉnh không còn đẩy asset ra khỏi dự án; nhập gói không còn treo server (một lần đọc đĩa, ghi tác phẩm một lần); `/xuong/`, `/thu-vien/`, `/tao-tac/` chuyển về địa chỉ không có `/`; chế độ tối: chữ trên nút đủ tương phản.
+- Tài liệu: **`docs/HUONG-DAN.md`** (hướng dẫn người dùng), README định vị lại + đủ 31 tool, QUY-TRINH-LINH-KIEN mục 8 theo 3 ứng dụng.
+- Test mới: dự án mẫu qua cổng 100%, gói hỏng / trùng / thiếu thư viện, khung bất biến, giữ dự án khi sửa; trình duyệt: phim xuất ra mở bằng `file://` (không server) và diễn được, storyboard, dự án mẫu một chạm, kịch bản lẻ → phân cảnh.
+
 ## v0.10.0 — Ba ứng dụng độc lập · luồng làm việc liền mạch · Gen Labs
 - **Tách 3 lớp thành 3 ứng dụng riêng** (yêu cầu của Ryan): `/xuong`, `/thu-vien`, `/tao-tac` — mỗi ứng dụng một địa chỉ, chỉ có menu của lớp mình (+ Hệ thống), màu riêng phủ toàn giao diện, tự nhớ trang đang mở. Bấm sang việc của lớp khác thì mở đúng ứng dụng đó. Bản xem thử không server dùng `?app=…`.
 - **Màn chọn khu** (`/`): 3 thẻ ứng dụng + **Bắt đầu nhanh** 3 bước (tạo dự án → tạo asset từ khung → làm phim), tự đánh dấu bước đã xong và đưa nút cho bước kế tiếp.

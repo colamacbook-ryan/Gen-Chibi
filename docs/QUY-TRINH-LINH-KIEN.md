@@ -41,7 +41,7 @@ vị trí mắt/mày/miệng ở 45° (`GC.Q45`), hiệu ứng bám mặt (`fx.f
 1. **Chọn bộ phận + lớp**: linh kiện thuộc slot nào (`hat`, `outfit`…), trả về lớp nào. Không tạo lớp mới nếu lớp có sẵn đủ dùng.
 2. **Vẽ chính diện** theo neo và bảng màu; khai báo `params` nếu có biến thể (độ cao mũ, độ dài râu…).
 3. **Vẽ 45°** bằng công cụ ở mục 3 (ưu tiên `face45` / `body45`; vẽ tay khi linh kiện có dáng riêng).
-4. **Soát trên ma-nơ-canh**: Studio › Thư viện linh kiện › bấm linh kiện → Bàn soát (4 góc nhìn × đứng, kinh ngạc, chạy, ngồi). Không soát trên một nhân vật cụ thể.
+4. **Soát trên ma-nơ-canh**: Studio › Thư viện linh kiện › bấm linh kiện → Bàn soát (5 góc: chính diện · 45° · 90° · 135° · sau lưng × đứng, kinh ngạc, chạy, ngồi). Không soát trên một nhân vật cụ thể.
 5. **Cổng kiểm + test**: `bash tools/test.sh` (license, tham số, dựng đủ 18 biểu cảm × 32 hoạt động × 2 hướng × 10 góc nhìn, phủ đủ 45°; linh kiện khung đủ 8 hướng).
 6. **Phát hành**: đổi `VERSION` + `CHANGELOG.md`, đẩy `main` — CI tạo Release, các bản cài tự cập nhật.
 
@@ -55,7 +55,7 @@ Ba lối vào, **một** cổng: không có đường nào ghi thẳng vào kho.
 
 | Ai tạo | Đi qua | Cổng kiểm |
 |---|---|---|
-| Agent ngoài (Claude Code, Claude web/desktop, Cursor…) | MCP — 15 tool | `saveAssetChecked` / `savePartChecked` |
+| Agent ngoài (Claude Code, Claude web/desktop, Cursor…) | MCP — 31 tool | `saveAssetChecked` / `savePartChecked` |
 | AI trong chatroom Studio (LLM API: OpenRouter, DeepSeek, MiniMax…) | Vòng function-calling trên **đúng bộ tool MCP** (trừ tool hệ thống), cùng chỉ dẫn MCP | như trên |
 | Người dùng Studio / gọi API HTTP | `PUT /api/assets`, `POST /api/parts` → cùng hai hàm | như trên |
 
@@ -86,14 +86,13 @@ Một loại asset mới không phải "một bộ vẽ mới" mà là **một c
 - Thứ tự vẽ: trời → (sao khi đêm) → cảnh xa → (sương) → công trình → mặt đất → đạo cụ sau → hàng sau → đạo cụ giữa → hàng trước → đạo cụ trước → tiền cảnh → thời tiết → màu giờ → (đom đóm).
 - Ngân sách (L-42): cảnh là tầng ảnh (SVG tĩnh); diễn viên ≤ 8, đạo cụ ≤ 10, hạt thời tiết ≤ 60; mưa/tuyết sinh bằng số giả ngẫu nhiên có hạt giống → cùng cảnh luôn ra cùng ảnh (cache ổn định).
 
-## 8. Ba lớp: Xưởng · Thư viện · Tạo tác — mỗi lớp một chủ, một nhịp
+## 8. Ba lớp — ba ứng dụng: Xưởng · Thư viện · Tạo tác (đặc tả: `docs/spec/DAC-TA-3-GIAI-DOAN.md`)
 
-| | **Xưởng** (khuôn) | **Thư viện** (hàng mẫu) | **Tạo tác** (của tôi) |
+| | **Xưởng** `/xuong` | **Thư viện** `/thu-vien` | **Tạo tác** `/tao-tac` |
 |---|---|---|---|
-| Chủ | Gen Labs | Gen Labs tuyển chọn | người dùng / agent |
-| Chứa | khung xương, luật, linh kiện, phông, khung tư thế & biểu cảm, cổng kiểm | các bộ chủ đề đã duyệt: nhân vật, trang bị, cảnh | nhân vật, trang bị, cảnh, kịch bản của riêng mình; Đạo diễn AI, Trợ lý AI |
-| Việc | làm khuôn, soát, kiểm | xem biến thể và **lấy về**: ảnh (SVG, PNG, avatar, sprite, thẻ, cảnh) và mã (tham chiếu, MCP, nhúng web, JSON) | phối, sửa, lưu qua cổng ghi duy nhất, xuất thành phẩm |
-| Nhịp thay đổi | chậm (nền móng) | vừa (thêm theo bộ) | liên tục |
+| Là gì | bộ khung chuẩn (không chủ đề) + nơi **tạo asset từ khung** | asset đã qua cổng kiểm, **xếp theo dự án chủ đề** | **Tác phẩm**: làm phim / truyện với AI đạo diễn |
+| Chứa | khung xương, luật, linh kiện, phông, khung tư thế & biểu cảm, cổng kiểm; Tạo asset mới, bàn chỉnh, Trợ lý AI tạo asset | dự án chủ đề → nhân vật, vật phẩm, bối cảnh | kịch bản, phân cảnh, cảnh thành phẩm, sân khấu final, kịch bản lẻ từ agent |
+| Việc | chọn khung → tham số → soát → cổng → lưu vào dự án | xem, **lấy về** (ảnh, sprite 8 hướng, mã), tải / nhập **gói dự án** | chat AI đạo diễn, diễn cả chuỗi, **xuất phim HTML**, storyboard |
 
-Dòng chảy một chiều: **Xưởng → (duyệt, xuất bản) → Thư viện → (lấy về phối) → Tạo tác → (xuất) thành phẩm**; tạo tác tốt được Gen Labs duyệt đưa lên Thư viện.
-Asset chính thức không sửa tại chỗ: "Phối bản của tôi" tạo bản riêng trong "Của tôi". Hiện cả ba lớp là ba khu trong cùng Studio (phân theo vai trò); khi có khách thật, Tạo tác mới tách thành không gian riêng từng người.
+Dòng chảy một chiều: **Xưởng → Thư viện → Tạo tác → thành phẩm**. Khung không bao giờ bị sửa: lưu vào khung (kể cả từ Studio) thành bản sao trong "Của tôi".
+Asset người dùng hoặc AI tạo lưu dạng **nháp trong dự án** và dùng được ngay — không có bước duyệt (Ryan, 2026-10-18). AI đạo diễn thiếu nhân vật / bối cảnh thì tự vào Xưởng tạo (đúng dự án, qua cổng kiểm).
