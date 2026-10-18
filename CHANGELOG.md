@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.5.2 — Hỗ trợ repo private: token cập nhật
+- **`GC_GITHUB_TOKEN`** (fine-grained, chỉ Contents: Read-only): bộ cập nhật gọi API GitHub có `Authorization: Bearer`, tải gói và SHA256SUMS qua URL API của asset (`Accept: application/octet-stream`). Token **chỉ gửi tới đúng host đầu tiên** — khi GitHub chuyển hướng sang host lưu trữ, token bị bỏ. Không token thì hành vi cũ giữ nguyên.
+- Repo private mà thiếu / sai token → báo lỗi rõ (nêu cách sửa), vẫn chạy bản cũ; không đoán qua trang công khai.
+- `install.sh` nhận `GC_GITHUB_TOKEN`: đọc release qua API, chọn asset theo tên, tải qua URL API; token đi bằng tệp cấu hình curl (không nằm trên dòng lệnh), ghi vào `.env` (thêm dòng nếu thiếu, giữ nguyên dòng khác). Không token mà repo private → hướng dẫn tạo token.
+- Lệnh mới `genchibi token [giá-trị|--clear]`: nhập ẩn (hoặc stdin) để token không vào lịch sử shell, ghi `.env`, khởi động lại. `docker-compose.yml` truyền `GC_GITHUB_TOKEN` vào container.
+- Rào mới `tools/test-token.js` (GitHub giả: 404 khi thiếu token, asset redirect sang host khác — host đích mà nhận Authorization là trượt; token sai; installer; `genchibi token`; token không lọt vào trạng thái/lịch sử/output).
+- README: mục "Repo private: token cập nhật".
+
 ## v0.5.1 — Vá theo review v0.5.0 (cảnh)
 - Review: không có blocker; không chèn được script/markup vào SVG cảnh, không prototype pollution, không ghi đè thư viện chính thức, không path traversal.
 - **Phông "Trời quang" thiếu tham số màu ở hai đám mây** → 6 cảnh mất mây và SVG chứa `NaN`/`undefined`. Đã sửa; **rào mới**: test quét mọi cảnh × giờ × thời tiết và mọi phông × giờ, cấm `NaN`, `undefined`, `null`, `[object`, `Infinity`.

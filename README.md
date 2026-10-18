@@ -25,6 +25,7 @@ genchibi update            # kiểm tra và cập nhật ngay
 genchibi logs
 genchibi backup | restore <tệp>
 genchibi mcp               # cầu MCP stdio cho agent
+genchibi token             # đặt token GitHub (repo private), nhập ẩn
 genchibi open | uninstall
 ```
 
@@ -95,6 +96,21 @@ launcher.js   chạy phiên bản hiện tại, canh sức khoẻ sau cập nh�
 install.sh    cài một lệnh · cli/genchibi
 tools/        test.sh (CI), test-update.sh, package.sh
 ```
+
+## Repo private: token cập nhật
+
+Khi repo phát hành là private, mọi request không token đều bị GitHub trả 404 — cả cài mới lẫn tự cập nhật cần một token chỉ-đọc.
+
+1. GitHub › Settings › Developer settings › Fine-grained personal access tokens › Generate new token.
+2. **Repository access**: *Only select repositories* → chỉ `gen-chibi`. **Permissions**: *Contents* = **Read-only** (không cần quyền nào khác).
+3. Cài mới (máy chưa có gen-chibi):
+   ```bash
+   curl -fsSL -H "Authorization: Bearer $GC_GITHUB_TOKEN" https://raw.githubusercontent.com/colamacbook-ryan/Gen-Chibi/main/install.sh | GC_GITHUB_TOKEN=$GC_GITHUB_TOKEN bash
+   ```
+   Installer ghi token vào `.env` (chmod 600), không in ra màn hình.
+4. Máy đã cài: chạy `genchibi token` (dán token, ẩn khi gõ) — lệnh ghi `GC_GITHUB_TOKEN` vào `.env` rồi tự khởi động lại. Gỡ token: `genchibi token --clear`.
+
+Token chỉ gửi tới `api.github.com`; khi GitHub chuyển hướng tải file sang host lưu trữ, token bị bỏ. Token không xuất hiện trong `/api/info`, trạng thái cập nhật, log hay MCP.
 
 ## Phát hành
 

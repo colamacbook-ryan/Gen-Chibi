@@ -104,6 +104,23 @@ set_env() { # set_env KHOÁ GIÁ_TRỊ — sửa hoặc thêm dòng trong .env
   export "$k=$v"
 }
 rand_hex() { openssl rand -hex "$1" 2>/dev/null || node -e "console.log(require('crypto').randomBytes($1).toString('hex'))"; }
+token_cmd() {
+  # genchibi token [giá trị|--clear]: đặt GC_GITHUB_TOKEN (repo private). Không truyền giá trị → hỏi ẩn / đọc stdin,
+  # để token không nằm trong lịch sử shell hay danh sách tiến trình.
+  local t="${1:-}" tmp
+  if [ "$t" = "--clear" ]; then t=""
+  elif [ -z "$t" ]; then
+    if [ -t 0 ]; then read -r -s -p "Dán GitHub token (Contents: Read-only, ẩn khi gõ): " t; echo; else read -r t || true; fi
+    [ -n "$t" ] || { echo "Không có token — không đổi gì." >&2; exit 1; }
+  fi
+  case "$t" in *[!A-Za-z0-9_.-]*) echo "Token có ký tự lạ — chép lại (chỉ gồm chữ, số, _ . -)." >&2; exit 1 ;; esac
+  touch .env; chmod 600 .env; tmp="$(mktemp)"
+  K=GC_GITHUB_TOKEN V="$t" awk 'BEGIN { k = ENVIRON["K"]; v = ENVIRON["V"]; d = 0 }
+    index($0, k "=") == 1 { print k "=" v; d = 1; next } { print } END { if (!d) print k "=" v }' .env > "$tmp" && cat "$tmp" > .env; rm -f "$tmp"
+  export GC_GITHUB_TOKEN="$t"
+  if [ -n "$t" ]; then echo "Đã ghi GC_GITHUB_TOKEN vào .env; khởi động lại để áp dụng…"; else echo "Đã xoá GC_GITHUB_TOKEN; khởi động lại…"; fi
+  if [ "$MODE" = docker ]; then start; else stop; start; fi
+}
 allow_host() { case ",${GC_ALLOWED_HOSTS:-}," in *",$1,"*) ;; *) set_env GC_ALLOWED_HOSTS "${GC_ALLOWED_HOSTS:+$GC_ALLOWED_HOSTS,}$1" ;; esac; }
 ensure_keys() {
   local fresh=""
@@ -305,6 +322,7 @@ case "${1:-help}" in
   logs) logs ;; backup) backup ;; restore) shift; restore "${1:-}" ;; uninstall) uninstall ;;
   mcp) mcp ;; open) open_ui ;; version) status ;;
   expose) shift; expose "$@" ;; link) shift; link_cmd "$@" ;;
+  token|github-token) shift; token_cmd "${1:-}" ;;
   *) cat <<EOF
 genchibi — quản lý gen-chibi ($HOME_DIR, chế độ $MODE)
   start | stop | restart | status   chạy, dừng, xem trạng thái
@@ -314,6 +332,7 @@ genchibi — quản lý gen-chibi ($HOME_DIR, chế độ $MODE)
   mcp                               cầu MCP (stdio) cho agent: claude mcp add gen-chibi -- genchibi mcp
   expose <tên-miền> | --quick       mở MCP ra Internet qua Cloudflare Tunnel, in link nối agent (--off, --rotate)
   link [--check]                    in link MCP + lệnh nối agent
+  token [giá-trị|--clear]           đặt token GitHub (repo private) cho tự cập nhật; bỏ trống = nhập ẩn
   open                              mở Studio trong trình duyệt
   uninstall                         gỡ (hỏi giữ hay xoá dữ liệu)
 EOF

@@ -27,13 +27,19 @@ function newer(a, b) { // a > b ?
   return x[3] > y[3];
 }
 
-function get(url, { json = false, maxBytes = 200 * 1024 * 1024, redirects = 5 } = {}) {
+// token (repo private): chỉ gửi tới đúng host của URL đầu tiên — GitHub chuyển hướng file sang host lưu trữ có chữ ký,
+// mang token theo sang đó vừa lộ token vừa bị từ chối. accept: 'json' | 'octet' (tải asset qua API) | mặc định.
+function get(url, { json = false, maxBytes = 200 * 1024 * 1024, redirects = 5, token = '', octet = false } = {}) {
   return new Promise((resolve, reject) => {
     const mod = url.startsWith('https:') ? https : http;
-    const req = mod.get(url, { agent: agentFor(url), headers: { 'User-Agent': 'gen-chibi-updater', Accept: json ? 'application/vnd.github+json' : '*/*' }, timeout: 30000 }, res => {
+    const headers = { 'User-Agent': 'gen-chibi-updater', Accept: json ? 'application/vnd.github+json' : octet ? 'application/octet-stream' : '*/*' };
+    if (token) headers.Authorization = 'Bearer ' + token;
+    const req = mod.get(url, { agent: agentFor(url), headers, timeout: 30000 }, res => {
       if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location && redirects > 0) {
         res.resume();
-        return resolve(get(new URL(res.headers.location, url).toString(), { json, maxBytes, redirects: redirects - 1 }));
+        const next = new URL(res.headers.location, url);
+        const sameHost = next.host === new URL(url).host;
+        return resolve(get(next.toString(), { json, maxBytes, redirects: redirects - 1, token: sameHost ? token : '', octet: sameHost && octet }));
       }
       if (res.statusCode !== 200) { res.resume(); return reject(new Error('HTTP ' + res.statusCode + ' khi tải ' + url)); }
       const chunks = []; let n = 0;
@@ -63,11 +69,12 @@ function latestTagByRedirect(url) {
 }
 
 class Updater {
-  constructor({ home, version, repo, feedUrl, log }) {
+  // token: GC_GITHUB_TOKEN (fine-grained, chỉ quyền đọc Contents của repo) — cần khi repo phát hành là private
+  constructor({ home, version, repo, feedUrl, log, token }) {
     this.home = home;
     this.version = version;
     this.repo = repo;
-    this.repo = repo;
+    this.token = token || '';
     this.apiFeed = !feedUrl;
     this.feedUrl = feedUrl || `https://api.github.com/repos/${repo}/releases/latest`;
     this.log = log || console.log;
@@ -104,9 +111,11 @@ class Updater {
   // API GitHub giới hạn 60 lượt/giờ cho mỗi IP (mạng dùng chung IP hay hết lượt): khi bị từ chối thì đọc tag
   // mới nhất từ chuyển hướng của trang /releases/latest và dựng link tải theo quy ước tên gói. Checksum vẫn kiểm như cũ.
   async feed() {
-    try { return await get(this.feedUrl, { json: true, maxBytes: 2 * 1024 * 1024 }); }
+    try { return await get(this.feedUrl, { json: true, maxBytes: 2 * 1024 * 1024, token: this.token }); }
     catch (e) {
       if (!this.apiFeed) throw e;
+      // repo private: trang công khai cũng 404 — báo rõ thay vì đoán
+      if (this.token || /HTTP 404/.test(e.message)) throw new Error(this.token ? 'GitHub từ chối token (' + e.message + ') — kiểm GC_GITHUB_TOKEN còn hạn và có quyền đọc repo ' + this.repo : 'Không thấy bản phát hành (' + e.message + '). Repo private: thêm GC_GITHUB_TOKEN vào .env.');
       const tag = await latestTagByRedirect('https://github.com/' + this.repo + '/releases/latest');
       const base = 'https://github.com/' + this.repo + '/releases/download/' + tag + '/';
       return { tag_name: tag, body: 'Ghi chú phát hành: https://github.com/' + this.repo + '/releases/tag/' + tag, published_at: null,
@@ -125,7 +134,9 @@ class Updater {
       lastCheck: new Date().toISOString(), skipped: this.skipped(tag),
       available: newer(tag, this.version) && !!tar && !!sums && !this.skipped(tag),
       newer: newer(tag, this.version) && !!tar && !!sums,
-      tarUrl: tar && tar.browser_download_url, tarName: tar && tar.name, sumsUrl: sums && sums.browser_download_url, error: null
+      // có token: tải qua URL API của asset (repo private không mở browser_download_url cho người lạ)
+      tarUrl: tar && (this.token && tar.url ? tar.url : tar.browser_download_url), tarName: tar && tar.name,
+      sumsUrl: sums && (this.token && sums.url ? sums.url : sums.browser_download_url), viaApi: !!(this.token && tar && tar.url), error: null
     });
     this.write(this.stateFile, this.state);
     return this.status();
@@ -142,7 +153,8 @@ class Updater {
     const tag = this.state.latest;
     const relDir = path.join(this.home, 'releases', tag);
     try {
-      const [tarBuf, sumsBuf] = await Promise.all([get(this.state.tarUrl), get(this.state.sumsUrl, { maxBytes: 1024 * 1024 })]);
+      const auth = this.state.viaApi ? { token: this.token, octet: true } : {};
+      const [tarBuf, sumsBuf] = await Promise.all([get(this.state.tarUrl, auth), get(this.state.sumsUrl, Object.assign({ maxBytes: 1024 * 1024 }, auth))]);
       const want = sumsBuf.toString('utf8').split('\n').map(l => l.trim().split(/\s+/)).find(p => p[1] && p[1].replace(/^\*/, '') === this.state.tarName);
       if (!want) throw new Error('SHA256SUMS không có dòng cho ' + this.state.tarName);
       const got = crypto.createHash('sha256').update(tarBuf).digest('hex');

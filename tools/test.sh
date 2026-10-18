@@ -299,3 +299,5 @@ bash tools/test-auth.sh || exit 1
 
 echo "5) tự cập nhật"
 bash tools/test-update.sh
+echo "4b) token GitHub (repo private)"
+node tools/test-token.js

@@ -22,6 +22,7 @@ services:
       GC_MCP_KEY: ${GC_MCP_KEY:-}
       GC_PUBLIC_URL: ${GC_PUBLIC_URL:-}
       GC_REPO: ${GC_REPO:-colamacbook-ryan/Gen-Chibi}
+      GC_GITHUB_TOKEN: ${GC_GITHUB_TOKEN:-}
       # mạng công ty có proxy: đặt trong .env
       HTTPS_PROXY: ${HTTPS_PROXY:-}
       NO_PROXY: ${NO_PROXY:-}

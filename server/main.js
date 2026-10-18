@@ -45,7 +45,7 @@ function settings() { return Object.assign({ autoUpdate: process.env.GC_AUTO_UPD
 
 const store = new Store(DATA);
 const engine = loadEngine(APP);
-const updater = new Updater({ home: HOME, version: VERSION, repo: REPO, feedUrl: process.env.GC_FEED_URL, log });
+const updater = new Updater({ home: HOME, version: VERSION, repo: REPO, feedUrl: process.env.GC_FEED_URL, log, token: process.env.GC_GITHUB_TOKEN || '' });
 const ai = new AI({ dataDir: DATA, secrets: new Secrets(DATA), engine });
 const mcp = new MCP({ engine, store, version: VERSION, system: { updater, restartSoon } });
 

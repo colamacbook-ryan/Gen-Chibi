@@ -3,6 +3,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/colamacbook-ryan/Gen-Chibi/main/install.sh | bash
 # Tuỳ chọn: --dir <thư mục> (mặc định ~/gen-chibi) · --port <cổng> (7480) · --native (chạy bằng Node, không Docker)
 #           --version vX.Y.Z (mặc định bản mới nhất)
+# Repo private: đặt GC_GITHUB_TOKEN=<fine-grained token, Contents: Read-only> (xem README). Token được ghi vào .env, không in ra.
 # © 2026 Afi Labs — All rights reserved.
 set -euo pipefail
 
@@ -32,6 +33,8 @@ OS="$(uname -s)"; ARCH="$(uname -m)"
 case "$OS" in Linux|Darwin) ;; *) die "Chưa hỗ trợ hệ điều hành $OS (Linux, macOS)." ;; esac
 command -v curl >/dev/null || die "Cần curl."
 command -v tar >/dev/null || die "Cần tar."
+TOKEN="${GC_GITHUB_TOKEN:-}"
+case "$TOKEN" in *[!A-Za-z0-9_.-]*) die "GC_GITHUB_TOKEN có ký tự lạ — chép lại token (chỉ gồm chữ, số, _ . -)." ;; esac
 sha256() { if command -v sha256sum >/dev/null; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
 
 printf "%sgen-chibi%s · cài vào %s · %s %s\n" "$B" "$N" "$DIR" "$OS" "$ARCH"
@@ -62,23 +65,47 @@ if [ -n "${GC_TARBALL:-}" ]; then
 else
   step "Tìm bản phát hành ${WANT:-mới nhất}…"
   API="${GC_GITHUB_API:-https://api.github.com}/repos/$REPO/releases/${WANT:+tags/}${WANT:-latest}"
-  META="$(curl -fsSL -H 'Accept: application/vnd.github+json' "$API" 2>/dev/null)" || META=""
-  if [ -n "$META" ]; then
-    TARURL="$(printf '%s' "$META" | grep -o '"browser_download_url": *"[^"]*\.tar\.gz"' | head -1 | sed 's/.*"\(https[^"]*\)"/\1/')"
-    SUMURL="$(printf '%s' "$META" | grep -o '"browser_download_url": *"[^"]*SHA256SUMS"' | head -1 | sed 's/.*"\(https[^"]*\)"/\1/')"
+  PRIVATE_HELP="Không đọc được bản phát hành của $REPO. Nếu repo là private: tạo fine-grained token (GitHub › Settings › Developer settings › Fine-grained tokens; Repository access: chỉ repo này; Permissions: Contents = Read-only) rồi chạy lại với GC_GITHUB_TOKEN=<token> (xem README, mục 'Repo private')."
+  if [ -n "$TOKEN" ]; then
+    # token đi qua tệp cấu hình curl (chmod 600), không nằm trên dòng lệnh nên không lộ trong ps.
+    # curl không chuyển header Authorization tự đặt sang host khác khi bị chuyển hướng (GitHub chuyển file sang host lưu trữ có chữ ký).
+    ( umask 077; printf 'header = "Authorization: Bearer %s"\n' "$TOKEN" > "$TMP/auth.curl" )
+    acurl() { curl -K "$TMP/auth.curl" "$@"; }
+    META="$(acurl -fsSL -H 'Accept: application/vnd.github+json' "$API" 2>/dev/null)" || die "GitHub từ chối token hoặc không thấy bản phát hành của $REPO — kiểm token còn hạn, có Repository access tới repo này và Contents: Read-only."
+    # asset trong repo private chỉ tải được qua URL API (.../releases/assets/<id>); đọc tên từng asset để chọn đúng gói
+    TARURL=""; SUMURL=""
+    for AU in $(printf '%s' "$META" | grep -o '"url": *"[^"]*/releases/assets/[0-9]*"' | sed 's/.*"\(http[^"]*\)"/\1/'); do
+      AN="$(acurl -fsSL -H 'Accept: application/vnd.github+json' "$AU" 2>/dev/null | grep -o '"name": *"[^"]*"' | head -1 | sed 's/.*: *"\(.*\)"/\1/')" || AN=""
+      case "$AN" in
+        gen-chibi-v[0-9]*.tar.gz) [ -n "$TARURL" ] || { TARURL="$AU"; TARNAME="$AN"; } ;;
+        SHA256SUMS) SUMURL="$AU" ;;
+      esac
+    done
   else
-    # API GitHub giới hạn 60 lượt/giờ cho mỗi IP (mạng dùng chung IP hay hết lượt) → hỏi thẳng trang phát hành
-    printf "%s!%s GitHub API từ chối (thường do hết lượt gọi của IP) — tải trực tiếp từ trang phát hành\n" "$Y" "$N"
-    TAG="${WANT:-$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest" | sed -n 's#.*/releases/tag/\(v[^/?]*\).*#\1#p')}"
-    [ -n "$TAG" ] || die "Không đọc được bản phát hành từ GitHub."
-    TARURL="https://github.com/$REPO/releases/download/$TAG/gen-chibi-$TAG.tar.gz"
-    SUMURL="https://github.com/$REPO/releases/download/$TAG/SHA256SUMS"
+    META="$(curl -fsSL -H 'Accept: application/vnd.github+json' "$API" 2>/dev/null)" || META=""
+    if [ -n "$META" ]; then
+      TARURL="$(printf '%s' "$META" | grep -o '"browser_download_url": *"[^"]*\.tar\.gz"' | head -1 | sed 's/.*"\(https[^"]*\)"/\1/')"
+      SUMURL="$(printf '%s' "$META" | grep -o '"browser_download_url": *"[^"]*SHA256SUMS"' | head -1 | sed 's/.*"\(https[^"]*\)"/\1/')"
+    else
+      # API GitHub giới hạn 60 lượt/giờ cho mỗi IP (mạng dùng chung IP hay hết lượt) → hỏi thẳng trang phát hành
+      printf "%s!%s GitHub API từ chối (thường do hết lượt gọi của IP) — tải trực tiếp từ trang phát hành\n" "$Y" "$N"
+      TAG="${WANT:-$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest" 2>/dev/null | sed -n 's#.*/releases/tag/\(v[^/?]*\).*#\1#p' || true)}"
+      [ -n "$TAG" ] || die "$PRIVATE_HELP"
+      TARURL="https://github.com/$REPO/releases/download/$TAG/gen-chibi-$TAG.tar.gz"
+      SUMURL="https://github.com/$REPO/releases/download/$TAG/SHA256SUMS"
+      curl -fsSIL -o /dev/null "$SUMURL" 2>/dev/null || die "$PRIVATE_HELP"
+    fi
+    TARNAME="$(basename "$TARURL")"
   fi
   [ -n "$TARURL" ] && [ -n "$SUMURL" ] || die "Bản phát hành thiếu gói hoặc SHA256SUMS."
-  TARNAME="$(basename "$TARURL")"
   step "Tải $TARNAME"
-  curl -fL --progress-bar -o "$TMP/$TARNAME" "$TARURL"
-  curl -fsSL -o "$TMP/SHA256SUMS" "$SUMURL"
+  if [ -n "$TOKEN" ]; then
+    acurl -fL --progress-bar -H 'Accept: application/octet-stream' -o "$TMP/$TARNAME" "$TARURL"
+    acurl -fsSL -H 'Accept: application/octet-stream' -o "$TMP/SHA256SUMS" "$SUMURL"
+  else
+    curl -fL --progress-bar -o "$TMP/$TARNAME" "$TARURL"
+    curl -fsSL -o "$TMP/SHA256SUMS" "$SUMURL"
+  fi
 fi
 WANTSUM="$(grep " \*\?$TARNAME\$" "$TMP/SHA256SUMS" | cut -d' ' -f1)"
 [ -n "$WANTSUM" ] && [ "$(sha256 "$TMP/$TARNAME")" = "$WANTSUM" ] || die "Sai checksum, dừng cài để an toàn."
@@ -93,6 +120,13 @@ cp "$DIR/current/launcher.js" "$DIR/launcher.js"
 cp "$DIR/current/docker-compose.yml" "$DIR/docker-compose.yml"
 ok "Đã giải nén $VER"
 
+# đặt/ thêm một dòng KHOÁ=giá trị trong .env mà không đưa giá trị lên dòng lệnh (awk đọc từ môi trường)
+env_put() { # env_put KHOÁ BIẾN_CHỨA_GIÁ_TRỊ
+  local tmp; tmp="$(mktemp)"
+  K="$1" V="${!2}" awk 'BEGIN { k = ENVIRON["K"]; v = ENVIRON["V"]; d = 0 }
+    index($0, k "=") == 1 { print k "=" v; d = 1; next } { print } END { if (!d) print k "=" v }' "$DIR/.env" > "$tmp" && cat "$tmp" > "$DIR/.env"; rm -f "$tmp"
+}
+
 # ---------- .env (sinh một lần; không có bí mật mặc định)
 if [ ! -f "$DIR/.env" ]; then
   KEY="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
@@ -106,6 +140,8 @@ GC_AUTO_UPDATE=1
 GC_UID=$(id -u)
 GC_GID=$(id -g)
 GC_REPO=$REPO
+# Repo private: token fine-grained chỉ quyền đọc (Contents: Read-only) để tự cập nhật
+GC_GITHUB_TOKEN=$TOKEN
 # Mở cho máy khác trong mạng: đặt GC_BIND=0.0.0.0, GC_ALLOWED_HOSTS=<tên máy> và GC_API_TOKEN=<chuỗi ngẫu nhiên dài>
 GC_API_TOKEN=
 GC_ALLOWED_HOSTS=
@@ -125,6 +161,7 @@ EOF
   ok "Đã tạo .env (khoá mã hoá riêng cho máy này)"
 else
   sed -i.bak "s/^GC_MODE=.*/GC_MODE=$MODE/" "$DIR/.env" && rm -f "$DIR/.env.bak"
+  [ -z "$TOKEN" ] || { env_put GC_GITHUB_TOKEN TOKEN; chmod 600 "$DIR/.env"; ok "Đã ghi GC_GITHUB_TOKEN vào .env"; }
   ok "Giữ .env cũ"
 fi
 
