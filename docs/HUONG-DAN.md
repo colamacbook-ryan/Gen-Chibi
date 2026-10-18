@@ -10,6 +10,8 @@
 4. Mở **Tạo tác** → tác phẩm *Ngày đầu đi làm* (4 phân cảnh) → bấm **▶ Diễn toàn bộ**.
 5. Bấm **Phim (HTML)** để tải phim về — mở tệp bằng trình duyệt bất kỳ là xem, gửi cho người xem.
 
+Muốn thấy một **bộ chủ đề trọn vẹn** (thứ gen-chibi sinh ra để bán): bấm **🏯 Mở bộ chủ đề mẫu "Tam Quốc"** — 7 tướng (mặt nạ kinh kịch, binh khí, 8 hướng), 13 trang bị, 8 bối cảnh và phim *Từ vườn đào tới Xích Bích* (5 phân cảnh). Mọi asset đã **Phát hành**: vào Thư viện › Dự án chủ đề › Tam Quốc › **Gói bán** để xem một gói bán trông thế nào.
+
 ## Ba khu — ba ứng dụng riêng
 
 | Khu | Địa chỉ | Làm gì |

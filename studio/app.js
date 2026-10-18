@@ -262,8 +262,10 @@
           h('div', null, h('b', { text: s.t }), h('span', { class: 'note', text: s.d })),
           h('button', { class: 'btn sm' + (s === next ? ' primary' : ''), onclick: function () { go(s.go); } }, (s.done ? 'Mở ' : 'Làm ngay ở ') + s.app + ' ›')));
       });
-      qs.appendChild(h('div', { class: 'pad stack' }, ol, Store.mode === 'server' && !Projects.all().some(function (p) { return p.id === DEMO_ID; }) ? h('div', { class: 'row' },
-        h('button', { class: 'btn', onclick: importDemo }, '✨ Mở dự án mẫu "Văn phòng vui"'), h('span', { class: 'note', text: '3 nhân vật · 2 bối cảnh · phim 4 phân cảnh — xem trọn luồng trong 10 giây, sửa và xuất thử thoải mái.' })) : null));
+      var demos = Store.mode === 'server' ? samplesLeft() : [];
+      qs.appendChild(h('div', { class: 'pad stack' }, ol, demos.map(function (S) {
+        return h('div', { class: 'row' }, h('button', { class: 'btn', onclick: function () { importDemo(S); } }, S.button), h('span', { class: 'note', text: S.note }));
+      })));
     }
     paintQuick(0);
     if (Store.mode === 'server') Store.api('GET', 'api/works').then(function (l) { paintQuick(l.length); }).catch(function () {});
@@ -1780,7 +1782,7 @@
     var sel = r.project != null ? r.project : null;
     actions(h('span', { class: 'note', text: 'Asset tạo từ bộ khung chuẩn được xếp theo dự án chủ đề.' }),
       Store.mode === 'server' ? h('button', { class: 'btn', title: 'Nhập tệp gói dự án (.json) — mọi thứ đi qua cổng kiểm', onclick: pickBundle }, 'Nhập gói…') : null,
-      Store.mode === 'server' && !Projects.all().some(function (p) { return p.id === DEMO_ID; }) ? h('button', { class: 'btn', onclick: importDemo }, '✨ Dự án mẫu') : null,
+      Store.mode === 'server' ? samplesLeft().map(function (S) { return h('button', { class: 'btn', title: S.note, onclick: function () { importDemo(S); } }, S.short); }) : null,
       h('button', { class: 'btn primary', onclick: function () { go({ page: 'create', project: sel || '' }); } }, '+ Tạo asset mới ›'));
     var listBox = h('div', { class: 'stack' }), detail = h('div', { class: 'stack' });
     var nName = h('input', { type: 'text', placeholder: 'Tên dự án (vd: Tam Quốc)', maxlength: 40, style: 'width:100%' });
@@ -1799,7 +1801,7 @@
       if (mineAll().some(function (x) { return !x.project; })) ps = ps.concat({ id: '', name: 'Chưa xếp dự án', description: 'Asset của tôi chưa gắn dự án nào.' });
       if (sel == null && ps.length) sel = ps[0].id;
       if (!ps.length) listBox.appendChild(h('div', { class: 'panel pad stack lib-empty' }, h('span', { class: 'note', text: 'Chưa có dự án chủ đề nào. Tạo một dự án (ví dụ "Tam Quốc") rồi vào Xưởng › Tạo asset mới để dựng nhân vật, trang bị, cảnh từ bộ khung chuẩn — hoặc mở dự án mẫu để xem trọn luồng ngay.' }),
-        Store.mode === 'server' ? h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: importDemo }, '✨ Mở dự án mẫu "Văn phòng vui"'), h('button', { class: 'btn', onclick: pickBundle }, 'Nhập gói…')) : null));
+        Store.mode === 'server' ? h('div', { class: 'row' }, samplesLeft().map(function (S, i) { return h('button', { class: 'btn' + (i ? '' : ' primary'), onclick: function () { importDemo(S); } }, S.button); }), h('button', { class: 'btn', onclick: pickBundle }, 'Nhập gói…')) : null));
       var grid = h('div', { class: 'libgrid' });
       ps.forEach(function (p) {
         var c = counts(p.id), first = [].concat(inProject(GC.assets(), p.id), inProject(GC.items(), p.id), inProject(GC.scenes(), p.id))[0];
@@ -1837,7 +1839,12 @@
     }
     paint();
   };
-  var DEMO_ID = 'mau-van-phong-vui';
+  // dự án mẫu đi kèm bản cài: nhập qua đúng cổng như mọi gói (studio/mau/<file>.json)
+  var SAMPLES = [
+    { id: 'mau-van-phong-vui', file: 'van-phong-vui', short: '✨ Văn phòng vui (mẫu)', button: '✨ Mở dự án mẫu "Văn phòng vui"', note: '3 nhân vật · 2 bối cảnh · phim 4 phân cảnh — xem trọn luồng trong 10 giây, sửa và xuất thử thoải mái.' },
+    { id: 'mau-tam-quoc', file: 'tam-quoc', short: '🏯 Tam Quốc (bộ chủ đề)', button: '🏯 Mở bộ chủ đề mẫu "Tam Quốc"', note: '7 tướng · 13 trang bị · 8 bối cảnh · phim 5 phân cảnh — một bộ thư viện trọn vẹn dựng từ khung, đã Phát hành: xem Gói bán trông thế nào.' }
+  ];
+  function samplesLeft() { return SAMPLES.filter(function (S) { return !Projects.all().some(function (p) { return p.id === S.id; }); }); }
   function exportBundle(P, sale) {
     // bản cài: server dựng gói (đủ tác phẩm + cảnh báo); bản xem thử không server: dựng tại trình duyệt — cùng một luật gói bán
     var get = Store.mode === 'server' ? Store.api('GET', 'api/projects/export?id=' + encodeURIComponent(P.id) + (sale ? '&sale=1' : '')) : Promise.resolve(projectBundle(P, sale));
@@ -1875,9 +1882,10 @@
     } });
     document.body.appendChild(inp); inp.click();
   }
-  function importDemo() {
-    toast('Đang dựng dự án mẫu…');
-    fetch('studio/mau/van-phong-vui.json').then(function (r) { if (!r.ok) throw new Error('Không tải được dự án mẫu'); return r.json(); }).then(function (b) { return importBundle(b); }).catch(function (e) { toast(e.message); });
+  function importDemo(S) {
+    S = S || SAMPLES[0];
+    toast('Đang dựng ' + S.short.replace(/^\S+ /, '') + '…');
+    fetch('studio/mau/' + S.file + '.json').then(function (r) { if (!r.ok) throw new Error('Không tải được dự án mẫu'); return r.json(); }).then(function (b) { return importBundle(b); }).catch(function (e) { toast(e.message); });
   }
   function projectBundle(P, sale) {
     var pick = function (list) { return inProject(list, P.id).filter(function (x) { return !sale || GC.statusOf(x.status) === 'published'; }); };

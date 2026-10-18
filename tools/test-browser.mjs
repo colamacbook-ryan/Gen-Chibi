@@ -244,6 +244,17 @@ try {
     const wcu = await (await fetch('http://localhost:7494/api/works/phim-cu')).json();
     if (wcu.shots[0].scene !== 'gen.khung/san-khau-chuan' || !wcu.shots[0].event) throw new Error('lưu phân cảnh cũ làm mất bối cảnh / lời thoại: ' + JSON.stringify(wcu.shots[0]));
     console.log('  ✓ Dữ liệu cũ (afi.*): Studio chọn đúng bối cảnh, Lưu giữ nguyên bối cảnh + lời thoại; bản ghi trong pack khung thành bản sao Của tôi');
+    // bộ chủ đề mẫu Tam Quốc: một chạm → Thư viện đủ bộ → gói bán trọn → Tạo tác sẵn sàng 5/5
+    await q.goto('http://localhost:7494/'); await q.waitForSelector('.qsteps');
+    await q.click('button:has-text("Mở bộ chủ đề mẫu")'); await q.waitForURL(/\/thu-vien$/, { timeout: 8000 }); await q.waitForSelector('.libcard.proj[title="mau-tam-quoc"]');
+    const tqc = await q.textContent('.libcard.proj[title="mau-tam-quoc"]');
+    if (!/7 nhân vật · 13 vật phẩm · 8 bối cảnh/.test(tqc)) throw new Error('bộ Tam Quốc: ' + tqc);
+    await q.click('.libcard.proj[title="mau-tam-quoc"]'); await q.waitForSelector('button:has-text("Gói bán · 28 asset phát hành")');
+    await q.evaluate(() => localStorage.setItem('gc-route-tao-tac', JSON.stringify({ page: 'works', work: 'tq-vuon-dao-xich-bich' })));
+    await q.goto('http://localhost:7494/tao-tac'); await q.waitForSelector('.readybar');
+    if (!/Sẵn sàng diễn cả 5 phân cảnh/.test(await q.textContent('.readybar'))) throw new Error('phim Tam Quốc chưa sẵn sàng: ' + await q.textContent('.readybar'));
+    if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
+    console.log('  ✓ Bộ chủ đề mẫu Tam Quốc một chạm: 7 tướng · 13 trang bị · 8 bối cảnh → Gói bán 28 asset → phim 5/5 phân cảnh sẵn sàng');
   } catch (e) { fail = 1; console.log('  ✗ dự án mẫu một chạm:', e.message); }
   finally { await b5.close(); srv5.kill(); }
 }

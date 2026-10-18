@@ -441,7 +441,8 @@
       var it = equipped(asset, slot);
       var Cs = it && it.equip.palette ? Object.assign({}, C, { P: Object.assign({}, C.P, it.equip.palette) }) : C;   // màu item chỉ áp lên linh kiện của nó
       var res = (vk ? p.views[vk] : p.draw)(Cs, st, vals);
-      if (K && vk !== K && res && !held) fbSlots.push(slot + ':' + p.id);
+      // 135° mượn bản sau lưng (cùng là góc thấy lưng) là bản vẽ thật, không phải dự phòng — không đè tóc bằng lớp tóc sau
+      if (K && vk !== K && !(BACK && BACK_KINDS[vk]) && res && !held) fbSlots.push(slot + ':' + p.id);
       // không có bản vẽ nghiêng nào: trượt parallax tạm (chỉ các góc thấy mặt)
       put(res, p.params ? paramTransform(p.params, vals) : '', K && !vk && !held && !BACK);
     });
@@ -1106,7 +1107,7 @@
   // SVG thuộc tập con chặt, màu là hex hoặc token bảng màu {robe}, 45° chọn chế độ drawn | same | face45 | body45.
   // Bộ lọc ĐỌC rồi DỰNG LẠI SVG từ những gì đã kiểm (không chép nguyên văn đầu vào) → không chèn được script/link/style.
   var SVG_TAGS = { g: 1, path: 1, circle: 1, ellipse: 1, rect: 1, line: 1, polyline: 1, polygon: 1 };
-  var NUM = /^-?\d{1,5}(\.\d{1,4})?$/;
+  var NUM = /^-?(?:\d{1,5}(?:\.\d{1,4})?|\.\d{1,4})$/;   // nhận cả ".25" (dạng SVG hợp lệ, rất hay gặp)
   var SVG_ATTRS = {
     d: /^[MmLlHhVvCcSsQqTtAaZz0-9eE.,\-\s]{1,8000}$/, points: /^[0-9eE.,\-\s]{1,4000}$/,
     cx: NUM, cy: NUM, r: NUM, rx: NUM, ry: NUM, x: NUM, y: NUM, width: NUM, height: NUM, x1: NUM, y1: NUM, x2: NUM, y2: NUM,
@@ -1120,8 +1121,11 @@
   function own(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }   // tra bảng không dính prototype (constructor, toString…)
   function paintOk(v, T) { return /^#[0-9a-fA-F]{3,8}$/.test(v) || v === 'none' || (/^\{[a-zA-Z]{1,20}\}$/.test(v) && (v === '{ink}' || own(T, v.slice(1, -1)))); }
   // tokens: bảng token màu hợp lệ (nhân vật: LIB.defaults; phông cảnh: SCENE.defaults)
-  function sanitizeSvg(src, errs, where, tokens) {
-    var T = tokens || LIB.defaults;
+  // opts.shape: cho d="{shape}" (viền đầu của nhân vật, đổi theo dáng đầu và góc nhìn) · opts.marks: cho <g class="gc-f45|gc-f45c|gc-b45t|gc-b45h">
+  // (đánh dấu chiếu 45°: engine thay bằng phép chiếu mặt / thân thật lúc dựng — dữ liệu không cần clipPath, url())
+  var MARK_CLASS = /^gc-(f45c?|b45[th])$/;
+  function sanitizeSvg(src, errs, where, tokens, opts) {
+    var T = tokens || LIB.defaults, O = opts || {};
     src = String(src || '');
     if (src.length > 20000) { errs.push(where + ': quá 20 000 ký tự'); return ''; }
     src = src.replace(/\s+/g, ' ');   // gộp khoảng trắng: regex tách thẻ chạy tuyến tính, không bậc hai
@@ -1141,7 +1145,9 @@
         if (own(seen, k)) { errs.push(where + ': thuộc tính "' + k + '" lặp lại'); return ''; }
         seen[k] = 1;
         if (!rule) { errs.push(where + ': thuộc tính "' + k + '" không được phép'); return ''; }
-        if (rule === 'paint' ? !paintOk(v, T) : !rule.test(v)) { errs.push(where + ': giá trị ' + k + '="' + v.slice(0, 40) + '" không hợp lệ'); return ''; }
+        var special = (k === 'd' && v === '{shape}' && O.shape) || (k === 'class' && MARK_CLASS.test(v) && O.marks && tag === 'g');
+        if (k === 'class' && MARK_CLASS.test(v) && !special) { errs.push(where + ': đánh dấu chiếu "' + v + '" chỉ dùng trên <g> trong views (góc nghiêng) của linh kiện nhân vật'); return ''; }
+        if (!special && (rule === 'paint' ? !paintOk(v, T) : !rule.test(v))) { errs.push(where + ': giá trị ' + k + '="' + v.slice(0, 40) + '" không hợp lệ'); return ''; }
         attrs += ' ' + k + '="' + v + '"';
       }
       out += '<' + tag + attrs + (selfClose ? '/>' : '>');
@@ -1161,12 +1167,12 @@
     if (typeof def.slot !== 'string' || !own(LIB.slots, def.slot)) errs.push('slot "' + def.slot + '" không có; chọn trong: ' + Object.keys(LIB.slots).join(', ') + ' (phông cảnh: ' + Object.keys(SCENE.slots).join(', ') + ')');
     d.id = String(def.id || ''); d.slot = def.slot; d.label = String(def.label || def.id || '').slice(0, 40);
     d.description = String(def.description || '').slice(0, 300);
-    function layers(src, where) {
+    function layers(src, where, marks) {
       var o = {}, n = 0;
       if (!src || typeof src !== 'object') { errs.push(where + ': cần object { lớp: svg }'); return o; }
       Object.keys(src).forEach(function (l) {
         if (LAYER_IDS.indexOf(l) < 0 || PART_LAYERS_DENY.test(l)) { errs.push(where + ': lớp "' + l + '" không dùng được cho linh kiện'); return; }
-        var c = sanitizeSvg(src[l], errs, where + '.' + l);
+        var c = sanitizeSvg(src[l], errs, where + '.' + l, null, { shape: true, marks: marks });
         if (c) { o[l] = c; n++; }
       });
       if (!n) errs.push(where + ': chưa có lớp nào vẽ được');
@@ -1182,7 +1188,7 @@
     var mode = v && (typeof v === 'string' ? v : v.mode);
     if (['drawn', 'same', 'face45', 'body45'].indexOf(mode) < 0) errs.push('views.q45: bắt buộc, chọn mode drawn (kèm layers) | same | face45 | body45 — xem quy trình 45°');
     d.views = { q45: { mode: mode } };
-    if (mode === 'drawn') d.views.q45.layers = layers(v.layers, 'views.q45.layers');
+    if (mode === 'drawn') d.views.q45.layers = layers(v.layers, 'views.q45.layers', true);
     // 8 hướng (tuỳ chọn): q90 nghiêng hẳn · q135 sau-45° · q180 sau lưng. drawn | same (= bản 45°) | front (= bản chính diện) | hide
     ['q90', 'q135', 'q180'].forEach(function (k) {
       var w = def.views && def.views[k];
@@ -1190,8 +1196,14 @@
       var m = typeof w === 'string' ? w : w.mode;
       if (['drawn', 'same', 'front', 'hide'].indexOf(m) < 0) { errs.push('views.' + k + ': mode drawn (kèm layers) | same | front | hide'); return; }
       d.views[k] = { mode: m };
-      if (m === 'drawn') d.views[k].layers = layers(w.layers, 'views.' + k + '.layers');
+      if (m === 'drawn') d.views[k].layers = layers(w.layers, 'views.' + k + '.layers', true);
     });
+    // thuộc tính riêng theo bộ phận: mặt nạ tô vùng quanh mắt (mặt nạ kinh kịch) · vật cầm tay dài (giấu khi động tác cần hai tay) / cầm nghiêng
+    if (def.eyeArea !== undefined) { if (d.slot === 'mask' && /^#[0-9a-fA-F]{6}$/.test(String(def.eyeArea))) d.eyeArea = def.eyeArea; else errs.push('eyeArea: chỉ cho mặt nạ (mask), mã hex #rrggbb'); }
+    if (def.tall !== undefined || def.upright !== undefined) {
+      if (d.slot !== 'heldL' && d.slot !== 'heldR') errs.push('tall / upright: chỉ cho vật cầm tay (heldL, heldR)');
+      else { if (def.tall === true) d.tall = true; if (def.upright === false) d.upright = false; }
+    }
     if (def.params) {
       d.params = {};
       Object.keys(def.params).slice(0, 6).forEach(function (k) {
@@ -1204,7 +1216,31 @@
     }
     return { errors: errs, def: errs.length ? null : d };
   }
-  function fillTokens(svg, P) { return svg.replace(/\{([a-zA-Z]{1,20})\}/g, function (_, k) { return k === 'ink' ? INK : (own(P, k) && HEX.test(P[k]) ? P[k] : '#ff00ff'); }); }
+  // lời khuyên (không chặn) cho linh kiện dữ liệu — những lỗi qua được cổng nhưng lộ ra khi nhìn: rút từ bài thử khung Tam Quốc
+  function partAdvice(d) {
+    var w = [];
+    if (!d || d.kind === 'scenery') return w;
+    if (d.slot === 'hair' && !d.views.q180 && !d.views.q135 && !d.layers.hairBack) w.push('Tóc chưa có bản sau lưng (views.q180 / q135): khi nhân vật quay lưng engine chỉ giữ lớp hairBack — tóc này sẽ BIẾN MẤT. Vẽ views.q180 = { mode: "drawn", layers: { hairFront: … } }, dùng <path d="{shape}" fill="{hair}"/> cho mảng tóc sau gáy (khít mọi dáng đầu).');
+    if (d.slot === 'mask' && JSON.stringify(d.layers).indexOf('{shape}') < 0 && d.eyeArea) w.push('Mặt nạ tô kín mặt nên vẽ viền bằng d="{shape}" để khít đầu tròn / vuông / oval ở mọi góc.');
+    if ((d.slot === 'heldL' || d.slot === 'heldR') && !d.icon) w.push('Vật cầm tay chưa có icon { cx, cy, size, rot }: thẻ trang bị sẽ lấy khung mặc định.');
+    return w;
+  }
+  function fillTokens(svg, P, shape) { return svg.replace(/\{([a-zA-Z]{1,20})\}/g, function (_, k) { return k === 'ink' ? INK : k === 'shape' ? shape || 'M100,100Z' : (own(P, k) && HEX.test(P[k]) ? P[k] : '#ff00ff'); }); }
+  // thay đánh dấu chiếu <g class="gc-…">…</g> bằng phép chiếu thật (helpers của thư viện lõi) — xử lý lồng nhau, quét tuyến tính
+  function expandMarks(svg, C) {
+    var i = svg.indexOf('<g class="gc-');
+    if (i < 0) return svg;
+    var m = /^<g class="gc-(f45c?|b45[th])">/.exec(svg.slice(i, i + 24));
+    if (!m) return svg;
+    var start = i + m[0].length, depth = 1, re = /<g[\s>]|<\/g>/g, x;
+    re.lastIndex = start;
+    while ((x = re.exec(svg))) { if (x[0] === '</g>') { if (!--depth) break; } else depth++; }
+    if (!x) return svg;
+    var H = G.GenChibi.helpers, inner = expandMarks(svg.slice(start, x.index), C), k = m[1];
+    var out = k === 'f45' ? H.face45(C, inner) : k === 'f45c' ? H.face45(C, inner, true) : H.body45(inner, k === 'b45h' ? H.HEM : H.TORSO_UP);
+    return svg.slice(0, i) + out + expandMarks(svg.slice(x.index + 4), C);
+  }
+  var SHAPE_EL = /<path d="\{shape\}"[^>]*\/>/g;
   // Đăng ký linh kiện dữ liệu vào một thư viện (pack phải có sẵn). Kiểm lại dù đã kiểm lúc lưu (phòng thủ nhiều lớp).
   function registerDataPart(packId, def) {
     packId = canonPack(packId);
@@ -1219,11 +1255,16 @@
       P.counts.scenery = Object.keys(LIB.parts).filter(function (k) { return k.indexOf(packId + '/') === 0 && LIB.parts[k].kind === 'scenery'; }).length;
       return { errors: [], def: d, part: sp };
     }
-    function draw(L) { return function (C) { var o = {}; for (var l in L) o[l] = fillTokens(L[l], C.P); return o; }; }
+    function draw(L) { return function (C) { var o = {}; for (var l in L) o[l] = expandMarks(fillTokens(L[l], C.P, C.shape), C); return o; }; }
     var front = draw(d.layers), q = d.views.q45, q45;
     if (q.mode === 'drawn') q45 = draw(q.layers);
     else if (q.mode === 'same') q45 = front;
-    else if (q.mode === 'face45') q45 = function (C) { var o = front(C); for (var l in o) o[l] = G.GenChibi.helpers.face45(C, o[l], l === 'mask'); return o; };
+    // face45: viền đầu {shape} giữ nguyên (đã là dáng đầu 45°), chỉ chiếu phần hoạ tiết bám mặt
+    else if (q.mode === 'face45') q45 = function (C) {
+      var o = {};
+      for (var l in d.layers) { var raw = d.layers[l], base = (raw.match(SHAPE_EL) || []).join(''); o[l] = fillTokens(base, C.P, C.shape) + G.GenChibi.helpers.face45(C, fillTokens(raw.replace(SHAPE_EL, ''), C.P, C.shape), l === 'mask'); }
+      return o;
+    };
     else q45 = function (C) { var o = front(C), H = G.GenChibi.helpers; for (var l in o) o[l] = l === 'hem' ? H.body45(o[l], H.HEM) : l === 'body' ? H.body45(o[l], H.TORSO_UP) : o[l]; return o; };
     var views = { q45: q45 };
     ['q90', 'q135', 'q180'].forEach(function (k) {
@@ -1232,7 +1273,7 @@
       views[k] = w.mode === 'drawn' ? draw(w.layers) : w.mode === 'same' ? q45 : w.mode === 'front' ? front : function () { return null; };
     });
     var part = { slot: d.slot, id: d.id, label: d.label, draw: front, views: views, params: d.params, data: d, icon: d.icon,
-      source: 'data:' + packId, license: P.license, pack: packId };
+      eyeArea: d.eyeArea, tall: d.tall, upright: d.upright, source: 'data:' + packId, license: P.license, pack: packId };
     LIB.parts[packId + '/' + d.slot + ':' + d.id] = part;
     P.counts.part = Object.keys(LIB.parts).filter(function (k) { return k.indexOf(packId + '/') === 0 && LIB.parts[k].kind !== 'scenery'; }).length;
     return { errors: [], def: d, part: part };
@@ -1490,7 +1531,7 @@
     resolveState: resolveState, palette: palette, paramValues: paramValues,
     compose: compose, poseAt: poseAt, chainTransforms: chainTransforms, neutralPose: neutralPose, svgString: svgString,
     shadowOf: shadowOf, handsBusy: handsBusy, Q45: Q45, Q90: Q90, faceRemap: faceRemap, VIEW_ORDER: VIEW_ORDER, VIEW_KIND: VIEW_KIND, VIEW_KINDS: VIEW_KINDS,
-    checkDataPart: checkDataPart, registerDataPart: registerDataPart, blockingGates: blockingGates,
+    checkDataPart: checkDataPart, registerDataPart: registerDataPart, partAdvice: partAdvice, blockingGates: blockingGates,
     ITEM: ITEM, ITEMS: ITEMS, ITEM_ORDER: ITEM_ORDER, items: function () { return ITEM_ORDER.map(function (k) { return ITEMS[k]; }); },
     SCENE: SCENE, SCENES: SCENES, SCENE_ORDER: SCENE_ORDER, scenes: function () { return SCENE_ORDER.map(function (k) { return SCENES[k]; }); },
     getScene: getScene, getAsset: getAsset, checkScene: checkScene, registerScene: registerScene, sceneSvg: sceneSvg, sceneGate: sceneGate,

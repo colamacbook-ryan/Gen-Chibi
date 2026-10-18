@@ -1,0 +1,2351 @@
+{
+ "format": "gen-chibi.project/1",
+ "kind": "sale",
+ "license": "© 2026 Gen Labs — All rights reserved",
+ "project": {
+  "id": "mau-tam-quoc",
+  "name": "Tam Quốc (bộ chủ đề mẫu)",
+  "description": "Bộ chủ đề trọn vẹn dựng từ khung: 7 tướng, 13 trang bị, 8 bối cảnh, 26 linh kiện nhân vật, 27 phông — và phim 5 phân cảnh. Mọi asset đã Phát hành: mở Gói bán để xem một bộ thư viện bán được trông thế nào."
+ },
+ "requires": {
+  "packs": []
+ },
+ "parts": [
+  {
+   "id": "tq-toc-gon",
+   "slot": "hair",
+   "label": "Mái gọn",
+   "description": "Tam Quốc — Mái gọn. Dựng lại từ khung (linh kiện dữ liệu).",
+   "layers": {
+    "hairFront": "<path d=\"M52,102 C50,70 70,55 100,55 C130,55 150,70 148,102 C142,90 134,82 124,80 C116,86 106,84 100,80 C94,84 84,86 76,80 C66,82 58,90 52,102 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M66,70 C76,62 90,60 100,60\" fill=\"none\" stroke=\"#fff\" stroke-width=\"3\" stroke-opacity=\"0.22\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M86,72 q2,6 0,10 M114,72 q-2,6 0,10\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.4\" stroke-opacity=\"0.25\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M51,96 C46,114 48,128 55,138 C57,124 57,112 59,100 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><g transform=\"translate(200 0) scale(-1 1)\"><path d=\"M51,96 C46,114 48,128 55,138 C57,124 57,112 59,100 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/></g>"
+   },
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)",
+   "views": {
+    "q45": {
+     "mode": "drawn",
+     "layers": {
+      "hairFront": "<path d=\"M54,100 C52,70 72,54 100,54 C128,55 148,70 148,100 C146,96 142,93 139,92 C136,100 132,104 126,104 C123,96 119,90 114,86 C106,89 96,87 90,81 C82,86 72,87 64,83 C59,88 56,94 54,100 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M70,68 C80,60 94,58 106,59\" fill=\"none\" stroke=\"#fff\" stroke-width=\"3\" stroke-opacity=\"0.22\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M78,74 q2,6 0,9 M104,74 q-2,6 0,10\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.4\" stroke-opacity=\"0.25\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M53,96 C49,112 51,124 56,132 C57,120 57,108 59,98 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>"
+     }
+    },
+    "q180": {
+     "mode": "drawn",
+     "layers": {
+      "hairFront": "<path d=\"{shape}\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M72,84 C80,104 82,118 84,130 M100,66 L100,132 M128,84 C120,104 118,118 116,130\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.4\" stroke-opacity=\"0.18\" stroke-linecap=\"round\"/><path d=\"M83,133 C91,138 109,138 117,133 L116,143 C108,147 92,147 84,143 Z\" fill=\"{skin}\"/><path d=\"M83,133 C91,138 109,138 117,133\" fill=\"none\" stroke=\"{ink}\" stroke-width=\"1.6\" stroke-linecap=\"round\"/><path d=\"M68,74 C78,64 92,60 104,60\" fill=\"none\" stroke=\"#fff\" stroke-width=\"3\" stroke-opacity=\"0.2\" stroke-linecap=\"round\"/>"
+     }
+    },
+    "q135": {
+     "mode": "drawn",
+     "layers": {
+      "hairFront": "<path d=\"{shape}\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M72,84 C80,104 82,118 84,130 M100,66 L100,132 M128,84 C120,104 118,118 116,130\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.4\" stroke-opacity=\"0.18\" stroke-linecap=\"round\"/><path d=\"M83,133 C91,138 109,138 117,133 L116,143 C108,147 92,147 84,143 Z\" fill=\"{skin}\"/><path d=\"M83,133 C91,138 109,138 117,133\" fill=\"none\" stroke=\"{ink}\" stroke-width=\"1.6\" stroke-linecap=\"round\"/><path d=\"M68,74 C78,64 92,60 104,60\" fill=\"none\" stroke=\"#fff\" stroke-width=\"3\" stroke-opacity=\"0.2\" stroke-linecap=\"round\"/>"
+     }
+    }
+   },
+   "params": {
+    "volume": {
+     "label": "Độ phồng tóc",
+     "min": 0.9,
+     "max": 1.15,
+     "step": 0.01,
+     "def": 1,
+     "type": "scale",
+     "pivot": [
+      100,
+      104
+     ]
+    }
+   }
+  },
+  {
+   "id": "tq-toc-dai",
+   "slot": "hair",
+   "label": "Tóc dài sau lưng",
+   "description": "Tam Quốc — Tóc dài sau lưng. Dựng lại từ khung (linh kiện dữ liệu).",
+   "layers": {
+    "hairBack": "<path d=\"M50,94 C38,140 42,190 58,214 L142,214 C158,190 162,140 150,94 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M60,140 C58,170 62,196 68,210 M140,140 C142,170 138,196 132,210\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.6\" stroke-opacity=\"0.14\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>",
+    "hairFront": "<path d=\"M52,102 C50,70 70,55 100,55 C130,55 150,70 148,102 C142,90 134,82 124,80 C116,86 106,84 100,80 C94,84 84,86 76,80 C66,82 58,90 52,102 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M66,70 C76,62 90,60 100,60\" fill=\"none\" stroke=\"#fff\" stroke-width=\"3\" stroke-opacity=\"0.22\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M86,72 q2,6 0,10 M114,72 q-2,6 0,10\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.4\" stroke-opacity=\"0.25\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M51,96 C46,114 48,128 55,138 C57,124 57,112 59,100 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><g transform=\"translate(200 0) scale(-1 1)\"><path d=\"M51,96 C46,114 48,128 55,138 C57,124 57,112 59,100 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/></g>"
+   },
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)",
+   "views": {
+    "q45": {
+     "mode": "drawn",
+     "layers": {
+      "hairBack": "<path d=\"M58,96 C46,140 52,190 66,214 L150,214 C164,188 166,138 150,92 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M146,140 C150,170 146,196 140,210 M70,150 C68,176 72,198 76,210\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.6\" stroke-opacity=\"0.14\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>",
+      "hairFront": "<path d=\"M54,100 C52,70 72,54 100,54 C128,55 148,70 148,100 C146,96 142,93 139,92 C136,100 132,104 126,104 C123,96 119,90 114,86 C106,89 96,87 90,81 C82,86 72,87 64,83 C59,88 56,94 54,100 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M70,68 C80,60 94,58 106,59\" fill=\"none\" stroke=\"#fff\" stroke-width=\"3\" stroke-opacity=\"0.22\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M78,74 q2,6 0,9 M104,74 q-2,6 0,10\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.4\" stroke-opacity=\"0.25\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M53,96 C49,112 51,124 56,132 C57,120 57,108 59,98 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>"
+     }
+    },
+    "q180": {
+     "mode": "drawn",
+     "layers": {
+      "hairFront": "<path d=\"M52,104 C44,146 48,188 60,214 L140,214 C152,188 156,146 148,104 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"{shape}\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M72,84 C80,104 82,118 84,130 M100,66 L100,132 M128,84 C120,104 118,118 116,130\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.4\" stroke-opacity=\"0.18\" stroke-linecap=\"round\"/><path d=\"M70,150 C68,176 70,198 74,210 M100,148 L100,212 M130,150 C132,176 130,198 126,210\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.6\" stroke-opacity=\"0.14\" stroke-linecap=\"round\"/><path d=\"M68,74 C78,64 92,60 104,60\" fill=\"none\" stroke=\"#fff\" stroke-width=\"3\" stroke-opacity=\"0.2\" stroke-linecap=\"round\"/>"
+     }
+    },
+    "q135": {
+     "mode": "drawn",
+     "layers": {
+      "hairFront": "<path d=\"M52,104 C44,146 48,188 60,214 L140,214 C152,188 156,146 148,104 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"{shape}\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M72,84 C80,104 82,118 84,130 M100,66 L100,132 M128,84 C120,104 118,118 116,130\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.4\" stroke-opacity=\"0.18\" stroke-linecap=\"round\"/><path d=\"M70,150 C68,176 70,198 74,210 M100,148 L100,212 M130,150 C132,176 130,198 126,210\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.6\" stroke-opacity=\"0.14\" stroke-linecap=\"round\"/><path d=\"M68,74 C78,64 92,60 104,60\" fill=\"none\" stroke=\"#fff\" stroke-width=\"3\" stroke-opacity=\"0.2\" stroke-linecap=\"round\"/>"
+     }
+    }
+   },
+   "params": {
+    "length": {
+     "label": "Độ dài tóc",
+     "min": 0.75,
+     "max": 1.1,
+     "step": 0.01,
+     "def": 1,
+     "type": "scaleY",
+     "pivot": [
+      100,
+      94
+     ]
+    }
+   }
+  },
+  {
+   "id": "tq-buoi-toc",
+   "slot": "hair",
+   "label": "Búi tó",
+   "description": "Tam Quốc — Búi tó. Dựng lại từ khung (linh kiện dữ liệu).",
+   "layers": {
+    "hairFront": "<circle cx=\"100\" cy=\"44\" r=\"12\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M93,38 q7,-5 14,0\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\" stroke-opacity=\"0.22\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M52,102 C50,70 70,55 100,55 C130,55 150,70 148,102 C142,90 134,82 124,80 C116,86 106,84 100,80 C94,84 84,86 76,80 C66,82 58,90 52,102 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M66,70 C76,62 90,60 100,60\" fill=\"none\" stroke=\"#fff\" stroke-width=\"3\" stroke-opacity=\"0.22\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M86,72 q2,6 0,10 M114,72 q-2,6 0,10\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.4\" stroke-opacity=\"0.25\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M51,96 C46,114 48,128 55,138 C57,124 57,112 59,100 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><g transform=\"translate(200 0) scale(-1 1)\"><path d=\"M51,96 C46,114 48,128 55,138 C57,124 57,112 59,100 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/></g><rect x=\"90\" y=\"50\" width=\"20\" height=\"6\" rx=\"2\" fill=\"{accent}\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>"
+   },
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)",
+   "views": {
+    "q45": {
+     "mode": "drawn",
+     "layers": {
+      "hairFront": "<circle cx=\"97\" cy=\"44\" r=\"12\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M90,38 q7,-5 14,0\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\" stroke-opacity=\"0.22\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M54,100 C52,70 72,54 100,54 C128,55 148,70 148,100 C146,96 142,93 139,92 C136,100 132,104 126,104 C123,96 119,90 114,86 C106,89 96,87 90,81 C82,86 72,87 64,83 C59,88 56,94 54,100 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M70,68 C80,60 94,58 106,59\" fill=\"none\" stroke=\"#fff\" stroke-width=\"3\" stroke-opacity=\"0.22\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M78,74 q2,6 0,9 M104,74 q-2,6 0,10\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.4\" stroke-opacity=\"0.25\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M53,96 C49,112 51,124 56,132 C57,120 57,108 59,98 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M86,50 L106,50 L108,56 L88,56 Z\" fill=\"{accent}\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>"
+     }
+    },
+    "q180": {
+     "mode": "drawn",
+     "layers": {
+      "hairFront": "<path d=\"{shape}\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M70,86 C80,72 90,62 97,56 M130,86 C120,72 110,62 103,56 M100,96 L100,58\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.4\" stroke-opacity=\"0.2\" stroke-linecap=\"round\"/><path d=\"M83,133 C91,138 109,138 117,133 L116,143 C108,147 92,147 84,143 Z\" fill=\"{skin}\"/><path d=\"M83,133 C91,138 109,138 117,133\" fill=\"none\" stroke=\"{ink}\" stroke-width=\"1.6\" stroke-linecap=\"round\"/><path d=\"M68,74 C78,64 92,60 104,60\" fill=\"none\" stroke=\"#fff\" stroke-width=\"3\" stroke-opacity=\"0.2\" stroke-linecap=\"round\"/><circle cx=\"100\" cy=\"44\" r=\"12\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><rect x=\"90\" y=\"50\" width=\"20\" height=\"6\" rx=\"2\" fill=\"{accent}\" stroke=\"{ink}\" stroke-width=\"2\"/>"
+     }
+    },
+    "q135": {
+     "mode": "drawn",
+     "layers": {
+      "hairFront": "<path d=\"{shape}\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M70,86 C80,72 90,62 97,56 M130,86 C120,72 110,62 103,56 M100,96 L100,58\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.4\" stroke-opacity=\"0.2\" stroke-linecap=\"round\"/><path d=\"M83,133 C91,138 109,138 117,133 L116,143 C108,147 92,147 84,143 Z\" fill=\"{skin}\"/><path d=\"M83,133 C91,138 109,138 117,133\" fill=\"none\" stroke=\"{ink}\" stroke-width=\"1.6\" stroke-linecap=\"round\"/><path d=\"M68,74 C78,64 92,60 104,60\" fill=\"none\" stroke=\"#fff\" stroke-width=\"3\" stroke-opacity=\"0.2\" stroke-linecap=\"round\"/><circle cx=\"100\" cy=\"44\" r=\"12\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><rect x=\"90\" y=\"50\" width=\"20\" height=\"6\" rx=\"2\" fill=\"{accent}\" stroke=\"{ink}\" stroke-width=\"2\"/>"
+     }
+    }
+   },
+   "params": {
+    "volume": {
+     "label": "Độ phồng tóc",
+     "min": 0.9,
+     "max": 1.15,
+     "step": 0.01,
+     "def": 1,
+     "type": "scale",
+     "pivot": [
+      100,
+      104
+     ]
+    }
+   }
+  },
+  {
+   "id": "tq-toc-dung",
+   "slot": "hair",
+   "label": "Tóc dựng xù",
+   "description": "Tam Quốc — Tóc dựng xù. Dựng lại từ khung (linh kiện dữ liệu).",
+   "layers": {
+    "hairFront": "<path d=\"M48,104 L38,78 L55,80 L50,56 L69,66 L72,38 L88,56 L100,30 L112,56 L128,38 L131,66 L150,56 L145,80 L162,78 L152,104 L141,86 L128,80 L118,88 L108,80 L100,88 L92,80 L82,88 L72,80 L59,86 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M72,50 L80,62 M100,40 L100,56 M128,50 L120,62\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\" stroke-opacity=\"0.18\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+   },
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)",
+   "views": {
+    "q45": {
+     "mode": "drawn",
+     "layers": {
+      "hairFront": "<path d=\"M51,104 L44,82 L57,83 L53,60 L68,67 L70,40 L85,55 L96,30 L110,53 L128,36 L133,62 L154,50 L150,78 L168,74 L158,100 L162,110 L148,110 L136,106 L130,98 L124,88 L114,80 L104,87 L95,80 L87,86 L79,80 L71,86 L63,81 L57,88 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M70,50 L77,61 M97,40 L97,55 M126,48 L118,60 M146,64 L138,74\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\" stroke-opacity=\"0.18\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+     }
+    },
+    "q180": {
+     "mode": "drawn",
+     "layers": {
+      "hairFront": "<path d=\"M48,104 L38,78 L55,80 L50,56 L69,66 L72,38 L88,56 L100,30 L112,56 L128,38 L131,66 L150,56 L145,80 L162,78 L152,104 L150,120 L56,120 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"{shape}\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M62,122 L70,136 L80,126 L90,140 L100,128 L110,140 L120,126 L130,136 L138,122\" fill=\"none\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M68,74 C78,64 92,60 104,60\" fill=\"none\" stroke=\"#fff\" stroke-width=\"3\" stroke-opacity=\"0.2\" stroke-linecap=\"round\"/>"
+     }
+    },
+    "q135": {
+     "mode": "drawn",
+     "layers": {
+      "hairFront": "<path d=\"M48,104 L38,78 L55,80 L50,56 L69,66 L72,38 L88,56 L100,30 L112,56 L128,38 L131,66 L150,56 L145,80 L162,78 L152,104 L150,120 L56,120 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"{shape}\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M62,122 L70,136 L80,126 L90,140 L100,128 L110,140 L120,126 L130,136 L138,122\" fill=\"none\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M68,74 C78,64 92,60 104,60\" fill=\"none\" stroke=\"#fff\" stroke-width=\"3\" stroke-opacity=\"0.2\" stroke-linecap=\"round\"/>"
+     }
+    }
+   },
+   "params": {
+    "spike": {
+     "label": "Độ dựng",
+     "min": 0.85,
+     "max": 1.25,
+     "step": 0.01,
+     "def": 1,
+     "type": "scaleY",
+     "pivot": [
+      100,
+      104
+     ]
+    }
+   }
+  },
+  {
+   "id": "tq-rau-de",
+   "slot": "beard",
+   "label": "Râu dê nhỏ",
+   "description": "Tam Quốc — Râu dê nhỏ. Dựng lại từ khung (linh kiện dữ liệu).",
+   "layers": {
+    "beard": "<path d=\"M95,141 C94,153 98,163 100,169 C102,163 106,153 105,141 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"1.6\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>",
+    "mustache": "<path d=\"M84,127 C89,122 95,122 100,125.5 C105,122 111,122 116,127\" fill=\"none\" stroke=\"{hair}\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M84,127 q-3,1 -4,4 M116,127 q3,1 4,4\" fill=\"none\" stroke=\"{hair}\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+   },
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)",
+   "views": {
+    "q45": {
+     "mode": "drawn",
+     "layers": {
+      "beard": "<path d=\"M77,142 C76,154 80,164 83,170 C86,163 89,153 88,141 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"1.6\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>",
+      "mustache": "<path d=\"M70,127 C73,123 77,123 80,125.5 C85,122 92,122 98,127\" fill=\"none\" stroke=\"{hair}\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M70,127 q-2,1 -3,3 M98,127 q3,1 4,4\" fill=\"none\" stroke=\"{hair}\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+     }
+    }
+   },
+   "params": {
+    "length": {
+     "label": "Độ dài chòm",
+     "min": 0.7,
+     "max": 1.5,
+     "step": 0.05,
+     "def": 1,
+     "type": "scaleY",
+     "pivot": [
+      100,
+      141
+     ]
+    }
+   }
+  },
+  {
+   "id": "tq-rau-ba-chom",
+   "slot": "beard",
+   "label": "Râu dài ba chòm",
+   "description": "Tam Quốc — Râu dài ba chòm. Dựng lại từ khung (linh kiện dữ liệu).",
+   "layers": {
+    "beard": "<path d=\"M70,120 C63,140 65,162 74,180 C77,162 79,140 79,124 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><g transform=\"translate(200 0) scale(-1 1)\"><path d=\"M70,120 C63,140 65,162 74,180 C77,162 79,140 79,124 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/></g><path d=\"M76,128 C74,152 82,188 100,214 C118,188 126,152 124,128 C114,142 86,142 76,128 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.6\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M91,152 C93,172 96,192 100,207 M109,152 C107,172 104,192 100,207 M100,146 L100,200\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\" stroke-opacity=\"0.16\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>",
+    "mustache": "<path d=\"M80,129 C87,119 96,120 100,125 C104,120 113,119 120,129 C112,127 106,128 100,130 C94,128 88,127 80,129 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>"
+   },
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)",
+   "views": {
+    "q45": {
+     "mode": "drawn",
+     "layers": {
+      "beard": "<g class=\"gc-f45\"><path d=\"M70,120 C63,140 65,162 74,180 C77,162 79,140 79,124 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><g transform=\"translate(200 0) scale(-1 1)\"><path d=\"M70,120 C63,140 65,162 74,180 C77,162 79,140 79,124 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/></g><path d=\"M76,128 C74,152 82,188 100,214 C118,188 126,152 124,128 C114,142 86,142 76,128 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.6\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M91,152 C93,172 96,192 100,207 M109,152 C107,172 104,192 100,207 M100,146 L100,200\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\" stroke-opacity=\"0.16\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></g>",
+      "mustache": "<g class=\"gc-f45\"><path d=\"M80,129 C87,119 96,120 100,125 C104,120 113,119 120,129 C112,127 106,128 100,130 C94,128 88,127 80,129 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/></g>"
+     }
+    }
+   },
+   "params": {
+    "length": {
+     "label": "Độ dài râu",
+     "min": 0.7,
+     "max": 1.12,
+     "step": 0.01,
+     "def": 1,
+     "type": "scaleY",
+     "pivot": [
+      100,
+      128
+     ]
+    }
+   }
+  },
+  {
+   "id": "tq-rau-ho",
+   "slot": "beard",
+   "label": "Râu hổ dựng",
+   "description": "Tam Quốc — Râu hổ dựng. Dựng lại từ khung (linh kiện dữ liệu).",
+   "layers": {
+    "beard": "<path d=\"M54,110 L45,122 L58,126 L49,140 L64,140 L59,155 L76,148 L75,165 L90,154 L96,171 L104,154 L110,171 L117,154 L125,165 L124,148 L141,155 L136,140 L151,140 L142,126 L155,122 L146,110 C140,130 124,143 100,143 C76,143 60,130 54,110 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M70,140 L66,150 M100,150 L100,162 M130,140 L134,150\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.6\" stroke-opacity=\"0.16\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>",
+    "mustache": "<path d=\"M79,127 L85,117 L90,124 L95,116 L100,123 L105,116 L110,124 L115,117 L121,127 C112,124 88,124 79,127 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>"
+   },
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)",
+   "views": {
+    "q45": {
+     "mode": "drawn",
+     "layers": {
+      "beard": "<g class=\"gc-f45\"><path d=\"M54,110 L45,122 L58,126 L49,140 L64,140 L59,155 L76,148 L75,165 L90,154 L96,171 L104,154 L110,171 L117,154 L125,165 L124,148 L141,155 L136,140 L151,140 L142,126 L155,122 L146,110 C140,130 124,143 100,143 C76,143 60,130 54,110 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M70,140 L66,150 M100,150 L100,162 M130,140 L134,150\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.6\" stroke-opacity=\"0.16\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></g>",
+      "mustache": "<g class=\"gc-f45\"><path d=\"M79,127 L85,117 L90,124 L95,116 L100,123 L105,116 L110,124 L115,117 L121,127 C112,124 88,124 79,127 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/></g>"
+     }
+    }
+   },
+   "params": {
+    "bristle": {
+     "label": "Độ xù",
+     "min": 0.85,
+     "max": 1.25,
+     "step": 0.01,
+     "def": 1,
+     "type": "scale",
+     "pivot": [
+      100,
+      120
+     ]
+    }
+   }
+  },
+  {
+   "id": "tq-rau-thua",
+   "slot": "beard",
+   "label": "Râu dài mảnh",
+   "description": "Tam Quốc — Râu dài mảnh. Dựng lại từ khung (linh kiện dữ liệu).",
+   "layers": {
+    "beard": "<path d=\"M94,141 C92,160 96,180 100,193 C104,180 108,160 106,141 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"1.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>",
+    "mustache": "<path d=\"M100,126 C94,121 86,123 79,137\" fill=\"none\" stroke=\"{hair}\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><g transform=\"translate(200 0) scale(-1 1)\"><path d=\"M100,126 C94,121 86,123 79,137\" fill=\"none\" stroke=\"{hair}\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></g>"
+   },
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)",
+   "views": {
+    "q45": {
+     "mode": "drawn",
+     "layers": {
+      "beard": "<g class=\"gc-f45\"><path d=\"M94,141 C92,160 96,180 100,193 C104,180 108,160 106,141 Z\" fill=\"{hair}\" stroke=\"{ink}\" stroke-width=\"1.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/></g>",
+      "mustache": "<g class=\"gc-f45\"><path d=\"M100,126 C94,121 86,123 79,137\" fill=\"none\" stroke=\"{hair}\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><g transform=\"translate(200 0) scale(-1 1)\"><path d=\"M100,126 C94,121 86,123 79,137\" fill=\"none\" stroke=\"{hair}\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></g></g>"
+     }
+    }
+   },
+   "params": {
+    "length": {
+     "label": "Độ dài râu",
+     "min": 0.7,
+     "max": 1.4,
+     "step": 0.05,
+     "def": 1,
+     "type": "scaleY",
+     "pivot": [
+      100,
+      141
+     ]
+    }
+   }
+  },
+  {
+   "id": "tq-khan-chien",
+   "slot": "hat",
+   "label": "Khăn buộc trán có nơ",
+   "description": "Tam Quốc — Khăn buộc trán có nơ. Dựng lại từ khung (linh kiện dữ liệu).",
+   "layers": {
+    "hat": "<path d=\"M49,82 C70,72 130,72 151,82 L151,93 C130,83 70,83 49,93 Z\" fill=\"{hat}\" stroke=\"{ink}\" stroke-width=\"2.6\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M52,88 C72,79 128,79 148,88\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.4\" stroke-opacity=\"0.22\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M152,86 C166,78 176,70 186,58 L180,82 C172,88 164,92 153,92 Z\" fill=\"{hat}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M152,90 C164,96 176,98 190,96 L178,108 C168,106 160,102 151,96 Z\" fill=\"{hat}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><circle cx=\"152\" cy=\"88\" r=\"6\" fill=\"{accent}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>"
+   },
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)",
+   "views": {
+    "q45": {
+     "mode": "drawn",
+     "layers": {
+      "hat": "<path d=\"M50,84 C64,72 120,70 150,79 L150,91 C120,82 64,84 50,96 Z\" fill=\"{hat}\" stroke=\"{ink}\" stroke-width=\"2.6\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M53,90 C68,79 118,77 147,86\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.4\" stroke-opacity=\"0.22\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M150,82 C164,74 174,66 184,54 L178,78 C170,84 162,88 151,88 Z\" fill=\"{hat}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M150,87 C162,93 174,95 188,93 L176,105 C166,103 158,99 149,93 Z\" fill=\"{hat}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><ellipse cx=\"149\" cy=\"85\" rx=\"5\" ry=\"6\" fill=\"{accent}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>"
+     }
+    }
+   }
+  },
+  {
+   "id": "tq-mu-mem",
+   "slot": "hat",
+   "label": "Mũ vải mềm",
+   "description": "Tam Quốc — Mũ vải mềm. Dựng lại từ khung (linh kiện dữ liệu).",
+   "layers": {
+    "hat": "<path d=\"M57,79 C55,50 76,35 100,35 C124,35 145,50 143,79 C120,70 80,70 57,79 Z\" fill=\"{hat}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M143,79 C145,56 128,40 112,37 C128,46 136,60 136,76 Z\" fill=\"#000\" fill-opacity=\"0.12\"/><path d=\"M74,46 C84,40 96,38 104,38\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2.4\" stroke-opacity=\"0.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M57,79 C80,70 120,70 143,79 L143,86 C120,78 80,78 57,86 Z\" fill=\"{accent}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><circle cx=\"100\" cy=\"35\" r=\"7\" fill=\"{accent}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>"
+   },
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)",
+   "views": {
+    "q45": {
+     "mode": "drawn",
+     "layers": {
+      "hat": "<path d=\"M57,79 C55,50 74,35 95,35 C122,35 145,50 143,79 C120,70 80,70 57,79 Z\" fill=\"{hat}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M143,79 C145,56 130,40 112,36 C130,46 137,60 137,76 Z\" fill=\"#000\" fill-opacity=\"0.16\"/><path d=\"M68,48 C78,41 88,38 96,38\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2.4\" stroke-opacity=\"0.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M57,79 C76,70 120,70 143,79 L143,86 C120,78 76,78 57,86 Z\" fill=\"{accent}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><ellipse cx=\"94\" cy=\"35\" rx=\"6\" ry=\"7\" fill=\"{accent}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>"
+     }
+    }
+   },
+   "params": {
+    "height": {
+     "label": "Độ cao mũ",
+     "min": 0.8,
+     "max": 1.3,
+     "step": 0.01,
+     "def": 1,
+     "type": "scaleY",
+     "pivot": [
+      100,
+      80
+     ]
+    }
+   }
+  },
+  {
+   "id": "tq-khan-cuon",
+   "slot": "hat",
+   "label": "Khăn cuốn (綸巾)",
+   "description": "Tam Quốc — Khăn cuốn (綸巾). Dựng lại từ khung (linh kiện dữ liệu).",
+   "layers": {
+    "hairBack": "<path d=\"M74,70 C56,84 50,110 40,140 C44,141 47,141 50,139 C54,128 56,118 60,110 C58,122 56,132 55,142 L62,141 C64,118 70,94 82,78 Z\" fill=\"{hat}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M70,84 C62,100 56,118 50,136\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.2\" stroke-opacity=\"0.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><g transform=\"translate(200 0) scale(-1 1)\"><path d=\"M74,70 C56,84 50,110 40,140 C44,141 47,141 50,139 C54,128 56,118 60,110 C58,122 56,132 55,142 L62,141 C64,118 70,94 82,78 Z\" fill=\"{hat}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M70,84 C62,100 56,118 50,136\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.2\" stroke-opacity=\"0.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></g>",
+    "hat": "<path d=\"M66,72 C63,50 74,30 100,27 C126,30 137,50 134,72 Z\" fill=\"{hat}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M134,72 C137,52 128,36 112,30 C124,40 128,54 127,70 Z\" fill=\"#000\" fill-opacity=\"0.16\"/><path d=\"M82,70 C80,54 86,40 100,32 M118,70 C120,54 114,40 100,32 M100,32 L100,68\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.4\" stroke-opacity=\"0.24\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M74,42 C82,34 92,31 100,30\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2.6\" stroke-opacity=\"0.22\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M59,65 C80,57 120,57 141,65 L141,78 C120,70 80,70 59,78 Z\" fill=\"{hat}\" stroke=\"{ink}\" stroke-width=\"2.6\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M62,71 C82,64 118,64 138,71\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.2\" stroke-opacity=\"0.3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><rect x=\"94\" y=\"59\" width=\"12\" height=\"12\" rx=\"3\" fill=\"{accent}\" stroke=\"{ink}\" stroke-width=\"1.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><circle cx=\"100\" cy=\"65\" r=\"2.4\" fill=\"#7ad0a5\"/>"
+   },
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)",
+   "views": {
+    "q45": {
+     "mode": "drawn",
+     "layers": {
+      "hairBack": "<path d=\"M126,70 C144,84 150,110 160,140 C156,141 153,141 150,139 C146,128 144,118 140,110 C142,122 144,132 145,142 L138,141 C136,118 130,94 118,78 Z\" fill=\"{hat}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M130,84 C138,100 144,118 150,136\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.2\" stroke-opacity=\"0.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><g transform=\"translate(-9 3)\"><path d=\"M126,70 C144,84 150,110 160,140 C156,141 153,141 150,139 C146,128 144,118 140,110 C142,122 144,132 145,142 L138,141 C136,118 130,94 118,78 Z\" fill=\"{hat}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M130,84 C138,100 144,118 150,136\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.2\" stroke-opacity=\"0.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></g>",
+      "hat": "<path d=\"M64,72 C61,50 72,30 96,27 C124,29 139,48 137,72 Z\" fill=\"{hat}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M137,72 C139,52 130,36 112,29 C126,40 131,54 130,70 Z\" fill=\"#000\" fill-opacity=\"0.18\"/><path d=\"M74,70 C72,54 78,40 92,31 M108,70 C112,54 108,40 94,30 M93,30 L88,68\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.4\" stroke-opacity=\"0.24\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M70,42 C78,34 86,30 94,29\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2.6\" stroke-opacity=\"0.22\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M57,64 C78,56 120,56 142,65 L142,78 C120,70 78,70 57,77 Z\" fill=\"{hat}\" stroke=\"{ink}\" stroke-width=\"2.6\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M60,70 C80,63 118,63 139,71\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.2\" stroke-opacity=\"0.3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><rect x=\"75\" y=\"59\" width=\"9\" height=\"12\" rx=\"2.5\" fill=\"{accent}\" stroke=\"{ink}\" stroke-width=\"1.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><ellipse cx=\"79.5\" cy=\"65\" rx=\"1.8\" ry=\"2.4\" fill=\"#7ad0a5\"/>"
+     }
+    }
+   },
+   "params": {
+    "height": {
+     "label": "Độ cao khăn",
+     "min": 0.85,
+     "max": 1.25,
+     "step": 0.01,
+     "def": 1,
+     "type": "scaleY",
+     "pivot": [
+      100,
+      74
+     ]
+    }
+   }
+  },
+  {
+   "id": "tq-mu-quan",
+   "slot": "hat",
+   "label": "Mũ quan (miện)",
+   "description": "Tam Quốc — Mũ quan (miện). Dựng lại từ khung (linh kiện dữ liệu).",
+   "layers": {
+    "hat": "<path d=\"M64,72 L68,33 L132,33 L136,72 C120,66 80,66 64,72 Z\" fill=\"{hat}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M120,33 L132,33 L136,72 C130,70 126,69 122,69 Z\" fill=\"#000\" fill-opacity=\"0.18\"/><rect x=\"60\" y=\"24\" width=\"80\" height=\"10\" rx=\"2\" fill=\"{hat}\" stroke=\"{ink}\" stroke-width=\"2.6\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M42,52 L158,52\" stroke=\"{accent}\" stroke-width=\"3.4\" stroke-linecap=\"round\"/><path d=\"M100,40 L107,50 L100,60 L93,50 Z\" fill=\"{accent}\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>"
+   },
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)",
+   "views": {
+    "q45": {
+     "mode": "drawn",
+     "layers": {
+      "hat": "<path d=\"M118,33 L136,36 L140,72 L122,69 Z\" fill=\"{hat}\" stroke=\"{ink}\" stroke-width=\"2.6\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M118,33 L136,36 L140,72 L122,69 Z\" fill=\"#000\" fill-opacity=\"0.22\"/><path d=\"M62,72 L66,33 L118,33 L122,69 C106,65 78,66 62,72 Z\" fill=\"{hat}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M108,33 L118,33 L122,69 C118,68 114,67 110,67 Z\" fill=\"#000\" fill-opacity=\"0.12\"/><path d=\"M58,24 L120,24 L140,27 L140,36 L120,34 L58,34 Z\" fill=\"{hat}\" stroke=\"{ink}\" stroke-width=\"2.6\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M38,54 L156,49\" stroke=\"{accent}\" stroke-width=\"3.4\" stroke-linecap=\"round\"/><path d=\"M90,40 L95,50 L90,60 L85,50 Z\" fill=\"{accent}\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>"
+     }
+    }
+   },
+   "params": {
+    "height": {
+     "label": "Độ cao mũ",
+     "min": 0.85,
+     "max": 1.25,
+     "step": 0.01,
+     "def": 1,
+     "type": "scaleY",
+     "pivot": [
+      100,
+      72
+     ]
+    }
+   }
+  },
+  {
+   "id": "tq-ao-bao",
+   "slot": "outfit",
+   "label": "Áo bào",
+   "description": "Tam Quốc — Áo bào. Dựng lại từ khung (linh kiện dữ liệu).",
+   "layers": {
+    "body": "<path d=\"M76,146 L124,146 L132.7,194 L67.3,194 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M112,146 L124,146 L132.7,194 L117,194 Z\" fill=\"#000\" fill-opacity=\"0.1\"/><path d=\"M86,146 L100,170 L114,146 Z\" fill=\"{inner}\"/><path d=\"M86,146 L100,170 L114,146\" fill=\"none\" stroke=\"{trim}\" stroke-width=\"5\" stroke-linejoin=\"round\"/><path d=\"M68,184 L132,184 L133,194 L67,194 Z\" fill=\"{trim}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><rect x=\"95\" y=\"183\" width=\"10\" height=\"12\" rx=\"2\" fill=\"{accent}\" stroke=\"{ink}\" stroke-width=\"1.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>",
+    "hem": "<path d=\"M68.4,188 L131.6,188 L136,212 C120,219 80,219 64,212 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M117,188 L131.6,188 L136,212 C130,215 124,216 118,217 Z\" fill=\"#000\" fill-opacity=\"0.1\"/><path d=\"M84,196 C86,204 85,210 82,214 M112,196 C114,204 116,210 118,214\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.4\" stroke-opacity=\"0.22\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M65,206 C80,213 120,213 135,206 L136,212 C120,219 80,219 64,212 Z\" fill=\"{trim}\"/>",
+    "armL": "<path d=\"M69,151 C62,158 61,168 62,181 L86,181 C87,170 87,161 85,153 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M62,166 C61,172 62,178 62,181 L70,181 C68,176 67,170 68,164 Z\" fill=\"#000\" fill-opacity=\"0.1\"/>",
+    "foreL": "<circle cx=\"74\" cy=\"177\" r=\"11.5\" fill=\"{robe}\"/><path d=\"M62,174 C61,182 60,189 60,196 L86,198 C87,190 87,182 86,174 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M68,184 q4,3 10,2\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.4\" stroke-opacity=\"0.22\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M60,191 L86,193 L86,199 L60,197 Z\" fill=\"{trim}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>",
+    "armR": "<g transform=\"translate(200 0) scale(-1 1)\"><path d=\"M69,151 C62,158 61,168 62,181 L86,181 C87,170 87,161 85,153 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M62,166 C61,172 62,178 62,181 L70,181 C68,176 67,170 68,164 Z\" fill=\"#000\" fill-opacity=\"0.1\"/></g>",
+    "foreR": "<g transform=\"translate(200 0) scale(-1 1)\"><circle cx=\"74\" cy=\"177\" r=\"11.5\" fill=\"{robe}\"/><path d=\"M62,174 C61,182 60,189 60,196 L86,198 C87,190 87,182 86,174 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M68,184 q4,3 10,2\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.4\" stroke-opacity=\"0.22\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M60,191 L86,193 L86,199 L60,197 Z\" fill=\"{trim}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/></g>"
+   },
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)",
+   "views": {
+    "q45": {
+     "mode": "drawn",
+     "layers": {
+      "body": "<path d=\"M76,146 L124,146 L132.7,194 L67.3,194 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M108,146 L124,146 L132.7,194 L112,194 Z\" fill=\"#000\" fill-opacity=\"0.1\"/><g class=\"gc-b45t\"><path d=\"M86,146 L100,170 L114,146 Z\" fill=\"{inner}\"/><path d=\"M86,146 L100,170 L114,146\" fill=\"none\" stroke=\"{trim}\" stroke-width=\"5\" stroke-linejoin=\"round\"/></g><path d=\"M68,184 L132,184 L133,194 L67,194 Z\" fill=\"{trim}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><rect x=\"84\" y=\"183\" width=\"8\" height=\"12\" rx=\"2\" fill=\"{accent}\" stroke=\"{ink}\" stroke-width=\"1.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>",
+      "hem": "<path d=\"M68.4,188 L131.6,188 L136,212 C120,219 80,219 64,212 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M110,188 L131.6,188 L136,212 C130,215 124,216 116,217 Z\" fill=\"#000\" fill-opacity=\"0.1\"/><g class=\"gc-b45h\"><path d=\"M84,196 C86,204 85,210 82,214 M112,196 C114,204 116,210 118,214\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.4\" stroke-opacity=\"0.22\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></g><path d=\"M65,206 C80,213 120,213 135,206 L136,212 C120,219 80,219 64,212 Z\" fill=\"{trim}\"/>",
+      "armL": "<path d=\"M69,151 C62,158 61,168 62,181 L86,181 C87,170 87,161 85,153 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M62,166 C61,172 62,178 62,181 L70,181 C68,176 67,170 68,164 Z\" fill=\"#000\" fill-opacity=\"0.1\"/>",
+      "foreL": "<circle cx=\"74\" cy=\"177\" r=\"11.5\" fill=\"{robe}\"/><path d=\"M62,174 C61,182 60,189 60,196 L86,198 C87,190 87,182 86,174 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M68,184 q4,3 10,2\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.4\" stroke-opacity=\"0.22\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M60,191 L86,193 L86,199 L60,197 Z\" fill=\"{trim}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>",
+      "armR": "<g transform=\"translate(200 0) scale(-1 1)\"><path d=\"M69,151 C62,158 61,168 62,181 L86,181 C87,170 87,161 85,153 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M62,166 C61,172 62,178 62,181 L70,181 C68,176 67,170 68,164 Z\" fill=\"#000\" fill-opacity=\"0.1\"/></g>",
+      "foreR": "<g transform=\"translate(200 0) scale(-1 1)\"><circle cx=\"74\" cy=\"177\" r=\"11.5\" fill=\"{robe}\"/><path d=\"M62,174 C61,182 60,189 60,196 L86,198 C87,190 87,182 86,174 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M68,184 q4,3 10,2\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.4\" stroke-opacity=\"0.22\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M60,191 L86,193 L86,199 L60,197 Z\" fill=\"{trim}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/></g>"
+     }
+    }
+   },
+   "params": {
+    "width": {
+     "label": "Độ rộng thân",
+     "min": 0.88,
+     "max": 1.18,
+     "step": 0.01,
+     "def": 1,
+     "type": "scaleX",
+     "pivot": [
+      100,
+      180
+     ]
+    }
+   }
+  },
+  {
+   "id": "tq-giap-tran",
+   "slot": "outfit",
+   "label": "Giáp trận",
+   "description": "Tam Quốc — Giáp trận. Dựng lại từ khung (linh kiện dữ liệu).",
+   "layers": {
+    "body": "<path d=\"M76,146 L124,146 L132.7,194 L67.3,194 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M112,146 L124,146 L132.7,194 L117,194 Z\" fill=\"#000\" fill-opacity=\"0.1\"/><path d=\"M77,150 L123,150 L127,185 L73,185 Z\" fill=\"{armor}\" stroke=\"{ink}\" stroke-width=\"2.6\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M76,156 q4,5 8,0 M85,156 q4,5 8,0 M94,156 q4,5 8,0 M103,156 q4,5 8,0 M112,156 q4,5 8,0 M80.5,163 q4,5 8,0 M89.5,163 q4,5 8,0 M98.5,163 q4,5 8,0 M107.5,163 q4,5 8,0 M76,170 q4,5 8,0 M85,170 q4,5 8,0 M94,170 q4,5 8,0 M103,170 q4,5 8,0 M112,170 q4,5 8,0 M80.5,177 q4,5 8,0 M89.5,177 q4,5 8,0 M98.5,177 q4,5 8,0 M107.5,177 q4,5 8,0 \" fill=\"none\" stroke=\"#000\" stroke-opacity=\".25\" stroke-width=\"1.5\"/><path d=\"M110,150 L123,150 L127,185 L114,185 Z\" fill=\"#000\" fill-opacity=\"0.12\"/><circle cx=\"100\" cy=\"165\" r=\"7.5\" fill=\"{metal}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><circle cx=\"98\" cy=\"163\" r=\"2.2\" fill=\"#fff\" fill-opacity=\".7\"/><path d=\"M68,185 L132,185 L133,195 L67,195 Z\" fill=\"{trim}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><circle cx=\"100\" cy=\"190\" r=\"6\" fill=\"{accent}\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>",
+    "hem": "<path d=\"M68.4,188 L131.6,188 L136,212 C120,219 80,219 64,212 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M117,188 L131.6,188 L136,212 C130,215 124,216 118,217 Z\" fill=\"#000\" fill-opacity=\"0.1\"/><path d=\"M70,196 L98,196 L96,211 L66,209 Z M102,196 L130,196 L134,209 L104,211 Z\" fill=\"{armor}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M70,203 L97,204 M103,204 L132,203\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.4\" stroke-opacity=\"0.24\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>",
+    "armL": "<path d=\"M69,151 C62,158 61,168 62,181 L86,181 C87,170 87,161 85,153 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M62,166 C61,172 62,178 62,181 L70,181 C68,176 67,170 68,164 Z\" fill=\"#000\" fill-opacity=\"0.1\"/><path d=\"M61,154 C63,143 80,140 90,150 L86,166 C77,161 68,161 61,164 Z\" fill=\"{armor}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M65,156 q8,-5 17,0 M64,161 q8,-5 17,0\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.5\" stroke-opacity=\"0.24\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M66,150 q6,-4 12,-3\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\" stroke-opacity=\"0.3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>",
+    "foreL": "<circle cx=\"74\" cy=\"177\" r=\"11.5\" fill=\"{robe}\"/><path d=\"M62,174 C61,182 60,189 60,196 L86,198 C87,190 87,182 86,174 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M68,184 q4,3 10,2\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.4\" stroke-opacity=\"0.22\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M60,191 L86,193 L86,199 L60,197 Z\" fill=\"{trim}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>",
+    "armR": "<g transform=\"translate(200 0) scale(-1 1)\"><path d=\"M69,151 C62,158 61,168 62,181 L86,181 C87,170 87,161 85,153 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M62,166 C61,172 62,178 62,181 L70,181 C68,176 67,170 68,164 Z\" fill=\"#000\" fill-opacity=\"0.1\"/><path d=\"M61,154 C63,143 80,140 90,150 L86,166 C77,161 68,161 61,164 Z\" fill=\"{armor}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M65,156 q8,-5 17,0 M64,161 q8,-5 17,0\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.5\" stroke-opacity=\"0.24\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M66,150 q6,-4 12,-3\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\" stroke-opacity=\"0.3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></g>",
+    "foreR": "<g transform=\"translate(200 0) scale(-1 1)\"><circle cx=\"74\" cy=\"177\" r=\"11.5\" fill=\"{robe}\"/><path d=\"M62,174 C61,182 60,189 60,196 L86,198 C87,190 87,182 86,174 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M68,184 q4,3 10,2\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.4\" stroke-opacity=\"0.22\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M60,191 L86,193 L86,199 L60,197 Z\" fill=\"{trim}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/></g>"
+   },
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)",
+   "views": {
+    "q45": {
+     "mode": "drawn",
+     "layers": {
+      "body": "<path d=\"M76,146 L124,146 L132.7,194 L67.3,194 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><g class=\"gc-b45t\"><path d=\"M77,150 L123,150 L127,185 L73,185 Z\" fill=\"{armor}\" stroke=\"{ink}\" stroke-width=\"2.6\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M76,156 q4,5 8,0 M85,156 q4,5 8,0 M94,156 q4,5 8,0 M103,156 q4,5 8,0 M112,156 q4,5 8,0 M80.5,163 q4,5 8,0 M89.5,163 q4,5 8,0 M98.5,163 q4,5 8,0 M107.5,163 q4,5 8,0 M76,170 q4,5 8,0 M85,170 q4,5 8,0 M94,170 q4,5 8,0 M103,170 q4,5 8,0 M112,170 q4,5 8,0 M80.5,177 q4,5 8,0 M89.5,177 q4,5 8,0 M98.5,177 q4,5 8,0 M107.5,177 q4,5 8,0 \" fill=\"none\" stroke=\"#000\" stroke-opacity=\".25\" stroke-width=\"1.5\"/><circle cx=\"100\" cy=\"165\" r=\"7.5\" fill=\"{metal}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><circle cx=\"98\" cy=\"163\" r=\"2.2\" fill=\"#fff\" fill-opacity=\".7\"/></g><path d=\"M108,146 L124,146 L132.7,194 L112,194 Z\" fill=\"#000\" fill-opacity=\"0.12\"/><path d=\"M68,185 L132,185 L133,195 L67,195 Z\" fill=\"{trim}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><ellipse cx=\"88\" cy=\"190\" rx=\"4.6\" ry=\"6\" fill=\"{accent}\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>",
+      "hem": "<path d=\"M68.4,188 L131.6,188 L136,212 C120,219 80,219 64,212 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M110,188 L131.6,188 L136,212 C130,215 124,216 116,217 Z\" fill=\"#000\" fill-opacity=\"0.1\"/><g class=\"gc-b45h\"><path d=\"M70,196 L98,196 L96,211 L66,209 Z M102,196 L130,196 L134,209 L104,211 Z\" fill=\"{armor}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M70,203 L97,204 M103,204 L132,203\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.4\" stroke-opacity=\"0.24\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></g>",
+      "armL": "<path d=\"M69,151 C62,158 61,168 62,181 L86,181 C87,170 87,161 85,153 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M62,166 C61,172 62,178 62,181 L70,181 C68,176 67,170 68,164 Z\" fill=\"#000\" fill-opacity=\"0.1\"/><path d=\"M61,154 C63,143 80,140 90,150 L86,166 C77,161 68,161 61,164 Z\" fill=\"{armor}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M65,156 q8,-5 17,0 M64,161 q8,-5 17,0\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.5\" stroke-opacity=\"0.24\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M66,150 q6,-4 12,-3\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\" stroke-opacity=\"0.3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>",
+      "foreL": "<circle cx=\"74\" cy=\"177\" r=\"11.5\" fill=\"{robe}\"/><path d=\"M62,174 C61,182 60,189 60,196 L86,198 C87,190 87,182 86,174 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M68,184 q4,3 10,2\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.4\" stroke-opacity=\"0.22\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M60,191 L86,193 L86,199 L60,197 Z\" fill=\"{trim}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>",
+      "armR": "<g transform=\"translate(200 0) scale(-1 1)\"><path d=\"M69,151 C62,158 61,168 62,181 L86,181 C87,170 87,161 85,153 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M62,166 C61,172 62,178 62,181 L70,181 C68,176 67,170 68,164 Z\" fill=\"#000\" fill-opacity=\"0.1\"/><path d=\"M61,154 C63,143 80,140 90,150 L86,166 C77,161 68,161 61,164 Z\" fill=\"{armor}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M65,156 q8,-5 17,0 M64,161 q8,-5 17,0\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.5\" stroke-opacity=\"0.24\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M66,150 q6,-4 12,-3\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\" stroke-opacity=\"0.3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></g>",
+      "foreR": "<g transform=\"translate(200 0) scale(-1 1)\"><circle cx=\"74\" cy=\"177\" r=\"11.5\" fill=\"{robe}\"/><path d=\"M62,174 C61,182 60,189 60,196 L86,198 C87,190 87,182 86,174 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M68,184 q4,3 10,2\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.4\" stroke-opacity=\"0.22\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M60,191 L86,193 L86,199 L60,197 Z\" fill=\"{trim}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/></g>"
+     }
+    }
+   },
+   "params": {
+    "width": {
+     "label": "Độ rộng thân",
+     "min": 0.88,
+     "max": 1.18,
+     "step": 0.01,
+     "def": 1,
+     "type": "scaleX",
+     "pivot": [
+      100,
+      180
+     ]
+    }
+   }
+  },
+  {
+   "id": "tq-ao-hac",
+   "slot": "outfit",
+   "label": "Áo hạc sưởng",
+   "description": "Tam Quốc — Áo hạc sưởng. Dựng lại từ khung (linh kiện dữ liệu).",
+   "layers": {
+    "body": "<path d=\"M76,146 L124,146 L132.7,194 L67.3,194 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M112,146 L124,146 L132.7,194 L117,194 Z\" fill=\"#000\" fill-opacity=\"0.08\"/><path d=\"M90,146 L100,166 L110,146 Z\" fill=\"{inner}\"/><path d=\"M84,146 L100,176 L116,146 L109,146 L100,162 L91,146 Z\" fill=\"{trim}\"/><path d=\"M67.6,186 L132.4,186 L133.5,194 L66.5,194 Z\" fill=\"{trim}\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><circle cx=\"100\" cy=\"190\" r=\"3.6\" fill=\"{accent}\" stroke=\"{ink}\" stroke-width=\"1.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>",
+    "hem": "<path d=\"M68.4,188 L131.6,188 L136,212 C120,219 80,219 64,212 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M117,188 L131.6,188 L136,212 C130,215 124,216 118,217 Z\" fill=\"#000\" fill-opacity=\"0.08\"/><path d=\"M100,194 L100,212\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.4\" stroke-opacity=\"0.18\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M64,207 C80,214 120,214 136,207 L136,212 C120,219 80,219 64,212 Z\" fill=\"{trim}\"/><path d=\"M74,200 q4,-4 8,0 M84,203 q4,-4 8,0 M108,203 q4,-4 8,0 M118,200 q4,-4 8,0\" fill=\"none\" stroke=\"#9d9a90\" stroke-width=\"1.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>",
+    "armL": "<path d=\"M66,150 C56,158 54,170 55,183 L89,183 C89,171 89,161 86,152 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M55,168 C54,175 55,180 55,183 L64,183 C62,178 61,172 62,165 Z\" fill=\"#000\" fill-opacity=\"0.08\"/>",
+    "foreL": "<circle cx=\"74\" cy=\"178\" r=\"15\" fill=\"{robe}\"/><path d=\"M55,176 C53,186 53,194 54,202 L90,202 C90,193 90,184 89,176 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M60,186 q6,-4 12,0 M70,192 q6,-4 12,0\" fill=\"none\" stroke=\"#b9b5aa\" stroke-width=\"1.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M54,195 L90,195 L90,202 L54,202 Z\" fill=\"{trim}\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>",
+    "armR": "<g transform=\"translate(200 0) scale(-1 1)\"><path d=\"M66,150 C56,158 54,170 55,183 L89,183 C89,171 89,161 86,152 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M55,168 C54,175 55,180 55,183 L64,183 C62,178 61,172 62,165 Z\" fill=\"#000\" fill-opacity=\"0.08\"/></g>",
+    "foreR": "<g transform=\"translate(200 0) scale(-1 1)\"><circle cx=\"74\" cy=\"178\" r=\"15\" fill=\"{robe}\"/><path d=\"M55,176 C53,186 53,194 54,202 L90,202 C90,193 90,184 89,176 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M60,186 q6,-4 12,0 M70,192 q6,-4 12,0\" fill=\"none\" stroke=\"#b9b5aa\" stroke-width=\"1.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M54,195 L90,195 L90,202 L54,202 Z\" fill=\"{trim}\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/></g>"
+   },
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)",
+   "views": {
+    "q45": {
+     "mode": "drawn",
+     "layers": {
+      "body": "<path d=\"M76,146 L124,146 L132.7,194 L67.3,194 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M108,146 L124,146 L132.7,194 L112,194 Z\" fill=\"#000\" fill-opacity=\"0.1\"/><path d=\"M80,146 L88,166 L96,146 Z\" fill=\"{inner}\"/><path d=\"M73,146 L88,176 L104,146 L97,146 L88,162 L80,146 Z\" fill=\"{trim}\"/><path d=\"M67.6,186 L132.4,186 L133.5,194 L66.5,194 Z\" fill=\"{trim}\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><ellipse cx=\"88\" cy=\"190\" rx=\"3\" ry=\"3.6\" fill=\"{accent}\" stroke=\"{ink}\" stroke-width=\"1.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>",
+      "hem": "<path d=\"M68.4,188 L131.6,188 L136,212 C120,219 80,219 64,212 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"3\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M110,188 L131.6,188 L136,212 C130,215 124,216 116,217 Z\" fill=\"#000\" fill-opacity=\"0.1\"/><path d=\"M88,194 L86,213\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.4\" stroke-opacity=\"0.18\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M64,207 C80,214 120,214 136,207 L136,212 C120,219 80,219 64,212 Z\" fill=\"{trim}\"/><path d=\"M66,200 q4,-4 8,0 M76,203 q4,-4 8,0 M98,203 q4,-4 8,0 M110,200 q4,-4 8,0\" fill=\"none\" stroke=\"#9d9a90\" stroke-width=\"1.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>",
+      "armL": "<path d=\"M66,150 C56,158 54,170 55,183 L89,183 C89,171 89,161 86,152 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M55,168 C54,175 55,180 55,183 L64,183 C62,178 61,172 62,165 Z\" fill=\"#000\" fill-opacity=\"0.08\"/>",
+      "foreL": "<circle cx=\"74\" cy=\"178\" r=\"15\" fill=\"{robe}\"/><path d=\"M55,176 C53,186 53,194 54,202 L90,202 C90,193 90,184 89,176 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M60,186 q6,-4 12,0 M70,192 q6,-4 12,0\" fill=\"none\" stroke=\"#b9b5aa\" stroke-width=\"1.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M54,195 L90,195 L90,202 L54,202 Z\" fill=\"{trim}\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>",
+      "armR": "<g transform=\"translate(200 0) scale(-1 1)\"><path d=\"M66,150 C56,158 54,170 55,183 L89,183 C89,171 89,161 86,152 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M55,168 C54,175 55,180 55,183 L64,183 C62,178 61,172 62,165 Z\" fill=\"#000\" fill-opacity=\"0.08\"/></g>",
+      "foreR": "<g transform=\"translate(200 0) scale(-1 1)\"><circle cx=\"74\" cy=\"178\" r=\"15\" fill=\"{robe}\"/><path d=\"M55,176 C53,186 53,194 54,202 L90,202 C90,193 90,184 89,176 Z\" fill=\"{robe}\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M60,186 q6,-4 12,0 M70,192 q6,-4 12,0\" fill=\"none\" stroke=\"#b9b5aa\" stroke-width=\"1.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M54,195 L90,195 L90,202 L54,202 Z\" fill=\"{trim}\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/></g>"
+     }
+    }
+   },
+   "params": {
+    "width": {
+     "label": "Độ rộng thân",
+     "min": 0.88,
+     "max": 1.18,
+     "step": 0.01,
+     "def": 1,
+     "type": "scaleX",
+     "pivot": [
+      100,
+      180
+     ]
+    }
+   }
+  },
+  {
+   "id": "tq-ao-choang",
+   "slot": "back",
+   "label": "Áo choàng",
+   "description": "Tam Quốc — Áo choàng. Dựng lại từ khung (linh kiện dữ liệu).",
+   "layers": {
+    "backItem": "<path d=\"M74,150 C58,170 52,200 50,222 L150,222 C148,200 142,170 126,150 Z\" fill=\"{cape}\" stroke=\"{ink}\" stroke-width=\"2.6\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M126,150 C142,170 148,200 150,222 L134,222 C134,196 130,170 120,152 Z\" fill=\"#000\" fill-opacity=\"0.15\"/>"
+   },
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)",
+   "views": {
+    "q45": {
+     "mode": "drawn",
+     "layers": {
+      "backItem": "<path d=\"M80,150 C66,170 60,200 58,222 L160,222 C158,198 150,168 132,150 Z\" fill=\"{cape}\" stroke=\"{ink}\" stroke-width=\"2.6\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M132,150 C150,168 158,198 160,222 L142,222 C142,196 138,170 126,152 Z\" fill=\"#000\" fill-opacity=\"0.15\"/>"
+     }
+    }
+   }
+  },
+  {
+   "id": "tq-quan",
+   "slot": "legwear",
+   "label": "Quần ống gọn",
+   "description": "Tam Quốc — Quần ống gọn. Dựng lại từ khung (linh kiện dữ liệu).",
+   "layers": {
+    "thighL": "<rect x=\"83\" y=\"198\" width=\"14\" height=\"17\" rx=\"5.5\" fill=\"{pants}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>",
+    "shinL": "<rect x=\"83.5\" y=\"208\" width=\"11\" height=\"14\" rx=\"4.5\" fill=\"{pants}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M86,212 q3,1.5 6,0\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.2\" stroke-opacity=\"0.22\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>",
+    "thighR": "<g transform=\"translate(200 0) scale(-1 1)\"><rect x=\"83\" y=\"198\" width=\"14\" height=\"17\" rx=\"5.5\" fill=\"{pants}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/></g>",
+    "shinR": "<g transform=\"translate(200 0) scale(-1 1)\"><rect x=\"83.5\" y=\"208\" width=\"11\" height=\"14\" rx=\"4.5\" fill=\"{pants}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M86,212 q3,1.5 6,0\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.2\" stroke-opacity=\"0.22\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></g>"
+   },
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)",
+   "views": {
+    "q45": {
+     "mode": "drawn",
+     "layers": {
+      "thighL": "<rect x=\"83\" y=\"198\" width=\"14\" height=\"17\" rx=\"5.5\" fill=\"{pants}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>",
+      "shinL": "<rect x=\"83.5\" y=\"208\" width=\"11\" height=\"14\" rx=\"4.5\" fill=\"{pants}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M86,212 q3,1.5 6,0\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.2\" stroke-opacity=\"0.22\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>",
+      "thighR": "<g transform=\"translate(200 0) scale(-1 1)\"><rect x=\"83\" y=\"198\" width=\"14\" height=\"17\" rx=\"5.5\" fill=\"{pants}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/></g>",
+      "shinR": "<g transform=\"translate(200 0) scale(-1 1)\"><rect x=\"83.5\" y=\"208\" width=\"11\" height=\"14\" rx=\"4.5\" fill=\"{pants}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M86,212 q3,1.5 6,0\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.2\" stroke-opacity=\"0.22\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></g>"
+     }
+    }
+   }
+  },
+  {
+   "id": "tq-ung",
+   "slot": "shoes",
+   "label": "Ủng",
+   "description": "Tam Quốc — Ủng. Dựng lại từ khung (linh kiện dữ liệu).",
+   "layers": {
+    "footL": "<ellipse cx=\"87\" cy=\"221\" rx=\"11\" ry=\"6.5\" fill=\"{boots}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M80,218 q5,-3 10,-1\" fill=\"none\" stroke=\"#fff\" stroke-opacity=\".25\" stroke-width=\"1.6\" stroke-linecap=\"round\"/>",
+    "footR": "<g transform=\"translate(200 0) scale(-1 1)\"><ellipse cx=\"87\" cy=\"221\" rx=\"11\" ry=\"6.5\" fill=\"{boots}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M80,218 q5,-3 10,-1\" fill=\"none\" stroke=\"#fff\" stroke-opacity=\".25\" stroke-width=\"1.6\" stroke-linecap=\"round\"/></g>"
+   },
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)",
+   "views": {
+    "q45": {
+     "mode": "drawn",
+     "layers": {
+      "footL": "<path d=\"M75,222 C74,215 84,214 94,216 C100,218 100,226 94,227.5 L81,227.5 C77,227.5 75,225 75,222 Z\" fill=\"{boots}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M79,219 q5,-3 10,-1\" fill=\"none\" stroke=\"#fff\" stroke-opacity=\".25\" stroke-width=\"1.6\" stroke-linecap=\"round\"/>",
+      "footR": "<g transform=\"translate(22 -1)\"><path d=\"M75,222 C74,215 84,214 94,216 C100,218 100,226 94,227.5 L81,227.5 C77,227.5 75,225 75,222 Z\" fill=\"{boots}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M79,219 q5,-3 10,-1\" fill=\"none\" stroke=\"#fff\" stroke-opacity=\".25\" stroke-width=\"1.6\" stroke-linecap=\"round\"/></g>"
+     }
+    }
+   }
+  },
+  {
+   "id": "tq-kiem",
+   "slot": "heldR",
+   "label": "Kiếm",
+   "description": "Tam Quốc — Kiếm. Dựng lại từ khung (linh kiện dữ liệu).",
+   "layers": {
+    "heldR": "<g transform=\"rotate(24 128 193)\"><path d=\"M125,172 L131,172 L130,110 L128,101 L126,110 Z\" fill=\"{metal}\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M128,168 L128,112\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.2\" stroke-opacity=\"0.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><rect x=\"119\" y=\"171\" width=\"18\" height=\"5\" rx=\"2\" fill=\"{accent}\" stroke=\"{ink}\" stroke-width=\"1.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><rect x=\"126\" y=\"176\" width=\"4\" height=\"22\" rx=\"1.5\" fill=\"{wood}\" stroke=\"{ink}\" stroke-width=\"1.6\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/></g>"
+   },
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)",
+   "views": {
+    "q45": "same"
+   },
+   "icon": {
+    "cx": 146,
+    "cy": 152,
+    "size": 120,
+    "rot": 21
+   },
+   "tall": true
+  },
+  {
+   "id": "tq-bau-ruou",
+   "slot": "heldL",
+   "label": "Bầu rượu",
+   "description": "Tam Quốc — Bầu rượu. Dựng lại từ khung (linh kiện dữ liệu).",
+   "layers": {
+    "heldL": "<path d=\"M72,184 C64,184 63,192 67,197 C58,201 58,215 72,217 C86,215 86,201 77,197 C81,192 80,184 72,184 Z\" fill=\"#d9a441\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M77,197 C86,201 86,215 72,217 C80,212 81,203 75,199 Z\" fill=\"#000\" fill-opacity=\"0.15\"/><rect x=\"69\" y=\"179\" width=\"6\" height=\"6\" rx=\"1.5\" fill=\"{wood}\" stroke=\"{ink}\" stroke-width=\"1.6\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M66,197 L78,197\" stroke=\"{tassel}\" stroke-width=\"2.4\"/>"
+   },
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)",
+   "views": {
+    "q45": "same"
+   },
+   "icon": {
+    "cx": 72,
+    "cy": 198,
+    "size": 50,
+    "rot": 0
+   }
+  },
+  {
+   "id": "tq-quat-long",
+   "slot": "heldR",
+   "label": "Quạt lông vũ (羽扇)",
+   "description": "Tam Quốc — Quạt lông vũ (羽扇). Dựng lại từ khung (linh kiện dữ liệu).",
+   "layers": {
+    "heldR": "<g transform=\"rotate(24 128 193)\"><path d=\"M126,186 L134,186 L132,212 Q130,216 128,212 Z\" fill=\"{tassel}\" stroke=\"{ink}\" stroke-width=\"1.6\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><rect x=\"126\" y=\"160\" width=\"8\" height=\"30\" rx=\"3\" fill=\"{accent}\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M127,170 L133,170 M127,178 L133,178\" fill=\"none\" stroke=\"#7a5a12\" stroke-width=\"1.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><g transform=\"rotate(-52 130 164)\"><path d=\"M130,164 C121,150 119,135.32 130,116.2 C141,135.32 139,150 130,164 Z\" fill=\"#ffffff\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M130,162 L130,118.2\" fill=\"none\" stroke=\"#b9b6ae\" stroke-width=\"1.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M130,142.49 C124,135.32 123,124.804 130,116.2 C137,124.804 136,135.32 130,142.49 Z\" fill=\"#e7e3d8\" fill-opacity=\".7\"/></g><g transform=\"rotate(-34 130 164)\"><path d=\"M130,164 C121,150 119,131.54 130,109.9 C141,131.54 139,150 130,164 Z\" fill=\"#f4f2ea\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M130,162 L130,111.9\" fill=\"none\" stroke=\"#b9b6ae\" stroke-width=\"1.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M130,139.655 C124,131.54 123,119.638 130,109.9 C137,119.638 136,131.54 130,139.655 Z\" fill=\"#e7e3d8\" fill-opacity=\".7\"/></g><g transform=\"rotate(-17 130 164)\"><path d=\"M130,164 C121,150 119,127.97 130,103.95 C141,127.97 139,150 130,164 Z\" fill=\"#ffffff\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M130,162 L130,105.95\" fill=\"none\" stroke=\"#b9b6ae\" stroke-width=\"1.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M130,136.9775 C124,127.97 123,114.75900000000001 130,103.95 C137,114.75900000000001 136,127.97 130,136.9775 Z\" fill=\"#e7e3d8\" fill-opacity=\".7\"/></g><g transform=\"rotate(0 130 164)\"><path d=\"M130,164 C121,150 119,124.4 130,98 C141,124.4 139,150 130,164 Z\" fill=\"#f4f2ea\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M130,162 L130,100\" fill=\"none\" stroke=\"#b9b6ae\" stroke-width=\"1.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M130,134.3 C124,124.4 123,109.88 130,98 C137,109.88 136,124.4 130,134.3 Z\" fill=\"#e7e3d8\" fill-opacity=\".7\"/></g><g transform=\"rotate(17 130 164)\"><path d=\"M130,164 C121,150 119,127.97 130,103.95 C141,127.97 139,150 130,164 Z\" fill=\"#ffffff\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M130,162 L130,105.95\" fill=\"none\" stroke=\"#b9b6ae\" stroke-width=\"1.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M130,136.9775 C124,127.97 123,114.75900000000001 130,103.95 C137,114.75900000000001 136,127.97 130,136.9775 Z\" fill=\"#e7e3d8\" fill-opacity=\".7\"/></g><g transform=\"rotate(34 130 164)\"><path d=\"M130,164 C121,150 119,131.54 130,109.9 C141,131.54 139,150 130,164 Z\" fill=\"#f4f2ea\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M130,162 L130,111.9\" fill=\"none\" stroke=\"#b9b6ae\" stroke-width=\"1.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M130,139.655 C124,131.54 123,119.638 130,109.9 C137,119.638 136,131.54 130,139.655 Z\" fill=\"#e7e3d8\" fill-opacity=\".7\"/></g><g transform=\"rotate(52 130 164)\"><path d=\"M130,164 C121,150 119,135.32 130,116.2 C141,135.32 139,150 130,164 Z\" fill=\"#ffffff\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M130,162 L130,118.2\" fill=\"none\" stroke=\"#b9b6ae\" stroke-width=\"1.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M130,142.49 C124,135.32 123,124.804 130,116.2 C137,124.804 136,135.32 130,142.49 Z\" fill=\"#e7e3d8\" fill-opacity=\".7\"/></g><ellipse cx=\"130\" cy=\"163\" rx=\"9\" ry=\"5\" fill=\"{accent}\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/></g>"
+   },
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)",
+   "views": {
+    "q45": "same"
+   },
+   "icon": {
+    "cx": 144,
+    "cy": 158,
+    "size": 132,
+    "rot": -24
+   },
+   "tall": true
+  },
+  {
+   "id": "tq-xa-mau",
+   "slot": "heldR",
+   "label": "Xà mâu (丈八蛇矛)",
+   "description": "Tam Quốc — Xà mâu (丈八蛇矛). Dựng lại từ khung (linh kiện dữ liệu).",
+   "layers": {
+    "heldR": "<g transform=\"rotate(13 128 193)\"><rect x=\"125.5\" y=\"34\" width=\"5\" height=\"200\" rx=\"2\" fill=\"{wood}\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M124,38 C119,28 132,24 126,14 C121,6 127,0 130,-10 C137,1 132,8 134,16 C139,26 130,30 132,38 Z\" fill=\"{metal}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M128,34 C124,26 131,20 128,12\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.2\" stroke-opacity=\"0.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M121,40 L135,40 L139,57 L117,57 Z\" fill=\"{tassel}\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/></g>"
+   },
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)",
+   "views": {
+    "q45": "same"
+   },
+   "icon": {
+    "cx": 146,
+    "cy": 112,
+    "size": 196,
+    "rot": 32
+   },
+   "tall": true
+  },
+  {
+   "id": "tq-dao-thanh-long",
+   "slot": "heldR",
+   "label": "Thanh Long Yển Nguyệt Đao",
+   "description": "Tam Quốc — Thanh Long Yển Nguyệt Đao. Dựng lại từ khung (linh kiện dữ liệu).",
+   "layers": {
+    "heldR": "<g transform=\"rotate(13 128 193)\"><rect x=\"125.5\" y=\"46\" width=\"5\" height=\"188\" rx=\"2\" fill=\"{wood}\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M130,48 C152,46 168,28 166,0 C158,16 146,26 130,26 Z\" fill=\"{metal}\" stroke=\"{ink}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M134,42 C150,38 160,24 162,8\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.4\" stroke-opacity=\"0.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M130,48 L130,26 C125,31 124,41 130,48 Z\" fill=\"#2f7a4f\" stroke=\"{ink}\" stroke-width=\"1.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M126,30 L117,21 L126,41 Z\" fill=\"{metal}\" stroke=\"{ink}\" stroke-width=\"1.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M121,50 L135,50 L139,66 L117,66 Z\" fill=\"{tassel}\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/></g>"
+   },
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)",
+   "views": {
+    "q45": "same"
+   },
+   "icon": {
+    "cx": 146,
+    "cy": 112,
+    "size": 196,
+    "rot": 32
+   },
+   "tall": true
+  },
+  {
+   "id": "tq-mat-den",
+   "slot": "mask",
+   "label": "Mặt đen kinh kịch",
+   "description": "Tam Quốc — Mặt đen kinh kịch. Dựng lại từ khung (linh kiện dữ liệu).",
+   "layers": {
+    "mask": "<path d=\"{shape}\" fill=\"#3b3a47\" stroke=\"{ink}\" stroke-width=\"3.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M60,104 C58,86 72,80 85,85 C96,89 97,100 95,111 C93,121 82,125 72,121 C64,118 61,112 60,104 Z\" fill=\"#ffffff\"/><g transform=\"translate(200 0) scale(-1 1)\"><path d=\"M60,104 C58,86 72,80 85,85 C96,89 97,100 95,111 C93,121 82,125 72,121 C64,118 61,112 60,104 Z\" fill=\"#ffffff\"/></g><path d=\"M91,68 Q100,58 109,68 Q100,80 91,68 Z\" fill=\"#ffffff\"/><path d=\"M100,112 l-4,8 h8 z\" fill=\"#ffffff\" opacity=\".9\"/>"
+   },
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)",
+   "views": {
+    "q45": {
+     "mode": "drawn",
+     "layers": {
+      "mask": "<path d=\"{shape}\" fill=\"#3b3a47\" stroke=\"{ink}\" stroke-width=\"3.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><g class=\"gc-f45c\"><path d=\"M60,104 C58,86 72,80 85,85 C96,89 97,100 95,111 C93,121 82,125 72,121 C64,118 61,112 60,104 Z\" fill=\"#ffffff\"/><g transform=\"translate(200 0) scale(-1 1)\"><path d=\"M60,104 C58,86 72,80 85,85 C96,89 97,100 95,111 C93,121 82,125 72,121 C64,118 61,112 60,104 Z\" fill=\"#ffffff\"/></g><path d=\"M91,68 Q100,58 109,68 Q100,80 91,68 Z\" fill=\"#ffffff\"/><path d=\"M100,112 l-4,8 h8 z\" fill=\"#ffffff\" opacity=\".9\"/></g>"
+     }
+    }
+   },
+   "eyeArea": "#ffffff"
+  },
+  {
+   "id": "tq-mat-do",
+   "slot": "mask",
+   "label": "Mặt đỏ kinh kịch",
+   "description": "Tam Quốc — Mặt đỏ kinh kịch. Dựng lại từ khung (linh kiện dữ liệu).",
+   "layers": {
+    "mask": "<path d=\"{shape}\" fill=\"#cf4a35\" stroke=\"{ink}\" stroke-width=\"3.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M58,118 C62,134 74,142 88,145\" fill=\"none\" stroke=\"#a63426\" stroke-width=\"5\" stroke-linecap=\"round\" opacity=\".55\"/><g transform=\"translate(200 0) scale(-1 1)\"><path d=\"M58,118 C62,134 74,142 88,145\" fill=\"none\" stroke=\"#a63426\" stroke-width=\"5\" stroke-linecap=\"round\" opacity=\".55\"/></g><circle cx=\"113\" cy=\"118\" r=\"1.6\" fill=\"{ink}\"/>"
+   },
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)",
+   "views": {
+    "q45": {
+     "mode": "drawn",
+     "layers": {
+      "mask": "<path d=\"{shape}\" fill=\"#cf4a35\" stroke=\"{ink}\" stroke-width=\"3.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><g class=\"gc-f45c\"><path d=\"M58,118 C62,134 74,142 88,145\" fill=\"none\" stroke=\"#a63426\" stroke-width=\"5\" stroke-linecap=\"round\" opacity=\".55\"/><g transform=\"translate(200 0) scale(-1 1)\"><path d=\"M58,118 C62,134 74,142 88,145\" fill=\"none\" stroke=\"#a63426\" stroke-width=\"5\" stroke-linecap=\"round\" opacity=\".55\"/></g><circle cx=\"113\" cy=\"118\" r=\"1.6\" fill=\"{ink}\"/></g>"
+     }
+    }
+   },
+   "eyeArea": "#cf4a35"
+  },
+  {
+   "id": "tq-mat-trang",
+   "slot": "mask",
+   "label": "Mặt trắng kinh kịch",
+   "description": "Tam Quốc — Mặt trắng kinh kịch. Dựng lại từ khung (linh kiện dữ liệu).",
+   "layers": {
+    "mask": "<path d=\"{shape}\" fill=\"#f8f5ef\" stroke=\"{ink}\" stroke-width=\"3.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M67,102 L55,90\" stroke=\"{ink}\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M88,121 q-4,6 0,12\" fill=\"none\" stroke=\"{ink}\" stroke-width=\"1.6\" stroke-linecap=\"round\"/><g transform=\"translate(200 0) scale(-1 1)\"><path d=\"M67,102 L55,90\" stroke=\"{ink}\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M88,121 q-4,6 0,12\" fill=\"none\" stroke=\"{ink}\" stroke-width=\"1.6\" stroke-linecap=\"round\"/></g><path d=\"M96,76 L95,88 M104,76 L105,88\" stroke=\"{ink}\" stroke-width=\"1.8\" stroke-linecap=\"round\"/>"
+   },
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)",
+   "views": {
+    "q45": {
+     "mode": "drawn",
+     "layers": {
+      "mask": "<path d=\"{shape}\" fill=\"#f8f5ef\" stroke=\"{ink}\" stroke-width=\"3.2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><g class=\"gc-f45c\"><path d=\"M67,102 L55,90\" stroke=\"{ink}\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M88,121 q-4,6 0,12\" fill=\"none\" stroke=\"{ink}\" stroke-width=\"1.6\" stroke-linecap=\"round\"/><g transform=\"translate(200 0) scale(-1 1)\"><path d=\"M67,102 L55,90\" stroke=\"{ink}\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M88,121 q-4,6 0,12\" fill=\"none\" stroke=\"{ink}\" stroke-width=\"1.6\" stroke-linecap=\"round\"/></g><path d=\"M96,76 L95,88 M104,76 L105,88\" stroke=\"{ink}\" stroke-width=\"1.8\" stroke-linecap=\"round\"/></g>"
+     }
+    }
+   },
+   "eyeArea": "#f8f5ef"
+  },
+  {
+   "id": "tq-troi-quang",
+   "slot": "sky",
+   "label": "Trời quang",
+   "description": "Tam Quốc — Trời quang.",
+   "svg": "<rect x=\"0\" y=\"0\" width=\"640\" height=\"360\" fill=\"{sky}\"/><rect x=\"0\" y=\"36\" width=\"640\" height=\"324\" fill=\"{skyLow}\" fill-opacity=\"0.16\"/><rect x=\"0\" y=\"72\" width=\"640\" height=\"288\" fill=\"{skyLow}\" fill-opacity=\"0.16\"/><rect x=\"0\" y=\"108\" width=\"640\" height=\"252\" fill=\"{skyLow}\" fill-opacity=\"0.16\"/><rect x=\"0\" y=\"144\" width=\"640\" height=\"216\" fill=\"{skyLow}\" fill-opacity=\"0.16\"/><rect x=\"0\" y=\"180\" width=\"640\" height=\"180\" fill=\"{skyLow}\" fill-opacity=\"0.16\"/><rect x=\"0\" y=\"216\" width=\"640\" height=\"144\" fill=\"{skyLow}\" fill-opacity=\"0.16\"/><rect x=\"0\" y=\"252\" width=\"640\" height=\"108\" fill=\"{skyLow}\" fill-opacity=\"0.16\"/><rect x=\"0\" y=\"288\" width=\"640\" height=\"72\" fill=\"{skyLow}\" fill-opacity=\"0.16\"/><rect x=\"0\" y=\"324\" width=\"640\" height=\"36\" fill=\"{skyLow}\" fill-opacity=\"0.16\"/><circle cx=\"512\" cy=\"74\" r=\"46\" fill=\"{sun}\" opacity=\"0.28\"/><circle cx=\"512\" cy=\"74\" r=\"27\" fill=\"{sun}\"/><g fill=\"{cloud}\" opacity=\"0.92\"><ellipse cx=\"112\" cy=\"74\" rx=\"48\" ry=\"13\"/><circle cx=\"94\" cy=\"67\" r=\"15\"/><circle cx=\"121\" cy=\"62\" r=\"20\"/><circle cx=\"142\" cy=\"70\" r=\"12\"/></g><g fill=\"{cloud}\" opacity=\"0.92\"><ellipse cx=\"318\" cy=\"46\" rx=\"37.4\" ry=\"10.1\"/><circle cx=\"304\" cy=\"40.5\" r=\"11.7\"/><circle cx=\"325\" cy=\"36.6\" r=\"15.6\"/><circle cx=\"341.4\" cy=\"42.9\" r=\"9.4\"/></g><g fill=\"{cloud}\" opacity=\"0.92\"><ellipse cx=\"612\" cy=\"132\" rx=\"31.7\" ry=\"8.6\"/><circle cx=\"600.1\" cy=\"127.4\" r=\"9.9\"/><circle cx=\"617.9\" cy=\"124.1\" r=\"13.2\"/><circle cx=\"631.8\" cy=\"129.4\" r=\"7.9\"/></g>",
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)",
+   "outdoor": true
+  },
+  {
+   "id": "tq-troi-tron",
+   "slot": "sky",
+   "label": "Trời trơn",
+   "description": "Tam Quốc — Trời trơn.",
+   "svg": "<rect x=\"0\" y=\"0\" width=\"640\" height=\"360\" fill=\"{sky}\"/><rect x=\"0\" y=\"36\" width=\"640\" height=\"324\" fill=\"{skyLow}\" fill-opacity=\"0.16\"/><rect x=\"0\" y=\"72\" width=\"640\" height=\"288\" fill=\"{skyLow}\" fill-opacity=\"0.16\"/><rect x=\"0\" y=\"108\" width=\"640\" height=\"252\" fill=\"{skyLow}\" fill-opacity=\"0.16\"/><rect x=\"0\" y=\"144\" width=\"640\" height=\"216\" fill=\"{skyLow}\" fill-opacity=\"0.16\"/><rect x=\"0\" y=\"180\" width=\"640\" height=\"180\" fill=\"{skyLow}\" fill-opacity=\"0.16\"/><rect x=\"0\" y=\"216\" width=\"640\" height=\"144\" fill=\"{skyLow}\" fill-opacity=\"0.16\"/><rect x=\"0\" y=\"252\" width=\"640\" height=\"108\" fill=\"{skyLow}\" fill-opacity=\"0.16\"/><rect x=\"0\" y=\"288\" width=\"640\" height=\"72\" fill=\"{skyLow}\" fill-opacity=\"0.16\"/><rect x=\"0\" y=\"324\" width=\"640\" height=\"36\" fill=\"{skyLow}\" fill-opacity=\"0.16\"/>",
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)",
+   "outdoor": true
+  },
+  {
+   "id": "tq-tuong-trong",
+   "slot": "sky",
+   "label": "Tường gỗ trong nhà",
+   "description": "Tam Quốc — Tường gỗ trong nhà.",
+   "svg": "<rect x=\"0\" y=\"0\" width=\"640\" height=\"360\" fill=\"{wall}\"/><rect x=\"0\" y=\"0\" width=\"80\" height=\"360\" fill=\"{wood}\" opacity=\"0.09\"/><rect x=\"80\" y=\"0\" width=\"80\" height=\"360\" fill=\"{wood}\" opacity=\"0.05\"/><rect x=\"160\" y=\"0\" width=\"80\" height=\"360\" fill=\"{wood}\" opacity=\"0.09\"/><rect x=\"240\" y=\"0\" width=\"80\" height=\"360\" fill=\"{wood}\" opacity=\"0.05\"/><rect x=\"320\" y=\"0\" width=\"80\" height=\"360\" fill=\"{wood}\" opacity=\"0.09\"/><rect x=\"400\" y=\"0\" width=\"80\" height=\"360\" fill=\"{wood}\" opacity=\"0.05\"/><rect x=\"480\" y=\"0\" width=\"80\" height=\"360\" fill=\"{wood}\" opacity=\"0.09\"/><rect x=\"560\" y=\"0\" width=\"80\" height=\"360\" fill=\"{wood}\" opacity=\"0.05\"/><rect x=\"0\" y=\"34\" width=\"640\" height=\"12\" fill=\"{woodDark}\"/><rect x=\"0\" y=\"196\" width=\"640\" height=\"8\" fill=\"{woodDark}\" opacity=\"0.8\"/><rect x=\"34\" y=\"0\" width=\"18\" height=\"360\" fill=\"{wood}\"/><rect x=\"588\" y=\"0\" width=\"18\" height=\"360\" fill=\"{wood}\"/><circle cx=\"456\" cy=\"118\" r=\"52\" fill=\"{woodDark}\"/><circle cx=\"456\" cy=\"118\" r=\"45\" fill=\"{sky}\"/><circle cx=\"470\" cy=\"104\" r=\"11\" fill=\"{sun}\" opacity=\"0.9\"/><g stroke=\"{woodDark}\" stroke-width=\"3\"><path d=\"M411,118 H501 M456,73 V163 M424,86 L488,150 M488,86 L424,150\"/></g><rect x=\"150\" y=\"58\" width=\"74\" height=\"122\" fill=\"#f7f1e2\" stroke=\"{woodDark}\" stroke-width=\"2\"/><rect x=\"144\" y=\"54\" width=\"86\" height=\"7\" rx=\"3\" fill=\"{woodDark}\"/><rect x=\"144\" y=\"178\" width=\"86\" height=\"7\" rx=\"3\" fill=\"{woodDark}\"/><path d=\"M162,150 Q178,110 196,128 T214,96\" stroke=\"{leaf}\" stroke-width=\"3\" fill=\"none\" opacity=\"0.7\"/><circle cx=\"200\" cy=\"82\" r=\"9\" fill=\"{cloth}\" opacity=\"0.8\"/>",
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)",
+   "outdoor": false
+  },
+  {
+   "id": "tq-nui-xa",
+   "slot": "far",
+   "label": "Núi xa",
+   "description": "Tam Quốc — Núi xa.",
+   "svg": "<path d=\"M0,214 Q34,186 62,170 Q84,160 104,184 Q140,132 176,118 Q206,140 238,178 Q270,150 300,146 Q338,170 372,196 Q414,138 456,124 Q492,150 530,186 Q566,160 598,156 Q622,166 640,176 L640,280 L0,280 Z\" fill=\"{hillFar}\"/><path d=\"M150,140 Q176,118 200,138 Q186,134 176,146 Q166,136 150,140 Z M430,146 Q456,124 480,144 Q466,140 456,152 Q446,142 430,146 Z\" fill=\"#ffffff\" opacity=\"0.45\"/><path d=\"M0,248 Q70,206 148,232 Q214,250 276,226 Q350,198 430,230 Q500,254 560,226 Q606,210 640,224 L640,290 L0,290 Z\" fill=\"{hill}\"/><path d=\"M0,264 Q90,244 190,258 Q300,272 410,252 Q520,236 640,256 L640,290 L0,290 Z\" fill=\"{grass}\" opacity=\"0.55\"/>",
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)"
+  },
+  {
+   "id": "tq-tuong-thanh",
+   "slot": "far",
+   "label": "Tường thành",
+   "description": "Tam Quốc — Tường thành.",
+   "svg": "<path d=\"M0,214 Q120,186 240,204 Q380,180 520,200 Q590,192 640,204 L640,262 L0,262 Z\" fill=\"{hillFar}\"/><rect x=\"0\" y=\"190\" width=\"640\" height=\"78\" fill=\"{stone}\"/><rect x=\"0\" y=\"178\" width=\"18\" height=\"14\" fill=\"{stone}\"/><rect x=\"30\" y=\"178\" width=\"18\" height=\"14\" fill=\"{stone}\"/><rect x=\"60\" y=\"178\" width=\"18\" height=\"14\" fill=\"{stone}\"/><rect x=\"90\" y=\"178\" width=\"18\" height=\"14\" fill=\"{stone}\"/><rect x=\"120\" y=\"178\" width=\"18\" height=\"14\" fill=\"{stone}\"/><rect x=\"150\" y=\"178\" width=\"18\" height=\"14\" fill=\"{stone}\"/><rect x=\"180\" y=\"178\" width=\"18\" height=\"14\" fill=\"{stone}\"/><rect x=\"210\" y=\"178\" width=\"18\" height=\"14\" fill=\"{stone}\"/><rect x=\"240\" y=\"178\" width=\"18\" height=\"14\" fill=\"{stone}\"/><rect x=\"270\" y=\"178\" width=\"18\" height=\"14\" fill=\"{stone}\"/><rect x=\"300\" y=\"178\" width=\"18\" height=\"14\" fill=\"{stone}\"/><rect x=\"330\" y=\"178\" width=\"18\" height=\"14\" fill=\"{stone}\"/><rect x=\"360\" y=\"178\" width=\"18\" height=\"14\" fill=\"{stone}\"/><rect x=\"390\" y=\"178\" width=\"18\" height=\"14\" fill=\"{stone}\"/><rect x=\"420\" y=\"178\" width=\"18\" height=\"14\" fill=\"{stone}\"/><rect x=\"450\" y=\"178\" width=\"18\" height=\"14\" fill=\"{stone}\"/><rect x=\"480\" y=\"178\" width=\"18\" height=\"14\" fill=\"{stone}\"/><rect x=\"510\" y=\"178\" width=\"18\" height=\"14\" fill=\"{stone}\"/><rect x=\"540\" y=\"178\" width=\"18\" height=\"14\" fill=\"{stone}\"/><rect x=\"570\" y=\"178\" width=\"18\" height=\"14\" fill=\"{stone}\"/><rect x=\"600\" y=\"178\" width=\"18\" height=\"14\" fill=\"{stone}\"/><rect x=\"630\" y=\"178\" width=\"18\" height=\"14\" fill=\"{stone}\"/><g stroke=\"{woodDark}\" stroke-width=\"1.2\" opacity=\"0.22\"><path d=\"M0,206 H640\"/><path d=\"M0,222 H640\"/><path d=\"M0,238 H640\"/><path d=\"M0,254 H640\"/></g><rect x=\"250\" y=\"150\" width=\"140\" height=\"118\" fill=\"{stone}\"/><rect x=\"250\" y=\"150\" width=\"140\" height=\"118\" fill=\"#000000\" opacity=\"0.06\"/><path d=\"M296,268 V232 Q320,206 344,232 V268 Z\" fill=\"{woodDark}\"/><rect x=\"270\" y=\"116\" width=\"100\" height=\"36\" fill=\"{wall}\"/><g fill=\"{cloth}\"><rect x=\"276\" y=\"116\" width=\"7\" height=\"36\"/><rect x=\"316\" y=\"116\" width=\"7\" height=\"36\"/><rect x=\"357\" y=\"116\" width=\"7\" height=\"36\"/></g><path d=\"M232,120 Q262,114 286,96 L354,96 Q378,114 408,120 Q404,126 396,124 L244,124 Q236,126 232,120 Z\" fill=\"#4f5d6b\"/><path d=\"M262,98 Q290,92 304,78 L336,78 Q350,92 378,98 Z\" fill=\"#4f5d6b\"/>",
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)"
+  },
+  {
+   "id": "tq-song-xa",
+   "slot": "far",
+   "label": "Sông rộng",
+   "description": "Tam Quốc — Sông rộng.",
+   "svg": "<path d=\"M0,214 Q60,196 130,206 Q220,186 300,204 Q400,190 480,202 Q560,192 640,206 L640,232 L0,232 Z\" fill=\"{hillFar}\"/><rect x=\"0\" y=\"226\" width=\"640\" height=\"64\" fill=\"{water}\"/><g stroke=\"#ffffff\" stroke-width=\"2\" stroke-linecap=\"round\" opacity=\"0.5\"><path d=\"M40,244 h46 M150,258 h70 M300,240 h38 M390,266 h84 M520,248 h60 M90,278 h40\"/></g><path d=\"M470,226 l18,-8 l26,0 l12,8 Z\" fill=\"{woodDark}\" opacity=\"0.7\"/><path d=\"M494,218 V196 L512,214 Z\" fill=\"{wall}\" opacity=\"0.8\"/>",
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)"
+  },
+  {
+   "id": "tq-rung-truc",
+   "slot": "far",
+   "label": "Rừng trúc xa",
+   "description": "Tam Quốc — Rừng trúc xa.",
+   "svg": "<rect x=\"0\" y=\"0\" width=\"640\" height=\"290\" fill=\"{bamboo}\" opacity=\"0.12\"/><g opacity=\"0.45\"><path d=\"M12,292 L7,-10\" stroke=\"{bamboo}\" stroke-width=\"6\" stroke-linecap=\"round\"/><path d=\"M7.4,258 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M6.9,224 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M6.3,190 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M5.7,156 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M5.2,122 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M4.6,88 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M4.1,54 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M3.5,20 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/></g><g opacity=\"0.5\"><ellipse cx=\"-2.8\" cy=\"64.1\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(20 -2.8 64.1)\"/><ellipse cx=\"-4\" cy=\"59.6\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(-2 -4 59.6)\"/><ellipse cx=\"-2.3\" cy=\"55.1\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(-24 -2.3 55.1)\"/><ellipse cx=\"2.1\" cy=\"51.4\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(-46 2.1 51.4)\"/></g><g opacity=\"0.59\"><path d=\"M43,292 L49,-10\" stroke=\"{bamboo}\" stroke-width=\"7\" stroke-linecap=\"round\"/><path d=\"M39.2,258 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M39.9,224 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M40.5,190 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M41.2,156 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M41.9,122 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M42.6,88 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M43.2,54 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M43.9,20 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/></g><g opacity=\"0.73\"><path d=\"M74,292 L69,-10\" stroke=\"{bamboo}\" stroke-width=\"8\" stroke-linecap=\"round\"/><path d=\"M68.4,258 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M67.9,224 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M67.3,190 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M66.7,156 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M66.2,122 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M65.6,88 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M65.1,54 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M64.5,20 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/></g><g opacity=\"0.45\"><path d=\"M94,292 L100,-10\" stroke=\"{bamboo}\" stroke-width=\"9\" stroke-linecap=\"round\"/><path d=\"M89.2,258 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M89.9,224 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M90.5,190 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M91.2,156 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M91.9,122 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M92.6,88 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M93.2,54 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M93.9,20 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/></g><g opacity=\"0.5\"><ellipse cx=\"116.8\" cy=\"142.9\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(-20 116.8 142.9)\"/><ellipse cx=\"118\" cy=\"147.4\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(2 118 147.4)\"/><ellipse cx=\"116.3\" cy=\"151.9\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(24 116.3 151.9)\"/><ellipse cx=\"111.9\" cy=\"155.6\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(46 111.9 155.6)\"/></g><g opacity=\"0.59\"><path d=\"M125,292 L120,-10\" stroke=\"{bamboo}\" stroke-width=\"6\" stroke-linecap=\"round\"/><path d=\"M120.4,258 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M119.9,224 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M119.3,190 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M118.7,156 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M118.2,122 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M117.6,88 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M117.1,54 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M116.5,20 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/></g><g opacity=\"0.73\"><path d=\"M156,292 L162,-10\" stroke=\"{bamboo}\" stroke-width=\"7\" stroke-linecap=\"round\"/><path d=\"M152.2,258 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M152.9,224 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M153.5,190 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M154.2,156 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M154.9,122 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M155.6,88 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M156.2,54 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M156.9,20 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/></g><g opacity=\"0.45\"><path d=\"M176,292 L171,-10\" stroke=\"{bamboo}\" stroke-width=\"8\" stroke-linecap=\"round\"/><path d=\"M170.4,258 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M169.9,224 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M169.3,190 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M168.7,156 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M168.2,122 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M167.6,88 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M167.1,54 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M166.5,20 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/></g><g opacity=\"0.5\"><ellipse cx=\"161.2\" cy=\"118.1\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(20 161.2 118.1)\"/><ellipse cx=\"160\" cy=\"113.6\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(-2 160 113.6)\"/><ellipse cx=\"161.7\" cy=\"109.1\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(-24 161.7 109.1)\"/><ellipse cx=\"166.1\" cy=\"105.4\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(-46 166.1 105.4)\"/></g><g opacity=\"0.59\"><path d=\"M207,292 L213,-10\" stroke=\"{bamboo}\" stroke-width=\"9\" stroke-linecap=\"round\"/><path d=\"M202.2,258 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M202.9,224 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M203.5,190 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M204.2,156 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M204.9,122 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M205.6,88 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M206.2,54 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M206.9,20 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/></g><g opacity=\"0.73\"><path d=\"M238,292 L233,-10\" stroke=\"{bamboo}\" stroke-width=\"6\" stroke-linecap=\"round\"/><path d=\"M233.4,258 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M232.9,224 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M232.3,190 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M231.7,156 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M231.2,122 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M230.6,88 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M230.1,54 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M229.5,20 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/></g><g opacity=\"0.45\"><path d=\"M258,292 L264,-10\" stroke=\"{bamboo}\" stroke-width=\"7\" stroke-linecap=\"round\"/><path d=\"M254.2,258 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M254.9,224 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M255.5,190 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M256.2,156 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M256.9,122 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M257.6,88 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M258.2,54 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M258.9,20 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/></g><g opacity=\"0.5\"><ellipse cx=\"280.8\" cy=\"76.9\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(-20 280.8 76.9)\"/><ellipse cx=\"282\" cy=\"81.4\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(2 282 81.4)\"/><ellipse cx=\"280.3\" cy=\"85.9\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(24 280.3 85.9)\"/><ellipse cx=\"275.9\" cy=\"89.6\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(46 275.9 89.6)\"/></g><g opacity=\"0.59\"><path d=\"M289,292 L284,-10\" stroke=\"{bamboo}\" stroke-width=\"8\" stroke-linecap=\"round\"/><path d=\"M283.4,258 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M282.9,224 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M282.3,190 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M281.7,156 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M281.2,122 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M280.6,88 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M280.1,54 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M279.5,20 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/></g><g opacity=\"0.73\"><path d=\"M309,292 L315,-10\" stroke=\"{bamboo}\" stroke-width=\"9\" stroke-linecap=\"round\"/><path d=\"M304.2,258 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M304.9,224 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M305.5,190 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M306.2,156 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M306.9,122 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M307.6,88 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M308.2,54 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M308.9,20 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/></g><g opacity=\"0.45\"><path d=\"M340,292 L335,-10\" stroke=\"{bamboo}\" stroke-width=\"6\" stroke-linecap=\"round\"/><path d=\"M335.4,258 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M334.9,224 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M334.3,190 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M333.7,156 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M333.2,122 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M332.6,88 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M332.1,54 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M331.5,20 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/></g><g opacity=\"0.5\"><ellipse cx=\"325.2\" cy=\"172.1\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(20 325.2 172.1)\"/><ellipse cx=\"324\" cy=\"167.6\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(-2 324 167.6)\"/><ellipse cx=\"325.7\" cy=\"163.1\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(-24 325.7 163.1)\"/><ellipse cx=\"330.1\" cy=\"159.4\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(-46 330.1 159.4)\"/></g><g opacity=\"0.59\"><path d=\"M371,292 L377,-10\" stroke=\"{bamboo}\" stroke-width=\"7\" stroke-linecap=\"round\"/><path d=\"M367.2,258 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M367.9,224 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M368.5,190 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M369.2,156 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M369.9,122 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M370.6,88 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M371.2,54 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M371.9,20 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/></g><g opacity=\"0.73\"><path d=\"M391,292 L386,-10\" stroke=\"{bamboo}\" stroke-width=\"8\" stroke-linecap=\"round\"/><path d=\"M385.4,258 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M384.9,224 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M384.3,190 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M383.7,156 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M383.2,122 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M382.6,88 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M382.1,54 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M381.5,20 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/></g><g opacity=\"0.45\"><path d=\"M422,292 L428,-10\" stroke=\"{bamboo}\" stroke-width=\"9\" stroke-linecap=\"round\"/><path d=\"M417.2,258 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M417.9,224 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M418.5,190 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M419.2,156 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M419.9,122 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M420.6,88 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M421.2,54 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M421.9,20 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/></g><g opacity=\"0.5\"><ellipse cx=\"444.8\" cy=\"130.9\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(-20 444.8 130.9)\"/><ellipse cx=\"446\" cy=\"135.4\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(2 446 135.4)\"/><ellipse cx=\"444.3\" cy=\"139.9\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(24 444.3 139.9)\"/><ellipse cx=\"439.9\" cy=\"143.6\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(46 439.9 143.6)\"/></g><g opacity=\"0.59\"><path d=\"M453,292 L448,-10\" stroke=\"{bamboo}\" stroke-width=\"6\" stroke-linecap=\"round\"/><path d=\"M448.4,258 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M447.9,224 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M447.3,190 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M446.7,156 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M446.2,122 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M445.6,88 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M445.1,54 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M444.5,20 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/></g><g opacity=\"0.73\"><path d=\"M473,292 L479,-10\" stroke=\"{bamboo}\" stroke-width=\"7\" stroke-linecap=\"round\"/><path d=\"M469.2,258 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M469.9,224 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M470.5,190 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M471.2,156 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M471.9,122 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M472.6,88 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M473.2,54 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M473.9,20 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/></g><g opacity=\"0.45\"><path d=\"M504,292 L499,-10\" stroke=\"{bamboo}\" stroke-width=\"8\" stroke-linecap=\"round\"/><path d=\"M498.4,258 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M497.9,224 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M497.3,190 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M496.7,156 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M496.2,122 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M495.6,88 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M495.1,54 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M494.5,20 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/></g><g opacity=\"0.5\"><ellipse cx=\"489.2\" cy=\"106.1\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(20 489.2 106.1)\"/><ellipse cx=\"488\" cy=\"101.6\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(-2 488 101.6)\"/><ellipse cx=\"489.7\" cy=\"97.1\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(-24 489.7 97.1)\"/><ellipse cx=\"494.1\" cy=\"93.4\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(-46 494.1 93.4)\"/></g><g opacity=\"0.59\"><path d=\"M535,292 L541,-10\" stroke=\"{bamboo}\" stroke-width=\"9\" stroke-linecap=\"round\"/><path d=\"M530.2,258 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M530.9,224 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M531.5,190 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M532.2,156 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M532.9,122 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M533.6,88 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M534.2,54 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M534.9,20 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/></g><g opacity=\"0.73\"><path d=\"M555,292 L550,-10\" stroke=\"{bamboo}\" stroke-width=\"6\" stroke-linecap=\"round\"/><path d=\"M550.4,258 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M549.9,224 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M549.3,190 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M548.7,156 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M548.2,122 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M547.6,88 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M547.1,54 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M546.5,20 h8\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/></g><g opacity=\"0.45\"><path d=\"M586,292 L592,-10\" stroke=\"{bamboo}\" stroke-width=\"7\" stroke-linecap=\"round\"/><path d=\"M582.2,258 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M582.9,224 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M583.5,190 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M584.2,156 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M584.9,122 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M585.6,88 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M586.2,54 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M586.9,20 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/></g><g opacity=\"0.5\"><ellipse cx=\"608.8\" cy=\"64.9\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(-20 608.8 64.9)\"/><ellipse cx=\"610\" cy=\"69.4\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(2 610 69.4)\"/><ellipse cx=\"608.3\" cy=\"73.9\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(24 608.3 73.9)\"/><ellipse cx=\"603.9\" cy=\"77.6\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(46 603.9 77.6)\"/></g><g opacity=\"0.59\"><path d=\"M606,292 L601,-10\" stroke=\"{bamboo}\" stroke-width=\"8\" stroke-linecap=\"round\"/><path d=\"M600.4,258 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M599.9,224 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M599.3,190 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M598.7,156 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M598.2,122 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M597.6,88 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M597.1,54 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M596.5,20 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/></g><g opacity=\"0.73\"><path d=\"M637,292 L643,-10\" stroke=\"{bamboo}\" stroke-width=\"9\" stroke-linecap=\"round\"/><path d=\"M632.2,258 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M632.9,224 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M633.5,190 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M634.2,156 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M634.9,122 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M635.6,88 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M636.2,54 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M636.9,20 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/></g>",
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)"
+  },
+  {
+   "id": "tq-lieu-co",
+   "slot": "mid",
+   "label": "Nhà tranh (thảo lư)",
+   "description": "Tam Quốc — Nhà tranh (thảo lư).",
+   "svg": "<ellipse cx=\"486\" cy=\"296\" rx=\"104\" ry=\"9\" fill=\"#000000\" opacity=\"0.08\"/><rect x=\"412\" y=\"210\" width=\"148\" height=\"84\" fill=\"{wall}\"/><rect x=\"410\" y=\"210\" width=\"8\" height=\"84\" fill=\"{wood}\"/><rect x=\"554\" y=\"210\" width=\"8\" height=\"84\" fill=\"{wood}\"/><rect x=\"470\" y=\"236\" width=\"34\" height=\"58\" fill=\"{woodDark}\"/><circle cx=\"497\" cy=\"266\" r=\"2\" fill=\"{light}\"/><rect x=\"520\" y=\"228\" width=\"26\" height=\"22\" fill=\"{woodDark}\" opacity=\"0.85\"/><path d=\"M533,228 V250 M520,239 H546\" stroke=\"{wall}\" stroke-width=\"2\"/><path d=\"M382,222 L436,160 Q486,136 536,160 L590,222 Q486,206 382,222 Z\" fill=\"{roof}\"/><g stroke=\"{woodDark}\" stroke-width=\"1.6\" opacity=\"0.28\" fill=\"none\"><path d=\"M410,212 L446,166 M440,210 L466,156 M470,208 L486,150 M502,208 L506,150 M532,210 L528,156 M562,212 L548,168\"/></g><path d=\"M382,222 Q486,206 590,222\" stroke=\"{woodDark}\" stroke-width=\"2.4\" fill=\"none\" opacity=\"0.5\"/><g fill=\"{stone}\"><ellipse cx=\"430\" cy=\"296\" rx=\"12\" ry=\"4\"/><ellipse cx=\"487\" cy=\"298\" rx=\"22\" ry=\"5\"/><ellipse cx=\"545\" cy=\"296\" rx=\"12\" ry=\"4\"/></g>",
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)"
+  },
+  {
+   "id": "tq-trai-quan",
+   "slot": "mid",
+   "label": "Lều quân",
+   "description": "Tam Quốc — Lều quân.",
+   "svg": "<ellipse cx=\"470\" cy=\"294\" rx=\"102\" ry=\"9\" fill=\"#000000\" opacity=\"0.1\"/><path d=\"M376,292 L470,176 L564,292 Z\" fill=\"{cloth}\"/><path d=\"M470,176 L564,292 L516,292 Z\" fill=\"#000000\" opacity=\"0.12\"/><g stroke=\"{wall}\" stroke-width=\"5\" opacity=\"0.6\"><path d=\"M470,176 L420,292 M470,176 L520,292\"/></g><path d=\"M450,292 L470,232 L490,292 Z\" fill=\"{woodDark}\"/><path d=\"M470,176 V146\" stroke=\"{woodDark}\" stroke-width=\"4\"/><path d=\"M472,146 L500,152 L472,160 Z\" fill=\"{light}\"/><path d=\"M376,292 L350,300 M564,292 L590,300\" stroke=\"{woodDark}\" stroke-width=\"2\"/><path d=\"M570,292 L612,240 L654,292 Z\" fill=\"{cloth}\" opacity=\"0.85\"/><path d=\"M600,292 L612,262 L624,292 Z\" fill=\"{woodDark}\" opacity=\"0.85\"/>",
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)"
+  },
+  {
+   "id": "tq-dinh",
+   "slot": "mid",
+   "label": "Đình",
+   "description": "Tam Quốc — Đình.",
+   "svg": "<ellipse cx=\"480\" cy=\"300\" rx=\"116\" ry=\"8\" fill=\"#000000\" opacity=\"0.08\"/><rect x=\"380\" y=\"280\" width=\"200\" height=\"16\" fill=\"{stone}\"/><rect x=\"380\" y=\"280\" width=\"200\" height=\"4\" fill=\"#ffffff\" opacity=\"0.3\"/><rect x=\"393\" y=\"196\" width=\"10\" height=\"86\" fill=\"{cloth}\"/><rect x=\"441\" y=\"196\" width=\"10\" height=\"86\" fill=\"{cloth}\"/><rect x=\"509\" y=\"196\" width=\"10\" height=\"86\" fill=\"{cloth}\"/><rect x=\"557\" y=\"196\" width=\"10\" height=\"86\" fill=\"{cloth}\"/><rect x=\"386\" y=\"192\" width=\"188\" height=\"10\" fill=\"{woodDark}\"/><g stroke=\"{woodDark}\" stroke-width=\"2\" opacity=\"0.6\"><path d=\"M398,248 H446 M514,248 H562 M398,262 H446 M514,262 H562\"/></g><path d=\"M352,196 Q372,190 390,170 L570,170 Q588,190 608,196 Q612,204 600,200 L360,200 Q348,204 352,196 Z\" fill=\"#4f5d6b\"/><path d=\"M392,172 Q420,166 438,148 L522,148 Q540,166 568,172 Z\" fill=\"#4f5d6b\"/><path d=\"M440,148 L480,132 L520,148 Z\" fill=\"#3e4a57\"/><circle cx=\"480\" cy=\"130\" r=\"4\" fill=\"{light}\"/>",
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)"
+  },
+  {
+   "id": "tq-nen-co",
+   "slot": "ground",
+   "label": "Bãi cỏ",
+   "description": "Tam Quốc — Bãi cỏ.",
+   "svg": "<path d=\"M0,262 Q160,252 320,258 Q480,264 640,254 L640,360 L0,360 Z\" fill=\"{grass}\"/><path d=\"M0,300 Q200,288 400,298 Q540,304 640,294 L640,360 L0,360 Z\" fill=\"#000000\" opacity=\"0.05\"/><g opacity=\"0.55\"><path d=\"M36,290 Q36.5,283 34,278 Q39,283 40,275 Q41.5,283 46.5,279 Q43.5,284 44,290 Z\" fill=\"{leaf}\"/></g><g opacity=\"0.55\"><path d=\"M125,340 Q125.7,331.3 122.6,325.1 Q128.8,331.3 130,321.4 Q131.9,331.3 138.1,326.4 Q134.3,332.6 135,340 Z\" fill=\"{leaf}\"/></g><g opacity=\"0.55\"><path d=\"M244.1,300 Q244.8,289.6 241.1,282.2 Q248.5,289.6 250,277.8 Q252.2,289.6 259.6,283.7 Q255.2,291.1 255.9,300 Z\" fill=\"{leaf}\"/></g><g opacity=\"0.55\"><path d=\"M376,352 Q376.5,345 374,340 Q379,345 380,337 Q381.5,345 386.5,341 Q383.5,346 384,352 Z\" fill=\"{leaf}\"/></g><g opacity=\"0.55\"><path d=\"M465,296 Q465.7,287.3 462.6,281.1 Q468.8,287.3 470,277.4 Q471.9,287.3 478.1,282.4 Q474.3,288.6 475,296 Z\" fill=\"{leaf}\"/></g><g opacity=\"0.55\"><path d=\"M584.1,330 Q584.8,319.6 581.1,312.2 Q588.5,319.6 590,307.8 Q592.2,319.6 599.6,313.7 Q595.2,321.1 595.9,330 Z\" fill=\"{leaf}\"/></g><g opacity=\"0.55\"><path d=\"M296,274 Q296.5,267 294,262 Q299,267 300,259 Q301.5,267 306.5,263 Q303.5,268 304,274 Z\" fill=\"{leaf}\"/></g><g opacity=\"0.55\"><path d=\"M555,276 Q555.7,267.3 552.6,261.1 Q558.8,267.3 560,257.4 Q561.9,267.3 568.1,262.4 Q564.3,268.6 565,276 Z\" fill=\"{leaf}\"/></g>",
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)"
+  },
+  {
+   "id": "tq-duong-dat",
+   "slot": "ground",
+   "label": "Đường đất",
+   "description": "Tam Quốc — Đường đất.",
+   "svg": "<path d=\"M0,262 Q160,252 320,258 Q480,264 640,254 L640,360 L0,360 Z\" fill=\"{grass}\"/><path d=\"M258,258 Q320,254 384,258 L600,360 L40,360 Z\" fill=\"{path}\"/><g fill=\"{woodDark}\" opacity=\"0.18\"><ellipse cx=\"300\" cy=\"300\" rx=\"16\" ry=\"3\"/><ellipse cx=\"380\" cy=\"330\" rx=\"22\" ry=\"4\"/><ellipse cx=\"230\" cy=\"342\" rx=\"14\" ry=\"3\"/></g><g opacity=\"0.5\"><path d=\"M55.2,300 Q55.8,291.6 52.8,285.6 Q58.8,291.6 60,282 Q61.8,291.6 67.8,286.8 Q64.2,292.8 64.8,300 Z\" fill=\"{leaf}\"/><path d=\"M584.4,318 Q585.1,308.2 581.6,301.2 Q588.6,308.2 590,297 Q592.1,308.2 599.1,302.6 Q594.9,309.6 595.6,318 Z\" fill=\"{leaf}\"/><path d=\"M146,350 Q146.5,343 144,338 Q149,343 150,335 Q151.5,343 156.5,339 Q153.5,344 154,350 Z\" fill=\"{leaf}\"/></g>",
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)"
+  },
+  {
+   "id": "tq-nen-dat",
+   "slot": "ground",
+   "label": "Sân đất nện",
+   "description": "Tam Quốc — Sân đất nện.",
+   "svg": "<path d=\"M0,260 Q320,250 640,260 L640,360 L0,360 Z\" fill=\"{ground}\"/><path d=\"M0,306 Q320,292 640,306 L640,360 L0,360 Z\" fill=\"#000000\" opacity=\"0.06\"/><g fill=\"{stone}\" opacity=\"0.6\"><ellipse cx=\"80\" cy=\"290\" rx=\"7\" ry=\"3\"/><ellipse cx=\"420\" cy=\"276\" rx=\"5\" ry=\"2\"/><ellipse cx=\"560\" cy=\"340\" rx=\"9\" ry=\"3\"/><ellipse cx=\"250\" cy=\"348\" rx=\"6\" ry=\"2\"/></g>",
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)"
+  },
+  {
+   "id": "tq-san-go",
+   "slot": "ground",
+   "label": "Sàn gỗ",
+   "description": "Tam Quốc — Sàn gỗ.",
+   "svg": "<rect x=\"0\" y=\"246\" width=\"640\" height=\"114\" fill=\"{wood}\"/><rect x=\"0\" y=\"242\" width=\"640\" height=\"8\" fill=\"{woodDark}\"/><g stroke=\"{woodDark}\" stroke-width=\"1.6\" opacity=\"0.35\"><path d=\"M0,268 H640\"/><path d=\"M40,246 V268\"/><path d=\"M180,246 V268\"/><path d=\"M320,246 V268\"/><path d=\"M460,246 V268\"/><path d=\"M600,246 V268\"/><path d=\"M0,292 H640\"/><path d=\"M110,268 V292\"/><path d=\"M250,268 V292\"/><path d=\"M390,268 V292\"/><path d=\"M530,268 V292\"/><path d=\"M0,320 H640\"/><path d=\"M40,292 V320\"/><path d=\"M180,292 V320\"/><path d=\"M320,292 V320\"/><path d=\"M460,292 V320\"/><path d=\"M600,292 V320\"/><path d=\"M0,352 H640\"/><path d=\"M110,320 V352\"/><path d=\"M250,320 V352\"/><path d=\"M390,320 V352\"/><path d=\"M530,320 V352\"/></g><rect x=\"0\" y=\"250\" width=\"640\" height=\"20\" fill=\"#000000\" opacity=\"0.08\"/>",
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)"
+  },
+  {
+   "id": "tq-bui-co",
+   "slot": "front",
+   "label": "Khóm cỏ tiền cảnh",
+   "description": "Tam Quốc — Khóm cỏ tiền cảnh.",
+   "svg": "<path d=\"M-1.2,362 Q0.2,342.4 -6.8,328.4 Q7.2,342.4 10,320 Q14.2,342.4 28.2,331.2 Q19.8,345.2 21.2,362 Z\" fill=\"{leaf}\"/><path d=\"M37.2,362 Q38.3,346.6 32.8,335.6 Q43.8,346.6 46,329 Q49.3,346.6 60.3,337.8 Q53.7,348.8 54.8,362 Z\" fill=\"{leaf}\"/><path d=\"M588,362 Q589.5,341 582,326 Q597,341 600,317 Q604.5,341 619.5,329 Q610.5,344 612,362 Z\" fill=\"{leaf}\"/><path d=\"M623.2,362 Q624.3,346.6 618.8,335.6 Q629.8,346.6 632,329 Q635.3,346.6 646.3,337.8 Q639.7,348.8 640.8,362 Z\" fill=\"{leaf}\"/><path d=\"M566.8,362 Q567.7,349.4 563.2,340.4 Q572.2,349.4 574,335 Q576.7,349.4 585.7,342.2 Q580.3,351.2 581.2,362 Z\" fill=\"{leaf}\"/>",
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)"
+  },
+  {
+   "id": "tq-vien-truc",
+   "slot": "front",
+   "label": "Trúc hai bên",
+   "description": "Tam Quốc — Trúc hai bên.",
+   "svg": "<path d=\"M14,370 L18,-10\" stroke=\"{bamboo}\" stroke-width=\"12\" stroke-linecap=\"round\"/><path d=\"M7.4,336 h14\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M7.7,302 h14\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M8.1,268 h14\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M8.4,234 h14\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M8.8,200 h14\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M9.1,166 h14\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M9.5,132 h14\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M9.9,98 h14\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M10.2,64 h14\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M10.6,30 h14\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M44,370 L41,-10\" stroke=\"{bamboo}\" stroke-width=\"9\" stroke-linecap=\"round\"/><path d=\"M38.2,336 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M38,302 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M37.7,268 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M37.4,234 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M37.2,200 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M36.9,166 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M36.6,132 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M36.4,98 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M36.1,64 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M35.8,30 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M626,370 L622,-10\" stroke=\"{bamboo}\" stroke-width=\"12\" stroke-linecap=\"round\"/><path d=\"M618.6,336 h14\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M618.3,302 h14\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M617.9,268 h14\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M617.6,234 h14\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M617.2,200 h14\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M616.9,166 h14\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M616.5,132 h14\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M616.1,98 h14\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M615.8,64 h14\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M615.4,30 h14\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M598,370 L601,-10\" stroke=\"{bamboo}\" stroke-width=\"9\" stroke-linecap=\"round\"/><path d=\"M592.8,336 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M593,302 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M593.3,268 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M593.6,234 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M593.8,200 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M594.1,166 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M594.4,132 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M594.6,98 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M594.9,64 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M595.2,30 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><ellipse cx=\"64.4\" cy=\"64.7\" rx=\"19.5\" ry=\"4.7\" fill=\"{leaf}\" transform=\"rotate(-20 64.4 64.7)\"/><ellipse cx=\"66\" cy=\"70.5\" rx=\"19.5\" ry=\"4.7\" fill=\"{leaf}\" transform=\"rotate(2 66 70.5)\"/><ellipse cx=\"63.8\" cy=\"76.3\" rx=\"19.5\" ry=\"4.7\" fill=\"{leaf}\" transform=\"rotate(24 63.8 76.3)\"/><ellipse cx=\"58.1\" cy=\"81.2\" rx=\"19.5\" ry=\"4.7\" fill=\"{leaf}\" transform=\"rotate(46 58.1 81.2)\"/><ellipse cx=\"40.7\" cy=\"175.5\" rx=\"16.5\" ry=\"4\" fill=\"{leaf}\" transform=\"rotate(-20 40.7 175.5)\"/><ellipse cx=\"42\" cy=\"180.5\" rx=\"16.5\" ry=\"4\" fill=\"{leaf}\" transform=\"rotate(2 42 180.5)\"/><ellipse cx=\"40.1\" cy=\"185.4\" rx=\"16.5\" ry=\"4\" fill=\"{leaf}\" transform=\"rotate(24 40.1 185.4)\"/><ellipse cx=\"35.3\" cy=\"189.5\" rx=\"16.5\" ry=\"4\" fill=\"{leaf}\" transform=\"rotate(46 35.3 189.5)\"/><ellipse cx=\"575.6\" cy=\"95.3\" rx=\"19.5\" ry=\"4.7\" fill=\"{leaf}\" transform=\"rotate(20 575.6 95.3)\"/><ellipse cx=\"574\" cy=\"89.5\" rx=\"19.5\" ry=\"4.7\" fill=\"{leaf}\" transform=\"rotate(-2 574 89.5)\"/><ellipse cx=\"576.2\" cy=\"83.7\" rx=\"19.5\" ry=\"4.7\" fill=\"{leaf}\" transform=\"rotate(-24 576.2 83.7)\"/><ellipse cx=\"581.9\" cy=\"78.8\" rx=\"19.5\" ry=\"4.7\" fill=\"{leaf}\" transform=\"rotate(-46 581.9 78.8)\"/><ellipse cx=\"599.3\" cy=\"214.5\" rx=\"16.5\" ry=\"4\" fill=\"{leaf}\" transform=\"rotate(20 599.3 214.5)\"/><ellipse cx=\"598\" cy=\"209.5\" rx=\"16.5\" ry=\"4\" fill=\"{leaf}\" transform=\"rotate(-2 598 209.5)\"/><ellipse cx=\"599.9\" cy=\"204.6\" rx=\"16.5\" ry=\"4\" fill=\"{leaf}\" transform=\"rotate(-24 599.9 204.6)\"/><ellipse cx=\"604.7\" cy=\"200.5\" rx=\"16.5\" ry=\"4\" fill=\"{leaf}\" transform=\"rotate(-46 604.7 200.5)\"/>",
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)"
+  },
+  {
+   "id": "tq-rem",
+   "slot": "front",
+   "label": "Rèm vải",
+   "description": "Tam Quốc — Rèm vải.",
+   "svg": "<path d=\"M0,0 L132,0 Q92,80 70,150 Q58,190 36,206 Q20,214 0,214 Z\" fill=\"{cloth}\"/><path d=\"M640,0 L508,0 Q548,80 570,150 Q582,190 604,206 Q620,214 640,214 Z\" fill=\"{cloth}\"/><path d=\"M20,0 Q30,100 22,200 M48,0 Q62,90 52,190 M620,0 Q610,100 618,200 M592,0 Q578,90 588,190\" stroke=\"#000000\" stroke-width=\"3\" opacity=\"0.12\" fill=\"none\"/><rect x=\"0\" y=\"0\" width=\"640\" height=\"18\" fill=\"{cloth}\"/><rect x=\"0\" y=\"18\" width=\"640\" height=\"5\" fill=\"{light}\" opacity=\"0.8\"/><rect x=\"34\" y=\"150\" width=\"34\" height=\"8\" rx=\"4\" fill=\"{light}\" transform=\"rotate(-24 51 154)\"/><rect x=\"572\" y=\"150\" width=\"34\" height=\"8\" rx=\"4\" fill=\"{light}\" transform=\"rotate(24 589 154)\"/>",
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)"
+  },
+  {
+   "id": "tq-thong",
+   "slot": "deco",
+   "label": "Cây tùng",
+   "description": "Tam Quốc — Cây tùng.",
+   "svg": "<ellipse cx=\"0\" cy=\"0\" rx=\"40\" ry=\"6\" fill=\"#000000\" opacity=\"0.1\"/><rect x=\"-7\" y=\"-46\" width=\"14\" height=\"46\" fill=\"{woodDark}\"/><path d=\"M-54,-40 L0,-100 L54,-40 Z\" fill=\"{leaf}\"/><path d=\"M-44,-80 L0,-136 L44,-80 Z\" fill=\"{leaf}\"/><path d=\"M-32,-116 L0,-166 L32,-116 Z\" fill=\"{leaf}\"/><path d=\"M0,-100 L54,-40 L20,-40 Z M0,-136 L44,-80 L16,-80 Z M0,-166 L32,-116 L12,-116 Z\" fill=\"#000000\" opacity=\"0.12\"/>",
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)"
+  },
+  {
+   "id": "tq-cay-truc",
+   "slot": "deco",
+   "label": "Khóm trúc",
+   "description": "Tam Quốc — Khóm trúc.",
+   "svg": "<ellipse cx=\"0\" cy=\"0\" rx=\"34\" ry=\"5\" fill=\"#000000\" opacity=\"0.1\"/><path d=\"M-14,0 L-20,-180\" stroke=\"{bamboo}\" stroke-width=\"8\" stroke-linecap=\"round\"/><path d=\"M-20.1,-34 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M-21.3,-68 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M-22.4,-102 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M-23.5,-136 h10\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M4,0 L8,-200\" stroke=\"{bamboo}\" stroke-width=\"9\" stroke-linecap=\"round\"/><path d=\"M-0.8,-34 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M-0.1,-68 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M0.5,-102 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M1.2,-136 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M1.9,-170 h11\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M18,0 L28,-150\" stroke=\"{bamboo}\" stroke-width=\"7\" stroke-linecap=\"round\"/><path d=\"M15.8,-34 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M18,-68 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M20.3,-102 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><path d=\"M22.6,-136 h9\" stroke=\"{leaf}\" stroke-width=\"2\" opacity=\"0.7\"/><ellipse cx=\"-34.9\" cy=\"-146.3\" rx=\"13.5\" ry=\"3.2\" fill=\"{leaf}\" transform=\"rotate(20 -34.9 -146.3)\"/><ellipse cx=\"-36\" cy=\"-150.4\" rx=\"13.5\" ry=\"3.2\" fill=\"{leaf}\" transform=\"rotate(-2 -36 -150.4)\"/><ellipse cx=\"-34.4\" cy=\"-154.4\" rx=\"13.5\" ry=\"3.2\" fill=\"{leaf}\" transform=\"rotate(-24 -34.4 -154.4)\"/><ellipse cx=\"-30.5\" cy=\"-157.8\" rx=\"13.5\" ry=\"3.2\" fill=\"{leaf}\" transform=\"rotate(-46 -30.5 -157.8)\"/><ellipse cx=\"26.8\" cy=\"-180.1\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(-20 26.8 -180.1)\"/><ellipse cx=\"28\" cy=\"-175.6\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(2 28 -175.6)\"/><ellipse cx=\"26.3\" cy=\"-171.1\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(24 26.3 -171.1)\"/><ellipse cx=\"21.9\" cy=\"-167.4\" rx=\"15\" ry=\"3.6\" fill=\"{leaf}\" transform=\"rotate(46 21.9 -167.4)\"/><ellipse cx=\"41\" cy=\"-123.3\" rx=\"12\" ry=\"2.9\" fill=\"{leaf}\" transform=\"rotate(-20 41 -123.3)\"/><ellipse cx=\"42\" cy=\"-119.7\" rx=\"12\" ry=\"2.9\" fill=\"{leaf}\" transform=\"rotate(2 42 -119.7)\"/><ellipse cx=\"40.6\" cy=\"-116.1\" rx=\"12\" ry=\"2.9\" fill=\"{leaf}\" transform=\"rotate(24 40.6 -116.1)\"/><ellipse cx=\"37.1\" cy=\"-113.1\" rx=\"12\" ry=\"2.9\" fill=\"{leaf}\" transform=\"rotate(46 37.1 -113.1)\"/><ellipse cx=\"-25.2\" cy=\"-93.1\" rx=\"10.5\" ry=\"2.5\" fill=\"{leaf}\" transform=\"rotate(20 -25.2 -93.1)\"/><ellipse cx=\"-26\" cy=\"-96.3\" rx=\"10.5\" ry=\"2.5\" fill=\"{leaf}\" transform=\"rotate(-2 -26 -96.3)\"/><ellipse cx=\"-24.8\" cy=\"-99.4\" rx=\"10.5\" ry=\"2.5\" fill=\"{leaf}\" transform=\"rotate(-24 -24.8 -99.4)\"/><ellipse cx=\"-21.7\" cy=\"-102\" rx=\"10.5\" ry=\"2.5\" fill=\"{leaf}\" transform=\"rotate(-46 -21.7 -102)\"/>",
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)"
+  },
+  {
+   "id": "tq-da",
+   "slot": "deco",
+   "label": "Tảng đá",
+   "description": "Tam Quốc — Tảng đá.",
+   "svg": "<ellipse cx=\"0\" cy=\"0\" rx=\"48\" ry=\"6\" fill=\"#000000\" opacity=\"0.1\"/><path d=\"M-42,0 Q-46,-26 -20,-36 Q2,-48 26,-32 Q46,-20 40,0 Z\" fill=\"{stone}\"/><path d=\"M-24,-30 Q-4,-42 16,-32 Q0,-34 -14,-24 Z\" fill=\"#ffffff\" opacity=\"0.35\"/><path d=\"M34,0 Q36,-14 50,-16 Q64,-14 64,0 Z\" fill=\"{stone}\"/><path d=\"M34,0 Q36,-14 50,-16 Q64,-14 64,0 Z\" fill=\"#000000\" opacity=\"0.1\"/>",
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)"
+  },
+  {
+   "id": "tq-co-hieu",
+   "slot": "deco",
+   "label": "Cờ trận",
+   "description": "Tam Quốc — Cờ trận.",
+   "svg": "<ellipse cx=\"0\" cy=\"0\" rx=\"18\" ry=\"4\" fill=\"#000000\" opacity=\"0.12\"/><rect x=\"-3\" y=\"-176\" width=\"6\" height=\"176\" fill=\"{woodDark}\"/><path d=\"M3,-170 L76,-164 Q66,-144 76,-124 Q66,-104 76,-86 L3,-92 Z\" fill=\"{cloth}\"/><path d=\"M3,-170 L76,-164 L76,-158 L3,-162 Z\" fill=\"{light}\"/><circle cx=\"38\" cy=\"-127\" r=\"15\" fill=\"{light}\"/><path d=\"M30,-134 H46 M38,-140 V-114 M30,-122 H46\" stroke=\"{cloth}\" stroke-width=\"3\"/><circle cx=\"0\" cy=\"-178\" r=\"5\" fill=\"{light}\"/>",
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)"
+  },
+  {
+   "id": "tq-ban-tra",
+   "slot": "deco",
+   "label": "Bàn trà",
+   "description": "Tam Quốc — Bàn trà.",
+   "svg": "<ellipse cx=\"0\" cy=\"0\" rx=\"70\" ry=\"7\" fill=\"#000000\" opacity=\"0.12\"/><rect x=\"-54\" y=\"-30\" width=\"8\" height=\"30\" fill=\"{woodDark}\"/><rect x=\"46\" y=\"-30\" width=\"8\" height=\"30\" fill=\"{woodDark}\"/><rect x=\"-64\" y=\"-38\" width=\"128\" height=\"10\" rx=\"3\" fill=\"{wood}\"/><rect x=\"-64\" y=\"-30\" width=\"128\" height=\"3\" fill=\"#000000\" opacity=\"0.15\"/><path d=\"M-18,-38 Q-20,-58 0,-60 Q20,-58 18,-38 Z\" fill=\"#e8e2d2\"/><path d=\"M18,-50 Q30,-52 30,-60\" stroke=\"#e8e2d2\" stroke-width=\"4\" fill=\"none\"/><rect x=\"-4\" y=\"-66\" width=\"8\" height=\"7\" rx=\"2\" fill=\"{woodDark}\"/><path d=\"M-48,-38 h14 l-2,-9 h-10 Z M34,-38 h14 l-2,-9 h-10 Z\" fill=\"#e8e2d2\"/>",
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)"
+  },
+  {
+   "id": "tq-den-long",
+   "slot": "deco",
+   "label": "Đèn lồng",
+   "description": "Tam Quốc — Đèn lồng.",
+   "svg": "<ellipse cx=\"0\" cy=\"0\" rx=\"14\" ry=\"3\" fill=\"#000000\" opacity=\"0.12\"/><rect x=\"-3\" y=\"-120\" width=\"6\" height=\"120\" fill=\"{woodDark}\"/><path d=\"M0,-118 H22 V-110\" stroke=\"{woodDark}\" stroke-width=\"3\" fill=\"none\"/><circle cx=\"22\" cy=\"-90\" r=\"28\" fill=\"{light}\" opacity=\"0.3\"/><ellipse cx=\"22\" cy=\"-90\" rx=\"13\" ry=\"16\" fill=\"{cloth}\"/><ellipse cx=\"22\" cy=\"-90\" rx=\"6\" ry=\"13\" fill=\"{light}\" opacity=\"0.55\"/><rect x=\"15\" y=\"-108\" width=\"14\" height=\"4\" fill=\"{woodDark}\"/><rect x=\"15\" y=\"-76\" width=\"14\" height=\"4\" fill=\"{woodDark}\"/><path d=\"M22,-72 V-62\" stroke=\"{light}\" stroke-width=\"2\"/>",
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)"
+  },
+  {
+   "id": "tq-hang-rao",
+   "slot": "deco",
+   "label": "Hàng rào",
+   "description": "Tam Quốc — Hàng rào.",
+   "svg": "<ellipse cx=\"0\" cy=\"0\" rx=\"74\" ry=\"4\" fill=\"#000000\" opacity=\"0.08\"/><path d=\"M-66,0 V-44 L-62,-50 L-58,-44 V0 Z\" fill=\"{wood}\"/><path d=\"M-25,0 V-44 L-21,-50 L-17,-44 V0 Z\" fill=\"{wood}\"/><path d=\"M17,0 V-44 L21,-50 L25,-44 V0 Z\" fill=\"{wood}\"/><path d=\"M58,0 V-44 L62,-50 L66,-44 V0 Z\" fill=\"{wood}\"/><rect x=\"-70\" y=\"-38\" width=\"140\" height=\"6\" fill=\"{woodDark}\"/><rect x=\"-70\" y=\"-18\" width=\"140\" height=\"6\" fill=\"{woodDark}\"/>",
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)"
+  },
+  {
+   "id": "tq-gia-binh-khi",
+   "slot": "deco",
+   "label": "Giá binh khí",
+   "description": "Tam Quốc — Giá binh khí.",
+   "svg": "<ellipse cx=\"0\" cy=\"0\" rx=\"52\" ry=\"5\" fill=\"#000000\" opacity=\"0.1\"/><path d=\"M-24,-4 V-140\" stroke=\"{woodDark}\" stroke-width=\"4\"/><path d=\"M-30,-140 L-24,-162 L-18,-140 Z\" fill=\"{stone}\"/><path d=\"M-28,-138 q4,10 8,0\" fill=\"{cloth}\"/><path d=\"M0,-4 V-140\" stroke=\"{woodDark}\" stroke-width=\"4\"/><path d=\"M-6,-140 L0,-162 L6,-140 Z\" fill=\"{stone}\"/><path d=\"M-4,-138 q4,10 8,0\" fill=\"{cloth}\"/><path d=\"M6,-150 q14,6 8,22\" stroke=\"{stone}\" stroke-width=\"5\" fill=\"none\"/><path d=\"M24,-4 V-140\" stroke=\"{woodDark}\" stroke-width=\"4\"/><path d=\"M18,-140 L24,-162 L30,-140 Z\" fill=\"{stone}\"/><path d=\"M20,-138 q4,10 8,0\" fill=\"{cloth}\"/><rect x=\"-44\" y=\"-62\" width=\"88\" height=\"7\" fill=\"{wood}\"/><rect x=\"-44\" y=\"-12\" width=\"88\" height=\"7\" fill=\"{wood}\"/><rect x=\"-46\" y=\"-70\" width=\"7\" height=\"70\" fill=\"{wood}\"/><rect x=\"39\" y=\"-70\" width=\"7\" height=\"70\" fill=\"{wood}\"/>",
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)"
+  },
+  {
+   "id": "tq-lua-trai",
+   "slot": "deco",
+   "label": "Đống lửa",
+   "description": "Tam Quốc — Đống lửa.",
+   "svg": "<ellipse cx=\"0\" cy=\"-4\" rx=\"62\" ry=\"14\" fill=\"{light}\" opacity=\"0.28\"/><g fill=\"{stone}\"><ellipse cx=\"-26\" cy=\"-2\" rx=\"9\" ry=\"5\"/><ellipse cx=\"26\" cy=\"-2\" rx=\"9\" ry=\"5\"/><ellipse cx=\"0\" cy=\"2\" rx=\"10\" ry=\"5\"/></g><rect x=\"-28\" y=\"-12\" width=\"56\" height=\"8\" rx=\"4\" fill=\"{woodDark}\" transform=\"rotate(16 0 -8)\"/><rect x=\"-28\" y=\"-12\" width=\"56\" height=\"8\" rx=\"4\" fill=\"{wood}\" transform=\"rotate(-16 0 -8)\"/><path d=\"M-16,-12 Q-22,-34 -6,-48 Q-8,-34 2,-30 Q0,-52 12,-62 Q10,-40 20,-30 Q24,-18 16,-12 Z\" fill=\"{cloth}\"/><path d=\"M-8,-12 Q-10,-28 0,-36 Q2,-26 8,-24 Q12,-16 8,-12 Z\" fill=\"{light}\"/>",
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)"
+  },
+  {
+   "id": "tq-bui-cay",
+   "slot": "deco",
+   "label": "Bụi cây",
+   "description": "Tam Quốc — Bụi cây.",
+   "svg": "<ellipse cx=\"0\" cy=\"0\" rx=\"46\" ry=\"5\" fill=\"#000000\" opacity=\"0.1\"/><g fill=\"{leaf}\"><circle cx=\"-22\" cy=\"-18\" r=\"20\"/><circle cx=\"4\" cy=\"-28\" r=\"25\"/><circle cx=\"28\" cy=\"-16\" r=\"18\"/><rect x=\"-40\" y=\"-18\" width=\"84\" height=\"18\" rx=\"9\"/></g><g fill=\"#ffffff\" opacity=\"0.22\"><circle cx=\"-4\" cy=\"-40\" r=\"8\"/><circle cx=\"-28\" cy=\"-26\" r=\"6\"/></g><g fill=\"{flower}\"><circle cx=\"-10\" cy=\"-24\" r=\"3\"/><circle cx=\"18\" cy=\"-30\" r=\"3\"/><circle cx=\"30\" cy=\"-12\" r=\"3\"/></g>",
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)"
+  }
+ ],
+ "items": [
+  {
+   "id": "tq-dao-sat",
+   "name": "Đao sắt",
+   "han": "",
+   "type": "weapon",
+   "rarity": "common",
+   "description": "Đao rèn thô của lính trơn.",
+   "stats": {
+    "atk": 32,
+    "spd": 18
+   },
+   "equip": {
+    "slot": "heldR",
+    "part": "local.my/tq-dao-thanh-long",
+    "params": {},
+    "palette": {
+     "metal": "#a7adb3",
+     "wood": "#6b4a2e",
+     "tassel": "#77706a"
+    }
+   },
+   "status": "published"
+  },
+  {
+   "id": "tq-thanh-long-dao",
+   "name": "Thanh Long Yển Nguyệt Đao",
+   "han": "青龍偃月刀",
+   "type": "weapon",
+   "rarity": "legendary",
+   "description": "Đao tám mươi hai cân của Quan Vũ.",
+   "stats": {
+    "atk": 98,
+    "def": 20,
+    "spd": 35,
+    "luk": 40
+   },
+   "equip": {
+    "slot": "heldR",
+    "part": "local.my/tq-dao-thanh-long",
+    "params": {},
+    "palette": {
+     "metal": "#e6eef3",
+     "wood": "#24573c",
+     "tassel": "#c8372d"
+    }
+   },
+   "status": "published"
+  },
+  {
+   "id": "tq-xa-mau",
+   "name": "Trượng Bát Xà Mâu",
+   "han": "丈八蛇矛",
+   "type": "weapon",
+   "rarity": "epic",
+   "description": "Mâu dài trượng tám, lưỡi uốn như rắn.",
+   "stats": {
+    "atk": 90,
+    "spd": 45,
+    "hp": 30
+   },
+   "equip": {
+    "slot": "heldR",
+    "part": "local.my/tq-xa-mau",
+    "params": {},
+    "palette": {
+     "metal": "#dfe6ea",
+     "wood": "#3b2a20",
+     "tassel": "#2b2b2b"
+    }
+   },
+   "status": "published"
+  },
+  {
+   "id": "tq-thuong-go",
+   "name": "Thương gỗ luyện tập",
+   "han": "",
+   "type": "weapon",
+   "rarity": "common",
+   "description": "Mũi bọc gỗ, dùng cho tân binh.",
+   "stats": {
+    "atk": 12,
+    "spd": 30
+   },
+   "equip": {
+    "slot": "heldR",
+    "part": "local.my/tq-xa-mau",
+    "params": {},
+    "palette": {
+     "metal": "#c9b48a",
+     "wood": "#a07a4a",
+     "tassel": "#d8cfc0"
+    }
+   },
+   "status": "published"
+  },
+  {
+   "id": "tq-kiem-sat",
+   "name": "Kiếm sắt",
+   "han": "",
+   "type": "weapon",
+   "rarity": "uncommon",
+   "description": "Kiếm thẳng hai lưỡi.",
+   "stats": {
+    "atk": 40,
+    "spd": 40
+   },
+   "equip": {
+    "slot": "heldR",
+    "part": "local.my/tq-kiem",
+    "params": {},
+    "palette": {}
+   },
+   "status": "published"
+  },
+  {
+   "id": "tq-quat-long-vu",
+   "name": "Quạt lông vũ",
+   "han": "羽扇",
+   "type": "talisman",
+   "rarity": "legendary",
+   "description": "Phe phẩy là tính xong cục diện.",
+   "stats": {
+    "int": 99,
+    "spd": 20,
+    "luk": 60
+   },
+   "equip": {
+    "slot": "heldR",
+    "part": "local.my/tq-quat-long",
+    "params": {},
+    "palette": {}
+   },
+   "status": "published"
+  },
+  {
+   "id": "tq-bau-ruou",
+   "name": "Bầu rượu",
+   "han": "",
+   "type": "offhand",
+   "rarity": "uncommon",
+   "description": "Uống một ngụm, gan to bằng trời.",
+   "stats": {
+    "hp": 25,
+    "luk": 15
+   },
+   "equip": {
+    "slot": "heldL",
+    "part": "local.my/tq-bau-ruou",
+    "params": {},
+    "palette": {}
+   },
+   "status": "published"
+  },
+  {
+   "id": "tq-khan-cuon",
+   "name": "Khăn cuốn",
+   "han": "綸巾",
+   "type": "helmet",
+   "rarity": "rare",
+   "description": "Khăn của bậc mưu sĩ.",
+   "stats": {
+    "int": 30,
+    "def": 5
+   },
+   "equip": {
+    "slot": "hat",
+    "part": "local.my/tq-khan-cuon",
+    "params": {},
+    "palette": {}
+   },
+   "status": "published"
+  },
+  {
+   "id": "tq-khan-chien",
+   "name": "Khăn chiến đỏ",
+   "han": "",
+   "type": "helmet",
+   "rarity": "common",
+   "description": "Buộc trán trước trận.",
+   "stats": {
+    "atk": 5,
+    "def": 6
+   },
+   "equip": {
+    "slot": "hat",
+    "part": "local.my/tq-khan-chien",
+    "params": {},
+    "palette": {
+     "hat": "#b8322a",
+     "accent": "#e0b44c"
+    }
+   },
+   "status": "published"
+  },
+  {
+   "id": "tq-giap-dong",
+   "name": "Giáp đồng",
+   "han": "",
+   "type": "armor",
+   "rarity": "rare",
+   "description": "Vảy đồng đan dày.",
+   "stats": {
+    "def": 60,
+    "hp": 40,
+    "spd": 5
+   },
+   "equip": {
+    "slot": "outfit",
+    "part": "local.my/tq-giap-tran",
+    "params": {},
+    "palette": {
+     "armor": "#c98b3c",
+     "robe": "#5a4636",
+     "trim": "#3a2c22",
+     "metal": "#e8d7a8"
+    }
+   },
+   "status": "published"
+  },
+  {
+   "id": "tq-giap-bac",
+   "name": "Giáp bạc Thường Sơn",
+   "han": "",
+   "type": "armor",
+   "rarity": "epic",
+   "description": "Bạch bào ngân giáp, sáng loá trận tiền.",
+   "stats": {
+    "def": 80,
+    "hp": 50,
+    "spd": 20
+   },
+   "equip": {
+    "slot": "outfit",
+    "part": "local.my/tq-giap-tran",
+    "params": {},
+    "palette": {
+     "armor": "#d9e2e8",
+     "robe": "#f4f4f0",
+     "trim": "#7d8b96",
+     "metal": "#ffffff",
+     "accent": "#5a8fc8"
+    }
+   },
+   "status": "published"
+  },
+  {
+   "id": "tq-ao-choang-do",
+   "name": "Áo choàng đỏ",
+   "han": "",
+   "type": "cloak",
+   "rarity": "uncommon",
+   "description": "Phần phật sau lưng khi xông trận.",
+   "stats": {
+    "def": 12,
+    "luk": 10
+   },
+   "equip": {
+    "slot": "back",
+    "part": "local.my/tq-ao-choang",
+    "params": {},
+    "palette": {
+     "cape": "#a8322b"
+    }
+   },
+   "status": "published"
+  },
+  {
+   "id": "tq-ung-da",
+   "name": "Ủng da",
+   "han": "",
+   "type": "boots",
+   "rarity": "common",
+   "description": "Đi đường xa không mỏi.",
+   "stats": {
+    "spd": 15
+   },
+   "equip": {
+    "slot": "shoes",
+    "part": "local.my/tq-ung",
+    "params": {},
+    "palette": {
+     "boots": "#5a3d2a"
+    }
+   },
+   "status": "published"
+  }
+ ],
+ "scenes": [
+  {
+   "id": "tq-thao-lu",
+   "name": "Thảo lư Long Trung",
+   "han": "隆中草廬",
+   "description": "Nhà tranh ẩn cư giữa núi và trúc — nơi Lưu Bị ba lần tìm Khổng Minh.",
+   "layers": {
+    "sky": {
+     "part": "local.my/tq-troi-quang"
+    },
+    "far": {
+     "part": "local.my/tq-nui-xa"
+    },
+    "mid": {
+     "part": "local.my/tq-lieu-co",
+     "dx": 30
+    },
+    "ground": {
+     "part": "local.my/tq-nen-co"
+    },
+    "front": {
+     "part": "local.my/tq-bui-co"
+    }
+   },
+   "deco": [
+    {
+     "part": "local.my/tq-cay-truc",
+     "x": 64,
+     "y": 286,
+     "scale": 1,
+     "flip": false,
+     "z": "back"
+    },
+    {
+     "part": "local.my/tq-cay-truc",
+     "x": 118,
+     "y": 276,
+     "scale": 0.8,
+     "flip": true,
+     "z": "back"
+    },
+    {
+     "part": "local.my/tq-hang-rao",
+     "x": 372,
+     "y": 290,
+     "scale": 0.8,
+     "flip": false,
+     "z": "back"
+    },
+    {
+     "part": "local.my/tq-da",
+     "x": 600,
+     "y": 316,
+     "scale": 0.8,
+     "flip": false,
+     "z": "mid"
+    }
+   ],
+   "palette": {},
+   "time": "day",
+   "weather": "petals",
+   "status": "published"
+  },
+  {
+   "id": "tq-doanh-trai",
+   "name": "Doanh trại lúc chiều",
+   "han": "軍營",
+   "description": "Trại quân dưới núi, cờ bay, lửa trại — họp bàn quân sự, luyện binh.",
+   "layers": {
+    "sky": {
+     "part": "local.my/tq-troi-quang"
+    },
+    "far": {
+     "part": "local.my/tq-nui-xa"
+    },
+    "mid": {
+     "part": "local.my/tq-trai-quan",
+     "dx": 20
+    },
+    "ground": {
+     "part": "local.my/tq-nen-dat"
+    }
+   },
+   "deco": [
+    {
+     "part": "local.my/tq-co-hieu",
+     "x": 70,
+     "y": 290,
+     "scale": 1,
+     "flip": false,
+     "z": "back"
+    },
+    {
+     "part": "local.my/tq-co-hieu",
+     "x": 380,
+     "y": 282,
+     "scale": 0.8,
+     "flip": false,
+     "z": "back"
+    },
+    {
+     "part": "local.my/tq-gia-binh-khi",
+     "x": 200,
+     "y": 280,
+     "scale": 0.85,
+     "flip": false,
+     "z": "back"
+    },
+    {
+     "part": "local.my/tq-lua-trai",
+     "x": 600,
+     "y": 330,
+     "scale": 0.9,
+     "flip": false,
+     "z": "mid"
+    }
+   ],
+   "palette": {},
+   "time": "dusk",
+   "weather": "clear",
+   "status": "published"
+  },
+  {
+   "id": "tq-duoi-thanh",
+   "name": "Dưới chân thành",
+   "han": "城下",
+   "description": "Cổng thành lớn, đường đất dẫn vào — gọi hàng, đấu tướng, vào thành.",
+   "layers": {
+    "sky": {
+     "part": "local.my/tq-troi-quang"
+    },
+    "far": {
+     "part": "local.my/tq-tuong-thanh"
+    },
+    "ground": {
+     "part": "local.my/tq-duong-dat"
+    }
+   },
+   "deco": [
+    {
+     "part": "local.my/tq-co-hieu",
+     "x": 60,
+     "y": 300,
+     "scale": 1,
+     "flip": false,
+     "z": "back"
+    },
+    {
+     "part": "local.my/tq-co-hieu",
+     "x": 590,
+     "y": 300,
+     "scale": 1,
+     "flip": true,
+     "z": "back"
+    },
+    {
+     "part": "local.my/tq-da",
+     "x": 160,
+     "y": 296,
+     "scale": 0.6,
+     "flip": false,
+     "z": "back"
+    }
+   ],
+   "palette": {},
+   "time": "day",
+   "weather": "clear",
+   "status": "published"
+  },
+  {
+   "id": "tq-xich-bich",
+   "name": "Bờ sông Xích Bích",
+   "han": "赤壁",
+   "description": "Sông rộng mờ sương sớm, thuyền xa — mượn tên, chờ gió Đông.",
+   "layers": {
+    "sky": {
+     "part": "local.my/tq-troi-quang"
+    },
+    "far": {
+     "part": "local.my/tq-song-xa"
+    },
+    "ground": {
+     "part": "local.my/tq-nen-co"
+    }
+   },
+   "deco": [
+    {
+     "part": "local.my/tq-thong",
+     "x": 70,
+     "y": 292,
+     "scale": 1,
+     "flip": false,
+     "z": "back"
+    },
+    {
+     "part": "local.my/tq-da",
+     "x": 586,
+     "y": 300,
+     "scale": 1.1,
+     "flip": false,
+     "z": "back"
+    },
+    {
+     "part": "local.my/tq-bui-cay",
+     "x": 520,
+     "y": 290,
+     "scale": 0.7,
+     "flip": false,
+     "z": "back"
+    }
+   ],
+   "palette": {},
+   "time": "dawn",
+   "weather": "mist",
+   "status": "published"
+  },
+  {
+   "id": "tq-thu-phong",
+   "name": "Thư phòng",
+   "han": "書房",
+   "description": "Phòng đọc sách lúc lên đèn — bàn mưu, đọc binh thư, uống trà.",
+   "layers": {
+    "sky": {
+     "part": "local.my/tq-tuong-trong"
+    },
+    "ground": {
+     "part": "local.my/tq-san-go"
+    },
+    "front": {
+     "part": "local.my/tq-rem"
+    }
+   },
+   "deco": [
+    {
+     "part": "local.my/tq-ban-tra",
+     "x": 320,
+     "y": 284,
+     "scale": 0.9,
+     "flip": false,
+     "z": "back"
+    },
+    {
+     "part": "local.my/tq-den-long",
+     "x": 92,
+     "y": 290,
+     "scale": 1,
+     "flip": false,
+     "z": "back"
+    },
+    {
+     "part": "local.my/tq-den-long",
+     "x": 548,
+     "y": 290,
+     "scale": 1,
+     "flip": true,
+     "z": "back"
+    }
+   ],
+   "palette": {},
+   "time": "dusk",
+   "weather": "clear",
+   "status": "published"
+  },
+  {
+   "id": "tq-rung-truc-dem",
+   "name": "Rừng trúc đêm",
+   "han": "竹林夜",
+   "description": "Rừng trúc dưới trăng, đom đóm bay — gặp gỡ bí mật, kết nghĩa, mai phục.",
+   "layers": {
+    "sky": {
+     "part": "local.my/tq-troi-quang"
+    },
+    "far": {
+     "part": "local.my/tq-rung-truc"
+    },
+    "ground": {
+     "part": "local.my/tq-nen-co"
+    },
+    "front": {
+     "part": "local.my/tq-vien-truc"
+    }
+   },
+   "deco": [
+    {
+     "part": "local.my/tq-cay-truc",
+     "x": 150,
+     "y": 280,
+     "scale": 0.9,
+     "flip": false,
+     "z": "back"
+    },
+    {
+     "part": "local.my/tq-cay-truc",
+     "x": 500,
+     "y": 278,
+     "scale": 1,
+     "flip": true,
+     "z": "back"
+    },
+    {
+     "part": "local.my/tq-da",
+     "x": 420,
+     "y": 296,
+     "scale": 0.6,
+     "flip": false,
+     "z": "back"
+    }
+   ],
+   "palette": {},
+   "time": "night",
+   "weather": "fireflies",
+   "status": "published"
+  },
+  {
+   "id": "tq-vuon-dao",
+   "name": "Vườn đào",
+   "han": "桃園",
+   "description": "Đình nhỏ giữa vườn đào nở rộ — kết nghĩa, thề ước, yến tiệc.",
+   "layers": {
+    "sky": {
+     "part": "local.my/tq-troi-quang"
+    },
+    "far": {
+     "part": "local.my/tq-nui-xa"
+    },
+    "mid": {
+     "part": "local.my/tq-dinh",
+     "dx": -20
+    },
+    "ground": {
+     "part": "local.my/tq-nen-co"
+    },
+    "front": {
+     "part": "local.my/tq-bui-co"
+    }
+   },
+   "deco": [
+    {
+     "part": "local.my/tq-bui-cay",
+     "x": 70,
+     "y": 292,
+     "scale": 1.2,
+     "flip": false,
+     "z": "back"
+    },
+    {
+     "part": "local.my/tq-bui-cay",
+     "x": 600,
+     "y": 300,
+     "scale": 1.1,
+     "flip": true,
+     "z": "back"
+    },
+    {
+     "part": "local.my/tq-ban-tra",
+     "x": 460,
+     "y": 286,
+     "scale": 0.7,
+     "flip": false,
+     "z": "back"
+    }
+   ],
+   "palette": {
+    "leaf": "#6f9e5c",
+    "flower": "#f39ab3"
+   },
+   "time": "day",
+   "weather": "petals",
+   "status": "published"
+  },
+  {
+   "id": "tq-tuyet-son",
+   "name": "Núi tuyết",
+   "han": "雪山",
+   "description": "Núi phủ tuyết, tùng xanh — hành quân mùa đông, tìm hiền giữa tuyết.",
+   "layers": {
+    "sky": {
+     "part": "local.my/tq-troi-tron"
+    },
+    "far": {
+     "part": "local.my/tq-nui-xa"
+    },
+    "ground": {
+     "part": "local.my/tq-nen-co"
+    },
+    "front": {
+     "part": "local.my/tq-bui-co"
+    }
+   },
+   "deco": [
+    {
+     "part": "local.my/tq-thong",
+     "x": 90,
+     "y": 288,
+     "scale": 1,
+     "flip": false,
+     "z": "back"
+    },
+    {
+     "part": "local.my/tq-thong",
+     "x": 150,
+     "y": 270,
+     "scale": 0.7,
+     "flip": false,
+     "z": "back"
+    },
+    {
+     "part": "local.my/tq-thong",
+     "x": 570,
+     "y": 294,
+     "scale": 1.1,
+     "flip": true,
+     "z": "back"
+    }
+   ],
+   "palette": {
+    "sky": "#d5e2ec",
+    "skyLow": "#f2f5f8",
+    "grass": "#eef2f6",
+    "hill": "#dce6ee",
+    "hillFar": "#c6d4e0",
+    "leaf": "#4f7f61"
+   },
+   "time": "day",
+   "weather": "snow",
+   "status": "published"
+  }
+ ],
+ "characters": [
+  {
+   "id": "tq-gia-cat-luong",
+   "name": "Gia Cát Lượng",
+   "han": "諸葛亮",
+   "faction": "Thục",
+   "role": "Mưu sĩ",
+   "persona": "quân sư bình thản bí hiểm, cười mỉm sau quạt, gặp nguy vẫn làm như không",
+   "look": {
+    "eyes": "calm",
+    "brows": "thin",
+    "parts": {
+     "head": "oval",
+     "mask": "none",
+     "hair": "local.my/tq-toc-dai",
+     "beard": "local.my/tq-rau-de",
+     "hat": "local.my/tq-khan-cuon",
+     "outfit": "local.my/tq-ao-hac",
+     "shoes": "local.my/tq-ung",
+     "heldR": "local.my/tq-quat-long",
+     "legwear": "local.my/tq-quan"
+    },
+    "params": {
+     "eyes": {
+      "size": 1.05
+     },
+     "beard": {
+      "length": 1.15
+     }
+    },
+    "palette": {
+     "skin": "#f9dcc6",
+     "hair": "#2a2420",
+     "robe": "#f8f6f0",
+     "inner": "#d9dde6",
+     "trim": "#26262b",
+     "hat": "#3a4660",
+     "accent": "#d9b04c",
+     "iris": "#4a3226"
+    }
+   },
+   "expressions": {
+    "shock": {
+     "fxRemove": [
+      "speed"
+     ]
+    },
+    "rage": {
+     "mouth": "bite",
+     "fxRemove": [
+      "fire"
+     ]
+    }
+   },
+   "identity": {
+    "p1": "Quạt lông vũ + khăn cuốn",
+    "must": [
+     "heldR:tq-quat-long",
+     "hat:tq-khan-cuon",
+     "outfit:tq-ao-hac"
+    ],
+    "source": "TQDN-038, TQDN-093, TQDN-095",
+    "confusable": [
+     "Chu Du (không cho Chu Du quạt)"
+    ]
+   },
+   "status": "published"
+  },
+  {
+   "id": "tq-quan-vu",
+   "name": "Quan Vũ",
+   "han": "關羽",
+   "faction": "Thục",
+   "role": "Võ tướng",
+   "persona": "kiêu hãnh, trọng nghĩa, hay vuốt râu tự đắc, bị chê râu là phồng mặt",
+   "look": {
+    "eyes": "phoenix",
+    "brows": "silkworm",
+    "parts": {
+     "head": "square",
+     "mask": "local.my/tq-mat-do",
+     "hair": "local.my/tq-buoi-toc",
+     "beard": "local.my/tq-rau-ba-chom",
+     "hat": "local.my/tq-mu-mem",
+     "outfit": "local.my/tq-giap-tran",
+     "shoes": "local.my/tq-ung",
+     "heldR": "local.my/tq-dao-thanh-long",
+     "legwear": "local.my/tq-quan"
+    },
+    "params": {},
+    "palette": {
+     "skin": "#f3cfb3",
+     "hair": "#1e1a19",
+     "robe": "#2f7a4f",
+     "armor": "#d4a73c",
+     "trim": "#1f4d33",
+     "hat": "#2f7a4f",
+     "accent": "#d4a73c",
+     "iris": "#3a2a20"
+    }
+   },
+   "expressions": {
+    "cry": {
+     "motion": "strokeBeard"
+    }
+   },
+   "identity": {
+    "p1": "Mặt đỏ + râu dài",
+    "must": [
+     "mask:tq-mat-do",
+     "beard:tq-rau-ba-chom",
+     "eyes:phoenix",
+     "heldR:tq-dao-thanh-long"
+    ],
+    "source": "TQDN-001, TQDN-025, TQDN-083",
+    "confusable": [
+     "Ngụy Diên (mặt đỏ, không râu dài)"
+    ]
+   },
+   "status": "published"
+  },
+  {
+   "id": "tq-truong-phi",
+   "name": "Trương Phi",
+   "han": "張飛",
+   "faction": "Thục",
+   "role": "Võ tướng",
+   "persona": "nóng nảy, hét to như sấm, mê rượu, thẳng như ruột ngựa",
+   "look": {
+    "eyes": "bulge",
+    "brows": "bushy",
+    "parts": {
+     "head": "round",
+     "mask": "local.my/tq-mat-den",
+     "hair": "local.my/tq-toc-dung",
+     "beard": "local.my/tq-rau-ho",
+     "hat": "local.my/tq-khan-chien",
+     "outfit": "local.my/tq-giap-tran",
+     "shoes": "local.my/tq-ung",
+     "heldR": "local.my/tq-xa-mau",
+     "heldL": "local.my/tq-bau-ruou",
+     "legwear": "local.my/tq-quan"
+    },
+    "params": {
+     "mouth": {
+      "size": 1.1
+     }
+    },
+    "palette": {
+     "skin": "#e9b996",
+     "hair": "#141217",
+     "robe": "#283550",
+     "armor": "#6d7b8c",
+     "trim": "#1a2238",
+     "hat": "#2a2a33",
+     "accent": "#c8372d"
+    }
+   },
+   "expressions": {},
+   "identity": {
+    "p1": "Mặt đen + râu hổ",
+    "must": [
+     "mask:tq-mat-den",
+     "beard:tq-rau-ho",
+     "eyes:bulge",
+     "heldR:tq-xa-mau"
+    ],
+    "source": "TQDN-001, TQDN-042",
+    "confusable": [
+     "Bàng Thống (da ngăm, mũ văn sinh)"
+    ]
+   },
+   "status": "published"
+  },
+  {
+   "id": "tq-tao-thao",
+   "name": "Tào Tháo",
+   "han": "曹操",
+   "faction": "Ngụy",
+   "role": "Chủ công",
+   "persona": "đa nghi, gian hùng, cười nham hiểm, ngủ cũng ôm kiếm",
+   "look": {
+    "eyes": "narrow",
+    "brows": "thin",
+    "parts": {
+     "head": "oval",
+     "mask": "local.my/tq-mat-trang",
+     "hair": "local.my/tq-buoi-toc",
+     "beard": "local.my/tq-rau-thua",
+     "hat": "local.my/tq-mu-quan",
+     "outfit": "local.my/tq-ao-bao",
+     "shoes": "local.my/tq-ung",
+     "heldR": "local.my/tq-kiem",
+     "legwear": "local.my/tq-quan"
+    },
+    "params": {},
+    "palette": {
+     "skin": "#f4d2b8",
+     "hair": "#1b1919",
+     "robe": "#24242b",
+     "inner": "#8f2f2a",
+     "trim": "#c9a23f",
+     "hat": "#18181d",
+     "accent": "#d6ad45",
+     "iris": "#2a1f18"
+    }
+   },
+   "expressions": {
+    "sleep": {
+     "eyes": "half",
+     "fxAdd": [
+      "sweat"
+     ]
+    }
+   },
+   "identity": {
+    "p1": "Mặt trắng kịch + mắt nheo",
+    "must": [
+     "mask:tq-mat-trang",
+     "eyes:narrow",
+     "beard:tq-rau-thua"
+    ],
+    "source": "TQDN-001, TQDN-041",
+    "confusable": [
+     "Tư Mã Ý, Đổng Trác (chỉ Tào Tháo mặt trắng kịch)"
+    ]
+   },
+   "status": "published"
+  },
+  {
+   "id": "tq-linh-que",
+   "name": "Lính quèn",
+   "han": "小兵",
+   "faction": "Vô danh",
+   "role": "Lính",
+   "persona": "nhát gan, tham ăn, luôn bị sai vặt, mơ được thưởng",
+   "look": {
+    "eyes": "round",
+    "brows": "normal",
+    "parts": {
+     "head": "round",
+     "mask": "none",
+     "hair": "local.my/tq-buoi-toc",
+     "beard": "none",
+     "hat": "local.my/tq-khan-chien",
+     "outfit": "local.my/tq-giap-tran",
+     "shoes": "local.my/tq-ung",
+     "heldR": "local.my/tq-xa-mau",
+     "legwear": "local.my/tq-quan"
+    },
+    "params": {},
+    "palette": {
+     "skin": "#f6d2b4",
+     "hair": "#3a2c22",
+     "robe": "#8a6a45",
+     "armor": "#a39478",
+     "trim": "#5a4630",
+     "hat": "#b33a2e",
+     "accent": "#e0b04a",
+     "tassel": "#b33a2e"
+    }
+   },
+   "expressions": {},
+   "identity": {
+    "p1": "Khăn đỏ + giáp vải",
+    "must": [
+     "hat:tq-khan-chien",
+     "mask:none"
+    ],
+    "source": "research §4.5 #32 (lính quèn)",
+    "confusable": []
+   },
+   "status": "published"
+  },
+  {
+   "id": "tq-luu-bi",
+   "name": "Lưu Bị",
+   "han": "劉備",
+   "faction": "Thục",
+   "role": "Chủ công",
+   "persona": "nhân hậu, nhẫn nại, khóc đúng lúc, giữ chữ tín với anh em",
+   "look": {
+    "eyes": "calm",
+    "brows": "normal",
+    "parts": {
+     "head": "oval",
+     "hair": "local.my/tq-buoi-toc",
+     "beard": "local.my/tq-rau-de",
+     "hat": "local.my/tq-mu-quan",
+     "outfit": "local.my/tq-ao-bao",
+     "shoes": "local.my/tq-ung",
+     "heldR": "local.my/tq-kiem",
+     "legwear": "local.my/tq-quan"
+    },
+    "params": {},
+    "palette": {
+     "skin": "#f6d6bd",
+     "hair": "#231d1a",
+     "robe": "#3f7d4e",
+     "inner": "#efe2b8",
+     "trim": "#c9a23f",
+     "hat": "#23232a",
+     "accent": "#d6ad45",
+     "iris": "#3a2a20",
+     "metal": "#d9dee2"
+    }
+   },
+   "expressions": {
+    "cry": {
+     "fxAdd": [
+      "tears"
+     ]
+    }
+   },
+   "identity": {
+    "p1": "Mũ quan + áo bào xanh Thục + kiếm",
+    "must": [
+     "hat:tq-mu-quan",
+     "outfit:tq-ao-bao",
+     "heldR:tq-kiem"
+    ],
+    "source": "phối từ linh kiện Tam Quốc — 0 linh kiện mới",
+    "confusable": [
+     "Tôn Quyền (áo đỏ Ngô)"
+    ]
+   },
+   "status": "published"
+  },
+  {
+   "id": "tq-trieu-van",
+   "name": "Triệu Vân",
+   "han": "趙雲",
+   "faction": "Thục",
+   "role": "Võ tướng",
+   "persona": "điềm tĩnh, gan dạ, một mình một ngựa xông trận, ít nói làm nhiều",
+   "look": {
+    "eyes": "phoenix",
+    "brows": "normal",
+    "parts": {
+     "head": "round",
+     "hair": "local.my/tq-toc-gon",
+     "hat": "local.my/tq-mu-mem",
+     "outfit": "local.my/tq-giap-tran",
+     "back": "local.my/tq-ao-choang",
+     "shoes": "local.my/tq-ung",
+     "heldR": "local.my/tq-xa-mau",
+     "legwear": "local.my/tq-quan"
+    },
+    "params": {},
+    "palette": {
+     "skin": "#f7d8c0",
+     "hair": "#1d1a1a",
+     "robe": "#f4f4f0",
+     "armor": "#d9e2e8",
+     "trim": "#7d8b96",
+     "hat": "#f4f4f0",
+     "accent": "#5a8fc8",
+     "cape": "#e9eef3",
+     "metal": "#ffffff",
+     "wood": "#f4f4f0",
+     "tassel": "#c8372d",
+     "iris": "#2f2620"
+    }
+   },
+   "expressions": {},
+   "identity": {
+    "p1": "Giáp bạc + áo choàng trắng + thương",
+    "must": [
+     "outfit:tq-giap-tran",
+     "back:tq-ao-choang",
+     "heldR:tq-xa-mau"
+    ],
+    "source": "phối từ linh kiện Tam Quốc — 0 linh kiện mới",
+    "confusable": [
+     "Mã Siêu (giáp bạc, mũ sư tử)"
+    ]
+   },
+   "status": "published"
+  }
+ ],
+ "works": [
+  {
+   "id": "tq-vuon-dao-xich-bich",
+   "title": "Từ vườn đào tới Xích Bích",
+   "logline": "Ba anh em kết nghĩa, ba lần tới lều cỏ mời Khổng Minh, rồi một trận gió đông đổi vận thiên hạ.",
+   "script": "Lưu Bị, Quan Vũ, Trương Phi kết nghĩa ở vườn đào. Lần thứ ba tới Long Trung giữa trời tuyết, Trương Phi nóng ruột đòi đốt lều. Gia Cát Lượng tỉnh giấc, nhận lời xuống núi. Ở doanh trại, lính báo Tào quân tám mươi vạn; Triệu Vân xin ra trận, Khổng Minh chỉ chờ gió đông. Bên sông Xích Bích, Tào Tháo cười đắc ý — cho tới khi gió đổi chiều.",
+   "shots": [
+    {
+     "id": "canh-1",
+     "title": "Kết nghĩa vườn đào",
+     "description": "Ba anh em thề dưới hoa đào.",
+     "scene": "local.my/tq-vuon-dao",
+     "cast": [
+      "local.my/tq-luu-bi",
+      "local.my/tq-quan-vu",
+      "local.my/tq-truong-phi"
+     ],
+     "event": {
+      "title": "Kết nghĩa vườn đào",
+      "steps": [
+       {
+        "actor": "tq-luu-bi",
+        "state": "vow",
+        "spot": "center",
+        "activity": "salute",
+        "say": "Không cầu sinh cùng ngày cùng tháng cùng năm…"
+       },
+       {
+        "actor": "tq-quan-vu",
+        "state": "vow",
+        "spot": "midLeft",
+        "say": "…chỉ nguyện chết cùng ngày cùng tháng cùng năm!"
+       },
+       {
+        "actor": "tq-truong-phi",
+        "state": "proud",
+        "spot": "midRight",
+        "activity": "cheer",
+        "fx": [
+         "confetti"
+        ],
+        "say": "Uống! Hôm nay phải say mới về!"
+       }
+      ]
+     }
+    },
+    {
+     "id": "canh-2",
+     "title": "Lần thứ ba tới Long Trung",
+     "description": "Trời tuyết, Trương Phi hết kiên nhẫn.",
+     "scene": "local.my/tq-tuyet-son",
+     "cast": [
+      "local.my/tq-truong-phi",
+      "local.my/tq-quan-vu",
+      "local.my/tq-luu-bi"
+     ],
+     "event": {
+      "title": "Lần thứ ba tới Long Trung",
+      "steps": [
+       {
+        "actor": "tq-truong-phi",
+        "state": "rage",
+        "spot": "midRight",
+        "fx": [
+         "steam"
+        ],
+        "say": "Để đệ đốt cái lều cỏ này cho hắn dậy!"
+       },
+       {
+        "actor": "tq-quan-vu",
+        "state": "think",
+        "spot": "midLeft",
+        "say": "Tam đệ bình tĩnh. Người tài thường khó gặp."
+       },
+       {
+        "actor": "tq-luu-bi",
+        "state": "beg",
+        "spot": "center",
+        "say": "Chờ thêm chút nữa thôi… vì thiên hạ.",
+        "hold": 2.4
+       }
+      ]
+     }
+    },
+    {
+     "id": "canh-3",
+     "title": "Thảo lư",
+     "description": "Khổng Minh tỉnh giấc và nhận lời.",
+     "scene": "local.my/tq-thao-lu",
+     "cast": [
+      "local.my/tq-gia-cat-luong",
+      "local.my/tq-luu-bi"
+     ],
+     "event": {
+      "title": "Thảo lư",
+      "steps": [
+       {
+        "actor": "tq-gia-cat-luong",
+        "state": "sleep",
+        "spot": "midRight",
+        "say": "Đại mộng ai tỉnh trước? Bình sinh ta tự biết…"
+       },
+       {
+        "actor": "tq-luu-bi",
+        "state": "beg",
+        "spot": "midLeft",
+        "activity": "bow",
+        "say": "Xin tiên sinh xuống núi giúp Bị!"
+       },
+       {
+        "actor": "tq-gia-cat-luong",
+        "state": "smug",
+        "say": "Thiên hạ chia ba — kế đã sẵn trong lòng.",
+        "hold": 2.6
+       }
+      ]
+     }
+    },
+    {
+     "id": "canh-4",
+     "title": "Doanh trại bàn kế",
+     "description": "Tin dữ tới, Khổng Minh vẫn ung dung.",
+     "scene": "local.my/tq-doanh-trai",
+     "cast": [
+      "local.my/tq-linh-que",
+      "local.my/tq-trieu-van",
+      "local.my/tq-gia-cat-luong"
+     ],
+     "event": {
+      "title": "Doanh trại bàn kế",
+      "steps": [
+       {
+        "actor": "tq-linh-que",
+        "state": "panic",
+        "spot": "left",
+        "fx": [
+         "exclaim"
+        ],
+        "say": "Báo! Tào quân tám mươi vạn!"
+       },
+       {
+        "actor": "tq-trieu-van",
+        "state": "vow",
+        "spot": "midRight",
+        "say": "Có Tử Long ở đây, quân sư cứ yên tâm!"
+       },
+       {
+        "actor": "tq-gia-cat-luong",
+        "state": "normal",
+        "spot": "center",
+        "say": "Đừng vội. Chỉ cần chờ một trận gió đông."
+       }
+      ]
+     }
+    },
+    {
+     "id": "canh-5",
+     "title": "Gió đông Xích Bích",
+     "description": "Tào Tháo đắc ý, rồi gió đổi chiều.",
+     "scene": "local.my/tq-xich-bich",
+     "cast": [
+      "local.my/tq-tao-thao",
+      "local.my/tq-gia-cat-luong"
+     ],
+     "event": {
+      "title": "Gió đông Xích Bích",
+      "steps": [
+       {
+        "actor": "tq-tao-thao",
+        "state": "smug",
+        "spot": "midLeft",
+        "say": "Tám mươi vạn quân, thuyền nối thành đất bằng!"
+       },
+       {
+        "actor": "tq-tao-thao",
+        "state": "shock",
+        "fx": [
+         "sweat"
+        ],
+        "say": "Gió… gió đông?!"
+       },
+       {
+        "actor": "tq-gia-cat-luong",
+        "state": "proud",
+        "spot": "midRight",
+        "say": "Vạn sự đã nằm trong tính toán.",
+        "hold": 2.8
+       }
+      ]
+     }
+    }
+   ]
+  }
+ ]
+}

@@ -354,7 +354,8 @@ class MCP {
           const svg = this.bench(c.def.slot, TMP_PACK + '/' + c.def.id, c.def.label);
           return {
             content: [
-              { type: 'text', text: 'Đạt kiểm dữ liệu. Bàn soát: ma-nơ-canh × 5 góc nhìn (chính diện, 45°, 90°, 135°, sau lưng) × đứng / kinh ngạc / chạy / ngồi. 45°: ' + c.def.views.q45.mode + '. Kiểm: mép khớp đầu/thân, 45° không lệch, màu theo token. Ổn thì save_part.' },
+              { type: 'text', text: 'Đạt kiểm dữ liệu. Bàn soát: ma-nơ-canh × 5 góc nhìn (chính diện, 45°, 90°, 135°, sau lưng) × đứng / kinh ngạc / chạy / ngồi. 45°: ' + c.def.views.q45.mode + '. Kiểm: mép khớp đầu/thân, 45° không lệch, màu theo token. Ổn thì save_part.' +
+                GC.partAdvice(c.def).map(w => '\n⚠ ' + w).join('') },
               { type: 'resource', resource: { uri: 'genchibi://bench/' + c.def.slot + '/' + c.def.id + '.svg', mimeType: 'image/svg+xml', text: svg } }
             ]
           };
@@ -366,7 +367,7 @@ class MCP {
         catch (e) { return Object.assign(json({ saved: false, errors: e.errors || [e.message] }), { isError: true }); }
         if (rec.kind === 'scenery') return json({ saved: true, ref: MY_PACK + '/' + rec.id, slot: rec.slot, version: rec.version,
           use: rec.slot === 'deco' ? 'Trong cảnh: deco: [{ part: "' + MY_PACK + '/' + rec.id + '", x, y }]' : 'Trong cảnh: layers.' + rec.slot + ' = "' + MY_PACK + '/' + rec.id + '"', studio: 'Studio › Xưởng › Kho linh kiện › Phông cảnh' });
-        return json({ saved: true, ref: MY_PACK + '/' + rec.id, slot: rec.slot, version: rec.version,
+        return json({ saved: true, ref: MY_PACK + '/' + rec.id, slot: rec.slot, version: rec.version, advice: this.GC.partAdvice(rec),
           use: 'Trong công thức nhân vật: look.parts.' + rec.slot + ' = "' + MY_PACK + '/' + rec.id + '"', studio: 'Studio › Xưởng › Kho linh kiện › ' + rec.label + ' (bấm để soát)' });
       }
       default: return null;
@@ -695,8 +696,11 @@ class MCP {
         q90: 'tuỳ chọn — nhìn ngang (quay trái). drawn (kèm layers) | same (= bản 45°) | front (= bản chính diện) | hide (không thấy). Thiếu → mượn 45°.',
         q135: 'tuỳ chọn — quay lưng chéo (thấy gáy + một bên má). drawn | same | front | hide. Thiếu → mượn sau lưng, rồi 45°.',
         q180: 'tuỳ chọn — sau lưng (engine giấu mặt, đưa vật sau lưng lên trước thân). drawn | same | front | hide. Thiếu → engine dùng bản chính diện.',
-        engineHandles: 'vị trí mắt/mày/miệng 45°, tay xa ra sau thân, lật gương, tư thế × di chuyển × động tác — linh kiện KHÔNG tự xử lý'
+        engineHandles: 'vị trí mắt/mày/miệng 45°, tay xa ra sau thân, lật gương, tư thế × di chuyển × động tác — linh kiện KHÔNG tự xử lý',
+        marks: 'trong layers của views (drawn): bọc chi tiết bằng <g class="gc-f45">…</g> (chiếu bám mặt: râu, hoa văn), gc-f45c (như trên + cắt theo viền đầu: mặt nạ), gc-b45t (chiếu trên thân trên: cổ áo, giáp ngực), gc-b45h (chiếu trên vạt) — dáng (silhouette) vẽ tay bên ngoài, chi tiết bên trong để engine chiếu'
       },
+      shapeToken: 'd="{shape}" = viền đầu của nhân vật đang mặc (đổi theo dáng đầu tròn / vuông / oval và theo góc nhìn) — dùng cho mặt nạ, sơn mặt phủ kín đầu',
+      extras: { eyeArea: 'mặt nạ: màu vùng quanh mắt "#rrggbb" (mặt nạ kinh kịch tô kín mặt)', tall: 'vật cầm tay dài (giáo, đao): true → engine giấu khi động tác cần hai tay', upright: 'vật cầm tay: false → không dựng thẳng theo cổ tay' },
       params: 'tuỳ chọn, tối đa 6: { label, type: scale|scaleX|scaleY|dx|dy, min, max, def, pivot: [x, y] }',
       example: EXAMPLE_PART,
       scenery: slot ? undefined : 'Phông cảnh (sky, far, mid, ground, front, deco): gọi get_part_spec với slot đó để lấy khung riêng 640×360.'

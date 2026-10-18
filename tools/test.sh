@@ -328,6 +328,58 @@ const fr = m.saveAssetChecked({ pack: "gen.khung", id: "ma-no-canh", name: "Sử
 no(fr.pack !== "local.my" || m.GC.ASSETS["gen.khung/ma-no-canh"].name !== "Ma-nơ-canh", "lưu vào khung phải thành bản sao trong Của tôi, khung giữ nguyên");
 console.log("   ✓ dự án mẫu qua cổng 100% (3 nhân vật · 1 item · 2 cảnh · phim 4 cảnh) · nhập trùng → 409 · lưu đè · xuất lại đủ · gói hỏng / asset lạ bị chặn");
 ' || exit 1
+echo "2f) linh kiện dữ liệu ngang linh kiện code + bộ chủ đề Tam Quốc dựng từ khung"
+node -e '
+const fs = require("fs"), os = require("os"), path = require("path"), cp = require("child_process");
+const { loadEngine } = require("./server/engine-node.js"); const { MCP } = require("./server/mcp.js"); const { Store } = require("./server/store.js");
+const m = new MCP({ engine: loadEngine("."), store: new Store(fs.mkdtempSync(path.join(os.tmpdir(), "gc-tq-"))), version: "t", system: {} });
+const GC = m.GC, no = (c, msg) => { if (c) { console.log("   ✗", msg); process.exit(1); } };
+// a) {shape} · đánh dấu chiếu 45° · eyeArea / tall · số ".25"
+const MASK = { id: "t-mat", slot: "mask", eyeArea: "#ffffff", layers: { mask: "<path d=\"{shape}\" fill=\"#cf4a35\" stroke=\"{ink}\" stroke-width=\"3\"/><circle cx=\"80\" cy=\"108\" r=\"6\" fill=\"#fff\" fill-opacity=\".8\"/>" },
+  views: { q45: { mode: "drawn", layers: { mask: "<path d=\"{shape}\" fill=\"#cf4a35\" stroke=\"{ink}\" stroke-width=\"3\"/><g class=\"gc-f45c\"><circle cx=\"80\" cy=\"108\" r=\"6\" fill=\"#fff\"/></g>" } } } };
+no(GC.checkDataPart(MASK).errors.length, "mặt nạ dùng {shape} + gc-f45c + eyeArea + \".8\" phải đạt: " + GC.checkDataPart(MASK).errors);
+const bad = [
+  ["đánh dấu chiếu ở bản chính diện", { id: "t1", slot: "mask", layers: { mask: "<g class=\"gc-f45\"><circle cx=\"1\" cy=\"1\" r=\"1\" fill=\"#fff\"/></g>" }, views: { q45: "same" } }],
+  ["đánh dấu chiếu trên thẻ không phải g", { id: "t2", slot: "mask", layers: { mask: "<circle cx=\"1\" cy=\"1\" r=\"1\" fill=\"#fff\"/>" }, views: { q45: { mode: "drawn", layers: { mask: "<circle class=\"gc-f45\" cx=\"1\" cy=\"1\" r=\"1\" fill=\"#fff\"/>" } } } }],
+  ["{shape} làm màu", { id: "t3", slot: "mask", layers: { mask: "<path d=\"M0,0 L9,9\" fill=\"{shape}\"/>" }, views: { q45: "same" } }],
+  ["{shape} trong phông cảnh", { id: "t4", slot: "sky", svg: "<path d=\"{shape}\" fill=\"{sky}\"/>" }],
+  ["eyeArea cho mũ", { id: "t5", slot: "hat", eyeArea: "#ffffff", layers: { hat: "<path d=\"M0,0 L9,9\" fill=\"{hat}\"/>" }, views: { q45: "same" } }],
+  ["tall cho mũ", { id: "t6", slot: "hat", tall: true, layers: { hat: "<path d=\"M0,0 L9,9\" fill=\"{hat}\"/>" }, views: { q45: "same" } }],
+  ["class lạ", { id: "t7", slot: "hat", layers: { hat: "<g class=\"gc-evil\"><path d=\"M0,0 L9,9\" fill=\"{hat}\"/></g>" }, views: { q45: "same" } }]
+];
+for (const [what, d] of bad) no(!GC.checkDataPart(d).errors.length, "phải chặn: " + what);
+m.savePartChecked(MASK, "t");
+const sq = m.saveAssetChecked({ id: "t-vuong", name: "Vuông", look: { eyes: "round", brows: "normal", parts: { head: "square", mask: "local.my/t-mat" } } }, "t");
+const front = GC.svgString(GC.ASSETS["local.my/t-vuong"], "normal"), q45 = GC.svgString(GC.ASSETS["local.my/t-vuong"], "normal", { director: { view: "left45" } });
+no(!front.includes(GC.getPart("head", "square").shape), "{shape} phải thành đúng viền đầu vuông ở chính diện");
+no(!q45.includes(GC.getPart("head", "square").shape45) || !/clip-path/.test(q45) || /gc-f45|\{shape\}/.test(q45), "45°: {shape} = viền đầu vuông 45°, gc-f45c thành phép chiếu có cắt theo đầu, không còn đánh dấu");
+// lời khuyên của cổng + 135° mượn bản sau lưng là bản vẽ thật (không đè tóc bằng lớp tóc sau)
+const HAIR = { id: "t-toc", slot: "hair", layers: { hairFront: "<path d=\"M52,102 C50,70 70,55 100,55 C130,55 150,70 148,102 Z\" fill=\"{hair}\"/>" }, views: { q45: "same" } };
+no(GC.partAdvice(GC.checkDataPart(HAIR).def).length !== 1, "tóc không có bản sau lưng phải được nhắc (sẽ biến mất khi quay lưng)");
+HAIR.views.q180 = { mode: "drawn", layers: { hairFront: "<path d=\"{shape}\" fill=\"{hair}\" stroke-width=\"2.71\"/>" } };
+no(GC.partAdvice(GC.checkDataPart(HAIR).def).length, "tóc có bản sau lưng thì không nhắc");
+m.savePartChecked(HAIR, "t"); m.saveAssetChecked({ id: "t-toc-nv", name: "Tóc", look: { eyes: "round", brows: "normal", parts: { hair: "local.my/t-toc" } } }, "t");
+no(!GC.svgString(GC.ASSETS["local.my/t-toc-nv"], "normal", { director: { view: "left135" } }).includes("2.71"), "135° phải mượn bản sau lưng của tóc (tóc không được biến mất)");
+// b) bộ Tam Quốc: qua cổng 100%, dựng sạch mọi góc, gói bán trọn, tái lập được từ port.js
+const b = JSON.parse(fs.readFileSync("studio/mau/tam-quoc.json", "utf8"));
+const r = m.importProject(b, {});
+no(r.errors.length, "Tam Quốc có mục không qua cổng: " + JSON.stringify(r.errors.slice(0, 3)));
+no(JSON.stringify(r.counts) !== JSON.stringify({ parts: 53, items: 13, scenes: 8, characters: 7, works: 1, shots: 5 }), "Tam Quốc thiếu mục: " + JSON.stringify(r.counts));
+const tq = GC.assets().filter(a => a.project === "mau-tam-quoc");
+let n = 0;
+for (const a of tq) for (const v of GC.VIEW_ORDER) for (const st of ["normal", "rage", "shock"]) {
+  const svg = GC.svgString(a, st, { director: { view: v } }); n++;
+  no(/gc-(f45|b45)|\{[a-zA-Z]+\}|#ff00ff/.test(svg), a.name + " " + v + " " + st + ": còn đánh dấu chiếu / token chưa thay / màu thiếu");
+}
+for (const id of ["tq-buoi-toc", "tq-toc-dung", "tq-toc-gon", "tq-toc-dai"]) no(!GC.getPart("hair", "local.my/" + id).views.q180, id + ": thiếu bản sau lưng (tóc sẽ biến mất khi quay lưng)");
+const sale = m.exportProject("mau-tam-quoc", { sale: true });
+no(sale.characters.length !== 7 || sale.items.length !== 13 || sale.scenes.length !== 8 || sale.works.length || sale.warnings.length, "gói bán Tam Quốc phải trọn: " + JSON.stringify({ c: sale.characters.length, i: sale.items.length, s: sale.scenes.length, w: sale.warnings }));
+const tmp = path.join(os.tmpdir(), "gc-tq-" + process.pid + ".json");
+cp.execFileSync(process.execPath, ["archive/tamquoc/port.js", tmp], { stdio: "ignore" });
+no(fs.readFileSync(tmp, "utf8") !== fs.readFileSync("studio/mau/tam-quoc.json", "utf8"), "studio/mau/tam-quoc.json lệch với archive/tamquoc/port.js — sửa ở port.js rồi chạy lại, không sửa tay gói");
+fs.unlinkSync(tmp);
+console.log("   ✓ {shape} khít dáng đầu · đánh dấu chiếu 45° chỉ trong views · chặn 7 kiểu dữ liệu sai · cổng nhắc tóc thiếu bản lưng · 135° mượn bản lưng · Tam Quốc qua cổng 100% (53 linh kiện · 13 trang bị · 8 cảnh · 7 tướng · 5 phân cảnh) · " + n + " ảnh sạch · gói bán trọn · tái lập được");
+' || exit 1
 echo "3) MCP"
 H="$(mktemp -d)"; PORT=7495
 (echo > /dev/tcp/127.0.0.1/$PORT) 2>/dev/null && { echo "Cổng $PORT đang bị chiếm"; exit 1; }

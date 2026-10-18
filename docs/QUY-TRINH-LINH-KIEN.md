@@ -36,6 +36,20 @@ vị trí mắt/mày/miệng ở 45° (`GC.Q45`), hiệu ứng bám mặt (`fx.f
 | Có dáng riêng (tóc, mũ, khăn, áo choàng, giày) | **vẽ tay** theo bản chuẩn quay trái: phía gáy (phải) lộ tóc/khối sau, chi tiết giữa dịch trái, mặt bên tối hơn | khăn cuốn, mũ quan, tóc dựng |
 | Không đổi khi quay (ống quần chibi…) | khai báo `views.q45 = draw` — nói rõ là đã soát | quần ống gọn |
 
+### Linh kiện DỮ LIỆU dùng được đủ các công cụ trên (v0.13)
+Linh kiện của agent / người dùng là dữ liệu SVG, không gọi được hàm — nên khung cho ba thứ thay thế, đều qua bộ lọc an toàn:
+
+| Cần | Viết trong dữ liệu | Engine làm lúc dựng |
+|---|---|---|
+| Phủ kín đầu theo đúng dáng (mặt nạ, sơn mặt, mảng tóc sau gáy) | `<path d="{shape}" …/>` | thay bằng viền đầu thật của nhân vật — tròn / vuông / oval, đúng góc nhìn đang dựng |
+| Chi tiết bám mặt ở góc nghiêng | `<g class="gc-f45">…</g>` · cắt theo đầu: `gc-f45c` | `face45` (cắt bằng viền đầu với `gc-f45c`) |
+| Chi tiết trên thân / vạt ở góc nghiêng | `<g class="gc-b45t">…</g>` · vạt: `gc-b45h` | `body45` với `TORSO_UP` / `HEM` |
+| Mặt nạ tô kín vùng mắt | `"eyeArea": "#rrggbb"` | màu vùng quanh mắt |
+| Binh khí dài | `"tall": true` (· `"upright": false` nếu không dựng thẳng theo cổ tay) | cất khi động tác cần hai tay |
+
+Đánh dấu chiếu chỉ hợp lệ trên `<g>` trong `views.*` (bản chính diện không chiếu); `{shape}` chỉ ở `d` của linh kiện nhân vật (phông cảnh không có đầu).
+Mẫu thật: bộ chủ đề Tam Quốc (`studio/mau/tam-quoc.json`) — 26 linh kiện nhân vật dữ liệu, dựng lại từ bộ v0.5 viết bằng code bằng `archive/tamquoc/port.js`, đạt cùng chất lượng 45° và có thêm bản 135° / sau lưng cho tóc.
+
 ## 4. Các bước tạo một linh kiện
 
 1. **Chọn bộ phận + lớp**: linh kiện thuộc slot nào (`hat`, `outfit`…), trả về lớp nào. Không tạo lớp mới nếu lớp có sẵn đủ dùng.

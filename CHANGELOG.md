@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.13.0 — Bài thử khung: bộ chủ đề Tam Quốc dựng từ khung
+- **Bộ chủ đề mẫu "Tam Quốc"** (`studio/mau/tam-quoc.json`): 7 tướng (Gia Cát Lượng, Quan Vũ, Trương Phi, Tào Tháo, Lưu Bị, Triệu Vân, Lính quèn), 13 trang bị, 8 bối cảnh, 26 linh kiện nhân vật + 27 phông dạng dữ liệu, phim *Từ vườn đào tới Xích Bích* (5 phân cảnh). Dựng lại bộ v0.5 (viết bằng code) thành **dự án chủ đề tạo từ khung**, đi qua đúng cổng nhập như mọi gói; mọi asset đã Phát hành → xem ngay một **Gói bán** trọn bộ. Lưu Bị và Triệu Vân phối 0 linh kiện mới.
+- **Linh kiện dữ liệu ngang linh kiện code** (phát hiện khi chạy bài thử khung):
+  - `d="{shape}"` — vẽ theo **dáng đầu thật** của nhân vật ở mọi góc (mặt nạ kinh kịch khít đầu tròn / vuông / oval; mảng tóc sau gáy).
+  - **Đánh dấu chiếu 45°** `<g class="gc-f45 | gc-f45c | gc-b45t | gc-b45h">` trong các lớp góc nghiêng: engine thay bằng phép chiếu mặt / thân thật lúc dựng — dữ liệu không cần `clipPath`, `url()`.
+  - `eyeArea` cho mặt nạ, `tall` / `upright` cho vật cầm tay.
+  - Bộ lọc số nhận dạng `.25` (SVG hợp lệ, rất hay gặp ở SVG do AI / người viết).
+  - `get_part_spec` mô tả đủ các năng lực trên cho agent.
+- Tóc có bản **135° / sau lưng** (trước đây tóc búi / dựng / gọn biến mất khi nhân vật quay lưng).
+- Engine: ở 135° mượn bản sau lưng của linh kiện là bản vẽ thật — không còn đè tóc bằng lớp tóc sau (tóc chỉ có bản sau lưng từng biến mất ở 135°).
+- Cổng linh kiện có **lời khuyên** (không chặn) cho lỗi qua được cổng nhưng lộ ra khi nhìn: tóc thiếu bản sau lưng, mặt nạ tô kín mặt chưa dùng `{shape}`, vật cầm tay thiếu icon — trả về ở `preview_part` / `save_part`.
+- Studio: chọn dự án mẫu — **Văn phòng vui** (xem luồng 10 giây) hoặc **Tam Quốc** (bộ chủ đề trọn vẹn).
+- `archive/tamquoc/port.js` — công cụ dev dựng lại gói từ nguồn; `tools/test.sh` (2f) chặn gói lệch nguồn, dựng 210 ảnh (7 tướng × 10 góc × 3 biểu cảm) không còn token / đánh dấu sót, chặn 7 kiểu dữ liệu sai.
+
 ## v0.12.0 — Nháp / Phát hành, Gói bán, thư viện gen.*
 Áp các quyết định Q1–Q4 của Ryan (2026-10-18) — xem `docs/spec/DAC-TA-3-GIAI-DOAN.md`.
 - **Hai trạng thái asset: Nháp / Phát hành** (thay Chờ duyệt / Đã duyệt). Nháp dùng ngay trong dự án — mặc định cho mọi asset, kể cả AI tự tạo; **Phát hành** đưa asset vào gói bán (nhân vật cần dấu nhận diện). Nút **Phát hành / Về nháp** ở khu *Dùng* của Thư viện; bấm xong vẫn đứng ở asset đó. Dữ liệu cũ tự quy đổi (`approved` → Phát hành, `review` → Nháp).
