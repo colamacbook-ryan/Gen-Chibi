@@ -132,9 +132,15 @@ const items = Object.values(OLD.ITEMS).map(it => {
 
 /* ---------- 5. dàn tướng: 5 tướng cũ + Lưu Bị, Triệu Vân ---------- */
 // v0.14: hai linh kiện vẽ mới để mỗi tướng có dấu nhận diện RIÊNG (CNS-025) — song kiếm của Lưu Bị, thương bạc tua đỏ của Triệu Vân
-const KIEM = parts.find(p => p.id === 'tq-kiem');
-parts.push({ id: 'tq-kiem-trai', slot: 'heldL', label: 'Kiếm tay trái (song kiếm)', description: 'Tam Quốc — kiếm tay trái, đi cùng kiếm tay phải thành song kiếm của Lưu Bị.',
-  layers: { heldL: '<g transform="translate(200 0) scale(-1 1)">' + KIEM.layers.heldR + '</g>' }, views: { q45: 'same' }, icon: { cx: 54, cy: 152, size: 120, rot: -21 }, tall: true, license: LICENSE, source: SOURCE });
+// (bản đầu: kiếm tay trái — hai kiếm chĩa ra hai bên thành chữ V khi đứng yên, Ryan thấy kỳ cục → đổi thành kiếm đeo sau lưng)
+parts.push({ id: 'tq-bao-kiem', slot: 'back', label: 'Kiếm đeo sau lưng', description: 'Tam Quốc — kiếm thứ hai trong bao đeo chéo sau lưng (song kiếm của Lưu Bị): chuôi nhô qua vai phải.',
+  // bao chéo từ sau hông trái (66,204 — khuất sau thân) lên vai phải (150,140); chuôi nhô ra NGOÀI viền đầu (đầu tròn ở y≈135 chỉ tới x≈136)
+  layers: { backItem: '<path d="M63.6,200.8 L68.4,207.2 L152.4,143.2 L147.6,136.8 Z" fill="{trim}" stroke="{ink}" stroke-width="2.4" stroke-linejoin="round"/>' +
+    '<path d="M84,184 L90,192 M113.4,161.6 L119.4,169.6" fill="none" stroke="{accent}" stroke-width="3" stroke-linecap="round"/>' +
+    '<path d="M145.4,130.9 L157.4,146.9 L154.6,149.1 L142.6,133.1 Z" fill="{accent}" stroke="{ink}" stroke-width="2" stroke-linejoin="round"/>' +
+    '<path d="M150.1,136.8 L161.2,128.3 L164.2,132.3 L153.1,140.8 Z" fill="#3a2a20" stroke="{ink}" stroke-width="1.8" stroke-linejoin="round"/>' +
+    '<circle cx="164.3" cy="129.1" r="3.6" fill="{accent}" stroke="{ink}" stroke-width="1.6"/>' },
+  views: { q45: 'same', q90: 'same', q135: 'same', q180: 'same' }, license: LICENSE, source: SOURCE });
 parts.push({ id: 'tq-thuong-bac', slot: 'heldR', label: 'Thương bạc tua đỏ', description: 'Tam Quốc — thương mũi lá thẳng, tua đỏ (Long Đảm thương của Triệu Vân).',
   layers: { heldR: '<g transform="rotate(13 128 193)"><rect x="125.5" y="34" width="5" height="200" rx="2" fill="{wood}" stroke="{ink}" stroke-width="2"/>' +
     '<path d="M128,-8 C134,4 135,22 131,36 L125,36 C121,22 122,4 128,-8 Z" fill="{metal}" stroke="{ink}" stroke-width="2.2" stroke-linejoin="round"/>' +
@@ -160,10 +166,10 @@ const characters = Object.values(OLD.ASSETS).map(a => ({
 }));
 characters.push({
   id: 'tq-luu-bi', name: 'Lưu Bị', han: '劉備', faction: 'Thục', role: 'Chủ công', persona: 'nhân hậu, nhẫn nại, khóc đúng lúc, giữ chữ tín với anh em', voice: VOICE['luu-bi'],
-  look: look({ eyes: 'calm', brows: 'normal', parts: { head: 'oval', hair: 'topknot', beard: 'goatee', hat: 'official-cap', outfit: 'robe', shoes: 'boots', heldR: 'sword', heldL: 'local.my/tq-kiem-trai' },
+  look: look({ eyes: 'calm', brows: 'normal', parts: { head: 'oval', hair: 'topknot', beard: 'goatee', hat: 'official-cap', outfit: 'robe', back: 'local.my/tq-bao-kiem', shoes: 'boots', heldR: 'sword' },
     palette: { skin: '#f6d6bd', hair: '#231d1a', robe: '#3f7d4e', inner: '#efe2b8', trim: '#c9a23f', hat: '#23232a', accent: '#d6ad45', iris: '#3a2a20', metal: '#d9dee2' } }),
   expressions: { cry: { fxAdd: ['tears'] } },
-  identity: { p1: 'Song kiếm + mũ quan + áo bào xanh Thục', must: ['heldL:tq-kiem-trai', 'heldR:tq-kiem', 'hat:tq-mu-quan'], source: 'phối từ linh kiện Tam Quốc + song kiếm vẽ mới', confusable: ['Tào Tháo (cùng mũ quan, nhưng mặt trắng kịch, một kiếm)', 'Tôn Quyền (áo đỏ Ngô)'] }, status: 'published'
+  identity: { p1: 'Song kiếm (một tay, một đeo sau lưng) + mũ quan + áo bào xanh Thục', must: ['back:tq-bao-kiem', 'heldR:tq-kiem', 'hat:tq-mu-quan'], source: 'phối từ linh kiện Tam Quốc + bao kiếm vẽ mới', confusable: ['Tào Tháo (cùng mũ quan, nhưng mặt trắng kịch, một kiếm)', 'Tôn Quyền (áo đỏ Ngô)'] }, status: 'published'
 });
 characters.push({
   id: 'tq-trieu-van', name: 'Triệu Vân', han: '趙雲', faction: 'Thục', role: 'Võ tướng', persona: 'điềm tĩnh, gan dạ, một mình một ngựa xông trận, ít nói làm nhiều', voice: VOICE['trieu-van'],
@@ -183,7 +189,7 @@ const works = [{
   script: 'Lưu Bị, Quan Vũ, Trương Phi kết nghĩa ở vườn đào. Lần thứ ba tới Long Trung giữa trời tuyết, Trương Phi nóng ruột đòi đốt lều. Gia Cát Lượng tỉnh giấc, nhận lời xuống núi. Ở doanh trại, lính báo Tào quân tám mươi vạn; Triệu Vân xin ra trận, Khổng Minh chỉ chờ gió đông. Bên sông Xích Bích, Tào Tháo cười đắc ý — cho tới khi gió đổi chiều.',
   shots: [
     shot('canh-1', 'Kết nghĩa vườn đào', 'Ba anh em thề dưới hoa đào.', 'vuon-dao', ['luu-bi', 'quan-vu', 'truong-phi'], [
-      { actor: 'truong-phi', state: 'proud', spot: 'right', activity: 'cheer', say: 'Rượu ngon đã bày, hoa đào đang nở rộ!' },
+      { actor: 'truong-phi', state: 'proud', spot: 'right', activity: 'drink', say: 'Rượu ngon đã bày, hoa đào đang nở rộ!' },
       { actor: 'luu-bi', state: 'normal', spot: 'left', to: 'truong-phi', say: 'Tam đệ chớ vội uống — việc lớn trước đã.' },
       { actor: 'luu-bi', state: 'vow', spot: 'center', activity: 'salute', to: 'quan-vu', say: 'Không cầu sinh cùng ngày cùng tháng cùng năm…' },
       { actor: 'quan-vu', state: 'vow', spot: 'midLeft', to: 'luu-bi', say: '…chỉ nguyện chết cùng ngày cùng tháng cùng năm!' },

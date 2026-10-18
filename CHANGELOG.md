@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.14.0 — Phim sống: dàn dựng, máy quay, nhép miệng, bong bóng truyện tranh, âm thanh, giọng nói
+Ryan xem phim v0.13: "nhân vật chỉ biết đứng yên rồi nhúng nhúng… bong bóng chữ không chuyên nghiệp… không có âm thanh hiệu ứng… không có giọng nói… không nhép miệng". Bộ phát được làm lại từ gốc.
+- **Đạo diễn tự động** (`GC.film.direct`, thuần dữ liệu, test được trong Node): nhân vật **đi / chạy ra sân** từ hai phía; **đi tới chỗ mới** khi kịch bản đổi chỗ đứng; **bước tới** người nghe khi giận / thề / van xin, **lùi lại** khi sốc / hoảng (không đè lên người khác); người nói **quay về người nghe**, khoa tay khi nói (động tác mới `talk`); người nghe quay về người nói, **gật gù** (động tác mới `nod`), **giật mình** khi bị hét.
+- **Máy quay**: cận mặt người nói (đọc được biểu cảm), khung hai người khi đối đáp, toàn cảnh khi cả nhóm ăn mừng; câu hét đẩy máy vào + rung, câu sốc chớp trắng.
+- **Nhép miệng**: miệng người nói đổi ngậm / mở nhỏ / mở to theo từng âm tiết của giọng đọc (chỉ thay lớp miệng — rẻ).
+- **Bong bóng thoại kiểu truyện tranh** vẽ SVG: nói (bo tròn), **hét** (răng cưa, chữ đậm rung), **nghĩ** (đám mây + bọt bay về đầu), thì thầm (viền đứt); đuôi chỉ đúng miệng người nói, thẻ tên theo màu nhân vật, chữ hiện từng từ theo giọng.
+- **Âm thanh** (`engine/audio.js`, Web Audio tổng hợp — không tệp, không mạng, chạy cả trong phim mở bằng file://): 17 hiệu ứng theo cảm xúc / hành động / bước chân / thẻ tiêu đề; tiếng nền theo bối cảnh (chim, dế, mưa, gió, trong nhà); nhạc nhẹ theo không khí phân cảnh (êm, căng, hùng tráng, hài, buồn), tự hạ khi có lời.
+- **Giọng nói riêng từng nhân vật**: máy đọc tiếng Việt của trình duyệt (cao độ + tốc độ theo nhân vật); không có giọng Việt thì **giọng blip** kiểu game (có dấu thanh, câu hỏi lên giọng). Công thức nhân vật có trường `voice { pitch, rate }`; Thư viện › Nhân vật › **Giọng**: kéo, nghe thử, lưu. Chưa đặt thì tự chọn theo vai.
+- Sân khấu Studio và phim xuất ra có nút 🔊 bật / tắt tiếng và chọn giọng (tự động / máy đọc / blip / tắt).
+- Kịch bản có thể chỉ đạo từng câu: `to`, `camera` (close / two / wide), `bubble` (say / shout / think / whisper), `sfx` — AI đạo diễn được dạy các trường này và được nhắc đổi `spot` để nhân vật đi lại.
+- Hai phim mẫu viết lại có dàn dựng + giọng riêng (Văn phòng vui, Tam Quốc).
+- Theo kiểm toàn vẹn (cortex): **bộ mẫu Tam Quốc** mang dấu Gen Labs — xem, sửa thử, làm phim; **không xuất gói bán** (sao lưu vẫn giữ dấu; đổi tên không gỡ được); gói làm bằng bản gen-chibi mới hơn → báo cập nhật trước khi ghi; tóc dữ liệu thiếu bản sau lưng → khung tự phủ mảng tóc theo viền đầu; Lưu Bị có **song kiếm**, Triệu Vân có **thương bạc tua đỏ** — mỗi tướng một bộ dấu nhận diện riêng.
+- Kiểm thử: `tools/test.sh` 2g (đạo diễn tự động: ra sân, đi lại, bong bóng, máy quay, khẩu hình, phản ứng mọi câu; lược đồ chặn giá trị sai), 2f mở rộng; trình duyệt đo đúng điều người xem thấy (nhân vật di chuyển, miệng nhép, máy quay cận, bong bóng có đuôi + thẻ tên, âm thanh bật).
+
 ## v0.13.0 — Bài thử khung: bộ chủ đề Tam Quốc dựng từ khung
 - **Bộ chủ đề mẫu "Tam Quốc"** (`studio/mau/tam-quoc.json`): 7 tướng (Gia Cát Lượng, Quan Vũ, Trương Phi, Tào Tháo, Lưu Bị, Triệu Vân, Lính quèn), 13 trang bị, 8 bối cảnh, 26 linh kiện nhân vật + 27 phông dạng dữ liệu, phim *Từ vườn đào tới Xích Bích* (5 phân cảnh). Dựng lại bộ v0.5 (viết bằng code) thành **dự án chủ đề tạo từ khung**, đi qua đúng cổng nhập như mọi gói; mọi asset đã Phát hành → xem ngay một **Gói bán** trọn bộ. Lưu Bị và Triệu Vân phối 0 linh kiện mới.
 - **Linh kiện dữ liệu ngang linh kiện code** (phát hiện khi chạy bài thử khung):

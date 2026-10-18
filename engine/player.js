@@ -135,7 +135,9 @@
       line.director = {};
       ['motion', 'fx', 'activity', 'posture', 'move', 'facing', 'view'].forEach(function (k) { if (s[k] !== undefined) line.director[k] = s[k]; });
       if (s.view) line.face[me] = s.view;
-      if (!s.activity && !s.motion && (!base.motion || base.motion === 'idle')) line.director.motion = 'talk';
+      // đang nói chuyện: cảm xúc "đứng yên" hoặc "giơ hai tay chiến thắng" → khoa tay khi nói (giơ hai tay mọi câu thành chữ V kỳ cục — Ryan);
+      // muốn giơ hai tay thì kịch bản ghi activity cheer / victory
+      if (!s.activity && !s.motion && (!base.motion || base.motion === 'idle' || base.motion === 'victory')) line.director.motion = 'talk';
       // người nghe: về nét mặt bình thường (trừ ngủ / khóc / mệt…), gật gù xen kẽ; câu hét làm người nghe giật mình
       state[me] = s.state;
       line.listen = {};
