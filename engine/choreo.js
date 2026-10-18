@@ -923,6 +923,65 @@
     return w + '</svg>';
   }
 
+  /* ------------------------------------- 6b. XUẤT HOẠT ẢNH (asset, v0.16 — Q9) */
+  // Một hành động → hoạt ảnh dùng ở nơi khác (game, web, chat): khung CỐ ĐỊNH ôm trọn mọi tư thế + hiệu ứng (không máy quay,
+  // không cảnh, nền trong suốt) → các khung SVG + sprite sheet + metadata timeline. Thuần dữ liệu: Node (MCP) và trình duyệt (Studio).
+  // spec: { asset, action, partner?, react?, k? } — đòn đánh không có partner thì đánh một ma-nơ-canh khung
+  function actionTimeline(spec) {
+    var A = spec && spec.asset, AC = GC.choreo.ACTIONS || {}, act = A && Object.prototype.hasOwnProperty.call(AC, spec.action) ? AC[spec.action] : null, k = spec.k || 0.8;
+    if (!A) throw new Error('choreo: thiếu nhân vật');
+    if (!act) throw new Error('choreo: không có hành động "' + spec.action + '" (xem list_actions)');
+    if (!act.attack) return solo({ a: { asset: A, x: 320, y: 330, k: k }, action: spec.action, dir: 1 });
+    var B = spec.partner || GC.ASSETS['gen.khung/ma-no-canh'] || A;
+    return duel({ a: { asset: A, x: 240, y: 330, k: k }, b: { asset: B, x: act.ranged ? 540 : 420, y: 330, k: k }, action: spec.action, react: spec.react || 'hit' });
+  }
+  // khung ôm: lấy mẫu 30 lần / giây mọi điểm của mọi diễn viên (đầu, chân, tay, mũi binh khí) + vị trí hiệu ứng, chừa nửa đầu
+  function animBox(tl) {
+    var x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, K = 0.8;
+    var add = function (p, pad) { if (!p || !isFinite(p[0]) || !isFinite(p[1])) return; x0 = Math.min(x0, p[0] - pad); x1 = Math.max(x1, p[0] + pad); y0 = Math.min(y0, p[1] - pad); y1 = Math.max(y1, p[1] + pad); };
+    (tl.actors || [tl]).forEach(function (A, ai) {
+      K = Math.max(K, A.K);
+      for (var s = 0; s <= tl.T + 1e-9; s += 1 / 30) {
+        add(pointAt(tl, s, 'head', ai), 58 * A.K); add(pointAt(tl, s, 'feet', ai), 12 * A.K);
+        ['hand', 'handL', 'foot', 'tip'].forEach(function (w) { add(pointAt(tl, s, w, ai), 10 * A.K); });
+      }
+    });
+    tl.events.forEach(function (e) { if (e.fx && isFinite(e.x) && isFinite(e.y)) add([e.x, e.y], e.fx === 'text' ? 40 : 28); if (isFinite(e.x0)) add([e.x0, e.y0], 12); });
+    var pad = 8 * K;
+    return { x: Math.floor(x0 - pad), y: Math.floor(y0 - pad), w: Math.ceil(x1 - x0 + 2 * pad), h: Math.ceil(y1 - y0 + 2 * pad) };
+  }
+  // một khung hoạt ảnh (r = giây thật) trong khung ôm cố định; opts: { size: cạnh dài px, fx: false bỏ hiệu ứng, shadow: false }
+  function animFrame(tl, r, box, opts) {
+    opts = opts || {};
+    var s = realToStory(tl, r), Fs = allAt(tl, s), sc = opts.size ? opts.size / Math.max(box.w, box.h) : 1;
+    var w = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="' + box.x + ' ' + box.y + ' ' + box.w + ' ' + box.h + '"' + (opts.size ? ' width="' + Math.round(box.w * sc) + '" height="' + Math.round(box.h * sc) + '"' : '') + '>';
+    if (opts.shadow !== false) w += Fs.map(function (F) { return shadowSvg(tl, F); }).join('');
+    w += ghostsSvg(tl, r, s, function (G2, ex) { return actorSvg(tl, G2, ex); }) + Fs.map(function (F) { return actorSvg(tl, F); }).join('');
+    if (opts.fx !== false) w += fxSvg(tl, r, s);
+    return w + '</svg>';
+  }
+  // trọn hoạt ảnh: { fps, frames: [{ t, svg }], box, duration, impact, meta } — fps 4…30, tối đa 120 khung
+  function animate(tl, opts) {
+    opts = opts || {};
+    var fps = Math.max(4, Math.min(30, Math.round(opts.fps || 12))), n = Math.min(120, Math.max(2, Math.ceil(tl.real * fps) + 1)), box = animBox(tl), frames = [];
+    for (var i = 0; i < n; i++) { var r = Math.min(tl.real, i / fps); frames.push({ t: +r.toFixed(3), svg: animFrame(tl, r, box, opts) }); }
+    var d = tl.duel || {};
+    return { fps: fps, frames: frames, box: box, duration: +tl.real.toFixed(3),
+      meta: { format: 'gen-chibi.anim/1', action: d.action || null, react: d.react || null, fps: fps, frameCount: n, duration: +tl.real.toFixed(3),
+        impact: d.impact != null ? +storyToReal(tl, d.impact).toFixed(3) : null, impactFrame: d.impact != null ? Math.round(storyToReal(tl, d.impact) * fps) : null,
+        box: box, segments: (tl.actors || [tl]).map(function (A, ai) { return A.segments.map(function (g) { return { actor: ai, clip: g.id, label: g.label, t0: +storyToReal(tl, g.t0).toFixed(3), t1: +storyToReal(tl, g.t1).toFixed(3) }; }); }) } };
+  }
+  // sprite sheet VECTƠ: mọi khung xếp lưới trong một SVG (cols cột, ô cell px) — Studio raster ra PNG; agent dùng thẳng hoặc tự raster
+  function sheetSVG(anim, opts) {
+    opts = opts || {};
+    var n = anim.frames.length, cols = Math.max(1, Math.min(n, opts.cols || Math.ceil(Math.sqrt(n)))), rows = Math.ceil(n / cols), b = anim.box;
+    var cw = opts.cell || 160, ch = Math.round(cw * b.h / b.w), out = '<svg xmlns="http://www.w3.org/2000/svg" width="' + cols * cw + '" height="' + rows * ch + '" viewBox="0 0 ' + cols * cw + ' ' + rows * ch + '">';
+    anim.frames.forEach(function (f, i) {
+      out += f.svg.replace('<svg xmlns="http://www.w3.org/2000/svg" ', '<svg x="' + (i % cols) * cw + '" y="' + Math.floor(i / cols) * ch + '" width="' + cw + '" height="' + ch + '" ').replace(/ width="\d+" height="\d+">/, '>');
+    });
+    return { svg: out + '</svg>', cols: cols, rows: rows, cell: { w: cw, h: ch } };
+  }
+
   /* --------------------------------------------------------- 7. BỘ PHÁT (DOM) */
   function player(box, tl, opts) {
     opts = opts || {};
@@ -1050,6 +1109,7 @@
     build: build, duel: duel, solo: solo, impacts: impacts, finalAt: finalAt, allAt: allAt, pointAt: pointAt, weaponOf: weaponOf, fxSvg: fxSvg, overlaySvg: overlaySvg, storyToReal: storyToReal, realToStory: realToStory, camAt: camAt,
     frameSVG: frameSVG, player: player, measure: measure, demos: {}, ACTIONS: {}, REACTS: {},
     MOTION: MOTION, FRAME_PACK: FRAME_PACK, PACKS: PACKS, packs: function () { return PACK_ORDER.map(function (k) { return PACKS[k]; }); },
-    checkPack: checkPack, registerPack: registerPack, unregisterPack: unregisterPack, hasWeapon: hasWeapon, canDo: canDo, actionsFor: actionsFor
+    checkPack: checkPack, registerPack: registerPack, unregisterPack: unregisterPack, hasWeapon: hasWeapon, canDo: canDo, actionsFor: actionsFor,
+    actionTimeline: actionTimeline, animBox: animBox, animFrame: animFrame, animate: animate, sheetSVG: sheetSVG
   };
 })(typeof window !== 'undefined' ? window.GenChibi : globalThis.GenChibi);
