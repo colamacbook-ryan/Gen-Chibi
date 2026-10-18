@@ -9,7 +9,7 @@
  "project": {
   "id": "mau-tam-quoc",
   "name": "Tam Quốc (bộ chủ đề mẫu)",
-  "description": "Bộ chủ đề trọn vẹn dựng từ khung: 7 tướng, 13 trang bị, 8 bối cảnh, 28 linh kiện nhân vật, 27 phông — và phim 5 phân cảnh có dàn dựng, giọng nói, âm thanh. Bộ mẫu của Gen Labs: xem gói bán trông thế nào (xem trước), không xuất bán."
+  "description": "Bộ chủ đề trọn vẹn dựng từ khung: 7 tướng, 13 trang bị, 8 bối cảnh, 28 linh kiện nhân vật, 27 phông — và phim 6 phân cảnh có dàn dựng, giọng nói, âm thanh, một màn đấu võ. Bộ mẫu của Gen Labs: xem gói bán trông thế nào (xem trước), không xuất bán."
  },
  "requires": {
   "packs": []
@@ -2232,7 +2232,7 @@
    "id": "tq-vuon-dao-xich-bich",
    "title": "Từ vườn đào tới Xích Bích",
    "logline": "Ba anh em kết nghĩa, ba lần tới lều cỏ mời Khổng Minh, rồi một trận gió đông đổi vận thiên hạ.",
-   "script": "Lưu Bị, Quan Vũ, Trương Phi kết nghĩa ở vườn đào. Lần thứ ba tới Long Trung giữa trời tuyết, Trương Phi nóng ruột đòi đốt lều. Gia Cát Lượng tỉnh giấc, nhận lời xuống núi. Ở doanh trại, lính báo Tào quân tám mươi vạn; Triệu Vân xin ra trận, Khổng Minh chỉ chờ gió đông. Bên sông Xích Bích, Tào Tháo cười đắc ý — cho tới khi gió đổi chiều.",
+   "script": "Lưu Bị, Quan Vũ, Trương Phi kết nghĩa ở vườn đào. Lần thứ ba tới Long Trung giữa trời tuyết, Trương Phi nóng ruột đòi đốt lều. Gia Cát Lượng tỉnh giấc, nhận lời xuống núi. Ở doanh trại, lính báo Tào quân tám mươi vạn; Triệu Vân xin ra trận, Khổng Minh chỉ chờ gió đông. Trước trận, Trương Phi đòi đấu tập với Triệu Vân cho nóng người — lính quèn xem mà hoa cả mắt. Bên sông Xích Bích, Tào Tháo cười đắc ý — cho tới khi gió đổi chiều.",
    "shots": [
     {
      "id": "canh-1",
@@ -2440,6 +2440,83 @@
         "spot": "midLeft",
         "to": "tq-gia-cat-luong",
         "say": "Thế… thắng trận có được thưởng bánh bao không ạ?"
+       }
+      ]
+     }
+    },
+    {
+     "id": "canh-dau-tap",
+     "title": "Đấu tập trước trận",
+     "description": "Trương Phi đòi đấu với Triệu Vân — thương đối xà mâu.",
+     "scene": "local.my/tq-doanh-trai",
+     "cast": [
+      "local.my/tq-truong-phi",
+      "local.my/tq-trieu-van",
+      "local.my/tq-linh-que"
+     ],
+     "event": {
+      "title": "Đấu tập trước trận",
+      "steps": [
+       {
+        "actor": "tq-truong-phi",
+        "state": "rage",
+        "spot": "midRight",
+        "to": "tq-trieu-van",
+        "say": "Tử Long! Trước trận đấu với ta vài hiệp cho nóng người!"
+       },
+       {
+        "actor": "tq-trieu-van",
+        "state": "vow",
+        "spot": "midLeft",
+        "to": "tq-truong-phi",
+        "say": "Tử Long xin lĩnh giáo!"
+       },
+       {
+        "actor": "tq-trieu-van",
+        "state": "rage",
+        "action": "thrust",
+        "target": "tq-truong-phi",
+        "react": "block",
+        "say": "Xem thương!"
+       },
+       {
+        "actor": "tq-truong-phi",
+        "state": "rage",
+        "action": "combo",
+        "target": "tq-trieu-van",
+        "react": "dodge",
+        "say": ""
+       },
+       {
+        "actor": "tq-linh-que",
+        "state": "shock",
+        "spot": "left",
+        "fx": [
+         "sweat"
+        ],
+        "to": "tq-trieu-van",
+        "say": "Oa… nhanh quá, nhìn không kịp!"
+       },
+       {
+        "actor": "tq-trieu-van",
+        "state": "vow",
+        "action": "leap",
+        "target": "tq-truong-phi",
+        "react": "fall",
+        "say": ""
+       },
+       {
+        "actor": "tq-truong-phi",
+        "state": "proud",
+        "to": "tq-trieu-van",
+        "say": "Hay! Hôm nay ta nhường đệ một hiệp!"
+       },
+       {
+        "actor": "tq-trieu-van",
+        "state": "smug",
+        "action": "salute",
+        "to": "tq-truong-phi",
+        "say": "Đa tạ Dực Đức nương tay."
        }
       ]
      }

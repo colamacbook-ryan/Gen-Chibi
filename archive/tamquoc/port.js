@@ -182,11 +182,11 @@ characters.push({
 /* ---------- 6. tác phẩm: "Từ vườn đào tới Xích Bích" — có dàn dựng: đổi chỗ đứng để đi lại, nói với ai, hành động ---------- */
 const K = id => 'local.my/tq-' + id;
 const shot = (id, title, description, scene, cast, steps) => ({ id, title, description, scene: K(scene), cast: cast.map(K),
-  event: { title, steps: steps.map(s => Object.assign({}, s, { actor: 'tq-' + s.actor }, s.to ? { to: 'tq-' + s.to } : {})) } });
+  event: { title, steps: steps.map(s => Object.assign({}, s, { actor: 'tq-' + s.actor }, s.to ? { to: 'tq-' + s.to } : {}, s.target ? { target: 'tq-' + s.target } : {})) } });
 const works = [{
   id: 'tq-vuon-dao-xich-bich', title: 'Từ vườn đào tới Xích Bích',
   logline: 'Ba anh em kết nghĩa, ba lần tới lều cỏ mời Khổng Minh, rồi một trận gió đông đổi vận thiên hạ.',
-  script: 'Lưu Bị, Quan Vũ, Trương Phi kết nghĩa ở vườn đào. Lần thứ ba tới Long Trung giữa trời tuyết, Trương Phi nóng ruột đòi đốt lều. Gia Cát Lượng tỉnh giấc, nhận lời xuống núi. Ở doanh trại, lính báo Tào quân tám mươi vạn; Triệu Vân xin ra trận, Khổng Minh chỉ chờ gió đông. Bên sông Xích Bích, Tào Tháo cười đắc ý — cho tới khi gió đổi chiều.',
+  script: 'Lưu Bị, Quan Vũ, Trương Phi kết nghĩa ở vườn đào. Lần thứ ba tới Long Trung giữa trời tuyết, Trương Phi nóng ruột đòi đốt lều. Gia Cát Lượng tỉnh giấc, nhận lời xuống núi. Ở doanh trại, lính báo Tào quân tám mươi vạn; Triệu Vân xin ra trận, Khổng Minh chỉ chờ gió đông. Trước trận, Trương Phi đòi đấu tập với Triệu Vân cho nóng người — lính quèn xem mà hoa cả mắt. Bên sông Xích Bích, Tào Tháo cười đắc ý — cho tới khi gió đổi chiều.',
   shots: [
     shot('canh-1', 'Kết nghĩa vườn đào', 'Ba anh em thề dưới hoa đào.', 'vuon-dao', ['luu-bi', 'quan-vu', 'truong-phi'], [
       { actor: 'truong-phi', state: 'proud', spot: 'right', activity: 'drink', say: 'Rượu ngon đã bày, hoa đào đang nở rộ!' },
@@ -211,6 +211,15 @@ const works = [{
       { actor: 'trieu-van', state: 'vow', spot: 'right', activity: 'salute', to: 'gia-cat-luong', say: 'Có Tử Long ở đây, quân sư cứ yên tâm!' },
       { actor: 'gia-cat-luong', state: 'smug', to: 'trieu-van', say: 'Chỉ cần chờ một trận gió đông.' },
       { actor: 'linh-que', state: 'greedy', spot: 'midLeft', to: 'gia-cat-luong', say: 'Thế… thắng trận có được thưởng bánh bao không ạ?' }]),
+    shot('canh-dau-tap', 'Đấu tập trước trận', 'Trương Phi đòi đấu với Triệu Vân — thương đối xà mâu.', 'doanh-trai', ['truong-phi', 'trieu-van', 'linh-que'], [
+      { actor: 'truong-phi', state: 'rage', spot: 'midRight', to: 'trieu-van', say: 'Tử Long! Trước trận đấu với ta vài hiệp cho nóng người!' },
+      { actor: 'trieu-van', state: 'vow', spot: 'midLeft', to: 'truong-phi', say: 'Tử Long xin lĩnh giáo!' },
+      { actor: 'trieu-van', state: 'rage', action: 'thrust', target: 'truong-phi', react: 'block', say: 'Xem thương!' },
+      { actor: 'truong-phi', state: 'rage', action: 'combo', target: 'trieu-van', react: 'dodge', say: '' },
+      { actor: 'linh-que', state: 'shock', spot: 'left', fx: ['sweat'], to: 'trieu-van', say: 'Oa… nhanh quá, nhìn không kịp!' },
+      { actor: 'trieu-van', state: 'vow', action: 'leap', target: 'truong-phi', react: 'fall', say: '' },
+      { actor: 'truong-phi', state: 'proud', to: 'trieu-van', say: 'Hay! Hôm nay ta nhường đệ một hiệp!' },
+      { actor: 'trieu-van', state: 'smug', action: 'salute', to: 'truong-phi', say: 'Đa tạ Dực Đức nương tay.' }]),
     shot('canh-5', 'Gió đông Xích Bích', 'Tào Tháo đắc ý, rồi gió đổi chiều.', 'xich-bich', ['tao-thao', 'gia-cat-luong'], [
       { actor: 'tao-thao', state: 'smug', spot: 'left', activity: 'point', to: 'gia-cat-luong', say: 'Tám mươi vạn quân, thuyền nối thành đất bằng!' },
       { actor: 'tao-thao', state: 'proud', spot: 'midLeft', to: 'gia-cat-luong', say: 'Gió tây bắc thổi — lửa sao tới được ta? Ha ha!' },
@@ -225,7 +234,7 @@ const works = [{
 const bundle = {
   format: 'gen-chibi.project/1', kind: 'sample', license: LICENSE,
   sample: { owner: 'Gen Labs', license: '© 2026 Gen Labs — bộ mẫu trưng bày: xem, sửa thử, làm phim; không bán lại, không phân phối' },
-  project: { id: 'mau-tam-quoc', name: 'Tam Quốc (bộ chủ đề mẫu)', description: 'Bộ chủ đề trọn vẹn dựng từ khung: 7 tướng, 13 trang bị, 8 bối cảnh, 28 linh kiện nhân vật, 27 phông — và phim 5 phân cảnh có dàn dựng, giọng nói, âm thanh. Bộ mẫu của Gen Labs: xem gói bán trông thế nào (xem trước), không xuất bán.' },
+  project: { id: 'mau-tam-quoc', name: 'Tam Quốc (bộ chủ đề mẫu)', description: 'Bộ chủ đề trọn vẹn dựng từ khung: 7 tướng, 13 trang bị, 8 bối cảnh, 28 linh kiện nhân vật, 27 phông — và phim 6 phân cảnh có dàn dựng, giọng nói, âm thanh, một màn đấu võ. Bộ mẫu của Gen Labs: xem gói bán trông thế nào (xem trước), không xuất bán.' },
   requires: { packs: [] }, parts: parts.concat(sceneryParts), items, scenes, characters, works
 };
 const out = process.argv[2] ? path.resolve(process.argv[2]) : path.join(APP, 'studio/mau/tam-quoc.json');   // tham số: ghi ra chỗ khác (test so khớp)

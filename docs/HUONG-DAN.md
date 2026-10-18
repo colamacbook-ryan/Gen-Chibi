@@ -10,7 +10,7 @@
 4. Mở **Tạo tác** → tác phẩm *Ngày đầu đi làm* (4 phân cảnh) → bấm **▶ Diễn toàn bộ**.
 5. Bấm **Phim (HTML)** để tải phim về — mở tệp bằng trình duyệt bất kỳ là xem, gửi cho người xem.
 
-Muốn thấy một **bộ chủ đề trọn vẹn** (thứ gen-chibi sinh ra để bán): bấm **🏯 Mở bộ chủ đề mẫu "Tam Quốc"** — 7 tướng (mặt nạ kinh kịch, binh khí, 8 hướng, giọng riêng), 13 trang bị, 8 bối cảnh và phim *Từ vườn đào tới Xích Bích* (5 phân cảnh có dàn dựng, giọng nói, âm thanh). Đây là **bộ mẫu của Gen Labs**: xem, sửa thử, làm phim thoải mái, nhưng **không xuất gói bán** — muốn bán thì dựng bộ của bạn trong một dự án riêng.
+Muốn thấy một **bộ chủ đề trọn vẹn** (thứ gen-chibi sinh ra để bán): bấm **🏯 Mở bộ chủ đề mẫu "Tam Quốc"** — 7 tướng (mặt nạ kinh kịch, binh khí, 8 hướng, giọng riêng), 13 trang bị, 8 bối cảnh và phim *Từ vườn đào tới Xích Bích* (6 phân cảnh có dàn dựng, giọng nói, âm thanh, một màn đấu võ). Đây là **bộ mẫu của Gen Labs**: xem, sửa thử, làm phim thoải mái, nhưng **không xuất gói bán** — muốn bán thì dựng bộ của bạn trong một dự án riêng.
 
 ## Ba khu — ba ứng dụng riêng
 
@@ -49,6 +49,7 @@ Khung không bao giờ bị sửa — asset của bạn là bản sao của khun
   - **âm thanh**: hiệu ứng theo cảm xúc / hành động, nền theo bối cảnh (chim, dế, mưa, gió), nhạc nhẹ theo không khí, **giọng riêng từng nhân vật**.
   - Nút 🔊 bật / tắt tiếng; chọn giọng: *tự động* (máy đọc tiếng Việt nếu trình duyệt có, không thì giọng blip), *máy đọc*, *blip kiểu game*, *tắt*.
   - Muốn chỉ đạo kỹ hơn: mỗi câu thoại có thể đặt `to` (nói với ai), `camera` (close / two / wide), `bubble` (say / shout / think / whisper), `sfx`; AI đạo diễn biết các trường này. Đổi `spot` giữa các câu để nhân vật đi lại.
+  - **Hành động & đấu võ** (v0.15): một bước kịch bản có thể là một màn biên đạo — `action` (đòn đánh: `thrust` đâm, `sweep` quét, `combo` liên hoàn, `spin` xoay chém, `leap` tung người bổ xuống; một mình: `twirl` múa binh khí, `rage`, `hero`, `victory`, `dance`, `salute`, `stretch`, `scratch`, `startle`, `flip`), `target` (người bị đánh) và `react` (`hit` trúng, `fall` ngã lộn rồi bật dậy, `ko` ngã choáng, `block` gạt đỡ, `dodge` lộn ra sau né). Người ra đòn **tự áp sát hoặc lùi** cho mũi binh khí chạm đúng đối thủ; đối thủ phản ứng **đúng khung va chạm**; có khựng hình, slow-mo, vệt chém, chữ tượng thanh (VÚT! XOẸT! RẦM!), người đứng xem giật mình. `say` để `""` nếu chỉ ra đòn. Xem phân cảnh *Đấu tập trước trận* trong phim Tam Quốc.
 
 ### Xuất thành phẩm
 | Nút | Ra gì |

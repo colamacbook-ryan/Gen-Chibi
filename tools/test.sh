@@ -384,7 +384,7 @@ no(!GC.svgString(GC.ASSETS["local.my/t-toc-nv"], "normal", { director: { view: "
 const b = JSON.parse(fs.readFileSync("studio/mau/tam-quoc.json", "utf8"));
 const r = m.importProject(b, {});
 no(r.errors.length, "Tam Quốc có mục không qua cổng: " + JSON.stringify(r.errors.slice(0, 3)));
-no(JSON.stringify(r.counts) !== JSON.stringify({ parts: 55, items: 13, scenes: 8, characters: 7, works: 1, shots: 5 }), "Tam Quốc thiếu mục: " + JSON.stringify(r.counts));
+no(JSON.stringify(r.counts) !== JSON.stringify({ parts: 55, items: 13, scenes: 8, characters: 7, works: 1, shots: 6 }), "Tam Quốc thiếu mục: " + JSON.stringify(r.counts));
 const tq = GC.assets().filter(a => a.project === "mau-tam-quoc");
 let n = 0;
 for (const a of tq) for (const v of GC.VIEW_ORDER) for (const st of ["normal", "rage", "shock"]) {
@@ -433,14 +433,14 @@ const tmp = path.join(os.tmpdir(), "gc-tq-" + process.pid + ".json");
 cp.execFileSync(process.execPath, ["archive/tamquoc/port.js", tmp], { stdio: "ignore" });
 no(fs.readFileSync(tmp, "utf8") !== fs.readFileSync("studio/mau/tam-quoc.json", "utf8"), "studio/mau/tam-quoc.json lệch với archive/tamquoc/port.js — sửa ở port.js rồi chạy lại, không sửa tay gói");
 fs.unlinkSync(tmp);
-console.log("   ✓ {shape} khít dáng đầu · đánh dấu chiếu 45° chỉ trong views · chặn 7 kiểu dữ liệu sai · cổng nhắc tóc thiếu bản lưng · 135° mượn bản lưng · chặn lồng đánh dấu / <g/> lệch cặp · Tam Quốc qua cổng 100% (55 linh kiện · 13 trang bị · 8 cảnh · 7 tướng · 5 phân cảnh) · " + n + " ảnh sạch · bộ mẫu không xuất bán (kể cả linh kiện mẫu trong dự án khác, qua sao lưu → nhập lại) · dấu nhận diện riêng · tóc lưng tự phủ · chặn gói bản mới hơn · tái lập được");
+console.log("   ✓ {shape} khít dáng đầu · đánh dấu chiếu 45° chỉ trong views · chặn 7 kiểu dữ liệu sai · cổng nhắc tóc thiếu bản lưng · 135° mượn bản lưng · chặn lồng đánh dấu / <g/> lệch cặp · Tam Quốc qua cổng 100% (55 linh kiện · 13 trang bị · 8 cảnh · 7 tướng · 6 phân cảnh) · " + n + " ảnh sạch · bộ mẫu không xuất bán (kể cả linh kiện mẫu trong dự án khác, qua sao lưu → nhập lại) · dấu nhận diện riêng · tóc lưng tự phủ · chặn gói bản mới hơn · tái lập được");
 ' || exit 1
 echo "2g) phim sống: đạo diễn tự động (ra sân, đi lại, quay mặt, cử chỉ, máy quay, bong bóng, khẩu hình, âm thanh)"
 node -e '
 const fs = require("fs"), os = require("os"), path = require("path"), vm = require("vm");
 const { MCP } = require("./server/mcp.js"); const { Store } = require("./server/store.js");
 const ctx = { window: {}, console }; vm.createContext(ctx);
-["engine/core.js", "kinds/character/gen.core.js", "kinds/khung/gen.khung.js", "engine/player.js"].forEach(f => vm.runInContext(fs.readFileSync(f, "utf8"), ctx, { filename: f }));
+["engine/core.js", "engine/choreo.js", "kinds/character/gen.core.js", "kinds/khung/gen.khung.js", "kinds/character/gen.choreo.js", "engine/player.js"].forEach(f => vm.runInContext(fs.readFileSync(f, "utf8"), ctx, { filename: f }));
 const GC = ctx.window.GenChibi, no = (c, msg) => { if (c) { console.log("   ✗", msg); process.exit(1); } };
 const m = new MCP({ engine: GC, store: new Store(fs.mkdtempSync(path.join(os.tmpdir(), "gc-p-"))), version: "t", system: {} });
 for (const f of ["van-phong-vui", "tam-quoc"]) no(m.importProject(JSON.parse(fs.readFileSync("studio/mau/" + f + ".json", "utf8")), {}).errors.length, f + " không qua cổng");
@@ -483,6 +483,31 @@ const shot1 = { title: "t", scene: "gen.khung/san-khau-chuan", cast: ["tq-luu-bi
 const pl = GC.film.direct(shot1), L1 = pl.beats.filter(x => x.type === "line");
 no(L1[0].say !== "" || /undefined/.test(JSON.stringify(L1[0])), "bước thiếu say phải là chuỗi rỗng");
 no(L1[1].hold !== 5 || L1[1].estimate >= 5, "hold không được trộn vào thời gian đọc (estimate " + L1[1].estimate + ")");
+// v0.15 — biên đạo trong phim: bước có action → nhịp "act"; đòn đánh chạm đúng mặt trước thân đối thủ, đối thủ phản ứng đúng khung va chạm
+const C = GC.choreo; let acts = 0, duels = 0;
+for (const s of m.store.getWork("tq-vuon-dao-xich-bich").shots) {
+  const p = GC.film.direct(s);
+  for (const b of p.beats.filter(x => x.type === "act")) {
+    acts++;
+    no(!b.tl || !(b.real > 0.8 && b.real < 7.5), s.title + ": màn " + b.action + " dài bất thường (" + b.real + " s)");
+    no(b.end.some(x => x < 30 || x > 610), s.title + ": " + b.action + " đẩy nhân vật ra ngoài sân khấu " + JSON.stringify(b.end));
+    if (!b.target) continue;
+    duels++;
+    const tl = b.tl, ti = tl.duel.impact, tip = C.pointAt(tl, ti, "tip", 0), xb = C.finalAt(tl, ti, 1).x, dir = tl.duel.dir;
+    let gap = 1e9; for (let t = 0; t < tl.T; t += 0.02) gap = Math.min(gap, Math.abs(C.finalAt(tl, t, 1).x - C.finalAt(tl, t, 0).x));
+    no(gap < 45, s.title + ": " + b.action + " hai người chồng lên nhau (gần nhất " + gap.toFixed(0) + ")");
+    if (b.react === "dodge") { const lift = -C.finalAt(tl, ti, 1).pose.root.y; no(lift < 20 && Math.abs(xb - b.from[1]) < 30, s.title + ": né mà vẫn đứng nguyên chỗ lúc đòn tới"); }
+    else no(Math.abs(tip[0] - (xb - dir * 26 * 0.8)) > 14, s.title + ": " + b.action + " không chạm đối thủ (mũi " + tip[0].toFixed(0) + ", mặt trước thân " + (xb - dir * 26 * 0.8).toFixed(0) + ")");
+    const seg = tl.actors[1].segments.filter(x => x.id !== "hold")[0], rc = C.REACTS[b.react].contact;
+    no(!seg || Math.abs(seg.t0 + rc - ti) > 0.03, s.title + ": " + b.react + " lệch khung va chạm");
+  }
+}
+no(acts < 4 || duels < 3, "phim Tam Quốc phải có màn đấu (≥ 3 đòn có đối thủ): " + acts + " / " + duels);
+for (const [what, st] of [["đòn thiếu target", { action: "thrust" }], ["target cho hành động một mình", { action: "dance", target: "tq-quan-vu" }], ["action lạ", { action: "fly" }], ["react thiếu target", { react: "hit" }], ["react lạ", { action: "thrust", target: "tq-quan-vu", react: "explode" }]])
+  no(!GC.director.validate({ title: "t", steps: [Object.assign({ actor: "tq-luu-bi", state: "normal", say: "" }, st)] }, cast).length, "phải chặn " + what);
+no(GC.director.validate({ title: "t", steps: [{ actor: "tq-luu-bi", state: "rage", say: "Xem kiếm!", action: "sweep", target: "tq-quan-vu", react: "block" }] }, cast).length, "đòn hợp lệ bị chặn");
+no(!/action/.test(GC.director.prompt(cast)) || !/react/.test(GC.director.prompt(cast)), "prompt đạo diễn phải dạy action / target / react");
+console.log("   ✓ biên đạo trong phim: " + acts + " màn hành động (" + duels + " màn đấu) · mũi binh khí chạm mặt trước thân đối thủ ±14 · không chồng người · phản ứng đúng khung va chạm ±0,03 s · không văng khỏi sân khấu · lược đồ action / target / react chặn 5 kiểu sai");
 console.log("   ✓ " + lines + " câu thoại: ai cũng ra sân · " + moves + " lần đi lại · " + talks + " câu khoa tay · " + shouts + " câu hét (đẩy máy) · " + thinks + " câu nghĩ · máy quay cận " + closes + " / hai người " + twos + " · " + nudges + " lần bước tới-lùi · khẩu hình + hướng nhìn + phản ứng mọi câu · lược đồ dàn dựng chặn giá trị sai");
 ' || exit 1
 echo "2h) ngôn ngữ cơ thể: 18 cảm xúc là 18 hình bóng toàn thân khác nhau rõ (đo bằng điểm mốc)"

@@ -122,7 +122,8 @@
       still: !!opts.still || reduce,
       setState: function (s, director) {
         var c = GC.compose(this.asset, s, director);
-        for (var l in c.layers) this.groups[l].innerHTML = c.layers[l];
+        for (var l in this.groups) this.groups[l].innerHTML = c.layers[l] || '';
+        this.resolvedLayers = c.layers;
         if (this.state !== null && (this.state !== s || director)) { this.t0 = performance.now(); this.popAt = this.t0; }
         this.state = s; this.resolved = c.state; this.director = director;
         svg.setAttribute('aria-label', (this.asset.name || this.asset.id) + ' · ' + ((GC.LIB.states[s] || {}).label || s));
@@ -130,6 +131,13 @@
         return c.state;
       },
       setAsset: function (a) { this.asset = a; this.setState(this.state || 'normal', this.director); },
+      // điều khiển trực tiếp (biên đạo, v0.15): fn(now) → { pose, layers, sig, blend } mỗi khung; fn trả null = tạm theo trạng thái thường.
+      // drive(null) → về trạng thái đang có (tư thế hoà dần từ dáng cuối của biên đạo)
+      drive: function (fn) {
+        this.driver = fn || null; this.settled = false;
+        if (!fn) { this.dsig = null; this.setState(this.state || 'normal', this.director); }
+        kick();
+      },
       destroy: function () {
         var i = fulls.indexOf(this);
         if (i >= 0) fulls.splice(i, 1);
@@ -147,6 +155,20 @@
   }
 
   function apply(inst, now, k) {
+    var D = inst.driver && inst.driver(now);
+    if (D) {
+      if (D.sig !== inst.dsig) { inst.dsig = D.sig; for (var gl in inst.groups) inst.groups[gl].innerHTML = D.layers[gl] || ''; }
+      var kb = D.blend == null ? 1 : D.blend;   // < 1: hoà dần từ dáng đang có (lúc vừa vào biên đạo)
+      GC.JOINT_IDS.forEach(function (j) { GC.CHANNELS.forEach(function (ch) { inst.cur[j][ch] += (D.pose[j][ch] - inst.cur[j][ch]) * kb; }); });
+      var ch2 = GC.chainTransforms(inst.cur);
+      GC.RIG.layers.forEach(function (l) { inst.groups[l[0]].setAttribute('transform', ch2[l[1]]); });
+      if (inst.shadow) {
+        var kk = Math.max(0.3, 1 - Math.max(0, -inst.cur.root.y) / 110);
+        inst.shadow.setAttribute('cx', '100'); inst.shadow.setAttribute('rx', (46 * kk).toFixed(1)); inst.shadow.setAttribute('ry', (7 * kk).toFixed(1)); inst.shadow.style.opacity = kk.toFixed(2);
+      }
+      return;
+    }
+    if (inst.dsig) { inst.dsig = null; for (var l0 in inst.groups) inst.groups[l0].innerHTML = (inst.resolvedLayers || {})[l0] || ''; }   // vừa thôi điều khiển: trả lớp vẽ của trạng thái
     var t = (now - inst.t0) / 1000;
     var target = GC.poseAt(inst.asset, inst.resolved, t, inst.still);
     // lấy đà + nảy khi đổi trạng thái (squash & stretch)
@@ -183,7 +205,7 @@
     var active = 0;
     for (var i = 0; i < fulls.length; i++) {
       var inst = fulls[i];
-      if (!inst.el.isConnected || !inst.visible || inst.settled) continue;
+      if (!inst.el.isConnected || (!inst.visible && !inst.driver) || inst.settled) continue;
       apply(inst, now, k);
       active++;
     }

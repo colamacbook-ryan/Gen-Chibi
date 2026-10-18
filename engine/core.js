@@ -758,7 +758,10 @@
   var FILM_CAMERAS = ['auto', 'wide', 'two', 'close'];
   var FILM_BUBBLES = ['say', 'shout', 'think', 'whisper'];
   var FILM_SFX = ['pop', 'whoosh', 'step', 'sting', 'hit', 'boing', 'sparkle', 'rumble', 'drip', 'sad', 'snore', 'party', 'hmm', 'gong', 'chime', 'swish', 'tick'];
+  // từ vựng HÀNH ĐỘNG (biên đạo, v0.15) nằm ở engine/choreo.js + kinds/character/gen.choreo.js — chưa nạp thì kịch bản không có action
+  function filmActions() { var C = G.GenChibi && G.GenChibi.choreo; return { act: (C && C.ACTIONS) || {}, react: (C && C.REACTS) || {} }; }
   function directorSchema(cast) {
+    var FA = filmActions();
     return {
       $schema: 'https://json-schema.org/draft/2020-12/schema',
       title: 'gen-chibi event', type: 'object', required: ['title', 'steps'], additionalProperties: false,
@@ -786,7 +789,11 @@
               to: { enum: castIds(cast) },
               camera: { enum: FILM_CAMERAS.slice() },
               bubble: { enum: FILM_BUBBLES.slice() },
-              sfx: { type: 'array', maxItems: 3, items: { enum: FILM_SFX.slice() } }
+              sfx: { type: 'array', maxItems: 3, items: { enum: FILM_SFX.slice() } },
+              // hành động (biên đạo): đòn đánh cần target; người bị đánh phản ứng đúng khung va chạm
+              action: { enum: Object.keys(FA.act) },
+              target: { enum: castIds(cast) },
+              react: { enum: Object.keys(FA.react) }
             }
           }
         }
@@ -831,6 +838,13 @@
       if (s.camera !== undefined && FILM_CAMERAS.indexOf(s.camera) < 0) errs.push(n + 'camera chọn: ' + FILM_CAMERAS.join(', ') + '.');
       if (s.bubble !== undefined && FILM_BUBBLES.indexOf(s.bubble) < 0) errs.push(n + 'bubble chọn: ' + FILM_BUBBLES.join(', ') + '.');
       if (s.sfx !== undefined && (!Array.isArray(s.sfx) || s.sfx.length > 3 || s.sfx.some(function (x) { return FILM_SFX.indexOf(x) < 0; }))) errs.push(n + 'sfx: mảng tối đa 3, chọn trong ' + FILM_SFX.join(', ') + '.');
+      var FA = filmActions(), ac = s.action !== undefined ? FA.act[s.action] : null;
+      if (s.action !== undefined && !ac) errs.push(n + 'action "' + String(s.action).slice(0, 40) + '" không có (chọn: ' + Object.keys(FA.act).join(', ') + ').');
+      if (ac && ac.attack && s.target === undefined) errs.push(n + 'đòn "' + s.action + '" cần "target" (người bị đánh).');
+      if (s.target !== undefined && (S.target.enum.indexOf(s.target) < 0 || s.target === s.actor)) errs.push(n + '"target" phải là một diễn viên khác trong dàn diễn viên.');
+      if (s.target !== undefined && !(ac && ac.attack)) errs.push(n + '"target" chỉ đi với đòn đánh (' + Object.keys(FA.act).filter(function (k) { return FA.act[k].attack; }).join(', ') + ').');
+      if (s.react !== undefined && !FA.react[s.react]) errs.push(n + 'react chọn: ' + Object.keys(FA.react).join(', ') + '.');
+      else if (s.react !== undefined && s.target === undefined) errs.push(n + '"react" là phản ứng của "target" — cần có target.');
     });
     return errs;
   }
@@ -859,6 +873,14 @@
     L.push('- to: id người nghe (mặc định: người vừa nói) · camera: ' + FILM_CAMERAS.join(' | ') + ' (close = cận người nói, two = hai người, wide = toàn cảnh)');
     L.push('- bubble: ' + FILM_BUBBLES.join(' | ') + ' (mặc định: hét khi rage/shock/panic/vow có "!", nghĩ khi think/sleep) · sfx: ' + FILM_SFX.join(', '));
     L.push('- Đổi spot giữa các bước để nhân vật đi lại trên sân khấu (đừng để mọi người đứng yên cả cảnh); xen activity (bow, salute, point, wave, cheer, attack…) cho câu thoại có hành động.');
+    var FA = filmActions();
+    if (Object.keys(FA.act).length) {
+      L.push('', 'Hành động (action, tuỳ chọn — biên đạo võ thuật / cử chỉ toàn thân, có máy quay, slow-mo, khựng hình khi trúng đòn, hiệu ứng, âm thanh):');
+      L.push('- đòn đánh (cần target = người bị đánh): ' + Object.keys(FA.act).filter(function (k) { return FA.act[k].attack; }).map(function (k) { return k + ' (' + FA.act[k].label + ')'; }).join(', '));
+      L.push('- một mình: ' + Object.keys(FA.act).filter(function (k) { return !FA.act[k].attack; }).map(function (k) { return k + ' (' + FA.act[k].label + ')'; }).join(', '));
+      L.push('- react (phản ứng của target, mặc định hit): ' + Object.keys(FA.react).map(function (k) { return k + ' (' + FA.react[k].label + ')'; }).join(', '));
+      L.push('- Cảnh đấu: hai người cùng hàng trước (left, midLeft, center, midRight, right), cách nhau ít nhất một chỗ đứng; người ra đòn tự áp sát / lùi cho trúng. "say" có thể là "" khi chỉ ra đòn, hoặc một tiếng hô ngắn. Tối đa 3 đòn một phân cảnh; xen câu thoại giữa các đòn. Hài kiểu phim võ, không máu.');
+    }
     L.push('', 'Schema:', JSON.stringify(directorSchema(cast), null, 2), '', 'Sự kiện: <mô tả sự kiện ở đây>');
     return L.join('\n');
   }

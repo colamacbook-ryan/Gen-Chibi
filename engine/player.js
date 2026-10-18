@@ -76,7 +76,8 @@
   // diễn bằng chân: cảm xúc tiến tới người nghe / lùi lại (đơn vị toạ độ cảnh, 640 = cả khung)
   var LEAN = { rage: 44, vow: 34, beg: 30, smug: 22, greedy: 22, proud: 16, shock: -36, panic: -30, unsure: -16 };
 
-  function sx(spot) { var s = GC.SCENE.spots[spot]; return s ? s.x : 320; }
+  // vị trí ngang: tên chỗ đứng, hoặc toạ độ x (sau một màn đấu nhân vật không còn đứng đúng chỗ)
+  function sx(spot) { if (typeof spot === 'number') return spot; var s = GC.SCENE.spots[spot]; return s ? s.x : 320; }
   function words(t) { return String(t || '').trim().split(/\s+/).filter(Boolean).length; }
   // màu thẻ tên: màu chủ đạo của nhân vật, đủ đậm để chữ trắng đọc được (áo trắng thì lấy viền / mũ)
   function lum(c) { var n = parseInt(c.slice(1), 16); return (0.299 * (n >> 16) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) / 255; }
@@ -115,9 +116,13 @@
         gait: first && (first.state === 'panic' || first.state === 'rage') ? 'run' : 'walk' });
       cur[a.id] = to; state[a.id] = 'normal';
     });
-    var prev = null, lastCam = null, pair = null;
+    var prev = null, lastCam = null, pair = null, byId = {}, row = {};
+    list.forEach(function (a) { byId[a.id] = a; row[a.id] = GC.SCENE.spots[home[a.id]] || GC.SCENE.spots.center; });
+    var C = GC.choreo, AC = (C && C.ACTIONS) || {}, RE = (C && C.REACTS) || {};
     steps.forEach(function (s, i) {
       var me = s.actor, base = GC.LIB.states[s.state] || GC.LIB.states.normal;
+      if (s.spot && GC.SCENE.spots[s.spot]) row[me] = GC.SCENE.spots[s.spot];
+      var ac = s.action && AC[s.action], silent = ac && !String(s.say || '').trim();   // ra đòn không hô: chỉ có nhịp hành động
       var line = { type: 'line', i: i, actor: me, say: s.say == null ? '' : String(s.say), state: s.state, hold: s.hold || 0 };
       // đi tới chỗ mới khi spot đổi (chạy khi hoảng / giận hoặc đường xa)
       if (s.spot && s.spot !== cur[me]) {
@@ -126,7 +131,7 @@
         cur[me] = s.spot;
       }
       // nói với ai: chỉ định > người vừa nói > người đứng gần nhất
-      var to = s.to && s.to !== me && ids.indexOf(s.to) >= 0 ? s.to : prev && prev !== me ? prev : nearest(me, ids, cur);
+      var to = s.to && s.to !== me && ids.indexOf(s.to) >= 0 ? s.to : ac && ac.attack && s.target && s.target !== me && ids.indexOf(s.target) >= 0 ? s.target : prev && prev !== me ? prev : nearest(me, ids, cur);
       line.to = to || null;
       // hướng nhìn: người nói nhìn người nghe; mọi người khác nhìn người nói
       line.face = {};
@@ -170,7 +175,28 @@
       var gapTo = to ? Math.abs(sx(cur[to]) - sx(cur[me])) : 0, room = lean > 0 ? Math.max(0, gapTo - 100) : 60;
       if (lean && to && !line.move && !(act0 && act0.move) && Math.min(Math.abs(lean), room) >= 12) line.nudge = (sx(cur[to]) < sx(cur[me]) ? -1 : 1) * (lean > 0 ? Math.min(lean, room) : lean);
       pair = to ? [me, to] : null; lastCam = cam; prev = me;
-      plan.beats.push(line);
+      if (!silent) plan.beats.push(line);
+      if (ac) {
+        // hành động (biên đạo): dựng sẵn ở đây (thuần dữ liệu) để biết ai đứng đâu sau màn đấu — câu sau quay mặt đúng chỗ
+        var tg = ac.attack && s.target && s.target !== me && ids.indexOf(s.target) >= 0 ? s.target : null;
+        var beat = { type: 'act', i: i, actor: me, action: s.action, label: ac.label, target: tg, react: tg ? (RE[s.react] ? s.react : 'hit') : null };
+        if (silent && line.move) beat.move = line.move;
+        var Pa = { asset: byId[me], x: sx(cur[me]), y: row[me].y, k: row[me].k }, tl = null;
+        try {
+          if (tg) tl = C.duel({ a: Pa, b: { asset: byId[tg], x: sx(cur[tg]), y: row[tg].y, k: row[tg].k }, action: s.action, react: beat.react });
+          else { var o = to || nearest(me, ids, cur); tl = C.solo({ a: Pa, action: s.action, dir: o && sx(cur[o]) < Pa.x ? -1 : 1 }); }
+        } catch (e) { tl = null; }   // đòn chưa dựng được (thiếu clip…) → bỏ hành động, câu thoại vẫn diễn
+        if (tl) {
+          beat.real = Math.round(tl.real * 100) / 100;
+          beat.from = [Pa.x, tg ? sx(cur[tg]) : null];
+          beat.end = tl.duel.end.map(function (v) { return Math.round(v * 10) / 10; });
+          beat.impact = tl.duel.impact != null ? Math.round(C.storyToReal(tl, tl.duel.impact) * 100) / 100 : null;
+          Object.defineProperty(beat, 'tl', { value: tl, enumerable: false });   // bộ phát dùng lại (không vào JSON / kiểm thử)
+          cur[me] = beat.end[0]; if (tg) cur[tg] = beat.end[1];
+          if (tg) { state[tg] = beat.react === 'ko' ? 'dizzy' : beat.react === 'hit' || beat.react === 'fall' ? 'injured' : state[tg]; pair = [me, tg]; }
+          plan.beats.push(beat);
+        }
+      }
     });
     return plan;
   }
@@ -192,6 +218,7 @@
     '.gcp-flash{background:#fff;opacity:0;pointer-events:none;z-index:40}.gcp-flash.on{animation:gcp-flash .45s ease-out}',
     '@keyframes gcp-flash{0%{opacity:.85}100%{opacity:0}}',
     '.gcp-ov{z-index:50;pointer-events:none}',
+    '.gcp-fx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:48;overflow:visible}.gcp-fxo{z-index:49}',
     // bong bóng thoại: hình vẽ SVG (nói / hét / nghĩ / thì thầm) + chữ hiện theo giọng đọc
     '.gcp-bub{position:absolute;max-width:46%;min-width:14%;padding:.7em 1.05em .75em;color:' + INK + ';font:700 max(12px,2.05cqw)/1.32 ui-rounded,"SF Pro Rounded","Nunito","Segoe UI",system-ui,sans-serif;text-align:center;letter-spacing:.005em;',
     'opacity:0;transform:scale(.6);transform-origin:var(--ox,50%) var(--oy,100%);transition:opacity .16s ease-out,transform .32s cubic-bezier(.3,1.7,.5,1)}',
@@ -427,7 +454,7 @@
       act(id, line.state, dir);
       Object.keys(els).forEach(function (k) { els[k].classList.toggle('speaking', k === id); });   // người nói luôn ở lớp trên
       // bước tới / lùi nửa bước theo cảm xúc (ngắn, không chặn lời thoại) — xong câu thì về chỗ
-      var home = pos[id] && pos[id].spot, nudged = false;
+      var home = pos[id], nudged = false;   // chỗ đang đứng (tên chỗ hoặc toạ độ sau màn đấu)
       if (line.nudge && pos[id]) {
         nudged = true;
         var p0 = pos[id], e = els[id];
@@ -448,7 +475,7 @@
         return Promise.race([talk, cap]).then(function () { b.word(n); mouth(0); return wait(Math.max(380, (line.hold || 0) * 1000 - (Date.now() - t0)), r); });   // hold = khung hiện tối thiểu
       }).then(function () {
         done = true; mouth(0); b.close(); bub = null;
-        if (nudged && r === run) { var p1 = pos[id]; els[id].style.transitionDuration = '.4s'; place(id, spotAt(home)); timers.push(setTimeout(function () { if (els[id]) els[id].style.transitionDuration = '0s'; }, 420)); }
+        if (nudged && r === run) { els[id].style.transitionDuration = '.4s'; place(id, home); timers.push(setTimeout(function () { if (els[id]) els[id].style.transitionDuration = '0s'; }, 420)); }
       }, function (e) { done = true; b.close(); bub = null; throw e; });
     }
     // không có engine/audio.js: vẫn nhép miệng + hiện chữ theo thời gian đọc ước tính
@@ -460,8 +487,67 @@
       })(i);
       return wait(n * per * 1000 + 200, r);
     }
+    /* ---- hành động (biên đạo, v0.15): chạy dòng thời gian choreo NGAY trên diễn viên đang có — đấu hai người hoặc múa một mình ---- */
+    function perform(beat, r) {
+      var C = GC.choreo, ids = [beat.actor].concat(beat.target ? [beat.target] : []);
+      if (!C || ids.some(function (id) { return !insts[id] || !insts[id].drive; })) return Promise.resolve();
+      var tl = beat.tl;
+      // đứng lệch chỗ so với lúc đạo diễn tính (vd. tua giữa chừng) → dựng lại cho khớp vị trí thật
+      if (!tl || Math.abs(pos[beat.actor].x - beat.from[0]) > 2 || (beat.target && Math.abs(pos[beat.target].x - beat.from[1]) > 2)) {
+        var pa = pos[beat.actor], P = function (id) { return { asset: cast[id], x: pos[id].x, y: pos[id].y, k: pos[id].k }; };
+        tl = beat.target ? C.duel({ a: P(beat.actor), b: P(beat.target), action: beat.action, react: beat.react }) : C.solo({ a: P(beat.actor), action: beat.action, dir: beat.end && beat.end[0] < pa.x ? -1 : 1 });
+      }
+      // người xem quay về phía màn đấu
+      Object.keys(insts).forEach(function (id) { if (ids.indexOf(id) < 0) act(id, 'normal', { view: pos[id].x > pos[beat.actor].x ? 'left45' : 'right45' }); });
+      Object.keys(els).forEach(function (k) { els[k].classList.toggle('speaking', k === beat.actor); });
+      var fxs = svgEl('svg', { viewBox: '0 0 ' + GC.SCENE.W + ' ' + GC.SCENE.H, preserveAspectRatio: 'none', class: 'gcp-fx' });
+      var ovs = svgEl('svg', { viewBox: '0 0 ' + GC.SCENE.W + ' ' + GC.SCENE.H, preserveAspectRatio: 'none', class: 'gcp-fx gcp-fxo' });
+      cam.appendChild(fxs); box.appendChild(ovs);
+      camera(beat.target ? 'two' : 'close', ids, false);
+      var t0 = performance.now(), lastR = 0, lastCam = 0, fired = {}, rows = ids.map(function (id) { return pos[id]; });
+      // mỗi khung (gọi từ vòng vẽ của diễn viên chính): âm thanh, rung, đẩy máy khi trúng, người xem giật mình, hiệu ứng, máy quay bám
+      function frame(rr, st) {
+        tl.events.forEach(function (e) {
+          if (fired[e.i] || e.rt > rr) return;
+          fired[e.i] = 1;
+          if (e.rt < lastR - 0.05) return;   // bỏ sự kiện quá cũ (tab ẩn rồi hiện lại)
+          var pan = e.x != null ? Math.max(-0.8, Math.min(0.8, (e.x - 320) / 320)) : panOf(beat.actor);
+          if (e.sfx) [].concat(e.sfx).forEach(function (n) { sfx(n, { gain: e.gain != null ? e.gain : 0.8, pan: pan }); });
+          if (e.shake) { shk.classList.remove('shake'); void shk.offsetWidth; shk.classList.add('shake'); }
+          if ((e.hitstop > 0 || e.hit) && !e.miss) {
+            camera(beat.target ? 'two' : 'close', ids, true);
+            timers.push(setTimeout(function () { if (r === run) camera(beat.target ? 'two' : 'close', ids, false); }, 260));
+            Object.keys(insts).forEach(function (id) { if (ids.indexOf(id) < 0) act(id, 'shock', { motion: 'jolt', view: pos[id].x > pos[beat.actor].x ? 'left45' : 'right45' }); });
+          }
+        });
+        lastR = rr;
+        if (rr - lastCam > 0.35) { lastCam = rr; camera(beat.target ? 'two' : 'close', ids, false); }   // diễn viên lướt / văng xa → máy bám theo
+        fxs.innerHTML = C.fxSvg(tl, rr, st);
+        ovs.innerHTML = C.overlaySvg(tl, rr, { bare: true });
+      }
+      ids.forEach(function (id, ai) {
+        els[id].style.transitionDuration = '0s';
+        insts[id].drive(function (now) {
+          if (r !== run) return null;
+          var rr = Math.min(tl.real, (now - t0) / 1000), st = C.realToStory(tl, rr), F = C.finalAt(tl, st, ai);
+          if (ai === 0) frame(rr, st);
+          place(id, { x: F.x, y: rows[ai].y, k: rows[ai].k, spot: rows[ai].spot });
+          return { pose: F.pose, layers: F.layers, sig: F.sig, blend: rr < 0.22 ? 0.3 : 1 };   // vào biên đạo: hoà dần từ dáng đang có
+        });
+      });
+      return wait(tl.real * 1000 + 120, r).then(function () {
+        var end = ids.map(function (id, ai) { return C.finalAt(tl, tl.T, ai).x; });
+        ids.forEach(function (id, ai) {
+          insts[id].drive(null);
+          place(id, { x: end[ai], y: rows[ai].y, k: rows[ai].k, spot: rows[ai].spot });
+          var o = ids[1 - ai] || null, view = o ? (pos[o].x < end[ai] ? 'left45' : 'right45') : 'front';
+          act(id, ai === 1 && beat.react === 'ko' ? 'dizzy' : ai === 1 && beat.react !== 'dodge' && beat.react !== 'block' ? 'injured' : 'normal', { view: view });
+        });
+        fxs.remove(); ovs.remove();
+      }, function (e) { fxs.remove(); ovs.remove(); ids.forEach(function (id) { if (insts[id]) insts[id].drive(null); }); throw e; });
+    }
     function lines(r) {
-      var L = plan.beats.filter(function (b) { return b.type === 'line'; }), i = 0, lastCam = 'wide';
+      var L = plan.beats.filter(function (b) { return b.type === 'line' || b.type === 'act'; }), i = 0, lastCam = 'wide';
       return (function next() {
         if (r !== run) return Promise.reject('stop');
         if (i >= L.length) return Promise.resolve();
@@ -469,6 +555,7 @@
         progress((plan.shotTitle || '') + ' · ' + i + '/' + L.length);
         var go = Promise.resolve();
         if (line.move) { camera('wide'); go = wait(300, r).then(function () { sfx('whoosh', { gain: 0.35, pan: panOf(line.actor) }); return walk(line.actor, line.move.to, line.move.gait, r); }); }
+        if (line.type === 'act') { progress((plan.shotTitle || '') + ' · ' + line.label); lastCam = 'two'; return go.then(function () { return perform(line, r); }).then(next); }
         return go.then(function () {
           camera(line.camera, line.camOn, line.punch);
           if (line.camera !== 'wide' && line.camera !== lastCam) sfx('whoosh', { gain: 0.18 });
