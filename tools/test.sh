@@ -108,9 +108,9 @@ const lay = GC.checkDataPart({ id: "x-2", slot: "hat", layers: { propFront: "<pa
 if (!lay.errors.length) { bad++; console.log("   ✗ cho dùng lớp đạo cụ"); }
 // linh kiện dữ liệu 8 hướng (tuỳ chọn): drawn | same | front | hide; mode lạ bị chặn; đăng ký xong dựng được mọi góc
 if (!GC.checkDataPart({ id: "x-4", slot: "hat", layers: { hat: "<path d=\"M0,0\"/>" }, views: { q45: "same", q90: "bay" } }).errors.some(e => /q90/.test(e))) { bad++; console.log("   ✗ mode góc 90° lạ vẫn qua"); }
-const d8 = GC.registerDataPart("afi.khung", { id: "x-8", slot: "hat", layers: { hat: "<path d=\"M50,80 L150,80 L100,40 Z\" fill=\"{hat}\"/>" }, views: { q45: "same", q90: { mode: "drawn", layers: { hat: "<path d=\"M60,80 L140,80 L96,40 Z\" fill=\"{hat}\"/>" } }, q135: "front", q180: "hide" } });
+const d8 = GC.registerDataPart("gen.khung", { id: "x-8", slot: "hat", layers: { hat: "<path d=\"M50,80 L150,80 L100,40 Z\" fill=\"{hat}\"/>" }, views: { q45: "same", q90: { mode: "drawn", layers: { hat: "<path d=\"M60,80 L140,80 L96,40 Z\" fill=\"{hat}\"/>" } }, q135: "front", q180: "hide" } });
 if (d8.errors.length || !["q45", "q90", "q135", "q180"].every(k => d8.part.views[k]) || d8.part.views.q180({ P: {} }) !== null) { bad++; console.log("   ✗ linh kiện dữ liệu 8 hướng:", d8.errors); }
-else delete GC.LIB.parts["afi.khung/hat:x-8"];
+else delete GC.LIB.parts["gen.khung/hat:x-8"];
 // hồi quy review bảo mật v0.3.0
 const t0 = Date.now();
 GC.sanitizeSvg("<g transform=\"" + ("translate(1)" + " ".repeat(100)).repeat(6) + "x\"></g>");
@@ -124,7 +124,7 @@ if (!GC.checkDataPart({ id: "x-3", slot: "constructor", layers: { hat: "<path d=
 const { MCP } = require("./server/mcp"); const { Store } = require("./server/store");
 const tmp = require("fs").mkdtempSync(require("os").tmpdir() + "/gc-sec-");
 const mcp = new MCP({ engine: GC, store: new Store(tmp), version: "test" });
-const ow = mcp.saveAssetChecked({ pack: "afi.khung", id: "ma-no-canh", name: "hacked", look: { eyes: "round", brows: "normal", parts: {} } }, "x");
+const ow = mcp.saveAssetChecked({ pack: "gen.khung", id: "ma-no-canh", name: "hacked", look: { eyes: "round", brows: "normal", parts: {} } }, "x");
 if (ow.pack !== "local.my") { bad++; console.log("   ✗ MCP/AI ghi đè được nhân vật chính thức:", ow.key); }
 try { mcp.savePartChecked({ id: "khoi-mu", slot: "hat", layers: { hat: "<path d=\"M0,0\"/>" }, views: { q45: "same" } }); bad++; console.log("   ✗ linh kiện trùng id chính thức được lưu"); } catch (e) { /* đúng: bị chặn */ }
 if (bad) process.exit(1);
@@ -137,21 +137,21 @@ node -e '
 const { loadEngine } = require("./server/engine-node"); const GC = loadEngine(process.cwd());
 let bad = 0; const no = (c, m) => { if (c) { bad++; console.log("   ✗", m); } };
 GC.items().forEach(i => GC.itemGate(i).forEach(g => no(!g.ok, i.key + ": " + g.label + " " + g.detail)));
-const B = { id: "item-mau", name: "X", type: "weapon", rarity: "rare", equip: { part: "afi.khung/khoi-que-dai" } };
+const B = { id: "item-mau", name: "X", type: "weapon", rarity: "rare", equip: { part: "gen.khung/khoi-que-dai" } };
 const err = d => GC.checkItem(Object.assign({}, B, d)).errors.length;
 no(err({}), "item mẫu phải hợp lệ (nếu không, các phép chặn dưới đây vô nghĩa): " + GC.checkItem(B).errors.join("; "));
 no(!err({ type: "boots" }), "loại không khớp linh kiện vẫn qua");
 no(!err({ equip: { part: "khong-co" } }), "linh kiện lạ vẫn qua");
-no(!err({ equip: { part: "afi.khung/khoi-que-dai", palette: { metal: "red; x" } } }), "màu không phải hex vẫn qua");
-no(!err({ equip: { part: "afi.khung/khoi-que-dai", palette: { constructor: "#fff" } } }), "token màu prototype vẫn qua");
+no(!err({ equip: { part: "gen.khung/khoi-que-dai", palette: { metal: "red; x" } } }), "màu không phải hex vẫn qua");
+no(!err({ equip: { part: "gen.khung/khoi-que-dai", palette: { constructor: "#fff" } } }), "token màu prototype vẫn qua");
 no(!err({ stats: { atk: 5000 } }), "chỉ số ngoài 0–999 vẫn qua");
 no(!err({ rarity: "mythic" }), "độ hiếm lạ vẫn qua");
 const card = GC.itemSvg(Object.assign({ key: "t" }, GC.checkItem(Object.assign({}, B, { name: "<script>alert(1)</script>" })).def), { mode: "card" });
 no(/<script/.test(card), "tên item không được escape trong thẻ");
-const qv = JSON.parse(JSON.stringify(GC.ASSETS["afi.khung/ma-no-canh"])); qv.key = "t/qv"; qv.look.equip = { heldR: "afi.khung/khung-vu-khi-dai", outfit: "afi.khung/khung-khoac-than", back: "afi.khung/khung-sau-lung" };
-no(GC.blockingGates(GC.gate(qv, { poses: true }), "review").length, "nhân vật mặc trang bị không qua cổng");
-no(GC.partRef(qv, "heldR") !== "afi.khung/khoi-que-dai", "trang bị không thay linh kiện");
-qv.look.equip = { heldR: "afi.khung/khung-khoac-than" };
+const qv = JSON.parse(JSON.stringify(GC.ASSETS["gen.khung/ma-no-canh"])); qv.key = "t/qv"; qv.look.equip = { heldR: "gen.khung/khung-vu-khi-dai", outfit: "gen.khung/khung-khoac-than", back: "gen.khung/khung-sau-lung" };
+no(GC.blockingGates(GC.gate(qv, { poses: true }), "published").length, "nhân vật mặc trang bị không qua cổng");
+no(GC.partRef(qv, "heldR") !== "gen.khung/khoi-que-dai", "trang bị không thay linh kiện");
+qv.look.equip = { heldR: "gen.khung/khung-khoac-than" };
 no(!GC.gate(qv).find(g => g.id === "parts" && !g.ok), "mặc item sai bộ phận vẫn qua");
 if (bad) process.exit(1);
 // hồi quy v0.4.1: part không phải chuỗi, ký tự điều khiển, item lệch bộ phận không làm vỡ nhân vật
@@ -160,7 +160,7 @@ no(thrown, "equip.part không phải chuỗi làm checkItem ném lỗi: " + (thr
 no(err({ equip: { part: 7 } }) === 0, "equip.part là số vẫn qua");
 const cc = GC.checkItem(Object.assign({}, B, { name: "A\u0000B\u001f", description: "x\u0007y" })).def;
 no(/[\u0000-\u001f]/.test(cc.name + cc.description), "ký tự điều khiển lọt vào item");
-qv.look.equip = { hat: "afi.khung/khung-vu-khi-dai" };
+qv.look.equip = { hat: "gen.khung/khung-vu-khi-dai" };
 let vo = null; try { GC.svgString(qv, "normal"); } catch (e) { vo = e; }
 no(vo, "item lệch bộ phận làm vỡ nhân vật: " + (vo && vo.message));
 console.log("   ✓", GC.items().length, "item chính thức đạt cổng; chặn loại/linh kiện/màu/chỉ số/độ hiếm sai; thẻ escape chữ; nhân vật mặc trang bị đạt cổng");
@@ -169,12 +169,12 @@ console.log("   ✓", GC.items().length, "item chính thức đạt cổng; ch�
 echo "2d) cảnh (loại asset thứ ba)"
 node -e '
 const { loadEngine } = require("./server/engine-node"); const GC = loadEngine(process.cwd());
-GC.registerAsset("t.cast", Object.assign(JSON.parse(JSON.stringify(GC.ASSETS["afi.khung/ma-no-canh"])), { id: "nguoi-2" }));   // diễn viên thứ hai dựng từ khung
+GC.registerAsset("t.cast", Object.assign(JSON.parse(JSON.stringify(GC.ASSETS["gen.khung/ma-no-canh"])), { id: "nguoi-2" }));   // diễn viên thứ hai dựng từ khung
 let bad = 0; const no = (c, m) => { if (c) { bad++; console.log("   ✗", m); } };
 GC.scenes().forEach(s => GC.sceneGate(s).forEach(g => no(!g.ok, s.key + ": " + g.label + " " + g.detail)));
 GC.scenery().filter(p => GC.PACKS[p.pack].group === "official").forEach(p => no(!p.license || !p.source, "phông thiếu license/nguồn: " + p.pack + "/" + p.slot + ":" + p.id));
 // phông chính thức phải được dùng lại: mỗi phông nằm trong ít nhất một cảnh (thư viện là nguyên liệu, không vẽ thừa)
-GC.scenery().filter(p => p.pack === "afi.khung").forEach(p => { const ref = p.pack + "/" + p.id; no(!GC.scenes().some(s => Object.values(s.layers).some(l => l.part === ref) || s.deco.some(d => d.part === ref)), "phông không cảnh nào dùng: " + ref); });
+GC.scenery().filter(p => p.pack === "gen.khung").forEach(p => { const ref = p.pack + "/" + p.id; no(!GC.scenes().some(s => Object.values(s.layers).some(l => l.part === ref) || s.deco.some(d => d.part === ref)), "phông không cảnh nào dùng: " + ref); });
 const B = { id: "canh-mau", name: "Mẫu", layers: { sky: "khung-troi", ground: "khung-nen" } };
 const err = d => GC.checkScene(Object.assign({}, B, d)).errors.length;
 no(err({}), "cảnh mẫu phải hợp lệ: " + GC.checkScene(B).errors.join("; "));
@@ -210,14 +210,14 @@ no(!GC.checkDataPart({ id: "da-ci", slot: "deco", svg: "<circle r=\"1\" fill=\"{
 no(!GC.checkDataPart({ id: "da-ci", slot: "deco", layers: { hat: "<g/>" } }).errors.length, "phông dùng layers (sai khuôn) vẫn qua");
 // đạo diễn: kịch bản đặt vào cảnh
 const cast = GC.assets();
-no(GC.director.validate({ title: "t", scene: "afi.khung/san-khau-chuan", steps: [{ actor: "ma-no-canh", state: "normal", spot: "left", say: "a" }] }, cast).length, "kịch bản có cảnh hợp lệ bị chặn");
+no(GC.director.validate({ title: "t", scene: "gen.khung/san-khau-chuan", steps: [{ actor: "ma-no-canh", state: "normal", spot: "left", say: "a" }] }, cast).length, "kịch bản có cảnh hợp lệ bị chặn");
 no(!GC.director.validate({ title: "t", scene: "khong-co", steps: [{ actor: "ma-no-canh", state: "normal", say: "a" }] }, cast).length, "cảnh lạ vẫn qua");
 no(!GC.director.validate({ title: "t", steps: [{ actor: "ma-no-canh", state: "normal", spot: "tren-troi", say: "a" }] }, cast).length, "chỗ đứng lạ vẫn qua");
 // hồi quy v0.5.1: không có giá trị hỏng (NaN, undefined…) trong mọi phông × giờ × thời tiết; tách lớp back/front đủ nội dung
 const BAD = /NaN|undefined|null|\[object|Infinity/;
 GC.scenes().forEach(s => GC.SCENE.timeOrder.forEach(t => GC.SCENE.weatherOrder.forEach(w => { const v = GC.sceneSvg(s, { time: t, weather: w, cast: [{ character: "ma-no-canh", spot: "left" }, { character: "nguoi-2", spot: "right" }] }); no(BAD.test(v), "giá trị hỏng trong " + s.key + " " + t + "/" + w + ": " + (v.match(BAD) || [""])[0]); })));
 GC.SCENE.timeOrder.forEach(t => Object.keys(GC.SCENE.slots).forEach(slot => GC.scenery(slot).forEach(p => {
-  const sc = { key: "q/" + p.id, id: "q", layers: { sky: { part: "afi.khung/khung-troi", dx: 0 }, ground: { part: "afi.khung/khung-nen", dx: 0 } }, deco: [], palette: {}, time: t, weather: "clear", spots: GC.SCENE.spotOrder };
+  const sc = { key: "q/" + p.id, id: "q", layers: { sky: { part: "gen.khung/khung-troi", dx: 0 }, ground: { part: "gen.khung/khung-nen", dx: 0 } }, deco: [], palette: {}, time: t, weather: "clear", spots: GC.SCENE.spotOrder };
   if (slot === "deco") sc.deco = [{ part: p.pack + "/" + p.id, x: 300, y: 300, scale: 1, flip: false, z: "back" }]; else sc.layers[slot] = { part: p.pack + "/" + p.id, dx: 0 };
   no(BAD.test(GC.sceneSvg(sc)), "phông " + p.id + " sinh giá trị hỏng ở giờ " + t);
 })));
@@ -254,6 +254,19 @@ let c = null; try { m.importProject(b, {}); } catch (e) { c = e; } no(!c || c.co
 no(m.importProject(b, { overwrite: true }).errors.length, "lưu đè lỗi");
 const ex = m.exportProject("mau-van-phong-vui");
 no(ex.characters.length !== 3 || ex.works.length !== 1 || ex.works[0].shots.length !== 4 || ex.works[0].chat, "xuất gói thiếu / lộ chat");
+no(ex.kind !== "backup" || ex.warnings.length, "gói sao lưu: kind backup, không cảnh báo");
+// GÓI BÁN (Q3, 2026-10-18): chỉ asset PHÁT HÀNH, không kèm tác phẩm; phụ thuộc còn nháp → kéo theo + cảnh báo
+const s0 = m.exportProject("mau-van-phong-vui", { sale: true });
+no(s0.kind !== "sale" || s0.characters.length || s0.items.length || s0.scenes.length || s0.works.length, "dự án toàn nháp → gói bán rỗng: " + JSON.stringify({ c: s0.characters.length, i: s0.items.length, s: s0.scenes.length, w: s0.works.length }));
+const pub = id => { const r = m.store.listAssets().find(a => a.pack === "local.my" && a.id === id); return m.saveAssetChecked(Object.assign({}, r, { pack: "local.my", status: "published" }), "phát hành", { allowAnyPack: true }); };
+no(pub("mau-anh-ba").status !== "published", "phát hành nhân vật");
+const s1 = m.exportProject("mau-van-phong-vui", { sale: true });
+no(s1.characters.length !== 1 || s1.characters[0].id !== "mau-anh-ba" || s1.works.length, "gói bán chỉ có asset phát hành, không tác phẩm");
+no(!s1.items.some(i => i.id === "mau-tap-ho-so") || !s1.warnings.some(w => /mau-tap-ho-so/.test(w)), "trang bị còn nháp: vẫn kéo theo (gói tự đủ) + cảnh báo: " + JSON.stringify(s1.warnings));
+no(m.GC.statusOf("approved") !== "published" || m.GC.statusOf("review") !== "draft" || m.GC.statusOf(undefined) !== "draft", "statusOf: dữ liệu cũ approved → phát hành, còn lại → nháp");
+let eid = null; try { pub("mau-be-na"); m.saveAssetChecked({ pack: "local.my", id: "mau-thieu-nd", name: "x", status: "published", look: { eyes: "round", brows: "normal", parts: {} } }, "t", { allowAnyPack: true }); } catch (x) { eid = x; }
+no(!eid || !/nhận diện|identity/i.test(eid.message), "phát hành thiếu dấu nhận diện phải bị chặn; nháp thì không");
+no(!m.saveAssetChecked({ pack: "local.my", id: "mau-thieu-nd", name: "x", look: { eyes: "round", brows: "normal", parts: {} } }, "t", { allowAnyPack: true }), "nháp thiếu nhận diện vẫn lưu được");
 for (const bad of [null, { format: "x" }, { format: "gen-chibi.project/1", project: { id: "../x" } }, { format: "gen-chibi.project/1", project: { id: "ok" }, characters: "x" }]) {
   let e = null; try { m.importProject(bad, {}); } catch (x) { e = x; } no(!e || e.code !== 400, "gói hỏng phải bị chặn: " + JSON.stringify(bad));
 }
@@ -280,11 +293,39 @@ no(m.GC.SCENES["local.my/mau-van-phong"].project !== "mau-van-phong-vui", "sửa
 const ch0 = m.saveAssetChecked({ pack: "local.my", id: "mau-be-na", name: "Na", look: { eyes: "round", brows: "normal", parts: {} } }, "t", { allowAnyPack: true });
 no(ch0.project !== "mau-van-phong-vui", "sửa nhân vật làm rơi dự án");
 no(m.saveItemChecked({ id: it0.id, name: "x", type: it0.type, rarity: it0.rarity, equip: it0.equip, project: "" }, "t").project !== "", "đặt project rỗng có chủ đích vẫn phải được");
-no(JSON.stringify(m.exportProject("mau-van-phong-vui").requires.packs) !== JSON.stringify(["afi.khung"]), "gói phải khai báo thư viện cần có (requires.packs)");
+no(JSON.stringify(m.exportProject("mau-van-phong-vui").requires.packs) !== JSON.stringify(["gen.khung"]), "gói phải khai báo thư viện cần có (requires.packs)");
 let er = null; try { m.importProject({ format: "gen-chibi.project/1", project: { id: "can" }, requires: { packs: ["afi.tamquoc"] } }, {}); } catch (x) { er = x; } no(!er || !/afi.tamquoc/.test(er.message), "gói cần thư viện chưa cài phải báo rõ");
+// đổi tên thư viện afi.* → gen.* (Q4, 2026-10-18): dữ liệu / gói cũ vẫn đọc được, lưu mới ghi tên mới
+no(!m.GC.getAsset("afi.khung/ma-no-canh") || m.GC.getAsset("afi.khung/ma-no-canh").key !== "gen.khung/ma-no-canh", "alias asset afi.khung → gen.khung");
+const oldCh = m.saveAssetChecked({ id: "cu-afi", name: "Cũ", look: { eyes: "round", brows: "normal", parts: { hat: "afi.khung/khoi-mu", outfit: "afi.core/than-tran" } } }, "t");
+no(oldCh.look.parts.hat !== "gen.khung/khoi-mu" || oldCh.look.parts.outfit !== "gen.core/than-tran", "lưu nhân vật phải chuẩn hoá tên thư viện cũ: " + JSON.stringify(oldCh.look.parts));
+no(!/<svg/.test(m.GC.svgString(m.GC.ASSETS["local.my/cu-afi"], "normal")), "nhân vật tham chiếu cũ phải dựng được");
+no(m.saveItemChecked({ id: "cu-item", name: "x", type: "weapon", rarity: "rare", equip: { part: "afi.khung/khoi-que-dai" } }, "t").equip.part !== "gen.khung/khoi-que-dai", "item tham chiếu cũ");
+const oldB = JSON.parse(JSON.stringify(b).replace(/gen\.(core|khung)/g, "afi.$1")); oldB.project.id = "goi-cu"; oldB.requires = { packs: ["afi.khung"] };
+const rOld = m.importProject(oldB, { overwrite: true });
+no(rOld.errors.length || rOld.counts.shots !== 4, "gói kiểu cũ (afi.*) phải nhập được: " + JSON.stringify(rOld.errors.slice(0, 2)));
+// hồi quy review v0.12: mọi lối tra cứu / đọc / xuất đều chuẩn hoá tên cũ
+no(!m.findAsset("afi.khung/ma-no-canh") || m.findAsset("afi.khung/ma-no-canh").key !== "gen.khung/ma-no-canh", "findAsset nhận tên cũ");
+const ob = { format: "gen-chibi.project/1", project: { id: "goi-cu-cast" }, works: [{ id: "phim-cu-cast", title: "x", shots: [{ id: "c1", scene: "afi.khung/san-khau-chuan", cast: ["afi.khung/ma-no-canh"], event: { title: "x", steps: [{ actor: "ma-no-canh", state: "vow", spot: "center", say: "A" }] } }] }] };
+const rOc = m.importProject(ob, {});
+no(rOc.errors.length || rOc.counts.shots !== 1, "gói cũ cast / scene afi.* phải nhập được: " + JSON.stringify(rOc.errors));
+const wOc = m.store.getWork("phim-cu-cast").shots[0];
+no(wOc.scene !== "gen.khung/san-khau-chuan" || wOc.cast[0] !== "gen.khung/ma-no-canh", "phân cảnh nhập phải lưu tên mới: " + JSON.stringify(wOc));
+m.store.saveProject({ id: "goi-cu-2", name: "Cũ 2" });
+m.store.saveWork({ id: "phim-cu", title: "Phim cũ", project: "goi-cu-2", shots: [{ id: "c1", title: "Cũ", scene: "afi.khung/san-khau-chuan", cast: ["afi.khung/ma-no-canh"], event: { title: "x", scene: "afi.khung/san-khau-chuan", steps: [{ actor: "ma-no-canh", state: "vow", spot: "center", say: "A" }] } }] });
+no(JSON.stringify(m.workView(m.store.getWork("phim-cu"))).includes("afi."), "workView phải trả tên mới");
+m.saveShotChecked({ work: "phim-cu", shot: { id: "c1", title: "Mới" } });
+const wC = m.store.getWork("phim-cu").shots[0];
+no(wC.title !== "Mới" || wC.scene !== "gen.khung/san-khau-chuan" || wC.cast[0] !== "gen.khung/ma-no-canh" || !wC.event || wC.event.scene !== "gen.khung/san-khau-chuan", "sửa phân cảnh cũ: giữ cảnh / diễn viên / lời thoại, lưu tên mới: " + JSON.stringify(wC));
+m.store.saveAsset("local.my/nv-cu", { name: "NV cũ", project: "goi-cu-2", look: { eyes: "round", brows: "normal", parts: { hat: "afi.khung/khoi-mu" } } }, "giả lập bản ghi trước v0.12");
+const eOld = m.exportProject("goi-cu-2");
+no(eOld.characters.find(a => a.id === "nv-cu").look.parts.hat !== "gen.khung/khoi-mu" || JSON.stringify(eOld).includes("afi.") || JSON.stringify(eOld.requires.packs) !== JSON.stringify(["gen.khung"]), "xuất gói từ bản ghi cũ: tên mới + requires đủ: " + JSON.stringify(eOld.requires));
+m.store.saveAsset("afi.khung/ban-cu", { name: "Bản chỉnh khung cũ", look: { eyes: "round", brows: "normal", parts: {} } }, "giả lập dữ liệu trước v0.11");
+m.sync();
+no(!m.GC.ASSETS["local.my/ban-cu"] || m.GC.ASSETS["gen.khung/ban-cu"], "bản ghi cũ trong pack khung phải nạp thành bản sao Của tôi, không vào khung");
 // khung không bao giờ bị sửa, kể cả đường Studio (allowAnyPack)
-const fr = m.saveAssetChecked({ pack: "afi.khung", id: "ma-no-canh", name: "Sửa khung", look: { eyes: "round", brows: "normal", parts: {} } }, "t", { allowAnyPack: true });
-no(fr.pack !== "local.my" || m.GC.ASSETS["afi.khung/ma-no-canh"].name !== "Ma-nơ-canh", "lưu vào khung phải thành bản sao trong Của tôi, khung giữ nguyên");
+const fr = m.saveAssetChecked({ pack: "gen.khung", id: "ma-no-canh", name: "Sửa khung", look: { eyes: "round", brows: "normal", parts: {} } }, "t", { allowAnyPack: true });
+no(fr.pack !== "local.my" || m.GC.ASSETS["gen.khung/ma-no-canh"].name !== "Ma-nơ-canh", "lưu vào khung phải thành bản sao trong Của tôi, khung giữ nguyên");
 console.log("   ✓ dự án mẫu qua cổng 100% (3 nhân vật · 1 item · 2 cảnh · phim 4 cảnh) · nhập trùng → 409 · lưu đè · xuất lại đủ · gói hỏng / asset lạ bị chặn");
 ' || exit 1
 echo "3) MCP"
@@ -319,7 +360,7 @@ printf '%s\n' \
  '{"jsonrpc":"2.0","id":22,"method":"tools/call","params":{"name":"render_scene","arguments":{"key":"ci-canh","cast":[{"character":"ci-equip","spot":"left","activity":"attack"},{"character":"ma-no-canh","spot":"right"}]}}}' \
  '{"jsonrpc":"2.0","id":23,"method":"tools/call","params":{"name":"save_scene","arguments":{"scene":{"id":"san-khau-chuan","name":"Đè","layers":{"sky":"khung-troi","ground":"khung-nen"}}}}}' \
  '{"jsonrpc":"2.0","id":24,"method":"tools/call","params":{"name":"validate_event","arguments":{"event":{"title":"CI","scene":"local.my/ci-canh","steps":[{"actor":"ma-no-canh","state":"normal","spot":"left","say":"Mưa rồi"}]}}}}' \
- '{"jsonrpc":"2.0","id":26,"method":"tools/call","params":{"name":"render_scene","arguments":{"key":"afi.khung/san-khau-chuan","time":"bogus"}}}' \
+ '{"jsonrpc":"2.0","id":26,"method":"tools/call","params":{"name":"render_scene","arguments":{"key":"gen.khung/san-khau-chuan","time":"bogus"}}}' \
  '{"jsonrpc":"2.0","id":25,"method":"tools/call","params":{"name":"render_scene","arguments":{"scene":{"id":"ci-nhap","layers":{"sky":"khung-troi","ground":"khung-nen"}},"cast":[{"character":"ma-no-canh","spot":"san-khau"}]}}}' \
  '{"jsonrpc":"2.0","id":27,"method":"tools/call","params":{"name":"save_project","arguments":{"id":"ci-chu-de","name":"Chủ đề CI","description":"dự án thử"}}}' \
  '{"jsonrpc":"2.0","id":28,"method":"tools/call","params":{"name":"save_item","arguments":{"item":{"id":"ci-proj","name":"Que dự án","type":"weapon","rarity":"rare","project":"ci-chu-de","equip":{"part":"khoi-que-dai"}}}}}' \
@@ -328,11 +369,12 @@ printf '%s\n' \
  '{"jsonrpc":"2.0","id":31,"method":"tools/call","params":{"name":"save_project","arguments":{"id":"Sai Id","name":"x"}}}' \
  '{"jsonrpc":"2.0","id":32,"method":"tools/call","params":{"name":"save_item","arguments":{"item":{"id":"ci-proj2","name":"x","type":"weapon","rarity":"rare","project":"../x","equip":{"part":"khoi-que-dai"}}}}}' \
  '{"jsonrpc":"2.0","id":33,"method":"tools/call","params":{"name":"save_work","arguments":{"title":"Phim MCP","project":"ci-chu-de","logline":"thử"}}}' \
- '{"jsonrpc":"2.0","id":34,"method":"tools/call","params":{"name":"save_shot","arguments":{"work":"phim-mcp","shot":{"title":"Mở đầu","scene":"afi.khung/san-khau-chuan","cast":["ma-no-canh"],"event":{"title":"Mở","steps":[{"actor":"ma-no-canh","state":"vow","spot":"center","say":"Bắt đầu!"}]}}}}}' \
- '{"jsonrpc":"2.0","id":35,"method":"tools/call","params":{"name":"save_shot","arguments":{"work":"phim-mcp","shot":{"title":"Lạ","scene":"afi.khung/khong-co","cast":["ai-do"]}}}}' \
+ '{"jsonrpc":"2.0","id":34,"method":"tools/call","params":{"name":"save_shot","arguments":{"work":"phim-mcp","shot":{"title":"Mở đầu","scene":"gen.khung/san-khau-chuan","cast":["ma-no-canh"],"event":{"title":"Mở","steps":[{"actor":"ma-no-canh","state":"vow","spot":"center","say":"Bắt đầu!"}]}}}}}' \
+ '{"jsonrpc":"2.0","id":35,"method":"tools/call","params":{"name":"save_shot","arguments":{"work":"phim-mcp","shot":{"title":"Lạ","scene":"gen.khung/khong-co","cast":["ai-do"]}}}}' \
  '{"jsonrpc":"2.0","id":36,"method":"tools/call","params":{"name":"get_work","arguments":{"id":"phim-mcp"}}}' \
  '{"jsonrpc":"2.0","id":37,"method":"tools/call","params":{"name":"export_project","arguments":{"id":"ci-chu-de"}}}' \
- '{"jsonrpc":"2.0","id":38,"method":"tools/call","params":{"name":"import_project","arguments":{"bundle":{"format":"gen-chibi.project/1","project":{"id":"ci-chu-de"},"items":[{"id":"ci-proj","name":"x","type":"weapon","rarity":"rare","equip":{"part":"afi.khung/khoi-que-dai"}}]}}}}' \
+ '{"jsonrpc":"2.0","id":38,"method":"tools/call","params":{"name":"import_project","arguments":{"bundle":{"format":"gen-chibi.project/1","project":{"id":"ci-chu-de"},"items":[{"id":"ci-proj","name":"x","type":"weapon","rarity":"rare","equip":{"part":"gen.khung/khoi-que-dai"}}]}}}}' \
+ '{"jsonrpc":"2.0","id":39,"method":"tools/call","params":{"name":"export_project","arguments":{"id":"ci-chu-de","sale":true}}}' \
  | GC_PORT=$PORT node server/mcp-stdio.js > "$H/mcp.out"
 node -e '
 const L = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n").map(JSON.parse);
@@ -378,11 +420,13 @@ ok(JSON.parse(by(33).result.content[0].text).saved, "save_work tạo tác phẩm
 ok(JSON.parse(by(34).result.content[0].text).hasEvent, "save_shot: phân cảnh có bối cảnh + diễn viên + lời thoại");
 ok(by(35).result.isError && /khong-co/.test(by(35).result.content[0].text) && /ai-do/.test(by(35).result.content[0].text), "save_shot chặn bối cảnh / diễn viên không có trong Thư viện");
 const gw = JSON.parse(by(36).result.content[0].text);
-ok(gw.shots.length === 1 && gw.shots[0].event.scene === "afi.khung/san-khau-chuan" && gw.project === "ci-chu-de", "get_work trả tác phẩm đủ phân cảnh");
+ok(gw.shots.length === 1 && gw.shots[0].event.scene === "gen.khung/san-khau-chuan" && gw.project === "ci-chu-de", "get_work trả tác phẩm đủ phân cảnh");
 const exb = JSON.parse(by(37).result.content[0].text);
 ok(exb.format === "gen-chibi.project/1" && exb.items.some(i => i.id === "ci-proj") && exb.works.some(w => w.id === "phim-mcp"), "export_project đủ item + tác phẩm");
 ok(by(38).result.isError && /ci-proj/.test(by(38).result.content[0].text), "import_project báo trùng thay vì ghi đè lặng lẽ");
-console.log("   ✓ MCP gói dự án: export_project đủ · import_project báo trùng");
+const sb = JSON.parse(by(39).result.content[0].text);
+ok(exb.kind === "backup" && sb.kind === "sale" && !sb.items.length && !sb.characters.length && !sb.works.length, "export_project sale: chỉ asset phát hành (ở đây toàn nháp → rỗng), không tác phẩm");
+console.log("   ✓ MCP gói dự án: export_project đủ · gói bán chỉ asset phát hành · import_project báo trùng");
 console.log("   ✓ MCP tác phẩm: save_work → save_shot (lời thoại qua cổng đạo diễn) → get_work; chặn asset không có");
 console.log("   ✓ MCP dự án chủ đề: tạo → lưu item / nhân vật vào dự án → đếm; chặn id lạ");
 console.log("   ✓ MCP cảnh: chuẩn phông → soát → lưu phông → phối cảnh → dựng có diễn viên → kịch bản trong cảnh; chặn đè chính thức");

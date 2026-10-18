@@ -1,4 +1,4 @@
-/* gen-chibi — BỘ KHUNG CHUẨN afi.khung (Xưởng · giai đoạn ①)
+/* gen-chibi — BỘ KHUNG CHUẨN gen.khung (Xưởng · giai đoạn ①)
  * © 2026 Gen Labs — All rights reserved.
  * Không chủ đề: ma-nơ-canh đầu trọc không quần áo, vật phẩm và bối cảnh là KHỐI ĐẠI DIỆN (kiểu greybox của làm game).
  * Mỗi khối là quy cách vẽ thành hình: đúng điểm gắn, kích thước, lớp, góc nhìn, tham số. Asset chủ đề sinh ra bằng cách
@@ -8,10 +8,10 @@
 (function (GC) {
   'use strict';
   var H = GC.helpers, stroke = H.stroke, shadow = H.shadow, line = H.line, mir = H.mir, res = H.res;
-  var SRC = 'afi.khung · khung chuẩn vẽ bằng code';
+  var SRC = 'gen.khung · khung chuẩn vẽ bằng code';
 
   GC.pack({
-    id: 'afi.khung', name: 'Bộ khung chuẩn', owner: 'Gen Labs', group: 'frame', visibility: 'private', version: '0.1.0',
+    id: 'gen.khung', aliases: ['afi.khung'], name: 'Bộ khung chuẩn', owner: 'Gen Labs', group: 'frame', visibility: 'private', version: '0.1.0',
     license: '© 2026 Gen Labs — All rights reserved',
     description: 'Khối đại diện cho vật phẩm và bối cảnh, ma-nơ-canh mẫu, sân khấu chuẩn. Không chủ đề.'
   }, function (D) {
@@ -91,12 +91,12 @@
 
     /* ================= NHÂN VẬT KHUNG ================= */
     D.asset({
-      id: 'ma-no-canh', code: 'KH-0001', name: 'Ma-nơ-canh', han: '', faction: 'Khung', role: 'Khung chuẩn nhân vật', status: 'approved', version: 1,
+      id: 'ma-no-canh', code: 'KH-0001', name: 'Ma-nơ-canh', han: '', faction: 'Khung', role: 'Khung chuẩn nhân vật', status: 'published', version: 1,
       persona: 'Ma-nơ-canh trung tính để soát khung: không chủ đề, không trang phục.',
       look: {
         eyes: 'round', brows: 'normal',
-        parts: { head: 'afi.core/round', hair: 'afi.core/troc', beard: 'afi.core/none', hat: 'afi.core/none', mask: 'afi.core/none',
-          outfit: 'afi.core/than-tran', back: 'afi.core/none', legwear: 'afi.core/chan-tran', shoes: 'afi.core/ban-chan', heldL: 'afi.core/none', heldR: 'afi.core/none' },
+        parts: { head: 'gen.core/round', hair: 'gen.core/troc', beard: 'gen.core/none', hat: 'gen.core/none', mask: 'gen.core/none',
+          outfit: 'gen.core/than-tran', back: 'gen.core/none', legwear: 'gen.core/chan-tran', shoes: 'gen.core/ban-chan', heldL: 'gen.core/none', heldR: 'gen.core/none' },
         params: {},
         palette: {}   // dùng bảng màu xám mặc định của khung lõi
       },
@@ -114,7 +114,7 @@
      ['khung-sau-lung', 'Khung sau lưng', 'cloak', 'back', 'khoi-choang'],
      ['khung-giay', 'Khung giày', 'boots', 'shoes', 'khoi-giay'],
      ['khung-che-mat', 'Khung che mặt', 'mask', 'mask', 'khoi-mat-na']].forEach(function (x) {
-      D.item({ id: x[0], name: x[1], type: x[2], rarity: 'common', status: 'approved', equip: { slot: x[3], part: 'afi.khung/' + x[4] },
+      D.item({ id: x[0], name: x[1], type: x[2], rarity: 'common', status: 'published', equip: { slot: x[3], part: 'gen.khung/' + x[4] },
         description: 'Khối đại diện — gốc để tạo vật phẩm cùng dáng.', icon: {} });
     });
 
@@ -176,11 +176,11 @@
     var GREY = { sky: '#dfe4e8', skyLow: '#f3f2ee', sun: '#ffffff', cloud: '#ffffff', hillFar: '#cdd0d3', hill: '#bfc3c7', ground: '#d6d2ca',
       grass: '#c9c6bf', path: '#c4beb3', water: '#c3ccd3', stone: '#bdbab4', wood: '#b2aca2', woodDark: '#8b867e', roof: '#a5a9ae',
       wall: '#e4e1db', cloth: '#b7bcc2', leaf: '#b0b5ad', bamboo: '#b0b5ad', flower: '#d8cfc9', light: '#f1e6c8' };
-    D.scene({ id: 'san-khau-chuan', name: 'Sân khấu chuẩn', han: '', status: 'approved', time: 'day', weather: 'clear', palette: GREY,
+    D.scene({ id: 'san-khau-chuan', name: 'Sân khấu chuẩn', han: '', status: 'published', time: 'day', weather: 'clear', palette: GREY,
       description: 'Bối cảnh khung: trời, chân trời, khối nhà, nền có lưới tỉ lệ, tiền cảnh, các khối đạo cụ. Hai vạch đứt là hàng sau và hàng trước.',
       layers: { sky: 'khung-troi', far: 'khung-chan-troi', mid: { part: 'khung-nha', dx: 20 }, ground: 'khung-nen', front: 'khung-tien-canh' },
       deco: [{ part: 'khoi-cay', x: 70, y: 280 }, { part: 'khoi-hop', x: 150, y: 278, scale: 0.7 }, { part: 'khoi-tru', x: 590, y: 300, z: 'mid', scale: 0.8 }, { part: 'khoi-co', x: 380, y: 272, scale: 0.7 }] });
-    D.scene({ id: 'phong-chuan', name: 'Phòng chuẩn (trong nhà)', han: '', status: 'approved', time: 'day', weather: 'clear', palette: GREY,
+    D.scene({ id: 'phong-chuan', name: 'Phòng chuẩn (trong nhà)', han: '', status: 'published', time: 'day', weather: 'clear', palette: GREY,
       description: 'Bối cảnh khung trong nhà: tường, cửa sổ, nền có lưới tỉ lệ, khối bàn và khối hộp.',
       layers: { sky: 'khung-tuong', ground: 'khung-nen' },
       deco: [{ part: 'khoi-ban', x: 320, y: 286, scale: 0.9 }, { part: 'khoi-hop', x: 90, y: 290 }, { part: 'khoi-da', x: 560, y: 300, scale: 0.7 }] });

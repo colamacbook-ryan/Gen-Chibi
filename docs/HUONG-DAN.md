@@ -1,6 +1,6 @@
 # Hướng dẫn sử dụng gen-chibi
 
-> gen-chibi giúp bạn **làm phim / truyện chibi** từ một bộ khung chuẩn: dựng nhân vật, vật phẩm, bối cảnh → cất vào thư viện theo chủ đề → chat với AI đạo diễn để ra phim.
+> gen-chibi là **nhà máy asset chibi theo chủ đề**: từ một bộ khung chuẩn dựng nhân vật, vật phẩm, bối cảnh → cất vào thư viện theo dự án chủ đề → phát hành thành **gói bán**. **Làm phim** với AI đạo diễn là cách dùng asset — và là bản demo sống của bộ thư viện.
 > © 2026 Gen Labs — All rights reserved · Tác giả: Ryan — 090.919.8823
 
 ## Nhanh nhất: 10 giây để thấy cả luồng
@@ -28,7 +28,7 @@ Bốn bước trên một trang:
 1. **Chọn khung** — Nhân vật (ma-nơ-canh), Vật phẩm (10 khối theo dáng: que dài, que ngắn, đĩa, hộp, cầu, mũ, áo, choàng, giày, che mặt), Bối cảnh (sân khấu ngoài trời / trong nhà). Chọn dự án để lưu vào.
 2. **Tham số & chi tiết** — tên, linh kiện từng bộ phận, độ dài / cỡ, bảng màu, mắt / mày, dấu nhận diện, tính cách (vật phẩm: loại, độ hiếm, chỉ số; bối cảnh: lớp phông, giờ, thời tiết, màu).
 3. **Soát mọi góc** — nhân vật 8 hướng + 4 hoạt động; vật phẩm icon + thẻ + mặc lên ma-nơ-canh; bối cảnh ngày / đêm / có diễn viên.
-4. **Cổng kiểm & lưu** — ✓ đạt, ✗ chặn (phải sửa), ⚠ chỉ cần khi chuyển duyệt (bản nháp vẫn lưu được).
+4. **Cổng kiểm & lưu** — ✓ đạt, ✗ chặn (phải sửa), ⚠ chỉ cần khi **Phát hành** (bản nháp vẫn lưu và dùng được).
 
 Lưu xong: **+ Tạo tiếp** (cùng khung, cùng dự án) · **Xem trong Thư viện** · **Làm phim với dự án này**.
 Khung không bao giờ bị sửa — asset của bạn là bản sao của khung + tham số của bạn.
@@ -48,17 +48,28 @@ Khung không bao giờ bị sửa — asset của bạn là bản sao của khun
 | **Storyboard SVG / PNG** | Bảng phân cảnh: ảnh từng cảnh + mô tả + lời thoại — để duyệt, in, gửi khách |
 | **JSON** | Kịch bản + phân cảnh dạng dữ liệu |
 
-## 4. Gói dự án — sao lưu, chuyển máy, chia sẻ / bán bộ asset theo chủ đề
-- **Tải gói dự án (JSON)** (Thư viện › Dự án chủ đề): nhân vật, trang bị, bối cảnh, linh kiện / phông tự vẽ đang dùng, tác phẩm.
-- **Nhập gói…**: mọi mục đi qua đúng cổng kiểm như khi tạo mới. Trùng id thì hỏi lưu đè — lưu đè tạo **phiên bản mới**, bản cũ vẫn trong lịch sử.
+## 4. Nháp, Phát hành và gói dự án — sao lưu, chuyển máy, bán bộ asset theo chủ đề
+Mỗi asset có một trong hai trạng thái:
+
+| Trạng thái | Nghĩa | Ai đặt |
+|---|---|---|
+| **Nháp** | Dùng ngay trong dự án (diễn, làm phim, xuất ảnh). Không cần dấu nhận diện | Mặc định — mọi asset mới, kể cả AI tự tạo |
+| **Phát hành** | Đủ chất lượng để **bán / chia sẻ**: vào *Gói bán* của dự án. Nhân vật phải có dấu nhận diện (cổng kiểm báo nếu thiếu) | Bạn bấm **Phát hành** ở khu *Dùng* của asset trong Thư viện (bấm **Về nháp** để rút lại) |
+
+Ở **Thư viện › Dự án chủ đề**, chọn một dự án:
+- **Gói sao lưu (JSON)** — mọi asset (cả nháp) + linh kiện / phông tự vẽ đang dùng + **tác phẩm**. Để sao lưu, chuyển máy.
+- **Gói bán · N asset phát hành** — chỉ asset **Phát hành**, **không** kèm tác phẩm. Nếu asset phát hành cần một thứ còn nháp (ví dụ nhân vật cầm vật phẩm nháp), gói vẫn kéo theo cho đủ và **báo cảnh báo** — phát hành nốt thứ đó trước khi bán.
+- **Nhập gói…** — mọi mục đi qua đúng cổng kiểm như khi tạo mới. Trùng id thì hỏi lưu đè — lưu đè tạo **phiên bản mới**, bản cũ vẫn trong lịch sử. Gói khai báo thư viện cần có (`requires.packs`); thiếu thì báo rõ.
 
 ## 5. Dùng asset ở nơi khác
 Ở Thư viện, mỗi asset có khu **Dùng**: tải SVG / PNG / avatar / sprite biểu cảm / **sprite 8 hướng**, chép mã tham chiếu, mã gọi MCP, mã nhúng web, JSON công thức.
+Mã tham chiếu có dạng `<thư viện>/<id>`: khung chuẩn là `gen.khung/…` và `gen.core/…`, asset của bạn là `local.my/…`. Tên cũ `afi.khung/…`, `afi.core/…` (trước v0.12) vẫn đọc được và được tự đổi sang tên mới khi lưu.
 
 ## 6. Cho agent AI (MCP)
 gen-chibi có MCP server (`/mcp` hoặc lệnh `genchibi mcp`) với 31 tool: tạo / kiểm / dựng nhân vật, linh kiện, item, cảnh; dự án chủ đề; tác phẩm (`save_work`, `save_shot`); gói dự án (`export_project`, `import_project`). Agent đi qua **cùng cổng kiểm** với Studio.
 
 ## Câu hỏi thường gặp
-- **AI tự tạo asset có cần duyệt không?** Không — lưu dạng nháp trong dự án của tác phẩm và dùng ngay.
+- **AI tự tạo asset có cần duyệt không?** Không — lưu dạng **nháp** trong dự án của tác phẩm và dùng ngay. Chỉ khi muốn đưa vào gói bán bạn mới bấm **Phát hành**.
+- **Phim HTML gửi đi có lộ engine không?** Bộ phát nằm trong tệp phim với giấy phép **chỉ để xem phim đó**. Bản SaaS sau này sẽ chuyển sang trình phát do Gen Labs lưu trữ hoặc xuất video.
 - **Lỡ sửa hỏng?** Mọi asset và tác phẩm có phiên bản; bản cũ nằm trong thư mục dữ liệu (`versions/`).
 - **Hiệu năng?** Mỗi sân khấu tối đa 8 diễn viên sống; ảnh tĩnh được cache; hết phân cảnh là huỷ diễn viên.

@@ -22,7 +22,12 @@ build() { # build <ver> [broken]
 }
 feed() { # feed <ver> [badsum]
   local d="$FEED/$1"
-  [ "${2:-}" = badsum ] && sed -i 's/^\(.\)/0/' "$d/SHA256SUMS"
+  # làm hỏng checksum: LUÔN đổi ký tự đầu sang ký tự khác (thay cứng bằng "0" là no-op khi hash vốn bắt đầu bằng 0 → trượt 1/16 lần)
+  if [ "${2:-}" = badsum ]; then
+    local s; s="$(cat "$d/SHA256SUMS")"; local c="${s:0:1}" r=0; [ "$c" = 0 ] && r=1
+    printf '%s%s\n' "$r" "${s:1}" > "$d/SHA256SUMS"
+    [ "$(head -c1 "$d/SHA256SUMS")" != "$c" ] || { echo "  ✗ không làm hỏng được SHA256SUMS"; exit 1; }
+  fi
   cat > "$FEED/latest.json" <<JSON
 {"tag_name":"v$1","body":"Ghi chú v$1","published_at":"2026-10-17T00:00:00Z","assets":[
  {"name":"gen-chibi-v$1.tar.gz","browser_download_url":"http://127.0.0.1:$FPORT/$1/gen-chibi-v$1.tar.gz"},
@@ -55,7 +60,7 @@ ls "$HOME_DIR/backups" | grep -q before-v0.1.1 && ok "đã backup dữ liệu tr
 
 echo "2) sai checksum"
 feed 0.1.2 badsum
-api POST /api/update/apply | grep -q 'checksum' && ok "từ chối gói sai checksum" || bad "không chặn checksum"
+R2=$(api POST /api/update/apply); echo "$R2" | grep -q 'checksum' && ok "từ chối gói sai checksum" || { bad "không chặn checksum"; echo "      phản hồi: $(echo "$R2" | head -c 300)"; }
 [ "$(ver)" = 0.1.1 ] && ok "vẫn chạy v0.1.1" || bad "phiên bản đổi sai"
 
 echo "3) bản mới hỏng → tự rollback"

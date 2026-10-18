@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.12.0 — Nháp / Phát hành, Gói bán, thư viện gen.*
+Áp các quyết định Q1–Q4 của Ryan (2026-10-18) — xem `docs/spec/DAC-TA-3-GIAI-DOAN.md`.
+- **Hai trạng thái asset: Nháp / Phát hành** (thay Chờ duyệt / Đã duyệt). Nháp dùng ngay trong dự án — mặc định cho mọi asset, kể cả AI tự tạo; **Phát hành** đưa asset vào gói bán (nhân vật cần dấu nhận diện). Nút **Phát hành / Về nháp** ở khu *Dùng* của Thư viện; bấm xong vẫn đứng ở asset đó. Dữ liệu cũ tự quy đổi (`approved` → Phát hành, `review` → Nháp).
+- **Gói bán** (Thư viện › Dự án chủ đề): chỉ asset phát hành, không kèm tác phẩm; asset phát hành cần thứ còn nháp (ví dụ vật phẩm đang cầm) → gói vẫn kéo theo cho đủ và **cảnh báo**. **Gói sao lưu** giữ nguyên: mọi asset + tác phẩm. Gói ghi `kind: sale | backup`. MCP `export_project` có `sale: true`. Bản xem thử không server dùng cùng luật.
+- **Đổi tên thư viện** `afi.core` → **`gen.core`**, `afi.khung` → **`gen.khung`** (tệp `kinds/character/gen.core.js`, `kinds/khung/gen.khung.js`). Tham chiếu, gói dự án và dữ liệu cũ `afi.*` vẫn đọc được (`aliases` của pack, `GC.canon`) và được chuẩn hoá sang tên mới khi lưu.
+- Dữ liệu lưu trước v0.12 (tham chiếu `afi.*`) được chuẩn hoá ở mọi lối: tra nhân vật (MCP / phân cảnh), đọc tác phẩm (Studio, AI đạo diễn), xuất gói (gói luôn ghi tên mới, `requires` đủ), sửa phân cảnh cũ không âm thầm mất bối cảnh / lời thoại; Studio nạp bản ghi cũ trong pack khung thành bản sao *Của tôi* như server (theo review).
+- **Định vị:** gen-chibi là nhà máy asset chibi theo chủ đề; làm phim là cách dùng asset và là bản demo của thư viện (README, Hướng dẫn).
+- Hook dự án chặn `pkill -f` / `killall` khi làm việc trên repo (bài học vận hành).
+- Sửa test tự cập nhật trượt ngẫu nhiên ~1/16 lần: bước "làm hỏng checksum" gán ký tự đầu thành `0` — no-op khi hash vốn bắt đầu bằng `0`. Nay luôn đổi sang ký tự khác và kiểm đã hỏng thật trước khi kiểm updater chặn.
+- Kiểm thử: gói bán (rỗng khi toàn nháp, chỉ asset phát hành, cảnh báo phụ thuộc nháp), quy đổi trạng thái cũ, phát hành thiếu dấu nhận diện bị chặn / nháp thì không, MCP `export_project` sale, tham chiếu `afi.*` cũ (nhân vật, item, gói, bản ghi trong pack khung), luồng trình duyệt Phát hành → Gói bán.
+
 ## v0.11.1 — Hoàn thiện theo kiểm toàn vẹn (cortex)
 - Menu Xưởng tách hai nhóm: **Xưởng — tạo asset từ khung** (Tạo asset mới, bàn chỉnh, Trợ lý AI tạo asset) và **Khung chuẩn — quy cách · kiểm** (việc của Gen Labs). Mở Xưởng vào thẳng *Tạo asset mới*.
 - Bảng tình trạng tác phẩm: phân cảnh thiếu diễn viên / bối cảnh có nút **+ Nhân vật ở Xưởng** / **+ Bối cảnh ở Xưởng** (đúng dự án của tác phẩm).

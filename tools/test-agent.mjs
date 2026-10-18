@@ -12,8 +12,8 @@ let steps = [
   ['get_part_spec', { slot: 'hat' }],
   ['save_part', { part: Object.assign({}, HAT, { layers: { hat: '<path d="M0,0" onload="alert(1)"/>' } }) }],
   ['save_part', { part: HAT }],
-  ['save_character', { asset: { id: 'ai-mix', name: 'Phối bởi AI', status: 'review', look: { eyes: 'round', brows: 'normal', parts: { hat: 'local.my/ai-hat' } }, identity: { must: [] } } }],
-  ['save_character', { asset: { id: 'ai-mix', name: 'Phối bởi AI', status: 'review', look: { eyes: 'round', brows: 'normal', parts: { hat: 'local.my/ai-hat' } }, identity: { must: ['hat:ai-hat'] } } }],
+  ['save_character', { asset: { id: 'ai-mix', name: 'Phối bởi AI', status: 'published', look: { eyes: 'round', brows: 'normal', parts: { hat: 'local.my/ai-hat' } }, identity: { must: [] } } }],
+  ['save_character', { asset: { id: 'ai-mix', name: 'Phối bởi AI', status: 'published', look: { eyes: 'round', brows: 'normal', parts: { hat: 'local.my/ai-hat' } }, identity: { must: ['hat:ai-hat'] } } }],
   ['update_app', {}]
 ];
 let sawTools = null;
@@ -40,7 +40,7 @@ try {
   ok(sawTools && sawTools.includes('save_part') && !sawTools.includes('update_app') && !sawTools.includes('rollback_app'), 'AI nhận đúng bộ tool MCP (trừ tool hệ thống)');
   ok(L[1] && !L[1].ok && /onload/.test(L[1].summary), 'SVG độc bị chặn ở cùng cổng với MCP');
   ok(L[2] && L[2].ok, 'linh kiện hợp lệ được lưu qua save_part');
-  ok(L[3] && !L[3].ok && /identity|nhận diện/.test(L[3].summary), 'nhân vật "chờ duyệt" thiếu dấu nhận diện bị chặn (luật chung)');
+  ok(L[3] && !L[3].ok && /identity|nhận diện/.test(L[3].summary), 'nhân vật "phát hành" thiếu dấu nhận diện bị chặn (luật chung)');
   ok(L[4] && L[4].ok, 'sửa xong thì lưu được');
   ok(L[5] && !L[5].ok && /không có trong nhà xưởng/.test(L[5].summary), 'tool hệ thống (update_app) bị từ chối với AI trong chatroom');
   const parts = await api('GET', '/api/parts'), assets = await api('GET', '/api/assets');
@@ -53,9 +53,9 @@ try {
   const EV = { title: 'Gặp nhau', steps: [{ actor: 'ai-be-na', state: 'proud', spot: 'left', say: 'Chào!' }, { actor: 'ma-no-canh', state: 'shock', spot: 'right', say: 'Ơ, bạn là ai?' }] };
   steps = [
     ['list_characters', {}],
-    ['save_shot', { work: 'phim-ci', shot: { title: 'Gặp gỡ', scene: 'afi.khung/san-khau-chuan', cast: ['ai-be-na', 'ma-no-canh'] } }],
-    ['save_character', { asset: { id: 'ai-be-na', name: 'Bé Na', project: 'ci-phim', look: { eyes: 'round', brows: 'normal', parts: { hat: 'afi.khung/khoi-mu' }, palette: { hat: '#e05a5a' } } } }],
-    ['save_shot', { work: 'phim-ci', shot: { title: 'Gặp gỡ', description: 'Bé Na gặp ma-nơ-canh', scene: 'afi.khung/san-khau-chuan', cast: ['ai-be-na', 'ma-no-canh'] } }],
+    ['save_shot', { work: 'phim-ci', shot: { title: 'Gặp gỡ', scene: 'gen.khung/san-khau-chuan', cast: ['ai-be-na', 'ma-no-canh'] } }],
+    ['save_character', { asset: { id: 'ai-be-na', name: 'Bé Na', project: 'ci-phim', look: { eyes: 'round', brows: 'normal', parts: { hat: 'gen.khung/khoi-mu' }, palette: { hat: '#e05a5a' } } } }],
+    ['save_shot', { work: 'phim-ci', shot: { title: 'Gặp gỡ', description: 'Bé Na gặp ma-nơ-canh', scene: 'gen.khung/san-khau-chuan', cast: ['ai-be-na', 'ma-no-canh'] } }],
     ['save_shot', { work: 'phim-ci', shot: { id: 'canh-1', event: Object.assign({}, EV, { steps: [{ actor: 'ai-be-na', state: 'bay', say: 'x' }] }) } }],
     ['save_shot', { work: 'phim-ci', shot: { id: 'canh-1', event: EV } }]
   ];
@@ -65,7 +65,7 @@ try {
   ok(CL[2] && CL[2].ok, 'AI tự tạo nhân vật thiếu ở Xưởng');
   ok(CL[3] && CL[3].ok && CL[4] && !CL[4].ok && /bay/.test(CL[4].summary) && CL[5] && CL[5].ok, 'phân cảnh + lời thoại qua cổng kiểm của đạo diễn (sai thì sửa)');
   const wf = await api('GET', '/api/works/phim-ci'), na = (await api('GET', '/api/assets')).find(a => a.id === 'ai-be-na');
-  ok(wf.shots.length === 1 && wf.shots[0].event && wf.shots[0].event.scene === 'afi.khung/san-khau-chuan' && wf.shots[0].cast.length === 2, 'tác phẩm có phân cảnh đủ cảnh + diễn viên + lời thoại');
+  ok(wf.shots.length === 1 && wf.shots[0].event && wf.shots[0].event.scene === 'gen.khung/san-khau-chuan' && wf.shots[0].cast.length === 2, 'tác phẩm có phân cảnh đủ cảnh + diễn viên + lời thoại');
   ok(na && na.project === 'ci-phim', 'nhân vật AI tạo nằm trong dự án của tác phẩm');
   const keep = await api('POST', '/api/works/phim-ci/shots', { shot: { id: 'canh-1' }, remove: 'false' });
   ok(keep.shots && keep.shots.length === 1, 'remove phải là true thật mới bỏ phân cảnh ("false" không xoá)');

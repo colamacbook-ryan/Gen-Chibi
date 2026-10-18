@@ -1,8 +1,8 @@
-/* gen-chibi — KHUNG LÕI afi.core (Xưởng · giai đoạn ①)
+/* gen-chibi — KHUNG LÕI gen.core (Xưởng · giai đoạn ①)
  * © 2026 Gen Labs — All rights reserved. Mọi hình vẽ bằng code, không asset ngoài.
  * Chỉ chứa phần dùng chung mọi chủ đề: bộ phận, dáng đầu, khuôn mặt (mắt / mày / miệng), 18 biểu cảm, hiệu ứng,
  * tư thế / di chuyển / động tác / 32 hoạt động, đạo cụ dạng khối, thân ma-nơ-canh. Không trang phục chủ đề
- * (bản cũ có tóc, râu, áo bào, giáp… cất ở archive/tamquoc/). Khối vật phẩm / bối cảnh: kinds/khung/afi.khung.js.
+ * (bản cũ có tóc, râu, áo bào, giáp… cất ở archive/tamquoc/). Khối vật phẩm / bối cảnh: kinds/khung/gen.khung.js.
  * Quy ước: toạ độ theo tư thế nghỉ của RIG (khung 200 × 240); neo đọc từ C.A.
  * Nét: viền ngoài 2.6–3.2, chi tiết trong 1.4–2. Đổ bóng: đen 8–14 % (hợp mọi màu nền).
  */
@@ -21,7 +21,7 @@
   GC.helpers = { mir: mir, both: both, f: f, stroke: stroke, shadow: shadow, line: line, k: k };
 
   GC.pack({
-    id: 'afi.core', name: 'Khung lõi', owner: 'Gen Labs', group: 'frame', visibility: 'private', version: '0.3.0',
+    id: 'gen.core', aliases: ['afi.core'], name: 'Khung lõi', owner: 'Gen Labs', group: 'frame', visibility: 'private', version: '0.3.0',
     license: '© 2026 Gen Labs — All rights reserved', description: 'Khung lõi dùng chung mọi chủ đề: bộ phận, dáng đầu, khuôn mặt, 18 biểu cảm, chuyển động, 32 hoạt động, đạo cụ khối, thân ma-nơ-canh.'
   }, function (D) {
 
@@ -40,7 +40,7 @@
      ['heldR', 'Tay phải cầm', 'none']].forEach(function (s) { D.slot(s[0], { label: s[1], fallback: s[2] }); });
 
     function part(slot, id, label, draw, extra) {
-      var p = { slot: slot, id: id, label: label, draw: draw, source: 'gen-chibi/kinds/character/afi.core.js' };
+      var p = { slot: slot, id: id, label: label, draw: draw, source: 'gen-chibi/kinds/character/gen.core.js' };
       for (var x in (extra || {})) p[x] = extra[x];
       D.part(p);
     }

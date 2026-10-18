@@ -59,7 +59,7 @@ Ba lối vào, **một** cổng: không có đường nào ghi thẳng vào kho.
 | AI trong chatroom Studio (LLM API: OpenRouter, DeepSeek, MiniMax…) | Vòng function-calling trên **đúng bộ tool MCP** (trừ tool hệ thống), cùng chỉ dẫn MCP | như trên |
 | Người dùng Studio / gọi API HTTP | `PUT /api/assets`, `POST /api/parts` → cùng hai hàm | như trên |
 
-- Luật chặn duy nhất `GC.blockingGates`: lỗi cấu trúc/an toàn (linh kiện lạ, license, tham số, không dựng được biểu cảm/hoạt động) chặn ở mọi trạng thái; dấu nhận diện bắt buộc khi "chờ duyệt"/"đã duyệt".
+- Luật chặn duy nhất `GC.blockingGates`: lỗi cấu trúc/an toàn (linh kiện lạ, license, tham số, không dựng được biểu cảm/hoạt động) chặn ở mọi trạng thái; dấu nhận diện bắt buộc khi **Phát hành** (nháp dùng ngay trong dự án, không cần dấu nhận diện — quyết định Q3 ngày 2026-10-18).
 - Linh kiện của agent là **dữ liệu SVG** (tập con an toàn, token màu) — engine đọc rồi dựng lại, kiểm lại cả khi Studio nạp.
 - Tool `preview_part` trả bàn soát; `get_part_spec` trả chính khung sườn này ở dạng máy đọc được — agent luôn nhận chuẩn từ hệ thống, không tự đoán.
 - Test `tools/test-agent.mjs` dùng LLM giả lập để khẳng định: AI chỉ ghi qua tool, SVG độc bị chặn, tool hệ thống bị từ chối, API HTTP không lách được cổng.

@@ -17,7 +17,7 @@
 
 | Loại | Khung | Đã dựng |
 |---|---|---|
-| Nhân vật | **ma-nơ-canh đầu trọc, không quần áo** — đủ khớp, 18 biểu cảm, 32 hoạt động, 8 hướng (2.5D) | `afi.khung/ma-no-canh` |
+| Nhân vật | **ma-nơ-canh đầu trọc, không quần áo** — đủ khớp, 18 biểu cảm, 32 hoạt động, 8 hướng (2.5D) | `gen.khung/ma-no-canh` |
 | Vật phẩm | **khối đại diện theo dáng**: que dài, que ngắn, đĩa dẹt, hộp, cầu, đội đầu, khoác thân, sau lưng, giày, che mặt | 10 khối + 10 item khung |
 | Bối cảnh | **khối đại diện**: trời / tường, chân trời, khối nhà, nền có lưới tỉ lệ, tiền cảnh, khối hộp / trụ / cây / đá / bàn / cờ | 13 khối + 2 cảnh khung |
 | Quy cách | kích thước, điểm gắn, lớp, góc nhìn, tham số, màu, luật kiểm — **thống nhất cho mọi asset** | `docs/QUY-CACH-KHUNG.md` |
@@ -53,3 +53,14 @@ Giao diện gồm 5 khu: **chat với AI · kịch bản · mô tả phân cản
 | 3 | Tạo tác: chat AI đạo diễn, kịch bản, phân cảnh, cảnh thành phẩm, sân khấu final; AI tự gọi Xưởng khi thiếu | xong — v0.9.0 (Tạo tác › Tác phẩm; MCP `list_works` / `get_work` / `save_work` / `save_shot`) |
 | 4 | Ba ứng dụng độc lập `/xuong` · `/thu-vien` · `/tao-tac` + luồng người dùng liền mạch (Ryan: "tách 3 lớp ra 3 giao diện quản lý độc lập") | xong — v0.10.0 |
 | 5 | Thành phẩm: xuất phim HTML độc lập, storyboard, bảng tình trạng; gói dự án xuất / nhập qua cổng; dự án mẫu một chạm; gom một lối Tạo tác | xong — v0.11.0 / v0.11.1 |
+| 6 | Áp quyết định Q1–Q4 (dưới): Nháp / Phát hành + Gói bán; đổi tên thư viện `afi.*` → `gen.*` (tên cũ vẫn đọc được); câu định vị | xong — v0.12.0 |
+
+---
+
+## Quyết định Q1–Q4 (Ryan, 2026-10-18: "ok theo mặc định của bạn hết")
+| # | Câu hỏi | Chốt |
+|---|---|---|
+| Q1 | Lõi ẩn (khung gốc là service cần giấu) với phim HTML xuất ra | **Giai đoạn dựng:** phim HTML vẫn chứa bộ phát, kèm giấy phép *chỉ để xem phim đó*. **Trước khi làm SaaS:** chuyển sang trình phát do Gen Labs lưu trữ hoặc xuất video; repo chuyển private khi Ryan bật |
+| Q2 | Câu định vị | **Nhà máy asset chibi theo chủ đề**; làm phim là *cách dùng* asset và là *bản demo sống* của thư viện |
+| Q3 | "Duyệt" còn nghĩa gì khi asset AI tạo không cần duyệt | Hai trạng thái: **Nháp** (dùng ngay trong dự án — mặc định, kể cả AI tạo) · **Phát hành** (vào **Gói bán**; nhân vật cần dấu nhận diện). Dữ liệu cũ: `approved` → Phát hành, `review` → Nháp. Gói sao lưu = mọi thứ + tác phẩm; Gói bán = chỉ asset phát hành, không tác phẩm |
+| Q4 | Tên thư viện `afi.*` (di sản Afi Labs) | Đổi sang **`gen.core`**, **`gen.khung`**; pack khai `aliases` để tham chiếu / gói / dữ liệu cũ `afi.*` vẫn đọc được và tự chuẩn hoá khi lưu |

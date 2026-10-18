@@ -87,14 +87,19 @@
   var SCENES = {};      // 'pack/id' → cảnh (loại asset thứ ba)
   var SCENE_ORDER = [];
 
+  // Đổi tên thư viện (vd. gen.core → gen.core, 2026-10-18): tên cũ là ALIAS — dữ liệu cũ vẫn đọc được, lưu mới ghi tên mới
+  var PACK_ALIAS = {};
+  function canonPack(id) { return typeof id === 'string' && own(PACK_ALIAS, id) ? PACK_ALIAS[id] : id; }
+  function canon(ref) { if (typeof ref !== 'string') return ref; var i = ref.indexOf('/'); return i > 0 ? canonPack(ref.slice(0, i)) + ref.slice(i) : ref; }
   // Mỗi mục đăng ký mang theo `pack` để biết chủ, license, nhóm thư viện.
   function pack(meta, fill) {
     if (!meta || !/^[a-z0-9]+(\.[a-z0-9-]+)+$/.test(meta.id)) throw new Error('id thư viện phải dạng chu.ten: ' + (meta && meta.id));
     var P = PACKS[meta.id] = {
       id: meta.id, name: meta.name, owner: meta.owner, group: meta.group || 'community',
       visibility: meta.visibility || 'private', license: meta.license, version: meta.version || '0.0.1',
-      description: meta.description || '', counts: {}
+      description: meta.description || '', counts: {}, aliases: (meta.aliases || []).slice()
     };
+    P.aliases.forEach(function (a) { PACK_ALIAS[a] = P.id; });
     function tag(o, kind) { o.pack = P.id; P.counts[kind] = (P.counts[kind] || 0) + 1; return o; }
     var D = {
       slot: function (id, def) { LIB.slots[id] = tag(def, 'slot'); },
@@ -133,6 +138,7 @@
   }
 
   function registerAsset(packId, def) {
+    packId = canonPack(packId);
     def = migrate(def);
     def.pack = packId;
     def.key = packId + '/' + def.id;
@@ -158,6 +164,7 @@
   // Tham chiếu linh kiện: "id" (tìm trong thư viện của asset rồi các thư viện khác) hoặc "pack/id"
   function getPart(slot, ref, preferPack) {
     if (!ref) return null;
+    ref = canon(ref); preferPack = canonPack(preferPack);
     if (ref.indexOf('/') > 0) {
       var sp = ref.split('/');
       return LIB.parts[sp[0] + '/' + slot + ':' + sp[1]] || null;
@@ -923,10 +930,13 @@
   }
 
 
+  // Trạng thái (Ryan 2026-10-18): NHÁP = dùng ngay trong dự án, không cần duyệt · PHÁT HÀNH = được đưa vào gói bán.
+  // Giá trị cũ: approved → published; review và mọi giá trị khác → draft.
+  function statusOf(s) { return s === 'published' || s === 'approved' ? 'published' : 'draft'; }
   // Luật chặn DUY NHẤT cho mọi lối ghi (MCP, Studio/HTTP, AI trong chatroom):
-  // lỗi cấu trúc/an toàn chặn ở mọi trạng thái; dấu nhận diện bắt buộc khi chờ duyệt / đã duyệt; mục thông tin không chặn.
+  // lỗi cấu trúc/an toàn chặn ở mọi trạng thái; dấu nhận diện bắt buộc khi PHÁT HÀNH; mục thông tin không chặn.
   function blockingGates(gates, status) {
-    return gates.filter(function (g) { return !g.ok && !g.info && !(g.id === 'identity' && (status || 'draft') === 'draft'); });
+    return gates.filter(function (g) { return !g.ok && !g.info && !(g.id === 'identity' && statusOf(status) === 'draft'); });
   }
 
 
@@ -958,6 +968,7 @@
   // Tra asset đã đăng ký: "pack/id" hoặc "id" (ưu tiên thư viện preferPack, rồi theo thứ tự đăng ký)
   function lookup(MAP, ORDER, ref, preferPack) {
     if (!ref || typeof ref !== 'string') return null;
+    ref = canon(ref); preferPack = canonPack(preferPack);
     if (ref.indexOf('/') > 0) return own(MAP, ref) ? MAP[ref] : null;
     if (preferPack && own(MAP, preferPack + '/' + ref)) return MAP[preferPack + '/' + ref];
     for (var i = 0; i < ORDER.length; i++) if (MAP[ORDER[i]].id === ref) return MAP[ORDER[i]];
@@ -1005,10 +1016,11 @@
     d.icon = { zoom: num(ic.zoom, 1, 0.5, 2.5), dx: num(ic.dx, 0, -80, 80), dy: num(ic.dy, 0, -80, 80), rot: num(ic.rot, 0, -180, 180) };
     if (def.project != null && def.project !== '' && !projectId(def.project)) errs.push('project: slug dự án (chữ thường, số, gạch nối, ≤ 40 ký tự)');
     d.project = projectId(def.project);
-    d.kind = 'item'; d.status = ['draft', 'review', 'approved'].indexOf(def.status) >= 0 ? def.status : 'draft';
+    d.kind = 'item'; d.status = statusOf(def.status);
     return { errors: errs, def: errs.length ? null : d };
   }
   function registerItem(packId, def) {
+    packId = canonPack(packId);
     var c = checkItem(def);
     if (c.errors.length) return c;
     var d = c.def; d.pack = packId; d.key = packId + '/' + d.id; d.version = def.version || 1;
@@ -1195,6 +1207,7 @@
   function fillTokens(svg, P) { return svg.replace(/\{([a-zA-Z]{1,20})\}/g, function (_, k) { return k === 'ink' ? INK : (own(P, k) && HEX.test(P[k]) ? P[k] : '#ff00ff'); }); }
   // Đăng ký linh kiện dữ liệu vào một thư viện (pack phải có sẵn). Kiểm lại dù đã kiểm lúc lưu (phòng thủ nhiều lớp).
   function registerDataPart(packId, def) {
+    packId = canonPack(packId);
     var c = checkDataPart(def);
     if (c.errors.length) return c;
     var d = c.def, P = PACKS[packId];
@@ -1334,10 +1347,11 @@
     }
     if (def.project != null && def.project !== '' && !projectId(def.project)) errs.push('project: slug dự án (chữ thường, số, gạch nối, ≤ 40 ký tự)');
     d.project = projectId(def.project);
-    d.kind = 'scene'; d.status = ['draft', 'review', 'approved'].indexOf(def.status) >= 0 ? def.status : 'draft';
+    d.kind = 'scene'; d.status = statusOf(def.status);
     return { errors: errs.slice(0, 20), def: errs.length ? null : d };
   }
   function registerScene(packId, def) {
+    packId = canonPack(packId);
     var c = checkScene(def);
     if (c.errors.length) return c;
     var d = c.def; d.pack = packId; d.key = packId + '/' + d.id; d.version = def.version || 1;
@@ -1456,7 +1470,7 @@
     var okR = true, er = '';
     try { sceneSvg(d); } catch (e) { okR = false; er = e.message; }
     res.push({ id: 'render', label: 'Dựng được cảnh', ok: okR, detail: er });
-    var demo = ASSETS['afi.khung/ma-no-canh'] || ASSETS[ASSET_ORDER[0]], okC = true, ec = '';
+    var demo = ASSETS['gen.khung/ma-no-canh'] || ASSETS[ASSET_ORDER[0]], okC = true, ec = '';
     if (demo) {
       try { sceneSvg(d, { cast: d.spots.map(function (sp) { return { asset: demo, spot: sp }; }) }); } catch (e) { okC = false; ec = e.message; }
       res.push({ id: 'cast', label: 'Đặt được diễn viên ở mọi chỗ đứng', ok: okC, detail: ec || d.spots.length + ' chỗ đứng' });
@@ -1482,7 +1496,7 @@
     getScene: getScene, getAsset: getAsset, checkScene: checkScene, registerScene: registerScene, sceneSvg: sceneSvg, sceneGate: sceneGate,
     checkCast: checkCast, checkScenery: checkScenery, svgBody: svgBody,
     scenery: function (slot) { return Object.keys(LIB.parts).map(function (k) { return LIB.parts[k]; }).filter(function (p) { return p.kind === 'scenery' && (!slot || p.slot === slot); }); },
-    projectId: projectId, getItem: getItem, checkItem: checkItem, registerItem: registerItem, itemSvg: itemSvg, itemGate: itemGate, partAlone: partAlone, sanitizeSvg: function (s0) { var e = []; var r = sanitizeSvg(s0, e, 'svg'); return { svg: r, errors: e }; },
+    canon: canon, canonPack: canonPack, statusOf: statusOf, projectId: projectId, getItem: getItem, checkItem: checkItem, registerItem: registerItem, itemSvg: itemSvg, itemGate: itemGate, partAlone: partAlone, sanitizeSvg: function (s0) { var e = []; var r = sanitizeSvg(s0, e, 'svg'); return { svg: r, errors: e }; },
     assets: function () { return ASSET_ORDER.map(function (k) { return ASSETS[k]; }); },
     director: { schema: directorSchema, validate: validateEvent, prompt: directorPrompt },
     gate: gate,
