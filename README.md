@@ -29,6 +29,14 @@ genchibi token             # đặt token GitHub (repo private), nhập ẩn
 genchibi open | uninstall
 ```
 
+## Bộ khung chuẩn (Xưởng)
+Mọi asset dựng từ một **bộ khung chuẩn không chủ đề** (kiểu greybox của làm game):
+- **Nhân vật:** ma-nơ-canh đầu trọc, không quần áo — 18 khớp, 18 biểu cảm, 32 hoạt động, 5 góc nhìn.
+- **Vật phẩm:** 10 khối đại diện theo dáng — que dài, que ngắn, đĩa dẹt, hộp, cầu, đội đầu, khoác thân, sau lưng, giày, che mặt.
+- **Bối cảnh:** khối trời / tường, chân trời, khối nhà, nền có lưới tỉ lệ, tiền cảnh, khối hộp / trụ / cây / đá / bàn / cờ; 8 chỗ đứng chuẩn.
+- **Quy cách** thống nhất cho mọi asset: [`docs/QUY-CACH-KHUNG.md`](docs/QUY-CACH-KHUNG.md). Đặc tả 3 giai đoạn: [`docs/spec/DAC-TA-3-GIAI-DOAN.md`](docs/spec/DAC-TA-3-GIAI-DOAN.md).
+- Bộ Tam Quốc cũ đã cất ở `archive/tamquoc/` (không nạp vào bản chạy).
+
 ## Tư thế & hoạt động
 Một khung hình = **biểu cảm** (mặt) × **tư thế nền** (thân dưới) × **di chuyển** (chu kỳ) × **động tác** (tay) + đạo cụ + hướng. Không vẽ tay từng tổ hợp: engine ghép lớp như animation layer của game engine.
 
@@ -37,10 +45,10 @@ Một khung hình = **biểu cảm** (mặt) × **tư thế nền** (thân dư�
 - Xưởng › Khung tư thế & hoạt động: xem và ghép thử, tải SVG.
 
 ## Item trang bị (loại asset thứ hai)
-Item = phối linh kiện có sẵn + bảng màu riêng + độ hiếm + chỉ số; tự đứng được (icon, thẻ) và mặc được lên nhân vật (`look.equip`). Thư viện › Trang bị (tải icon/thẻ, chép mã), Xưởng › Bàn phối trang bị; MCP `list_items` / `validate_item` / `save_item` / `render_item`.
+Item = phối linh kiện có sẵn + bảng màu riêng + độ hiếm + chỉ số; tự đứng được (icon, thẻ) và mặc được lên nhân vật (`look.equip`). Thư viện › Trang bị (tải icon/thẻ, chép mã), Tạo tác › Trang bị của tôi; mọi vật phẩm bắt đầu từ một khối khung; MCP `list_items` / `validate_item` / `save_item` / `render_item`.
 
 ## Cảnh (loại asset thứ ba)
-Cảnh = phối phông có sẵn (trời, cảnh xa, công trình, mặt đất, đạo cụ, tiền cảnh) + bảng màu + giờ (ngày, bình minh, hoàng hôn, đêm) + thời tiết (mưa, tuyết, hoa rơi, lá bay, sương, đom đóm). 27 phông → 8 cảnh Tam Quốc (Thảo lư, Doanh trại, Dưới chân thành, Xích Bích, Thư phòng, Rừng trúc đêm, Vườn đào, Núi tuyết). Nhân vật đứng vào 8 chỗ đứng chuẩn, tự quay 45° về phía nhau. Kịch bản đặt vào cảnh bằng `"scene"` + `"spot"`. MCP `list_scenes` / `validate_scene` / `save_scene` / `render_scene`; phông mới qua `get_part_spec` → `preview_part` → `save_part`.
+Cảnh = phối phông có sẵn (trời, cảnh xa, công trình, mặt đất, đạo cụ, tiền cảnh) + bảng màu + giờ (ngày, bình minh, hoàng hôn, đêm) + thời tiết (mưa, tuyết, hoa rơi, lá bay, sương, đom đóm). Nhân vật đứng vào 8 chỗ đứng chuẩn, tự quay 45° về phía nhau. Kịch bản đặt vào cảnh bằng `"scene"` + `"spot"`. MCP `list_scenes` / `validate_scene` / `save_scene` / `render_scene`; phông mới qua `get_part_spec` → `preview_part` → `save_part`.
 
 ## Quy trình tạo lập linh kiện
 Nhà xưởng giữ giá trị ở **khung sườn + quy trình**; nhân vật chỉ là phối linh kiện. Chuẩn tạo một linh kiện (toạ độ, lớp, góc nhìn chính diện + 45°, công cụ `face45`/`body45`, soát trên ma-nơ-canh, cổng kiểm, phát hành): [`docs/QUY-TRINH-LINH-KIEN.md`](docs/QUY-TRINH-LINH-KIEN.md).
@@ -89,7 +97,7 @@ Studio › Cài đặt AI: chọn OpenRouter, DeepSeek, MiniMax hoặc địa ch
 
 ```
 engine/       core.js (khung xương, thư viện, kế thừa 4 tầng, cổng kiểm), render.js (3 tầng vẽ có ngân sách)
-kinds/        character/afi.core.js (thư viện chính thức), afi.tamquoc.js (Tam Quốc + dàn tướng)
+kinds/        character/afi.core.js (khung lõi: khuôn mặt, biểu cảm, chuyển động, thân ma-nơ-canh) · khung/afi.khung.js (khối vật phẩm, khối bối cảnh, ma-nơ-canh, sân khấu chuẩn)
 studio/       giao diện quản lý
 server/       API cục bộ, updater, core AI, MCP, kho bí mật
 launcher.js   chạy phiên bản hiện tại, canh sức khoẻ sau cập nhật, tự rollback

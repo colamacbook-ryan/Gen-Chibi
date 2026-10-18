@@ -1,5 +1,8 @@
-/* gen-chibi — thư viện chính thức afi.core (loại asset: character)
+/* gen-chibi — KHUNG LÕI afi.core (Xưởng · giai đoạn ①)
  * © 2026 Afi Labs — All rights reserved. Mọi hình vẽ bằng code, không asset ngoài.
+ * Chỉ chứa phần dùng chung mọi chủ đề: bộ phận, dáng đầu, khuôn mặt (mắt / mày / miệng), 18 biểu cảm, hiệu ứng,
+ * tư thế / di chuyển / động tác / 32 hoạt động, đạo cụ dạng khối, thân ma-nơ-canh. Không trang phục chủ đề
+ * (bản cũ có tóc, râu, áo bào, giáp… cất ở archive/tamquoc/). Khối vật phẩm / bối cảnh: kinds/khung/afi.khung.js.
  * Quy ước: toạ độ theo tư thế nghỉ của RIG (khung 200 × 240); neo đọc từ C.A.
  * Nét: viền ngoài 2.6–3.2, chi tiết trong 1.4–2. Đổ bóng: đen 8–14 % (hợp mọi màu nền).
  */
@@ -18,20 +21,22 @@
   GC.helpers = { mir: mir, both: both, f: f, stroke: stroke, shadow: shadow, line: line, k: k };
 
   GC.pack({
-    id: 'afi.core', name: 'Afi Core', owner: 'Afi Labs', group: 'official', visibility: 'public', version: '0.2.0',
-    license: '© 2026 Afi Labs — All rights reserved', description: 'Khung chuẩn và linh kiện chung: dáng đầu, tóc, râu, trang phục, khuôn mặt, 18 biểu cảm, động tác, hiệu ứng.'
+    id: 'afi.core', name: 'Khung lõi', owner: 'Afi Labs', group: 'frame', visibility: 'private', version: '0.3.0',
+    license: '© 2026 Afi Labs — All rights reserved', description: 'Khung lõi dùng chung mọi chủ đề: bộ phận, dáng đầu, khuôn mặt, 18 biểu cảm, chuyển động, 32 hoạt động, đạo cụ khối, thân ma-nơ-canh.'
   }, function (D) {
 
+    // bảng màu mặc định của khung: xám trung tính (greybox). Asset chủ đề đổi token để "thay áo", không vẽ lại.
     D.defaults({
-      skin: '#f8d7bd', skinShade: '#e3b08e', hair: '#2a2320', iris: '#4a2f22', robe: '#e6e1d6', inner: '#f3efe6',
-      trim: '#2b2b2b', accent: '#d4a63c', hat: '#2f3a52', armor: '#9aa5ae', metal: '#d5dbe0', boots: '#2b211d',
-      blush: '#f39aa0', wood: '#7a5532', tassel: '#c8372d', cape: '#7c2d2a', pants: '#4a4650'
+      skin: '#dcd6cc', skinShade: '#bcb4a7', hair: '#5e5a54', iris: '#3c3c3c', robe: '#b9bec4', inner: '#e4e2dd',
+      trim: '#8e949b', accent: '#c9b98f', hat: '#a9aeb4', armor: '#a3a8ae', metal: '#d3d6d9', boots: '#7f8389',
+      blush: '#d9c3b8', wood: '#a59d92', tassel: '#b3a59a', cape: '#9aa0a7', pants: '#a9a39a'
     });
 
     /* ---------------- SLOT ---------------- */
-    [['head', 'Dáng đầu', 'round'], ['mask', 'Mặt nạ / màu mặt', 'none'], ['hair', 'Tóc', 'neat'],
-     ['beard', 'Râu', 'none'], ['hat', 'Mũ / khăn', 'none'], ['outfit', 'Trang phục', 'robe'],
-     ['back', 'Sau lưng', 'none'], ['legwear', 'Quần', 'pants'], ['shoes', 'Giày', 'boots'], ['heldL', 'Tay trái cầm', 'none'],
+    // mặc định = ma-nơ-canh (đầu trọc, thân trần) — asset chủ đề thay từng bộ phận
+    [['head', 'Dáng đầu', 'round'], ['mask', 'Mặt nạ / màu mặt', 'none'], ['hair', 'Tóc', 'troc'],
+     ['beard', 'Râu', 'none'], ['hat', 'Mũ / khăn', 'none'], ['outfit', 'Trang phục', 'than-tran'],
+     ['back', 'Sau lưng', 'none'], ['legwear', 'Quần', 'chan-tran'], ['shoes', 'Giày', 'ban-chan'], ['heldL', 'Tay trái cầm', 'none'],
      ['heldR', 'Tay phải cầm', 'none']].forEach(function (s) { D.slot(s[0], { label: s[1], fallback: s[2] }); });
 
     function part(slot, id, label, draw, extra) {
@@ -79,143 +84,12 @@
       } } });
     });
 
-    part('mask', 'none', 'Không', function () { return null; });
-
-    /* ---------------- TÓC ---------------- */
-    var BANGS = 'M52,102 C50,70 70,55 100,55 C130,55 150,70 148,102 C142,90 134,82 124,80 C116,86 106,84 100,80 C94,84 84,86 76,80 C66,82 58,90 52,102 Z';
-    var LOCK = 'M51,96 C46,114 48,128 55,138 C57,124 57,112 59,100 Z';
-    function bangs(C) {
-      return '<path d="' + BANGS + '" fill="' + C.P.hair + '"' + stroke(2.8) + '/>' +
-        line('M66,70 C76,62 90,60 100,60', 3, '#fff', 0.22) + line('M86,72 q2,6 0,10 M114,72 q-2,6 0,10', 1.4, '#000', 0.25) +
-        both('<path d="' + LOCK + '" fill="' + C.P.hair + '"' + stroke(2.4) + '/>');
-    }
-    // Mái 45°: đường ngôi lệch về trái theo mặt, khối tóc gáy phủ bên phải xuống ngang trên tai, lọn tóc mai phía xa ở mép trái.
-    var BANGS45 = 'M54,100 C52,70 72,54 100,54 C128,55 148,70 148,100 C146,96 142,93 139,92 C136,100 132,104 126,104 C123,96 119,90 114,86 C106,89 96,87 90,81 C82,86 72,87 64,83 C59,88 56,94 54,100 Z';
-    function bangs45(C) {
-      return '<path d="' + BANGS45 + '" fill="' + C.P.hair + '"' + stroke(2.8) + '/>' +
-        line('M70,68 C80,60 94,58 106,59', 3, '#fff', 0.22) + line('M78,74 q2,6 0,9 M104,74 q-2,6 0,10', 1.4, '#000', 0.25) +
-        '<path d="M53,96 C49,112 51,124 56,132 C57,120 57,108 59,98 Z" fill="' + C.P.hair + '"' + stroke(2.2) + '/>';
-    }
-    var HAIR_P = { volume: { label: 'Độ phồng tóc', min: 0.9, max: 1.15, step: 0.01, def: 1, type: 'scale', pivot: [100, 104] } };
-    part('hair', 'neat', 'Mái gọn', function (C) { return { hairFront: bangs(C) }; }, { params: HAIR_P, views: { q45: function (C) { return { hairFront: bangs45(C) }; } } });
-    part('hair', 'long-back', 'Tóc dài sau lưng', function (C) {
-      return {
-        hairBack: '<path d="M50,94 C38,140 42,190 58,214 L142,214 C158,190 162,140 150,94 Z" fill="' + C.P.hair + '"' + stroke(2.8) + '/>' +
-          line('M60,140 C58,170 62,196 68,210 M140,140 C142,170 138,196 132,210', 1.6, '#fff', 0.14),
-        hairFront: bangs(C)
-      };
-    }, { params: { length: { label: 'Độ dài tóc', min: 0.75, max: 1.1, step: 0.01, def: 1, type: 'scaleY', pivot: [100, 94] } },
-      views: { q45: function (C) {
-        // 45°: khối tóc dài dồn về phía gáy (phải) và rủ sau lưng
-        return {
-          hairBack: '<path d="M58,96 C46,140 52,190 66,214 L150,214 C164,188 166,138 150,92 Z" fill="' + C.P.hair + '"' + stroke(2.8) + '/>' +
-            line('M146,140 C150,170 146,196 140,210 M70,150 C68,176 72,198 76,210', 1.6, '#fff', 0.14),
-          hairFront: bangs45(C)
-        };
-      } } });
-    part('hair', 'topknot', 'Búi tó', function (C) {
-      return {
-        hairFront: '<circle cx="100" cy="44" r="12" fill="' + C.P.hair + '"' + stroke(2.8) + '/>' + line('M93,38 q7,-5 14,0', 2, '#fff', 0.22) + bangs(C) +
-          '<rect x="90" y="50" width="20" height="6" rx="2" fill="' + C.P.accent + '"' + stroke(2) + '/>'
-      };
-    }, { params: HAIR_P, views: { q45: function (C) {
-      return {
-        hairFront: '<circle cx="97" cy="44" r="12" fill="' + C.P.hair + '"' + stroke(2.8) + '/>' + line('M90,38 q7,-5 14,0', 2, '#fff', 0.22) + bangs45(C) +
-          '<path d="M86,50 L106,50 L108,56 L88,56 Z" fill="' + C.P.accent + '"' + stroke(2) + '/>'
-      };
-    } } });
-    part('hair', 'spiky', 'Tóc dựng xù', function (C) {
-      var d = 'M48,104 L38,78 L55,80 L50,56 L69,66 L72,38 L88,56 L100,30 L112,56 L128,38 L131,66 L150,56 L145,80 L162,78 L152,104 ' +
-        'L141,86 L128,80 L118,88 L108,80 L100,88 L92,80 L82,88 L72,80 L59,86 Z';
-      return { hairFront: '<path d="' + d + '" fill="' + C.P.hair + '"' + stroke(2.8) + '/>' + line('M72,50 L80,62 M100,40 L100,56 M128,50 L120,62', 2, '#fff', 0.18) };
-    }, { params: { spike: { label: 'Độ dựng', min: 0.85, max: 1.25, step: 0.01, def: 1, type: 'scaleY', pivot: [100, 104] } },
-      views: { q45: function (C) {
-        var d = 'M51,104 L44,82 L57,83 L53,60 L68,67 L70,40 L85,55 L96,30 L110,53 L128,36 L133,62 L154,50 L150,78 L168,74 L158,100 L162,110 ' +
-          'L148,110 L136,106 L130,98 L124,88 L114,80 L104,87 L95,80 L87,86 L79,80 L71,86 L63,81 L57,88 Z';
-        return { hairFront: '<path d="' + d + '" fill="' + C.P.hair + '"' + stroke(2.8) + '/>' + line('M70,50 L77,61 M97,40 L97,55 M126,48 L118,60 M146,64 L138,74', 2, '#fff', 0.18) };
-      } } });
+    part('mask', 'none', 'Không', function () { return null; }, { views: { q45: function () { return null; } } });
 
     /* ---------------- RÂU ---------------- */
-    part('beard', 'none', 'Không', function () { return null; });
-    part('beard', 'goatee', 'Râu dê nhỏ', function (C) {
-      return {
-        beard: '<path d="M95,141 C94,153 98,163 100,169 C102,163 106,153 105,141 Z" fill="' + C.P.hair + '"' + stroke(1.6) + '/>',
-        mustache: line('M84,127 C89,122 95,122 100,125.5 C105,122 111,122 116,127', 2.4, C.P.hair) +
-          line('M84,127 q-3,1 -4,4 M116,127 q3,1 4,4', 1.8, C.P.hair)
-      };
-    }, { params: { length: { label: 'Độ dài chòm', min: 0.7, max: 1.5, step: 0.05, def: 1, type: 'scaleY', pivot: [100, 141] } },
-      views: { q45: function (C) {
-        // 45°: chòm râu dưới cằm lệch trái, ria phía xa ngắn lại
-        return {
-          beard: '<path d="M77,142 C76,154 80,164 83,170 C86,163 89,153 88,141 Z" fill="' + C.P.hair + '"' + stroke(1.6) + '/>',
-          mustache: line('M70,127 C73,123 77,123 80,125.5 C85,122 92,122 98,127', 2.4, C.P.hair) + line('M70,127 q-2,1 -3,3 M98,127 q3,1 4,4', 1.8, C.P.hair)
-        };
-      } } });
-    part('beard', 'long3', 'Râu dài ba chòm', function (C) {
-      var side = '<path d="M70,120 C63,140 65,162 74,180 C77,162 79,140 79,124 Z" fill="' + C.P.hair + '"' + stroke(2.2) + '/>';
-      return {
-        beard: both(side) +
-          '<path d="M76,128 C74,152 82,188 100,214 C118,188 126,152 124,128 C114,142 86,142 76,128 Z" fill="' + C.P.hair + '"' + stroke(2.6) + '/>' +
-          line('M91,152 C93,172 96,192 100,207 M109,152 C107,172 104,192 100,207 M100,146 L100,200', 2, '#fff', 0.16),
-        mustache: '<path d="M80,129 C87,119 96,120 100,125 C104,120 113,119 120,129 C112,127 106,128 100,130 C94,128 88,127 80,129 Z" fill="' + C.P.hair + '"' + stroke(2) + '/>'
-      };
-    }, { params: { length: { label: 'Độ dài râu', min: 0.7, max: 1.12, step: 0.01, def: 1, type: 'scaleY', pivot: [100, 128] } },
-      views: { q45: function (C) { var f = GC.getPart('beard', 'afi.core/long3').draw(C); return { beard: face45(C, f.beard), mustache: face45(C, f.mustache) }; } } });
-    part('beard', 'tiger', 'Râu hổ dựng', function (C) {
-      var d = 'M54,110 L45,122 L58,126 L49,140 L64,140 L59,155 L76,148 L75,165 L90,154 L96,171 L104,154 L110,171 L117,154 ' +
-        'L125,165 L124,148 L141,155 L136,140 L151,140 L142,126 L155,122 L146,110 C140,130 124,143 100,143 C76,143 60,130 54,110 Z';
-      return {
-        beard: '<path d="' + d + '" fill="' + C.P.hair + '"' + stroke(2.4) + '/>' + line('M70,140 L66,150 M100,150 L100,162 M130,140 L134,150', 1.6, '#fff', 0.16),
-        mustache: '<path d="M79,127 L85,117 L90,124 L95,116 L100,123 L105,116 L110,124 L115,117 L121,127 C112,124 88,124 79,127 Z" fill="' + C.P.hair + '"' + stroke(2) + '/>'
-      };
-    }, { params: { bristle: { label: 'Độ xù', min: 0.85, max: 1.25, step: 0.01, def: 1, type: 'scale', pivot: [100, 120] } },
-      views: { q45: function (C) { var f = GC.getPart('beard', 'afi.core/tiger').draw(C); return { beard: face45(C, f.beard), mustache: face45(C, f.mustache) }; } } });
-    part('beard', 'long-thin', 'Râu dài mảnh', function (C) {
-      return {
-        beard: '<path d="M94,141 C92,160 96,180 100,193 C104,180 108,160 106,141 Z" fill="' + C.P.hair + '"' + stroke(1.8) + '/>',
-        mustache: both(line('M100,126 C94,121 86,123 79,137', 2.4, C.P.hair))
-      };
-    }, { params: { length: { label: 'Độ dài râu', min: 0.7, max: 1.4, step: 0.05, def: 1, type: 'scaleY', pivot: [100, 141] } },
-      views: { q45: function (C) { var f = GC.getPart('beard', 'afi.core/long-thin').draw(C); return { beard: face45(C, f.beard), mustache: face45(C, f.mustache) }; } } });
-
+    part('beard', 'none', 'Không', function () { return null; }, { views: { q45: function () { return null; } } });
     /* ---------------- MŨ / KHĂN chung ---------------- */
-    var HAT_P = { height: { label: 'Độ cao mũ', min: 0.8, max: 1.3, step: 0.01, def: 1, type: 'scaleY', pivot: [100, 80] } };
-    part('hat', 'none', 'Không', function () { return null; });
-    part('hat', 'warrior-band', 'Khăn buộc trán có nơ', function (C) {
-      return {
-        hat: '<path d="M49,82 C70,72 130,72 151,82 L151,93 C130,83 70,83 49,93 Z" fill="' + C.P.hat + '"' + stroke(2.6) + '/>' +
-          line('M52,88 C72,79 128,79 148,88', 1.4, '#fff', 0.22) +
-          '<path d="M152,86 C166,78 176,70 186,58 L180,82 C172,88 164,92 153,92 Z" fill="' + C.P.hat + '"' + stroke(2.4) + '/>' +
-          '<path d="M152,90 C164,96 176,98 190,96 L178,108 C168,106 160,102 151,96 Z" fill="' + C.P.hat + '"' + stroke(2.4) + '/>' +
-          '<circle cx="152" cy="88" r="6" fill="' + C.P.accent + '"' + stroke(2.2) + '/>'
-      };
-    }, { views: { q45: function (C) {
-      // 45°: dải khăn cong theo đầu quay (điểm thấp nhất dồn trái), nút và hai đuôi khăn ở phía gáy (phải)
-      return {
-        hat: '<path d="M50,84 C64,72 120,70 150,79 L150,91 C120,82 64,84 50,96 Z" fill="' + C.P.hat + '"' + stroke(2.6) + '/>' +
-          line('M53,90 C68,79 118,77 147,86', 1.4, '#fff', 0.22) +
-          '<path d="M150,82 C164,74 174,66 184,54 L178,78 C170,84 162,88 151,88 Z" fill="' + C.P.hat + '"' + stroke(2.4) + '/>' +
-          '<path d="M150,87 C162,93 174,95 188,93 L176,105 C166,103 158,99 149,93 Z" fill="' + C.P.hat + '"' + stroke(2.4) + '/>' +
-          '<ellipse cx="149" cy="85" rx="5" ry="6" fill="' + C.P.accent + '"' + stroke(2.2) + '/>'
-      };
-    } } });
-    part('hat', 'soft-cap', 'Mũ vải mềm', function (C) {
-      return {
-        hat: '<path d="M57,79 C55,50 76,35 100,35 C124,35 145,50 143,79 C120,70 80,70 57,79 Z" fill="' + C.P.hat + '"' + stroke(2.8) + '/>' +
-          shadow('M143,79 C145,56 128,40 112,37 C128,46 136,60 136,76 Z', 0.12) + line('M74,46 C84,40 96,38 104,38', 2.4, '#fff', 0.2) +
-          '<path d="M57,79 C80,70 120,70 143,79 L143,86 C120,78 80,78 57,86 Z" fill="' + C.P.accent + '"' + stroke(2.4) + '/>' +
-          '<circle cx="100" cy="35" r="7" fill="' + C.P.accent + '"' + stroke(2.4) + '/>'
-      };
-    }, { params: HAT_P, views: { q45: function (C) {
-      // 45°: chóp mũ và nút lệch trái theo mặt, vành cong theo đầu quay, bóng đổ phía gáy
-      return {
-        hat: '<path d="M57,79 C55,50 74,35 95,35 C122,35 145,50 143,79 C120,70 80,70 57,79 Z" fill="' + C.P.hat + '"' + stroke(2.8) + '/>' +
-          shadow('M143,79 C145,56 130,40 112,36 C130,46 137,60 137,76 Z', 0.16) + line('M68,48 C78,41 88,38 96,38', 2.4, '#fff', 0.2) +
-          '<path d="M57,79 C76,70 120,70 143,79 L143,86 C120,78 76,78 57,86 Z" fill="' + C.P.accent + '"' + stroke(2.4) + '/>' +
-          '<ellipse cx="94" cy="35" rx="6" ry="7" fill="' + C.P.accent + '"' + stroke(2.4) + '/>'
-      };
-    } } });
-
+    part('hat', 'none', 'Không', function () { return null; }, { views: { q45: function () { return null; } } });
     /* ---------------- TRANG PHỤC: thân + tay trên (armL) + tay dưới (foreL) ---------------- */
     var TORSO = 'M76,146 L124,146 L136,212 C120,219 80,219 64,212 Z';
     var TORSO_SH = 'M112,146 L124,146 L136,212 C130,215 124,216 118,217 Z';
@@ -259,103 +133,48 @@
     GC.helpers.face45 = face45; GC.helpers.body45 = body45;
     var BODY_P = { width: { label: 'Độ rộng thân', min: 0.88, max: 1.18, step: 0.01, def: 1, type: 'scaleX', pivot: [100, 180] } };
 
-    part('outfit', 'robe', 'Áo bào', function (C) {
-      return res({
-        body: '<path d="' + TORSO_UP + '" fill="' + C.P.robe + '"' + stroke(3) + '/>' + shadow(TORSO_UP_SH, 0.1) +
-          '<path d="M86,146 L100,170 L114,146 Z" fill="' + C.P.inner + '"/>' +
-          '<path d="M86,146 L100,170 L114,146" fill="none" stroke="' + C.P.trim + '" stroke-width="5" stroke-linejoin="round"/>' +
-          '<path d="M68,184 L132,184 L133,194 L67,194 Z" fill="' + C.P.trim + '"' + stroke(2.4) + '/>' +
-          '<rect x="95" y="183" width="10" height="12" rx="2" fill="' + C.P.accent + '"' + stroke(1.8) + '/>',
-        hem: '<path d="' + HEM + '" fill="' + C.P.robe + '"' + stroke(3) + '/>' + shadow(HEM_SH, 0.1) +
-          line('M84,196 C86,204 85,210 82,214 M112,196 C114,204 116,210 118,214', 1.4, '#000', 0.22) +
-          '<path d="M65,206 C80,213 120,213 135,206 L136,212 C120,219 80,219 64,212 Z" fill="' + C.P.trim + '"/>'
-      }, sleeves(C, C.P.robe, C.P.trim));
-    }, { params: BODY_P, views: { q45: function (C) {
-      return res({
-        body: '<path d="' + TORSO_UP + '" fill="' + C.P.robe + '"' + stroke(3) + '/>' + shadow('M108,146 L124,146 L132.7,194 L112,194 Z', 0.1) +
-          body45('<path d="M86,146 L100,170 L114,146 Z" fill="' + C.P.inner + '"/>' +
-            '<path d="M86,146 L100,170 L114,146" fill="none" stroke="' + C.P.trim + '" stroke-width="5" stroke-linejoin="round"/>', TORSO_UP) +
-          '<path d="M68,184 L132,184 L133,194 L67,194 Z" fill="' + C.P.trim + '"' + stroke(2.4) + '/>' +
-          '<rect x="84" y="183" width="8" height="12" rx="2" fill="' + C.P.accent + '"' + stroke(1.8) + '/>',
-        hem: '<path d="' + HEM + '" fill="' + C.P.robe + '"' + stroke(3) + '/>' + shadow('M110,188 L131.6,188 L136,212 C130,215 124,216 116,217 Z', 0.1) +
-          body45(line('M84,196 C86,204 85,210 82,214 M112,196 C114,204 116,210 118,214', 1.4, '#000', 0.22), HEM) +
-          '<path d="M65,206 C80,213 120,213 135,206 L136,212 C120,219 80,219 64,212 Z" fill="' + C.P.trim + '"/>'
-      }, sleeves(C, C.P.robe, C.P.trim));
-    } } });
-    part('outfit', 'armor', 'Giáp trận', function (C) {
-      var pad = '<path d="M61,154 C63,143 80,140 90,150 L86,166 C77,161 68,161 61,164 Z" fill="' + C.P.armor + '"' + stroke(2.4) + '/>' +
-        line('M65,156 q8,-5 17,0 M64,161 q8,-5 17,0', 1.5, '#000', 0.24) + line('M66,150 q6,-4 12,-3', 2, '#fff', 0.3);
-      var sc = '';
-      for (var r = 0; r < 4; r++) for (var c = 0; c < 5; c++) {
-        var x = 80 + c * 9 + (r % 2 ? 4.5 : 0), y = 156 + r * 7;
-        if (x < 120) sc += 'M' + (x - 4) + ',' + y + ' q4,5 8,0 ';
-      }
-      return res({
-        body: '<path d="' + TORSO_UP + '" fill="' + C.P.robe + '"' + stroke(3) + '/>' + shadow(TORSO_UP_SH, 0.1) +
-          '<path d="M77,150 L123,150 L127,185 L73,185 Z" fill="' + C.P.armor + '"' + stroke(2.6) + '/>' +
-          '<path d="' + sc + '" fill="none" stroke="#000" stroke-opacity=".25" stroke-width="1.5"/>' +
-          shadow('M110,150 L123,150 L127,185 L114,185 Z', 0.12) +
-          '<circle cx="100" cy="165" r="7.5" fill="' + C.P.metal + '"' + stroke(2.2) + '/>' + '<circle cx="98" cy="163" r="2.2" fill="#fff" fill-opacity=".7"/>' +
-          '<path d="M68,185 L132,185 L133,195 L67,195 Z" fill="' + C.P.trim + '"' + stroke(2.4) + '/>' +
-          '<circle cx="100" cy="190" r="6" fill="' + C.P.accent + '"' + stroke(2) + '/>',
-        hem: '<path d="' + HEM + '" fill="' + C.P.robe + '"' + stroke(3) + '/>' + shadow(HEM_SH, 0.1) +
-          '<path d="M70,196 L98,196 L96,211 L66,209 Z M102,196 L130,196 L134,209 L104,211 Z" fill="' + C.P.armor + '"' + stroke(2.2) + '/>' +
-          line('M70,203 L97,204 M103,204 L132,203', 1.4, '#000', 0.24)
-      }, sleeves(C, C.P.robe, C.P.trim, pad));
-    }, { params: BODY_P, views: { q45: function (C) {
-      // 45°: giáp ngực, hộ tâm kính, vảy và giáp đùi chiếu theo thân quay; đai giữ ngang; tay áo + giáp vai dùng lại bản chính diện
-      var fr = GC.getPart('outfit', 'afi.core/armor').draw(C);
-      var sc = '';
-      for (var r = 0; r < 4; r++) for (var c = 0; c < 5; c++) {
-        var x = 80 + c * 9 + (r % 2 ? 4.5 : 0), y = 156 + r * 7;
-        if (x < 120) sc += 'M' + (x - 4) + ',' + y + ' q4,5 8,0 ';
-      }
-      return res({
-        body: '<path d="' + TORSO_UP + '" fill="' + C.P.robe + '"' + stroke(3) + '/>' +
-          body45('<path d="M77,150 L123,150 L127,185 L73,185 Z" fill="' + C.P.armor + '"' + stroke(2.6) + '/>' +
-            '<path d="' + sc + '" fill="none" stroke="#000" stroke-opacity=".25" stroke-width="1.5"/>' +
-            '<circle cx="100" cy="165" r="7.5" fill="' + C.P.metal + '"' + stroke(2.2) + '/>' + '<circle cx="98" cy="163" r="2.2" fill="#fff" fill-opacity=".7"/>', TORSO_UP) +
-          shadow('M108,146 L124,146 L132.7,194 L112,194 Z', 0.12) +
-          '<path d="M68,185 L132,185 L133,195 L67,195 Z" fill="' + C.P.trim + '"' + stroke(2.4) + '/>' +
-          '<ellipse cx="88" cy="190" rx="4.6" ry="6" fill="' + C.P.accent + '"' + stroke(2) + '/>',
-        hem: '<path d="' + HEM + '" fill="' + C.P.robe + '"' + stroke(3) + '/>' + shadow('M110,188 L131.6,188 L136,212 C130,215 124,216 116,217 Z', 0.1) +
-          body45('<path d="M70,196 L98,196 L96,211 L66,209 Z M102,196 L130,196 L134,209 L104,211 Z" fill="' + C.P.armor + '"' + stroke(2.2) + '/>' +
-            line('M70,203 L97,204 M103,204 L132,203', 1.4, '#000', 0.24), HEM)
-      }, { armL: fr.armL, foreL: fr.foreL, armR: fr.armR, foreR: fr.foreR });
-    } } });
-
-    part('back', 'none', 'Không', function () { return null; });
-    part('back', 'cape', 'Áo choàng', function (C) {
-      return { backItem: '<path d="M74,150 C58,170 52,200 50,222 L150,222 C148,200 142,170 126,150 Z" fill="' + C.P.cape + '"' + stroke(2.6) + '/>' + shadow('M126,150 C142,170 148,200 150,222 L134,222 C134,196 130,170 120,152 Z', 0.15) };
-    }, { views: { q45: function (C) {
-      return { backItem: '<path d="M80,150 C66,170 60,200 58,222 L160,222 C158,198 150,168 132,150 Z" fill="' + C.P.cape + '"' + stroke(2.6) + '/>' + shadow('M132,150 C150,168 158,198 160,222 L142,222 C142,196 138,170 126,152 Z', 0.15) };
-    } } });
-    function pants(C) {
-      var th = '<rect x="83" y="198" width="14" height="17" rx="5.5" fill="' + C.P.pants + '"' + stroke(2.4) + '/>';
-      var sh = '<rect x="83.5" y="208" width="11" height="14" rx="4.5" fill="' + C.P.pants + '"' + stroke(2.2) + '/>' + line('M86,212 q3,1.5 6,0', 1.2, '#000', 0.22);
-      return { thighL: th, shinL: sh, thighR: mir(th), shinR: mir(sh) };
-    }
-    // ống quần chibi nhìn 45° giống chính diện: dùng chung hình, engine dời vị trí hai chân
-    part('legwear', 'pants', 'Quần ống gọn', pants, { views: { q45: pants } });
-    part('shoes', 'boots', 'Ủng', function (C) {
-      var b = '<ellipse cx="87" cy="221" rx="11" ry="6.5" fill="' + C.P.boots + '"' + stroke(2.4) + '/>' + '<path d="M80,218 q5,-3 10,-1" fill="none" stroke="#fff" stroke-opacity=".25" stroke-width="1.6" stroke-linecap="round"/>';
-      return { footL: b, footR: mir(b) };
-    }, { views: { q45: function (C) {
-      var b = '<path d="M75,222 C74,215 84,214 94,216 C100,218 100,226 94,227.5 L81,227.5 C77,227.5 75,225 75,222 Z" fill="' + C.P.boots + '"' + stroke(2.4) + '/>' +
-        '<path d="M79,219 q5,-3 10,-1" fill="none" stroke="#fff" stroke-opacity=".25" stroke-width="1.6" stroke-linecap="round"/>';
-      return { footL: b, footR: '<g transform="translate(22 -1)">' + b + '</g>' };
-    } } });
-
+    part('back', 'none', 'Không', function () { return null; }, { views: { q45: function () { return null; } } });
     part('heldL', 'none', 'Không', function () { return null; });
     part('heldR', 'none', 'Không', function () { return null; });
-    part('heldR', 'sword', 'Kiếm', function (C) {
-      return {
-        heldR: '<g transform="rotate(24 128 193)">' +
-          '<path d="M125,172 L131,172 L130,110 L128,101 L126,110 Z" fill="' + C.P.metal + '"' + stroke(2) + '/>' + line('M128,168 L128,112', 1.2, '#fff', 0.6) +
-          '<rect x="119" y="171" width="18" height="5" rx="2" fill="' + C.P.accent + '"' + stroke(1.8) + '/>' +
-          '<rect x="126" y="176" width="4" height="22" rx="1.5" fill="' + C.P.wood + '"' + stroke(1.6) + '/></g>'
-      };
-    }, { tall: true, icon: { cx: 146, cy: 152, size: 120, rot: 21 } });
+
+    function q(fn) { return { q45: fn }; }
+    /* ---------------- THÂN MA-NƠ-CANH (mặc định của mọi nhân vật) ---------------- */
+    // Thân trần: thân trên + khối hông (vạt) + tay trần. Khớp vai / khuỷu lộ ra như ma-nơ-canh gỗ.
+    var PELVIS = 'M68.4,188 L131.6,188 L133.5,204 C120,210 80,210 66.5,204 Z';
+    function body(C) {
+      var sk = C.P.skin, sd = C.P.skinShade;
+      return res({
+        body: '<path d="' + TORSO_UP + '" fill="' + sk + '"' + stroke(3) + '/>' + shadow(TORSO_UP_SH, 0.1) +
+          line('M100,152 L100,186', 1.4, '#000', 0.16) + line('M84,166 q16,6 32,0', 1.4, '#000', 0.12) +
+          '<circle cx="78" cy="154" r="5" fill="' + sd + '"' + stroke(1.6) + '/>' + '<circle cx="122" cy="154" r="5" fill="' + sd + '"' + stroke(1.6) + '/>',
+        hem: '<path d="' + PELVIS + '" fill="' + sk + '"' + stroke(3) + '/>' + shadow('M117,188 L131.6,188 L133.5,204 C128,206 123,207 118,208 Z', 0.1) +
+          line('M100,190 L100,206', 1.4, '#000', 0.14)
+      }, sleeves(C, sk, sd));
+    }
+    part('outfit', 'than-tran', 'Thân trần (ma-nơ-canh)', body, { khung: true, views: q(function (C) {
+      var o = body(C);
+      o.body = '<path d="' + TORSO_UP + '" fill="' + C.P.skin + '"' + stroke(3) + '/>' + shadow('M108,146 L124,146 L132.7,194 L112,194 Z', 0.12) +
+        line('M88,152 L88,186', 1.4, '#000', 0.16) + '<circle cx="74" cy="154" r="4.4" fill="' + C.P.skinShade + '"' + stroke(1.6) + '/>';
+      o.hem = '<path d="' + PELVIS + '" fill="' + C.P.skin + '"' + stroke(3) + '/>' + shadow('M112,188 L131.6,188 L133.5,204 C126,207 120,208 114,208 Z', 0.12) +
+        line('M88,190 L88,207', 1.4, '#000', 0.14);
+      return o;
+    }) });
+    function legs(C) {
+      var th = '<rect x="83" y="198" width="14" height="17" rx="6" fill="' + C.P.skin + '"' + stroke(2.4) + '/>';
+      var sh = '<rect x="84" y="208" width="11" height="14" rx="5" fill="' + C.P.skin + '"' + stroke(2.2) + '/>' +
+        '<circle cx="89.5" cy="210" r="3.2" fill="' + C.P.skinShade + '"' + stroke(1.2) + '/>';
+      return { thighL: th, shinL: sh, thighR: mir(th), shinR: mir(sh) };
+    }
+    part('legwear', 'chan-tran', 'Chân trần (ma-nơ-canh)', legs, { khung: true, views: q(legs) });
+    function feet(C) {
+      var b = '<ellipse cx="87" cy="221.5" rx="9.5" ry="5.5" fill="' + C.P.skin + '"' + stroke(2.2) + '/>';
+      return { footL: b, footR: mir(b) };
+    }
+    part('shoes', 'ban-chan', 'Bàn chân trần', feet, { khung: true, views: q(function (C) {
+      var b = '<path d="M77,222 C77,216 85,216 93,217.5 C98,219 98,226 93,227 L82,227 C79,227 77,225 77,222 Z" fill="' + C.P.skin + '"' + stroke(2.2) + '/>';
+      return { footL: b, footR: '<g transform="translate(22 -1)">' + b + '</g>' };
+    }) });
+    part('hair', 'troc', 'Đầu trọc', function () { return null; }, { khung: true, views: q(function () { return null; }) });
 
     /* ---------------- MẮT: KIỂU × DÁNG ---------------- */
     D.eyeStyle('round', { label: 'Tròn to', w: 9, h: 11 });
@@ -680,7 +499,8 @@
      * Không vẽ tay từng tổ hợp: ghép lớp như animation layer của game engine.
      * Toạ độ đạo cụ theo sân khấu (stage, không chạy theo nhân vật); mặt đất y = 228.
      */
-    var WOOD = '#8a5a34', WOOD_D = '#6b4426', CLOTH = '#b5523b', MAT = '#d9c38f', WATER = '#5fb2de';
+    // đạo cụ của hoạt động là KHỐI XÁM (greybox) — đúng vị trí và kích thước theo tư thế; chủ đề thay hình sau
+    var G1 = '#c9c5bd', G2 = '#a8a49c', G3 = '#8d8982', WATER = '#b9c6cf';
 
     /* ---------------- hiệu ứng cho di chuyển ---------------- */
     fx('dust', 'Bụi chân', 'fxBack', function () {
@@ -705,63 +525,48 @@
         '<circle cx="117" cy="133" r="1.8" fill="#fff" stroke="' + INK + '" stroke-width="1"/>';
     });
 
-    /* ---------------- đạo cụ ---------------- */
+    /* ---------------- đạo cụ (khối) ---------------- */
     function prop(id, label, draw) { D.prop(id, { label: label, draw: draw }); }
-    prop('stool', 'Ghế đẩu', function () {
-      return { propBack: '<rect x="66" y="208" width="7" height="20" rx="2" fill="' + WOOD_D + '"' + stroke(2) + '/><rect x="127" y="208" width="7" height="20" rx="2" fill="' + WOOD_D + '"' + stroke(2) + '/>' +
-        line('M72,220 L128,220', 3, WOOD_D) + '<rect x="58" y="199" width="84" height="11" rx="4" fill="' + WOOD + '"' + stroke(2.4) + '/>' + line('M64,202 L136,202', 1.4, '#fff', 0.25) };
+    function box(x, y, w, h, fill, r) { return '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="' + (r || 2) + '" fill="' + fill + '"' + stroke(2.2) + '/>'; }
+    prop('stool', 'Khối ghế', function () {
+      return { propBack: box(66, 208, 7, 20, G3) + box(127, 208, 7, 20, G3) + box(58, 199, 84, 11, G2, 3) };
     });
-    prop('cushion', 'Nệm ngồi', function () {
-      return { propBack: '<ellipse cx="100" cy="225" rx="60" ry="10" fill="' + CLOTH + '"' + stroke(2.4) + '/>' + '<ellipse cx="100" cy="223" rx="44" ry="5" fill="#fff" fill-opacity=".14"/>' };
+    prop('cushion', 'Khối nệm ngồi', function () {
+      return { propBack: '<ellipse cx="100" cy="225" rx="60" ry="10" fill="' + G2 + '"' + stroke(2.4) + '/>' };
     });
-    prop('bedroll', 'Chiếu + gối', function () {
-      var mat = '<rect x="-14" y="214" width="228" height="12" rx="4" fill="' + MAT + '"' + stroke(2.2) + '/>';
-      for (var x = 6; x < 210; x += 18) mat += line('M' + x + ',216 L' + x + ',224', 1.2, '#a88f5c');
-      return { propBack: mat + '<ellipse cx="34" cy="206" rx="34" ry="11" fill="#f4efe3"' + stroke(2.4) + '/>' + line('M10,203 q24,-6 48,0', 1.4, '#c9c0ac') };
+    prop('bedroll', 'Khối chiếu + gối', function () {
+      return { propBack: box(-14, 214, 228, 12, G1, 4) + '<ellipse cx="34" cy="206" rx="34" ry="11" fill="' + G1 + '"' + stroke(2.4) + '/>' };
     });
-    // Chăn khớp với tư thế nằm: cổ ở x≈114, thân trải tới chân x≈192, dải y 124–212 (toạ độ sân khấu).
-    // Phủ từ cổ tới chân, mặt trên nhô theo dáng người (ngực rồi bàn chân), mép gấp màu kem ở phía cổ.
-    prop('blanket', 'Chăn', function (C) {
+    // chăn khớp tư thế nằm: cổ x≈114 → chân x≈192, dải y 124–212 (toạ độ sân khấu); phủ từ cổ tới chân, tay nắm mép chăn
+    prop('blanket', 'Khối chăn', function (C) {
       var top = 'M110,218 L110,124 C114,110 126,104 140,104 C156,104 164,114 176,118 C184,120 188,112 198,112 C210,112 216,128 216,150 L216,218 Z';
-      return { propFront: '<path d="' + top + '" fill="#7d9fcf"' + stroke(2.8) + '/>' +
-        shadow('M140,202 C164,208 192,208 216,200 L216,218 L110,218 L110,206 Z', 0.12) +
-        line('M150,130 l5,5 m14,-2 l5,5 m-26,22 l5,5 m14,-2 l5,5 m-26,22 l5,5 m14,-2 l5,5 m20,-50 l5,5 m-4,24 l5,5', 1.6, '#fff', 0.45) +
-        // mép chăn gấp: mỏng, mép phải cong mềm
-        '<path d="M106,218 L106,122 C108,110 118,105 128,108 C133,128 130,176 133,218 Z" fill="#f4efe3"' + stroke(2.6) + '/>' +
-        line('M117,116 C120,140 118,180 120,212', 1.2, '#c9c0ac') +
-        // bàn tay nắm mép chăn
-        '<circle cx="131" cy="150" r="7.5" fill="' + C.P.skin + '"' + stroke(2.4) + '/>' + line('M127,147 q3,-2 6,0', 1.4, C.P.skinShade) };
+      return { propFront: '<path d="' + top + '" fill="' + G2 + '"' + stroke(2.8) + '/>' + shadow('M140,202 C164,208 192,208 216,200 L216,218 L110,218 L110,206 Z', 0.12) +
+        '<path d="M106,218 L106,122 C108,110 118,105 128,108 C133,128 130,176 133,218 Z" fill="' + G1 + '"' + stroke(2.6) + '/>' +
+        '<circle cx="131" cy="150" r="7.5" fill="' + C.P.skin + '"' + stroke(2.4) + '/>' };
     });
-    prop('desk', 'Bàn thấp + giấy mực', function () {
-      return { propMid: '<rect x="44" y="206" width="112" height="9" rx="2" fill="' + WOOD_D + '"' + stroke(2.2) + '/>' +
-        '<rect x="50" y="215" width="8" height="13" rx="2" fill="' + WOOD_D + '"' + stroke(2) + '/><rect x="142" y="215" width="8" height="13" rx="2" fill="' + WOOD_D + '"' + stroke(2) + '/>' +
-        '<rect x="36" y="196" width="128" height="11" rx="3" fill="' + WOOD + '"' + stroke(2.6) + '/>' + line('M42,199 L158,199', 1.4, '#fff', 0.25) +
-        '<path d="M76,192 L118,192 L120,198 L74,198 Z" fill="#fbf8f0"' + stroke(1.6) + '/>' + line('M84,194 L84,197 M92,194 L92,197 M100,194 L100,197', 1.2, INK, 0.6) +
-        '<rect x="132" y="190" width="16" height="8" rx="2" fill="#3a3a3a"' + stroke(1.6) + '/>' };
+    prop('desk', 'Khối bàn thấp', function () {
+      return { propMid: box(50, 206, 8, 22, G3) + box(142, 206, 8, 22, G3) + box(36, 196, 128, 11, G2, 3) + box(78, 190, 40, 6, G1, 1) };
     });
-    prop('water', 'Mặt nước', function () {
+    prop('water', 'Khối mặt nước', function () {
       return {
-        propBack: '<rect x="-24" y="182" width="248" height="16" fill="#a9daf1"/>',
-        propFront: '<g class="chb-wave"><path d="M-40,188 q12,-7 24,0 t24,0 t24,0 t24,0 t24,0 t24,0 t24,0 t24,0 t24,0 t24,0 t24,0 t24,0 L248,262 L-40,262 Z" fill="' + WATER + '" fill-opacity=".86"' + stroke(2.4) + '/></g>' +
-          line('M10,204 q10,-4 20,0 M150,212 q10,-4 20,0 M80,226 q10,-4 20,0', 2, '#fff', 0.55)
+        propBack: '<rect x="-24" y="182" width="248" height="16" fill="' + WATER + '" fill-opacity=".6"/>',
+        propFront: '<g class="chb-wave"><path d="M-40,188 q12,-7 24,0 t24,0 t24,0 t24,0 t24,0 t24,0 t24,0 t24,0 t24,0 t24,0 t24,0 t24,0 L248,262 L-40,262 Z" fill="' + WATER + '" fill-opacity=".86"' + stroke(2.4) + '/></g>'
       };
     });
-    prop('bowl', 'Bát cơm (tay trái)', function (C) {
-      return { heldL: '<path d="M58,186 L86,186 Q85,200 72,201 Q59,200 58,186 Z" fill="#f1ede3"' + stroke(2.2) + '/>' + line('M60,191 L84,191', 2, '#4f7fbf', 0.85) +
-        '<path d="M59,186 Q72,174 85,186 Z" fill="#fff"' + stroke(1.8) + '/>' };
+    prop('bowl', 'Khối bát (tay trái)', function () {
+      return { heldL: '<path d="M58,186 L86,186 Q85,200 72,201 Q59,200 58,186 Z" fill="' + G1 + '"' + stroke(2.2) + '/>' };
     });
-    prop('chopsticks', 'Đũa (tay phải)', function () {
-      return { heldR: line('M126,198 L112,166 M131,197 L119,165', 2.6, '#b07a45') };
+    prop('chopsticks', 'Khối que đôi (tay phải)', function () {
+      return { heldR: line('M126,198 L112,166 M131,197 L119,165', 2.6, G3) };
     });
-    prop('cup', 'Chén trà (tay phải)', function () {
-      return { heldR: '<path d="M119,180 L137,180 L134,195 L122,195 Z" fill="#f1ede3"' + stroke(2.2) + '/>' + '<ellipse cx="128" cy="180.5" rx="8.5" ry="2.4" fill="#b98b4a"/>' + line('M121,186 L135,186', 1.6, '#4f7fbf', 0.8) };
+    prop('cup', 'Khối chén (tay phải)', function () {
+      return { heldR: '<path d="M119,180 L137,180 L134,195 L122,195 Z" fill="' + G1 + '"' + stroke(2.2) + '/>' };
     });
-    prop('book', 'Sách (hai tay)', function () {
-      return { heldL: '<g transform="rotate(-8 72 193)"><path d="M64,170 L100,174 L100,206 L64,202 Z" fill="#c9473b"' + stroke(2.2) + '/><path d="M68,172 L98,175 L98,203 L68,200 Z" fill="#fbf8f0"' + stroke(1.4) + '/>' +
-        line('M72,180 L94,182 M72,186 L94,188 M72,192 L94,194', 1.2, INK, 0.5) + '</g>' };
+    prop('book', 'Khối sách (hai tay)', function () {
+      return { heldL: '<g transform="rotate(-8 72 193)">' + '<path d="M64,170 L100,174 L100,206 L64,202 Z" fill="' + G2 + '"' + stroke(2.2) + '/></g>' };
     });
-    prop('brush', 'Bút lông (tay phải)', function () {
-      return { heldR: '<path d="M125,196 L117,214" stroke="' + WOOD + '" stroke-width="3.6" stroke-linecap="round"/><path d="M118,210 L114,220 L120,213 Z" fill="' + INK + '"/>' };
+    prop('brush', 'Khối bút (tay phải)', function () {
+      return { heldR: '<path d="M125,196 L117,214" stroke="' + G3 + '" stroke-width="3.6" stroke-linecap="round"/>' };
     });
 
     /* ---------------- tư thế nền (thân dưới + vị trí) ----------------
@@ -923,7 +728,6 @@
     A('cheer', 'Giao tiếp', 'Cổ vũ', 'reo hò, cổ vũ', { move: 'bounce', action: 'cheer', state: 'proud' });
 
     /* ---------------- TRAIT: hành vi đi theo BỘ PHẬN ---------------- */
-    D.trait({ id: 'beard-long', label: 'Râu dài → vuốt râu', if: { beard: ['long3', 'long-thin'] }, over: { normal: { motion: 'strokeBeard' }, think: { motion: 'strokeBeard' } } });
     D.trait({ id: 'bulge-eyes', label: 'Mắt ốc → hét to hơn', if: { eyes: ['bulge'] }, over: { rage: { fxAdd: ['exclaim'] }, vow: { fxAdd: ['exclaim'] } } });
 
     /* ---------------- HỒ SƠ ÁNH XẠ cho ứng dụng dùng asset ---------------- */

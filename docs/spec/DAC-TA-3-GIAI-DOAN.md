@@ -45,7 +45,7 @@ Giao diện gồm 5 khu: **chat với AI · kịch bản · mô tả phân cản
 ## Thứ tự làm
 | Đợt | Nội dung | Trạng thái |
 |---|---|---|
-| 1a | Bộ khung chuẩn + quy cách + bảng soát bằng hình | **xong — chờ Ryan xem hình** |
-| 1b | Cất Tam Quốc khỏi bản chạy; Studio Xưởng hiển thị khung + quy cách; test chuyển sang khung | sau khi Ryan ok hình |
+| 1a | Bộ khung chuẩn + quy cách + bảng soát bằng hình | xong (Ryan duyệt 2026-10-18) |
+| 1b | Cất Tam Quốc khỏi bản chạy; đạo cụ thành khối; Studio Xưởng hiển thị khung + quy cách; test chuyển sang khung | xong — v0.6.0 |
 | 2 | Giao diện tạo asset từ khung (chọn khung → tham số → soát → lưu thư viện theo dự án chủ đề) | |
 | 3 | Tạo tác: chat AI đạo diễn, kịch bản, phân cảnh, cảnh thành phẩm, sân khấu final; AI tự gọi Xưởng khi thiếu | |

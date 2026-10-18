@@ -9,7 +9,7 @@ const vm = require('vm');
 function loadEngine(appDir) {
   const ctx = { window: {}, console };
   vm.createContext(ctx);
-  ['engine/core.js', 'kinds/character/afi.core.js', 'kinds/character/afi.tamquoc.js', 'kinds/item/afi.items.js', 'kinds/scene/afi.scenes.js'].forEach(f => {
+  ['engine/core.js', 'kinds/character/afi.core.js', 'kinds/khung/afi.khung.js'].forEach(f => {
     vm.runInContext(fs.readFileSync(path.join(appDir, f), 'utf8'), ctx, { filename: f });
   });
   return ctx.window.GenChibi;

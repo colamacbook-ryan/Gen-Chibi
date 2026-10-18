@@ -13,7 +13,7 @@
   GC.pack({
     id: 'afi.khung', name: 'Bộ khung chuẩn', owner: 'Afi Labs', group: 'frame', visibility: 'private', version: '0.1.0',
     license: '© 2026 Afi Labs — All rights reserved',
-    description: 'Khung chuẩn cho mọi asset: ma-nơ-canh, khối vật phẩm, khối bối cảnh. Không chủ đề.'
+    description: 'Khối đại diện cho vật phẩm và bối cảnh, ma-nơ-canh mẫu, sân khấu chuẩn. Không chủ đề.'
   }, function (D) {
     function part(slot, id, label, draw, extra) {
       var p = { slot: slot, id: id, label: label, draw: draw, source: SRC, khung: true };
@@ -21,44 +21,6 @@
       D.part(p);
     }
     function same(fn) { return { q45: fn }; }
-
-    /* ================= NHÂN VẬT: ma-nơ-canh ================= */
-    // Thân trần: thân trên + khối hông (vạt) + tay trần. Khớp vai / khuỷu lộ ra như ma-nơ-canh gỗ.
-    var PELVIS = 'M68.4,188 L131.6,188 L133.5,204 C120,210 80,210 66.5,204 Z';
-    function body(C) {
-      var sk = C.P.skin, sd = C.P.skinShade;
-      return res({
-        body: '<path d="' + H.TORSO_UP + '" fill="' + sk + '"' + stroke(3) + '/>' + shadow(H.TORSO_UP_SH, 0.1) +
-          line('M100,152 L100,186', 1.4, '#000', 0.16) + line('M84,166 q16,6 32,0', 1.4, '#000', 0.12) +
-          '<circle cx="78" cy="154" r="5" fill="' + sd + '"' + stroke(1.6) + '/>' + '<circle cx="122" cy="154" r="5" fill="' + sd + '"' + stroke(1.6) + '/>',
-        hem: '<path d="' + PELVIS + '" fill="' + sk + '"' + stroke(3) + '/>' + shadow('M117,188 L131.6,188 L133.5,204 C128,206 123,207 118,208 Z', 0.1) +
-          line('M100,190 L100,206', 1.4, '#000', 0.14)
-      }, H.sleeves(C, sk, sd));
-    }
-    part('outfit', 'than-tran', 'Thân trần (ma-nơ-canh)', body, { views: same(function (C) {
-      var o = body(C);
-      o.body = '<path d="' + H.TORSO_UP + '" fill="' + C.P.skin + '"' + stroke(3) + '/>' + shadow('M108,146 L124,146 L132.7,194 L112,194 Z', 0.12) +
-        line('M88,152 L88,186', 1.4, '#000', 0.16) + '<circle cx="74" cy="154" r="4.4" fill="' + C.P.skinShade + '"' + stroke(1.6) + '/>';
-      o.hem = '<path d="' + PELVIS + '" fill="' + C.P.skin + '"' + stroke(3) + '/>' + shadow('M112,188 L131.6,188 L133.5,204 C126,207 120,208 114,208 Z', 0.12) +
-        line('M88,190 L88,207', 1.4, '#000', 0.14);
-      return o;
-    }) });
-    function legs(C) {
-      var th = '<rect x="83" y="198" width="14" height="17" rx="6" fill="' + C.P.skin + '"' + stroke(2.4) + '/>';
-      var sh = '<rect x="84" y="208" width="11" height="14" rx="5" fill="' + C.P.skin + '"' + stroke(2.2) + '/>' +
-        '<circle cx="89.5" cy="210" r="3.2" fill="' + C.P.skinShade + '"' + stroke(1.2) + '/>';
-      return { thighL: th, shinL: sh, thighR: mir(th), shinR: mir(sh) };
-    }
-    part('legwear', 'chan-tran', 'Chân trần (ma-nơ-canh)', legs, { views: same(legs) });
-    function feet(C) {
-      var b = '<ellipse cx="87" cy="221.5" rx="9.5" ry="5.5" fill="' + C.P.skin + '"' + stroke(2.2) + '/>';
-      return { footL: b, footR: mir(b) };
-    }
-    part('shoes', 'ban-chan', 'Bàn chân trần', feet, { views: same(function (C) {
-      var b = '<path d="M77,222 C77,216 85,216 93,217.5 C98,219 98,226 93,227 L82,227 C79,227 77,225 77,222 Z" fill="' + C.P.skin + '"' + stroke(2.2) + '/>';
-      return { footL: b, footR: '<g transform="translate(22 -1)">' + b + '</g>' };
-    }) });
-    part('hair', 'troc', 'Đầu trọc', function () { return null; }, { views: same(function () { return null; }) });
 
     /* ================= VẬT PHẨM: khối đại diện theo dáng =================
      * Vật cầm tay neo ở lòng bàn tay (gripR 128,193 · gripL 72,193). Đồ mặc theo đúng lớp của bộ phận. */
@@ -124,13 +86,12 @@
       persona: 'Ma-nơ-canh trung tính để soát khung: không chủ đề, không trang phục.',
       look: {
         eyes: 'round', brows: 'normal',
-        parts: { head: 'afi.core/round', hair: 'afi.khung/troc', beard: 'afi.core/none', hat: 'afi.core/none', mask: 'afi.core/none',
-          outfit: 'afi.khung/than-tran', back: 'afi.core/none', legwear: 'afi.khung/chan-tran', shoes: 'afi.khung/ban-chan', heldL: 'afi.core/none', heldR: 'afi.core/none' },
+        parts: { head: 'afi.core/round', hair: 'afi.core/troc', beard: 'afi.core/none', hat: 'afi.core/none', mask: 'afi.core/none',
+          outfit: 'afi.core/than-tran', back: 'afi.core/none', legwear: 'afi.core/chan-tran', shoes: 'afi.core/ban-chan', heldL: 'afi.core/none', heldR: 'afi.core/none' },
         params: {},
-        palette: { skin: '#dcd6cc', skinShade: '#bcb4a7', blush: '#d9c3b8', iris: '#3c3c3c', hair: '#5e5a54',
-          robe: '#b9bec4', trim: '#8e949b', accent: '#c9b98f', hat: '#a9aeb4', metal: '#d3d6d9', wood: '#a59d92', cape: '#9aa0a7', boots: '#7f8389' }
+        palette: {}   // dùng bảng màu xám mặc định của khung lõi
       },
-      expressions: {}, lines: {}, identity: { p1: 'Ma-nơ-canh đầu trọc', must: ['hair:troc', 'outfit:than-tran'], source: 'Khung chuẩn Afi' }
+      expressions: {}, lines: {}, identity: { p1: 'Ma-nơ-canh đầu tròn, mặt trung tính', must: ['head:round'], source: 'Khung chuẩn Afi' }
     });
 
     /* ================= VẬT PHẨM KHUNG (một khối = một item mẫu) ================= */

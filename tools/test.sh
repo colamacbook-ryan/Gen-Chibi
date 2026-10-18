@@ -46,12 +46,12 @@ const cast = GC.assets();
 const ok = GC.director.validate({ title: "t", steps: [{ actor: cast[0].id, state: "normal", activity: "eat", say: "a" }, { actor: cast[0].id, state: "panic", move: "run", facing: "left", say: "b" }] }, cast);
 const ko = GC.director.validate({ title: "t", steps: [{ actor: cast[0].id, state: "normal", move: "swim", posture: "stand", say: "a" }, { actor: cast[0].id, state: "normal", activity: "bay-len-troi", say: "b" }] }, cast);
 if (ok.length || ko.length !== 2) { bad++; console.log("   ✗ đạo diễn:", ok, ko); }
-// 45° vẽ thật ở mức linh kiện: bộ của Gia Cát Lượng phủ đủ; nhân vật khác vẫn dựng được (engine trượt phần thiếu)
-const gcl = GC.assets().find(a => a.id === "gia-cat-luong");
+// 45° vẽ thật ở mức linh kiện: ma-nơ-canh của khung phủ đủ (mọi asset dựng từ khung kế thừa)
+const gcl = GC.assets().find(a => a.id === "ma-no-canh");
 const cov = GC.gate(gcl).find(x => x.id === "view45");
-if (!cov || !/đủ/.test(cov.detail)) { bad++; console.log("   ✗ Gia Cát Lượng chưa đủ bản vẽ 45°:", cov && cov.detail); }
+if (!cov || !/đủ/.test(cov.detail)) { bad++; console.log("   ✗ Ma-nơ-canh (khung) chưa đủ bản vẽ 45°:", cov && cov.detail); }
 // rào quy trình (docs/QUY-TRINH-LINH-KIEN.md): linh kiện thư viện chính thức phải có bản 45°, license và nguồn
-Object.values(GC.LIB.parts).filter(p => GC.PACKS[p.pack].group === "official" && p.id !== "none" && !/^held[LR]$/.test(p.slot) && p.kind !== "scenery").forEach(p => {
+Object.values(GC.LIB.parts).filter(p => ["official", "frame"].indexOf(GC.PACKS[p.pack].group) >= 0 && p.id !== "none" && !/^held[LR]$/.test(p.slot) && p.kind !== "scenery").forEach(p => {
   if (!(p.views && p.views.q45)) { bad++; console.log("   ✗ linh kiện chính thức thiếu bản 45°:", p.pack + "/" + p.slot + ":" + p.id); }
   if (!p.license || !p.source) { bad++; console.log("   ✗ linh kiện thiếu license/nguồn:", p.pack + "/" + p.slot + ":" + p.id); }
 });
@@ -101,9 +101,9 @@ if (!GC.checkDataPart({ id: "x-3", slot: "constructor", layers: { hat: "<path d=
 const { MCP } = require("./server/mcp"); const { Store } = require("./server/store");
 const tmp = require("fs").mkdtempSync(require("os").tmpdir() + "/gc-sec-");
 const mcp = new MCP({ engine: GC, store: new Store(tmp), version: "test" });
-const ow = mcp.saveAssetChecked({ pack: "afi.tamquoc", id: "truong-phi", name: "hacked", look: { eyes: "round", brows: "normal", parts: {} } }, "x");
+const ow = mcp.saveAssetChecked({ pack: "afi.khung", id: "ma-no-canh", name: "hacked", look: { eyes: "round", brows: "normal", parts: {} } }, "x");
 if (ow.pack !== "local.my") { bad++; console.log("   ✗ MCP/AI ghi đè được nhân vật chính thức:", ow.key); }
-try { mcp.savePartChecked({ id: "lun-jin", slot: "hat", layers: { hat: "<path d=\"M0,0\"/>" }, views: { q45: "same" } }); bad++; console.log("   ✗ linh kiện trùng id chính thức được lưu"); } catch (e) { /* đúng: bị chặn */ }
+try { mcp.savePartChecked({ id: "khoi-mu", slot: "hat", layers: { hat: "<path d=\"M0,0\"/>" }, views: { q45: "same" } }); bad++; console.log("   ✗ linh kiện trùng id chính thức được lưu"); } catch (e) { /* đúng: bị chặn */ }
 if (bad) process.exit(1);
 console.log("   ✓", Object.keys(attacks).length, "kiểu tấn công bị chặn; SVG hợp lệ qua; 45° bắt buộc; lớp sân khấu bị cấm");
 console.log("   ✓ hồi quy bảo mật: không ReDoS, không tra prototype, không attr trùng, MCP/AI không ghi đè thư viện chính thức, không che id chính thức");
@@ -114,21 +114,21 @@ node -e '
 const { loadEngine } = require("./server/engine-node"); const GC = loadEngine(process.cwd());
 let bad = 0; const no = (c, m) => { if (c) { bad++; console.log("   ✗", m); } };
 GC.items().forEach(i => GC.itemGate(i).forEach(g => no(!g.ok, i.key + ": " + g.label + " " + g.detail)));
-const B = { id: "item-mau", name: "X", type: "weapon", rarity: "rare", equip: { part: "afi.tamquoc/guandao" } };
+const B = { id: "item-mau", name: "X", type: "weapon", rarity: "rare", equip: { part: "afi.khung/khoi-que-dai" } };
 const err = d => GC.checkItem(Object.assign({}, B, d)).errors.length;
 no(err({}), "item mẫu phải hợp lệ (nếu không, các phép chặn dưới đây vô nghĩa): " + GC.checkItem(B).errors.join("; "));
 no(!err({ type: "boots" }), "loại không khớp linh kiện vẫn qua");
 no(!err({ equip: { part: "khong-co" } }), "linh kiện lạ vẫn qua");
-no(!err({ equip: { part: "afi.tamquoc/guandao", palette: { metal: "red; x" } } }), "màu không phải hex vẫn qua");
-no(!err({ equip: { part: "afi.tamquoc/guandao", palette: { constructor: "#fff" } } }), "token màu prototype vẫn qua");
+no(!err({ equip: { part: "afi.khung/khoi-que-dai", palette: { metal: "red; x" } } }), "màu không phải hex vẫn qua");
+no(!err({ equip: { part: "afi.khung/khoi-que-dai", palette: { constructor: "#fff" } } }), "token màu prototype vẫn qua");
 no(!err({ stats: { atk: 5000 } }), "chỉ số ngoài 0–999 vẫn qua");
 no(!err({ rarity: "mythic" }), "độ hiếm lạ vẫn qua");
 const card = GC.itemSvg(Object.assign({ key: "t" }, GC.checkItem(Object.assign({}, B, { name: "<script>alert(1)</script>" })).def), { mode: "card" });
 no(/<script/.test(card), "tên item không được escape trong thẻ");
-const qv = JSON.parse(JSON.stringify(GC.ASSETS["afi.tamquoc/quan-vu"])); qv.key = "t/qv"; qv.look.equip = { heldR: "afi.items/dao-sat", outfit: "afi.items/giap-bac", back: "afi.items/ao-choang-do" };
+const qv = JSON.parse(JSON.stringify(GC.ASSETS["afi.khung/ma-no-canh"])); qv.key = "t/qv"; qv.look.equip = { heldR: "afi.khung/khung-vu-khi-dai", outfit: "afi.khung/khung-khoac-than", back: "afi.khung/khung-sau-lung" };
 no(GC.blockingGates(GC.gate(qv, { poses: true }), "review").length, "nhân vật mặc trang bị không qua cổng");
-no(GC.partRef(qv, "heldR") !== "afi.tamquoc/guandao", "trang bị không thay linh kiện");
-qv.look.equip = { heldR: "afi.items/giap-bac" };
+no(GC.partRef(qv, "heldR") !== "afi.khung/khoi-que-dai", "trang bị không thay linh kiện");
+qv.look.equip = { heldR: "afi.khung/khung-khoac-than" };
 no(!GC.gate(qv).find(g => g.id === "parts" && !g.ok), "mặc item sai bộ phận vẫn qua");
 if (bad) process.exit(1);
 // hồi quy v0.4.1: part không phải chuỗi, ký tự điều khiển, item lệch bộ phận không làm vỡ nhân vật
@@ -137,7 +137,7 @@ no(thrown, "equip.part không phải chuỗi làm checkItem ném lỗi: " + (thr
 no(err({ equip: { part: 7 } }) === 0, "equip.part là số vẫn qua");
 const cc = GC.checkItem(Object.assign({}, B, { name: "A\u0000B\u001f", description: "x\u0007y" })).def;
 no(/[\u0000-\u001f]/.test(cc.name + cc.description), "ký tự điều khiển lọt vào item");
-qv.look.equip = { hat: "afi.items/dao-sat" };
+qv.look.equip = { hat: "afi.khung/khung-vu-khi-dai" };
 let vo = null; try { GC.svgString(qv, "normal"); } catch (e) { vo = e; }
 no(vo, "item lệch bộ phận làm vỡ nhân vật: " + (vo && vo.message));
 console.log("   ✓", GC.items().length, "item chính thức đạt cổng; chặn loại/linh kiện/màu/chỉ số/độ hiếm sai; thẻ escape chữ; nhân vật mặc trang bị đạt cổng");
@@ -146,36 +146,37 @@ console.log("   ✓", GC.items().length, "item chính thức đạt cổng; ch�
 echo "2d) cảnh (loại asset thứ ba)"
 node -e '
 const { loadEngine } = require("./server/engine-node"); const GC = loadEngine(process.cwd());
+GC.registerAsset("t.cast", Object.assign(JSON.parse(JSON.stringify(GC.ASSETS["afi.khung/ma-no-canh"])), { id: "nguoi-2" }));   // diễn viên thứ hai dựng từ khung
 let bad = 0; const no = (c, m) => { if (c) { bad++; console.log("   ✗", m); } };
 GC.scenes().forEach(s => GC.sceneGate(s).forEach(g => no(!g.ok, s.key + ": " + g.label + " " + g.detail)));
 GC.scenery().filter(p => GC.PACKS[p.pack].group === "official").forEach(p => no(!p.license || !p.source, "phông thiếu license/nguồn: " + p.pack + "/" + p.slot + ":" + p.id));
 // phông chính thức phải được dùng lại: mỗi phông nằm trong ít nhất một cảnh (thư viện là nguyên liệu, không vẽ thừa)
-GC.scenery().filter(p => p.pack === "afi.scenes").forEach(p => { const ref = p.pack + "/" + p.id; no(!GC.scenes().some(s => Object.values(s.layers).some(l => l.part === ref) || s.deco.some(d => d.part === ref)), "phông không cảnh nào dùng: " + ref); });
-const B = { id: "canh-mau", name: "Mẫu", layers: { sky: "open", ground: "grass" } };
+GC.scenery().filter(p => p.pack === "afi.khung").forEach(p => { const ref = p.pack + "/" + p.id; no(!GC.scenes().some(s => Object.values(s.layers).some(l => l.part === ref) || s.deco.some(d => d.part === ref)), "phông không cảnh nào dùng: " + ref); });
+const B = { id: "canh-mau", name: "Mẫu", layers: { sky: "khung-troi", ground: "khung-nen" } };
 const err = d => GC.checkScene(Object.assign({}, B, d)).errors.length;
 no(err({}), "cảnh mẫu phải hợp lệ: " + GC.checkScene(B).errors.join("; "));
-no(!err({ layers: { sky: "open" } }), "thiếu mặt đất vẫn qua");
-no(!err({ layers: { sky: "open", ground: "grass", far: "khong-co" } }), "phông lạ vẫn qua");
-no(!err({ layers: { sky: "grass", ground: "grass" } }), "phông sai lớp vẫn qua");
-no(!err({ layers: { sky: "open", ground: "grass", hat: "x" } }), "lớp lạ vẫn qua");
-no(!err({ layers: { sky: { part: 7 }, ground: "grass" } }), "part không phải chuỗi vẫn qua");
+no(!err({ layers: { sky: "khung-troi" } }), "thiếu mặt đất vẫn qua");
+no(!err({ layers: { sky: "khung-troi", ground: "khung-nen", far: "khong-co" } }), "phông lạ vẫn qua");
+no(!err({ layers: { sky: "khung-nen", ground: "khung-nen" } }), "phông sai lớp vẫn qua");
+no(!err({ layers: { sky: "khung-troi", ground: "khung-nen", hat: "x" } }), "lớp lạ vẫn qua");
+no(!err({ layers: { sky: { part: 7 }, ground: "khung-nen" } }), "part không phải chuỗi vẫn qua");
 no(!err({ palette: { grass: "red" } }), "màu không phải hex vẫn qua");
 no(!err({ palette: { robe: "#ffffff" } }), "token màu nhân vật vẫn qua ở cảnh");
 no(!err({ palette: { constructor: "#ffffff" } }), "token prototype vẫn qua");
 no(!err({ time: "noon" }) || !err({ weather: "storm" }), "giờ / thời tiết lạ vẫn qua");
 no(!err({ spots: ["left", "san-khau"] }) || !err({ spots: [] }), "chỗ đứng lạ / rỗng vẫn qua");
-no(!err({ deco: new Array(11).fill({ part: "rock", x: 100 }) }), "quá ngân sách 10 đạo cụ vẫn qua");
-const c0 = GC.checkScene(Object.assign({}, B, { name: "A\u0000<b>", deco: [{ part: "rock", x: 9999, scale: 99 }] })).def;
+no(!err({ deco: new Array(11).fill({ part: "khoi-da", x: 100 }) }), "quá ngân sách 10 đạo cụ vẫn qua");
+const c0 = GC.checkScene(Object.assign({}, B, { name: "A\u0000<b>", deco: [{ part: "khoi-da", x: 9999, scale: 99 }] })).def;
 no(/[\u0000]/.test(c0.name) || c0.deco[0].x !== 640 || c0.deco[0].scale !== 2.5, "chữ / số không được làm sạch, kẹp khoảng");
 // diễn viên
-const sc = GC.getScene("thao-lu");
-no(GC.checkCast([{ character: "gia-cat-luong", spot: "left" }, { character: "quan-vu", spot: "right", activity: "attack", view: "left45" }], sc).length, "dàn diễn viên hợp lệ bị chặn");
+const sc = GC.getScene("san-khau-chuan");
+no(GC.checkCast([{ character: "ma-no-canh", spot: "left" }, { character: "nguoi-2", spot: "right", activity: "attack", view: "left45" }], sc).length, "dàn diễn viên hợp lệ bị chặn");
 no(!GC.checkCast([{ character: "khong-co", spot: "left" }], sc).length, "nhân vật lạ vẫn qua");
-no(!GC.checkCast([{ character: "quan-vu", spot: "left" }, { character: "gia-cat-luong", spot: "left" }], sc).length, "hai người cùng chỗ đứng vẫn qua");
-no(!GC.checkCast([{ character: "quan-vu", spot: "__proto__" }], sc).length, "chỗ đứng prototype vẫn qua");
-no(!GC.checkCast(new Array(9).fill(0).map((x, i) => ({ character: "quan-vu", spot: GC.SCENE.spotOrder[i % 8] })), sc).length, "quá 8 diễn viên vẫn qua");
-const a1 = GC.sceneSvg(sc, { cast: [{ character: "gia-cat-luong", spot: "midLeft" }, { character: "quan-vu", spot: "midRight" }] });
-no(a1 !== GC.sceneSvg(sc, { cast: [{ character: "gia-cat-luong", spot: "midLeft" }, { character: "quan-vu", spot: "midRight" }] }), "dựng cảnh không ổn định (ảnh cache sẽ nhảy)");
+no(!GC.checkCast([{ character: "nguoi-2", spot: "left" }, { character: "ma-no-canh", spot: "left" }], sc).length, "hai người cùng chỗ đứng vẫn qua");
+no(!GC.checkCast([{ character: "nguoi-2", spot: "__proto__" }], sc).length, "chỗ đứng prototype vẫn qua");
+no(!GC.checkCast(new Array(9).fill(0).map((x, i) => ({ character: "nguoi-2", spot: GC.SCENE.spotOrder[i % 8] })), sc).length, "quá 8 diễn viên vẫn qua");
+const a1 = GC.sceneSvg(sc, { cast: [{ character: "ma-no-canh", spot: "midLeft" }, { character: "nguoi-2", spot: "midRight" }] });
+no(a1 !== GC.sceneSvg(sc, { cast: [{ character: "ma-no-canh", spot: "midLeft" }, { character: "nguoi-2", spot: "midRight" }] }), "dựng cảnh không ổn định (ảnh cache sẽ nhảy)");
 GC.SCENE.timeOrder.forEach(t => GC.SCENE.weatherOrder.forEach(w => { try { GC.sceneSvg(sc, { time: t, weather: w }); } catch (e) { no(true, "dựng " + t + "/" + w + ": " + e.message); } }));
 // phông dạng dữ liệu: cùng bộ lọc SVG, token cảnh
 const okS = GC.checkDataPart({ id: "da-ci", slot: "deco", label: "Đá", svg: "<circle cx=\"0\" cy=\"-10\" r=\"10\" fill=\"{stone}\"/>" });
@@ -186,34 +187,34 @@ no(!GC.checkDataPart({ id: "da-ci", slot: "deco", svg: "<circle r=\"1\" fill=\"{
 no(!GC.checkDataPart({ id: "da-ci", slot: "deco", layers: { hat: "<g/>" } }).errors.length, "phông dùng layers (sai khuôn) vẫn qua");
 // đạo diễn: kịch bản đặt vào cảnh
 const cast = GC.assets();
-no(GC.director.validate({ title: "t", scene: "afi.scenes/thao-lu", steps: [{ actor: "gia-cat-luong", state: "normal", spot: "left", say: "a" }] }, cast).length, "kịch bản có cảnh hợp lệ bị chặn");
-no(!GC.director.validate({ title: "t", scene: "khong-co", steps: [{ actor: "gia-cat-luong", state: "normal", say: "a" }] }, cast).length, "cảnh lạ vẫn qua");
-no(!GC.director.validate({ title: "t", steps: [{ actor: "gia-cat-luong", state: "normal", spot: "tren-troi", say: "a" }] }, cast).length, "chỗ đứng lạ vẫn qua");
+no(GC.director.validate({ title: "t", scene: "afi.khung/san-khau-chuan", steps: [{ actor: "ma-no-canh", state: "normal", spot: "left", say: "a" }] }, cast).length, "kịch bản có cảnh hợp lệ bị chặn");
+no(!GC.director.validate({ title: "t", scene: "khong-co", steps: [{ actor: "ma-no-canh", state: "normal", say: "a" }] }, cast).length, "cảnh lạ vẫn qua");
+no(!GC.director.validate({ title: "t", steps: [{ actor: "ma-no-canh", state: "normal", spot: "tren-troi", say: "a" }] }, cast).length, "chỗ đứng lạ vẫn qua");
 // hồi quy v0.5.1: không có giá trị hỏng (NaN, undefined…) trong mọi phông × giờ × thời tiết; tách lớp back/front đủ nội dung
 const BAD = /NaN|undefined|null|\[object|Infinity/;
-GC.scenes().forEach(s => GC.SCENE.timeOrder.forEach(t => GC.SCENE.weatherOrder.forEach(w => { const v = GC.sceneSvg(s, { time: t, weather: w, cast: [{ character: "gia-cat-luong", spot: "left" }, { character: "quan-vu", spot: "right" }] }); no(BAD.test(v), "giá trị hỏng trong " + s.key + " " + t + "/" + w + ": " + (v.match(BAD) || [""])[0]); })));
+GC.scenes().forEach(s => GC.SCENE.timeOrder.forEach(t => GC.SCENE.weatherOrder.forEach(w => { const v = GC.sceneSvg(s, { time: t, weather: w, cast: [{ character: "ma-no-canh", spot: "left" }, { character: "nguoi-2", spot: "right" }] }); no(BAD.test(v), "giá trị hỏng trong " + s.key + " " + t + "/" + w + ": " + (v.match(BAD) || [""])[0]); })));
 GC.SCENE.timeOrder.forEach(t => Object.keys(GC.SCENE.slots).forEach(slot => GC.scenery(slot).forEach(p => {
-  const sc = { key: "q/" + p.id, id: "q", layers: { sky: { part: "afi.scenes/plain", dx: 0 }, ground: { part: "afi.scenes/grass", dx: 0 } }, deco: [], palette: {}, time: t, weather: "clear", spots: GC.SCENE.spotOrder };
+  const sc = { key: "q/" + p.id, id: "q", layers: { sky: { part: "afi.khung/khung-troi", dx: 0 }, ground: { part: "afi.khung/khung-nen", dx: 0 } }, deco: [], palette: {}, time: t, weather: "clear", spots: GC.SCENE.spotOrder };
   if (slot === "deco") sc.deco = [{ part: p.pack + "/" + p.id, x: 300, y: 300, scale: 1, flip: false, z: "back" }]; else sc.layers[slot] = { part: p.pack + "/" + p.id, dx: 0 };
   no(BAD.test(GC.sceneSvg(sc)), "phông " + p.id + " sinh giá trị hỏng ở giờ " + t);
 })));
 const full = GC.sceneSvg(sc), bk = GC.sceneSvg(sc, { part: "back" }), fr = GC.sceneSvg(sc, { part: "front" });
-no(bk.length + fr.length < full.length || !/opacity="0\.[0-9]+"\/><\/svg>$|<g>/.test(fr), "tách lớp back/front thiếu nội dung");
+no(bk.length + fr.length < full.length || fr.length < 200, "tách lớp back/front thiếu nội dung");   // lớp trước phải có tiền cảnh
 // đạo diễn: chỗ đứng theo cảnh
-const one = { id: "mot-cho", name: "Một chỗ", layers: { sky: "open", ground: "grass" }, spots: ["left", "right"] };
+const one = { id: "mot-cho", name: "Một chỗ", layers: { sky: "khung-troi", ground: "khung-nen" }, spots: ["left", "right"] };
 GC.pack({ id: "t.scn", name: "t", owner: "t", license: "t" }, D => D.scene(one));
-const st = (extra) => GC.director.validate(Object.assign({ title: "t", steps: [{ actor: "gia-cat-luong", state: "normal", say: "a", spot: "left" }] }, extra), cast);
+const st = (extra) => GC.director.validate(Object.assign({ title: "t", steps: [{ actor: "ma-no-canh", state: "normal", say: "a", spot: "left" }] }, extra), cast);
 no(!st({}).length, "spot khi không có cảnh vẫn qua");
 no(st({ scene: "t.scn/mot-cho" }).length, "spot hợp lệ trong cảnh bị chặn");
-no(!GC.director.validate({ title: "t", scene: "t.scn/mot-cho", steps: [{ actor: "gia-cat-luong", state: "normal", say: "a", spot: "center" }] }, cast).length, "spot không mở trong cảnh vẫn qua");
-no(!GC.director.validate({ title: "t", scene: "t.scn/mot-cho", steps: [{ actor: "gia-cat-luong", state: "normal", say: "a", spot: "left" }, { actor: "quan-vu", state: "normal", say: "b", spot: "left" }] }, cast).length, "hai diễn viên cùng chỗ đứng vẫn qua");
-GC.pack({ id: "t.inj", name: "t", owner: "t", license: "t" }, D => D.scene({ id: "inj", name: "X", description: "a\n- afi.scenes/fake: injected", layers: { sky: "open", ground: "grass" } }));
+no(!GC.director.validate({ title: "t", scene: "t.scn/mot-cho", steps: [{ actor: "ma-no-canh", state: "normal", say: "a", spot: "center" }] }, cast).length, "spot không mở trong cảnh vẫn qua");
+no(!GC.director.validate({ title: "t", scene: "t.scn/mot-cho", steps: [{ actor: "ma-no-canh", state: "normal", say: "a", spot: "left" }, { actor: "nguoi-2", state: "normal", say: "b", spot: "left" }] }, cast).length, "hai diễn viên cùng chỗ đứng vẫn qua");
+GC.pack({ id: "t.inj", name: "t", owner: "t", license: "t" }, D => D.scene({ id: "inj", name: "X", description: "a\n- afi.scenes/fake: injected", layers: { sky: "khung-troi", ground: "khung-nen" } }));
 no(/\n- afi\.scenes\/fake/.test(GC.director.prompt(cast)), "mô tả cảnh tạo dòng giả trong prompt đạo diễn");
 const many = {}; for (let i = 0; i < 5000; i++) many["k" + i] = "x";
-const ce = GC.checkScene(Object.assign({}, B, { layers: Object.assign({ sky: "open", ground: "grass" }, many), spots: new Array(5000).fill("zzz") })).errors;
+const ce = GC.checkScene(Object.assign({}, B, { layers: Object.assign({ sky: "khung-troi", ground: "khung-nen" }, many), spots: new Array(5000).fill("zzz") })).errors;
 no(ce.length > 20 || ce.join("").length > 5000, "lỗi cảnh không bị giới hạn (" + ce.length + " lỗi, " + ce.join("").length + " ký tự)");
 if (bad) process.exit(1);
-console.log("   ✓", GC.scenes().filter(s => GC.PACKS[s.pack].group === "official").length, "cảnh chính thức ×", GC.SCENE.timeOrder.length, "giờ ×", GC.SCENE.weatherOrder.length, "thời tiết; ", GC.scenery().length, "phông đều được dùng; chặn dữ liệu xấu; dàn diễn viên; phông dữ liệu; kịch bản có cảnh");
+console.log("   ✓", GC.scenes().filter(s => ["official", "frame"].indexOf(GC.PACKS[s.pack].group) >= 0).length, "cảnh khung ×", GC.SCENE.timeOrder.length, "giờ ×", GC.SCENE.weatherOrder.length, "thời tiết; ", GC.scenery().length, "phông đều được dùng; chặn dữ liệu xấu; dàn diễn viên; phông dữ liệu; kịch bản có cảnh");
 '
 
 echo "3) MCP"
@@ -226,7 +227,7 @@ printf '%s\n' \
  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
  '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
  '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
- '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"save_character","arguments":{"asset":{"id":"ci-test","name":"CI","look":{"eyes":"round","brows":"normal","parts":{"hat":"warrior-band"}},"identity":{"must":["hat:warrior-band"]}}}}}' \
+ '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"save_character","arguments":{"asset":{"id":"ci-test","name":"CI","look":{"eyes":"round","brows":"normal","parts":{"hat":"khoi-mu"}},"identity":{"must":["hat:khoi-mu"]}}}}}' \
  '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"save_character","arguments":{"asset":{"id":"ci-bad","name":"Bad","look":{"eyes":"round","brows":"normal","parts":{"hat":"ufo"}},"identity":{"must":["hat:ufo"]}}}}}' \
  '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"get_part_spec","arguments":{"slot":"hat"}}}' \
  '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"preview_part","arguments":{"part":{"id":"ci-hat","slot":"hat","label":"Mũ CI","layers":{"hat":"<path d=\"M50,80 L100,30 L150,80 Z\" fill=\"{hat}\" stroke=\"{ink}\" stroke-width=\"2.8\"/>"},"views":{"q45":"same"}}}}}' \
@@ -234,22 +235,22 @@ printf '%s\n' \
  '{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"save_part","arguments":{"part":{"id":"ci-hat","slot":"hat","label":"Mũ CI","layers":{"hat":"<path d=\"M50,80 L100,30 L150,80 Z\" fill=\"{hat}\" stroke=\"{ink}\" stroke-width=\"2.8\"/>"},"views":{"q45":"same"}}}}}' \
  '{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"save_character","arguments":{"asset":{"id":"ci-mix","name":"Phối","look":{"eyes":"round","brows":"normal","parts":{"hat":"local.my/ci-hat"}},"identity":{"must":["hat:ci-hat"]}}}}}' \
  '{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"render_character","arguments":{"key":"ci-mix","view":"left45","activity":"run"}}}' \
- '{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"save_item","arguments":{"item":{"id":"ci-dao","name":"Đao CI","type":"weapon","rarity":"epic","equip":{"part":"guandao","palette":{"metal":"#ffcc00"}},"stats":{"atk":77}}}}}' \
+ '{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"save_item","arguments":{"item":{"id":"ci-dao","name":"Đao CI","type":"weapon","rarity":"epic","equip":{"part":"khoi-que-dai","palette":{"metal":"#ffcc00"}},"stats":{"atk":77}}}}}' \
  '{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"render_item","arguments":{"key":"ci-dao","mode":"card"}}}' \
  '{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"save_character","arguments":{"asset":{"id":"ci-equip","name":"Mặc đồ","look":{"eyes":"round","brows":"normal","parts":{},"equip":{"heldR":"local.my/ci-dao"}}}}}}' \
  '{"jsonrpc":"2.0","id":14,"method":"tools/call","params":{"name":"render_item","arguments":{"key":"ci-dao","mode":"equipped","character":"ci-equip","view":"left45","activity":"attack"}}}' \
  '{"jsonrpc":"2.0","id":15,"method":"tools/call","params":{"name":"save_item","arguments":{"item":{"id":"ci-dao","name":"Đổi bộ phận","type":"helmet","rarity":"common","equip":{"part":"local.my/ci-hat"}}}}}' \
- '{"jsonrpc":"2.0","id":16,"method":"tools/call","params":{"name":"render_item","arguments":{"item":{"id":"ci-nhap","name":"Nháp","type":"weapon","rarity":"rare","equip":{"part":"guandao","palette":{"metal":"#12ab34"}}},"mode":"equipped","character":"ci-equip"}}}' \
+ '{"jsonrpc":"2.0","id":16,"method":"tools/call","params":{"name":"render_item","arguments":{"item":{"id":"ci-nhap","name":"Nháp","type":"weapon","rarity":"rare","equip":{"part":"khoi-que-dai","palette":{"metal":"#12ab34"}}},"mode":"equipped","character":"ci-equip"}}}' \
  '{"jsonrpc":"2.0","id":17,"method":"tools/call","params":{"name":"list_items","arguments":{}}}' \
  '{"jsonrpc":"2.0","id":18,"method":"tools/call","params":{"name":"get_part_spec","arguments":{"slot":"deco"}}}' \
  '{"jsonrpc":"2.0","id":19,"method":"tools/call","params":{"name":"preview_part","arguments":{"part":{"id":"ci-den","slot":"deco","label":"Đèn CI","svg":"<rect x=\"-8\" y=\"-40\" width=\"16\" height=\"40\" fill=\"{stone}\"/>"}}}}' \
  '{"jsonrpc":"2.0","id":20,"method":"tools/call","params":{"name":"save_part","arguments":{"part":{"id":"ci-den","slot":"deco","label":"Đèn CI","svg":"<rect x=\"-8\" y=\"-40\" width=\"16\" height=\"40\" fill=\"{stone}\"/>"}}}}' \
- '{"jsonrpc":"2.0","id":21,"method":"tools/call","params":{"name":"save_scene","arguments":{"scene":{"id":"ci-canh","name":"Cảnh CI","layers":{"sky":"open","ground":"dirt"},"deco":[{"part":"local.my/ci-den","x":200}],"time":"night","weather":"rain"}}}}' \
- '{"jsonrpc":"2.0","id":22,"method":"tools/call","params":{"name":"render_scene","arguments":{"key":"ci-canh","cast":[{"character":"ci-equip","spot":"left","activity":"attack"},{"character":"gia-cat-luong","spot":"right"}]}}}' \
- '{"jsonrpc":"2.0","id":23,"method":"tools/call","params":{"name":"save_scene","arguments":{"scene":{"id":"thao-lu","name":"Đè","layers":{"sky":"open","ground":"dirt"}}}}}' \
- '{"jsonrpc":"2.0","id":24,"method":"tools/call","params":{"name":"validate_event","arguments":{"event":{"title":"CI","scene":"local.my/ci-canh","steps":[{"actor":"gia-cat-luong","state":"normal","spot":"left","say":"Mưa rồi"}]}}}}' \
- '{"jsonrpc":"2.0","id":26,"method":"tools/call","params":{"name":"render_scene","arguments":{"key":"afi.scenes/thao-lu","time":"bogus"}}}' \
- '{"jsonrpc":"2.0","id":25,"method":"tools/call","params":{"name":"render_scene","arguments":{"scene":{"id":"ci-nhap","layers":{"sky":"open","ground":"grass"}},"cast":[{"character":"gia-cat-luong","spot":"san-khau"}]}}}' \
+ '{"jsonrpc":"2.0","id":21,"method":"tools/call","params":{"name":"save_scene","arguments":{"scene":{"id":"ci-canh","name":"Cảnh CI","layers":{"sky":"khung-troi","ground":"khung-nen"},"deco":[{"part":"local.my/ci-den","x":200}],"time":"night","weather":"rain"}}}}' \
+ '{"jsonrpc":"2.0","id":22,"method":"tools/call","params":{"name":"render_scene","arguments":{"key":"ci-canh","cast":[{"character":"ci-equip","spot":"left","activity":"attack"},{"character":"ma-no-canh","spot":"right"}]}}}' \
+ '{"jsonrpc":"2.0","id":23,"method":"tools/call","params":{"name":"save_scene","arguments":{"scene":{"id":"san-khau-chuan","name":"Đè","layers":{"sky":"khung-troi","ground":"khung-nen"}}}}}' \
+ '{"jsonrpc":"2.0","id":24,"method":"tools/call","params":{"name":"validate_event","arguments":{"event":{"title":"CI","scene":"local.my/ci-canh","steps":[{"actor":"ma-no-canh","state":"normal","spot":"left","say":"Mưa rồi"}]}}}}' \
+ '{"jsonrpc":"2.0","id":26,"method":"tools/call","params":{"name":"render_scene","arguments":{"key":"afi.khung/san-khau-chuan","time":"bogus"}}}' \
+ '{"jsonrpc":"2.0","id":25,"method":"tools/call","params":{"name":"render_scene","arguments":{"scene":{"id":"ci-nhap","layers":{"sky":"khung-troi","ground":"khung-nen"}},"cast":[{"character":"ma-no-canh","spot":"san-khau"}]}}}' \
  | GC_PORT=$PORT node server/mcp-stdio.js > "$H/mcp.out"
 node -e '
 const L = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n").map(JSON.parse);

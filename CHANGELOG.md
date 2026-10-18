@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.6.0 — Xưởng: bộ khung chuẩn không chủ đề
+- **Bộ khung chuẩn** cho mọi asset (kiểu greybox của làm game), thay cho nội dung Tam Quốc:
+  - **Nhân vật:** ma-nơ-canh đầu trọc, không quần áo — đủ 18 biểu cảm × 32 hoạt động × 5 góc nhìn; mọi nhân vật mới bắt đầu từ ma-nơ-canh.
+  - **Vật phẩm:** 10 khối đại diện theo dáng (que dài, que ngắn, đĩa dẹt, hộp, cầu, đội đầu, khoác thân, sau lưng, giày, che mặt), có tham số, mỗi khối kèm một vật phẩm khung.
+  - **Bối cảnh:** khối trời / tường, chân trời, khối nhà, nền có lưới tỉ lệ (vạch hàng trước / hàng sau), tiền cảnh, khối hộp / trụ / cây / đá / bàn / cờ; 2 sân khấu chuẩn (ngoài trời, trong nhà).
+  - **Đạo cụ của hoạt động** (ghế, nệm, chiếu, chăn, bàn, nước, bát, đũa, chén, sách, bút) chuyển thành khối xám, giữ đúng vị trí theo tư thế.
+  - Bảng màu mặc định xám trung tính; asset chủ đề đổi token để "thay áo".
+- **Quy cách thống nhất** `docs/QUY-CACH-KHUNG.md` (kích thước, điểm gắn, lớp, góc nhìn, tham số, màu, quy trình tạo asset từ khung). Đặc tả 3 giai đoạn v3 theo lời Ryan.
+- `afi.core` thành **khung lõi** (khuôn mặt, biểu cảm, chuyển động, hoạt động, thân ma-nơ-canh); khối vật phẩm / bối cảnh ở `kinds/khung/afi.khung.js`.
+- **Tam Quốc đã cất** ở `archive/tamquoc/` (không nạp vào bản chạy, không nằm trong gói phát hành); sau này dựng lại như một dự án chủ đề từ khung.
+- Studio: trang **Xưởng › Bộ khung chuẩn** (quy cách + ma-nơ-canh mọi góc và hoạt động + khối vật phẩm + khối bối cảnh). Thư viện không bày đồ của khung; bản cài mới có thư viện trống kèm lời dẫn.
+- MCP / Trợ lý AI / Đạo diễn mặc định dùng ma-nơ-canh; toàn bộ test chuyển sang khung.
+
 ## v0.5.3 — Studio ba lớp: Thư viện · Tạo tác · Xưởng
 - **Thư viện** (xanh dương): hàng mẫu Afi đã duyệt — xem, tải ảnh, chép mã.
 - **Tạo tác** (xanh lá, mới): nhân vật / trang bị / cảnh của tôi, Đạo diễn AI, Trợ lý AI (chat) — nơi người dùng phối và xuất thành phẩm.

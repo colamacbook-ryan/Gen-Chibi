@@ -45,7 +45,7 @@ function obj(props, required) { return { type: 'object', properties: props, requ
 const TOOLS = [
   { name: 'get_catalog', title: 'Kho từ vựng', description: 'Toàn bộ từ vựng được phép dùng: thư viện, bộ phận (slot) và linh kiện kèm tham số, kiểu mắt/mày, 18 biểu cảm, động tác, hiệu ứng, khoá màu, hồ sơ ánh xạ. Gọi trước khi viết công thức.', inputSchema: obj({}), annotations: { readOnlyHint: true } },
   { name: 'list_characters', title: 'Danh sách nhân vật', description: 'Các nhân vật hiện có (chính thức + của người dùng): id, key, tên, thư viện, trạng thái duyệt, phiên bản, tính cách.', inputSchema: obj({}), annotations: { readOnlyHint: true } },
-  { name: 'get_character', title: 'Xem công thức nhân vật', description: 'Công thức JSON đầy đủ của một nhân vật (dùng làm mẫu để tạo nhân vật mới).', inputSchema: obj({ key: { type: 'string', description: 'key đầy đủ (vd. afi.tamquoc/quan-vu) hoặc id ngắn (quan-vu)' } }, ['key']), annotations: { readOnlyHint: true } },
+  { name: 'get_character', title: 'Xem công thức nhân vật', description: 'Công thức JSON đầy đủ của một nhân vật (dùng làm mẫu để tạo nhân vật mới).', inputSchema: obj({ key: { type: 'string', description: 'key đầy đủ (vd. afi.khung/ma-no-canh) hoặc id ngắn (ma-no-canh)' } }, ['key']), annotations: { readOnlyHint: true } },
   { name: 'validate_character', title: 'Kiểm công thức', description: 'Chạy cổng kiểm (linh kiện, license, tham số, nhận diện, 18 biểu cảm, động tác) trên một công thức chưa lưu.', inputSchema: obj({ asset: { type: 'object', description: 'công thức nhân vật: { id, name, look: { eyes, brows, parts, params, palette }, expressions?, identity, persona? }' } }, ['asset']), annotations: { readOnlyHint: true } },
   { name: 'save_character', title: 'Lưu nhân vật', description: 'Kiểm rồi lưu nhân vật (có phiên bản). Mặc định vào thư viện local.my; nếu key trùng nhân vật đã có thì lưu thành phiên bản mới.', inputSchema: obj({ asset: { type: 'object' }, note: { type: 'string', description: 'ghi chú phiên bản' } }, ['asset']) },
   { name: 'render_character', title: 'Dựng hình', description: 'Dựng SVG của một nhân vật ở một biểu cảm. Dùng key của nhân vật đã có, hoặc truyền asset chưa lưu để xem thử.', inputSchema: obj({ key: { type: 'string' }, asset: { type: 'object' }, state: { type: 'string', description: 'id biểu cảm, mặc định normal' }, activity: { type: 'string', description: 'hoạt động: eat, sleep, run, attack… (get_catalog › activities)' }, posture: { type: 'string' }, move: { type: 'string' }, motion: { type: 'string' }, facing: { type: 'string', enum: ['left', 'right'] }, view: { type: 'string', enum: ['front', 'left', 'right', 'left45', 'right45'], description: 'góc nhìn: chính diện, nghiêng nhẹ 3/4, hoặc nghiêng 45° vẽ thật (trái/phải theo màn hình)' }, t: { type: 'number', description: 'giây trong chu kỳ động tác (bỏ trống = khung đại diện)' }, crop: { type: 'boolean', description: 'true = khung avatar (đầu và vai)' } }) , annotations: { readOnlyHint: true } },
@@ -242,7 +242,7 @@ class MCP {
         if (args.mode === 'equipped' && args.item) { tmp = GC.registerItem(TMP_PACK, it).def; it = tmp; }   // bản nháp: mặc thử, xoá ngay sau khi dựng
         try {
         if (args.mode === 'equipped') {
-          const base = this.findAsset(String(args.character || 'gia-cat-luong'));
+          const base = this.findAsset(String(args.character || 'ma-no-canh'));
           if (!base) return toolError('Không có nhân vật ' + args.character);
           const a = clone(base); a.key = 'equip/' + it.key.replace(/[^a-z0-9]/gi, ''); a.look.equip = Object.assign({}, a.look.equip, { [it.equip.slot]: it.key });
           const dir = {}; if (args.view) dir.view = args.view; if (args.activity && GC.LIB.activities[args.activity]) dir.activity = args.activity;
@@ -289,7 +289,7 @@ class MCP {
         const r = GC.registerDataPart(TMP_PACK, c.def);
         if (c.def.kind === 'scenery') {
           try {
-            return { content: [{ type: 'text', text: 'Đạt kiểm dữ liệu. Bàn soát phông: đặt vào cảnh trung tính kèm Gia Cát Lượng, ban ngày và ban đêm. Kiểm: đúng khung 640×360 (đạo cụ: gốc ở chân), màu theo token cảnh, không che diễn viên. Ổn thì save_part.' },
+            return { content: [{ type: 'text', text: 'Đạt kiểm dữ liệu. Bàn soát phông: đặt vào sân khấu chuẩn kèm ma-nơ-canh, ban ngày và ban đêm. Kiểm: đúng khung 640×360 (đạo cụ: gốc ở chân), màu theo token cảnh, không che diễn viên. Ổn thì save_part.' },
               { type: 'resource', resource: { uri: 'genchibi://bench/' + c.def.slot + '/' + c.def.id + '.svg', mimeType: 'image/svg+xml', text: this.sceneBench(c.def.slot, TMP_PACK + '/' + c.def.id) } }] };
           } finally { delete GC.LIB.parts[TMP_PACK + '/' + c.def.slot + ':' + c.def.id]; }
         }
@@ -416,13 +416,13 @@ class MCP {
       example: EXAMPLE_SCENERY
     };
   }
-  // Bàn soát phông: cảnh trung tính + phông đang soát + Gia Cát Lượng, ngày và đêm cạnh nhau
+  // Bàn soát phông: sân khấu chuẩn + phông đang soát + ma-nơ-canh, ngày và đêm cạnh nhau
   sceneBench(slot, ref) {
     const GC = this.GC, S = GC.SCENE;
-    const sc = { key: 'bench/' + slot, id: 'bench', layers: { sky: { part: 'afi.scenes/plain', dx: 0 }, ground: { part: 'afi.scenes/grass', dx: 0 } }, deco: [], palette: {}, time: 'day', weather: 'clear', spots: S.spotOrder.slice() };
+    const sc = { key: 'bench/' + slot, id: 'bench', layers: { sky: { part: 'afi.khung/khung-troi', dx: 0 }, ground: { part: 'afi.khung/khung-nen', dx: 0 } }, deco: [], palette: {}, time: 'day', weather: 'clear', spots: S.spotOrder.slice() };
     if (slot === 'deco') sc.deco = [{ part: ref, x: 130, y: 300, scale: 1, flip: false, z: 'back' }, { part: ref, x: 500, y: 290, scale: 0.7, flip: true, z: 'back' }];
     else sc.layers[slot] = { part: ref, dx: 0 };
-    const demo = this.findAsset('gia-cat-luong'), cast = demo ? [{ asset: demo, spot: 'center' }] : [];
+    const demo = this.findAsset('ma-no-canh'), cast = demo ? [{ asset: demo, spot: 'center' }] : [];
     const one = t => GC.sceneSvg(sc, { cast, time: t }).replace(/^<svg xmlns="http:\/\/www.w3.org\/2000\/svg" viewBox="0 0 640 360">/, '');
     return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1290 360"><svg x="0" y="0" width="640" height="360" viewBox="0 0 640 360">' + one('day') +
       '<svg x="650" y="0" width="640" height="360" viewBox="0 0 640 360">' + one('night') + '</svg>';

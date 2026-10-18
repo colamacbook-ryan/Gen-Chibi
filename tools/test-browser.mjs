@@ -40,7 +40,7 @@ try {
     return [...new Set(out)];
   });
   if (res.length) { fail = 1; res.slice(0, 20).forEach(x => console.log('  ✗', x)); }
-  else console.log('  ✓ mọi lớp gắn vào đầu đi cùng đầu (5 nhân vật × 5 biểu cảm × 6 khung hình)');
+  else console.log('  ✓ mọi lớp gắn vào đầu đi cùng đầu (mọi nhân vật × 5 biểu cảm × 6 khung hình)');
 } finally { await b.close(); srv.kill(); }
 // Bản cài có token: Studio phải hiện màn đăng nhập (không lùi về chế độ xem thử), nhập đúng token thì vào được.
 {
@@ -83,18 +83,21 @@ try {
       const zone = await q.evaluate(() => document.body.getAttribute('data-zone')), tag = await q.textContent('.zone-tag');
       if (!zone || !tag) throw new Error('trang "' + label + '" thiếu nhãn khu');
       if (zone === 'lib') {
-        const cards = await q.$$('.libcard'), use = await q.$$('.usebar'), code = await q.$('textarea.code');
-        if (!cards.length || use.length < 2 || !code) throw new Error('thư viện "' + label + '" thiếu thẻ hoặc khu Dùng');
-        const txt = await code.inputValue(); if (!/\//.test(txt)) throw new Error('thư viện "' + label + '": mã tham chiếu rỗng');
+        // Thư viện không bày đồ của khung: bản cài mới thì trống (có lời dẫn); có asset đã tạo thì có thẻ + khu Dùng
+        const cards = await q.$$('.libcard'), use = await q.$$('.usebar'), code = await q.$('textarea.code'), empty = await q.$('.lib-empty');
+        if (!empty && (!cards.length || use.length < 2 || !code)) throw new Error('thư viện "' + label + '" thiếu thẻ hoặc khu Dùng');
+        if (cards.length && await q.$('.libcard img[alt="Ma-nơ-canh"]')) throw new Error('thư viện "' + label + '" bày đồ của khung');
+        if (code) { const txt = await code.inputValue(); if (!/\//.test(txt)) throw new Error('thư viện "' + label + '": mã tham chiếu rỗng'); }
       }
+      if (label === 'Bộ khung chuẩn' && (await q.$$('.libcard')).length < 10) throw new Error('trang Bộ khung chuẩn thiếu khối vật phẩm');
     }
     await q.click('.nav-item:has-text("Đạo diễn AI")'); await q.waitForTimeout(300);
-    await q.selectOption('select[aria-label="Cảnh"]', 'afi.scenes/thao-lu'); await q.click('button:text-is("Diễn")'); await q.waitForTimeout(600);
+    await q.selectOption('select[aria-label="Cảnh"]', 'afi.khung/san-khau-chuan'); await q.click('button:text-is("Diễn")'); await q.waitForTimeout(600);
     const actors = await q.$$('.dscene .actor'), picked = await q.$$('.fxchips button[aria-pressed="true"]');
     if (!actors.length || actors.length !== picked.length) throw new Error('sân khấu cảnh: ' + actors.length + ' diễn viên / ' + picked.length + ' được chọn');
     // hồi quy: mã nhúng web không để tên do agent đặt thoát khỏi <script>
     await q.evaluate(async () => {
-      const a = JSON.parse(JSON.stringify(window.GenChibi.ASSETS['afi.tamquoc/linh-que']));
+      const a = JSON.parse(JSON.stringify(window.GenChibi.ASSETS['afi.khung/ma-no-canh']));
       Object.assign(a, { id: 'xss-ci', pack: 'local.my', name: '</script><img src=x onerror=alert(1)>', status: 'draft' }); delete a.key;
       const r = await fetch('api/assets/local.my/xss-ci', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify(a) });
       if (!r.ok) throw new Error('không lưu được nhân vật thử: ' + r.status);

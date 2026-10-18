@@ -227,7 +227,7 @@ class AI {
     const m = model || c.model;
     const row = { model: m, provider: c.provider, at: new Date().toISOString() };
     try {
-      const r = await this.director({ description: 'Cả nhóm được thưởng nóng vì hoàn thành dự án sớm, nhưng một người lỡ tay làm đổ trà lên bản kế hoạch.', cast: ['gia-cat-luong', 'truong-phi', 'linh-que'], model: m });
+      const r = await this.director({ description: 'Ma-nơ-canh được thưởng nóng vì hoàn thành việc sớm, nhưng lỡ tay làm đổ trà lên bản kế hoạch.', cast: ['ma-no-canh'], model: m });
       Object.assign(row, { ok: true, attempts: r.attempts, ms: r.ms, tokensIn: r.usage.prompt, tokensOut: r.usage.completion, steps: r.event.steps.length, verdict: r.attempts === 1 ? 'Dùng tốt' : 'Dùng được (cần sửa ' + (r.attempts - 1) + ' lần)' });
     } catch (e) {
       Object.assign(row, { ok: false, error: e.message.slice(0, 300), verdict: 'Không dùng được' });

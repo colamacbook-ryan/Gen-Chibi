@@ -1399,7 +1399,7 @@
     var okR = true, er = '';
     try { sceneSvg(d); } catch (e) { okR = false; er = e.message; }
     res.push({ id: 'render', label: 'Dựng được cảnh', ok: okR, detail: er });
-    var demo = ASSETS['afi.tamquoc/gia-cat-luong'] || ASSETS[ASSET_ORDER[0]], okC = true, ec = '';
+    var demo = ASSETS['afi.khung/ma-no-canh'] || ASSETS[ASSET_ORDER[0]], okC = true, ec = '';
     if (demo) {
       try { sceneSvg(d, { cast: d.spots.map(function (sp) { return { asset: demo, spot: sp }; }) }); } catch (e) { okC = false; ec = e.message; }
       res.push({ id: 'cast', label: 'Đặt được diễn viên ở mọi chỗ đứng', ok: okC, detail: ec || d.spots.length + ' chỗ đứng' });
