@@ -10,7 +10,7 @@
 4. Mở **Tạo tác** → tác phẩm *Ngày đầu đi làm* (4 phân cảnh) → bấm **▶ Diễn toàn bộ**.
 5. Bấm **Phim (HTML)** để tải phim về — mở tệp bằng trình duyệt bất kỳ là xem, gửi cho người xem.
 
-Muốn thấy một **bộ chủ đề trọn vẹn** (thứ gen-chibi sinh ra để bán): bấm **🏯 Mở bộ chủ đề mẫu "Tam Quốc"** — 7 tướng (mặt nạ kinh kịch, binh khí, 8 hướng), 13 trang bị, 8 bối cảnh và phim *Từ vườn đào tới Xích Bích* (5 phân cảnh). Mọi asset đã **Phát hành**: vào Thư viện › Dự án chủ đề › Tam Quốc › **Gói bán** để xem một gói bán trông thế nào.
+Muốn thấy một **bộ chủ đề trọn vẹn** (thứ gen-chibi sinh ra để bán): bấm **🏯 Mở bộ chủ đề mẫu "Tam Quốc"** — 7 tướng (mặt nạ kinh kịch, binh khí, 8 hướng, giọng riêng), 13 trang bị, 8 bối cảnh và phim *Từ vườn đào tới Xích Bích* (5 phân cảnh có dàn dựng, giọng nói, âm thanh). Đây là **bộ mẫu của Gen Labs**: xem, sửa thử, làm phim thoải mái, nhưng **không xuất gói bán** — muốn bán thì dựng bộ của bạn trong một dự án riêng.
 
 ## Ba khu — ba ứng dụng riêng
 
@@ -41,7 +41,14 @@ Khung không bao giờ bị sửa — asset của bạn là bản sao của khun
 - **AI đạo diễn** (cần API key ở *Cài đặt AI*): kể ý tưởng hoặc bấm nút nhanh *Viết kịch bản · Chia phân cảnh · Viết lời thoại · Kiểm thiếu*. AI chỉ dùng asset trong Thư viện; **thiếu nhân vật / bối cảnh thì AI tự vào Xưởng tạo** (đúng dự án, qua cổng kiểm) rồi mới dùng. Mỗi câu trả lời kèm nhật ký việc AI đã làm (✓ / ✗).
 - **Không có AI vẫn làm được**: tự thêm phân cảnh, chọn bối cảnh, bấm chọn diễn viên (≤ 8), rồi *AI viết lời thoại* cho từng cảnh hoặc chỉnh JSON qua MCP.
 - **Tình trạng**: thanh "Sẵn sàng x/y phân cảnh" + danh sách cảnh còn thiếu gì — bấm để tới đúng phân cảnh.
-- **Sân khấu final**: ▶ Diễn toàn bộ — thẻ tiêu đề từng phân cảnh, diễn viên sống, bóng thoại có tên người nói.
+- **Sân khấu final**: ▶ Diễn toàn bộ — phim có **dàn dựng tự động**:
+  - nhân vật **đi ra sân**, **đi tới chỗ mới** khi kịch bản đổi chỗ đứng, **bước tới** khi giận / thề / van xin và **lùi lại** khi sốc / hoảng;
+  - người nói **quay về người nghe**, khoa tay khi nói; người nghe gật gù, giật mình khi bị hét;
+  - **máy quay** cận mặt người nói, khung hai người khi đối đáp, đẩy vào + rung khi hét, chớp trắng khi sốc;
+  - **nhép miệng** theo lời; **bong bóng thoại** kiểu truyện tranh — nói, **hét** (răng cưa), **nghĩ** (đám mây), thì thầm — có thẻ tên, chữ hiện theo giọng;
+  - **âm thanh**: hiệu ứng theo cảm xúc / hành động, nền theo bối cảnh (chim, dế, mưa, gió), nhạc nhẹ theo không khí, **giọng riêng từng nhân vật**.
+  - Nút 🔊 bật / tắt tiếng; chọn giọng: *tự động* (máy đọc tiếng Việt nếu trình duyệt có, không thì giọng blip), *máy đọc*, *blip kiểu game*, *tắt*.
+  - Muốn chỉ đạo kỹ hơn: mỗi câu thoại có thể đặt `to` (nói với ai), `camera` (close / two / wide), `bubble` (say / shout / think / whisper), `sfx`; AI đạo diễn biết các trường này. Đổi `spot` giữa các câu để nhân vật đi lại.
 
 ### Xuất thành phẩm
 | Nút | Ra gì |
@@ -62,6 +69,9 @@ Mỗi asset có một trong hai trạng thái:
 - **Gói sao lưu (JSON)** — mọi asset (cả nháp) + linh kiện / phông tự vẽ đang dùng + **tác phẩm**. Để sao lưu, chuyển máy.
 - **Gói bán · N asset phát hành** — chỉ asset **Phát hành**, **không** kèm tác phẩm. Nếu asset phát hành cần một thứ còn nháp (ví dụ nhân vật cầm vật phẩm nháp), gói vẫn kéo theo cho đủ và **báo cảnh báo** — phát hành nốt thứ đó trước khi bán.
 - **Nhập gói…** — mọi mục đi qua đúng cổng kiểm như khi tạo mới. Trùng id thì hỏi lưu đè — lưu đè tạo **phiên bản mới**, bản cũ vẫn trong lịch sử. Gói khai báo thư viện cần có (`requires.packs`); thiếu thì báo rõ.
+
+### Giọng nhân vật
+Thư viện › Nhân vật › khu **Dùng** › **Giọng**: kéo cao độ (trầm ↔ cao) và tốc độ (chậm ↔ nhanh), bấm **▶ Nghe thử**, **Lưu giọng** để dùng trong mọi phim. Chưa đặt thì gen-chibi tự chọn theo vai (tướng / sếp trầm hơn, lính / bé cao hơn).
 
 ## 5. Dùng asset ở nơi khác
 Ở Thư viện, mỗi asset có khu **Dùng**: tải SVG / PNG / avatar / sprite biểu cảm / **sprite 8 hướng**, chép mã tham chiếu, mã gọi MCP, mã nhúng web, JSON công thức.

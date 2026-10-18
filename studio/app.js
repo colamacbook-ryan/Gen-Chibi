@@ -1146,6 +1146,37 @@
   }
   function b64(s) { return btoa(unescape(encodeURIComponent(s))); }
   // Phim HTML độc lập: engine + thư viện đang nạp + asset "của tôi" mà tác phẩm dùng + bộ phát — một tệp, mở bằng trình duyệt là xem
+  // âm thanh phim: bật / tắt tiếng + kiểu giọng, nhớ theo máy (engine/audio.js)
+  var AudioPref = {
+    get: function () { try { return JSON.parse(localStorage.getItem('gc-audio') || '{}') || {}; } catch (e) { return {}; } },
+    apply: function () { var A = GC.audio, p = AudioPref.get(); if (!A) return; A.setMuted(!!p.muted); A.setVoiceMode(p.voice || 'auto'); },
+    set: function (k, v) { var p = AudioPref.get(); p[k] = v; try { localStorage.setItem('gc-audio', JSON.stringify(p)); } catch (e) { /* bỏ qua */ } AudioPref.apply(); }
+  };
+  AudioPref.apply();
+  var VOICE_MODES = [['auto', 'Giọng: tự động'], ['tts', 'Giọng: máy đọc tiếng Việt'], ['blip', 'Giọng: blip kiểu game'], ['off', 'Giọng: tắt']];
+  function audioControls() {
+    if (!GC.audio) return null;
+    var p = AudioPref.get();
+    var mute = h('button', { class: 'btn sm', title: 'Bật / tắt tiếng phim (hiệu ứng, nền, nhạc, giọng)', 'aria-label': 'Bật / tắt tiếng', onclick: function () { var m = !GC.audio.muted; AudioPref.set('muted', m); mute.textContent = m ? '🔇' : '🔊'; } }, p.muted ? '🔇' : '🔊');
+    var vs = h('select', { 'aria-label': 'Giọng nhân vật', title: 'Máy đọc dùng giọng tiếng Việt có sẵn của trình duyệt; không có thì tự chuyển sang giọng blip', onchange: function () { AudioPref.set('voice', vs.value); } });
+    VOICE_MODES.forEach(function (o) { var op = h('option', { value: o[0], text: o[1] }); if ((p.voice || 'auto') === o[0]) op.selected = true; vs.appendChild(op); });
+    return [mute, vs];
+  }
+  // giọng của nhân vật trong phim: cao độ + tốc độ, nghe thử ngay; asset của tôi thì lưu được
+  function voiceRow(a, mine) {
+    if (!GC.audio) return null;
+    var v = GC.audio.voiceOf(a);
+    var pitch = h('input', { type: 'range', min: 0.5, max: 2, step: 0.05, value: v.pitch, 'aria-label': 'Cao độ giọng', title: 'Cao độ: trầm ← → cao' });
+    var rate = h('input', { type: 'range', min: 0.6, max: 1.6, step: 0.05, value: v.rate, 'aria-label': 'Tốc độ nói', title: 'Tốc độ: chậm ← → nhanh' });
+    var cur = function () { return GC.audio.voiceOf(Object.assign({}, a, { voice: { pitch: +pitch.value, rate: +rate.value } })); };
+    var line = 'Xin chào, ta là ' + a.name + '!';
+    return h('div', { class: 'usebar' }, h('b', { text: 'Giọng' }), h('span', { class: 'note', text: 'trầm' }), pitch, h('span', { class: 'note', text: 'cao · chậm' }), rate, h('span', { class: 'note', text: 'nhanh' }),
+      h('button', { class: 'btn sm', onclick: function () { GC.audio.unlock(); GC.audio.say(line, cur()); } }, '▶ Nghe thử'),
+      mine ? h('button', { class: 'btn sm', title: 'Lưu giọng vào công thức nhân vật (dùng trong mọi phim)', onclick: function () {
+        var d = clone(a); d.voice = { pitch: +pitch.value, rate: +rate.value };
+        resave(d, 'Đổi giọng').then(function () { toast('Đã lưu giọng của ' + a.name + '.'); }).catch(function (e) { toast(e.message); });
+      } }, 'Lưu giọng') : null);
+  }
   function exportFilm(W) {
     var chars = [], scenes = [];
     W.shots.forEach(function (s) { chars = chars.concat(GC.film.actors(s)); var sc = GC.film.scene(s); if (sc) scenes.push(sc); });
@@ -1156,7 +1187,7 @@
     Promise.all(srcs.map(function (f) { return fetch(f).then(function (r) { if (!r.ok) throw new Error('Không tải được ' + f); return r.text(); }); }))
       .then(function (texts) {
         var pick = function (o, keys) { var r = {}; keys.forEach(function (k) { if (o[k] !== undefined) r[k] = o[k]; }); return r; };
-        data = { parts: data.parts, characters: data.characters.map(function (a) { return pick(a, ['id', 'pack', 'name', 'version', 'look', 'expressions', 'kind']); }),
+        data = { parts: data.parts, characters: data.characters.map(function (a) { return pick(a, ['id', 'pack', 'name', 'version', 'look', 'expressions', 'kind', 'voice', 'role']); }),
           items: data.items.map(function (x) { return pick(x, ['id', 'name', 'type', 'rarity', 'equip']); }),
           scenes: data.scenes.map(function (x) { return pick(x, ['id', 'name', 'layers', 'deco', 'palette', 'time', 'weather', 'spots']); }) };
         var film = { title: W.title, logline: W.logline || '', shots: W.shots.map(function (s) { return { id: s.id, title: s.title, description: s.description || '', scene: s.scene, cast: s.cast, event: s.event }; }) };
@@ -1165,7 +1196,8 @@
           '<meta name="generator" content="gen-chibi ' + xml(String((Store.info || {}).version || '')) + ' · Gen Labs">\n<style>' + FILM_CSS + '</style>\n</head>\n<body>\n' +
           '<main class="film"><header><div><h1>' + xml(W.title) + '</h1><p>' + xml(W.logline || '') + '</p></div><span class="badge">' + W.shots.length + ' phân cảnh</span></header>\n' +
           '<div class="screen"><div id="stage"></div><button id="big" class="big" aria-label="Xem phim">▶</button></div>\n' +
-          '<div class="bar"><button id="play">▶ Xem</button><button id="stop">■ Dừng</button><button id="full">⛶ Toàn màn hình</button><span id="prog"></span></div>\n' +
+          '<div class="bar"><button id="play">▶ Xem</button><button id="stop">■ Dừng</button><button id="full">⛶ Toàn màn hình</button><button id="mute" aria-label="Bật / tắt tiếng">🔊</button>' +
+          '<select id="voice" aria-label="Giọng nhân vật"><option value="auto">Giọng: tự động</option><option value="tts">Giọng: máy đọc</option><option value="blip">Giọng: blip</option><option value="off">Giọng: tắt</option></select><span id="prog"></span></div>\n' +
           '<ol id="chapters"></ol>\n<footer>Làm bằng gen-chibi · Bộ phát © 2026 Gen Labs — chỉ để xem phim này</footer></main>\n' +
           texts.map(function (t, i) { return '<script>/* ' + srcs[i] + ' */\n' + safe(t) + '\n</script>'; }).join('\n') + '\n' +
           '<script>\nvar DATA = ' + jsonForScript(data) + ';\nvar FILM = ' + jsonForScript(film) + ';\n' + FILM_BOOT + '\n</script>\n</body>\n</html>\n';
@@ -1183,6 +1215,7 @@
     '.big[hidden]{display:none}',
     '.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.bar button{background:#232227;color:#ece9e2;border:1px solid #34333a;border-radius:6px;padding:6px 12px;font:inherit;cursor:pointer}',
     '.bar button:hover{background:#2c2b31}#prog{margin-left:auto;color:#a8a49d;font-variant-numeric:tabular-nums}',
+    '.bar select{background:#232227;color:#ece9e2;border:1px solid #34333a;border-radius:6px;padding:6px 8px;font:inherit}',
     '#chapters{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}',
     '#chapters button{width:100%;text-align:left;background:#1b1b1e;color:inherit;border:1px solid #2a2a2f;border-radius:8px;padding:8px 10px;font:inherit;cursor:pointer;display:grid;gap:2px}',
     '#chapters button:hover{border-color:#4a4950}#chapters b{font-size:13px}#chapters span{font-size:12px;color:#8a857e}',
@@ -1203,6 +1236,7 @@
     '  function play(from) { $("big").hidden = true; player.play(ready.slice(from || 0), FILM.title); }',
     '  $("big").onclick = $("play").onclick = function () { play(0); };',
     '  $("stop").onclick = function () { player.stop(); $("big").hidden = false; };',
+    '  var A = GC.audio; if (A) { $("mute").onclick = function () { A.setMuted(!A.muted); $("mute").textContent = A.muted ? "🔇" : "🔊"; }; $("voice").onchange = function () { A.setVoiceMode($("voice").value); }; } else { $("mute").hidden = $("voice").hidden = true; }',
     '  $("full").onclick = function () { var s = document.querySelector(".screen"); (s.requestFullscreen || s.webkitRequestFullscreen || function () {}).call(s); };',
     '  document.addEventListener("keydown", function (e) { if (e.code === "Space" && e.target === document.body) { e.preventDefault(); if ($("big").hidden) $("stop").onclick(); else play(0); } });',
     '  ready.forEach(function (s, i) {',
@@ -1254,7 +1288,7 @@
         evPanel),
       h('div', { class: 'stack' },
         h('div', { class: 'panel' }, h('h3', null, 'Sân khấu final', h('span', { class: 'r row', style: 'gap:6px' }, prog,
-          h('button', { class: 'btn sm primary', onclick: function () { if (W) player.play(W.shots, W.title); } }, '▶ Diễn toàn bộ'), h('button', { class: 'btn sm', onclick: function () { player.stop(); } }, 'Dừng'))),
+          audioControls(), h('button', { class: 'btn sm primary', onclick: function () { if (W) player.play(W.shots, W.title); } }, '▶ Diễn toàn bộ'), h('button', { class: 'btn sm', onclick: function () { player.stop(); } }, 'Dừng'))),
           h('div', { class: 'pad stack' }, stage, readyBox,
             h('div', { class: 'usebar' }, h('b', { text: 'Xuất' }),
               h('button', { class: 'btn sm primary', title: 'Một tệp .html chạy được ở mọi trình duyệt, không cần cài gì — gửi cho người xem', onclick: function () { if (W) exportFilm(W); } }, 'Phim (HTML)'),
@@ -1504,14 +1538,14 @@
   }
   function useHead(x, box, extra) {
     // asset của tôi: đổi dự án chủ đề ngay tại Thư viện (lưu lại qua đúng cổng ghi của loại đó)
-    var pub = GC.statusOf(x.status) === 'published';
+    var pub = GC.statusOf(x.status) === 'published', smp = (Projects.all().filter(function (p) { return p.id === x.project; })[0] || {}).sample;
     var stay = Object.assign({}, route, { key: x.key });   // lưu xong vẫn đứng ở asset này, không nhảy về đầu danh sách
     var pj = x.pack === MY_PACK ? h('div', { class: 'row' }, h('span', { class: 'note', text: 'Dự án chủ đề' }), projectSelect(x.project || '', function (v) {
       var d = clone(x); d.project = v;
       resave(d, 'Chuyển sang dự án ' + Projects.name(v)).then(function () { toast('Đã chuyển ' + x.name + ' sang ' + Projects.name(v)); go(stay); }).catch(function (e) { toast(e.message); });
-    }), h('span', { class: pub ? 'chip ok' : 'chip', text: pub ? 'Phát hành' : 'Nháp' }),
+    }), smp ? h('span', { class: 'chip', title: smp.license || '', text: 'Bộ mẫu ' + (smp.owner || 'Gen Labs') }) : h('span', { class: pub ? 'chip ok' : 'chip', text: pub ? 'Phát hành' : 'Nháp' }),
       // Nháp = dùng ngay trong dự án; Phát hành = vào gói bán (nhân vật cần dấu nhận diện — cổng kiểm sẽ báo nếu thiếu)
-      h('button', { class: 'btn sm', title: pub ? 'Đưa về nháp: không còn trong gói bán' : 'Phát hành: đưa vào gói bán của dự án', onclick: function () {
+      smp ? null : h('button', { class: 'btn sm', title: pub ? 'Đưa về nháp: không còn trong gói bán' : 'Phát hành: đưa vào gói bán của dự án', onclick: function () {
         var d = clone(x); d.status = pub ? 'draft' : 'published';
         resave(d, pub ? 'Về nháp' : 'Phát hành').then(function () { toast(pub ? 'Đã đưa ' + x.name + ' về nháp.' : 'Đã phát hành ' + x.name + ' — có trong gói bán của dự án.'); go(stay); }).catch(function (e) { toast(e.message); });
       } }, pub ? 'Về nháp' : 'Phát hành')) : null;
@@ -1558,6 +1592,7 @@
         useHead(a, box, [
           stg, h('div', { class: 'row' }, selS, selA, vsel),
           h('div', { class: 'note', text: (a.identity && a.identity.p1 ? 'Nhận diện: ' + a.identity.p1 + '. ' : '') + (a.persona || '') }),
+          voiceRow(a, mine),
           h('div', { class: 'usebar' }, h('b', { text: 'Tải ảnh' }),
             h('button', { class: 'btn sm', onclick: function () { download(name() + '.svg', GC.svgString(a, u.state, { director: dir() }), 'image/svg+xml'); } }, 'SVG'),
             h('button', { class: 'btn sm', onclick: function () { savePng(name() + '-512.png', R.imageURL(a, u.state, { director: dir() }), 512, Math.round(512 * 258 / 248)); } }, 'PNG 512'),
@@ -1807,7 +1842,8 @@
         var c = counts(p.id), first = [].concat(inProject(GC.assets(), p.id), inProject(GC.items(), p.id), inProject(GC.scenes(), p.id))[0];
         grid.appendChild(h('button', { class: 'libcard proj', 'aria-pressed': String(sel === p.id), title: p.id || '(chưa xếp)', onclick: function () { sel = p.id; paint(); } },
           h('div', { class: 'im' }, first ? h('img', { src: thumbOf(first), alt: '' }) : h('div', { class: 'note', style: 'padding:28px 0', text: 'trống' })),
-          h('div', { class: 'lb' }, h('b', { text: p.name }), h('span', { class: 'note', text: c[0] + ' nhân vật · ' + c[1] + ' vật phẩm · ' + c[2] + ' bối cảnh' }))));
+          h('div', { class: 'lb' }, h('b', { text: p.name }), h('span', { class: 'note', text: c[0] + ' nhân vật · ' + c[1] + ' vật phẩm · ' + c[2] + ' bối cảnh' }),
+            p.sample ? h('span', { class: 'chip', title: p.sample.license || '', text: 'Bộ mẫu ' + (p.sample.owner || 'Gen Labs') }) : null)));
       });
       if (ps.length) listBox.appendChild(h('div', { class: 'panel' }, h('h3', null, 'Dự án', h('span', { class: 'r note', text: ps.length })), h('div', { class: 'pad' }, grid)));
       paintDetail();
@@ -1817,7 +1853,8 @@
       if (sel == null) return;
       var P = Projects.all().filter(function (p) { return p.id === sel; })[0] || { id: '', name: 'Chưa xếp dự án', description: '' };
       var parts = [['Nhân vật', inProject(GC.assets(), sel), 'lib-characters'], ['Vật phẩm', inProject(GC.items(), sel), 'lib-items'], ['Bối cảnh', inProject(GC.scenes(), sel), 'lib-scenes']];
-      var body = h('div', { class: 'pad stack' }, P.description ? h('div', { class: 'note', text: P.description }) : null);
+      var body = h('div', { class: 'pad stack' }, P.description ? h('div', { class: 'note', text: P.description }) : null,
+        P.sample ? h('div', { class: 'banner' }, h('span', { text: 'Bộ mẫu của ' + (P.sample.owner || 'Gen Labs') + ' — ' + (P.sample.license || 'chỉ để xem và làm phim thử') + '. Muốn bán: dựng bộ của bạn trong một dự án riêng rồi phát hành.' })) : null);
       parts.forEach(function (g) {
         if (!g[1].length) return;
         var row = h('div', { class: 'libgrid sm' });
@@ -1832,6 +1869,7 @@
         h('button', { class: 'btn sm primary', onclick: function () { go({ page: 'create', project: sel }); } }, '+ Tạo asset trong dự án'),
         h('button', { class: 'btn sm', onclick: function () { setLastProject(sel); go({ page: 'works', project: sel }); } }, 'Làm phim với dự án này ›'),
         sel ? h('button', { class: 'btn sm', title: 'Sao lưu / chuyển máy: mọi asset (cả nháp) + tác phẩm — nhập lại được ở bản cài khác', onclick: function () { exportBundle(P); } }, 'Gói sao lưu (JSON)') : null,
+        P.sample ? h('span', { class: 'chip', title: 'Bộ mẫu không xuất gói bán', text: 'Gói bán · bộ mẫu, không bán' }) :
         sel ? h('button', { class: 'btn sm', title: 'Gói để bán / chia sẻ: chỉ asset đã PHÁT HÀNH, không kèm tác phẩm', onclick: function () { exportBundle(P, true); } },
           'Gói bán · ' + [].concat(inProject(GC.assets(), sel), inProject(GC.items(), sel), inProject(GC.scenes(), sel)).filter(function (x) { return GC.statusOf(x.status) === 'published'; }).length + ' asset phát hành')
           : h('span', { class: 'note', text: 'Xếp asset vào một dự án (ở khung "Dùng" của từng asset) để tải gói.' })));

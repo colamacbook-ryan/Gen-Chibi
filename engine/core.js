@@ -521,7 +521,11 @@
       // thấy lưng: không khuôn mặt; đồ sau lưng (áo choàng, bao) ra trước thân; tóc phía sau thành lớp trước đầu
       FACE_LAYERS.forEach(function (l) { out[l] = ''; });
       if (out.backItem) { out.body += out.backItem; out.backItem = ''; }
-      if (fbSlots.some(function (x) { return x.indexOf('hair:') === 0; })) { out.hairFront = out.hairBack; out.hairBack = ''; }
+      // tóc chưa có bản lưng: lớp tóc sau lên trước; không có cả lớp đó thì khung tự phủ mảng tóc theo viền đầu (không để đầu trọc — CNS-024)
+      if (fbSlots.some(function (x) { return x.indexOf('hair:') === 0; })) {
+        out.hairFront = out.hairBack || '<path d="' + C.shape + '" fill="' + (C.P.hair || '#2a2420') + '" stroke="' + INK + '" stroke-width="2.8" stroke-linejoin="round"/>';
+        out.hairBack = '';
+      }
       // sau lưng hẳn: đồ cầm tay khuất sau thân
       if (K === 'q180') ['L', 'R'].forEach(function (s) { out['held' + s + 'b'] += out['held' + s]; out['held' + s] = ''; });
     }
@@ -720,6 +724,10 @@
 
   /* ----------------------------------------------------------- 6. DIRECTOR */
   function castIds(cast) { return cast.map(function (a) { return a.id; }); }
+  // từ vựng dàn dựng phim (engine/player.js dùng; âm thanh tổng hợp ở engine/audio.js)
+  var FILM_CAMERAS = ['auto', 'wide', 'two', 'close'];
+  var FILM_BUBBLES = ['say', 'shout', 'think', 'whisper'];
+  var FILM_SFX = ['pop', 'whoosh', 'step', 'sting', 'hit', 'boing', 'sparkle', 'rumble', 'drip', 'sad', 'snore', 'party', 'hmm', 'gong', 'chime', 'swish', 'tick'];
   function directorSchema(cast) {
     return {
       $schema: 'https://json-schema.org/draft/2020-12/schema',
@@ -743,7 +751,12 @@
               spot: { enum: SCENE.spotOrder.slice() },
               fx: { type: 'array', maxItems: 3, items: { enum: Object.keys(LIB.fx) } },
               say: { type: 'string', maxLength: 120 },
-              hold: { type: 'number', minimum: 0.8, maximum: 6 }
+              hold: { type: 'number', minimum: 0.8, maximum: 6 },
+              // dàn dựng (tuỳ chọn — thiếu thì đạo diễn tự động của bộ phát tự quyết): nói với ai, máy quay, kiểu bong bóng, âm thanh
+              to: { enum: castIds(cast) },
+              camera: { enum: FILM_CAMERAS.slice() },
+              bubble: { enum: FILM_BUBBLES.slice() },
+              sfx: { type: 'array', maxItems: 3, items: { enum: FILM_SFX.slice() } }
             }
           }
         }
@@ -784,6 +797,10 @@
       if (typeof s.say !== 'string') errs.push(n + 'thiếu "say".');
       else if (s.say.length > 120) errs.push(n + '"say" dài quá 120 ký tự.');
       if (s.hold !== undefined && !(typeof s.hold === 'number' && s.hold >= 0.8 && s.hold <= 6)) errs.push(n + '"hold" phải trong khoảng 0.8–6 giây.');
+      if (s.to !== undefined && (S.to.enum.indexOf(s.to) < 0 || s.to === s.actor)) errs.push(n + '"to" phải là một diễn viên khác trong dàn diễn viên.');
+      if (s.camera !== undefined && FILM_CAMERAS.indexOf(s.camera) < 0) errs.push(n + 'camera chọn: ' + FILM_CAMERAS.join(', ') + '.');
+      if (s.bubble !== undefined && FILM_BUBBLES.indexOf(s.bubble) < 0) errs.push(n + 'bubble chọn: ' + FILM_BUBBLES.join(', ') + '.');
+      if (s.sfx !== undefined && (!Array.isArray(s.sfx) || s.sfx.length > 3 || s.sfx.some(function (x) { return FILM_SFX.indexOf(x) < 0; }))) errs.push(n + 'sfx: mảng tối đa 3, chọn trong ' + FILM_SFX.join(', ') + '.');
     });
     return errs;
   }
@@ -808,6 +825,10 @@
       SCENE_ORDER.forEach(function (k) { L.push('- ' + k + ': ' + one(SCENES[k].name) + (SCENES[k].description ? ' — ' + one(SCENES[k].description) : '')); });
       L.push('- spot: ' + SCENE.spotOrder.map(function (k) { return k + ' (' + SCENE.spots[k].label + ')'; }).join(', '));
     }
+    L.push('', 'Dàn dựng phim (tuỳ chọn — bộ phát tự dàn dựng nếu bỏ trống: nhân vật đi ra sân, đi tới chỗ mới khi spot đổi, quay về người nghe, khoa tay khi nói, máy quay cận người nói, nhép miệng, giọng riêng):');
+    L.push('- to: id người nghe (mặc định: người vừa nói) · camera: ' + FILM_CAMERAS.join(' | ') + ' (close = cận người nói, two = hai người, wide = toàn cảnh)');
+    L.push('- bubble: ' + FILM_BUBBLES.join(' | ') + ' (mặc định: hét khi rage/shock/panic/vow có "!", nghĩ khi think/sleep) · sfx: ' + FILM_SFX.join(', '));
+    L.push('- Đổi spot giữa các bước để nhân vật đi lại trên sân khấu (đừng để mọi người đứng yên cả cảnh); xen activity (bow, salute, point, wave, cheer, attack…) cho câu thoại có hành động.');
     L.push('', 'Schema:', JSON.stringify(directorSchema(cast), null, 2), '', 'Sự kiện: <mô tả sự kiện ở đây>');
     return L.join('\n');
   }
@@ -1227,7 +1248,7 @@
   function partAdvice(d) {
     var w = [];
     if (!d || d.kind === 'scenery') return w;
-    if (d.slot === 'hair' && !d.views.q180 && !d.views.q135 && !d.layers.hairBack) w.push('Tóc chưa có bản sau lưng (views.q180 / q135): khi nhân vật quay lưng engine chỉ giữ lớp hairBack — tóc này sẽ BIẾN MẤT. Vẽ views.q180 = { mode: "drawn", layers: { hairFront: … } }, dùng <path d="{shape}" fill="{hair}"/> cho mảng tóc sau gáy (khít mọi dáng đầu).');
+    if (d.slot === 'hair' && !d.views.q180 && !d.views.q135) w.push('Tóc chưa có bản sau lưng (views.q180 / q135): khi nhân vật quay lưng engine chỉ phủ một mảng tóc trơn theo viền đầu' + (d.layers.hairBack ? ' (hoặc dùng lớp hairBack)' : '') + ' — búi, dải buộc, tóc dài sẽ mất. Vẽ views.q180 = { mode: "drawn", layers: { hairFront: … } }, dùng <path d="{shape}" fill="{hair}"/> cho mảng tóc sau gáy (khít mọi dáng đầu), và views.q135 tương tự.');
     if (d.slot === 'mask' && JSON.stringify(d.layers).indexOf('{shape}') < 0 && d.eyeArea) w.push('Mặt nạ tô kín mặt nên vẽ viền bằng d="{shape}" để khít đầu tròn / vuông / oval ở mọi góc.');
     if ((d.slot === 'heldL' || d.slot === 'heldR') && !d.icon) w.push('Vật cầm tay chưa có icon { cx, cy, size, rot }: thẻ trang bị sẽ lấy khung mặc định.');
     return w;
@@ -1541,7 +1562,7 @@
     getPart: getPart, partsOfSlot: partsOfSlot, partRef: partRef, traitsOf: traitsOf,
     resolveState: resolveState, palette: palette, paramValues: paramValues,
     compose: compose, poseAt: poseAt, chainTransforms: chainTransforms, neutralPose: neutralPose, svgString: svgString,
-    shadowOf: shadowOf, handsBusy: handsBusy, Q45: Q45, Q90: Q90, faceRemap: faceRemap, VIEW_ORDER: VIEW_ORDER, VIEW_KIND: VIEW_KIND, VIEW_KINDS: VIEW_KINDS,
+    shadowOf: shadowOf, handsBusy: handsBusy, Q45: Q45, Q90: Q90, faceRemap: faceRemap, VIEW_ORDER: VIEW_ORDER, VIEW_KIND: VIEW_KIND, VIEW_KINDS: VIEW_KINDS, FILM: { cameras: FILM_CAMERAS, bubbles: FILM_BUBBLES, sfx: FILM_SFX },
     checkDataPart: checkDataPart, registerDataPart: registerDataPart, partAdvice: partAdvice, blockingGates: blockingGates,
     ITEM: ITEM, ITEMS: ITEMS, ITEM_ORDER: ITEM_ORDER, items: function () { return ITEM_ORDER.map(function (k) { return ITEMS[k]; }); },
     SCENE: SCENE, SCENES: SCENES, SCENE_ORDER: SCENE_ORDER, scenes: function () { return SCENE_ORDER.map(function (k) { return SCENES[k]; }); },

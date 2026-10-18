@@ -54,6 +54,7 @@ Giao diện gồm 5 khu: **chat với AI · kịch bản · mô tả phân cản
 | 4 | Ba ứng dụng độc lập `/xuong` · `/thu-vien` · `/tao-tac` + luồng người dùng liền mạch (Ryan: "tách 3 lớp ra 3 giao diện quản lý độc lập") | xong — v0.10.0 |
 | 5 | Thành phẩm: xuất phim HTML độc lập, storyboard, bảng tình trạng; gói dự án xuất / nhập qua cổng; dự án mẫu một chạm; gom một lối Tạo tác | xong — v0.11.0 / v0.11.1 |
 | 6 | Áp quyết định Q1–Q4 (dưới): Nháp / Phát hành + Gói bán; đổi tên thư viện `afi.*` → `gen.*` (tên cũ vẫn đọc được); câu định vị | xong — v0.12.0 |
+| 8 | **Phim sống** (Ryan 2026-10-18: "nhân vật chỉ biết đứng yên… không âm thanh, không giọng, không nhép miệng… quá tệ"): đạo diễn tự động (ra sân, đi lại, bước tới / lùi, quay về người nói, khoa tay, phản ứng), máy quay cận / hai người / toàn + rung / chớp, nhép miệng, bong bóng truyện tranh (nói / hét / nghĩ / thì thầm), âm thanh tổng hợp (hiệu ứng, nền, nhạc), giọng riêng từng nhân vật (máy đọc tiếng Việt / blip). Bộ mẫu Tam Quốc thành tủ kính Gen Labs không xuất bán | xong — v0.14.0 |
 | 7 | **Bài thử khung: dựng lại Tam Quốc như một dự án chủ đề** qua đúng cổng (linh kiện dữ liệu → trang bị → bối cảnh → tướng → phim → gói bán). Khung được nâng để linh kiện dữ liệu ngang linh kiện code: `{shape}`, đánh dấu chiếu 45°, `eyeArea` / `tall` | xong — v0.13.0 (`studio/mau/tam-quoc.json`, `archive/tamquoc/port.js`) |
 
 ---

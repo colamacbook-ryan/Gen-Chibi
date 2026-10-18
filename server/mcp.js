@@ -48,7 +48,7 @@ const TOOLS = [
   { name: 'list_characters', title: 'Danh sách nhân vật', description: 'Các nhân vật hiện có (chính thức + của người dùng): id, key, tên, thư viện, trạng thái duyệt, phiên bản, tính cách.', inputSchema: obj({}), annotations: { readOnlyHint: true } },
   { name: 'get_character', title: 'Xem công thức nhân vật', description: 'Công thức JSON đầy đủ của một nhân vật (dùng làm mẫu để tạo nhân vật mới).', inputSchema: obj({ key: { type: 'string', description: 'key đầy đủ (vd. gen.khung/ma-no-canh) hoặc id ngắn (ma-no-canh)' } }, ['key']), annotations: { readOnlyHint: true } },
   { name: 'validate_character', title: 'Kiểm công thức', description: 'Chạy cổng kiểm (linh kiện, license, tham số, nhận diện, 18 biểu cảm, động tác) trên một công thức chưa lưu.', inputSchema: obj({ asset: { type: 'object', description: 'công thức nhân vật: { id, name, look: { eyes, brows, parts, params, palette }, expressions?, identity, persona? }' } }, ['asset']), annotations: { readOnlyHint: true } },
-  { name: 'save_character', title: 'Lưu nhân vật', description: 'Kiểm rồi lưu nhân vật (có phiên bản). Mặc định vào thư viện local.my; nếu key trùng nhân vật đã có thì lưu thành phiên bản mới. Trạng thái (cả item / cảnh): status "draft" (mặc định — nháp, dùng ngay trong dự án) hoặc "published" (phát hành — vào gói bán; nhân vật phát hành cần dấu nhận diện identity). AI tự tạo thì để nháp; người dùng quyết phát hành.', inputSchema: obj({ asset: { type: 'object' }, note: { type: 'string', description: 'ghi chú phiên bản' } }, ['asset']) },
+  { name: 'save_character', title: 'Lưu nhân vật', description: 'Kiểm rồi lưu nhân vật (có phiên bản). Mặc định vào thư viện local.my; nếu key trùng nhân vật đã có thì lưu thành phiên bản mới. Trạng thái (cả item / cảnh): status "draft" (mặc định — nháp, dùng ngay trong dự án) hoặc "published" (phát hành — vào gói bán; nhân vật phát hành cần dấu nhận diện identity). AI tự tạo thì để nháp; người dùng quyết phát hành. Giọng trong phim: voice { pitch 0.5–2 (trầm → cao), rate 0.6–1.6 (chậm → nhanh) }.', inputSchema: obj({ asset: { type: 'object' }, note: { type: 'string', description: 'ghi chú phiên bản' } }, ['asset']) },
   { name: 'render_character', title: 'Dựng hình', description: 'Dựng SVG của một nhân vật ở một biểu cảm. Dùng key của nhân vật đã có, hoặc truyền asset chưa lưu để xem thử.', inputSchema: obj({ key: { type: 'string' }, asset: { type: 'object' }, state: { type: 'string', description: 'id biểu cảm, mặc định normal' }, activity: { type: 'string', description: 'hoạt động: eat, sleep, run, attack… (get_catalog › activities)' }, posture: { type: 'string' }, move: { type: 'string' }, motion: { type: 'string' }, facing: { type: 'string', enum: ['left', 'right'] }, view: { type: 'string', enum: ['front', 'left', 'right', 'left45', 'right45', 'left90', 'right90', 'left135', 'right135', 'back'], description: 'góc nhìn 8 hướng: chính diện, nghiêng nhẹ 3/4, 45°, 90° (nhìn ngang), 135° (quay lưng chéo), back (sau lưng) — trái/phải theo màn hình' }, t: { type: 'number', description: 'giây trong chu kỳ động tác (bỏ trống = khung đại diện)' }, crop: { type: 'boolean', description: 'true = khung avatar (đầu và vai)' } }) , annotations: { readOnlyHint: true } },
   { name: 'get_director_schema', title: 'Schema kịch bản', description: 'JSON Schema + hướng dẫn viết kịch bản sự kiện cho các diễn viên đã chọn.', inputSchema: obj({ cast: { type: 'array', items: { type: 'string' }, description: 'id diễn viên; bỏ trống = tất cả' } }), annotations: { readOnlyHint: true } },
   { name: 'validate_event', title: 'Kiểm kịch bản', description: 'Kiểm một kịch bản sự kiện theo schema (diễn viên, biểu cảm, động tác, hiệu ứng có trong kho).', inputSchema: obj({ event: { type: 'object' }, cast: { type: 'array', items: { type: 'string' } } }, ['event']), annotations: { readOnlyHint: true } },
@@ -182,6 +182,14 @@ class MCP {
     if (x.project === undefined) { const prev = this.store.getAsset(x.key); if (prev && prev.project) x.project = prev.project; }   // giữ dự án khi bản sửa không gửi kèm
     if (x.project != null && x.project !== '' && !this.GC.projectId(x.project)) throw new Error('project: slug dự án (chữ thường, số, gạch nối, ≤ 40 ký tự) — xem list_projects');
     x.project = this.GC.projectId(x.project);
+    // giọng riêng của nhân vật trong phim (engine/audio.js): cao độ + tốc độ, kẹp trong khoảng nghe được; sai kiểu thì bỏ
+    if (x.voice !== undefined) {
+      const v = x.voice && typeof x.voice === 'object' ? x.voice : {}, num = (n, lo, hi) => typeof n === 'number' && isFinite(n) ? Math.max(lo, Math.min(hi, n)) : undefined;
+      const out = {}, pitch = num(v.pitch, 0.5, 2), rate = num(v.rate, 0.6, 1.6);
+      if (pitch !== undefined) out.pitch = pitch;
+      if (rate !== undefined) out.rate = rate;
+      if (Object.keys(out).length) x.voice = out; else delete x.voice;
+    }
     return this.GC.migrate(x);
   }
   // nhận key đầy đủ (pack/id) hoặc id ngắn (ưu tiên bản trong "Của tôi")
@@ -461,6 +469,7 @@ class MCP {
     this.sync();
     const P = S.listProjects().find(p => p.id === id);
     if (!P) throw Object.assign(new Error('Không có dự án ' + id + ' (list_projects)'), { code: 404 });
+    if (sale && P.sample) throw Object.assign(new Error('Bộ mẫu của ' + (P.sample.owner || 'Gen Labs') + ' — chỉ để xem, sửa thử, làm phim; không xuất gói bán. Dựng bộ của bạn trong một dự án riêng rồi phát hành.'), { code: 403 });
     const clean = r => { const o = this.canonRefs(r); ['version', 'savedAt', 'note', '_note', 'key'].forEach(k => delete o[k]); return o; };   // gói luôn ghi tên thư viện mới
     const inP = r => (r.project || '') === id && (!sale || GC.statusOf(r.status) === 'published');
     const allA = S.listAssets().filter(a => a.pack === MY_PACK), allI = S.listItems(), allS = S.listScenes(), dataParts = S.listParts();
@@ -484,6 +493,7 @@ class MCP {
     const drafts = (list, what) => list.filter(r => GC.statusOf(r.status) !== 'published').map(r => what + ' ' + r.id + ' còn nháp nhưng asset phát hành cần nó — phát hành nó trước khi bán');
     const warnings = sale ? drafts(items, 'vật phẩm').concat(drafts(scenes, 'bối cảnh')) : [];
     const out = { format: 'gen-chibi.project/1', kind: sale ? 'sale' : 'backup', license: '© 2026 Gen Labs — All rights reserved', project: { id: P.id, name: P.name, description: P.description || '' }, warnings,
+      sample: P.sample || undefined,   // sao lưu bộ mẫu vẫn mang dấu mẫu → nhập lại ở máy khác vẫn không xuất bán được
       characters: chars.map(clean), items: items.map(clean), scenes: scenes.map(clean), parts: Object.values(used), works, exportedAt: new Date().toISOString() };
     // gói cần những thư viện nào (khung, chủ đề…) để mở được ở bản cài khác
     const packs = {}; JSON.stringify(out).replace(/"([a-z0-9]+(?:\.[a-z0-9-]+)+)\/[a-z0-9-]+"/g, (_, pk) => { const c = GC.canonPack(pk); if (c !== MY_PACK && GC.PACKS[c]) packs[c] = 1; return _; });
@@ -499,6 +509,10 @@ class MCP {
     const arr = (x, n, what) => { if (x === undefined) return []; if (!Array.isArray(x)) throw bad(what + ': cần mảng'); if (x.length > n) throw bad(what + ': tối đa ' + n); return x.filter(v => v && typeof v === 'object'); };
     const parts = arr(b.parts, 300, 'parts'), items = arr(b.items, 500, 'items'), scenes = arr(b.scenes, 200, 'scenes'), chars = arr(b.characters, 500, 'characters'), works = arr(b.works, 50, 'works');
     // ngân sách: tổng phân cảnh ≤ 200 (mỗi phân cảnh chạy cổng đạo diễn) — chặn gói phình to làm treo server
+    // gói làm bằng bản gen-chibi mới hơn bản đang chạy: báo cập nhật TRƯỚC khi ghi gì (CNS-023) — tránh nhập nửa vời
+    const semver = v => { const m = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(String(v || '')); return m ? [+m[1], +m[2], +m[3]] : null; };
+    const want = semver(b.requires && b.requires.engine), have = semver(this.version);
+    if (want && have && (want[0] - have[0] || want[1] - have[1] || want[2] - have[2]) > 0) throw bad('Gói làm bằng gen-chibi ' + b.requires.engine + ', bản đang chạy là ' + this.version + ' — cập nhật gen-chibi (Hệ thống › Cập nhật) rồi nhập lại');
     const need = (b.requires && Array.isArray(b.requires.packs) ? b.requires.packs : []).filter(pk => typeof pk === 'string' && !Object.prototype.hasOwnProperty.call(GC.PACKS, GC.canonPack(pk)));
     if (need.length) throw bad('Gói cần thư viện chưa cài: ' + need.slice(0, 6).join(', ') + ' — cập nhật gen-chibi hoặc cài thư viện đó trước');
     const nShots = works.reduce((n, w) => n + (Array.isArray(w.shots) ? w.shots.length : 0), 0);
@@ -536,7 +550,9 @@ class MCP {
       }));
     } finally { this._bulk = false; }
     const total = Object.keys(done).reduce((n, k) => n + done[k], 0);
-    if (total || !errors.length) S.saveProject({ id: pid, name: P.name || pid, description: P.description || '' });   // không tạo dự án rỗng khi mọi mục đều hỏng
+    // bộ mẫu (Gen Labs): dự án mang dấu chủ sở hữu + giấy phép, xuất bán bị chặn (CNS-022)
+    const sample = b.sample && typeof b.sample === 'object' ? { owner: b.sample.owner, license: b.sample.license } : null;
+    if (total || !errors.length) S.saveProject({ id: pid, name: P.name || pid, description: P.description || '' }, sample ? { sample } : undefined);   // không tạo dự án rỗng khi mọi mục đều hỏng
     return { imported: total > 0, project: pid, counts: done, errors, conflicts: conflicts.length };
   }
   /* ---- TÁC PHẨM: kịch bản → phân cảnh → lời thoại; mọi phân cảnh chỉ dùng asset có trong Thư viện ---- */
@@ -695,7 +711,7 @@ class MCP {
           same: 'không đổi khi quay (ống quần, đồ tròn đều)' },
         q90: 'tuỳ chọn — nhìn ngang (quay trái). drawn (kèm layers) | same (= bản 45°) | front (= bản chính diện) | hide (không thấy). Thiếu → mượn 45°.',
         q135: 'tuỳ chọn — quay lưng chéo (thấy gáy + một bên má). drawn | same | front | hide. Thiếu → mượn sau lưng, rồi 45°.',
-        q180: 'tuỳ chọn — sau lưng (engine giấu mặt, đưa vật sau lưng lên trước thân). drawn | same | front | hide. Thiếu → engine dùng bản chính diện.',
+        q180: 'tuỳ chọn — sau lưng (engine giấu mặt, đưa vật sau lưng lên trước thân). drawn | same | front | hide. Thiếu → tóc: engine phủ một mảng tóc trơn theo viền đầu (vẽ q180 để giữ búi / dải / tóc dài); vật khác: bản chính diện.',
         engineHandles: 'vị trí mắt/mày/miệng 45°, tay xa ra sau thân, lật gương, tư thế × di chuyển × động tác — linh kiện KHÔNG tự xử lý',
         marks: 'trong layers của views (drawn): bọc chi tiết bằng <g class="gc-f45">…</g> (chiếu bám mặt: râu, hoa văn), gc-f45c (như trên + cắt theo viền đầu: mặt nạ), gc-b45t (chiếu trên thân trên: cổ áo, giáp ngực), gc-b45h (chiếu trên vạt) — dáng (silhouette) vẽ tay bên ngoài, chi tiết bên trong để engine chiếu'
       },

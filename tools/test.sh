@@ -384,7 +384,7 @@ no(!GC.svgString(GC.ASSETS["local.my/t-toc-nv"], "normal", { director: { view: "
 const b = JSON.parse(fs.readFileSync("studio/mau/tam-quoc.json", "utf8"));
 const r = m.importProject(b, {});
 no(r.errors.length, "Tam Quốc có mục không qua cổng: " + JSON.stringify(r.errors.slice(0, 3)));
-no(JSON.stringify(r.counts) !== JSON.stringify({ parts: 53, items: 13, scenes: 8, characters: 7, works: 1, shots: 5 }), "Tam Quốc thiếu mục: " + JSON.stringify(r.counts));
+no(JSON.stringify(r.counts) !== JSON.stringify({ parts: 55, items: 13, scenes: 8, characters: 7, works: 1, shots: 5 }), "Tam Quốc thiếu mục: " + JSON.stringify(r.counts));
 const tq = GC.assets().filter(a => a.project === "mau-tam-quoc");
 let n = 0;
 for (const a of tq) for (const v of GC.VIEW_ORDER) for (const st of ["normal", "rage", "shock"]) {
@@ -392,13 +392,74 @@ for (const a of tq) for (const v of GC.VIEW_ORDER) for (const st of ["normal", "
   no(/gc-(f45|b45)|\{[a-zA-Z]+\}|#ff00ff/.test(svg), a.name + " " + v + " " + st + ": còn đánh dấu chiếu / token chưa thay / màu thiếu");
 }
 for (const id of ["tq-buoi-toc", "tq-toc-dung", "tq-toc-gon", "tq-toc-dai"]) no(!GC.getPart("hair", "local.my/" + id).views.q180, id + ": thiếu bản sau lưng (tóc sẽ biến mất khi quay lưng)");
-const sale = m.exportProject("mau-tam-quoc", { sale: true });
-no(sale.characters.length !== 7 || sale.items.length !== 13 || sale.scenes.length !== 8 || sale.works.length || sale.warnings.length, "gói bán Tam Quốc phải trọn: " + JSON.stringify({ c: sale.characters.length, i: sale.items.length, s: sale.scenes.length, w: sale.warnings }));
+// bộ mẫu Gen Labs (CNS-022): không xuất bán; sao lưu giữ dấu mẫu; đổi tên dự án không gỡ được dấu
+let es = null; try { m.exportProject("mau-tam-quoc", { sale: true }); } catch (x) { es = x; }
+no(!es || es.code !== 403, "bộ mẫu Gen Labs không được xuất gói bán");
+const bk = m.exportProject("mau-tam-quoc");
+no(!bk.sample || bk.sample.owner !== "Gen Labs" || bk.characters.length !== 7 || bk.items.length !== 13 || bk.scenes.length !== 8, "sao lưu bộ mẫu phải đủ và giữ dấu mẫu");
+m.store.saveProject({ id: "mau-tam-quoc", name: "Đổi tên" });
+no(!m.store.listProjects().find(p => p.id === "mau-tam-quoc").sample, "sửa tên dự án không được gỡ dấu bộ mẫu");
+// mỗi tướng một bộ dấu nhận diện riêng (CNS-025)
+const sig = GC.assets().filter(a => a.project === "mau-tam-quoc").map(a => (a.identity.must || []).slice().sort().join("|"));
+no(new Set(sig).size !== sig.length, "hai tướng Tam Quốc trùng dấu nhận diện");
+// tóc dữ liệu thiếu bản lưng: khung phủ mảng tóc theo viền đầu, không để đầu trọc (CNS-024)
+m.savePartChecked({ id: "t-toc-tron", slot: "hair", layers: { hairFront: "<path d=\"M52,102 C50,70 70,55 100,55 C130,55 150,70 148,102 Z\" fill=\"{hair}\"/>" }, views: { q45: "same" } }, "t");
+m.saveAssetChecked({ id: "t-toc-tron-nv", name: "x", look: { eyes: "round", brows: "normal", parts: { hair: "local.my/t-toc-tron" }, palette: { hair: "#123456" } } }, "t");
+no(!GC.svgString(GC.ASSETS["local.my/t-toc-tron-nv"], "normal", { director: { view: "back" } }).includes("#123456"), "tóc thiếu bản lưng phải được phủ mảng tóc khi quay lưng");
+// gói làm bằng bản mới hơn: báo cập nhật trước khi ghi (CNS-023)
+const m2 = new MCP({ engine: loadEngine("."), store: new Store(fs.mkdtempSync(path.join(os.tmpdir(), "gc-v-"))), version: "0.14.0", system: {} });
+let ev2 = null; try { m2.importProject({ format: "gen-chibi.project/1", project: { id: "moi-hon" }, requires: { engine: "9.0.0", packs: [] }, items: [] }, {}); } catch (x) { ev2 = x; }
+no(!ev2 || !/cập nhật/.test(ev2.message) || m2.store.listProjects().length, "gói làm bằng bản mới hơn phải báo cập nhật và không tạo gì");
 const tmp = path.join(os.tmpdir(), "gc-tq-" + process.pid + ".json");
 cp.execFileSync(process.execPath, ["archive/tamquoc/port.js", tmp], { stdio: "ignore" });
 no(fs.readFileSync(tmp, "utf8") !== fs.readFileSync("studio/mau/tam-quoc.json", "utf8"), "studio/mau/tam-quoc.json lệch với archive/tamquoc/port.js — sửa ở port.js rồi chạy lại, không sửa tay gói");
 fs.unlinkSync(tmp);
-console.log("   ✓ {shape} khít dáng đầu · đánh dấu chiếu 45° chỉ trong views · chặn 7 kiểu dữ liệu sai · cổng nhắc tóc thiếu bản lưng · 135° mượn bản lưng · chặn lồng đánh dấu / <g/> lệch cặp · Tam Quốc qua cổng 100% (53 linh kiện · 13 trang bị · 8 cảnh · 7 tướng · 5 phân cảnh) · " + n + " ảnh sạch · gói bán trọn · tái lập được");
+console.log("   ✓ {shape} khít dáng đầu · đánh dấu chiếu 45° chỉ trong views · chặn 7 kiểu dữ liệu sai · cổng nhắc tóc thiếu bản lưng · 135° mượn bản lưng · chặn lồng đánh dấu / <g/> lệch cặp · Tam Quốc qua cổng 100% (55 linh kiện · 13 trang bị · 8 cảnh · 7 tướng · 5 phân cảnh) · " + n + " ảnh sạch · bộ mẫu không xuất bán · dấu nhận diện riêng · tóc lưng tự phủ · chặn gói bản mới hơn · tái lập được");
+' || exit 1
+echo "2g) phim sống: đạo diễn tự động (ra sân, đi lại, quay mặt, cử chỉ, máy quay, bong bóng, khẩu hình, âm thanh)"
+node -e '
+const fs = require("fs"), os = require("os"), path = require("path"), vm = require("vm");
+const { MCP } = require("./server/mcp.js"); const { Store } = require("./server/store.js");
+const ctx = { window: {}, console }; vm.createContext(ctx);
+["engine/core.js", "kinds/character/gen.core.js", "kinds/khung/gen.khung.js", "engine/player.js"].forEach(f => vm.runInContext(fs.readFileSync(f, "utf8"), ctx, { filename: f }));
+const GC = ctx.window.GenChibi, no = (c, msg) => { if (c) { console.log("   ✗", msg); process.exit(1); } };
+const m = new MCP({ engine: GC, store: new Store(fs.mkdtempSync(path.join(os.tmpdir(), "gc-p-"))), version: "t", system: {} });
+for (const f of ["van-phong-vui", "tam-quoc"]) no(m.importProject(JSON.parse(fs.readFileSync("studio/mau/" + f + ".json", "utf8")), {}).errors.length, f + " không qua cổng");
+no(!GC.LIB.motions.talk || !GC.LIB.motions.nod, "thiếu động tác talk / nod");
+let lines = 0, moves = 0, talks = 0, shouts = 0, thinks = 0, closes = 0, twos = 0, nudges = 0;
+for (const wid of ["mau-ngay-dau-di-lam", "tq-vuon-dao-xich-bich"]) for (const s of m.store.getWork(wid).shots) {
+  const p = GC.film.direct(s), ids = p.cast.map(c => c.id);
+  no(!p || !p.mood || !p.ambient || !p.ambient.weather, s.title + ": thiếu mood / ambient");
+  const ent = p.beats.filter(b => b.type === "enter");
+  no(ent.length !== ids.length || ent.some(b => !/^(left|right)$/.test(b.from) || !/^(walk|run)$/.test(b.gait)), s.title + ": mỗi diễn viên phải ra sân (đi / chạy) từ một phía");
+  for (const L of p.beats.filter(b => b.type === "line")) {
+    lines++;
+    no(["say", "shout", "think", "whisper"].indexOf(L.bubble) < 0 || ["wide", "two", "close"].indexOf(L.camera) < 0, s.title + ": thiếu bong bóng / máy quay");
+    no(ids.some(id => !L.face[id]), s.title + ": ai cũng phải có hướng nhìn");
+    no(!L.mouths.closed || !L.mouths.small || !L.mouths.big || L.mouths.closed === L.mouths.big, s.title + ": khẩu hình phải có ngậm / mở");
+    no(ids.filter(id => id !== L.actor).some(id => !L.listen[id]), s.title + ": người nghe phải có phản ứng");
+    no(L.to && L.face[L.actor] === "front" && L.face[L.to] === "front", s.title + ": đối đáp mà không ai quay về ai");
+    const st = m.store.getWork(wid).shots.find(x => x.id === s.id).event.steps[L.i];
+    if (st.to) no(L.to !== st.to, s.title + ": không theo chỉ định to");
+    if (L.move) { moves++; no(!/^(walk|run)$/.test(L.move.gait), "dáng đi lạ"); }
+    if (L.director.motion === "talk") talks++;
+    if (L.bubble === "shout") { shouts++; no(!L.punch, "câu hét phải đẩy máy quay vào"); }
+    if (L.bubble === "think") thinks++;
+    if (L.camera === "close") closes++; if (L.camera === "two") twos++;
+    if (L.nudge) nudges++;
+    if (/^(rage|shock|panic|vow)$/.test(L.state) && /!/.test(L.say) && !st.bubble) no(L.bubble !== "shout", s.title + ": câu " + L.state + " có ! phải là bong bóng hét");
+    if (/^(think|sleep)$/.test(L.state) && !st.bubble) no(L.bubble !== "think", s.title + ": " + L.state + " phải là bong bóng nghĩ");
+  }
+}
+no(moves < 6 || talks < 2 || shouts < 4 || thinks < 3 || closes < 8 || twos < 1 || nudges < 4, "phim mẫu phải có đi lại / khoa tay / hét / nghĩ / cận / hai người / bước tới-lùi: " + JSON.stringify({ moves, talks, shouts, thinks, closes, twos, nudges }));
+// lược đồ đạo diễn nhận trường dàn dựng mới, chặn giá trị sai
+const cast = [GC.ASSETS["local.my/tq-luu-bi"], GC.ASSETS["local.my/tq-quan-vu"]];
+const ok = { title: "t", steps: [{ actor: "tq-luu-bi", state: "normal", say: "A", to: "tq-quan-vu", camera: "two", bubble: "whisper", sfx: ["chime"] }] };
+no(GC.director.validate(ok, cast).length, "trường dàn dựng hợp lệ bị chặn: " + GC.director.validate(ok, cast));
+for (const [what, st] of [["to chính mình", { to: "tq-luu-bi" }], ["camera lạ", { camera: "drone" }], ["bubble lạ", { bubble: "yell" }], ["sfx lạ", { sfx: ["boom"] }]])
+  no(!GC.director.validate({ title: "t", steps: [Object.assign({ actor: "tq-luu-bi", state: "normal", say: "A" }, st)] }, cast).length, "phải chặn " + what);
+no(!/camera/.test(GC.director.prompt(cast)), "prompt đạo diễn phải dạy dàn dựng");
+console.log("   ✓ " + lines + " câu thoại: ai cũng ra sân · " + moves + " lần đi lại · " + talks + " câu khoa tay · " + shouts + " câu hét (đẩy máy) · " + thinks + " câu nghĩ · máy quay cận " + closes + " / hai người " + twos + " · " + nudges + " lần bước tới-lùi · khẩu hình + hướng nhìn + phản ứng mọi câu · lược đồ dàn dựng chặn giá trị sai");
 ' || exit 1
 echo "3) MCP"
 H="$(mktemp -d)"; PORT=7495

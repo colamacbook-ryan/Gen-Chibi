@@ -130,67 +130,96 @@ const items = Object.values(OLD.ITEMS).map(it => {
     stats: Object.assign({}, it.stats), equip: { slot: it.equip.slot, part: 'local.my/' + PARTS[k], params: Object.assign({}, it.equip.params), palette: Object.assign({}, it.equip.palette) }, status: 'published' };
 });
 
-/* ---------- 5. dàn tướng: 5 tướng cũ + 2 tướng mới phối 0 linh kiện mới ---------- */
+/* ---------- 5. dàn tướng: 5 tướng cũ + Lưu Bị, Triệu Vân ---------- */
+// v0.14: hai linh kiện vẽ mới để mỗi tướng có dấu nhận diện RIÊNG (CNS-025) — song kiếm của Lưu Bị, thương bạc tua đỏ của Triệu Vân
+const KIEM = parts.find(p => p.id === 'tq-kiem');
+parts.push({ id: 'tq-kiem-trai', slot: 'heldL', label: 'Kiếm tay trái (song kiếm)', description: 'Tam Quốc — kiếm tay trái, đi cùng kiếm tay phải thành song kiếm của Lưu Bị.',
+  layers: { heldL: '<g transform="translate(200 0) scale(-1 1)">' + KIEM.layers.heldR + '</g>' }, views: { q45: 'same' }, icon: { cx: 54, cy: 152, size: 120, rot: -21 }, tall: true, license: LICENSE, source: SOURCE });
+parts.push({ id: 'tq-thuong-bac', slot: 'heldR', label: 'Thương bạc tua đỏ', description: 'Tam Quốc — thương mũi lá thẳng, tua đỏ (Long Đảm thương của Triệu Vân).',
+  layers: { heldR: '<g transform="rotate(13 128 193)"><rect x="125.5" y="34" width="5" height="200" rx="2" fill="{wood}" stroke="{ink}" stroke-width="2"/>' +
+    '<path d="M128,-8 C134,4 135,22 131,36 L125,36 C121,22 122,4 128,-8 Z" fill="{metal}" stroke="{ink}" stroke-width="2.2" stroke-linejoin="round"/>' +
+    '<path d="M128,-2 L128,32" fill="none" stroke="#fff" stroke-width="1.2" stroke-opacity="0.7" stroke-linecap="round"/>' +
+    '<rect x="123" y="35" width="10" height="5" rx="1.5" fill="{accent}" stroke="{ink}" stroke-width="1.6"/>' +
+    '<path d="M123,40 C114,48 116,62 128,66 C140,62 142,48 133,40 Z" fill="{tassel}" stroke="{ink}" stroke-width="2" stroke-linejoin="round"/>' +
+    '<path d="M122,48 C121,54 123,58 126,61 M134,48 C135,54 133,58 130,61" fill="none" stroke="#000" stroke-width="1.2" stroke-opacity="0.2" stroke-linecap="round"/></g>' },
+  views: { q45: 'same' }, icon: { cx: 146, cy: 112, size: 196, rot: 32 }, tall: true, license: LICENSE, source: SOURCE });
+
 const look = (o, extra) => {
-  const parts = {}; Object.keys(o.parts).forEach(sl => { parts[sl] = ref(sl, o.parts[sl]); });
+  const parts = {}; Object.keys(o.parts).forEach(sl => { parts[sl] = /^local\.my\//.test(o.parts[sl]) ? o.parts[sl] : ref(sl, o.parts[sl]); });
   if (!parts.legwear) parts.legwear = 'local.my/tq-quan';
   return Object.assign({ eyes: o.eyes, brows: o.brows, parts, params: JSON.parse(JSON.stringify(o.params || {})), palette: Object.assign({}, o.palette) }, extra || {});
 };
 const must = arr => (arr || []).map(m => { const [sl, id] = m.split(':'); return /^(eyes|brows)$/.test(sl) || id === 'none' ? m : sl + ':' + ref(sl, id).replace('local.my/', ''); });
+// giọng trong phim: cao độ + tốc độ (engine/audio.js) — Trương Phi trầm và nhanh, Lính quèn cao và líu ríu, Khổng Minh chậm rãi
+const VOICE = { 'gia-cat-luong': { pitch: 1.0, rate: 0.86 }, 'quan-vu': { pitch: 0.72, rate: 0.9 }, 'truong-phi': { pitch: 0.55, rate: 1.15 },
+  'tao-thao': { pitch: 0.86, rate: 1.0 }, 'linh-que': { pitch: 1.42, rate: 1.22 }, 'luu-bi': { pitch: 0.96, rate: 0.95 }, 'trieu-van': { pitch: 1.12, rate: 1.05 } };
 const characters = Object.values(OLD.ASSETS).map(a => ({
-  id: 'tq-' + a.id, name: a.name, han: a.han || '', faction: a.faction || '', role: a.role || '', persona: a.persona || '',
+  id: 'tq-' + a.id, name: a.name, han: a.han || '', faction: a.faction || '', role: a.role || '', persona: a.persona || '', voice: VOICE[a.id],
   look: look(a.look), expressions: JSON.parse(JSON.stringify(a.expressions || {})),
   identity: { p1: a.identity.p1, must: must(a.identity.must), source: a.identity.source || '', confusable: a.identity.confusable || [] }, status: 'published'
 }));
 characters.push({
-  id: 'tq-luu-bi', name: 'Lưu Bị', han: '劉備', faction: 'Thục', role: 'Chủ công', persona: 'nhân hậu, nhẫn nại, khóc đúng lúc, giữ chữ tín với anh em',
-  look: look({ eyes: 'calm', brows: 'normal', parts: { head: 'oval', hair: 'topknot', beard: 'goatee', hat: 'official-cap', outfit: 'robe', shoes: 'boots', heldR: 'sword' },
+  id: 'tq-luu-bi', name: 'Lưu Bị', han: '劉備', faction: 'Thục', role: 'Chủ công', persona: 'nhân hậu, nhẫn nại, khóc đúng lúc, giữ chữ tín với anh em', voice: VOICE['luu-bi'],
+  look: look({ eyes: 'calm', brows: 'normal', parts: { head: 'oval', hair: 'topknot', beard: 'goatee', hat: 'official-cap', outfit: 'robe', shoes: 'boots', heldR: 'sword', heldL: 'local.my/tq-kiem-trai' },
     palette: { skin: '#f6d6bd', hair: '#231d1a', robe: '#3f7d4e', inner: '#efe2b8', trim: '#c9a23f', hat: '#23232a', accent: '#d6ad45', iris: '#3a2a20', metal: '#d9dee2' } }),
   expressions: { cry: { fxAdd: ['tears'] } },
-  identity: { p1: 'Mũ quan + áo bào xanh Thục + kiếm', must: ['hat:tq-mu-quan', 'outfit:tq-ao-bao', 'heldR:tq-kiem'], source: 'phối từ linh kiện Tam Quốc — 0 linh kiện mới', confusable: ['Tôn Quyền (áo đỏ Ngô)'] }, status: 'published'
+  identity: { p1: 'Song kiếm + mũ quan + áo bào xanh Thục', must: ['heldL:tq-kiem-trai', 'heldR:tq-kiem', 'hat:tq-mu-quan'], source: 'phối từ linh kiện Tam Quốc + song kiếm vẽ mới', confusable: ['Tào Tháo (cùng mũ quan, nhưng mặt trắng kịch, một kiếm)', 'Tôn Quyền (áo đỏ Ngô)'] }, status: 'published'
 });
 characters.push({
-  id: 'tq-trieu-van', name: 'Triệu Vân', han: '趙雲', faction: 'Thục', role: 'Võ tướng', persona: 'điềm tĩnh, gan dạ, một mình một ngựa xông trận, ít nói làm nhiều',
-  look: look({ eyes: 'phoenix', brows: 'normal', parts: { head: 'round', hair: 'neat', hat: 'soft-cap', outfit: 'armor', back: 'cape', shoes: 'boots', heldR: 'serpent-spear' },
+  id: 'tq-trieu-van', name: 'Triệu Vân', han: '趙雲', faction: 'Thục', role: 'Võ tướng', persona: 'điềm tĩnh, gan dạ, một mình một ngựa xông trận, ít nói làm nhiều', voice: VOICE['trieu-van'],
+  look: look({ eyes: 'phoenix', brows: 'normal', parts: { head: 'round', hair: 'neat', hat: 'soft-cap', outfit: 'armor', back: 'cape', shoes: 'boots', heldR: 'local.my/tq-thuong-bac' },
     palette: { skin: '#f7d8c0', hair: '#1d1a1a', robe: '#f4f4f0', armor: '#d9e2e8', trim: '#7d8b96', hat: '#f4f4f0', accent: '#5a8fc8', cape: '#e9eef3', metal: '#ffffff', wood: '#f4f4f0', tassel: '#c8372d', iris: '#2f2620' } }),
   expressions: {},
-  identity: { p1: 'Giáp bạc + áo choàng trắng + thương', must: ['outfit:tq-giap-tran', 'back:tq-ao-choang', 'heldR:tq-xa-mau'], source: 'phối từ linh kiện Tam Quốc — 0 linh kiện mới', confusable: ['Mã Siêu (giáp bạc, mũ sư tử)'] }, status: 'published'
+  identity: { p1: 'Thương bạc tua đỏ + giáp bạc + áo choàng trắng', must: ['heldR:tq-thuong-bac', 'outfit:tq-giap-tran', 'back:tq-ao-choang'], source: 'phối từ linh kiện Tam Quốc + thương bạc vẽ mới', confusable: ['Mã Siêu (giáp bạc, mũ sư tử)', 'Trương Phi (xà mâu, mặt đen)'] }, status: 'published'
 });
 
-/* ---------- 6. tác phẩm: "Từ vườn đào tới Xích Bích" ---------- */
+/* ---------- 6. tác phẩm: "Từ vườn đào tới Xích Bích" — có dàn dựng: đổi chỗ đứng để đi lại, nói với ai, hành động ---------- */
 const K = id => 'local.my/tq-' + id;
-const shot = (id, title, description, scene, cast, steps) => ({ id, title, description, scene: K(scene), cast: cast.map(K), event: { title, steps: steps.map(s => Object.assign({}, s, { actor: 'tq-' + s.actor })) } });
+const shot = (id, title, description, scene, cast, steps) => ({ id, title, description, scene: K(scene), cast: cast.map(K),
+  event: { title, steps: steps.map(s => Object.assign({}, s, { actor: 'tq-' + s.actor }, s.to ? { to: 'tq-' + s.to } : {})) } });
 const works = [{
   id: 'tq-vuon-dao-xich-bich', title: 'Từ vườn đào tới Xích Bích',
   logline: 'Ba anh em kết nghĩa, ba lần tới lều cỏ mời Khổng Minh, rồi một trận gió đông đổi vận thiên hạ.',
   script: 'Lưu Bị, Quan Vũ, Trương Phi kết nghĩa ở vườn đào. Lần thứ ba tới Long Trung giữa trời tuyết, Trương Phi nóng ruột đòi đốt lều. Gia Cát Lượng tỉnh giấc, nhận lời xuống núi. Ở doanh trại, lính báo Tào quân tám mươi vạn; Triệu Vân xin ra trận, Khổng Minh chỉ chờ gió đông. Bên sông Xích Bích, Tào Tháo cười đắc ý — cho tới khi gió đổi chiều.',
   shots: [
     shot('canh-1', 'Kết nghĩa vườn đào', 'Ba anh em thề dưới hoa đào.', 'vuon-dao', ['luu-bi', 'quan-vu', 'truong-phi'], [
-      { actor: 'luu-bi', state: 'vow', spot: 'center', activity: 'salute', say: 'Không cầu sinh cùng ngày cùng tháng cùng năm…' },
-      { actor: 'quan-vu', state: 'vow', spot: 'midLeft', say: '…chỉ nguyện chết cùng ngày cùng tháng cùng năm!' },
-      { actor: 'truong-phi', state: 'proud', spot: 'midRight', activity: 'cheer', fx: ['confetti'], say: 'Uống! Hôm nay phải say mới về!' }]),
+      { actor: 'truong-phi', state: 'proud', spot: 'right', activity: 'cheer', say: 'Rượu ngon đã bày, hoa đào đang nở rộ!' },
+      { actor: 'luu-bi', state: 'normal', spot: 'left', to: 'truong-phi', say: 'Tam đệ chớ vội uống — việc lớn trước đã.' },
+      { actor: 'luu-bi', state: 'vow', spot: 'center', activity: 'salute', to: 'quan-vu', say: 'Không cầu sinh cùng ngày cùng tháng cùng năm…' },
+      { actor: 'quan-vu', state: 'vow', spot: 'midLeft', to: 'luu-bi', say: '…chỉ nguyện chết cùng ngày cùng tháng cùng năm!' },
+      { actor: 'truong-phi', state: 'proud', spot: 'midRight', activity: 'cheer', fx: ['confetti'], to: 'luu-bi', say: 'Uống! Hôm nay phải say mới về!' }]),
     shot('canh-2', 'Lần thứ ba tới Long Trung', 'Trời tuyết, Trương Phi hết kiên nhẫn.', 'tuyet-son', ['truong-phi', 'quan-vu', 'luu-bi'], [
-      { actor: 'truong-phi', state: 'rage', spot: 'midRight', fx: ['steam'], say: 'Để đệ đốt cái lều cỏ này cho hắn dậy!' },
-      { actor: 'quan-vu', state: 'think', spot: 'midLeft', say: 'Tam đệ bình tĩnh. Người tài thường khó gặp.' },
-      { actor: 'luu-bi', state: 'beg', spot: 'center', say: 'Chờ thêm chút nữa thôi… vì thiên hạ.', hold: 2.4 }]),
+      { actor: 'truong-phi', state: 'rage', spot: 'midRight', fx: ['steam'], to: 'luu-bi', say: 'Để đệ đốt cái lều cỏ này cho hắn dậy!' },
+      { actor: 'quan-vu', state: 'think', spot: 'midLeft', to: 'truong-phi', say: 'Tam đệ bình tĩnh. Người tài thường khó gặp.' },
+      { actor: 'luu-bi', state: 'beg', spot: 'center', activity: 'bow', to: 'truong-phi', say: 'Chờ thêm chút nữa thôi… vì thiên hạ.' },
+      { actor: 'truong-phi', state: 'lazy', spot: 'right', fx: ['sweat'], say: 'Hừ… lạnh muốn đóng băng cả râu rồi!' }]),
     shot('canh-3', 'Thảo lư', 'Khổng Minh tỉnh giấc và nhận lời.', 'thao-lu', ['gia-cat-luong', 'luu-bi'], [
       { actor: 'gia-cat-luong', state: 'sleep', spot: 'midRight', say: 'Đại mộng ai tỉnh trước? Bình sinh ta tự biết…' },
-      { actor: 'luu-bi', state: 'beg', spot: 'midLeft', activity: 'bow', say: 'Xin tiên sinh xuống núi giúp Bị!' },
-      { actor: 'gia-cat-luong', state: 'smug', say: 'Thiên hạ chia ba — kế đã sẵn trong lòng.', hold: 2.6 }]),
+      { actor: 'luu-bi', state: 'unsure', spot: 'left', bubble: 'whisper', to: 'gia-cat-luong', say: 'Tiên sinh… tiên sinh đã tỉnh chưa?' },
+      { actor: 'luu-bi', state: 'beg', spot: 'midLeft', activity: 'bow', to: 'gia-cat-luong', say: 'Xin tiên sinh xuống núi giúp Bị!' },
+      { actor: 'gia-cat-luong', state: 'think', to: 'luu-bi', say: 'Thiên hạ… sẽ chia làm ba.' },
+      { actor: 'gia-cat-luong', state: 'smug', to: 'luu-bi', say: 'Kế đã sẵn trong lòng — Lượng xin theo chúa công.', hold: 2.6 }]),
     shot('canh-4', 'Doanh trại bàn kế', 'Tin dữ tới, Khổng Minh vẫn ung dung.', 'doanh-trai', ['linh-que', 'trieu-van', 'gia-cat-luong'], [
-      { actor: 'linh-que', state: 'panic', spot: 'left', fx: ['exclaim'], say: 'Báo! Tào quân tám mươi vạn!' },
-      { actor: 'trieu-van', state: 'vow', spot: 'midRight', say: 'Có Tử Long ở đây, quân sư cứ yên tâm!' },
-      { actor: 'gia-cat-luong', state: 'normal', spot: 'center', say: 'Đừng vội. Chỉ cần chờ một trận gió đông.' }]),
+      { actor: 'linh-que', state: 'panic', spot: 'left', fx: ['exclaim'], to: 'gia-cat-luong', say: 'Báo! Báo! Tào quân tám mươi vạn!' },
+      { actor: 'gia-cat-luong', state: 'normal', spot: 'center', to: 'linh-que', say: 'Đừng hoảng. Ngồi xuống uống ngụm trà đã.' },
+      { actor: 'trieu-van', state: 'vow', spot: 'right', activity: 'salute', to: 'gia-cat-luong', say: 'Có Tử Long ở đây, quân sư cứ yên tâm!' },
+      { actor: 'gia-cat-luong', state: 'smug', to: 'trieu-van', say: 'Chỉ cần chờ một trận gió đông.' },
+      { actor: 'linh-que', state: 'greedy', spot: 'midLeft', to: 'gia-cat-luong', say: 'Thế… thắng trận có được thưởng bánh bao không ạ?' }]),
     shot('canh-5', 'Gió đông Xích Bích', 'Tào Tháo đắc ý, rồi gió đổi chiều.', 'xich-bich', ['tao-thao', 'gia-cat-luong'], [
-      { actor: 'tao-thao', state: 'smug', spot: 'midLeft', say: 'Tám mươi vạn quân, thuyền nối thành đất bằng!' },
-      { actor: 'tao-thao', state: 'shock', fx: ['sweat'], say: 'Gió… gió đông?!' },
-      { actor: 'gia-cat-luong', state: 'proud', spot: 'midRight', say: 'Vạn sự đã nằm trong tính toán.', hold: 2.8 }])
+      { actor: 'tao-thao', state: 'smug', spot: 'left', activity: 'point', to: 'gia-cat-luong', say: 'Tám mươi vạn quân, thuyền nối thành đất bằng!' },
+      { actor: 'tao-thao', state: 'proud', spot: 'midLeft', to: 'gia-cat-luong', say: 'Gió tây bắc thổi — lửa sao tới được ta? Ha ha!' },
+      { actor: 'gia-cat-luong', state: 'normal', spot: 'midRight', to: 'tao-thao', say: 'Thừa tướng… nhìn lá cờ kìa.' },
+      { actor: 'tao-thao', state: 'shock', fx: ['sweat'], to: 'gia-cat-luong', say: 'Gió… gió đông?!' },
+      { actor: 'tao-thao', state: 'panic', spot: 'left', say: 'Rút! Rút mau!!!' },
+      { actor: 'gia-cat-luong', state: 'proud', to: 'tao-thao', say: 'Vạn sự đã nằm trong tính toán.', hold: 2.8 }])
   ]
 }];
 
+// BỘ MẪU của Gen Labs (CNS-022): trưng bày + làm phim thử, KHÔNG xuất bán — cổng nhập ghi dấu, cổng xuất chặn gói bán
 const bundle = {
-  format: 'gen-chibi.project/1', kind: 'sale', license: LICENSE,
-  project: { id: 'mau-tam-quoc', name: 'Tam Quốc (bộ chủ đề mẫu)', description: 'Bộ chủ đề trọn vẹn dựng từ khung: 7 tướng, 13 trang bị, 8 bối cảnh, 26 linh kiện nhân vật, 27 phông — và phim 5 phân cảnh. Mọi asset đã Phát hành: mở Gói bán để xem một bộ thư viện bán được trông thế nào.' },
+  format: 'gen-chibi.project/1', kind: 'sample', license: LICENSE,
+  sample: { owner: 'Gen Labs', license: '© 2026 Gen Labs — bộ mẫu trưng bày: xem, sửa thử, làm phim; không bán lại, không phân phối' },
+  project: { id: 'mau-tam-quoc', name: 'Tam Quốc (bộ chủ đề mẫu)', description: 'Bộ chủ đề trọn vẹn dựng từ khung: 7 tướng, 13 trang bị, 8 bối cảnh, 28 linh kiện nhân vật, 27 phông — và phim 5 phân cảnh có dàn dựng, giọng nói, âm thanh. Bộ mẫu của Gen Labs: xem gói bán trông thế nào (xem trước), không xuất bán.' },
   requires: { packs: [] }, parts: parts.concat(sceneryParts), items, scenes, characters, works
 };
 const out = process.argv[2] ? path.resolve(process.argv[2]) : path.join(APP, 'studio/mau/tam-quoc.json');   // tham số: ghi ra chỗ khác (test so khớp)

@@ -1,11 +1,15 @@
 {
  "format": "gen-chibi.project/1",
- "kind": "sale",
+ "kind": "sample",
  "license": "© 2026 Gen Labs — All rights reserved",
+ "sample": {
+  "owner": "Gen Labs",
+  "license": "© 2026 Gen Labs — bộ mẫu trưng bày: xem, sửa thử, làm phim; không bán lại, không phân phối"
+ },
  "project": {
   "id": "mau-tam-quoc",
   "name": "Tam Quốc (bộ chủ đề mẫu)",
-  "description": "Bộ chủ đề trọn vẹn dựng từ khung: 7 tướng, 13 trang bị, 8 bối cảnh, 26 linh kiện nhân vật, 27 phông — và phim 5 phân cảnh. Mọi asset đã Phát hành: mở Gói bán để xem một bộ thư viện bán được trông thế nào."
+  "description": "Bộ chủ đề trọn vẹn dựng từ khung: 7 tướng, 13 trang bị, 8 bối cảnh, 28 linh kiện nhân vật, 27 phông — và phim 5 phân cảnh có dàn dựng, giọng nói, âm thanh. Bộ mẫu của Gen Labs: xem gói bán trông thế nào (xem trước), không xuất bán."
  },
  "requires": {
   "packs": []
@@ -810,6 +814,48 @@
     }
    },
    "eyeArea": "#f8f5ef"
+  },
+  {
+   "id": "tq-kiem-trai",
+   "slot": "heldL",
+   "label": "Kiếm tay trái (song kiếm)",
+   "description": "Tam Quốc — kiếm tay trái, đi cùng kiếm tay phải thành song kiếm của Lưu Bị.",
+   "layers": {
+    "heldL": "<g transform=\"translate(200 0) scale(-1 1)\"><g transform=\"rotate(24 128 193)\"><path d=\"M125,172 L131,172 L130,110 L128,101 L126,110 Z\" fill=\"{metal}\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><path d=\"M128,168 L128,112\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.2\" stroke-opacity=\"0.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><rect x=\"119\" y=\"171\" width=\"18\" height=\"5\" rx=\"2\" fill=\"{accent}\" stroke=\"{ink}\" stroke-width=\"1.8\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><rect x=\"126\" y=\"176\" width=\"4\" height=\"22\" rx=\"1.5\" fill=\"{wood}\" stroke=\"{ink}\" stroke-width=\"1.6\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/></g></g>"
+   },
+   "views": {
+    "q45": "same"
+   },
+   "icon": {
+    "cx": 54,
+    "cy": 152,
+    "size": 120,
+    "rot": -21
+   },
+   "tall": true,
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)"
+  },
+  {
+   "id": "tq-thuong-bac",
+   "slot": "heldR",
+   "label": "Thương bạc tua đỏ",
+   "description": "Tam Quốc — thương mũi lá thẳng, tua đỏ (Long Đảm thương của Triệu Vân).",
+   "layers": {
+    "heldR": "<g transform=\"rotate(13 128 193)\"><rect x=\"125.5\" y=\"34\" width=\"5\" height=\"200\" rx=\"2\" fill=\"{wood}\" stroke=\"{ink}\" stroke-width=\"2\"/><path d=\"M128,-8 C134,4 135,22 131,36 L125,36 C121,22 122,4 128,-8 Z\" fill=\"{metal}\" stroke=\"{ink}\" stroke-width=\"2.2\" stroke-linejoin=\"round\"/><path d=\"M128,-2 L128,32\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.2\" stroke-opacity=\"0.7\" stroke-linecap=\"round\"/><rect x=\"123\" y=\"35\" width=\"10\" height=\"5\" rx=\"1.5\" fill=\"{accent}\" stroke=\"{ink}\" stroke-width=\"1.6\"/><path d=\"M123,40 C114,48 116,62 128,66 C140,62 142,48 133,40 Z\" fill=\"{tassel}\" stroke=\"{ink}\" stroke-width=\"2\" stroke-linejoin=\"round\"/><path d=\"M122,48 C121,54 123,58 126,61 M134,48 C135,54 133,58 130,61\" fill=\"none\" stroke=\"#000\" stroke-width=\"1.2\" stroke-opacity=\"0.2\" stroke-linecap=\"round\"/></g>"
+   },
+   "views": {
+    "q45": "same"
+   },
+   "icon": {
+    "cx": 146,
+    "cy": 112,
+    "size": 196,
+    "rot": 32
+   },
+   "tall": true,
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)"
   },
   {
    "id": "tq-troi-quang",
@@ -1782,6 +1828,10 @@
    "faction": "Thục",
    "role": "Mưu sĩ",
    "persona": "quân sư bình thản bí hiểm, cười mỉm sau quạt, gặp nguy vẫn làm như không",
+   "voice": {
+    "pitch": 1,
+    "rate": 0.86
+   },
    "look": {
     "eyes": "calm",
     "brows": "thin",
@@ -1849,6 +1899,10 @@
    "faction": "Thục",
    "role": "Võ tướng",
    "persona": "kiêu hãnh, trọng nghĩa, hay vuốt râu tự đắc, bị chê râu là phồng mặt",
+   "voice": {
+    "pitch": 0.72,
+    "rate": 0.9
+   },
    "look": {
     "eyes": "phoenix",
     "brows": "silkworm",
@@ -1902,6 +1956,10 @@
    "faction": "Thục",
    "role": "Võ tướng",
    "persona": "nóng nảy, hét to như sấm, mê rượu, thẳng như ruột ngựa",
+   "voice": {
+    "pitch": 0.55,
+    "rate": 1.15
+   },
    "look": {
     "eyes": "bulge",
     "brows": "bushy",
@@ -1955,6 +2013,10 @@
    "faction": "Ngụy",
    "role": "Chủ công",
    "persona": "đa nghi, gian hùng, cười nham hiểm, ngủ cũng ôm kiếm",
+   "voice": {
+    "pitch": 0.86,
+    "rate": 1
+   },
    "look": {
     "eyes": "narrow",
     "brows": "thin",
@@ -2010,6 +2072,10 @@
    "faction": "Vô danh",
    "role": "Lính",
    "persona": "nhát gan, tham ăn, luôn bị sai vặt, mơ được thưởng",
+   "voice": {
+    "pitch": 1.42,
+    "rate": 1.22
+   },
    "look": {
     "eyes": "round",
     "brows": "normal",
@@ -2055,6 +2121,10 @@
    "faction": "Thục",
    "role": "Chủ công",
    "persona": "nhân hậu, nhẫn nại, khóc đúng lúc, giữ chữ tín với anh em",
+   "voice": {
+    "pitch": 0.96,
+    "rate": 0.95
+   },
    "look": {
     "eyes": "calm",
     "brows": "normal",
@@ -2066,6 +2136,7 @@
      "outfit": "local.my/tq-ao-bao",
      "shoes": "local.my/tq-ung",
      "heldR": "local.my/tq-kiem",
+     "heldL": "local.my/tq-kiem-trai",
      "legwear": "local.my/tq-quan"
     },
     "params": {},
@@ -2089,14 +2160,15 @@
     }
    },
    "identity": {
-    "p1": "Mũ quan + áo bào xanh Thục + kiếm",
+    "p1": "Song kiếm + mũ quan + áo bào xanh Thục",
     "must": [
-     "hat:tq-mu-quan",
-     "outfit:tq-ao-bao",
-     "heldR:tq-kiem"
+     "heldL:tq-kiem-trai",
+     "heldR:tq-kiem",
+     "hat:tq-mu-quan"
     ],
-    "source": "phối từ linh kiện Tam Quốc — 0 linh kiện mới",
+    "source": "phối từ linh kiện Tam Quốc + song kiếm vẽ mới",
     "confusable": [
+     "Tào Tháo (cùng mũ quan, nhưng mặt trắng kịch, một kiếm)",
      "Tôn Quyền (áo đỏ Ngô)"
     ]
    },
@@ -2109,6 +2181,10 @@
    "faction": "Thục",
    "role": "Võ tướng",
    "persona": "điềm tĩnh, gan dạ, một mình một ngựa xông trận, ít nói làm nhiều",
+   "voice": {
+    "pitch": 1.12,
+    "rate": 1.05
+   },
    "look": {
     "eyes": "phoenix",
     "brows": "normal",
@@ -2119,7 +2195,7 @@
      "outfit": "local.my/tq-giap-tran",
      "back": "local.my/tq-ao-choang",
      "shoes": "local.my/tq-ung",
-     "heldR": "local.my/tq-xa-mau",
+     "heldR": "local.my/tq-thuong-bac",
      "legwear": "local.my/tq-quan"
     },
     "params": {},
@@ -2140,15 +2216,16 @@
    },
    "expressions": {},
    "identity": {
-    "p1": "Giáp bạc + áo choàng trắng + thương",
+    "p1": "Thương bạc tua đỏ + giáp bạc + áo choàng trắng",
     "must": [
+     "heldR:tq-thuong-bac",
      "outfit:tq-giap-tran",
-     "back:tq-ao-choang",
-     "heldR:tq-xa-mau"
+     "back:tq-ao-choang"
     ],
-    "source": "phối từ linh kiện Tam Quốc — 0 linh kiện mới",
+    "source": "phối từ linh kiện Tam Quốc + thương bạc vẽ mới",
     "confusable": [
-     "Mã Siêu (giáp bạc, mũ sư tử)"
+     "Mã Siêu (giáp bạc, mũ sư tử)",
+     "Trương Phi (xà mâu, mặt đen)"
     ]
    },
    "status": "published"
@@ -2175,16 +2252,32 @@
       "title": "Kết nghĩa vườn đào",
       "steps": [
        {
+        "actor": "tq-truong-phi",
+        "state": "proud",
+        "spot": "right",
+        "activity": "cheer",
+        "say": "Rượu ngon đã bày, hoa đào đang nở rộ!"
+       },
+       {
+        "actor": "tq-luu-bi",
+        "state": "normal",
+        "spot": "left",
+        "to": "tq-truong-phi",
+        "say": "Tam đệ chớ vội uống — việc lớn trước đã."
+       },
+       {
         "actor": "tq-luu-bi",
         "state": "vow",
         "spot": "center",
         "activity": "salute",
+        "to": "tq-quan-vu",
         "say": "Không cầu sinh cùng ngày cùng tháng cùng năm…"
        },
        {
         "actor": "tq-quan-vu",
         "state": "vow",
         "spot": "midLeft",
+        "to": "tq-luu-bi",
         "say": "…chỉ nguyện chết cùng ngày cùng tháng cùng năm!"
        },
        {
@@ -2195,6 +2288,7 @@
         "fx": [
          "confetti"
         ],
+        "to": "tq-luu-bi",
         "say": "Uống! Hôm nay phải say mới về!"
        }
       ]
@@ -2220,20 +2314,32 @@
         "fx": [
          "steam"
         ],
+        "to": "tq-luu-bi",
         "say": "Để đệ đốt cái lều cỏ này cho hắn dậy!"
        },
        {
         "actor": "tq-quan-vu",
         "state": "think",
         "spot": "midLeft",
+        "to": "tq-truong-phi",
         "say": "Tam đệ bình tĩnh. Người tài thường khó gặp."
        },
        {
         "actor": "tq-luu-bi",
         "state": "beg",
         "spot": "center",
-        "say": "Chờ thêm chút nữa thôi… vì thiên hạ.",
-        "hold": 2.4
+        "activity": "bow",
+        "to": "tq-truong-phi",
+        "say": "Chờ thêm chút nữa thôi… vì thiên hạ."
+       },
+       {
+        "actor": "tq-truong-phi",
+        "state": "lazy",
+        "spot": "right",
+        "fx": [
+         "sweat"
+        ],
+        "say": "Hừ… lạnh muốn đóng băng cả râu rồi!"
        }
       ]
      }
@@ -2258,15 +2364,31 @@
        },
        {
         "actor": "tq-luu-bi",
+        "state": "unsure",
+        "spot": "left",
+        "bubble": "whisper",
+        "to": "tq-gia-cat-luong",
+        "say": "Tiên sinh… tiên sinh đã tỉnh chưa?"
+       },
+       {
+        "actor": "tq-luu-bi",
         "state": "beg",
         "spot": "midLeft",
         "activity": "bow",
+        "to": "tq-gia-cat-luong",
         "say": "Xin tiên sinh xuống núi giúp Bị!"
        },
        {
         "actor": "tq-gia-cat-luong",
+        "state": "think",
+        "to": "tq-luu-bi",
+        "say": "Thiên hạ… sẽ chia làm ba."
+       },
+       {
+        "actor": "tq-gia-cat-luong",
         "state": "smug",
-        "say": "Thiên hạ chia ba — kế đã sẵn trong lòng.",
+        "to": "tq-luu-bi",
+        "say": "Kế đã sẵn trong lòng — Lượng xin theo chúa công.",
         "hold": 2.6
        }
       ]
@@ -2292,19 +2414,36 @@
         "fx": [
          "exclaim"
         ],
-        "say": "Báo! Tào quân tám mươi vạn!"
-       },
-       {
-        "actor": "tq-trieu-van",
-        "state": "vow",
-        "spot": "midRight",
-        "say": "Có Tử Long ở đây, quân sư cứ yên tâm!"
+        "to": "tq-gia-cat-luong",
+        "say": "Báo! Báo! Tào quân tám mươi vạn!"
        },
        {
         "actor": "tq-gia-cat-luong",
         "state": "normal",
         "spot": "center",
-        "say": "Đừng vội. Chỉ cần chờ một trận gió đông."
+        "to": "tq-linh-que",
+        "say": "Đừng hoảng. Ngồi xuống uống ngụm trà đã."
+       },
+       {
+        "actor": "tq-trieu-van",
+        "state": "vow",
+        "spot": "right",
+        "activity": "salute",
+        "to": "tq-gia-cat-luong",
+        "say": "Có Tử Long ở đây, quân sư cứ yên tâm!"
+       },
+       {
+        "actor": "tq-gia-cat-luong",
+        "state": "smug",
+        "to": "tq-trieu-van",
+        "say": "Chỉ cần chờ một trận gió đông."
+       },
+       {
+        "actor": "tq-linh-que",
+        "state": "greedy",
+        "spot": "midLeft",
+        "to": "tq-gia-cat-luong",
+        "say": "Thế… thắng trận có được thưởng bánh bao không ạ?"
        }
       ]
      }
@@ -2324,8 +2463,24 @@
        {
         "actor": "tq-tao-thao",
         "state": "smug",
-        "spot": "midLeft",
+        "spot": "left",
+        "activity": "point",
+        "to": "tq-gia-cat-luong",
         "say": "Tám mươi vạn quân, thuyền nối thành đất bằng!"
+       },
+       {
+        "actor": "tq-tao-thao",
+        "state": "proud",
+        "spot": "midLeft",
+        "to": "tq-gia-cat-luong",
+        "say": "Gió tây bắc thổi — lửa sao tới được ta? Ha ha!"
+       },
+       {
+        "actor": "tq-gia-cat-luong",
+        "state": "normal",
+        "spot": "midRight",
+        "to": "tq-tao-thao",
+        "say": "Thừa tướng… nhìn lá cờ kìa."
        },
        {
         "actor": "tq-tao-thao",
@@ -2333,12 +2488,19 @@
         "fx": [
          "sweat"
         ],
+        "to": "tq-gia-cat-luong",
         "say": "Gió… gió đông?!"
+       },
+       {
+        "actor": "tq-tao-thao",
+        "state": "panic",
+        "spot": "left",
+        "say": "Rút! Rút mau!!!"
        },
        {
         "actor": "tq-gia-cat-luong",
         "state": "proud",
-        "spot": "midRight",
+        "to": "tq-tao-thao",
         "say": "Vạn sự đã nằm trong tính toán.",
         "hold": 2.8
        }

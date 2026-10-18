@@ -1,64 +1,418 @@
 {
-  "format": "gen-chibi.project/1",
-  "license": "© 2026 Gen Labs — dự án mẫu đi kèm gen-chibi",
-  "project": { "id": "mau-van-phong-vui", "name": "Văn phòng vui (mẫu)", "description": "Dự án mẫu: 3 nhân vật, 1 vật phẩm, 2 bối cảnh và phim 4 phân cảnh — dựng hoàn toàn từ bộ khung chuẩn. Xem, sửa, xuất thử thoải mái." },
-  "parts": [],
-  "items": [
-    { "id": "mau-tap-ho-so", "name": "Tập hồ sơ", "type": "offhand", "rarity": "rare", "equip": { "slot": "heldL", "part": "gen.khung/khoi-hop", "palette": { "wood": "#c8a46a" } },
-      "stats": { "int": 12, "def": 3 }, "description": "Ba trăm trang báo cáo quý ba. Nặng hơn vẻ ngoài.", "status": "draft" }
-  ],
-  "scenes": [
-    { "id": "mau-van-phong", "name": "Văn phòng", "description": "Phòng làm việc ấm: tường kem, sàn gỗ, bàn họp, chậu cây.",
-      "layers": { "sky": "gen.khung/khung-tuong", "ground": "gen.khung/khung-nen" },
-      "deco": [ { "part": "gen.khung/khoi-ban", "x": 320, "y": 286, "scale": 0.9 }, { "part": "gen.khung/khoi-hop", "x": 92, "y": 290 }, { "part": "gen.khung/khoi-cay", "x": 578, "y": 296, "scale": 0.8 } ],
-      "palette": { "wall": "#efe3cf", "ground": "#d9c6a5", "wood": "#9c7650", "woodDark": "#6e5136", "leaf": "#6fa86b", "stone": "#c9bfae", "light": "#fff6e0" },
-      "time": "day", "weather": "clear", "status": "draft" },
-    { "id": "mau-san-thuong", "name": "Sân thượng lúc hoàng hôn", "description": "Sân thượng toà nhà, trời chiều, gió nhẹ.",
-      "layers": { "sky": "gen.khung/khung-troi", "far": "gen.khung/khung-chan-troi", "mid": { "part": "gen.khung/khung-nha", "dx": 40 }, "ground": "gen.khung/khung-nen", "front": "gen.khung/khung-tien-canh" },
-      "deco": [ { "part": "gen.khung/khoi-co", "x": 560, "y": 276, "scale": 0.7 }, { "part": "gen.khung/khoi-tru", "x": 70, "y": 296, "scale": 0.8 } ],
-      "palette": { "sky": "#9fc4e8", "skyLow": "#f6c99a", "ground": "#cdbfa8", "hill": "#9fb08a", "hillFar": "#b7c2c9", "roof": "#b5655a", "wall": "#e9dfcf" },
-      "time": "dusk", "weather": "leaves", "status": "draft" }
-  ],
-  "characters": [
-    { "id": "mau-be-na", "name": "Bé Na", "role": "Nhân viên mới", "persona": "Hăng hái, đến sớm, hay hoảng nhưng không bao giờ bỏ cuộc.",
-      "look": { "eyes": "round", "brows": "normal", "parts": { "hat": "gen.khung/khoi-mu", "outfit": "gen.khung/khoi-ao", "shoes": "gen.khung/khoi-giay" }, "params": {},
-        "palette": { "hat": "#e05a5a", "accent": "#f3d27a", "robe": "#f2c14e", "trim": "#c9772c", "boots": "#8a5a3c", "skin": "#f1d9c4", "skinShade": "#dfbea3" } },
-      "identity": { "p1": "Mũ đỏ, áo vàng", "must": ["hat:khoi-mu"], "source": "dự án mẫu" }, "status": "draft" },
-    { "id": "mau-sep-tu", "name": "Sếp Tư", "role": "Trưởng phòng", "persona": "Nghiêm, ít nói, đếm từng phút — nhưng tốt bụng ngầm.",
-      "look": { "eyes": "calm", "brows": "bushy", "parts": { "outfit": "gen.khung/khoi-ao", "back": "gen.khung/khoi-choang", "shoes": "gen.khung/khoi-giay" }, "params": {},
-        "palette": { "robe": "#4f6d8f", "trim": "#d9d2c3", "cape": "#2f3f55", "boots": "#2b2b2b", "skin": "#e8cdb5", "skinShade": "#d2b296" } },
-      "identity": { "p1": "Áo xanh than, áo choàng", "must": ["back:khoi-choang"], "source": "dự án mẫu" }, "status": "draft" },
-    { "id": "mau-anh-ba", "name": "Anh Ba", "role": "Đồng nghiệp", "persona": "Lầy lội, luôn đeo kính đen, chuyên đẩy việc cho người mới.",
-      "look": { "eyes": "narrow", "brows": "thin", "parts": { "mask": "gen.khung/khoi-mat-na", "outfit": "gen.khung/khoi-ao" }, "params": {}, "equip": { "heldL": "local.my/mau-tap-ho-so" },
-        "palette": { "accent": "#262626", "robe": "#7bb662", "trim": "#4d7a3a", "skin": "#e3c2a2", "skinShade": "#cba486" } },
-      "identity": { "p1": "Kính đen, áo xanh lá", "must": ["mask:khoi-mat-na"], "source": "dự án mẫu" }, "status": "draft" }
-  ],
-  "works": [
-    { "id": "mau-ngay-dau-di-lam", "title": "Ngày đầu đi làm", "logline": "Bé Na ngày đầu đi làm, gặp Sếp Tư khó tính và núi hồ sơ của Anh Ba.",
-      "script": "Bé Na đến từ 7 giờ nhưng Sếp Tư vẫn chê muộn. Anh Ba đẩy cho Na tập hồ sơ 300 trang. Na cày cả ngày và hoàn thành. Chiều trên sân thượng, Sếp Tư khen Na — và cả nhóm bật cười.",
-      "shots": [
-        { "id": "canh-1", "title": "Buổi sáng đầu tiên", "description": "Na hớn hở chào sếp; sếp nhìn đồng hồ.", "scene": "local.my/mau-van-phong", "cast": ["local.my/mau-be-na", "local.my/mau-sep-tu"],
-          "event": { "title": "Buổi sáng đầu tiên", "steps": [
-            { "actor": "mau-be-na", "state": "proud", "spot": "midLeft", "activity": "wave", "say": "Chào sếp ạ! Em là Na, nhân viên mới!" },
-            { "actor": "mau-sep-tu", "state": "smug", "spot": "midRight", "say": "Ừ. Đồng hồ chỉ 8 giờ 01 phút." },
-            { "actor": "mau-be-na", "state": "shock", "fx": ["sweat"], "say": "Ơ… em đến từ 7 giờ mà sếp!" },
-            { "actor": "mau-sep-tu", "state": "think", "say": "Đến sớm thì… tạm tính là đúng giờ.", "hold": 2.6 } ] } },
-        { "id": "canh-2", "title": "Núi hồ sơ", "description": "Anh Ba đẩy tập hồ sơ 300 trang cho Na.", "scene": "local.my/mau-van-phong", "cast": ["local.my/mau-sep-tu", "local.my/mau-anh-ba", "local.my/mau-be-na"],
-          "event": { "title": "Núi hồ sơ", "steps": [
-            { "actor": "mau-sep-tu", "state": "work", "spot": "center", "activity": "point", "say": "Ba, đưa Na tập hồ sơ quý ba." },
-            { "actor": "mau-anh-ba", "state": "lazy", "spot": "midLeft", "say": "Đây, nhẹ thôi mà… có ba trăm trang." },
-            { "actor": "mau-be-na", "state": "panic", "spot": "midRight", "fx": ["exclaim"], "say": "BA TRĂM TRANG?!" },
-            { "actor": "mau-anh-ba", "state": "smug", "activity": "wave", "say": "Chúc em may mắn nha~" } ] } },
-        { "id": "canh-3", "title": "Tăng tốc", "description": "Na cày hồ sơ cả ngày.", "scene": "local.my/mau-van-phong", "cast": ["local.my/mau-be-na"],
-          "event": { "title": "Tăng tốc", "steps": [
-            { "actor": "mau-be-na", "state": "vow", "spot": "center", "activity": "write", "say": "Không sao! Na làm được!" },
-            { "actor": "mau-be-na", "state": "exhausted", "fx": ["sweatMany"], "say": "Trang… hai trăm chín mươi chín…" },
-            { "actor": "mau-be-na", "state": "proud", "activity": "cheer", "fx": ["confetti"], "say": "XONG RỒI!!!" } ] } },
-        { "id": "canh-4", "title": "Hoàng hôn trên sân thượng", "description": "Sếp khen Na; Anh Ba chen ngang.", "scene": "local.my/mau-san-thuong", "cast": ["local.my/mau-sep-tu", "local.my/mau-be-na", "local.my/mau-anh-ba"],
-          "event": { "title": "Hoàng hôn", "steps": [
-            { "actor": "mau-sep-tu", "state": "proud", "spot": "midRight", "say": "Làm tốt lắm, Na. Mai đi sớm… như hôm nay nhé." },
-            { "actor": "mau-be-na", "state": "proud", "spot": "midLeft", "activity": "salute", "say": "Dạ! Mai em đến từ 6 giờ!" },
-            { "actor": "mau-anh-ba", "state": "shock", "spot": "left", "fx": ["sweat"], "say": "Ấy đừng, 6 giờ cửa còn khoá!" } ] } }
-      ] }
-  ]
+ "format": "gen-chibi.project/1",
+ "license": "© 2026 Gen Labs — dự án mẫu đi kèm gen-chibi",
+ "project": {
+  "id": "mau-van-phong-vui",
+  "name": "Văn phòng vui (mẫu)",
+  "description": "Dự án mẫu: 3 nhân vật, 1 vật phẩm, 2 bối cảnh và phim 4 phân cảnh — dựng hoàn toàn từ bộ khung chuẩn. Xem, sửa, xuất thử thoải mái."
+ },
+ "parts": [],
+ "items": [
+  {
+   "id": "mau-tap-ho-so",
+   "name": "Tập hồ sơ",
+   "type": "offhand",
+   "rarity": "rare",
+   "equip": {
+    "slot": "heldL",
+    "part": "gen.khung/khoi-hop",
+    "palette": {
+     "wood": "#c8a46a"
+    }
+   },
+   "stats": {
+    "int": 12,
+    "def": 3
+   },
+   "description": "Ba trăm trang báo cáo quý ba. Nặng hơn vẻ ngoài.",
+   "status": "draft"
+  }
+ ],
+ "scenes": [
+  {
+   "id": "mau-van-phong",
+   "name": "Văn phòng",
+   "description": "Phòng làm việc ấm: tường kem, sàn gỗ, bàn họp, chậu cây.",
+   "layers": {
+    "sky": "gen.khung/khung-tuong",
+    "ground": "gen.khung/khung-nen"
+   },
+   "deco": [
+    {
+     "part": "gen.khung/khoi-ban",
+     "x": 320,
+     "y": 286,
+     "scale": 0.9
+    },
+    {
+     "part": "gen.khung/khoi-hop",
+     "x": 92,
+     "y": 290
+    },
+    {
+     "part": "gen.khung/khoi-cay",
+     "x": 578,
+     "y": 296,
+     "scale": 0.8
+    }
+   ],
+   "palette": {
+    "wall": "#efe3cf",
+    "ground": "#d9c6a5",
+    "wood": "#9c7650",
+    "woodDark": "#6e5136",
+    "leaf": "#6fa86b",
+    "stone": "#c9bfae",
+    "light": "#fff6e0"
+   },
+   "time": "day",
+   "weather": "clear",
+   "status": "draft"
+  },
+  {
+   "id": "mau-san-thuong",
+   "name": "Sân thượng lúc hoàng hôn",
+   "description": "Sân thượng toà nhà, trời chiều, gió nhẹ.",
+   "layers": {
+    "sky": "gen.khung/khung-troi",
+    "far": "gen.khung/khung-chan-troi",
+    "mid": {
+     "part": "gen.khung/khung-nha",
+     "dx": 40
+    },
+    "ground": "gen.khung/khung-nen",
+    "front": "gen.khung/khung-tien-canh"
+   },
+   "deco": [
+    {
+     "part": "gen.khung/khoi-co",
+     "x": 560,
+     "y": 276,
+     "scale": 0.7
+    },
+    {
+     "part": "gen.khung/khoi-tru",
+     "x": 70,
+     "y": 296,
+     "scale": 0.8
+    }
+   ],
+   "palette": {
+    "sky": "#9fc4e8",
+    "skyLow": "#f6c99a",
+    "ground": "#cdbfa8",
+    "hill": "#9fb08a",
+    "hillFar": "#b7c2c9",
+    "roof": "#b5655a",
+    "wall": "#e9dfcf"
+   },
+   "time": "dusk",
+   "weather": "leaves",
+   "status": "draft"
+  }
+ ],
+ "characters": [
+  {
+   "id": "mau-be-na",
+   "name": "Bé Na",
+   "role": "Nhân viên mới",
+   "persona": "Hăng hái, đến sớm, hay hoảng nhưng không bao giờ bỏ cuộc.",
+   "look": {
+    "eyes": "round",
+    "brows": "normal",
+    "parts": {
+     "hat": "gen.khung/khoi-mu",
+     "outfit": "gen.khung/khoi-ao",
+     "shoes": "gen.khung/khoi-giay"
+    },
+    "params": {},
+    "palette": {
+     "hat": "#e05a5a",
+     "accent": "#f3d27a",
+     "robe": "#f2c14e",
+     "trim": "#c9772c",
+     "boots": "#8a5a3c",
+     "skin": "#f1d9c4",
+     "skinShade": "#dfbea3"
+    }
+   },
+   "identity": {
+    "p1": "Mũ đỏ, áo vàng",
+    "must": [
+     "hat:khoi-mu"
+    ],
+    "source": "dự án mẫu"
+   },
+   "status": "draft",
+   "voice": {
+    "pitch": 1.55,
+    "rate": 1.12
+   }
+  },
+  {
+   "id": "mau-sep-tu",
+   "name": "Sếp Tư",
+   "role": "Trưởng phòng",
+   "persona": "Nghiêm, ít nói, đếm từng phút — nhưng tốt bụng ngầm.",
+   "look": {
+    "eyes": "calm",
+    "brows": "bushy",
+    "parts": {
+     "outfit": "gen.khung/khoi-ao",
+     "back": "gen.khung/khoi-choang",
+     "shoes": "gen.khung/khoi-giay"
+    },
+    "params": {},
+    "palette": {
+     "robe": "#4f6d8f",
+     "trim": "#d9d2c3",
+     "cape": "#2f3f55",
+     "boots": "#2b2b2b",
+     "skin": "#e8cdb5",
+     "skinShade": "#d2b296"
+    }
+   },
+   "identity": {
+    "p1": "Áo xanh than, áo choàng",
+    "must": [
+     "back:khoi-choang"
+    ],
+    "source": "dự án mẫu"
+   },
+   "status": "draft",
+   "voice": {
+    "pitch": 0.68,
+    "rate": 0.86
+   }
+  },
+  {
+   "id": "mau-anh-ba",
+   "name": "Anh Ba",
+   "role": "Đồng nghiệp",
+   "persona": "Lầy lội, luôn đeo kính đen, chuyên đẩy việc cho người mới.",
+   "look": {
+    "eyes": "narrow",
+    "brows": "thin",
+    "parts": {
+     "mask": "gen.khung/khoi-mat-na",
+     "outfit": "gen.khung/khoi-ao"
+    },
+    "params": {},
+    "equip": {
+     "heldL": "local.my/mau-tap-ho-so"
+    },
+    "palette": {
+     "accent": "#262626",
+     "robe": "#7bb662",
+     "trim": "#4d7a3a",
+     "skin": "#e3c2a2",
+     "skinShade": "#cba486"
+    }
+   },
+   "identity": {
+    "p1": "Kính đen, áo xanh lá",
+    "must": [
+     "mask:khoi-mat-na"
+    ],
+    "source": "dự án mẫu"
+   },
+   "status": "draft",
+   "voice": {
+    "pitch": 1.05,
+    "rate": 1.15
+   }
+  }
+ ],
+ "works": [
+  {
+   "id": "mau-ngay-dau-di-lam",
+   "title": "Ngày đầu đi làm",
+   "logline": "Bé Na ngày đầu đi làm, gặp Sếp Tư khó tính và núi hồ sơ của Anh Ba.",
+   "script": "Bé Na đến từ 7 giờ nhưng Sếp Tư vẫn chê muộn. Anh Ba đẩy cho Na tập hồ sơ 300 trang. Na cày cả ngày và hoàn thành. Chiều trên sân thượng, Sếp Tư khen Na — và cả nhóm bật cười.",
+   "shots": [
+    {
+     "id": "canh-1",
+     "title": "Buổi sáng đầu tiên",
+     "description": "Na hớn hở chào sếp; sếp nhìn đồng hồ.",
+     "scene": "local.my/mau-van-phong",
+     "cast": [
+      "local.my/mau-be-na",
+      "local.my/mau-sep-tu"
+     ],
+     "event": {
+      "title": "Buổi sáng đầu tiên",
+      "steps": [
+       {
+        "actor": "mau-be-na",
+        "state": "proud",
+        "spot": "left",
+        "activity": "wave",
+        "to": "mau-sep-tu",
+        "say": "Chào sếp ạ! Em là Na, nhân viên mới!"
+       },
+       {
+        "actor": "mau-sep-tu",
+        "state": "smug",
+        "spot": "midRight",
+        "to": "mau-be-na",
+        "say": "Ừ. Đồng hồ chỉ 8 giờ 01 phút."
+       },
+       {
+        "actor": "mau-be-na",
+        "state": "shock",
+        "spot": "midLeft",
+        "fx": [
+         "sweat"
+        ],
+        "to": "mau-sep-tu",
+        "say": "Ơ… em đến từ 7 giờ mà sếp!"
+       },
+       {
+        "actor": "mau-sep-tu",
+        "state": "think",
+        "to": "mau-be-na",
+        "say": "Đến sớm thì… tạm tính là đúng giờ.",
+        "hold": 2.6
+       }
+      ]
+     }
+    },
+    {
+     "id": "canh-2",
+     "title": "Núi hồ sơ",
+     "description": "Anh Ba đẩy tập hồ sơ 300 trang cho Na.",
+     "scene": "local.my/mau-van-phong",
+     "cast": [
+      "local.my/mau-sep-tu",
+      "local.my/mau-anh-ba",
+      "local.my/mau-be-na"
+     ],
+     "event": {
+      "title": "Núi hồ sơ",
+      "steps": [
+       {
+        "actor": "mau-sep-tu",
+        "state": "work",
+        "spot": "center",
+        "activity": "point",
+        "to": "mau-anh-ba",
+        "say": "Ba, đưa Na tập hồ sơ quý ba."
+       },
+       {
+        "actor": "mau-anh-ba",
+        "state": "lazy",
+        "spot": "right",
+        "to": "mau-sep-tu",
+        "say": "Dạ sếp… để em mang qua."
+       },
+       {
+        "actor": "mau-anh-ba",
+        "state": "smug",
+        "spot": "midLeft",
+        "to": "mau-be-na",
+        "say": "Đây, nhẹ thôi mà… có ba trăm trang."
+       },
+       {
+        "actor": "mau-be-na",
+        "state": "panic",
+        "spot": "left",
+        "fx": [
+         "exclaim"
+        ],
+        "to": "mau-anh-ba",
+        "say": "BA TRĂM TRANG?!"
+       },
+       {
+        "actor": "mau-anh-ba",
+        "state": "smug",
+        "spot": "right",
+        "activity": "wave",
+        "to": "mau-be-na",
+        "say": "Chúc em may mắn nha~"
+       }
+      ]
+     }
+    },
+    {
+     "id": "canh-3",
+     "title": "Tăng tốc",
+     "description": "Na cày hồ sơ cả ngày.",
+     "scene": "local.my/mau-van-phong",
+     "cast": [
+      "local.my/mau-be-na"
+     ],
+     "event": {
+      "title": "Tăng tốc",
+      "steps": [
+       {
+        "actor": "mau-be-na",
+        "state": "vow",
+        "spot": "center",
+        "activity": "write",
+        "say": "Không sao! Na làm được!"
+       },
+       {
+        "actor": "mau-be-na",
+        "state": "exhausted",
+        "fx": [
+         "sweatMany"
+        ],
+        "say": "Trang… hai trăm chín mươi chín…"
+       },
+       {
+        "actor": "mau-be-na",
+        "state": "proud",
+        "activity": "cheer",
+        "fx": [
+         "confetti"
+        ],
+        "say": "XONG RỒI!!!"
+       }
+      ]
+     }
+    },
+    {
+     "id": "canh-4",
+     "title": "Hoàng hôn trên sân thượng",
+     "description": "Sếp khen Na; Anh Ba chen ngang.",
+     "scene": "local.my/mau-san-thuong",
+     "cast": [
+      "local.my/mau-sep-tu",
+      "local.my/mau-be-na",
+      "local.my/mau-anh-ba"
+     ],
+     "event": {
+      "title": "Hoàng hôn",
+      "steps": [
+       {
+        "actor": "mau-sep-tu",
+        "state": "proud",
+        "spot": "midRight",
+        "to": "mau-be-na",
+        "say": "Làm tốt lắm, Na. Mai đi sớm… như hôm nay nhé."
+       },
+       {
+        "actor": "mau-be-na",
+        "state": "proud",
+        "spot": "midLeft",
+        "activity": "salute",
+        "to": "mau-sep-tu",
+        "say": "Dạ! Mai em đến từ 6 giờ!"
+       },
+       {
+        "actor": "mau-anh-ba",
+        "state": "shock",
+        "spot": "left",
+        "fx": [
+         "sweat"
+        ],
+        "to": "mau-be-na",
+        "say": "Ấy đừng, 6 giờ cửa còn khoá!"
+       }
+      ]
+     }
+    }
+   ]
+  }
+ ]
 }
