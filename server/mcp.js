@@ -4,6 +4,7 @@
 // kiểm theo cổng, dựng SVG và lưu. Không cần LLM API lõi.
 // Vận chuyển: HTTP (POST /mcp, JSON) và stdio (server/mcp-stdio.js chuyển tiếp vào /mcp).
 'use strict';
+const fs = require('fs'), path = require('path'), crypto = require('crypto');
 
 const PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const SERVER_INFO = { name: 'gen-chibi', title: 'gen-chibi — nhà máy nhân vật chibi bằng code' };
@@ -81,6 +82,24 @@ function text(t, extra) { return Object.assign({ content: [{ type: 'text', text:
 function json(v) { return { content: [{ type: 'text', text: JSON.stringify(v, null, 2) }], structuredContent: Array.isArray(v) ? { items: v } : v }; }
 function toolError(msg) { return { content: [{ type: 'text', text: msg }], isError: true }; }
 function clone(o) { return JSON.parse(JSON.stringify(o)); }
+// Dấu theo NỘI DUNG (review bảo mật): dấu ở siêu dữ liệu gói xoá được bằng tay trước khi nhập lại → so thêm bản vẽ của từng
+// linh kiện với các bộ mẫu app mang sẵn (studio/mau/*.json, kind "sample"). Trùng hình = mục mẫu, dù đã đổi id hay gỡ dấu.
+// Giới hạn đã biết: bản sửa khác đi hoặc sửa thẳng dữ liệu trên máy của chính mình thì không chặn được ở app tự cài — giấy phép điều chỉnh.
+let SAMPLE_ART = null;
+function artSig(p) { return p && p.layers ? crypto.createHash('sha256').update(JSON.stringify([p.slot, p.layers, p.views || null])).digest('hex') : ''; }
+function sampleArt(GC) {   // ký theo dạng ĐÃ QUA CỔNG (cổng chuẩn hoá SVG) — cùng dạng với linh kiện đã lưu
+  if (SAMPLE_ART) return SAMPLE_ART;
+  SAMPLE_ART = new Map();
+  const dir = path.join(__dirname, '..', 'studio', 'mau');
+  let files = []; try { files = fs.readdirSync(dir).filter(f => f.endsWith('.json')); } catch { /* bản cài không kèm bộ mẫu */ }
+  files.forEach(f => {
+    let b; try { b = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')); } catch { return; }
+    if (!b || b.kind !== 'sample' || !Array.isArray(b.parts)) return;
+    const owner = (b.sample && b.sample.owner) || 'Gen Labs';
+    b.parts.forEach(p => { const c = GC.checkDataPart(p), h = artSig(c.errors.length ? p : c.def); if (h) SAMPLE_ART.set(h, { owner, id: p.id }); });
+  });
+  return SAMPLE_ART;
+}
 // khoá dấu nguồn gốc bộ mẫu (store.markProvenance) của mọi mục trong một gói dự án
 function provKeys(b) {
   const arr = x => Array.isArray(x) ? x.filter(v => v && typeof v === 'object') : [];
@@ -503,6 +522,7 @@ class MCP {
       characters: chars.map(clean), items: items.map(clean), scenes: scenes.map(clean), parts: Object.values(used), works, exportedAt: new Date().toISOString() };
     // mục của bộ mẫu dùng trong dự án KHÁC (linh kiện Tam Quốc gắn vào nhân vật của bạn…): gói bán chặn, gói sao lưu mang dấu theo
     const prov = S.provenance(), marked = provKeys(out).filter(k => prov[k]);
+    if (sale) { const art = sampleArt(GC); out.parts.forEach(p => { const c = GC.checkDataPart(p), hit = art.get(artSig(c.errors.length ? p : c.def)), k = 'part:' + p.slot + ':' + p.id; if (hit && !prov[k]) { prov[k] = { owner: hit.owner }; marked.push(k); } }); }
     if (sale && marked.length) {
       const owner = prov[marked[0]].owner || 'Gen Labs', names = marked.slice(0, 6).map(k => k.split(':').pop()).join(', ') + (marked.length > 6 ? '…' : '');
       throw Object.assign(new Error('Gói bán đang dùng ' + marked.length + ' mục của bộ mẫu ' + owner + ' (' + names + ') — bộ mẫu chỉ để xem, sửa thử, làm phim. Thay bằng linh kiện / trang bị / cảnh của riêng bạn rồi xuất lại.'), { code: 403, sample: marked });

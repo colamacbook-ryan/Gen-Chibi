@@ -408,6 +408,14 @@ const m3 = new MCP({ engine: loadEngine("."), store: new Store(fs.mkdtempSync(pa
 no(m3.importProject(JSON.parse(JSON.stringify(bk2)), {}).errors.length, "nhập lại sao lưu lỗi");
 let es3 = null; try { m3.exportProject("cua-toi", { sale: true }); } catch (x) { es3 = x; }
 no(!es3 || es3.code !== 403, "nhập lại sao lưu ở máy khác không được rửa dấu bộ mẫu");
+// gỡ tay dấu trong gói + đổi id linh kiện: vẫn nhận ra hình vẽ của bộ mẫu app mang sẵn (dấu theo nội dung — review bảo mật)
+const strip = JSON.parse(JSON.stringify(bk2)); delete strip.provenance;
+strip.parts.forEach(p => { if (p.id === "tq-toc-gon") p.id = "toc-cua-toi"; });
+strip.characters.forEach(a => { a.look.parts.hair = "local.my/toc-cua-toi"; a.identity = { must: ["hair:toc-cua-toi"] }; });
+const m4 = new MCP({ engine: loadEngine("."), store: new Store(fs.mkdtempSync(path.join(os.tmpdir(), "gc-pw-"))), version: "t", system: {} });
+no(m4.importProject(strip, {}).errors.length, "nhập gói đã gỡ dấu lỗi");
+let es4 = null; try { m4.exportProject("cua-toi", { sale: true }); } catch (x) { es4 = x; }
+no(!es4 || es4.code !== 403 || !/toc-cua-toi/.test(es4.message), "gỡ dấu + đổi id vẫn phải bị nhận ra theo hình vẽ: " + (es4 && es4.message));
 m.store.saveProject({ id: "mau-tam-quoc", name: "Đổi tên" });
 no(!m.store.listProjects().find(p => p.id === "mau-tam-quoc").sample, "sửa tên dự án không được gỡ dấu bộ mẫu");
 // mỗi tướng một bộ dấu nhận diện riêng (CNS-025)
