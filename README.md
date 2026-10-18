@@ -2,7 +2,7 @@
 
 Nhà máy nhân vật chibi **vẽ bằng code**: một khung xương chuẩn, kho linh kiện có tham số, 18 biểu cảm khoa trương, động tác là dữ liệu, cổng kiểm tự động. Mỗi nhân vật là một **công thức JSON**; engine dựng ra SVG/PNG/sprite sheet hoặc nhân vật "sống" đổi biểu cảm lúc chạy.
 
-- **Studio** (desktop, kiểu Data Console), ba lớp: **Thư viện** — hàng mẫu đã duyệt (nhân vật, trang bị, cảnh) theo nhóm, tải ảnh và chép mã; **Tạo tác** — nhân vật / trang bị / cảnh của tôi, Đạo diễn AI, Trợ lý AI; **Xưởng** — khuôn của Afi: linh kiện, phông, khung tư thế & biểu cảm, cổng kiểm.
+- **Studio** (desktop, kiểu Data Console), ba lớp theo dòng chảy: **Xưởng** — bộ khung chuẩn + **Tạo asset mới** (chọn khung → tham số → soát → cổng kiểm → lưu), bàn chỉnh, linh kiện, khung tư thế & biểu cảm, cổng kiểm; **Thư viện** — asset đã qua cổng xếp theo **dự án chủ đề**, tải ảnh, chép mã, tải gói dự án; **Tạo tác** — làm phim / truyện với AI đạo diễn.
 - **Đạo diễn AI**: LLM viết kịch bản sự kiện trong từ vựng đóng của kho; server kiểm và bắt model sửa nếu sai.
 - **MCP server**: agent (Claude Code, Claude Desktop…) nối thẳng vào để tự tạo nhân vật và kịch bản, không tốn LLM API lõi.
 - **Tự cập nhật** từ GitHub Releases: kiểm SHA-256, sao lưu dữ liệu trước khi đổi, tự chạy lại bản cũ nếu bản mới lỗi.
@@ -45,7 +45,7 @@ Một khung hình = **biểu cảm** (mặt) × **tư thế nền** (thân dư�
 - Xưởng › Khung tư thế & hoạt động: xem và ghép thử, tải SVG.
 
 ## Item trang bị (loại asset thứ hai)
-Item = phối linh kiện có sẵn + bảng màu riêng + độ hiếm + chỉ số; tự đứng được (icon, thẻ) và mặc được lên nhân vật (`look.equip`). Thư viện › Trang bị (tải icon/thẻ, chép mã), Tạo tác › Trang bị của tôi; mọi vật phẩm bắt đầu từ một khối khung; MCP `list_items` / `validate_item` / `save_item` / `render_item`.
+Item = phối linh kiện có sẵn + bảng màu riêng + độ hiếm + chỉ số; tự đứng được (icon, thẻ) và mặc được lên nhân vật (`look.equip`). Thư viện › Trang bị (tải icon/thẻ, chép mã), Xưởng › Tạo asset mới / Bàn chỉnh trang bị; mọi vật phẩm bắt đầu từ một khối khung; MCP `list_items` / `validate_item` / `save_item` / `render_item`.
 
 ## Cảnh (loại asset thứ ba)
 Cảnh = phối phông có sẵn (trời, cảnh xa, công trình, mặt đất, đạo cụ, tiền cảnh) + bảng màu + giờ (ngày, bình minh, hoàng hôn, đêm) + thời tiết (mưa, tuyết, hoa rơi, lá bay, sương, đom đóm). Nhân vật đứng vào 8 chỗ đứng chuẩn, tự quay 45° về phía nhau. Kịch bản đặt vào cảnh bằng `"scene"` + `"spot"`. MCP `list_scenes` / `validate_scene` / `save_scene` / `render_scene`; phông mới qua `get_part_spec` → `preview_part` → `save_part`.

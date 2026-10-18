@@ -23,6 +23,7 @@ class Store {
     this.partDir = path.join(dataDir, 'parts');
     this.itemDir = path.join(dataDir, 'items');
     this.sceneDir = path.join(dataDir, 'scenes');
+    this.projectFile = path.join(dataDir, 'projects.json');
     [this.assetDir, this.verDir, this.trashDir, this.eventDir, this.partDir, this.itemDir, this.sceneDir].forEach(d => fs.mkdirSync(d, { recursive: true }));
   }
   fileOf(key) { return key.replace('/', '~'); }
@@ -87,6 +88,18 @@ class Store {
   saveItem(def, note) { return this.saveKind(this.itemDir, 'items', def, note); }
   listScenes() { return this.listKind(this.sceneDir); }
   saveScene(def, note) { return this.saveKind(this.sceneDir, 'scenes', def, note); }
+  // dự án chủ đề: một tệp projects.json (ít, đọc cả cụm) — asset trỏ tới bằng trường project
+  listProjects() { return readJSON(this.projectFile, []); }
+  saveProject(p) {
+    if (!p || !/^[a-z0-9][a-z0-9-]{0,39}$/.test(String(p.id || ''))) throw Object.assign(new Error('id dự án: chữ thường, số, gạch nối, ≤ 40 ký tự'), { code: 400 });
+    const name = String(p.name || '').replace(/[\u0000-\u001F\u007F]/g, '').trim().slice(0, 40);
+    if (!name) throw Object.assign(new Error('dự án cần tên'), { code: 400 });
+    const list = this.listProjects(), old = list.find(x => x.id === p.id);
+    const rec = { id: p.id, name, description: String(p.description || '').replace(/[\u0000-\u001F\u007F]/g, '').slice(0, 300), createdAt: old ? old.createdAt : new Date().toISOString(), updatedAt: new Date().toISOString() };
+    if (!old && list.length >= 200) throw Object.assign(new Error('tối đa 200 dự án'), { code: 400 });
+    writeJSON(this.projectFile, old ? list.map(x => x.id === p.id ? rec : x) : list.concat(rec));
+    return rec;
+  }
   listEvents() {
     return fs.readdirSync(this.eventDir).filter(f => f.endsWith('.json')).map(f => {
       const e = readJSON(path.join(this.eventDir, f), null);

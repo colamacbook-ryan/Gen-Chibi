@@ -203,6 +203,11 @@ async function route(req, res) {
   if (em && m === 'GET') { const e = store.getEvent(em[1]); return e ? send(res, 200, e) : fail(res, 404, 'không có kịch bản này'); }
 
   // ---- asset có phiên bản
+  if (p === '/api/projects' && m === 'GET') { mcp.sync(); return send(res, 200, mcp.projects()); }
+  if (p === '/api/projects' && m === 'POST') {
+    const b = await body(req);
+    try { return send(res, 200, store.saveProject(b)); } catch (e) { return fail(res, e.code || 400, e.message); }
+  }
   if (p === '/api/parts' && m === 'GET') return send(res, 200, store.listParts());
   if (p === '/api/items' && m === 'GET') return send(res, 200, store.listItems());
   if (p === '/api/items' && m === 'POST') {

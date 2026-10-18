@@ -200,3 +200,24 @@ table.grid tr[aria-selected="true"] td { background: var(--accent-soft); }
 .dscene .actor .stage { position: absolute; inset: 0; background: none; }
 .dscene .bubble { top: 0; left: -10%; right: -10%; font-size: 12px; }
 .dscene .actor.speaking { z-index: 4 !important; }   /* đang nói: bóng thoại nổi trên lớp trước */
+/* Xưởng › Tạo asset mới: 4 bước (chọn khung → tham số → soát → cổng & lưu) */
+.steps { display: flex; gap: 6px; list-style: none; margin: 0; padding: 0; flex-wrap: wrap; }
+.steps li { display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--fg2); font-size: 12px; }
+.steps li b { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--raised); font-size: 11px; }
+.steps li.done { color: var(--fg); border-color: var(--zone-fab); }
+.steps li.done b { background: var(--zone-fab); color: #fff; }
+.split.create { grid-template-columns: minmax(0, 1fr) 520px; }
+.stepn { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--zone-fab); color: #fff; font-size: 11px; margin-right: 6px; }
+.fld { display: grid; gap: 2px; min-width: 120px; }
+.slotgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px 10px; }
+.slotgrid select { width: 100%; }
+.palgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 4px 10px; }
+.palgrid .pal { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.palgrid .pal input { width: 30px; height: 22px; padding: 0; border: 1px solid var(--line); }
+.revgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.revgrid figure { margin: 0; background: var(--stage); border-radius: 4px; display: grid; justify-items: center; }
+.revgrid img { width: 100%; display: block; }
+.revgrid figcaption { font-size: 11px; padding-bottom: 2px; }
+ul.gates { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 12px; }
+ul.gates li.ok b { color: var(--ok, #2e8b57); } ul.gates li.bad b { color: var(--bad, #c0392b); } ul.gates li.info b { color: var(--fg2); }
+@media (max-width: 1200px) { .split.create { grid-template-columns: minmax(0, 1fr); } }

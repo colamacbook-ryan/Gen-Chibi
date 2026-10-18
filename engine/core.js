@@ -965,6 +965,9 @@
   }
   function getItem(ref, preferPack) { return lookup(ITEMS, ITEM_ORDER, ref, preferPack); }
   // Chữ thuần: bỏ ký tự điều khiển (XML không nhận) rồi cắt độ dài
+  // Dự án chủ đề (giai đoạn ②): mọi asset của người dùng gắn một dự án — slug ngắn; rỗng = chưa xếp dự án
+  var PROJECT_ID = /^[a-z0-9][a-z0-9-]{0,39}$/;
+  function projectId(v) { return typeof v === 'string' && PROJECT_ID.test(v) ? v : ''; }
   function plain(t, n) { return String(t == null ? '' : t).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '').slice(0, n); }
   // Kiểm + chuẩn hoá item (dữ liệu thuần: chữ được escape khi vẽ, màu chỉ nhận hex, linh kiện phải có thật và đúng bộ phận)
   function checkItem(def) {
@@ -1000,6 +1003,8 @@
     d.description = plain(def.description, 200); d.lore = plain(def.lore, 600);
     var ic = def.icon || {};
     d.icon = { zoom: num(ic.zoom, 1, 0.5, 2.5), dx: num(ic.dx, 0, -80, 80), dy: num(ic.dy, 0, -80, 80), rot: num(ic.rot, 0, -180, 180) };
+    if (def.project != null && def.project !== '' && !projectId(def.project)) errs.push('project: slug dự án (chữ thường, số, gạch nối, ≤ 40 ký tự)');
+    d.project = projectId(def.project);
     d.kind = 'item'; d.status = ['draft', 'review', 'approved'].indexOf(def.status) >= 0 ? def.status : 'draft';
     return { errors: errs, def: errs.length ? null : d };
   }
@@ -1327,6 +1332,8 @@
         d.spots = SCENE.spotOrder.filter(function (x) { return def.spots.indexOf(x) >= 0; });
       }
     }
+    if (def.project != null && def.project !== '' && !projectId(def.project)) errs.push('project: slug dự án (chữ thường, số, gạch nối, ≤ 40 ký tự)');
+    d.project = projectId(def.project);
     d.kind = 'scene'; d.status = ['draft', 'review', 'approved'].indexOf(def.status) >= 0 ? def.status : 'draft';
     return { errors: errs.slice(0, 20), def: errs.length ? null : d };
   }
@@ -1475,7 +1482,7 @@
     getScene: getScene, getAsset: getAsset, checkScene: checkScene, registerScene: registerScene, sceneSvg: sceneSvg, sceneGate: sceneGate,
     checkCast: checkCast, checkScenery: checkScenery, svgBody: svgBody,
     scenery: function (slot) { return Object.keys(LIB.parts).map(function (k) { return LIB.parts[k]; }).filter(function (p) { return p.kind === 'scenery' && (!slot || p.slot === slot); }); },
-    getItem: getItem, checkItem: checkItem, registerItem: registerItem, itemSvg: itemSvg, itemGate: itemGate, partAlone: partAlone, sanitizeSvg: function (s0) { var e = []; var r = sanitizeSvg(s0, e, 'svg'); return { svg: r, errors: e }; },
+    projectId: projectId, getItem: getItem, checkItem: checkItem, registerItem: registerItem, itemSvg: itemSvg, itemGate: itemGate, partAlone: partAlone, sanitizeSvg: function (s0) { var e = []; var r = sanitizeSvg(s0, e, 'svg'); return { svg: r, errors: e }; },
     assets: function () { return ASSET_ORDER.map(function (k) { return ASSETS[k]; }); },
     director: { schema: directorSchema, validate: validateEvent, prompt: directorPrompt },
     gate: gate,

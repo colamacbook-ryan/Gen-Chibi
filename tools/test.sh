@@ -263,16 +263,22 @@ printf '%s\n' \
  '{"jsonrpc":"2.0","id":24,"method":"tools/call","params":{"name":"validate_event","arguments":{"event":{"title":"CI","scene":"local.my/ci-canh","steps":[{"actor":"ma-no-canh","state":"normal","spot":"left","say":"Mưa rồi"}]}}}}' \
  '{"jsonrpc":"2.0","id":26,"method":"tools/call","params":{"name":"render_scene","arguments":{"key":"afi.khung/san-khau-chuan","time":"bogus"}}}' \
  '{"jsonrpc":"2.0","id":25,"method":"tools/call","params":{"name":"render_scene","arguments":{"scene":{"id":"ci-nhap","layers":{"sky":"khung-troi","ground":"khung-nen"}},"cast":[{"character":"ma-no-canh","spot":"san-khau"}]}}}' \
+ '{"jsonrpc":"2.0","id":27,"method":"tools/call","params":{"name":"save_project","arguments":{"id":"ci-chu-de","name":"Chủ đề CI","description":"dự án thử"}}}' \
+ '{"jsonrpc":"2.0","id":28,"method":"tools/call","params":{"name":"save_item","arguments":{"item":{"id":"ci-proj","name":"Que dự án","type":"weapon","rarity":"rare","project":"ci-chu-de","equip":{"part":"khoi-que-dai"}}}}}' \
+ '{"jsonrpc":"2.0","id":29,"method":"tools/call","params":{"name":"save_character","arguments":{"asset":{"id":"ci-proj-nv","name":"NV dự án","project":"ci-chu-de","look":{"eyes":"round","brows":"normal","parts":{}}}}}}' \
+ '{"jsonrpc":"2.0","id":30,"method":"tools/call","params":{"name":"list_projects","arguments":{}}}' \
+ '{"jsonrpc":"2.0","id":31,"method":"tools/call","params":{"name":"save_project","arguments":{"id":"Sai Id","name":"x"}}}' \
+ '{"jsonrpc":"2.0","id":32,"method":"tools/call","params":{"name":"save_item","arguments":{"item":{"id":"ci-proj2","name":"x","type":"weapon","rarity":"rare","project":"../x","equip":{"part":"khoi-que-dai"}}}}}' \
  | GC_PORT=$PORT node server/mcp-stdio.js > "$H/mcp.out"
 node -e '
 const L = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n").map(JSON.parse);
 const by = id => L.find(r => r.id === id);
 const ok = (c, m) => { if (!c) { console.log("   ✗", m); process.exit(1); } };
 ok(by(1).result.protocolVersion === "2025-06-18", "bắt tay");
-ok(by(2).result.tools.length === 23, "23 tool");
+ok(by(2).result.tools.length === 25, "25 tool");
 ok(!by(3).result.isError && JSON.parse(by(3).result.content[0].text).saved, "lưu nhân vật hợp lệ");
 ok(by(4).result.isError, "chặn linh kiện lạ");
-console.log("   ✓ MCP: bắt tay, 23 tool, lưu hợp lệ, chặn linh kiện lạ");
+console.log("   ✓ MCP: bắt tay, 25 tool, lưu hợp lệ, chặn linh kiện lạ");
 const spec = JSON.parse(by(5).result.content[0].text);
 ok(spec.slots[0].slot === "hat" && spec.example && spec.views.q45, "get_part_spec có khung + ví dụ");
 ok(!by(6).result.isError && /<svg/.test(by(6).result.content[1].resource.text), "preview_part trả bàn soát SVG");
@@ -300,6 +306,11 @@ ok(by(23).result.isError && /chính thức/.test(by(23).result.content[0].text),
 ok(JSON.parse(by(24).result.content[0].text).ok, "kịch bản đặt vào cảnh của tôi");
 ok(by(25).result.isError && /chỗ đứng/.test(by(25).result.content[0].text), "render_scene chặn chỗ đứng lạ");
 ok(by(26).result && by(26).result.isError && /time: chọn/.test(by(26).result.content[0].text), "render_scene giờ lạ phải báo lỗi rõ");
+const pj = JSON.parse(by(30).result.content[0].text).find(p => p.id === "ci-chu-de");
+ok(pj && pj.name === "Chủ đề CI" && pj.items === 1 && pj.characters === 1, "list_projects đếm asset theo dự án: " + JSON.stringify(pj));
+ok(by(31).result.isError, "chặn id dự án sai");
+ok(by(32).result.isError && /project/.test(by(32).result.content[0].text), "chặn project không phải slug");
+console.log("   ✓ MCP dự án chủ đề: tạo → lưu item / nhân vật vào dự án → đếm; chặn id lạ");
 console.log("   ✓ MCP cảnh: chuẩn phông → soát → lưu phông → phối cảnh → dựng có diễn viên → kịch bản trong cảnh; chặn đè chính thức");
 ' "$H/mcp.out"
 kill $SP 2>/dev/null || true

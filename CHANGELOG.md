@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.8.0 — Giai đoạn ②: tạo asset từ khung → Thư viện theo dự án chủ đề
+- **Xưởng › Tạo asset mới** — 4 bước trên một trang: ① chọn khung (ma-nơ-canh · 10 khối vật phẩm · 2 sân khấu chuẩn) + dự án; ② tham số & chi tiết (linh kiện từng bộ phận, tham số, bảng màu, mắt / mày, dấu nhận diện, tính cách — vật phẩm: loại, độ hiếm, độ dài / cỡ, màu, chỉ số — bối cảnh: lớp phông, giờ, thời tiết, màu); ③ soát (nhân vật 8 hướng + 4 hoạt động; vật phẩm icon + thẻ + mặc lên ma-nơ-canh 4 góc; bối cảnh như chọn / đêm / có diễn viên); ④ cổng kiểm & lưu. Khung không bị sửa — bản của bạn là bản sao.
+- **Dự án chủ đề:** mọi asset của người dùng có trường `project`. Trang **Thư viện › Dự án chủ đề** (tạo dự án, xem asset theo dự án, **tải gói dự án JSON** gồm công thức + linh kiện tự vẽ đang dùng). Thư viện nhân vật / trang bị / cảnh chia mục theo dự án; đổi dự án ngay ở khung "Dùng".
+- Điều hướng theo đúng dòng chảy **Xưởng → Thư viện → Tạo tác**: Xưởng gồm Bộ khung chuẩn, Tạo asset mới, các bàn chỉnh, kho linh kiện, khung chuyển động, cổng kiểm; Tạo tác dành cho làm phim / truyện với AI.
+- Server: `GET/POST /api/projects` (projects.json). MCP thêm `list_projects`, `save_project` (25 tool); `save_character` / `save_item` / `save_scene` nhận `project` (slug, kiểm chặt).
+- Test: MCP dự án (tạo, lưu vào dự án, đếm, chặn id lạ); trình duyệt đi trọn luồng tạo nhân vật / vật phẩm / bối cảnh vào dự án rồi kiểm Thư viện.
+
 ## v0.7.0 — 8 hướng nhìn (2.5D)
 - **Engine:** thêm góc 90° (nhìn ngang), 135° (quay lưng chéo) và sau lưng — đủ 8 hướng: `front · left45/right45 · left90/right90 · left135/right135 · back` (giữ `left/right` 3/4 nhẹ). Bên phải = lật gương; sau lưng engine tự giấu mặt, đưa vật sau lưng (áo choàng…) lên trước thân, vật cầm tay ra sau thân; 90° chỉ một mắt.
 - Linh kiện thiếu góc nào thì **mượn góc gần nhất** (90° → 45°; 135° → sau lưng → 45°; sau lưng → chính diện); cổng kiểm có mục thông tin "Bản vẽ 8 hướng".

@@ -74,6 +74,7 @@ try {
   try {
     await q.goto('http://localhost:7498/');
     await q.waitForFunction(() => /^v\d/.test(document.getElementById('verChip').textContent), null, { timeout: 5000 });
+    await q.waitForSelector('.nav-group.zone-make', { timeout: 5000 });
     const zones = await q.$$eval('.nav-group', els => els.map(e => e.className));
     if (!['zone-lib', 'zone-make', 'zone-fab'].every(k => zones.some(z => z.indexOf(k) >= 0))) throw new Error('thiếu lớp Thư viện / Tạo tác / Xưởng trong điều hướng');
     const pages = await q.$$eval('.nav-item', els => els.length);
@@ -112,5 +113,42 @@ try {
     console.log('  ✓ Studio: ' + pages + ' trang mở không lỗi; 3 lớp Thư viện / Tạo tác / Xưởng; Thư viện có thẻ theo nhóm + tải ảnh + chép mã; đạo diễn diễn trong cảnh; mã nhúng không bị chèn script');
   } catch (e) { fail = 1; console.log('  ✗ Studio Thư viện/Xưởng:', e.message); }
   finally { await b3.close(); srv3.kill(); }
+}
+// Giai đoạn ②: Xưởng › Tạo asset mới (chọn khung → tham số → soát → cổng → lưu) → Thư viện xếp theo dự án chủ đề
+{
+  const home4 = mkdtempSync(path.join(tmpdir(), 'gc-'));
+  const srv4 = spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home4, GC_PORT: '7499', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' });
+  await new Promise(r => setTimeout(r, 1200));
+  const b4 = await pw.chromium.launch();
+  const q = await b4.newPage({ viewport: { width: 1500, height: 950 } });
+  const errs = []; q.on('pageerror', e => errs.push(e.message));
+  try {
+    await q.goto('http://localhost:7499/');
+    await q.evaluate(async () => {
+      const r = await fetch('api/projects', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify({ id: 'ci-du-an', name: 'Dự án CI' }) });
+      if (!r.ok) throw new Error('không tạo được dự án: ' + r.status);
+      localStorage.setItem('gc-route', JSON.stringify({ page: 'create', project: 'ci-du-an' }));
+    });
+    await q.reload(); await q.waitForTimeout(700);
+    const saveIn = async kind => {
+      if (kind) { await q.click('.split.create .seg button:has-text("' + kind + '")'); await q.waitForTimeout(250); }
+      await q.click('.split.create .libcard'); await q.waitForTimeout(350);
+      if (!(await q.$$('.split.create .sticky img')).length) throw new Error('bàn soát trống (' + (kind || 'Nhân vật') + ')');
+      await q.click('button:has-text("Lưu vào Thư viện · Dự án CI")'); await q.waitForTimeout(700);
+      if (!/Đã lưu local\.my\//.test(await q.textContent('.split.create .sticky'))) throw new Error('chưa lưu được ' + (kind || 'Nhân vật'));
+    };
+    await q.fill('.split.create input[type=text]', 'Nhân vật CI').catch(() => {});
+    await saveIn(null);
+    await q.fill('.split.create input[type=text]', 'Nhân vật CI'); await q.waitForTimeout(200);
+    await saveIn('Vật phẩm'); await saveIn('Bối cảnh');
+    await q.click('.nav-item:has-text("Dự án chủ đề")'); await q.waitForTimeout(500);
+    const card = await q.textContent('.libcard.proj');
+    if (!/Dự án CI/.test(card) || !/1 nhân vật · 1 trang bị · 1 cảnh/.test(card)) throw new Error('trang dự án: ' + card);
+    await q.click('.nav-item.zone-lib:has-text("Trang bị")'); await q.waitForTimeout(400);
+    if (!(await q.$('.seg button:has-text("Dự án · Dự án CI")'))) throw new Error('Thư viện không có mục theo dự án');
+    if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
+    console.log('  ✓ Tạo asset mới: chọn khung → soát → cổng → lưu nhân vật / vật phẩm / bối cảnh vào dự án; Thư viện xếp theo dự án chủ đề');
+  } catch (e) { fail = 1; console.log('  ✗ Tạo asset mới / dự án:', e.message); }
+  finally { await b4.close(); srv4.kill(); }
 }
 process.exit(fail);

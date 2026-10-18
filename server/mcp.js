@@ -37,6 +37,7 @@ const INSTRUCTIONS = [
   'Tạo linh kiện (đúng quy trình nhà xưởng): get_part_spec → vẽ chính diện + chọn chế độ 45° → preview_part (soát trên ma-nơ-canh, sửa đến khi đạt) → save_part → dùng trong look.parts của nhân vật. Linh kiện là DỮ LIỆU SVG (tập con an toàn), không phải code.',
   'Item trang bị (loại asset thứ hai): list_items → viết item (phối linh kiện có sẵn + bảng màu + chỉ số + độ hiếm) → validate_item → save_item → render_item (icon / card / equipped). Nhân vật mặc qua look.equip.<slot>.',
   'Cảnh (loại asset thứ ba): list_scenes → viết cảnh (phối phông có sẵn theo lớp sky/far/mid/ground/front + deco + bảng màu + time + weather) → validate_scene → save_scene → render_scene (kèm cast: nhân vật đứng ở chỗ đứng chuẩn, có activity/view). Thiếu phông: get_part_spec slot=sky|far|mid|ground|front|deco → preview_part → save_part. Kịch bản đặt vào cảnh bằng event.scene + step.spot.',
+  'Dự án chủ đề: mọi asset tạo ra thuộc một dự án (list_projects / save_project); khi lưu nhân vật / item / cảnh, đặt "project": "<id dự án>". Tạo asset bằng cách sao bộ khung chuẩn (afi.khung) rồi thêm tham số — không sửa khung.',
   'Phiên bản: get_app_version xem bản đang chạy và bản mới trên GitHub; update_app cập nhật ngay (tự rollback nếu bản mới lỗi); rollback_app quay về bản trước.',
   'Luật: chỉ dùng id có trong catalog; màu là mã hex; tham số nằm trong khoảng min–max; nhân vật mới lưu vào thư viện "local.my"; luôn khai báo identity.must (dấu nhận diện bắt buộc). Biểu cảm luôn khoa trương, hài, không máu.'
 ].join('\n');
@@ -63,6 +64,8 @@ const TOOLS = [
   { name: 'validate_scene', title: 'Kiểm cảnh', description: 'Kiểm cảnh chưa lưu: phông có thật đúng lớp, đạo cụ ≤ 10, màu hex theo token cảnh, giờ, thời tiết, chỗ đứng; dựng được và đặt được diễn viên ở mọi chỗ đứng. Cảnh = phối phông có sẵn (hoặc phông tự tạo qua save_part).', inputSchema: obj({ scene: { type: 'object', description: '{ id, name, han?, description?, layers: { sky, ground, far?, mid?, front? : "id phông" | { part, dx?, flip? } }, deco?: [{ part, x, y?, scale?, flip?, z?: back|mid|front }], palette?, time?: day|dawn|dusk|night, weather?: clear|rain|snow|petals|leaves|mist|fireflies, spots? }' } }, ['scene']), annotations: { readOnlyHint: true } },
   { name: 'save_scene', title: 'Lưu cảnh', description: 'Kiểm rồi lưu cảnh vào thư viện "Của tôi" (có phiên bản). Kịch bản dùng qua event.scene = "local.my/<id>".', inputSchema: obj({ scene: { type: 'object' }, note: { type: 'string' } }, ['scene']) },
   { name: 'render_scene', title: 'Dựng cảnh', description: 'SVG 640×360 của một cảnh (key đã lưu hoặc scene nháp), có thể đặt dàn diễn viên: cast = [{ character, spot, state?, activity?, posture?, move?, motion?, facing?, view? }] (≤ 8). Từ hai diễn viên trở lên, ai chưa chọn view sẽ tự quay 45° về giữa. time / weather để xem thử biến thể.', inputSchema: obj({ key: { type: 'string' }, scene: { type: 'object' }, cast: { type: 'array', items: { type: 'object' } }, time: { type: 'string', enum: ['day', 'dawn', 'dusk', 'night'] }, weather: { type: 'string', enum: ['clear', 'rain', 'snow', 'petals', 'leaves', 'mist', 'fireflies'] } }), annotations: { readOnlyHint: true } },
+  { name: 'list_projects', title: 'Dự án chủ đề', description: 'Các dự án chủ đề của Thư viện (mỗi asset của người dùng thuộc một dự án): id, tên, mô tả, số nhân vật / item / cảnh. Lưu asset vào dự án bằng trường "project": "<id>" trong save_character / save_item / save_scene.', inputSchema: obj({}), annotations: { readOnlyHint: true } },
+  { name: 'save_project', title: 'Tạo / sửa dự án chủ đề', description: 'Tạo hoặc đổi tên một dự án chủ đề (id slug, name, description). Không xoá asset.', inputSchema: obj({ id: { type: 'string', description: 'slug: chữ thường, số, gạch nối' }, name: { type: 'string' }, description: { type: 'string' } }, ['id', 'name']) },
   { name: 'get_app_version', title: 'Phiên bản ứng dụng', description: 'Phiên bản đang chạy, bản mới nhất trên GitHub Releases, ghi chú phát hành, bản có thể quay về và lịch sử cập nhật. check=false để không hỏi GitHub.', inputSchema: obj({ check: { type: 'boolean', description: 'hỏi GitHub bản mới nhất (mặc định true)' } }), annotations: { readOnlyHint: true, openWorldHint: true } },
   { name: 'update_app', title: 'Cập nhật ứng dụng', description: 'Tải bản mới nhất từ GitHub Releases (kiểm SHA-256, sao lưu dữ liệu) rồi khởi động lại. Bản mới lỗi thì launcher tự quay về bản cũ. Kết nối ngắt vài giây; gọi get_app_version sau ~15 giây để xác nhận. force=true áp cả bản từng bị bỏ qua vì lần trước chạy lỗi.', inputSchema: obj({ force: { type: 'boolean' } }), annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: true } },
   { name: 'rollback_app', title: 'Quay về bản trước', description: 'Chạy lại bản cài trước đó (sao lưu dữ liệu trước khi đổi). Cần confirm = "ROLLBACK".', inputSchema: obj({ confirm: { type: 'string', enum: ['ROLLBACK'] } }, ['confirm']), annotations: { destructiveHint: true } }
@@ -88,6 +91,16 @@ class MCP {
     (this.store.listScenes ? this.store.listScenes() : []).forEach(d => { const r = this.GC.registerScene(MY_PACK, d); if (r.errors.length) console.warn('bỏ cảnh', d.id, r.errors); });
   }
   sync() { this.store.listAssets().forEach(a => this.GC.registerAsset(a.pack, clone(a))); }
+  // dự án + số asset mỗi loại (asset trỏ dự án chưa đăng ký vẫn hiện, để không "mất" thứ gì)
+  projects() {
+    const GC = this.GC, list = this.store.listProjects(), ids = list.map(p => p.id);
+    const mine = [].concat(GC.assets(), GC.items(), GC.scenes()).filter(x => x.pack === MY_PACK);
+    mine.forEach(x => { if (x.project && ids.indexOf(x.project) < 0) { ids.push(x.project); list.push({ id: x.project, name: x.project, description: '(chưa đăng ký)' }); } });
+    return list.map(p => Object.assign({}, p, {
+      characters: GC.assets().filter(x => x.pack === MY_PACK && x.project === p.id).length,
+      items: GC.items().filter(x => x.pack === MY_PACK && x.project === p.id).length,
+      scenes: GC.scenes().filter(x => x.pack === MY_PACK && x.project === p.id).length }));
+  }
 
   catalog() {
     const GC = this.GC, L = GC.LIB;
@@ -145,6 +158,8 @@ class MCP {
     x.look.parts = x.look.parts || {};
     x.version = x.version || 0;
     x.status = ['draft', 'review', 'approved'].indexOf(x.status) >= 0 ? x.status : 'draft';
+    if (x.project != null && x.project !== '' && !this.GC.projectId(x.project)) throw new Error('project: slug dự án (chữ thường, số, gạch nối, ≤ 40 ký tự) — xem list_projects');
+    x.project = this.GC.projectId(x.project);
     return this.GC.migrate(x);
   }
   // nhận key đầy đủ (pack/id) hoặc id ngắn (ưu tiên bản trong "Của tôi")
@@ -219,6 +234,10 @@ class MCP {
       }
       case 'get_app_version': case 'update_app': case 'rollback_app': return this.appTool(name, args, ctx || {});
       case 'get_part_spec': return json(this.partSpec(args.slot));
+      case 'list_projects': { this.sync(); return json(this.projects()); }
+      case 'save_project': {
+        try { return json(this.store.saveProject(args)); } catch (e) { return toolError(e.message); }
+      }
       case 'list_items': {
         return json(GC.items().filter(i => (!args.type || i.type === args.type) && (!args.rarity || i.rarity === args.rarity))
           .map(i => ({ key: i.key, name: i.name, type: i.type, rarity: i.rarity, slot: i.equip.slot, part: i.equip.part, stats: i.stats })));
