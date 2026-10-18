@@ -135,7 +135,12 @@
       // drive(null) → về trạng thái đang có (tư thế hoà dần từ dáng cuối của biên đạo)
       drive: function (fn) {
         this.driver = fn || null; this.settled = false;
-        if (!fn) { this.dsig = null; this.setState(this.state || 'normal', this.director); }
+        if (!fn) {
+          this.dsig = null; this.setState(this.state || 'normal', this.director);
+          // biên đạo để góc quay nhiều vòng (lộn 360°, múa thương 956°) → đưa về góc tương đương gần đích nhất, không xoay ngược cả vòng
+          var tg = GC.poseAt(this.asset, this.resolved, 0, this.still), cur = this.cur;
+          GC.JOINT_IDS.forEach(function (j) { var d = cur[j].rot - tg[j].rot; cur[j].rot = tg[j].rot + (d - 360 * Math.round(d / 360)); });
+        }
         kick();
       },
       destroy: function () {

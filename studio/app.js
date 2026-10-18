@@ -1823,6 +1823,7 @@
     actions(h('span', { class: 'note', text: 'Asset tạo từ bộ khung chuẩn được xếp theo dự án chủ đề.' }),
       Store.mode === 'server' ? h('button', { class: 'btn', title: 'Nhập tệp gói dự án (.json) — mọi thứ đi qua cổng kiểm', onclick: pickBundle }, 'Nhập gói…') : null,
       Store.mode === 'server' ? samplesLeft().map(function (S) { return h('button', { class: 'btn', title: S.note, onclick: function () { importDemo(S); } }, S.short); }) : null,
+      Store.mode === 'server' ? samplesStale().map(function (S) { return h('button', { class: 'btn', title: 'Bộ mẫu trên máy là bản cũ — ' + S.note, onclick: function () { updateDemo(S); } }, '⟳ Cập nhật ' + S.short.replace(/^\S+ /, '')); }) : null,
       h('button', { class: 'btn primary', onclick: function () { go({ page: 'create', project: sel || '' }); } }, '+ Tạo asset mới ›'));
     var listBox = h('div', { class: 'stack' }), detail = h('div', { class: 'stack' });
     var nName = h('input', { type: 'text', placeholder: 'Tên dự án (vd: Tam Quốc)', maxlength: 40, style: 'width:100%' });
@@ -1859,7 +1860,8 @@
       var P = Projects.all().filter(function (p) { return p.id === sel; })[0] || { id: '', name: 'Chưa xếp dự án', description: '' };
       var parts = [['Nhân vật', inProject(GC.assets(), sel), 'lib-characters'], ['Vật phẩm', inProject(GC.items(), sel), 'lib-items'], ['Bối cảnh', inProject(GC.scenes(), sel), 'lib-scenes']];
       var body = h('div', { class: 'pad stack' }, P.description ? h('div', { class: 'note', text: P.description }) : null,
-        P.sample ? h('div', { class: 'banner' }, h('span', { text: 'Bộ mẫu của ' + (P.sample.owner || 'Gen Labs') + ' — ' + (P.sample.license || 'chỉ để xem và làm phim thử') + '. Muốn bán: dựng bộ của bạn trong một dự án riêng rồi phát hành.' })) : null);
+        P.sample ? h('div', { class: 'banner' }, h('span', { text: 'Bộ mẫu của ' + (P.sample.owner || 'Gen Labs') + ' — ' + (P.sample.license || 'chỉ để xem và làm phim thử') + '. Muốn bán: dựng bộ của bạn trong một dự án riêng rồi phát hành.' }),
+          Store.mode === 'server' ? samplesStale().filter(function (S) { return S.id === P.id; }).map(function (S) { return h('button', { class: 'btn sm primary', onclick: function () { updateDemo(S); } }, '⟳ Có bản mới của bộ mẫu — cập nhật'); }) : null) : null);
       parts.forEach(function (g) {
         if (!g[1].length) return;
         var row = h('div', { class: 'libgrid sm' });
@@ -1885,9 +1887,16 @@
   // dự án mẫu đi kèm bản cài: nhập qua đúng cổng như mọi gói (studio/mau/<file>.json)
   var SAMPLES = [
     { id: 'mau-van-phong-vui', file: 'van-phong-vui', short: '✨ Văn phòng vui (mẫu)', button: '✨ Mở dự án mẫu "Văn phòng vui"', note: '3 nhân vật · 2 bối cảnh · phim 4 phân cảnh — xem trọn luồng trong 10 giây, sửa và xuất thử thoải mái.' },
-    { id: 'mau-tam-quoc', file: 'tam-quoc', short: '🏯 Tam Quốc (bộ chủ đề)', button: '🏯 Mở bộ chủ đề mẫu "Tam Quốc"', note: '7 tướng · 13 trang bị · 8 bối cảnh · phim 6 phân cảnh (có màn đấu) — một bộ thư viện trọn vẹn dựng từ khung, đã Phát hành: xem Gói bán trông thế nào.' }
+    { id: 'mau-tam-quoc', file: 'tam-quoc', version: '2026.10.18-dau-tap', short: '🏯 Tam Quốc (bộ chủ đề)', button: '🏯 Mở bộ chủ đề mẫu "Tam Quốc"', note: '7 tướng · 13 trang bị · 8 bối cảnh · phim 6 phân cảnh (có màn đấu) — một bộ thư viện trọn vẹn dựng từ khung, đã Phát hành: xem Gói bán trông thế nào.' }
   ];
   function samplesLeft() { return SAMPLES.filter(function (S) { return !Projects.all().some(function (p) { return p.id === S.id; }); }); }
+  // bộ mẫu đã nhập từ bản cũ (thiếu phân cảnh / asset mới) — bản cài tự cập nhật mã nhưng không tự đụng dữ liệu của người dùng
+  function samplesStale() { return SAMPLES.filter(function (S) { var p = Projects.all().filter(function (x) { return x.id === S.id; })[0]; return S.version && p && p.sample && p.sample.version !== S.version; }); }
+  function updateDemo(S) {
+    if (!window.confirm('Cập nhật "' + S.short.replace(/^\S+ /, '') + '" lên bản mới nhất?\n\nChỗ bạn đã sửa trên bộ mẫu thành phiên bản cũ (vẫn xem lại được trong lịch sử).')) return;
+    toast('Đang cập nhật ' + S.short.replace(/^\S+ /, '') + '…');
+    fetch('studio/mau/' + S.file + '.json').then(function (r) { if (!r.ok) throw new Error('Không tải được bộ mẫu'); return r.json(); }).then(function (b) { return importBundle(b, true); }).catch(function (e) { toast(e.message); });
+  }
   function exportBundle(P, sale) {
     // bản cài: server dựng gói (đủ tác phẩm + cảnh báo); bản xem thử không server: dựng tại trình duyệt — cùng một luật gói bán
     var get = Store.mode === 'server' ? Store.api('GET', 'api/projects/export?id=' + encodeURIComponent(P.id) + (sale ? '&sale=1' : '')) : Promise.resolve(projectBundle(P, sale));

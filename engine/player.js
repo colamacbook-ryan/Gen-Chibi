@@ -92,6 +92,7 @@
     steps.forEach(function (s) { var m = MOOD[s.state] || 'calm'; n[m] = (n[m] || 0) + 1; });
     return Object.keys(n).sort(function (a, b) { return n[b] - n[a] || (a === 'calm' ? 1 : -1); })[0] || 'calm';
   }
+  function own(o, k) { return typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k); }   // tra bảng không dính prototype (constructor, toString…)
   function uniq(a) { return a.filter(function (x, i) { return x && a.indexOf(x) === i; }); }
   function faceTo(cur, me, target) {
     if (!target || !cur[target]) return 'front';
@@ -122,7 +123,7 @@
     steps.forEach(function (s, i) {
       var me = s.actor, base = GC.LIB.states[s.state] || GC.LIB.states.normal;
       if (s.spot && GC.SCENE.spots[s.spot]) row[me] = GC.SCENE.spots[s.spot];
-      var ac = s.action && AC[s.action], silent = ac && !String(s.say || '').trim();   // ra đòn không hô: chỉ có nhịp hành động
+      var ac = s.action && own(AC, s.action) ? AC[s.action] : null, silent = ac && !String(s.say || '').trim();   // ra đòn không hô: chỉ có nhịp hành động
       var line = { type: 'line', i: i, actor: me, say: s.say == null ? '' : String(s.say), state: s.state, hold: s.hold || 0 };
       // đi tới chỗ mới khi spot đổi (chạy khi hoảng / giận hoặc đường xa)
       if (s.spot && s.spot !== cur[me]) {
@@ -179,15 +180,16 @@
       if (ac) {
         // hành động (biên đạo): dựng sẵn ở đây (thuần dữ liệu) để biết ai đứng đâu sau màn đấu — câu sau quay mặt đúng chỗ
         var tg = ac.attack && s.target && s.target !== me && ids.indexOf(s.target) >= 0 ? s.target : null;
-        var beat = { type: 'act', i: i, actor: me, action: s.action, label: ac.label, target: tg, react: tg ? (RE[s.react] ? s.react : 'hit') : null };
+        var beat = { type: 'act', i: i, actor: me, action: s.action, label: ac.label, target: tg, react: tg ? (own(RE, s.react) ? s.react : 'hit') : null };
         if (silent && line.move) beat.move = line.move;
         var Pa = { asset: byId[me], x: sx(cur[me]), y: row[me].y, k: row[me].k }, tl = null;
+        var walls = ids.filter(function (id) { return id !== me && id !== tg; }).map(function (id) { return sx(cur[id]); });   // người đứng xem: không lộn / văng đè lên
         try {
-          if (tg) tl = C.duel({ a: Pa, b: { asset: byId[tg], x: sx(cur[tg]), y: row[tg].y, k: row[tg].k }, action: s.action, react: beat.react });
-          else { var o = to || nearest(me, ids, cur); tl = C.solo({ a: Pa, action: s.action, dir: o && sx(cur[o]) < Pa.x ? -1 : 1 }); }
+          if (tg) tl = C.duel({ a: Pa, b: { asset: byId[tg], x: sx(cur[tg]), y: row[tg].y, k: row[tg].k }, action: s.action, react: beat.react, walls: walls });
+          else { var o = to || nearest(me, ids, cur); tl = C.solo({ a: Pa, action: s.action, dir: o && sx(cur[o]) < Pa.x ? -1 : 1, walls: walls }); }
         } catch (e) { tl = null; }   // đòn chưa dựng được (thiếu clip…) → bỏ hành động, câu thoại vẫn diễn
         if (tl) {
-          beat.real = Math.round(tl.real * 100) / 100;
+          beat.real = Math.round(tl.real * 100) / 100; beat.dir = tl.duel.dir;
           beat.from = [Pa.x, tg ? sx(cur[tg]) : null];
           beat.end = tl.duel.end.map(function (v) { return Math.round(v * 10) / 10; });
           beat.impact = tl.duel.impact != null ? Math.round(C.storyToReal(tl, tl.duel.impact) * 100) / 100 : null;
@@ -302,7 +304,7 @@
   function player(box, opts) {
     opts = opts || {};
     GC.render.injectCSS(); injectCSS();
-    var R = GC.render, A = GC.audio || null, insts = {}, els = {}, cast = {}, pos = {}, run = 0, timers = [], cam = null, ov = null, shk = null, flash = null, bub = null, plan = null, camState = null;
+    var R = GC.render, A = GC.audio || null, insts = {}, els = {}, cast = {}, pos = {}, run = 0, timers = [], cam = null, ov = null, shk = null, flash = null, bub = null, plan = null, camState = null, acting = null;
     var progress = function (t) { if (opts.onProgress) opts.onProgress(t); };
     var ro = typeof ResizeObserver === 'function' ? new ResizeObserver(function () { if (bub) bub.layout(); }) : null;
     if (ro) ro.observe(box);
@@ -494,8 +496,10 @@
       var tl = beat.tl;
       // đứng lệch chỗ so với lúc đạo diễn tính (vd. tua giữa chừng) → dựng lại cho khớp vị trí thật
       if (!tl || Math.abs(pos[beat.actor].x - beat.from[0]) > 2 || (beat.target && Math.abs(pos[beat.target].x - beat.from[1]) > 2)) {
-        var pa = pos[beat.actor], P = function (id) { return { asset: cast[id], x: pos[id].x, y: pos[id].y, k: pos[id].k }; };
-        tl = beat.target ? C.duel({ a: P(beat.actor), b: P(beat.target), action: beat.action, react: beat.react }) : C.solo({ a: P(beat.actor), action: beat.action, dir: beat.end && beat.end[0] < pa.x ? -1 : 1 });
+        var P = function (id) { return { asset: cast[id], x: pos[id].x, y: pos[id].y, k: pos[id].k }; };
+        var walls = Object.keys(pos).filter(function (id) { return ids.indexOf(id) < 0 && insts[id]; }).map(function (id) { return pos[id].x; });
+        try { tl = beat.target ? C.duel({ a: P(beat.actor), b: P(beat.target), action: beat.action, react: beat.react, walls: walls }) : C.solo({ a: P(beat.actor), action: beat.action, dir: beat.dir || 1, walls: walls }); }
+        catch (e) { return Promise.resolve(); }   // không dựng lại được → bỏ màn này, phim vẫn chạy tiếp
       }
       // người xem quay về phía màn đấu
       Object.keys(insts).forEach(function (id) { if (ids.indexOf(id) < 0) act(id, 'normal', { view: pos[id].x > pos[beat.actor].x ? 'left45' : 'right45' }); });
@@ -510,7 +514,7 @@
         tl.events.forEach(function (e) {
           if (fired[e.i] || e.rt > rr) return;
           fired[e.i] = 1;
-          if (e.rt < lastR - 0.05) return;   // bỏ sự kiện quá cũ (tab ẩn rồi hiện lại)
+          if (e.rt < rr - 0.25) return;   // tab ẩn rồi hiện lại: bỏ sự kiện đã quá giờ, không nổ dồn một lúc
           var pan = e.x != null ? Math.max(-0.8, Math.min(0.8, (e.x - 320) / 320)) : panOf(beat.actor);
           if (e.sfx) [].concat(e.sfx).forEach(function (n) { sfx(n, { gain: e.gain != null ? e.gain : 0.8, pan: pan }); });
           if (e.shake) { shk.classList.remove('shake'); void shk.offsetWidth; shk.classList.add('shake'); }
@@ -535,6 +539,13 @@
           return { pose: F.pose, layers: F.layers, sig: F.sig, blend: rr < 0.22 ? 0.3 : 1 };   // vào biên đạo: hoà dần từ dáng đang có
         });
       });
+      // dọn dẹp dùng chung: hết màn, bị dừng (stop() xoá hẹn giờ nên promise không bao giờ xong) hoặc lỗi
+      var cleaned = false, cleanup = function () {
+        if (cleaned) return; cleaned = true; acting = null;
+        fxs.remove(); ovs.remove();
+        ids.forEach(function (id) { if (insts[id] && insts[id].driver) insts[id].drive(null); });
+      };
+      acting = cleanup;
       return wait(tl.real * 1000 + 120, r).then(function () {
         var end = ids.map(function (id, ai) { return C.finalAt(tl, tl.T, ai).x; });
         ids.forEach(function (id, ai) {
@@ -543,8 +554,8 @@
           var o = ids[1 - ai] || null, view = o ? (pos[o].x < end[ai] ? 'left45' : 'right45') : 'front';
           act(id, ai === 1 && beat.react === 'ko' ? 'dizzy' : ai === 1 && beat.react !== 'dodge' && beat.react !== 'block' ? 'injured' : 'normal', { view: view });
         });
-        fxs.remove(); ovs.remove();
-      }, function (e) { fxs.remove(); ovs.remove(); ids.forEach(function (id) { if (insts[id]) insts[id].drive(null); }); throw e; });
+        cleanup();
+      }, function (e) { cleanup(); throw e; });
     }
     function lines(r) {
       var L = plan.beats.filter(function (b) { return b.type === 'line' || b.type === 'act'; }), i = 0, lastCam = 'wide';
@@ -571,7 +582,7 @@
       sfx('gong', { gain: 0.6 });
       return wait(ms || 1700, r);
     }
-    function stop() { run++; timers.forEach(clearTimeout); timers = []; if (A) A.stopAll(); bub = null; if (ov) Array.prototype.forEach.call(ov.querySelectorAll('.gcp-bub'), function (b) { b.remove(); }); }
+    function stop() { run++; timers.forEach(clearTimeout); timers = []; if (acting) acting(); if (A) A.stopAll(); bub = null; if (ov) Array.prototype.forEach.call(ov.querySelectorAll('.gcp-bub'), function (b) { b.remove(); }); }
     function playShot(shot, r) {
       if (r !== run) return Promise.reject('stop');   // đã stop / show trong cùng tick: không dựng lại sân khấu, không bật nhạc
       if (!build(shot, true)) return Promise.resolve();

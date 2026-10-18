@@ -50,6 +50,9 @@ Khung không bao giờ bị sửa — asset của bạn là bản sao của khun
   - Nút 🔊 bật / tắt tiếng; chọn giọng: *tự động* (máy đọc tiếng Việt nếu trình duyệt có, không thì giọng blip), *máy đọc*, *blip kiểu game*, *tắt*.
   - Muốn chỉ đạo kỹ hơn: mỗi câu thoại có thể đặt `to` (nói với ai), `camera` (close / two / wide), `bubble` (say / shout / think / whisper), `sfx`; AI đạo diễn biết các trường này. Đổi `spot` giữa các câu để nhân vật đi lại.
   - **Hành động & đấu võ** (v0.15): một bước kịch bản có thể là một màn biên đạo — `action` (đòn đánh: `thrust` đâm, `sweep` quét, `combo` liên hoàn, `spin` xoay chém, `leap` tung người bổ xuống; một mình: `twirl` múa binh khí, `rage`, `hero`, `victory`, `dance`, `salute`, `stretch`, `scratch`, `startle`, `flip`), `target` (người bị đánh) và `react` (`hit` trúng, `fall` ngã lộn rồi bật dậy, `ko` ngã choáng, `block` gạt đỡ, `dodge` lộn ra sau né). Người ra đòn **tự áp sát hoặc lùi** cho mũi binh khí chạm đúng đối thủ; đối thủ phản ứng **đúng khung va chạm**; có khựng hình, slow-mo, vệt chém, chữ tượng thanh (VÚT! XOẸT! RẦM!), người đứng xem giật mình. `say` để `""` nếu chỉ ra đòn. Xem phân cảnh *Đấu tập trước trận* trong phim Tam Quốc.
+    - Hiện **chưa có ô chọn đòn trong Studio**: viết `action` / `target` / `react` bằng cách nhờ **AI đạo diễn** ("cho Triệu Vân đâm Trương Phi, Trương Phi gạt đỡ") hoặc gửi kịch bản JSON qua MCP (`save_event`, `save_shot`).
+    - Hai đấu thủ **không chồng đầu** (người ra đòn tự lùi lại nếu đổ người tới quá sát), **không lộn / văng đè lên người đứng xem**; đòn *tung người bổ xuống* bổ xuống đất ngay trước mặt đối thủ — trúng bằng chấn động.
+    - Máy đang giữ bộ Tam Quốc cũ (chưa có màn đấu)? Ở **Thư viện › Dự án chủ đề**, bấm **⟳ Cập nhật Tam Quốc** để nhập đè bản mới.
 
 ### Xuất thành phẩm
 | Nút | Ra gì |

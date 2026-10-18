@@ -790,7 +790,7 @@
               camera: { enum: FILM_CAMERAS.slice() },
               bubble: { enum: FILM_BUBBLES.slice() },
               sfx: { type: 'array', maxItems: 3, items: { enum: FILM_SFX.slice() } },
-              // hành động (biên đạo): đòn đánh cần target; người bị đánh phản ứng đúng khung va chạm
+              // hành động (biên đạo): đòn đánh cần target; người bị đánh phản ứng đúng khung va chạm (chưa nạp biên đạo → enum rỗng = không dùng được)
               action: { enum: Object.keys(FA.act) },
               target: { enum: castIds(cast) },
               react: { enum: Object.keys(FA.react) }
@@ -838,12 +838,12 @@
       if (s.camera !== undefined && FILM_CAMERAS.indexOf(s.camera) < 0) errs.push(n + 'camera chọn: ' + FILM_CAMERAS.join(', ') + '.');
       if (s.bubble !== undefined && FILM_BUBBLES.indexOf(s.bubble) < 0) errs.push(n + 'bubble chọn: ' + FILM_BUBBLES.join(', ') + '.');
       if (s.sfx !== undefined && (!Array.isArray(s.sfx) || s.sfx.length > 3 || s.sfx.some(function (x) { return FILM_SFX.indexOf(x) < 0; }))) errs.push(n + 'sfx: mảng tối đa 3, chọn trong ' + FILM_SFX.join(', ') + '.');
-      var FA = filmActions(), ac = s.action !== undefined ? FA.act[s.action] : null;
+      var FA = filmActions(), ac = s.action !== undefined && own(FA.act, s.action) ? FA.act[s.action] : null;
       if (s.action !== undefined && !ac) errs.push(n + 'action "' + String(s.action).slice(0, 40) + '" không có (chọn: ' + Object.keys(FA.act).join(', ') + ').');
       if (ac && ac.attack && s.target === undefined) errs.push(n + 'đòn "' + s.action + '" cần "target" (người bị đánh).');
       if (s.target !== undefined && (S.target.enum.indexOf(s.target) < 0 || s.target === s.actor)) errs.push(n + '"target" phải là một diễn viên khác trong dàn diễn viên.');
       if (s.target !== undefined && !(ac && ac.attack)) errs.push(n + '"target" chỉ đi với đòn đánh (' + Object.keys(FA.act).filter(function (k) { return FA.act[k].attack; }).join(', ') + ').');
-      if (s.react !== undefined && !FA.react[s.react]) errs.push(n + 'react chọn: ' + Object.keys(FA.react).join(', ') + '.');
+      if (s.react !== undefined && !own(FA.react, s.react)) errs.push(n + 'react chọn: ' + Object.keys(FA.react).join(', ') + '.');
       else if (s.react !== undefined && s.target === undefined) errs.push(n + '"react" là phản ứng của "target" — cần có target.');
     });
     return errs;

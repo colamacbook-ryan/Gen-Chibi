@@ -9,8 +9,12 @@ const require = createRequire(import.meta.url);
 const { Store } = require('../server/store.js');
 let pw; try { pw = require('playwright'); } catch { pw = require('/opt/node22/lib/node_modules/playwright'); }
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+// server con do test dựng: tắt hết khi thoát — kể cả khi test sập giữa chừng (L-55: server sót lại khiến lần chạy sau dùng nhầm dữ liệu cũ)
+const kids = []; const kid = c => { kids.push(c); return c; };
+process.on('exit', () => kids.forEach(c => { try { c.kill(); } catch (e) { /* đã tắt */ } }));
+process.on('uncaughtException', e => { console.error(e); process.exit(1); });
 const home = mkdtempSync(path.join(tmpdir(), 'gc-'));
-const srv = spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home, GC_PORT: '7496', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' });
+const srv = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home, GC_PORT: '7496', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
 await new Promise(r => setTimeout(r, 1200));
 const b = await pw.chromium.launch();
 const p = await b.newPage();
@@ -46,7 +50,7 @@ try {
 // Bản cài có token: Studio phải hiện màn đăng nhập (không lùi về chế độ xem thử), nhập đúng token thì vào được.
 {
   const home2 = mkdtempSync(path.join(tmpdir(), 'gc-'));
-  const srv2 = spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home2, GC_PORT: '7497', GC_NO_AUTOCHECK: '1', GC_API_TOKEN: 'tok-test-123' }, stdio: 'ignore' });
+  const srv2 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home2, GC_PORT: '7497', GC_NO_AUTOCHECK: '1', GC_API_TOKEN: 'tok-test-123' }, stdio: 'ignore' }));
   await new Promise(r => setTimeout(r, 1200));
   const b2 = await pw.chromium.launch();
   const q = await b2.newPage();
@@ -67,7 +71,7 @@ try {
 // thư viện có thẻ theo nhóm + khu "Dùng" (tải ảnh, chép mã); đạo diễn diễn được trong cảnh.
 {
   const home3 = mkdtempSync(path.join(tmpdir(), 'gc-'));
-  const srv3 = spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home3, GC_PORT: '7498', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' });
+  const srv3 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home3, GC_PORT: '7498', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
   await new Promise(r => setTimeout(r, 1200));
   const b3 = await pw.chromium.launch();
   const q = await b3.newPage({ viewport: { width: 1500, height: 950 } });
@@ -125,7 +129,7 @@ try {
 // Giai đoạn ②: Xưởng › Tạo asset mới (chọn khung → tham số → soát → cổng → lưu) → Thư viện xếp theo dự án chủ đề
 {
   const home4 = mkdtempSync(path.join(tmpdir(), 'gc-'));
-  const srv4 = spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home4, GC_PORT: '7499', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' });
+  const srv4 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home4, GC_PORT: '7499', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
   await new Promise(r => setTimeout(r, 1200));
   const b4 = await pw.chromium.launch();
   const q = await b4.newPage({ viewport: { width: 1500, height: 950 } });
@@ -202,7 +206,7 @@ try {
 // Người dùng mới: màn chọn khu → "Mở dự án mẫu" một chạm → Thư viện có dự án đủ asset → Tạo tác sẵn sàng diễn cả phim
 {
   const home5 = mkdtempSync(path.join(tmpdir(), 'gc-'));
-  const srv5 = spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home5, GC_PORT: '7494', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' });
+  const srv5 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home5, GC_PORT: '7494', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
   await new Promise(r => setTimeout(r, 1200));
   const b5 = await pw.chromium.launch();
   const q = await b5.newPage({ viewport: { width: 1440, height: 900 } });
@@ -277,6 +281,23 @@ try {
     await q.goto('http://localhost:7494/tao-tac'); await q.waitForSelector('.readybar');
     if (!/Sẵn sàng diễn cả 6 phân cảnh/.test(await q.textContent('.readybar'))) throw new Error('phim Tam Quốc chưa sẵn sàng: ' + await q.textContent('.readybar'));
     if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
+    // máy đã nhập bộ mẫu bản cũ (trước phân cảnh đấu): Thư viện mời cập nhật → nhập đè → đủ phân cảnh mới (CNS-036)
+    await q.evaluate(async () => {
+      const b = await fetch('studio/mau/tam-quoc.json').then(r => r.json());
+      b.sample.version = 'cu'; b.works[0].shots = b.works[0].shots.filter(s => s.id !== 'canh-dau-tap');
+      const r = await fetch('api/projects/import', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify({ bundle: b, overwrite: true }) });
+      if (!r.ok) throw new Error('nhập bản cũ ' + r.status);
+    });
+    await q.evaluate(() => localStorage.setItem('gc-route-thu-vien', JSON.stringify({ page: 'projects', project: 'mau-tam-quoc' })));
+    await q.goto('http://localhost:7494/thu-vien'); await q.waitForSelector('button:has-text("Cập nhật Tam Quốc")', { timeout: 6000 });
+    // hộp xác nhận "Cập nhật…?": trang này đã tự chấp nhận mọi hộp thoại (q.on('dialog') ở trên)
+    await q.click('button:has-text("⟳ Cập nhật Tam Quốc")'); await q.waitForURL(/\/thu-vien$/); await q.waitForTimeout(800);
+    if (await q.$('button:has-text("⟳ Cập nhật Tam Quốc")')) throw new Error('cập nhật xong vẫn còn mời cập nhật');
+    await q.evaluate(() => localStorage.setItem('gc-route-tao-tac', JSON.stringify({ page: 'works', work: 'tq-vuon-dao-xich-bich' })));
+    await q.goto('http://localhost:7494/tao-tac'); await q.waitForSelector('.readybar');
+    if (!/Sẵn sàng diễn cả 6 phân cảnh/.test(await q.textContent('.readybar'))) throw new Error('cập nhật bộ mẫu chưa có phân cảnh mới: ' + await q.textContent('.readybar'));
+    if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
+    console.log('  ✓ Bộ mẫu cũ trên máy → nút "Cập nhật Tam Quốc" → nhập đè → đủ 6 phân cảnh (có màn đấu)');
     console.log('  ✓ Bộ chủ đề mẫu Tam Quốc một chạm: 7 tướng · 13 trang bị · 8 bối cảnh · dấu bộ mẫu Gen Labs (không xuất bán) → phim 6/6 phân cảnh sẵn sàng (có màn đấu)');
   } catch (e) { fail = 1; console.log('  ✗ dự án mẫu một chạm:', e.message); }
   finally { await b5.close(); srv5.kill(); }
@@ -342,6 +363,13 @@ try {
     if (!['VÚT!', 'XOẸT!', 'RẦM!'].some(w => seen.words.has(w))) throw new Error('không thấy chữ va chạm: ' + [...seen.words].join(' '));
     if (seen.xs.size < 12) throw new Error('diễn viên gần như không di chuyển khi đấu (' + seen.xs.size + ' vị trí)');
     if (await q.$('.gcp-fx')) throw new Error('xong màn đấu mà lớp hiệu ứng chưa dọn');
+    // bấm dừng GIỮA màn đấu: lớp hiệu ứng / màu phủ phải dọn, diễn viên thôi bị điều khiển (review v0.15 #4)
+    await q.evaluate(() => { P.stop(); P.play([SHOT], 'Thử lại'); });
+    await q.waitForFunction(() => /Đâm|Liên hoàn|Tung/.test(document.getElementById('pg').textContent), null, { timeout: 30000 });
+    await q.waitForTimeout(500);
+    await q.evaluate(() => P.stop()); await q.waitForTimeout(400);
+    const left = await q.evaluate(() => ({ fx: document.querySelectorAll('.gcp-fx').length, driven: Array.from(document.querySelectorAll('.gcp-actor svg.gc-full')).filter(s => s.__gc && s.__gc.driver).length }));
+    if (left.fx || left.driven) throw new Error('dừng giữa màn đấu còn sót ' + left.fx + ' lớp hiệu ứng, ' + left.driven + ' diễn viên bị điều khiển');
     if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
     console.log('  ✓ Biên đạo trong phim: "Đấu tập trước trận" diễn ' + seen.acts.size + ' màn (' + [...seen.acts].join(', ') + ') · chữ va chạm ' + [...seen.words].join(' ') + ' · ' + seen.xs.size + ' thế đứng · dọn lớp hiệu ứng');
   } catch (e) { fail = 1; console.log('  ✗ biên đạo trong phim:', e.message); }

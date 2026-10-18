@@ -416,6 +416,18 @@ const m4 = new MCP({ engine: loadEngine("."), store: new Store(fs.mkdtempSync(pa
 no(m4.importProject(strip, {}).errors.length, "nhập gói đã gỡ dấu lỗi");
 let es4 = null; try { m4.exportProject("cua-toi", { sale: true }); } catch (x) { es4 = x; }
 no(!es4 || es4.code !== 403 || !/toc-cua-toi/.test(es4.message), "gỡ dấu + đổi id vẫn phải bị nhận ra theo hình vẽ: " + (es4 && es4.message));
+// … và đảo thứ tự khoá layers cũng không lách được chữ ký (review v0.15 #6)
+const strip2 = JSON.parse(JSON.stringify(strip)), multi = strip2.parts.find(p => Object.keys(p.layers || {}).length > 1) || strip2.parts[0];
+strip2.parts.forEach(p => { const L = p.layers, ks = Object.keys(L).reverse(); p.layers = {}; ks.forEach(k => { p.layers[k] = L[k]; }); });
+const m6 = new MCP({ engine: loadEngine("."), store: new Store(fs.mkdtempSync(path.join(os.tmpdir(), "gc-pk-"))), version: "t", system: {} });
+no(m6.importProject(strip2, {}).errors.length, "nhập gói đảo khoá lỗi");
+let es6 = null; try { m6.exportProject("cua-toi", { sale: true }); } catch (x) { es6 = x; }
+no(!es6 || es6.code !== 403, "đảo thứ tự khoá layers không được lách dấu bộ mẫu");
+// bộ mẫu có phiên bản (CNS-036): Studio mời cập nhật khi máy giữ bản cũ — phiên bản ghi trong Studio phải khớp gói
+const Q = String.fromCharCode(39), smv = b.sample && b.sample.version;   // (khối này nằm trong node -e nên không viết dấu nháy đơn)
+const appV = (new RegExp("id: " + Q + "mau-tam-quoc" + Q + "[^}]*?version: " + Q + "([^" + Q + "]+)" + Q).exec(fs.readFileSync("studio/app.js", "utf8")) || [])[1];
+no(!smv || smv !== appV, "phiên bản bộ mẫu trong studio/app.js (" + appV + ") phải khớp gói tam-quoc.json (" + smv + ")");
+no((m.store.listProjects().find(p => p.id === "mau-tam-quoc").sample || {}).version !== smv, "nhập bộ mẫu phải lưu phiên bản bộ mẫu");
 m.store.saveProject({ id: "mau-tam-quoc", name: "Đổi tên" });
 no(!m.store.listProjects().find(p => p.id === "mau-tam-quoc").sample, "sửa tên dự án không được gỡ dấu bộ mẫu");
 // mỗi tướng một bộ dấu nhận diện riêng (CNS-025)
@@ -493,21 +505,49 @@ for (const s of m.store.getWork("tq-vuon-dao-xich-bich").shots) {
     no(b.end.some(x => x < 30 || x > 610), s.title + ": " + b.action + " đẩy nhân vật ra ngoài sân khấu " + JSON.stringify(b.end));
     if (!b.target) continue;
     duels++;
-    const tl = b.tl, ti = tl.duel.impact, tip = C.pointAt(tl, ti, "tip", 0), xb = C.finalAt(tl, ti, 1).x, dir = tl.duel.dir;
-    let gap = 1e9; for (let t = 0; t < tl.T; t += 0.02) gap = Math.min(gap, Math.abs(C.finalAt(tl, t, 1).x - C.finalAt(tl, t, 0).x));
-    no(gap < 45, s.title + ": " + b.action + " hai người chồng lên nhau (gần nhất " + gap.toFixed(0) + ")");
-    if (b.react === "dodge") { const lift = -C.finalAt(tl, ti, 1).pose.root.y; no(lift < 20 && Math.abs(xb - b.from[1]) < 30, s.title + ": né mà vẫn đứng nguyên chỗ lúc đòn tới"); }
-    else no(Math.abs(tip[0] - (xb - dir * 26 * 0.8)) > 14, s.title + ": " + b.action + " không chạm đối thủ (mũi " + tip[0].toFixed(0) + ", mặt trước thân " + (xb - dir * 26 * 0.8).toFixed(0) + ")");
+    const tl = b.tl, ti = tl.duel.impact, tr = tl.duel.reach, dir = tl.duel.dir, A0 = tl.actors[0];
+    // hình học binh khí THẬT (đọc từ bản vẽ) — không đo bằng chính hàm của engine (review v0.15: test tự quy chiếu bỏ lọt mũi thương xuyên người)
+    const W = C.weaponOf(A0.asset);
+    no(W.tip > 30 && !(A0.weapon.R && A0.weapon.R.tip === W.tip && A0.weapon.R.angle === W.angle), s.title + ": màn đấu không dùng hình học binh khí thật " + JSON.stringify(A0.weapon));
+    const F = C.finalAt(tl, tr, 0), M = GC.jointMatrices(F.pose), a = (W.angle || 0) * Math.PI / 180, L = W.tip || 0, px = 128 + L * Math.sin(a), py = 193 - L * Math.cos(a);
+    const tipX = F.x + ((M.handR[0] * px + M.handR[2] * py + M.handR[4]) - 100) * F.K, xb = C.finalAt(tl, tr, 1).x, front = xb - dir * (26 + (C.ACTIONS[b.action].shock || 0)) * 0.8, xa = F.x;
+    // tâm đầu tính thẳng từ ma trận khớp (không qua pointAt) — gốc chân cách xa vẫn có thể chồng đầu khi người đổ tới (review v0.15: bổ thương 37)
+    const headAt = (t, ai) => { const F = C.finalAt(tl, t, ai), H = GC.jointMatrices(F.pose).head; return [F.x + (H[0] * 100 + H[2] * 96 + H[4] - 100) * F.K, F.G + (H[1] * 100 + H[3] * 96 + H[5] - 228) * F.K]; };
+    let gap = 1e9; for (let t = 0; t < tl.T; t += 0.01) { const p = headAt(t, 0), q = headAt(t, 1); gap = Math.min(gap, Math.hypot(p[0] - q[0], p[1] - q[1])); }
+    no(gap < 68, s.title + ": " + b.action + " đầu hai người chồng nhau (tâm đầu gần nhất " + gap.toFixed(0) + " < 68)");
+    no(!(tl.duel.short >= 0 && tl.duel.short <= 80), s.title + ": " + b.action + " lùi quá xa để tránh chồng đầu (" + tl.duel.short + ")");
+    if (b.react === "dodge") { const lift = -C.finalAt(tl, ti, 1).pose.root.y; no(lift < 20 && Math.abs(C.finalAt(tl, ti, 1).x - b.from[1]) < 30, s.title + ": né mà vẫn đứng nguyên chỗ lúc đòn tới"); }
+    else {
+      const miss = (front - tipX) * dir, atMin = Math.abs((xb - xa) * dir - 102 * 0.8) < 4;   // tầm bị giới hạn bởi khoảng cách tối thiểu / rào đầu (duel.short) thì được hụt đúng phần đó, nhưng không xuyên qua
+      no(miss < -14 || (!atMin && miss > 14 + tl.duel.short), s.title + ": " + b.action + (miss < 0 ? " mũi binh khí xuyên qua đối thủ " : " không chạm đối thủ ") + "(mũi " + tipX.toFixed(0) + ", mặt trước thân " + front.toFixed(0) + ")");
+    }
     const seg = tl.actors[1].segments.filter(x => x.id !== "hold")[0], rc = C.REACTS[b.react].contact;
     no(!seg || Math.abs(seg.t0 + rc - ti) > 0.03, s.title + ": " + b.react + " lệch khung va chạm");
   }
 }
 no(acts < 4 || duels < 3, "phim Tam Quốc phải có màn đấu (≥ 3 đòn có đối thủ): " + acts + " / " + duels);
-for (const [what, st] of [["đòn thiếu target", { action: "thrust" }], ["target cho hành động một mình", { action: "dance", target: "tq-quan-vu" }], ["action lạ", { action: "fly" }], ["react thiếu target", { react: "hit" }], ["react lạ", { action: "thrust", target: "tq-quan-vu", react: "explode" }]])
+for (const [what, st] of [["đòn thiếu target", { action: "thrust" }], ["target cho hành động một mình", { action: "dance", target: "tq-quan-vu" }], ["action lạ", { action: "fly" }], ["react thiếu target", { react: "hit" }], ["react lạ", { action: "thrust", target: "tq-quan-vu", react: "explode" }],
+  ["action là khoá prototype", { action: "toString" }], ["react là khoá prototype", { action: "thrust", target: "tq-quan-vu", react: "constructor" }]])
   no(!GC.director.validate({ title: "t", steps: [Object.assign({ actor: "tq-luu-bi", state: "normal", say: "" }, st)] }, cast).length, "phải chặn " + what);
 no(GC.director.validate({ title: "t", steps: [{ actor: "tq-luu-bi", state: "rage", say: "Xem kiếm!", action: "sweep", target: "tq-quan-vu", react: "block" }] }, cast).length, "đòn hợp lệ bị chặn");
 no(!/action/.test(GC.director.prompt(cast)) || !/react/.test(GC.director.prompt(cast)), "prompt đạo diễn phải dạy action / target / react");
-console.log("   ✓ biên đạo trong phim: " + acts + " màn hành động (" + duels + " màn đấu) · mũi binh khí chạm mặt trước thân đối thủ ±14 · không chồng người · phản ứng đúng khung va chạm ±0,03 s · không văng khỏi sân khấu · lược đồ action / target / react chặn 5 kiểu sai");
+// người đứng xem (v0.15.1): lộn né / lùi lấy đà không đè lên người đứng sau lưng (chừa một thân 80); đòn bay ngắn lại thay vì lùi, vẫn chạm
+const span = (tl, ai) => { const xs = tl.actors[ai].xs; return [Math.min.apply(null, xs), Math.max.apply(null, xs)]; };
+const tipMiss = tl => { const W = C.weaponOf(tl.actors[0].asset), F = C.finalAt(tl, tl.duel.reach, 0), M = GC.jointMatrices(F.pose), a = (W.angle || 0) * Math.PI / 180, px = 128 + W.tip * Math.sin(a), py = 193 - W.tip * Math.cos(a);
+  return (C.finalAt(tl, tl.duel.reach, 1).x - tl.duel.dir * (26 + (C.ACTIONS[tl.duel.action].shock || 0)) * 0.8 - (F.x + ((M.handR[0] * px + M.handR[2] * py + M.handR[4]) - 100) * F.K)) * tl.duel.dir; };
+const tlW = C.duel({ a: { asset: cast[0], x: 177, y: 330, k: 0.8 }, b: { asset: cast[1], x: 412, y: 330, k: 0.8 }, action: "leap", react: "fall", walls: [100] }), mW = tipMiss(tlW);
+no(span(tlW, 0)[0] < 170, "bổ thương: lùi lấy đà đè lên người đứng sau lưng (lùi tới " + span(tlW, 0)[0].toFixed(0) + ", người xem ở 100)");
+no(mW < -14 || mW > 14 + tlW.duel.short, "bổ thương có người sau lưng: không chạm / xuyên qua (" + mW.toFixed(0) + ", lùi né đầu " + tlW.duel.short + ")");
+const tlD = C.duel({ a: { asset: cast[1], x: 474, y: 330, k: 0.8 }, b: { asset: cast[0], x: 211, y: 330, k: 0.8 }, action: "combo", react: "dodge", walls: [100] });
+no(span(tlD, 1)[0] < 170, "lộn né đáp lên người đứng sau lưng (tới " + span(tlD, 1)[0].toFixed(0) + ", người xem ở 100)");
+const tl0 = C.duel({ a: { asset: cast[0], x: 177, y: 330, k: 0.8 }, b: { asset: cast[1], x: 412, y: 330, k: 0.8 }, action: "leap", react: "fall" }), tlM = C.duel({ a: { asset: cast[0], x: 177, y: 330, k: 0.8 }, b: { asset: cast[1], x: 412, y: 330, k: 0.8 }, action: "leap", react: "fall", walls: [300] });
+no(JSON.stringify(tl0.duel.end) !== JSON.stringify(tlM.duel.end), "người đứng chen GIỮA hai đấu thủ không được làm đổi màn đấu");
+// xoay người đánh sang TRÁI: lúc va chạm phải quay mặt về đối thủ (review v0.15 #2)
+const tlS = C.duel({ a: { asset: cast[0], x: 430, y: 330, k: 0.8 }, b: { asset: cast[1], x: 210, y: 330, k: 0.8 }, action: "spin", react: "hit" });
+no(!/^left/.test(C.finalAt(tlS, tlS.duel.impact, 0).view), "xoay chém sang trái mà quay lưng về đối thủ");
+// binh khí cất khi tay đưa lên mặt (review v0.15 #3): các cảm xúc tay gần mặt phải có hide
+for (const mo of ["ponder", "gloat", "covet", "plead", "loaf", "grind", "nurse"]) no(!(GC.LIB.motions[mo].hide || []).length, "động tác " + mo + " phải cất binh khí (tay đưa lên mặt)");
+console.log("   ✓ biên đạo trong phim: " + acts + " màn hành động (" + duels + " màn đấu) · mũi binh khí (hình học thật từ bản vẽ) chạm mặt trước thân ±14, không xuyên qua · tâm đầu hai người cách ≥ 68 suốt màn · không lộn / lùi đè người đứng xem · phản ứng đúng khung va chạm ±0,03 s · không văng khỏi sân khấu · lược đồ action / target / react chặn 5 kiểu sai");
 console.log("   ✓ " + lines + " câu thoại: ai cũng ra sân · " + moves + " lần đi lại · " + talks + " câu khoa tay · " + shouts + " câu hét (đẩy máy) · " + thinks + " câu nghĩ · máy quay cận " + closes + " / hai người " + twos + " · " + nudges + " lần bước tới-lùi · khẩu hình + hướng nhìn + phản ứng mọi câu · lược đồ dàn dựng chặn giá trị sai");
 ' || exit 1
 echo "2h) ngôn ngữ cơ thể: 18 cảm xúc là 18 hình bóng toàn thân khác nhau rõ (đo bằng điểm mốc)"

@@ -100,10 +100,11 @@
       (c.faces || []).forEach(function (f) { faces.push({ t: t0 + f[0] * sc, f: f[1] }); });
       c.keys.forEach(function (k) {
         var x = k[3] || {};
-        keys.push({ t: t0 + k[0] * sc, p: resolve(k[1]), ease: k[2] || 'io', ez: x.ez, spin: !!x.spin, view: viewName(x.view || view, x.dir || d), hide: x.hide || step.hide || c.hide || [], clip: c.id, step: si });
+        // x.dir: hướng TƯƠNG ĐỐI với hướng của bước (xoay người: -1 = đang quay về phía sau) — đánh sang trái vẫn đúng
+        keys.push({ t: t0 + k[0] * sc, p: resolve(k[1]), ease: k[2] || 'io', ez: x.ez, spin: !!x.spin, view: viewName(x.view || view, x.dir ? x.dir * d : d), hide: x.hide || step.hide || c.hide || [], clip: c.id, step: si });
         if (x.face) faces.push({ t: t0 + k[0] * sc, f: x.face });
       });
-      var x0 = X, ts = a.travelScale || 1;
+      var x0 = X, ts = (a.travelScale || 1) * (step.tscale > 0 ? step.tscale : 1);   // tscale: thu / giãn quãng đi riêng bước này (đòn bay ngắn lại khi sau lưng hết chỗ lùi)
       (c.travel || []).forEach(function (q) { X = x0 + d * q[1] * ts; trav.push({ t: t0 + q[0] * sc, x: X, ease: q[2] || 'io' }); });
       (c.events || []).concat(step.events || []).forEach(function (e) {
         var ev = Object.assign({ t: t0 + e[0] * sc, dir: d, step: si, a: ai }, e[1]);
@@ -131,7 +132,7 @@
     faces.sort(function (p, q) { return p.t - q.t; });
     var acc = { eyes: null, brows: null, mouth: null, fx: [] };
     faces.forEach(function (f) { acc = Object.assign({}, acc, f.f); f.full = acc; });
-    return { asset: a.asset, K: K, G: a.ground || 330, weapon: a.weapon || weaponOf(a.asset), keys: keys, trav: trav, faces: faces, segments: segs, T: t, cache: {} };
+    return { asset: a.asset, K: K, G: a.ground || 330, weapon: a.weapon || handWeapon(a.asset), keys: keys, trav: trav, faces: faces, segments: segs, T: t, cache: {} };
   }
   // tư thế mỗi khung (120 Hz): nội suy then chốt → lò xo; vị trí trong thế giới
   function bake(A, nF) {
@@ -212,12 +213,15 @@
   // hình học binh khí cầm tay (tay phải): góc nghiêng sẵn của bản vẽ + chiều dài tới mũi / tới chuôi, đọc thẳng từ lớp vẽ
   // (đa số đồ cầm tay vẽ dựng đứng từ điểm nắm 128,193; có thể bọc trong rotate(a 128 193))
   var WEAPON_CACHE = {};
+  // dạng dùng trong dòng thời gian: { R: hình học } — tay không thì {} (mũi = bàn tay)
+  function handWeapon(asset) { var w = weaponOf(asset); return w && w.tip ? { R: w } : {}; }
   function weaponOf(asset) {
     var ref = asset && GC.partRef ? GC.partRef(asset, 'heldR') : null;
     if (!ref || ref === 'none') return {};
-    if (WEAPON_CACHE[ref]) return WEAPON_CACHE[ref];
     var p = GC.getPart('heldR', ref, asset.pack), w = { angle: 0, tip: 24, butt: 0 };
     var L = p && (p.layers || (p.data && p.data.layers)), art = L && (L.heldR || '');   // linh kiện dữ liệu giữ bản gốc ở p.data
+    var ck = ref + '#' + (typeof art === 'string' ? art.length + ':' + art.slice(0, 64) + art.slice(-64) : !!(p && p.tall));   // sửa bản vẽ → khoá khác
+    if (WEAPON_CACHE[ck]) return WEAPON_CACHE[ck];
     if (typeof art === 'string' && art) {
       var m = /rotate\(\s*(-?[\d.]+)\s+128\s+193\s*\)/.exec(art), ys = [];
       art.replace(/\by="(-?[\d.]+)"[^>]*?height="([\d.]+)"/g, function (_, y, h) { ys.push(+y, +y + +h); return _; });
@@ -225,7 +229,7 @@
       if (ys.length) { w.tip = Math.max(20, 193 - Math.min.apply(null, ys)); w.butt = Math.max(0, Math.max.apply(null, ys) - 193); }
       if (m) w.angle = +m[1];
     } else if (p && p.tall) w.tip = 110;
-    return (WEAPON_CACHE[ref] = w);
+    return (WEAPON_CACHE[ck] = w);
   }
   function mapTime(A, B, v) {
     var lo = 0, hi = A.length - 1;
@@ -239,59 +243,117 @@
   function realToStory(tl, r) { return mapTime(tl.mR, tl.mS, r); }
 
   /* ------------------------------------------------- 4b. ĐẤU (hai diễn viên) */
-  // spec: { a: { asset, x, y, k, face? }, b: { asset, x, y, k }, action, react, scene?, world? } — x, y: chân trong toạ độ cảnh, k: tỉ lệ
+  // spec: { a: { asset, x, y, k, face? }, b: { asset, x, y, k }, action, react, scene?, world?, walls? } — x, y: chân trong toạ độ cảnh, k: tỉ lệ; walls: x người đứng xem
   // 1) dựng riêng người ra đòn, tìm điểm va chạm (sự kiện hitstop / hit) và mũi binh khí lúc đó
   // 2) thiếu / thừa tầm → chèn bước áp sát (lướt) hoặc lùi trước đòn, để mũi binh khí chạm đúng mặt trước thân đối thủ
   // 3) đối thủ thủ thế chờ rồi phản ứng ĐÚNG khung va chạm (trúng / đỡ / né / ngã) — hai bên chung một đồng hồ (cùng khựng, cùng slow-mo)
   function actorSpec(p, dir, steps, extra) {
     return Object.assign({ asset: p.asset, x0: p.x, dir: dir, scale: p.k || 0.8, ground: p.y || 330, travelScale: (p.k || 0.8) / 0.62, steps: steps }, extra || {});
   }
+  // khoảng cách đầu–đầu nhỏ nhất giữa diễn viên 0 và 1 trong cả màn (mẫu 60 Hz)
+  function minHead(tl) {
+    var g = Infinity;
+    for (var t = 0; t <= tl.T; t += 1 / 60) { var a = pointAt(tl, t, 'head', 0), b = pointAt(tl, t, 'head', 1), d = Math.hypot(a[0] - b[0], a[1] - b[1]); if (d < g) g = d; }
+    return g;
+  }
   function impacts(tl, ai) { return tl.events.filter(function (e) { return (e.a || 0) === (ai || 0) && (e.hitstop > 0 || e.hit); }); }
   function duel(spec) {
-    var AC = GC.choreo.ACTIONS || {}, RE = GC.choreo.REACTS || {}, act = AC[spec.action], re = RE[spec.react || 'hit'];
+    var AC = GC.choreo.ACTIONS || {}, RE = GC.choreo.REACTS || {}, has = Object.prototype.hasOwnProperty;
+    var act = has.call(AC, spec.action) ? AC[spec.action] : null, re = has.call(RE, spec.react || 'hit') ? RE[spec.react || 'hit'] : null;
     if (!act || !act.attack) throw new Error('choreo: "' + spec.action + '" không phải đòn đánh (' + Object.keys(AC).filter(function (k) { return AC[k].attack; }).join(', ') + ')');
     if (!re) throw new Error('choreo: phản ứng lạ "' + spec.react + '" (' + Object.keys(RE).join(', ') + ')');
     var A = spec.a, B = spec.b, dir = B.x >= A.x ? 1 : -1, kB = B.k || 0.8;
     var fierce = { eyes: 'fierce', brows: 'angry', mouth: 'flat' };
     var mk = function (pre) { return [{ clip: 'hold', dur: 0.28 + (pre || 0), pose: 'guard', face: Object.assign({}, fierce, A.face || {}) }].concat(act.clips.map(function (c) { return { clip: c }; })); };
-    var solo1 = build({ actors: [actorSpec(A, dir, mk())], world: spec.world || SW });
-    var hits = impacts(solo1, 0);
-    if (!hits.length) throw new Error('choreo: đòn ' + spec.action + ' không có điểm va chạm');
-    var h = hits[hits.length - 1], tip = pointAt(solo1, h.t, 'tip', 0), root = xAt(solo1.actors[0], h.t);
-    var front = B.x - dir * 26 * kB, need = (front - A.x) * dir - (tip[0] - root) * dir, have = (root - A.x) * dir;
-    var delta = Math.max(-420, Math.min(420, need - have)), steps = mk();
-    // không áp sát quá một thân người (đòn hất lên cao có mũi binh khí gần thân → tính tầm theo mũi sẽ làm hai người chồng lên nhau)
-    var minGap = 62 * Math.max(A.k || 0.8, kB), gap = (B.x - (A.x + dir * (have + delta))) * dir;
-    if (gap < minGap) delta -= minGap - gap;
-    if (Math.abs(delta) > 8) steps.splice(1, 0, { clip: 'stepIn', dist: delta / ((A.k || 0.8) / 0.62) });
-    var lone = build({ actors: [actorSpec(A, dir, steps)], world: spec.world || SW }), hs = impacts(lone, 0), tImp = hs[hs.length - 1].t;
-    var wait = tImp - re.contact;
-    if (wait < 0.3) { steps[0].dur += 0.3 - wait; tImp += 0.3 - wait; wait = 0.3; }
-    var bSteps = [{ clip: 'hold', dur: wait, pose: 'guard', face: { eyes: 'fierce', brows: 'determined', mouth: 'flat' } }].concat(re.clips.map(function (c) { return { clip: c }; }));
-    steps.push({ clip: 'hold', dur: 0.35, pose: 'guard' });
-    var specs = [actorSpec(A, dir, steps), actorSpec(B, -dir, bSteps, { quiet: true, cams: false, speeds: false })];
-    var tl = build({ actors: specs, follow: [0, 1], world: spec.world || SW, scene: spec.scene || null });
-    // bị đánh văng / lộn ra ngoài sân khấu → thu ngắn quãng trượt của phản ứng cho vừa (chừa nửa thân ở mép)
-    var lo = 36, hi2 = (spec.world || SW) - 36, xsB = tl.actors[1].xs, far = 0;
-    for (var q = 0; q < xsB.length; q++) far = Math.max(far, (xsB[q] - B.x) * dir);   // văng về phía sau lưng mình = hướng dir của người đánh
-    var room = (dir > 0 ? hi2 - B.x : B.x - lo);
-    if (far > room && far > 1) { specs[1].travelScale *= Math.max(0.15, room / far); tl = build({ actors: specs, follow: [0, 1], world: spec.world || SW, scene: spec.scene || null }); }
-    if (re.miss) impacts(tl, 0).forEach(function (e) { delete e.hitstop; if (e.fx === 'impact') e.fx = 'spark'; if (e.sfx === 'hit' || (e.sfx && e.sfx.indexOf && e.sfx.indexOf('hit') >= 0)) e.sfx = 'swish'; e.miss = true; });
+    var W0 = spec.world || SW, hold0 = mk();
+    // người đứng xem chen GIỮA hai đấu thủ không tính (không cấm người ra đòn tiến tới) — chỉ chặn phía sau lưng mỗi người
+    var walls = (spec.walls || []).filter(function (w) { return (w - A.x) * (w - B.x) > 0; });
+    // tầm theo cú VƯƠN XA NHẤT (liên hoàn: cú đâm, không phải cú hất thương lên trời); phản ứng khớp cú CUỐI
+    var reach = function (tl) {
+      var hs = impacts(tl, 0), best = null;
+      hs.forEach(function (e) { var tip = pointAt(tl, e.t, 'tip', 0), root = xAt(tl.actors[0], e.t), ahead = (tip[0] - root) * dir; if (!best || ahead > best.ahead) best = { e: e, ahead: ahead, root: root }; });
+      return best;
+    };
+    var solo1 = build({ actors: [actorSpec(A, dir, hold0)], world: W0 }), r1 = reach(solo1);
+    if (!r1) throw new Error('choreo: đòn ' + spec.action + ' không có điểm va chạm');
+    var front = B.x - dir * (26 + (act.shock || 0)) * kB, minGap = 102 * Math.max(A.k || 0.8, kB), ts = (A.k || 0.8) / 0.62;   // ≥ bề rộng đầu chibi (~104 đv khung): hai đầu không chồng nhau
+    var have = (r1.root - A.x) * dir, delta = (front - A.x) * dir - r1.ahead - have, steps, lone;
+    // chỗ lùi sau lưng người ra đòn (tới mép sân / tới người đứng xem, chừa một thân) — đòn bay xa hơn khoảng cách hai người
+    // thì phải lùi lấy đà; hết chỗ lùi → lùi hết chỗ, phần còn lại thu ngắn chính quãng bay của đòn
+    var room = Math.max(0, dir > 0 ? A.x - 36 : W0 - 36 - A.x);
+    walls.forEach(function (w) { var bd = (A.x - w) * dir; if (bd > 0) room = Math.min(room, Math.max(0, bd - 100 * (A.k || 0.8))); });
+    var plan = function (delta) {
+      var st = mk(), back = delta, sc = 1;
+      if (delta < -room && have > 10) { back = -room; sc = Math.max(0.2, (have + delta + room) / have); }
+      if (sc < 1) st.forEach(function (x, i) { if (i) x.tscale = sc; });
+      if (Math.abs(back) > 8) st.splice(1, 0, { clip: 'stepIn', dist: back / ts });
+      return st;
+    };
+    // hai vòng: chèn bước áp sát làm lò xo của binh khí lúc va chạm hơi khác → đo lại, chỉnh phần dư
+    for (var it = 0; it < 2; it++) {
+      delta = Math.max(-420, Math.min(420, delta));
+      var gap = (B.x - (A.x + dir * (have + delta))) * dir;   // không áp sát quá một thân người
+      if (gap < minGap) delta -= minGap - gap;
+      steps = plan(delta);
+      lone = build({ actors: [actorSpec(A, dir, steps)], world: W0 });
+      var r2 = reach(lone), tipX = pointAt(lone, r2.e.t, 'tip', 0)[0], miss = (front - tipX) * dir;
+      if (Math.abs(miss) < 3 || Math.abs(delta) <= 8 && Math.abs(miss) < 8) break;
+      delta += miss;
+    }
+    // né / đỡ: canh cú ĐẦU (tránh hoặc gạt cả chuỗi); trúng / ngã / choáng: canh cú CUỐI (đòn kết liễu)
+    var stage = function (steps, lone) {
+      var hs = impacts(lone, 0), early = re.miss || spec.react === 'block', tImp = (early ? hs[0] : hs[hs.length - 1]).t, tReach = reach(lone).e.t;
+      var wait = tImp - re.contact;
+      if (wait < 0.3) { steps[0].dur += 0.3 - wait; tImp += 0.3 - wait; tReach += 0.3 - wait; wait = 0.3; }
+      var bSteps = [{ clip: 'hold', dur: wait, pose: 'guard', face: { eyes: 'fierce', brows: 'determined', mouth: 'flat' } }].concat(re.clips.map(function (c) { return { clip: c }; }));
+      steps.push({ clip: 'hold', dur: 0.35, pose: 'guard' });
+      var specs = [actorSpec(A, dir, steps), actorSpec(B, -dir, bSteps, { quiet: true, cams: false, speeds: false })];
+      var mk3 = function () { return build({ actors: specs, follow: [0, 1], world: W0, scene: spec.scene || null }); };
+      // văng / lộn / lùi ra ngoài sân khấu → thu ngắn quãng đi của diễn viên đó cho vừa (chừa nửa thân ở mép)
+      return { tl: fitStage(mk3(), specs, [A.x, B.x], mk3, W0, walls), tImp: tImp, tReach: tReach };
+    };
+    // rào đầu: đổ người tới (đâm xuống, chém quét) hay đối thủ gập người khi trúng đòn có thể làm hai cái đầu chibi chồng nhau dù gốc chân
+    // đã cách minGap → đo cả màn, thiếu thì lùi người ra đòn đúng phần thiếu (chịu mũi binh khí ngắn đi một chút, ghi vào duel.short)
+    var headGap = 90 * Math.max(A.k || 0.8, kB), short = 0, out, g;
+    for (var hg = 0; hg < 3; hg++) {
+      out = stage(steps, lone); g = minHead(out.tl);
+      if (g >= headGap - 1 || hg === 2) break;
+      var back = headGap - g + 2; short += back; delta -= back;
+      steps = plan(delta);
+      lone = build({ actors: [actorSpec(A, dir, steps)], world: W0 });
+    }
+    var tl = out.tl;
+    if (re.miss) impacts(tl, 0).forEach(function (e) { delete e.hitstop; if (e.fx === 'impact') e.fx = 'spark'; if (e.sfx === 'hit' || (e.sfx && e.sfx.indexOf && e.sfx.indexOf('hit') >= 0)) e.sfx = 'swish'; e.miss = true; e.hit = true; });
     // giờ thật đổi khi bỏ khựng hình (né) → dựng lại bảng giờ
     if (re.miss) retime(tl);
-    var hitsF = impacts(tl, 0);
-    tl.duel = { dir: dir, impact: hitsF.length ? hitsF[hitsF.length - 1].t : tImp, react: spec.react || 'hit', action: spec.action,
+    tl.duel = { dir: dir, impact: out.tImp, reach: out.tReach, react: spec.react || 'hit', action: spec.action, short: Math.round(short), head: Math.round(g),
       end: tl.actors.map(function (X) { return X.xs[X.xs.length - 1]; }) };
     return tl;
   }
   // một người diễn một hành động (múa thương, nhảy mừng, thi lễ…) tại chỗ đứng hiện tại
   function solo(spec) {
-    var act = (GC.choreo.ACTIONS || {})[spec.action];
+    var AC = GC.choreo.ACTIONS || {}, act = Object.prototype.hasOwnProperty.call(AC, spec.action) ? AC[spec.action] : null;
     if (!act) throw new Error('choreo: không có hành động ' + spec.action);
     var A = spec.a, steps = act.clips.map(function (c) { return { clip: c }; }).concat([{ clip: 'hold', dur: 0.3, pose: act.attack ? 'guard' : 'ready' }]);
-    var tl = build({ actors: [actorSpec(A, spec.dir || 1, steps)], world: spec.world || SW, scene: spec.scene || null });
+    var specs = [actorSpec(A, spec.dir || 1, steps)], mk2 = function () { return build({ actors: specs, world: spec.world || SW, scene: spec.scene || null }); };
+    var tl = fitStage(mk2(), specs, [A.x], mk2, spec.world || SW, spec.walls);
     tl.duel = { dir: spec.dir || 1, action: spec.action, end: [tl.actors[0].xs[tl.actors[0].xs.length - 1]] };
     return tl;
+  }
+  // diễn viên nào đi ra ngoài [36, W − 36] (văng, lộn, lùi lấy đà) → thu quãng đi của RIÊNG người đó cho vừa, dựng lại một lần
+  // walls: chỗ đứng (x) của người đứng xem — coi như mép sân phụ, chừa ~một thân người, để không lộn / văng đè lên họ
+  function fitStage(tl, specs, origins, rebuild, W, walls) {
+    var again = false;
+    specs.forEach(function (sp, ai) {
+      var xs = tl.actors[ai].xs, o = origins[ai] != null ? origins[ai] : sp.x0, mn = Infinity, mx = -Infinity, f = 1, lo = 36, hi = W - 36, clr = 100 * (sp.scale || 0.8);
+      // đang đứng sẵn trong vùng chừa thì mốc là chỗ đứng (không bắt lùi xa hơn) · sai số 3 đv cho lò xo / làm tròn
+      (walls || []).forEach(function (w) { if (w < o) lo = Math.max(lo, Math.min(o, w + clr) - 3); else if (w > o) hi = Math.min(hi, Math.max(o, w - clr) + 3); });
+      for (var q = 0; q < xs.length; q++) { if (xs[q] < mn) mn = xs[q]; if (xs[q] > mx) mx = xs[q]; }
+      if (mn < lo && o > mn) f = Math.min(f, Math.max(0, o - lo) / (o - mn));
+      if (mx > hi && mx > o) f = Math.min(f, Math.max(0, hi - o) / (mx - o));
+      if (f < 0.999) { sp.travelScale = (sp.travelScale || 1) * Math.max(0.15, f); again = true; }
+    });
+    return again ? rebuild() : tl;
   }
   // dựng lại bảng giờ truyện ↔ thật (sau khi sửa sự kiện khựng hình)
   function retime(tl) {
@@ -445,7 +507,7 @@
           '<path d="' + dd + '" fill="none" stroke="#bfe3ff" stroke-width="' + f1(4 * (1 - q) * sz + 0.5) + '" stroke-linecap="round" opacity="' + o + '"/>';
       } else if (kind === 'text') {
         var pop = q < 0.15 ? 0.4 + q / 0.15 * 0.8 : q < 0.25 ? 1.2 - (q - 0.15) : 1.1, fs = 30 * sz * pop;
-        out += '<text x="' + f1(x) + '" y="' + f1(y - 12 * q) + '" font-family="Impact, \'Arial Black\', sans-serif" font-weight="900" font-size="' + f1(fs) + '" text-anchor="middle" fill="' + (e.color || '#ffd23f') + '" stroke="#2b211d" stroke-width="' + f1(fs / 7) + '" paint-order="stroke" stroke-linejoin="round" transform="rotate(' + (e.rot || -8) + ' ' + f1(x) + ' ' + f1(y) + ')" opacity="' + (q > 0.8 ? (1 - q) / 0.2 : 1).toFixed(3) + '">' + esc(e.text || '') + '</text>';
+        out += '<text x="' + f1(x) + '" y="' + f1(y - 12 * q) + '" font-family="Impact, \'Arial Black\', sans-serif" font-weight="900" font-size="' + f1(fs) + '" text-anchor="middle" fill="' + esc(e.color || '#ffd23f') + '" stroke="#2b211d" stroke-width="' + f1(fs / 7) + '" paint-order="stroke" stroke-linejoin="round" transform="rotate(' + (+e.rot || -8) + ' ' + f1(x) + ' ' + f1(y) + ')" opacity="' + (q > 0.8 ? (1 - q) / 0.2 : 1).toFixed(3) + '">' + esc(e.text || '') + '</text>';
       }
     });
     return out;
@@ -470,9 +532,11 @@
       }
     });
     if (!bare) s += '<rect width="' + SW + '" height="' + SH + '" fill="url(#gcc-vig)"/>';
-    var lb = stateAt(tl, r, 'letterbox'), lbv = lb ? (lb.v ? Math.min(1, (r - lb.rt) / 0.4) : Math.max(0, 1 - (r - lb.rt) / 0.4)) : 0;
+    // khung điện ảnh: tắt chỉ co lại khi trước đó đang bật (sự kiện "tắt" đứng một mình không làm dải đen chớp ra)
+    var lbs = tl.events.filter(function (e) { return e.letterbox !== undefined && e.rt <= r; }), lb = lbs[lbs.length - 1], wasOn = lbs.length > 1 && lbs[lbs.length - 2].letterbox;
+    var lbv = lb ? (lb.letterbox ? Math.min(1, (r - lb.rt) / 0.4) : wasOn ? Math.max(0, 1 - (r - lb.rt) / 0.4) : 0) : 0;
     if (lbv > 0) { var hb = (36 * lbv).toFixed(1); s += '<rect width="' + SW + '" height="' + hb + '" fill="#000"/><rect y="' + (SH - hb) + '" width="' + SW + '" height="' + hb + '" fill="#000"/>'; }
-    tl.events.forEach(function (e) { if (e.flash && r >= e.rt && r < e.rt + 0.18) s += '<rect width="' + SW + '" height="' + SH + '" fill="' + (e.flashColor || '#fff') + '" opacity="' + (e.flash * (1 - (r - e.rt) / 0.18)).toFixed(3) + '"/>'; });
+    tl.events.forEach(function (e) { if (e.flash && r >= e.rt && r < e.rt + 0.18) s += '<rect width="' + SW + '" height="' + SH + '" fill="' + esc(e.flashColor || '#fff') + '" opacity="' + (e.flash * (1 - (r - e.rt) / 0.18)).toFixed(3) + '"/>'; });
     var ttl = !bare && tl.events.filter(function (e) { return e.title && r >= e.rt && r < e.rt + (e.hold || 2.5); })[0];
     if (ttl) {
       var qa = Math.min(1, (r - ttl.rt) / 0.3);

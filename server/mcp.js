@@ -86,7 +86,9 @@ function clone(o) { return JSON.parse(JSON.stringify(o)); }
 // linh kiện với các bộ mẫu app mang sẵn (studio/mau/*.json, kind "sample"). Trùng hình = mục mẫu, dù đã đổi id hay gỡ dấu.
 // Giới hạn đã biết: bản sửa khác đi hoặc sửa thẳng dữ liệu trên máy của chính mình thì không chặn được ở app tự cài — giấy phép điều chỉnh.
 let SAMPLE_ART = null;
-function artSig(p) { return p && p.layers ? crypto.createHash('sha256').update(JSON.stringify([p.slot, p.layers, p.views || null])).digest('hex') : ''; }
+// chuỗi hoá CHUẨN (khoá sắp xếp, đệ quy) — đảo thứ tự khoá layers / views không đổi được chữ ký
+function canonJSON(v) { return Array.isArray(v) ? '[' + v.map(canonJSON).join(',') + ']' : v && typeof v === 'object' ? '{' + Object.keys(v).sort().map(function (k) { return JSON.stringify(k) + ':' + canonJSON(v[k]); }).join(',') + '}' : JSON.stringify(v === undefined ? null : v); }
+function artSig(p) { return p && p.layers ? crypto.createHash('sha256').update(canonJSON([p.slot, p.layers, p.views || null])).digest('hex') : ''; }
 function sampleArt(GC) {   // ký theo dạng ĐÃ QUA CỔNG (cổng chuẩn hoá SVG) — cùng dạng với linh kiện đã lưu
   if (SAMPLE_ART) return SAMPLE_ART;
   SAMPLE_ART = new Map();
@@ -588,7 +590,7 @@ class MCP {
     if (mark) S.markProvenance(provKeys(b), mark);
     if (b.provenance && typeof b.provenance === 'object') Object.keys(b.provenance).slice(0, 2000).forEach(k => { const v = b.provenance[k]; if (v && typeof v === 'object') S.markProvenance([k], v); });
     // bộ mẫu (Gen Labs): dự án mang dấu chủ sở hữu + giấy phép, xuất bán bị chặn (CNS-022)
-    const sample = b.sample && typeof b.sample === 'object' ? { owner: b.sample.owner, license: b.sample.license } : null;
+    const sample = b.sample && typeof b.sample === 'object' ? { owner: b.sample.owner, license: b.sample.license, version: b.sample.version } : null;
     if (total || !errors.length) S.saveProject({ id: pid, name: P.name || pid, description: P.description || '' }, sample ? { sample } : undefined);   // không tạo dự án rỗng khi mọi mục đều hỏng
     return { imported: total > 0, project: pid, counts: done, errors, conflicts: conflicts.length };
   }

@@ -101,7 +101,7 @@ class Store {
     const list = this.listProjects(), old = list.find(x => x.id === p.id);
     const rec = { id: p.id, name, description: String(p.description || '').replace(/[\u0000-\u001F\u007F]/g, '').slice(0, 300), createdAt: old ? old.createdAt : new Date().toISOString(), updatedAt: new Date().toISOString() };
     const clean = (t, n) => String(t || '').replace(/[\u0000-\u001F\u007F]/g, '').trim().slice(0, n);
-    const sm = opts && opts.sample ? { owner: clean(opts.sample.owner, 40) || 'Gen Labs', license: clean(opts.sample.license, 200) } : old && old.sample;
+    const sm = opts && opts.sample ? Object.assign({ owner: clean(opts.sample.owner, 40) || 'Gen Labs', license: clean(opts.sample.license, 200) }, opts.sample.version ? { version: clean(opts.sample.version, 40) } : {}) : old && old.sample;
     if (sm) rec.sample = sm;
     if (!old && list.length >= 200) throw Object.assign(new Error('tối đa 200 dự án'), { code: 400 });
     writeJSON(this.projectFile, old ? list.map(x => x.id === p.id ? rec : x) : list.concat(rec));

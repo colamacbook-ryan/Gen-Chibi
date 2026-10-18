@@ -233,7 +233,8 @@ const works = [{
 // BỘ MẪU của Gen Labs (CNS-022): trưng bày + làm phim thử, KHÔNG xuất bán — cổng nhập ghi dấu, cổng xuất chặn gói bán
 const bundle = {
   format: 'gen-chibi.project/1', kind: 'sample', license: LICENSE,
-  sample: { owner: 'Gen Labs', license: '© 2026 Gen Labs — bộ mẫu trưng bày: xem, sửa thử, làm phim; không bán lại, không phân phối' },
+  // version: đổi mỗi khi nội dung bộ mẫu đổi — Studio thấy máy đang giữ bản cũ thì mời "Cập nhật bộ mẫu" (khớp SAMPLES trong studio/app.js)
+  sample: { owner: 'Gen Labs', license: '© 2026 Gen Labs — bộ mẫu trưng bày: xem, sửa thử, làm phim; không bán lại, không phân phối', version: '2026.10.18-dau-tap' },
   project: { id: 'mau-tam-quoc', name: 'Tam Quốc (bộ chủ đề mẫu)', description: 'Bộ chủ đề trọn vẹn dựng từ khung: 7 tướng, 13 trang bị, 8 bối cảnh, 28 linh kiện nhân vật, 27 phông — và phim 6 phân cảnh có dàn dựng, giọng nói, âm thanh, một màn đấu võ. Bộ mẫu của Gen Labs: xem gói bán trông thế nào (xem trước), không xuất bán.' },
   requires: { packs: [] }, parts: parts.concat(sceneryParts), items, scenes, characters, works
 };

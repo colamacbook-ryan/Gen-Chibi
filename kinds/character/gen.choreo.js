@@ -223,7 +223,7 @@
     keys: [[0.1, mix(C.POSES.coil, { wR: -84 }), 'out'], [0.16, mix(C.POSES.jab, { wR: -92 }), 'snap'], [0.26, mix(C.POSES.coil, { wR: -86 }), 'out'], [0.32, mix(C.POSES.jab, { wR: -90, root: { x: -12 } }), 'snap'],
       [0.44, mix(C.POSES.crouch, { wR: -130, armR: { rot: 80 } }), 'out'], [0.56, mix(C.POSES.upper, { wR: 48 }), 'snap', { ez: { 'root.y': 'up' } }], [0.9, mix(C.POSES.ready, { wR: -42 }), 'down', { ez: { 'root.y': 'down' } }]],
     travel: [[0, 0], [0.16, 16, 'snap'], [0.32, 34, 'snap'], [0.56, 48, 'snap']],
-    events: [[0.12, { sfx: 'swish', gain: 0.7 }], [0.16, { at: 'tip', fx: 'spark', size: 0.8, sfx: 'hit', gain: 0.6 }], [0.28, { sfx: 'swish', gain: 0.7 }], [0.32, { at: 'tip', fx: 'spark', size: 0.9, sfx: 'hit', gain: 0.7 }],
+    events: [[0.12, { sfx: 'swish', gain: 0.7 }], [0.16, { at: 'tip', fx: 'spark', size: 0.8, sfx: 'hit', gain: 0.6, hit: true }], [0.28, { sfx: 'swish', gain: 0.7 }], [0.32, { at: 'tip', fx: 'spark', size: 0.9, sfx: 'hit', gain: 0.7, hit: true }],
       [0.5, { sfx: 'swish', gain: 1 }], [0.56, { fx: 'smear', smear: 0.12 }], [0.56, { at: 'tip', fx: 'impact', size: 1.2, hitstop: 0.09, shake: 7, sfx: 'hit' }], [0.58, { at: 'tip', fx: 'text', text: 'XOẸT!', dy: -20, size: 1.1, rot: -14 }]],
     cam: [[0.1, { z: 2.0, lead: 90, fy: 0.55, roll: -2, lag: 7 }], [0.56, { z: 2.25, fy: 0.75, roll: 4 }, 'snap'], [0.9, { z: 1.7, roll: 0 }]] });
   clip('victory', { label: 'Vác thương vui sướng', view: 'front', face: { eyes: 'happy', brows: 'raised', mouth: 'laugh', fx: ['sparkles'] },
@@ -284,12 +284,13 @@
 
   // TỪ VỰNG PHIM: bước kịch bản { action, target, react } → clip của người đánh + clip phản ứng của người bị đánh
   //   attack: cần target, có điểm va chạm (sự kiện hitstop / hit); contact: giây trong clip phản ứng lúc "chạm"
+  //   shock: (đv khung) đòn đập đất — mũi binh khí nhắm cách mặt trước thân đối thủ chừng này, chấn động làm phần còn lại
   C.ACTIONS = {
     thrust: { label: 'Đâm thẳng', clips: ['thrust'], attack: true },
     sweep: { label: 'Quét ngang', clips: ['sweep'], attack: true },
     combo: { label: 'Liên hoàn ba đòn', clips: ['counter'], attack: true },
     spin: { label: 'Xoay người chém vòng', clips: ['spin'], attack: true },
-    leap: { label: 'Tung người bổ xuống', clips: ['leap', 'plunge'], attack: true },
+    leap: { label: 'Tung người bổ xuống', clips: ['leap', 'plunge'], attack: true, shock: 70 },   // bổ xuống ĐẤT trước mặt đối thủ — trúng bằng chấn động (vòng sóng), không bằng mũi thương
     twirl: { label: 'Múa binh khí', clips: ['twirl'] },
     rage: { label: 'Dậm chân nổi giận', clips: ['rage'] },
     hero: { label: 'Tạo dáng anh hùng', clips: ['heroPose'] },

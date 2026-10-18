@@ -4,7 +4,8 @@
  "license": "© 2026 Gen Labs — All rights reserved",
  "sample": {
   "owner": "Gen Labs",
-  "license": "© 2026 Gen Labs — bộ mẫu trưng bày: xem, sửa thử, làm phim; không bán lại, không phân phối"
+  "license": "© 2026 Gen Labs — bộ mẫu trưng bày: xem, sửa thử, làm phim; không bán lại, không phân phối",
+  "version": "2026.10.18-dau-tap"
  },
  "project": {
   "id": "mau-tam-quoc",
