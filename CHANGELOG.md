@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.4.1 — Vá độ bền cho item (review v0.4.0)
+- Review bảo mật v0.4.0: **không có lỗ hổng** (escape chữ, hex, prototype, path traversal, ghi đè chính thức đều đứng vững). Vá 4 điểm độ bền:
+- Item bị lưu lại sang bộ phận khác không còn làm vỡ nhân vật đang mặc nó (engine bỏ qua item lệch bộ phận); cổng ghi chặn đổi bộ phận của item đã lưu — muốn đổi thì tạo id mới.
+- `equip.part` không phải chuỗi → báo lỗi rõ ràng thay vì lỗi nội bộ.
+- Lọc ký tự điều khiển trong tên / Hán tự / mô tả / truyền thuyết (trước đây làm thẻ SVG hỏng).
+- `render_item` chế độ `equipped` mặc thử được **item nháp chưa lưu** (đăng ký tạm, xoá ngay sau khi dựng).
+- Test hồi quy cho cả 4 điểm.
+
 ## v0.4.0 — Loại asset thứ hai: item trang bị
 - **Item trang bị** = phối: trỏ tới linh kiện có sẵn + bảng màu riêng (chỉ áp lên linh kiện đó) + tham số + độ hiếm + chỉ số. Một linh kiện cho nhiều phẩm cấp (Đao sắt thường ↔ Thanh Long Yển Nguyệt Đao huyền thoại) — không vẽ thêm.
 - Từ vựng đóng: 8 loại (vũ khí, tay phụ, pháp khí, mũ/khăn, giáp/áo, áo choàng, giày, mặt nạ) → bộ phận mặc; 5 độ hiếm; 6 chỉ số.

@@ -224,15 +224,17 @@ class MCP {
         if (args.item) { const c = GC.checkItem(args.item); if (c.errors.length) return toolError(c.errors.join('; ')); it = Object.assign({ key: 'preview/' + c.def.id }, c.def); }
         else it = GC.getItem(String(args.key || ''), MY_PACK);
         if (!it) return toolError('Không có item ' + args.key + '. Gọi list_items.');
-        let svg;
+        let svg, tmp = null;
+        if (args.mode === 'equipped' && args.item) { tmp = GC.registerItem(TMP_PACK, it).def; it = tmp; }   // bản nháp: mặc thử, xoá ngay sau khi dựng
+        try {
         if (args.mode === 'equipped') {
-          if (!args.item && !GC.ITEMS[it.key]) return toolError('equipped cần item đã lưu (key).');
           const base = this.findAsset(String(args.character || 'gia-cat-luong'));
           if (!base) return toolError('Không có nhân vật ' + args.character);
           const a = clone(base); a.key = 'equip/' + it.key.replace(/[^a-z0-9]/gi, ''); a.look.equip = Object.assign({}, a.look.equip, { [it.equip.slot]: it.key });
           const dir = {}; if (args.view) dir.view = args.view; if (args.activity && GC.LIB.activities[args.activity]) dir.activity = args.activity;
           try { svg = GC.svgString(a, (GC.LIB.activities[dir.activity] || {}).state || 'normal', { director: dir }); } catch (e) { return toolError('Không dựng được: ' + e.message); }
         } else svg = GC.itemSvg(it, { mode: args.mode === 'card' ? 'card' : 'icon', size: 160 });
+        } finally { if (tmp) { delete GC.ITEMS[tmp.key]; const i = GC.ITEM_ORDER.indexOf(tmp.key); if (i >= 0) GC.ITEM_ORDER.splice(i, 1); } }
         return { content: [{ type: 'text', text: it.name + ' · ' + (GC.ITEM.rarity[it.rarity] || {}).label + ' · ' + (args.mode || 'icon') }, { type: 'resource', resource: { uri: 'genchibi://item/' + it.key + '/' + (args.mode || 'icon') + '.svg', mimeType: 'image/svg+xml', text: svg } }] };
       }
       case 'preview_part': {
@@ -315,6 +317,8 @@ class MCP {
     const c = this.GC.checkItem(item);
     if (!c.errors.length) {
       if (this.GC.items().some(i => i.id === c.def.id && i.pack !== MY_PACK)) c.errors.push('id "' + c.def.id + '" trùng item của thư viện chính thức — chọn id khác');
+      const prev = this.GC.ITEMS[MY_PACK + '/' + c.def.id];
+      if (prev && prev.equip.slot !== c.def.equip.slot) c.errors.push('item "' + c.def.id + '" đang ở bộ phận ' + prev.equip.slot + ' — đổi bộ phận thì tạo id mới (nhân vật đang mặc sẽ không vỡ)');
       const bad = this.GC.itemGate(c.def).filter(g => !g.ok && !g.info);
       bad.forEach(g => c.errors.push(g.label + (g.detail ? ': ' + g.detail : '')));
     }

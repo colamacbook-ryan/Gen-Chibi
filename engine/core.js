@@ -167,7 +167,8 @@
   // Nhân vật mặc item (look.equip.<slot> = "pack/id") → linh kiện, tham số, bảng màu của item thắng look.parts
   function equipped(asset, slot) {
     var ref = asset.look && asset.look.equip && asset.look.equip[slot];
-    return ref ? getItem(ref, asset.pack) : null;
+    var it = typeof ref === 'string' ? getItem(ref, asset.pack) : null;
+    return it && it.equip.slot === slot ? it : null;   // item đổi bộ phận sau khi đã mặc → bỏ qua, không làm vỡ nhân vật
   }
   function partRef(asset, slot) { var it = equipped(asset, slot); return it ? it.equip.part : asset.look.parts[slot] || (LIB.slots[slot] || {}).fallback; }
 
@@ -898,19 +899,21 @@
     for (var i = 0; i < ITEM_ORDER.length; i++) if (ITEMS[ITEM_ORDER[i]].id === ref) return ITEMS[ITEM_ORDER[i]];
     return null;
   }
+  // Chữ thuần: bỏ ký tự điều khiển (XML không nhận) rồi cắt độ dài
+  function plain(t, n) { return String(t == null ? '' : t).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '').slice(0, n); }
   // Kiểm + chuẩn hoá item (dữ liệu thuần: chữ được escape khi vẽ, màu chỉ nhận hex, linh kiện phải có thật và đúng bộ phận)
   function checkItem(def) {
     var errs = [], d = {};
     if (!def || typeof def !== 'object') return { errors: ['item phải là object'], def: null };
     if (!/^[a-z0-9][a-z0-9-]{1,63}$/.test(String(def.id || ''))) errs.push('id: chữ thường, số, gạch nối, 2–64 ký tự');
-    d.id = String(def.id || ''); d.name = String(def.name || def.id || '').slice(0, 40); d.han = String(def.han || '').slice(0, 12);
+    d.id = String(def.id || ''); d.name = plain(def.name || def.id, 40); d.han = plain(def.han, 12);
     if (typeof def.type !== 'string' || !own(ITEM.types, def.type)) errs.push('type: chọn ' + Object.keys(ITEM.types).join(' | '));
     if (typeof def.rarity !== 'string' || !own(ITEM.rarity, def.rarity)) errs.push('rarity: chọn ' + ITEM.rarityOrder.join(' | '));
     d.type = def.type; d.rarity = def.rarity;
     var eq = def.equip || {};
     var slot = typeof eq.slot === 'string' ? eq.slot : (own(ITEM.types, def.type) ? ITEM.types[def.type].slots[0] : '');
     if (own(ITEM.types, def.type) && ITEM.types[def.type].slots.indexOf(slot) < 0) errs.push('equip.slot "' + slot + '" không hợp với loại ' + def.type + ' (' + ITEM.types[def.type].slots.join('/') + ')');
-    var part = slot && getPart(slot, eq.part);
+    var part = slot && typeof eq.part === 'string' && getPart(slot, eq.part);
     if (!part) errs.push('equip.part "' + eq.part + '" không có trong bộ phận ' + slot + ' (xem get_catalog › slots)');
     d.equip = { slot: slot, part: part ? part.pack + '/' + part.id : String(eq.part || ''), params: {}, palette: {} };
     if (eq.params && typeof eq.params === 'object' && part && part.params) Object.keys(eq.params).forEach(function (k) {
@@ -929,7 +932,7 @@
       if (typeof v !== 'number' || !isFinite(v) || v < 0 || v > 999) { errs.push('stats.' + k + ': số 0–999'); return; }
       d.stats[k] = Math.round(v);
     });
-    d.description = String(def.description || '').slice(0, 200); d.lore = String(def.lore || '').slice(0, 600);
+    d.description = plain(def.description, 200); d.lore = plain(def.lore, 600);
     var ic = def.icon || {};
     d.icon = { zoom: num(ic.zoom, 1, 0.5, 2.5), dx: num(ic.dx, 0, -80, 80), dy: num(ic.dy, 0, -80, 80), rot: num(ic.rot, 0, -180, 180) };
     d.kind = 'item'; d.status = ['draft', 'review', 'approved'].indexOf(def.status) >= 0 ? def.status : 'draft';

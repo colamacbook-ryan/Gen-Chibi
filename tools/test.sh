@@ -130,6 +130,15 @@ no(GC.partRef(qv, "heldR") !== "afi.tamquoc/guandao", "trang bị không thay li
 qv.look.equip = { heldR: "afi.items/giap-bac" };
 no(!GC.gate(qv).find(g => g.id === "parts" && !g.ok), "mặc item sai bộ phận vẫn qua");
 if (bad) process.exit(1);
+// hồi quy v0.4.1: part không phải chuỗi, ký tự điều khiển, item lệch bộ phận không làm vỡ nhân vật
+let thrown = null; try { GC.checkItem(Object.assign({}, B, { equip: { part: { x: 1 } } })); GC.checkItem(Object.assign({}, B, { equip: { part: 7 } })); } catch (e) { thrown = e; }
+no(thrown, "equip.part không phải chuỗi làm checkItem ném lỗi: " + (thrown && thrown.message));
+no(err({ equip: { part: 7 } }) === 0, "equip.part là số vẫn qua");
+const cc = GC.checkItem(Object.assign({}, B, { name: "A\u0000B\u001f", description: "x\u0007y" })).def;
+no(/[\u0000-\u001f]/.test(cc.name + cc.description), "ký tự điều khiển lọt vào item");
+qv.look.equip = { hat: "afi.items/dao-sat" };
+let vo = null; try { GC.svgString(qv, "normal"); } catch (e) { vo = e; }
+no(vo, "item lệch bộ phận làm vỡ nhân vật: " + (vo && vo.message));
 console.log("   ✓", GC.items().length, "item chính thức đạt cổng; chặn loại/linh kiện/màu/chỉ số/độ hiếm sai; thẻ escape chữ; nhân vật mặc trang bị đạt cổng");
 '
 
@@ -155,6 +164,9 @@ printf '%s\n' \
  '{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"render_item","arguments":{"key":"ci-dao","mode":"card"}}}' \
  '{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"save_character","arguments":{"asset":{"id":"ci-equip","name":"Mặc đồ","look":{"eyes":"round","brows":"normal","parts":{},"equip":{"heldR":"local.my/ci-dao"}}}}}}' \
  '{"jsonrpc":"2.0","id":14,"method":"tools/call","params":{"name":"render_item","arguments":{"key":"ci-dao","mode":"equipped","character":"ci-equip","view":"left45","activity":"attack"}}}' \
+ '{"jsonrpc":"2.0","id":15,"method":"tools/call","params":{"name":"save_item","arguments":{"item":{"id":"ci-dao","name":"Đổi bộ phận","type":"helmet","rarity":"common","equip":{"part":"local.my/ci-hat"}}}}}' \
+ '{"jsonrpc":"2.0","id":16,"method":"tools/call","params":{"name":"render_item","arguments":{"item":{"id":"ci-nhap","name":"Nháp","type":"weapon","rarity":"rare","equip":{"part":"guandao","palette":{"metal":"#12ab34"}}},"mode":"equipped","character":"ci-equip"}}}' \
+ '{"jsonrpc":"2.0","id":17,"method":"tools/call","params":{"name":"list_items","arguments":{}}}' \
  | GC_PORT=$PORT node server/mcp-stdio.js > "$H/mcp.out"
 node -e '
 const L = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n").map(JSON.parse);
@@ -178,6 +190,10 @@ ok(/Đao CI/.test(by(12).result.content[1].resource.text), "render_item card");
 ok(!by(13).result.isError, "nhân vật mặc item của tôi");
 ok(!by(14).result.isError && /<svg/.test(by(14).result.content[1].resource.text), "render_item equipped 45° + tấn công");
 console.log("   ✓ MCP item: lưu → thẻ → nhân vật mặc → dựng 45° tấn công");
+ok(by(15).result.isError && /bộ phận/.test(by(15).result.content[0].text), "chặn đổi bộ phận của item đã lưu");
+ok(!by(16).result.isError && /12ab34/i.test(by(16).result.content[1].resource.text), "render_item equipped với item nháp phải mặc thử được");
+ok(!/ci-nhap/.test(JSON.stringify(by(17).result)), "item nháp không được lưu lại sau khi dựng");
+console.log("   ✓ MCP item: chặn đổi bộ phận · mặc thử item nháp không để lại dấu");
 ' "$H/mcp.out"
 kill $SP 2>/dev/null || true
 
