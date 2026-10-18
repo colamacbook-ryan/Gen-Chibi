@@ -1,241 +1,228 @@
 # gen-chibi — Đặc tả 3 giai đoạn: Xưởng · Thư viện · Tạo tác
 
-> **Trạng thái:** BẢN NHÁP, chờ Ryan duyệt (cổng ② của STD-05). Chưa code theo bản này.
-> **Ngày:** 2026-10-18 · **Người viết:** Gen · **Nguồn ý đồ:** `01-projects/gen-chibi/INTENT.md` (Second-Brain) và các trao đổi ngày 2026-10-18.
-> **Phạm vi:** cách tổ chức sản phẩm thành ba giai đoạn — đối tượng, việc làm, màn hình, chỗ chuyển giao. Không bàn engine vẽ (đã có), không bàn tính tiền chi tiết.
+> **Trạng thái:** BẢN NHÁP v2, chờ Ryan duyệt (cổng ② của STD-05). Chưa code theo bản này.
+> **Ngày:** 2026-10-18 · **Người viết:** Gen · v2 đã sửa theo kiểm toàn vẹn CNS (STD-15): 4 🔴, 6 🟡.
+> **Nguồn ý đồ:** `01-projects/gen-chibi/INTENT.md` (Second-Brain, INT-01…08) + lời Ryan ngày 2026-10-18 (chưa vào INTENT, ghi ở mục 10).
 > © 2026 Afi Labs — All rights reserved.
 
 ---
 
-## 0. Một câu và một sơ đồ
+## 0. Một câu, một sơ đồ
 
-**Ba lớp là ba bộ công năng, cũng là ba giai đoạn liên tiếp trong vòng đời của một asset:** làm khuôn → bày hàng mẫu → dùng để sáng tác.
+**Ba lớp là ba bộ công năng, cũng là ba giai đoạn liên tiếp:** làm khuôn → bày hàng mẫu → dùng để sáng tác.
+*(Ryan 2026-10-18: "3 lớp này bản chất nó là 3 bộ công năng và giai đoạn khác nhau".)*
 
 ```
- ① XƯỞNG (Afi)              ② THƯ VIỆN (mọi người xem)         ③ TẠO TÁC (của tôi)
- làm khuôn · soát · kiểm ──Xuất bản──▶ bộ chủ đề có phiên bản ──Lấy về──▶ tác phẩm · phối · đạo diễn ──Xuất──▶ thành phẩm
-        ▲                                                              │
-        └─────────────── Báo thiếu (cần linh kiện X) ◀─────────────────┤
-        └─────────────── Đề cử (tác phẩm hay → Afi duyệt) ◀────────────┘
+ ① XƯỞNG (Afi)                ② THƯ VIỆN (chỉ đọc)            ③ TẠO TÁC (của người dùng)
+ khung · bộ nháp · kiểm ──Xuất bản──▶ bộ @phiên-bản ──Lấy về──▶ phối · đạo diễn ──Xuất──▶ thành phẩm
+                                          └──Tải trực tiếp──▶ thành phẩm
 ```
 
-| | ① Xưởng | ② Thư viện | ③ Tạo tác |
-|---|---|---|---|
-| Câu hỏi của lớp | khuôn này đúng chuẩn chưa? | có gì để dùng? | tôi làm ra được gì? |
-| Chủ | Afi | Afi tuyển chọn | người dùng / agent của họ |
-| Mặt (STD-05) | **Admin** | danh mục dùng chung (chỉ đọc) | **Workspace** |
-| Thước đo chất lượng | khắt khe nhất | đã duyệt, ổn định, có phiên bản | tự do |
-| Nhịp thay đổi | chậm | vừa (theo bộ) | liên tục |
+| | ① Xưởng | ② Thư viện | ③ Tạo tác | Hệ thống |
+|---|---|---|---|---|
+| Câu hỏi | khuôn đúng chuẩn chưa? | có gì để dùng? | tôi làm ra được gì? | app chạy ổn không? |
+| Chủ | Afi | Afi tuyển chọn | người dùng / agent | chủ máy |
+| Mặt (STD-05) | **Admin** | **Workspace** (chỉ đọc) | **Workspace** | **Admin** |
+| Nhịp thay đổi | chậm | vừa | liên tục | hiếm |
 
 ---
 
 ## 1. Luật bất biến
 
-| # | Luật | Vì sao |
+| # | Luật |
+|---|---|
+| L1 | **Mỗi đối tượng thuộc đúng một giai đoạn.** Không trang nào trộn đồ của hai giai đoạn. |
+| L2 | **Đồ chỉ đi qua 4 cửa:** Xuất bản (①→②), Lấy về (②→③), Tải trực tiếp (②→ngoài), Xuất thành phẩm (③→ngoài). Cả hai cửa ra ngoài chỉ giao **thành phẩm** (ảnh, sprite, JSON công thức), không giao khuôn. |
+| L3 | **Chỉ Xưởng sửa khuôn.** Bộ đã xuất bản bất biến. Tạo tác tự do trong phạm vi của mình. |
+| L4 | **Ghim phiên bản hai tầng:** bộ khai báo `khung@x`; tác phẩm và thành phẩm lưu cả `khung@x` và `bộ@y`, nên dựng lại ra y hệt. Khung mới chỉ có hiệu lực khi Xưởng **phát hành lại bộ**. Người dùng tự bấm nâng phiên bản. *(Cần làm engine giữ được nhiều phiên bản cùng lúc — xem §8. Không thuộc Đợt 1.)* |
+| L5 | **Một cổng ghi, phân quyền theo vai:** Afi ghi khung và bộ nháp; người dùng / agent chỉ ghi vào phạm vi Tạo tác của họ. Studio, MCP, Trợ lý AI cùng cổng và cùng luật kiểm. |
+| L6 | **Ở bản SaaS, engine và linh kiện gốc không rời server Afi.** Khách xem trước bằng ảnh do server dựng, nhận thành phẩm và công thức tham chiếu. Bản cài về máy (self-host) trở thành **bản nội bộ của Afi**. *(INT-06 cần Ryan xác nhận thu hẹp — §10.)* |
+
+---
+
+## 2. Danh từ (giữ tối thiểu)
+
+| Đối tượng | Giai đoạn | Là gì |
 |---|---|---|
-| L1 | **Mỗi đối tượng thuộc đúng một giai đoạn.** Không có trang nào trộn đồ của hai giai đoạn. | Gốc của sự rối hiện tại (Thư viện có "Của tôi", "của tôi" liệt kê đồ chính thức). |
-| L2 | **Dòng chảy một chiều qua 3 cửa** (Xuất bản, Lấy về, Xuất thành phẩm) + **2 vòng phản hồi** (Báo thiếu, Đề cử). Ngoài các cửa này, không có đường tắt. | Biết chính xác đồ đi từ đâu tới đâu. |
-| L3 | **Chỉ Xưởng sửa được khuôn.** Thư viện bất biến theo phiên bản. Tạo tác tự do trong không gian của mình. | Khuôn là tài sản của Afi; hàng mẫu phải ổn định để người dùng tin. |
-| L4 | **Tác phẩm ghim phiên bản bộ** (vd. `afi.tamquoc@1.2`). Bộ lên 1.3 thì tác phẩm cũ không đổi, người dùng chủ động nâng. | Cập nhật thư viện không được làm hỏng thứ người dùng đã làm. |
-| L5 | **Mọi ghi đi qua một cổng ghi** (như hiện nay): Studio, MCP, Trợ lý AI cùng luật. | Giữ chuẩn thống nhất (đã có, giữ nguyên). |
-| L6 | **Khuôn (engine + linh kiện gốc) chỉ chạy trên server.** Giai đoạn ② và ③ chỉ nhận thành phẩm và công thức tham chiếu. | Hướng SaaS giấu khung (Ryan 2026-10-18). |
+| **Khung** | ① | từ vựng và luật dùng chung mọi chủ đề: khung xương, lớp, góc nhìn, tư thế / động tác / biểu cảm / hoạt động, ngữ pháp cảnh và item, cổng kiểm. **Không chứa linh kiện.** Có phiên bản `khung@x`. |
+| **Bộ cơ sở** | ① → ② | bộ đặc biệt chứa linh kiện chung mọi chủ đề (dáng đầu, mắt, tóc cơ bản, quần áo trơn…) — hiện là 25 linh kiện trong `afi.core`. Bộ chủ đề **phụ thuộc** bộ cơ sở. |
+| **Bộ chủ đề** | ① nháp → ② đã xuất bản | gói của một chủ đề: linh kiện riêng + nhân vật mẫu + trang bị + cảnh + kịch bản mẫu. Khai báo `khung@x` và bộ phụ thuộc. Bản đã xuất bản là `id@phiên-bản`, bất biến. |
+| **Linh kiện** | ① | mảnh vẽ cắm vào khung (kể cả phông cảnh, đạo cụ). Luôn thuộc một bộ. |
+| **Tác phẩm** | ③ | *(chờ Ryan chốt — §10 câu 1)* đơn vị làm việc của người dùng: một đầu ra cụ thể, gom dàn diễn viên, cảnh, kịch bản, thành phẩm. |
+| **Thành phẩm** | ③ / ra ngoài | file xuất ra kèm công thức và phiên bản khung + bộ đã dùng. |
+
+Các ý tưởng *Hộp yêu cầu, Báo thiếu, Đề cử, Tủ đồ, linh kiện riêng của khách* chuyển sang **Phụ lục A** — làm khi có nhu cầu thật.
 
 ---
 
-## 2. Danh từ — đối tượng của từng giai đoạn
+## 3. Giai đoạn ① — XƯỞNG (Admin)
 
-| Đối tượng | Giai đoạn | Là gì | Ai sửa | Vòng đời |
-|---|---|---|---|---|
-| **Khung** | ① | khung xương, lớp vẽ, góc nhìn, từ vựng tư thế / động tác / biểu cảm / hoạt động, ngữ pháp cảnh và item, cổng kiểm | Afi | có phiên bản khung (đổi rất hiếm) |
-| **Linh kiện** | ① | mảnh vẽ cắm vào khung: tóc, mũ, áo, vật cầm, phông cảnh, đạo cụ | Afi | nháp → đạt cổng → nằm trong bộ |
-| **Bộ nháp** | ① | một chủ đề đang làm: danh sách linh kiện + nhân vật mẫu + trang bị + cảnh + kịch bản mẫu + ảnh bìa | Afi | nháp → đang kiểm → xuất bản |
-| **Bộ đã xuất bản** | ② | ảnh chụp bất biến của một bộ nháp: `id@phiên-bản`, chủ đề, license, changelog | không ai (chỉ đọc) | xuất bản → bản mới thay → ngừng (vẫn đọc được) |
-| **Mục trong bộ** | ② | nhân vật / trang bị / cảnh / linh kiện thuộc một bộ đã xuất bản | không ai | theo bộ |
-| **Tác phẩm** | ③ | một việc người dùng làm ra: "Truyện cô giáo", "Bộ sticker Tết". Có mục đích đầu ra, các bộ đang dùng (ghim phiên bản) | người dùng | đang làm → đã xuất → lưu trữ |
-| **Đồ của tôi** | ③ | nhân vật / trang bị / cảnh do người dùng phối (từ mục trong bộ, bằng tham chiếu hoặc nhân bản). Dùng lại được ở nhiều tác phẩm | người dùng | có phiên bản riêng |
-| **Kịch bản** | ③ | chuỗi bước diễn trong một cảnh (Đạo diễn AI) | người dùng | thuộc tác phẩm |
-| **Thành phẩm** | ③ | file xuất ra (ảnh, sprite, trang truyện…) **kèm công thức sinh ra nó** để dựng lại y hệt | hệ thống tạo | bất biến; xoá được |
-| **Yêu cầu** | ③ → ① | "Báo thiếu" (cần linh kiện X) hoặc "Đề cử" (tác phẩm / đồ hay) | người dùng tạo, Afi xử lý | mở → đang làm → xong / từ chối |
-
-**Hai danh từ mới quan trọng nhất:** *Bộ chủ đề* (đơn vị của Xưởng và Thư viện) và *Tác phẩm* (đơn vị của Tạo tác). Hiện tại chưa có cả hai — đó là lý do mọi thứ bị chia theo loại asset và lẫn vào nhau.
-
----
-
-## 3. Giai đoạn ① — XƯỞNG (Admin của Afi)
-
-**Mục đích:** làm khuôn đạt chuẩn và đóng gói thành bộ chủ đề để xuất bản.
-**Người dùng:** Ryan, Gen, họa sĩ / agent của Afi. Không mở cho khách.
+**Mục đích:** làm khung và quy trình chuẩn hoá, đóng gói thành bộ, kiểm, xuất bản.
+*(Ryan 2026-10-18: "phần xưởng sẽ là chúng ta dồn sức làm bộ khung xương và qui trình tiêu chuẩn chuẩn hóa mọi thứ chứ không vội sản xuất hàng loạt asset".)*
 
 ### 3.1 Việc làm
-1. **Làm linh kiện**: vẽ (SVG an toàn, token màu) hoặc nhờ agent (`get_part_spec` → `preview_part` → `save_part`), soát trên bàn soát (ma-nơ-canh × góc nhìn × tình huống; phông: ngày/đêm + diễn viên).
-2. **Gom bộ**: tạo bộ nháp theo chủ đề, thêm linh kiện, phối nhân vật mẫu, trang bị, cảnh, kịch bản mẫu, chọn ảnh bìa.
-3. **Kiểm bộ**: chạy cổng kiểm cả bộ theo **tiêu chuẩn bộ** (3.3).
-4. **Xuất bản**: chốt phiên bản, viết changelog, đẩy sang Thư viện.
-5. **Xử lý yêu cầu** từ Tạo tác: báo thiếu → việc làm linh kiện; đề cử → duyệt vào bộ.
-6. **Giữ khung**: xem và (hiếm khi) nâng phiên bản khung; mọi thay đổi khung chạy lại cổng cho toàn bộ bộ.
+1. **Giữ khung**: xem, và (hiếm) nâng `khung@x`. Khung mới không tự áp vào bộ đã xuất bản (L4).
+2. **Làm linh kiện**: tạo / sửa / nhập SVG an toàn, hoặc nhờ agent (`get_part_spec` → `preview_part` → `save_part`); soát trên bàn soát.
+3. **Gom bộ nháp**: chọn linh kiện, phối nhân vật mẫu, trang bị, cảnh, kịch bản mẫu.
+4. **Kiểm bộ** theo tiêu chuẩn 3.3.
+5. **Xuất bản**: tăng phiên bản, ghi changelog, đẩy sang Thư viện.
 
 ### 3.2 Màn hình
-| Mã | Màn | Nội dung chính |
+| Mã | Màn | Từ hiện trạng |
 |---|---|---|
-| X1 | Tổng quan Xưởng | bộ đang làm, yêu cầu đang mở, cổng đỏ, linh kiện mới |
-| X2 | Khung | từ vựng (tư thế, động tác, biểu cảm, hoạt động, góc nhìn, ngữ pháp cảnh/item), phiên bản khung — *gộp hai trang "Khung tư thế" và "Khung biểu cảm" hiện có* |
-| X3 | Kho linh kiện & phông | danh sách theo bộ phận, bàn soát, **tạo / sửa / nhập** linh kiện (hiện chỉ xem) |
-| X4 | Bộ chủ đề (nháp) | thành phần, checklist tiêu chuẩn bộ, nút Kiểm và **Xuất bản** |
-| X5 | Cổng kiểm & hiệu năng | báo cáo kiểm toàn kho, ngân sách hiệu năng |
-| X6 | Hộp yêu cầu | báo thiếu, đề cử từ Tạo tác |
+| X1 | Khung | gộp "Khung tư thế & hoạt động" + "Khung biểu cảm & động tác" |
+| X2 | Kho linh kiện & phông | trang hiện có + thêm **tạo / sửa / nhập** linh kiện |
+| X3 | Bộ chủ đề (nháp) | mới: thành phần, checklist tiêu chuẩn, nút Kiểm, nút Xuất bản |
+| X4 | Cổng kiểm & hiệu năng | trang hiện có |
 
-### 3.3 Tiêu chuẩn một bộ chủ đề (đề xuất — Ryan sửa)
-| Hạng mục | Tối thiểu |
-|---|---|
-| Nhân vật mẫu | đủ các vai chính của chủ đề (≥ 5), mỗi nhân vật đạt cổng ở 18 biểu cảm × 32 hoạt động × 5 góc |
-| Linh kiện | mọi linh kiện có bản 45° (trừ vật cầm tay), license, nguồn; không trùng id chính thức |
-| Cảnh | ≥ 4 cảnh (có trong nhà và ngoài trời), dùng được ở 4 giờ, mọi phông đều được dùng |
-| Trang bị | có cho các bộ phận chính của chủ đề |
-| Kịch bản mẫu | ≥ 2, chạy được trong cảnh của bộ |
-| Trình bày | ảnh bìa, ảnh demo, mô tả, chủ đề, nhãn tìm kiếm |
-| Pháp lý | license bộ, file ghi công (credits) |
-| Kỹ thuật | qua mọi cổng; không có giá trị hỏng (NaN…) ở mọi giờ × thời tiết |
+### 3.3 Tiêu chuẩn một bộ chủ đề
+**Bắt buộc (đợt 1 kiểm được ngay với dữ liệu hiện có):**
+- ≥ 5 nhân vật mẫu, mỗi nhân vật đạt cổng ở 18 biểu cảm × 32 hoạt động × 5 góc nhìn.
+- Mọi linh kiện có bản 45° (trừ vật cầm tay), license, nguồn; không trùng id.
+- ≥ 4 cảnh (có trong nhà và ngoài trời), dùng được ở 4 giờ; mọi phông của bộ đều được dùng; không có giá trị hỏng ở mọi giờ × thời tiết.
+- Khai báo `khung@x` và bộ phụ thuộc.
+
+**Khuyến nghị (chưa có chỗ chứa — thêm khi làm X3):** trang bị cho các bộ phận chính, ≥ 2 kịch bản mẫu, ảnh bìa, ảnh demo, mô tả, nhãn tìm kiếm, changelog, file ghi công.
+
+*Bộ Tam Quốc hiện đạt phần bắt buộc: 5 nhân vật, 8 cảnh, 27/27 phông được dùng, 13 trang bị.*
 
 ### 3.4 Dùng chung mọi chủ đề vs đổi theo chủ đề
-| Khung (dùng chung, nằm ở X2) | Bộ chủ đề (đổi theo chủ đề, nằm ở X4) |
+| Khung + bộ cơ sở (dùng chung) | Bộ chủ đề (đổi theo chủ đề) |
 |---|---|
-| khung xương, điểm neo, lớp, góc nhìn | linh kiện: tóc, mũ, áo, giày, vật cầm, mặt nạ |
-| 18 biểu cảm, hệ mắt/mày/miệng, hiệu ứng | bảng màu, nhân vật, tính cách, câu thoại |
-| tư thế, di chuyển, động tác, 32 hoạt động | trang bị (hình, độ hiếm, chỉ số theo bối cảnh) |
-| ngữ pháp cảnh (lớp, chỗ đứng, giờ, thời tiết), ngữ pháp item | phông, đạo cụ, cảnh dựng sẵn |
-| cổng kiểm, ngân sách, quy trình xuất, Đạo diễn, MCP | kịch bản mẫu, hoạt động riêng của chủ đề (nếu cần) |
+| khung xương, lớp, góc nhìn, từ vựng chuyển động, 18 biểu cảm, hệ mắt / mày / miệng | linh kiện riêng: tóc, mũ, áo, giày, vật cầm, mặt nạ của chủ đề |
+| ngữ pháp cảnh (lớp, chỗ đứng, giờ, thời tiết) và item (loại, độ hiếm, chỉ số) | bảng màu, nhân vật, tính cách, câu thoại |
+| cổng kiểm, ngân sách hiệu năng, quy trình xuất, Đạo diễn, MCP | trang bị, phông, đạo cụ, cảnh, kịch bản mẫu |
+| linh kiện cơ bản (bộ cơ sở) | |
 
 ---
 
-## 4. Giai đoạn ② — THƯ VIỆN (hàng mẫu, chỉ đọc)
+## 4. Giai đoạn ② — THƯ VIỆN (Workspace, chỉ đọc)
 
-**Mục đích:** cho mọi người thấy có gì để dùng, và lấy về.
-**Luật riêng:** chỉ chứa **bộ đã xuất bản**. Không có "Của tôi", không sửa tại chỗ.
+**Luật riêng:** chỉ chứa bộ đã xuất bản. Không có "Của tôi".
 
 ### 4.1 Việc làm
-1. **Duyệt theo chủ đề** (bộ là đơn vị chính), tìm xuyên bộ theo tên / vai / loại.
-2. **Xem biến thể** của một mục: biểu cảm, hoạt động, góc, giờ, thời tiết, đặt diễn viên vào cảnh.
-3. **Lấy về** theo hai cách:
-   - **Tải trực tiếp**: ảnh (SVG, PNG, avatar, sprite, thẻ trang bị, cảnh) và mã (mã tham chiếu, lệnh MCP, nhúng web, JSON) — *đã có*.
-   - **Đưa vào tác phẩm**: chọn một tác phẩm (hoặc tạo mới) → mục được *tham chiếu* (dùng nguyên) hoặc *nhân bản* (để sửa) sang Tạo tác.
+1. Duyệt theo **bộ chủ đề**; tìm xuyên bộ.
+2. Xem biến thể: biểu cảm, hoạt động, góc, giờ, thời tiết, đặt diễn viên vào cảnh.
+3. **Tải trực tiếp thành phẩm**: SVG, PNG, avatar, sprite, thẻ trang bị, cảnh; **JSON công thức**; lệnh MCP mẫu.
+   *Bỏ "nhúng web kiểu chép thư mục engine/" (mâu thuẫn L6) — thay bằng link thành phẩm khi có SaaS.*
+4. **Lấy về Tạo tác** (khi có giai đoạn ③): mặc định **tham chiếu ghim phiên bản**; khi người dùng bấm sửa thì tạo bản sao của họ.
 
 ### 4.2 Màn hình
-| Mã | Màn | Nội dung chính |
+| Mã | Màn | Từ hiện trạng |
 |---|---|---|
-| T1 | Trang chủ Thư viện | lưới **bộ chủ đề** (ảnh bìa, tên, số nhân vật / cảnh / trang bị, phiên bản) |
-| T2 | Trang bộ | giới thiệu, ảnh demo, tab Nhân vật · Trang bị · Cảnh · Kịch bản mẫu, license, changelog, phiên bản cũ |
-| T3 | Chi tiết mục | xem biến thể + khu **Dùng** (tải ảnh, chép mã, "Đưa vào tác phẩm…") — *tái dùng khu Dùng hiện có* |
-| T4 | Tìm kiếm | xuyên mọi bộ |
+| T1 | Trang chủ Thư viện — lưới bộ chủ đề | mới |
+| T2 | Trang bộ — giới thiệu, tab Nhân vật · Trang bị · Cảnh, license, phiên bản | mới |
+| T3 | Chi tiết mục + khu Dùng | trang hiện có, bỏ nhóm "Của tôi", bỏ nhúng web chép engine |
 
 ---
 
-## 5. Giai đoạn ③ — TẠO TÁC (Workspace của người dùng)
+## 5. Giai đoạn ③ — TẠO TÁC (Workspace)
 
-**Mục đích:** biến hàng mẫu thành thứ người dùng cần, và xuất ra dùng.
-**Luật riêng:** chỉ chứa đồ của người dùng. Đồ mẫu chỉ được *tham chiếu* hoặc *nhân bản vào*.
+**Luật riêng:** chỉ chứa đồ của người dùng. Đồ mẫu chỉ được tham chiếu hoặc sao chép vào.
+**Làm sau cùng** — khi Ryan chốt §10 câu 1 và có một nhu cầu thật để làm theo.
 
 ### 5.1 Việc làm
-1. **Tạo tác phẩm**: đặt tên, chọn mục đích đầu ra (khung truyện · sticker · sprite cho game · ảnh lẻ · cảnh diễn), chọn bộ dùng (ghim phiên bản).
-2. **Dựng dàn**: lấy nhân vật / trang bị / cảnh từ Thư viện (tham chiếu hoặc nhân bản) hoặc phối mới.
-3. **Phối**: sửa ngoại hình, tham số, bảng màu, mặc trang bị; phối cảnh.
-4. **Đạo diễn**: viết hoặc nhờ AI viết kịch bản, diễn trong cảnh.
-5. **Xuất thành phẩm** theo mục đích đầu ra; mỗi thành phẩm lưu kèm công thức.
-6. **Xem lại / dựng lại** thành phẩm cũ (cùng công thức → cùng kết quả).
-7. **Báo thiếu** ("cần nón cối") hoặc **Đề cử** (gửi Xưởng).
-8. **Trợ lý AI / agent qua MCP** làm mọi việc trên *trong phạm vi tác phẩm đang mở*.
+1. Tạo tác phẩm (tên, mục đích đầu ra, bộ dùng ghim phiên bản).
+2. Lấy nhân vật / trang bị / cảnh từ Thư viện, phối, sửa.
+3. Đạo diễn: kịch bản, diễn trong cảnh.
+4. Xuất thành phẩm kèm công thức; xem lại / dựng lại.
+5. Trợ lý AI / agent qua MCP làm các việc trên trong phạm vi tác phẩm đang mở.
 
 ### 5.2 Màn hình
-| Mã | Màn | Nội dung chính |
+| Mã | Màn | Từ hiện trạng |
 |---|---|---|
-| C1 | Tác phẩm của tôi | danh sách tác phẩm, nút Tạo mới (chọn mục đích đầu ra) |
-| C2 | Không gian tác phẩm | 4 khu: Dàn diễn viên · Cảnh · Kịch bản · Thành phẩm |
-| C3 | Bàn phối | phối nhân vật / trang bị / cảnh **của tôi** — mở trong ngữ cảnh tác phẩm — *tái dùng bàn phối hiện có, bỏ đồ chính thức khỏi danh sách* |
-| C4 | Đạo diễn | kịch bản → diễn trong cảnh → xuất — *tái dùng Đạo diễn AI hiện có* |
-| C5 | Trợ lý AI | chat làm việc trong tác phẩm đang mở — *tái dùng Trợ lý AI hiện có* |
-| C6 | Thành phẩm | lịch sử xuất, tải lại, xem công thức, dựng lại |
-| C7 | Tủ đồ của tôi | đồ của tôi dùng chung giữa các tác phẩm |
+| C1 | Tác phẩm của tôi | mới |
+| C2 | Không gian tác phẩm: Dàn · Cảnh · Kịch bản · Thành phẩm | mới |
+| C3 | Bàn phối (chỉ đồ của tôi) | bàn phối nhân vật / trang bị / cảnh hiện có, lọc bỏ đồ chính thức |
+| C4 | Đạo diễn | trang hiện có, gắn với tác phẩm |
+| C5 | Trợ lý AI | trang hiện có, gắn với tác phẩm |
+
+**Hệ thống (Admin):** Cài đặt AI, Cập nhật — giữ như hiện có, không thuộc giai đoạn nào.
 
 ---
 
-## 6. Chỗ chuyển giao
+## 6. MCP / API theo vai
 
-| Cửa | Từ → Tới | Điều kiện | Kết quả |
-|---|---|---|---|
-| **Xuất bản** | ① → ② | bộ nháp đạt tiêu chuẩn bộ (3.3), Afi bấm xuất bản | bộ `id@phiên-bản` bất biến xuất hiện ở Thư viện |
-| **Lấy về** | ② → ③ | người dùng chọn mục + tác phẩm | tham chiếu (ghim phiên bản) hoặc bản nhân bản thuộc người dùng |
-| **Tải trực tiếp** | ② → ngoài | — | ảnh / mã (tính lượt khi lên SaaS) |
-| **Xuất thành phẩm** | ③ → ngoài | đồ trong tác phẩm đạt cổng | file + công thức, lưu vào lịch sử (tính lượt khi lên SaaS) |
-| **Báo thiếu** | ③ → ① | — | yêu cầu mở trong Hộp yêu cầu (X6) |
-| **Đề cử** | ③ → ① → ② | Afi duyệt | đồ được đưa vào bộ nháp, lên Thư viện ở phiên bản sau |
-
----
-
-## 7. MCP và API theo giai đoạn
-
-| Giai đoạn | Tool hiện có | Ai được gọi (khi lên SaaS) |
+| Nhóm | Tool | Ai gọi (khi lên SaaS) |
 |---|---|---|
-| ① Xưởng | `get_part_spec`, `preview_part`, `save_part`, `get_app_version`, `update_app`, `rollback_app` | chỉ Afi |
-| ② Thư viện | `get_catalog`, `list_characters`, `get_character`, `list_items`, `list_scenes`, `render_*` cho mục trong bộ | mọi khách |
-| ③ Tạo tác | `validate_*`, `save_character`, `save_item`, `save_scene`, `get_director_schema`, `validate_event`, `save_event`, `render_*` cho đồ của tôi | khách, trong phạm vi tác phẩm của họ |
+| Xưởng | `get_part_spec`, `preview_part`, `save_part` (ghi vào **bộ nháp**, không vào `local.my`) | chỉ Afi |
+| Thư viện | `get_catalog`, `list_*`, `get_character`, `render_*` cho mục trong bộ | mọi khách |
+| Tạo tác | `validate_*`, `save_*`, `get_director_schema`, `validate_event`, `save_event`, `render_*` cho đồ của tôi | khách, trong phạm vi của họ |
+| Vận hành | `get_app_version`, `update_app`, `rollback_app` | chủ máy |
 
-Cần thêm (đợt sau): tool làm việc với **tác phẩm** (`list_works`, `open_work`, `export_output`), tool **lấy về** (`use_in_work`), và `render_*` trả **đường link** thành phẩm thay vì nguyên SVG (tiết kiệm token).
+Cần sửa khi làm từng đợt:
+- `list_*` thêm tham số phạm vi (`library` | `mine`) — hiện trả lẫn cả hai.
+- `render_*` trả **link** thành phẩm thay vì nguyên SVG (một cảnh ~67 000 ký tự ≈ hàng chục nghìn token).
+- Cổng ghi phân quyền theo vai (L5): hiện Studio được ghi vào pack chính thức (`allowAnyPack`), MCP / AI chỉ ghi `local.my`.
 
 ---
 
-## 8. Hiện trạng → mục tiêu
+## 7. Hiện trạng → mục tiêu
 
-| Hiện có | Thuộc về | Việc cần làm |
+| Hiện có | Đích | Việc |
 |---|---|---|
-| Thư viện › Nhân vật / Trang bị / Cảnh (lưới theo loại, khu Dùng) | ② | đổi đơn vị chính sang **bộ chủ đề**; bỏ nhóm "Của tôi"; giữ khu Dùng; thêm "Đưa vào tác phẩm" |
-| Nhân vật / Trang bị / Cảnh của tôi (bàn phối) | ③ | chỉ liệt kê đồ của tôi; mở trong ngữ cảnh tác phẩm |
-| Đạo diễn AI, Trợ lý AI | ③ | gắn với tác phẩm; thành phẩm lưu vào lịch sử |
-| Kho linh kiện & phông | ① | thêm tạo / sửa / nhập linh kiện trên giao diện |
-| Khung tư thế, Khung biểu cảm | ① | gộp thành màn Khung (X2) |
-| Cổng kiểm & hiệu năng | ① | giữ |
-| Pack (`afi.core`, `afi.tamquoc`, `afi.items`, `afi.scenes`) | ① / ② | hiện chia theo **loại**; cần gom lại thành **bộ chủ đề** ("Tam Quốc" gồm nhân vật + trang bị + cảnh), khung (`afi.core`) tách khỏi bộ |
-| Kho "Của tôi" (`local.my`) | ③ | thành Tủ đồ của tôi + tác phẩm |
-| — | ② | thiếu: phiên bản bộ, trang bộ, trang chủ thư viện |
-| — | ③ | thiếu: tác phẩm, lịch sử thành phẩm |
-| — | ① → ② | thiếu: luồng xuất bản bộ |
+| `afi.core` (25 linh kiện + từ vựng + luật) | Khung + Bộ cơ sở | tách: từ vựng và luật → Khung; 25 linh kiện → Bộ cơ sở |
+| `afi.tamquoc` + `afi.items` + `afi.scenes` (chia theo loại) | Bộ chủ đề "Tam Quốc" | gom thành một bộ, phụ thuộc Bộ cơ sở |
+| Pack có trường `version` nhưng chưa bất biến, chưa ghim | L4 | engine giữ nhiều phiên bản cùng lúc (registry theo `pack@ver`); tham chiếu chéo có phiên bản — **việc engine thật, Đợt 2** |
+| Thư viện theo loại asset, có nhóm "Của tôi" | T1–T3 | Đợt 2 |
+| Nhúng web chép engine | — | bỏ khi lên SaaS (L6) |
+| Bàn phối liệt kê cả đồ chính thức | C3 | Đợt 3 |
+| Kịch bản ở kho chung `/api/events` | bộ (kịch bản mẫu) / tác phẩm | Đợt 2–3 |
 
 ---
 
-## 9. Phạm vi
+## 8. Phạm vi theo đợt
 
-**Đợt 1 (tái cấu trúc tối thiểu để hết lẫn lộn):**
-- Danh từ **Bộ chủ đề** (nháp + đã xuất bản + phiên bản) và **Tác phẩm** (tên, mục đích, dàn, cảnh, kịch bản, thành phẩm).
-- Gom pack hiện có thành bộ "Tam Quốc" + khung `afi.core`.
-- Thư viện theo bộ (T1–T3), bỏ "Của tôi" khỏi Thư viện.
-- Tạo tác theo tác phẩm (C1, C2, C6), bàn phối chỉ đồ của tôi.
-- Xuất bản bộ (X4) ở mức tối thiểu: kiểm theo tiêu chuẩn → tăng phiên bản → hiện ở Thư viện.
-- Theo STD-05 ⑥: **backend trước** (đối tượng + API + MCP + test), giao diện sau.
+| Đợt | Làm | Điều kiện bắt đầu |
+|---|---|---|
+| **1 — Xưởng** | X1 (gộp Khung), X2 (tạo / sửa / nhập linh kiện), X3 (bộ nháp + tiêu chuẩn bắt buộc + cổng), X4; tách Khung / Bộ cơ sở / Bộ Tam Quốc | Ryan duyệt đặc tả này |
+| **2 — Thư viện** | xuất bản bộ có phiên bản bất biến (L4: engine nhiều phiên bản), T1–T3, `list_*` theo phạm vi, `render_*` trả link | Đợt 1 xong |
+| **3 — Tạo tác** | Tác phẩm, C1–C5, lấy về ghim phiên bản | Ryan chốt câu 1 + có một nhu cầu thật để làm theo |
 
-**Để sau:** hộp yêu cầu (báo thiếu, đề cử), vẽ linh kiện trên giao diện Xưởng, nhiều khách (SaaS), tính lượt, plugin Godot, bộ khiển hành vi.
+Mỗi đợt theo STD-05 ⑥: **phần nền phía server trước** (đối tượng, API, MCP, test), giao diện sau.
 
 ---
 
-## 10. Câu hỏi mở cho Ryan
+## 9. Truy vết ý đồ
 
-1. **"Tác phẩm" có đúng đơn vị anh định dùng không?** Hay người dùng chỉ cần "tủ đồ của tôi" mà không cần gom theo tác phẩm?
-2. **Người dùng có được tự tạo linh kiện không?** Đề xuất: được, nhưng là *linh kiện riêng* trong Tạo tác (chỉ dùng trong đồ của họ); muốn thành khuôn chung thì phải qua Đề cử → Xưởng duyệt.
-3. **Tiêu chuẩn bộ chủ đề ở 3.3** — anh sửa con số tối thiểu nào?
-4. **Lấy về mặc định là tham chiếu hay nhân bản?** Đề xuất: tham chiếu (nhẹ, tự hưởng bản vá) — chỉ nhân bản khi người dùng bấm sửa.
-5. **Bộ đầu tiên sau Tam Quốc** là chủ đề gì?
+| Ý đồ | Đặc tả đáp ứng ở đâu |
+|---|---|
+| INT-01 Asset là code, xuất bản độc lập | L2 (thành phẩm + JSON công thức), L4 (dựng lại y hệt) |
+| INT-02 Afi làm khung; đồ người dùng thành tài nguyên chung theo nhóm thư viện | Khung + bộ do Afi; **phần "đồ người dùng thành tài nguyên chung" đưa sang Phụ lục A** — cần Ryan xác nhận (§10 câu 2) |
+| INT-03 SaaS về sau | L6, §6 phân quyền tool |
+| INT-05 MCP cho agent | §6 |
+| INT-06 MVP cài về máy | L6 thu hẹp thành bản nội bộ Afi — **cần Ryan xác nhận** (§10 câu 3) |
+| INT-07 Quản lý chi tiết từng asset | X2, T3, C3 |
+| INT-08 Chất lượng là hào bảo vệ | §3.3 tiêu chuẩn bộ, Đợt 1 dồn vào Xưởng |
 
 ---
 
-## 11. Thuật ngữ
+## 10. Câu hỏi cho Ryan
 
+1. **"Tác phẩm" có đúng đơn vị làm việc của người dùng không?** (Chỉ cần chốt trước Đợt 3.)
+2. **INT-02:** đồ người dùng tạo có trở thành tài nguyên chung (nhóm / cộng đồng) không, hay chỉ Afi duyệt mới lên Thư viện?
+3. **INT-06:** bản cài về máy chỉ còn là bản nội bộ Afi khi lên SaaS — đúng không?
+4. **Tiêu chuẩn bộ (§3.3):** sửa con số nào?
+5. **Bộ chủ đề thứ hai** sau Tam Quốc là gì? (Để kiểm khung + bộ cơ sở có thật sự dùng chung được.)
+
+**Lời Ryan 2026-10-18 cần đưa vào INTENT khi mở lại Second-Brain:** ba giai đoạn; Xưởng làm khung và quy trình trước; repo private + SaaS giấu khung; tránh phức tạp hoá, làm theo nhu cầu thật. Kèm: STD-04 đổi visibility → cập nhật LICENSE / README cho repo private.
+
+---
+
+## Phụ lục A — Ý tưởng để sau (chưa thuộc phạm vi)
+- **Hộp yêu cầu:** người dùng báo thiếu linh kiện → việc cho Xưởng.
+- **Đề cử:** đồ hay của người dùng → Afi duyệt vào bộ.
+- **Linh kiện riêng của khách** trong Tạo tác (cần đối tượng mới, phụ thuộc câu 2).
+- **Tủ đồ của tôi** dùng chung giữa nhiều tác phẩm.
+- **Nhóm / cộng đồng** đóng góp bộ (INT-02).
+- Plugin Godot, bộ khiển hành vi, SaaS nhiều khách, tính lượt.
+
+## Phụ lục B — Thuật ngữ
 | Từ | Nghĩa |
 |---|---|
-| Khung | phần dùng chung mọi chủ đề: khung xương, từ vựng chuyển động, luật, cổng |
-| Linh kiện | mảnh vẽ cắm vào khung (kể cả phông cảnh) |
-| Bộ chủ đề | gói linh kiện + nhân vật + trang bị + cảnh của một chủ đề; nháp ở Xưởng, bản đã xuất bản ở Thư viện |
-| Tác phẩm | đơn vị làm việc của người dùng, gom mọi thứ cho một đầu ra |
-| Thành phẩm | file xuất ra kèm công thức sinh ra nó |
-| Tham chiếu / Nhân bản | dùng nguyên mục của bộ (ghim phiên bản) / sao một bản thuộc người dùng để sửa |
-
----
-
-## Ghi chú đồng bộ Second-Brain
-Ryan đang tạm dừng việc ghi Second-Brain. Khi mở lại: chép đặc tả này sang `01-projects/gen-chibi/spec/`, và cập nhật `INTENT.md`: thêm nguyên lý "3 giai đoạn"; sửa STD-04 (repo chuyển private); ghi hướng SaaS giấu khung (L6) và luật ghim phiên bản (L4).
+| Khung | từ vựng và luật dùng chung, không chứa linh kiện; `khung@x` |
+| Bộ cơ sở | linh kiện dùng chung mọi chủ đề |
+| Bộ chủ đề | gói của một chủ đề; nháp ở Xưởng, `id@phiên-bản` ở Thư viện |
+| Tác phẩm | đơn vị làm việc của người dùng |
+| Thành phẩm | file xuất ra + công thức + phiên bản khung và bộ |
+| Tham chiếu ghim phiên bản | dùng nguyên mục của bộ ở đúng phiên bản; nâng phiên bản bằng tay |
