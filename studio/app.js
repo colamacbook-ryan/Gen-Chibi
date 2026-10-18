@@ -1187,7 +1187,12 @@
     Promise.all(srcs.map(function (f) { return fetch(f).then(function (r) { if (!r.ok) throw new Error('Không tải được ' + f); return r.text(); }); }))
       .then(function (texts) {
         var pick = function (o, keys) { var r = {}; keys.forEach(function (k) { if (o[k] !== undefined) r[k] = o[k]; }); return r; };
-        data = { parts: data.parts, characters: data.characters.map(function (a) { return pick(a, ['id', 'pack', 'name', 'version', 'look', 'expressions', 'kind', 'voice', 'role']); }),
+        data = { parts: data.parts, characters: data.characters.map(function (a) {
+            // giọng chốt sẵn lúc xuất (nhân vật chưa lưu giọng thì lấy giọng Studio đang dùng — không xuất persona)
+            var o = pick(a, ['id', 'pack', 'name', 'version', 'look', 'expressions', 'kind', 'voice', 'role']);
+            if (!o.voice && GC.audio) o.voice = GC.audio.voiceOf(a);
+            return o;
+          }),
           items: data.items.map(function (x) { return pick(x, ['id', 'name', 'type', 'rarity', 'equip']); }),
           scenes: data.scenes.map(function (x) { return pick(x, ['id', 'name', 'layers', 'deco', 'palette', 'time', 'weather', 'spots']); }) };
         var film = { title: W.title, logline: W.logline || '', shots: W.shots.map(function (s) { return { id: s.id, title: s.title, description: s.description || '', scene: s.scene, cast: s.cast, event: s.event }; }) };

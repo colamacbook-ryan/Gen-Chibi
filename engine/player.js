@@ -118,7 +118,7 @@
     var prev = null, lastCam = null, pair = null;
     steps.forEach(function (s, i) {
       var me = s.actor, base = GC.LIB.states[s.state] || GC.LIB.states.normal;
-      var line = { type: 'line', i: i, actor: me, say: s.say, state: s.state, hold: s.hold || 0 };
+      var line = { type: 'line', i: i, actor: me, say: s.say == null ? '' : String(s.say), state: s.state, hold: s.hold || 0 };
       // đi tới chỗ mới khi spot đổi (chạy khi hoảng / giận hoặc đường xa)
       if (s.spot && s.spot !== cur[me]) {
         var dist = Math.abs(sx(s.spot) - sx(cur[me]));
@@ -147,7 +147,7 @@
         line.listen[id] = { state: st, motion: SHOUT[s.state] ? 'jolt' : (i + id.length) % 2 && st === 'normal' ? 'nod' : null };
       });
       // bong bóng: chỉ định > nghĩ (think / sleep) > hét (cảm xúc mạnh có "!") > nói
-      line.bubble = s.bubble || (THINK[s.state] ? 'think' : SHOUT[s.state] && /[!?]/.test(s.say) ? 'shout' : 'say');
+      line.bubble = s.bubble || (THINK[s.state] ? 'think' : SHOUT[s.state] && /[!?]/.test(line.say) ? 'shout' : 'say');
       // máy quay: chỉ định > toàn cảnh khi có người di chuyển / cả nhóm ăn mừng > hai người khi đối đáp > cận người nói
       var cam = s.camera && s.camera !== 'auto' ? s.camera : null;
       if (!cam) {
@@ -163,7 +163,7 @@
       // khẩu hình: miệng ngậm (giữ nét cười / mím của cảm xúc) ↔ mở nhỏ ↔ mở to (hét / cười lớn)
       var mouth = base.mouth;
       line.mouths = { closed: CLOSED[mouth] ? mouth : 'flat', small: 'oSmall', big: line.bubble === 'shout' ? 'shout' : mouth === 'laugh' ? 'laugh' : 'oBig' };
-      line.estimate = Math.max(1.6, words(s.say) * 0.3 + 0.6, s.hold || 0);
+      line.estimate = Math.max(1.6, words(line.say) * 0.3 + 0.6);   // thời gian đọc; hold (giữ khung) tính riêng lúc diễn
       // bước tới / lùi lại theo cảm xúc (không khi vừa đi tới chỗ mới hoặc hoạt động tự di chuyển); xong câu thì về chỗ
       var lean = LEAN[s.state] || 0, act0 = s.activity && GC.LIB.activities[s.activity];
       // bước tới không đè lên người nghe: giữ khoảng cách tối thiểu ~ một thân người (100 đơn vị cảnh)
@@ -311,7 +311,8 @@
         S = Math.max(1.15, Math.min(1.6, 0.62 / (Math.abs(a.x - b.x) + 0.24)));
       }
       if (punch) S *= 1.12;
-      var tx = mode === 'wide' ? 0 : Math.max(1 - S, Math.min(0, 0.5 - fx * S)), ty = mode === 'wide' ? 0 : Math.max(1 - S, Math.min(0, cy - fy * S));
+      // toàn cảnh: zoom (nếu có punch) quanh tâm khung, không lệch về góc trái trên
+      var tx = mode === 'wide' ? (1 - S) / 2 : Math.max(1 - S, Math.min(0, 0.5 - fx * S)), ty = mode === 'wide' ? (1 - S) / 2 : Math.max(1 - S, Math.min(0, cy - fy * S));
       camState = { S: S, tx: tx, ty: ty };
       cam.classList.toggle('cut', !!cut);
       cam.style.transform = 'translate(' + (tx * 100).toFixed(3) + '%,' + (ty * 100).toFixed(3) + '%) scale(' + S.toFixed(4) + ')';
@@ -439,12 +440,12 @@
       if (line.screen === 'flash') { flash.classList.remove('on'); void flash.offsetWidth; flash.classList.add('on'); }
       if (line.screen) { shk.classList.remove('shake'); void shk.offsetWidth; shk.classList.add('shake'); }
       return wait(260, r).then(function () {
-        b.show(); sfx('pop', { gain: 0.5, pan: panOf(id) });
+        b.show(); sfx('pop', { gain: 0.5, pan: panOf(id) }); var t0 = Date.now();
         var n = String(line.say).split(/\s+/).filter(Boolean).length;
         var hooks = { onMouth: function (v) { if (r === run && !done) mouth(v); }, onWord: function (i) { if (r === run && !done) b.word(i); } };
         var talk = A ? A.say(line.say, voice, hooks) : fallbackSay(line, n, hooks, r);
         var cap = wait((line.estimate * 2.2 + 3) * 1000, r);   // giọng đọc treo (onend không về) cũng không làm kẹt phim
-        return Promise.race([talk, cap]).then(function () { b.word(n); mouth(0); return wait(Math.max(380, (line.hold || 0) * 1000 - line.estimate * 1000), r); });
+        return Promise.race([talk, cap]).then(function () { b.word(n); mouth(0); return wait(Math.max(380, (line.hold || 0) * 1000 - (Date.now() - t0)), r); });   // hold = khung hiện tối thiểu
       }).then(function () {
         done = true; mouth(0); b.close(); bub = null;
         if (nudged && r === run) { var p1 = pos[id]; els[id].style.transitionDuration = '.4s'; place(id, spotAt(home)); timers.push(setTimeout(function () { if (els[id]) els[id].style.transitionDuration = '0s'; }, 420)); }
@@ -485,6 +486,7 @@
     }
     function stop() { run++; timers.forEach(clearTimeout); timers = []; if (A) A.stopAll(); bub = null; if (ov) Array.prototype.forEach.call(ov.querySelectorAll('.gcp-bub'), function (b) { b.remove(); }); }
     function playShot(shot, r) {
+      if (r !== run) return Promise.reject('stop');   // đã stop / show trong cùng tick: không dựng lại sân khấu, không bật nhạc
       if (!build(shot, true)) return Promise.resolve();
       plan.shotTitle = shot.title;
       if (A) { A.ambient(plan.ambient); A.music(plan.mood); }
