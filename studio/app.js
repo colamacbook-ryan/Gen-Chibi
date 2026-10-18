@@ -5,6 +5,11 @@
 (function () {
   'use strict';
   var GC = window.GenChibi, LIB = GC.LIB, R = GC.render;
+  // 8 hướng (2.5D): tên góc → nhãn. Thứ tự = GC.VIEW_ORDER. Sprite 8 hướng đi vòng theo chiều kim đồng hồ từ chính diện.
+  var VIEW_LABEL = { front: 'Chính diện', left: '3/4 trái', right: '3/4 phải', left45: '45° trái', right45: '45° phải', left90: '90° trái', right90: '90° phải',
+    left135: '135° trái', right135: '135° phải', back: 'Sau lưng' };
+  var VIEWS_ALL = GC.VIEW_ORDER.map(function (v) { return [v, VIEW_LABEL[v] || v]; });
+  var DIR8 = ['front', 'left45', 'left90', 'left135', 'back', 'right135', 'right90', 'right45'];
   R.injectCSS();
 
   /* ============================================================ tiện ích */
@@ -630,7 +635,7 @@
       });
     });
     // Bàn soát (bước 4 của quy trình tạo lập — docs/QUY-TRINH-LINH-KIEN.md): linh kiện trên ma-nơ-canh × góc nhìn × tình huống
-    var VIEWS = [['front', 'Chính diện'], ['left', '3/4 trái'], ['left45', '45° trái'], ['right45', '45° phải']];
+    var VIEWS = ['front', 'left45', 'left90', 'left135', 'back'].map(function (v) { return [v, VIEW_LABEL[v]]; });
     var CASES = [['normal', null, 'Đứng'], ['shock', null, 'Kinh ngạc'], ['vow', 'run', 'Chạy'], ['normal', 'sit-floor', 'Ngồi']];
     function showBench(slot, p) {
       clear(bench);
@@ -875,7 +880,7 @@
       face.appendChild(h('button', { 'aria-pressed': String(sel.facing === f[0]), onclick: function () { sel.facing = f[0]; Array.prototype.forEach.call(face.children, function (b, i) { b.setAttribute('aria-pressed', String(i === (f[0] === 'right' ? 0 : 1))); }); play(); } }, f[1]));
     });
     var viewSeg = h('div', { class: 'seg' });
-    [['', 'Tự động'], ['front', 'Chính diện'], ['left', '3/4 trái'], ['right', '3/4 phải'], ['left45', '45° trái'], ['right45', '45° phải']].forEach(function (v) {
+    [['', 'Tự động']].concat(VIEWS_ALL).forEach(function (v) {
       viewSeg.appendChild(h('button', { 'data-v': v[0], 'aria-pressed': String(sel.view === v[0]), onclick: function () {
         sel.view = v[0];
         Array.prototype.forEach.call(viewSeg.children, function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-v') === sel.view)); });
@@ -921,7 +926,7 @@
       var st = inst.setState(stateOf(), dirOf());
       var act = LIB.activities[sel.activity];
       $('psLabel').textContent = act ? act.label : '';
-      info.textContent = 'Đang diễn: ' + stateLabel(stateOf()) + ' · ' + (st.kind === 'q45' ? (st.mirror ? '45° phải' : '45° trái') + (st.fallback45 && st.fallback45.length ? ' (linh kiện chưa vẽ nghiêng: ' + st.fallback45.join(', ') + ')' : ' (vẽ thật đủ bộ)') : st.turn ? (st.turn < 0 ? '3/4 trái' : '3/4 phải') : 'chính diện') + ' · tư thế ' + (LIB.postures[st.posture] || {}).label + ' · ' +
+      info.textContent = 'Đang diễn: ' + stateLabel(stateOf()) + ' · ' + (st.kind ? (VIEW_LABEL[dirOf().view] || st.kind) + (st.fallback45 && st.fallback45.length ? ' (linh kiện mượn góc gần nhất: ' + st.fallback45.join(', ') + ')' : ' (vẽ thật đủ bộ)') : st.turn ? (st.turn < 0 ? '3/4 trái' : '3/4 phải') : 'chính diện') + ' · tư thế ' + (LIB.postures[st.posture] || {}).label + ' · ' +
         (st.move ? 'di chuyển ' + LIB.moves[st.move].label : 'đứng yên') + ' · động tác ' + ((LIB.motions[st.motion] || {}).label || st.motion) +
         (st.props.length ? ' · đạo cụ: ' + st.props.map(function (p) { return LIB.props[p].label; }).join(', ') : '');
       Array.prototype.forEach.call(grid.querySelectorAll('.state-cell'), function (c) { c.setAttribute('aria-pressed', String(c.getAttribute('data-a') === sel.activity)); });
@@ -1284,9 +1289,9 @@
         selA.appendChild(h('option', { value: '', text: '— hoạt động —' }));
         LIB.activityOrder.forEach(function (k) { selA.appendChild(h('option', { value: k, text: LIB.activities[k].label })); });
         var vseg = h('div', { class: 'seg' });
-        [['front', 'Chính diện'], ['left45', '45° trái'], ['right45', '45° phải']].forEach(function (v) {
-          vseg.appendChild(h('button', { 'aria-pressed': String(u.view === v[0]), onclick: function () { u.view = v[0]; Array.prototype.forEach.call(vseg.children, function (b, i) { b.setAttribute('aria-pressed', String(i === ['front', 'left45', 'right45'].indexOf(u.view))); }); paintU(); } }, v[1]));
-        });
+        var vsel = h('select', { 'aria-label': 'Góc nhìn', onchange: function () { u.view = vsel.value; paintU(); } });
+        VIEWS_ALL.forEach(function (v) { vsel.appendChild(h('option', { value: v[0], text: v[1] })); });
+        vsel.value = u.view;
         function dir() { var d = {}; if (u.activity) d.activity = u.activity; if (u.view !== 'front') d.view = u.view; return Object.keys(d).length ? d : undefined; }
         function name() { return a.id + '-' + u.state + (u.activity ? '-' + u.activity : '') + (u.view !== 'front' ? '-' + u.view : ''); }
         var code;
@@ -1305,13 +1310,14 @@
           ['JSON công thức', function () { return JSON.stringify(a, null, 2); }]
         ]);
         useHead(a, box, [
-          stg, h('div', { class: 'row' }, selS, selA, vseg),
+          stg, h('div', { class: 'row' }, selS, selA, vsel),
           h('div', { class: 'note', text: (a.identity && a.identity.p1 ? 'Nhận diện: ' + a.identity.p1 + '. ' : '') + (a.persona || '') }),
           h('div', { class: 'usebar' }, h('b', { text: 'Tải ảnh' }),
             h('button', { class: 'btn sm', onclick: function () { download(name() + '.svg', GC.svgString(a, u.state, { director: dir() }), 'image/svg+xml'); } }, 'SVG'),
             h('button', { class: 'btn sm', onclick: function () { savePng(name() + '-512.png', R.imageURL(a, u.state, { director: dir() }), 512, Math.round(512 * 258 / 248)); } }, 'PNG 512'),
             h('button', { class: 'btn sm', onclick: function () { savePng(a.id + '-avatar-256.png', R.imageURL(a, u.state, { crop: true, noShadow: true, director: dir() }), 256, 256); } }, 'Avatar 256'),
-            h('button', { class: 'btn sm', onclick: function () { spriteSheet(a); } }, 'Sprite ' + LIB.stateOrder.length + ' biểu cảm')),
+            h('button', { class: 'btn sm', onclick: function () { spriteSheet(a); } }, 'Sprite ' + LIB.stateOrder.length + ' biểu cảm'),
+            h('button', { class: 'btn sm', title: 'Một hàng 8 hướng (vòng theo chiều kim đồng hồ từ chính diện), theo biểu cảm + hoạt động đang chọn', onclick: function () { sprite8(a, u.state, u.activity); } }, 'Sprite 8 hướng')),
           h('div', { class: 'usebar' }, h('b', { text: 'Tải mã' }),
             h('button', { class: 'btn sm', onclick: function () { download(a.id + '.json', JSON.stringify(a, null, 2), 'application/json'); } }, 'JSON công thức')),
           code,
@@ -1321,6 +1327,20 @@
       }
     }, r);
   };
+  function sprite8(a, state, activity) {
+    var cell = 256, ch = Math.round(cell * 258 / 248);
+    var c = document.createElement('canvas'); c.width = DIR8.length * cell; c.height = ch;
+    var ctx = c.getContext('2d'), done = 0;
+    DIR8.forEach(function (v, i) {
+      var img = new Image(), d = { view: v };
+      if (activity) d.activity = activity;
+      img.onload = function () {
+        ctx.drawImage(img, i * cell, 0, cell, ch);
+        if (++done === DIR8.length) c.toBlob(function (b) { downloadBlob(a.id + '-8dir-' + (activity || state) + '.png', b); toast('Thứ tự ô: ' + DIR8.join(', ')); }, 'image/png');
+      };
+      img.src = R.imageURL(a, state, { director: d });
+    });
+  }
   function spriteSheet(a) {
     var cols = 6, cell = 256, ch = Math.round(cell * 258 / 248), rows = Math.ceil(LIB.stateOrder.length / cols);
     var c = document.createElement('canvas'); c.width = cols * cell; c.height = rows * ch;
@@ -1455,8 +1475,8 @@
     var S = GC.SCENE;
     function cellImg(url, w, label) { return h('figure', { style: 'margin:0;display:grid;justify-items:center;gap:2px;width:' + w + 'px' }, h('img', { src: url, alt: label, style: 'width:100%;display:block' }), h('figcaption', { class: 'note', style: 'text-align:center', text: label })); }
     var views = h('div', { class: 'row', style: 'align-items:flex-end' });
-    [['front', 'Chính diện'], ['left', '3/4 trái'], ['right', '3/4 phải'], ['left45', '45° trái'], ['right45', '45° phải']].forEach(function (v) {
-      views.appendChild(cellImg(R.imageURL(m, 'normal', { director: { view: v[0] } }), 120, v[1]));
+    VIEWS_ALL.forEach(function (v) {
+      views.appendChild(cellImg(R.imageURL(m, 'normal', { director: { view: v[0] } }), 96, v[1]));
     });
     var acts = h('div', { class: 'row', style: 'align-items:flex-end' });
     LIB.activityOrder.forEach(function (a) {

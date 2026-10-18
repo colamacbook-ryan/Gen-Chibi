@@ -19,6 +19,8 @@
 
 - **Chính diện** — `draw(C, st, vals)`.
 - **45° vẽ thật** — `views.q45(C, st, vals)`. Bản chuẩn **quay mặt sang trái màn hình** (tay phải màn hình ở phía gần); 45° phải = engine lật gương.
+- **90° / 135° / sau lưng** (8 hướng, v0.7.0) — `views.q90` (nhìn ngang), `views.q135` (quay lưng chéo), `views.q180` (sau lưng). Cùng quy ước quay sang trái; bên phải = lật gương. Thiếu thì engine **mượn góc gần nhất** (q90 → q45; q135 → q180 → q45; q180 → chính diện). Linh kiện **của khung** phải đủ cả 4 (test chặn).
+  Ở góc lưng engine tự giấu mặt, đưa vật sau lưng lên trước thân, vật cầm tay ra sau thân. Linh kiện dữ liệu khai báo `views.q90|q135|q180` = `drawn` (kèm layers) | `same` (= bản 45°) | `front` | `hide`.
 - **3/4 nhẹ** — engine tự trượt parallax, không cần vẽ.
 - Thiếu `q45`: engine trượt tạm (φ = 32°) để vẫn dùng được, cổng kiểm báo thiếu. **Thư viện chính thức không được thiếu** (test chặn phát hành).
 
@@ -40,7 +42,7 @@ vị trí mắt/mày/miệng ở 45° (`GC.Q45`), hiệu ứng bám mặt (`fx.f
 2. **Vẽ chính diện** theo neo và bảng màu; khai báo `params` nếu có biến thể (độ cao mũ, độ dài râu…).
 3. **Vẽ 45°** bằng công cụ ở mục 3 (ưu tiên `face45` / `body45`; vẽ tay khi linh kiện có dáng riêng).
 4. **Soát trên ma-nơ-canh**: Studio › Thư viện linh kiện › bấm linh kiện → Bàn soát (4 góc nhìn × đứng, kinh ngạc, chạy, ngồi). Không soát trên một nhân vật cụ thể.
-5. **Cổng kiểm + test**: `bash tools/test.sh` (license, tham số, dựng đủ 18 biểu cảm × 32 hoạt động × 2 hướng × 5 góc nhìn, phủ đủ 45°).
+5. **Cổng kiểm + test**: `bash tools/test.sh` (license, tham số, dựng đủ 18 biểu cảm × 32 hoạt động × 2 hướng × 10 góc nhìn, phủ đủ 45°; linh kiện khung đủ 8 hướng).
 6. **Phát hành**: đổi `VERSION` + `CHANGELOG.md`, đẩy `main` — CI tạo Release, các bản cài tự cập nhật.
 
 ## 5. Nhân vật = phối, không vẽ

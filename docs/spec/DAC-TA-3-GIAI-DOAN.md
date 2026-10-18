@@ -17,7 +17,7 @@
 
 | Loại | Khung | Đã dựng |
 |---|---|---|
-| Nhân vật | **ma-nơ-canh đầu trọc, không quần áo** — đủ khớp, 18 biểu cảm, 32 hoạt động, 5 góc nhìn | `afi.khung/ma-no-canh` |
+| Nhân vật | **ma-nơ-canh đầu trọc, không quần áo** — đủ khớp, 18 biểu cảm, 32 hoạt động, 8 hướng (2.5D) | `afi.khung/ma-no-canh` |
 | Vật phẩm | **khối đại diện theo dáng**: que dài, que ngắn, đĩa dẹt, hộp, cầu, đội đầu, khoác thân, sau lưng, giày, che mặt | 10 khối + 10 item khung |
 | Bối cảnh | **khối đại diện**: trời / tường, chân trời, khối nhà, nền có lưới tỉ lệ, tiền cảnh, khối hộp / trụ / cây / đá / bàn / cờ | 13 khối + 2 cảnh khung |
 | Quy cách | kích thước, điểm gắn, lớp, góc nhìn, tham số, màu, luật kiểm — **thống nhất cho mọi asset** | `docs/QUY-CACH-KHUNG.md` |
@@ -47,5 +47,6 @@ Giao diện gồm 5 khu: **chat với AI · kịch bản · mô tả phân cản
 |---|---|---|
 | 1a | Bộ khung chuẩn + quy cách + bảng soát bằng hình | xong (Ryan duyệt 2026-10-18) |
 | 1b | Cất Tam Quốc khỏi bản chạy; đạo cụ thành khối; Studio Xưởng hiển thị khung + quy cách; test chuyển sang khung | xong — v0.6.0 |
+| 1c | 8 hướng nhìn (2.5D): 45° · 90° · 135° · sau lưng cho engine + mọi linh kiện khung; sprite 8 hướng | xong — v0.7.0 |
 | 2 | Giao diện tạo asset từ khung (chọn khung → tham số → soát → lưu thư viện theo dự án chủ đề) | |
 | 3 | Tạo tác: chat AI đạo diễn, kịch bản, phân cảnh, cảnh thành phẩm, sân khấu final; AI tự gọi Xưởng khi thiếu | |

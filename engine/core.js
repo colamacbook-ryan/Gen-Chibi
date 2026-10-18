@@ -237,7 +237,7 @@
       if (director.view) st.turn = VIEWS[director.view] !== undefined ? VIEWS[director.view] : 0;
       if (typeof director.turn === 'number' && isFinite(director.turn)) st.turn = Math.max(-1, Math.min(1, director.turn));
       st.viewSet = !!director.view || typeof director.turn === 'number';
-      if (director.view === 'left45' || director.view === 'right45') { st.kind = 'q45'; st.view = director.view; }
+      if (VIEW_KIND[director.view]) { st.kind = VIEW_KIND[director.view]; st.view = director.view; }
       if (director.fx) { st.fx = st.fx.concat(director.fx); st.src.fx = SRC.director; }
     }
     var pz = LIB.postures[st.posture] || {}, mv = st.move && LIB.moves[st.move];
@@ -251,7 +251,8 @@
     // góc nhìn tính theo MÀN HÌNH; khi quay trái cả hình bị lật gương nên đổi dấu sang hệ toạ độ của nhân vật
     st.turnLocal = st.facing === 'left' ? -st.turn : st.turn;
     // lật gương: góc 45° do góc nhìn quyết định (bản chuẩn quay trái); các góc khác theo hướng di chuyển
-    if (st.kind === 'q45') { st.mirror = st.view === 'right45'; st.turnLocal = -1; st.facing = st.mirror ? 'right' : 'left'; }
+    if (st.kind === 'q180') { st.mirror = true; st.turnLocal = 0; st.facing = 'right'; }   // sau lưng: hai bên đổi chỗ như nhìn từ phía sau
+    else if (TURNED[st.kind]) { st.mirror = /^right/.test(st.view); st.turnLocal = -1; st.facing = st.mirror ? 'right' : 'left'; }
     else st.mirror = st.facing === 'left';
     st.fx = st.fx.filter(function (f, i) { return st.fx.indexOf(f) === i; });
     return st;
@@ -261,7 +262,19 @@
   // Quay kiểu parallax (như Live2D/Spine cho chibi): đầu chibi gần như hình cầu nên viền đầu giữ nguyên,
   // các lớp trên mặt trượt theo độ sâu trên cầu: x = R·sin(θ − φ). θ là góc của chi tiết, φ là góc quay.
   // Mắt xa hẹp lại (cos giảm), mắt gần rộng ra; tóc sau, tai trượt ngược; thân quay ít hơn đầu; tay xa ra sau thân.
-  var VIEWS = { front: 0, left: -1, right: 1, left45: -1, right45: 1 };
+  var VIEWS = { front: 0, left: -1, right: 1, left45: -1, right45: 1, left90: -1, right90: 1, left135: -1, right135: 1, back: 0 };
+  // 8 hướng (kiểu game RPG) — vẽ 5, lật gương ra 8. Bản chuẩn của mỗi góc quay sang TRÁI màn hình; *right* = lật gương.
+  //   q45 nghiêng 45° · q90 nghiêng hẳn (nhìn ngang) · q135 quay lưng chéo · q180 sau lưng
+  var VIEW_ORDER = ['front', 'left', 'right', 'left45', 'right45', 'left90', 'right90', 'left135', 'right135', 'back'];
+  var VIEW_KIND = { left45: 'q45', right45: 'q45', left90: 'q90', right90: 'q90', left135: 'q135', right135: 'q135', back: 'q180' };
+  var VIEW_KINDS = ['q45', 'q90', 'q135', 'q180'];
+  // linh kiện chưa có bản vẽ góc này → dùng bản gần nhất (cổng kiểm báo thiếu)
+  var VIEW_FALLBACK = { q45: ['q45'], q90: ['q90', 'q45'], q135: ['q135', 'q180', 'q45'], q180: ['q180'] };
+  var TURNED = { q45: 1, q90: 1, q135: 1 };          // thân xoay sang trái (tay xa ra sau thân)
+  var BACK_KINDS = { q135: 1, q180: 1 };             // thấy lưng: không vẽ khuôn mặt
+  var FACE_LAYERS = ['eyes', 'brows', 'mouth', 'mustache', 'beard', 'cheeks', 'mask'];
+  // nhìn ngang (q90): chỉ thấy một mắt, sát mép trước của mặt
+  var Q90 = { eye: { x: 62, sx: 0.55 }, brow: { x: 64, sx: 0.55 }, mouth: { dx: -32, sx: 0.6 } };
   var TURN = { phi: 22, R: 48, body: 0.55 };
   // Góc 45° VẼ THẬT ở mức linh kiện: part.views.q45(C, st, vals). Bản vẽ chuẩn quay mặt sang TRÁI màn hình
   // (tay phải màn hình ở phía gần); 45° phải = lật gương. Linh kiện chưa có bản vẽ 45° thì engine trượt parallax (phi 32°).
@@ -331,7 +344,7 @@
     st.farArm = far;
   }
   function applyTurn(out, turn, st, C) {
-    if (!turn || st.kind === 'q45') return;
+    if (!turn || st.kind) return;   // góc vẽ thật (q45…q180) không trượt parallax
     // phía sau đầu lộ ra khi quay là TÓC, không phải da: lưỡi liềm = hình đầu − chính nó dịch theo hướng quay, chỉ phần trên tai
     var crescent = out.hairFront ? crescentOf(C, turn, TURN.phi) : '';
     TURN_LAYERS.forEach(function (t) {
@@ -392,8 +405,9 @@
     var head = getPart('head', partRef(asset, 'head'), asset.pack) || getPart('head', 'round');
     var mask = getPart('mask', partRef(asset, 'mask'), asset.pack);
     P.eyeArea = (mask && mask.eyeArea) || P.skin;
-    var Q = st.kind === 'q45';
-    var C = { P: P, A: RIG.anchors, shape: Q && head.shape45 ? head.shape45 : head.shape, ink: INK, asset: asset, flip: !!st.mirror, st: st, view: Q ? 'q45' : 'front' };
+    var K = st.kind || null, Q = K === 'q45', BACK = !!BACK_KINDS[K];
+    var shape = K === 'q90' ? head.shape90 || head.shape45 : K === 'q135' ? head.shape135 || head.shape : K === 'q45' ? head.shape45 : null;
+    var C = { P: P, A: RIG.anchors, shape: shape || head.shape, ink: INK, asset: asset, flip: !!st.mirror, st: st, view: K || 'front' };
     var out = {};
     LAYER_IDS.forEach(function (l) { out[l] = ''; });
 
@@ -403,7 +417,7 @@
       for (var layer in res) {
         if (!(layer in out)) throw new Error('lớp lạ: ' + layer);
         var c = wrap ? '<g transform="' + wrap + '">' + res[layer] + '</g>' : res[layer];
-        if (fb && Q && c) { var sh = layerShift(layer, -1, Q45.phi); if (sh) c = turnWrap(c, sh.dx, sh.sx, sh.cx); }
+        if (fb && c) { var sh = layerShift(layer, -1, Q45.phi); if (sh) c = turnWrap(c, sh.dx, sh.sx, sh.cx); }
         out[layer] += c;
       }
     }
@@ -415,12 +429,14 @@
       var p = getPart(slot, ref, asset.pack);
       if (!p) throw new Error('thiếu linh kiện ' + slot + ':' + ref);
       var vals = p.params ? paramValues(asset, slot, p.params) : {};
-      var native = Q && p.views && p.views.q45;
+      var vk = K ? VIEW_FALLBACK[K].filter(function (k) { return p.views && p.views[k]; })[0] : null;
+      var held = /^held[LR]$/.test(slot);
       var it = equipped(asset, slot);
       var Cs = it && it.equip.palette ? Object.assign({}, C, { P: Object.assign({}, C.P, it.equip.palette) }) : C;   // màu item chỉ áp lên linh kiện của nó
-      var res = (native ? p.views.q45 : p.draw)(Cs, st, vals);
-      if (Q && !native && res && !/^held[LR]$/.test(slot)) fbSlots.push(slot + ':' + p.id);
-      put(res, p.params ? paramTransform(p.params, vals) : '', Q && !native && !/^held[LR]$/.test(slot));
+      var res = (vk ? p.views[vk] : p.draw)(Cs, st, vals);
+      if (K && vk !== K && res && !held) fbSlots.push(slot + ':' + p.id);
+      // không có bản vẽ nghiêng nào: trượt parallax tạm (chỉ các góc thấy mặt)
+      put(res, p.params ? paramTransform(p.params, vals) : '', K && !vk && !held && !BACK);
     });
 
     // đạo cụ của tư thế / di chuyển / động tác / hoạt động
@@ -451,10 +467,11 @@
     var ep = LIB.eyePoses[st.eyes];
     if (!ep) throw new Error('thiếu dáng mắt ' + st.eyes);
     var ev = paramValues(asset, 'eyes', EYE_PARAMS);
-    [-1, 1].forEach(function (side) {
+    if (!BACK) [-1, 1].forEach(function (side) {
+      if (K === 'q90' && side < 0) return;   // nhìn ngang: mắt xa khuất sau sống mũi
       var a = side < 0 ? C.A.eyeL : C.A.eyeR;
       var x = a[0] + side * ev.gap, y = a[1] + ev.y;
-      var tw = Q ? { dx: Q45.eye[side < 0 ? 'L' : 'R'].x + side * ev.gap - x, sx: Q45.eye[side < 0 ? 'L' : 'R'].sx } : st.turnLocal ? sphereShift(x, st.turnLocal) : { dx: 0, sx: 1 };
+      var tw = K === 'q90' ? { dx: Q90.eye.x - x, sx: Q90.eye.sx } : Q ? { dx: Q45.eye[side < 0 ? 'L' : 'R'].x + side * ev.gap - x, sx: Q45.eye[side < 0 ? 'L' : 'R'].sx } : st.turnLocal ? sphereShift(x, st.turnLocal) : { dx: 0, sx: 1 };
       out.eyes += turnWrap('<g transform="translate(' + x + ' ' + y + ') scale(' + ev.size + ') translate(' + (-x) + ' ' + (-y) + ')">' + ep(es, side, x, y, C) + '</g>', tw.dx, tw.sx, x);
     });
     // Chớp mắt chạy trên nhóm con này. KHÔNG đặt animation CSS lên chính nhóm lớp (data-l):
@@ -465,9 +482,10 @@
     var bp = LIB.browPoses[st.brows];
     if (!bp) throw new Error('thiếu dáng mày ' + st.brows);
     var bv = paramValues(asset, 'brows', BROW_PARAMS);
-    [-1, 1].forEach(function (side) {
+    if (!BACK) [-1, 1].forEach(function (side) {
+      if (K === 'q90' && side < 0) return;
       var bx = (side < 0 ? C.A.browL : C.A.browR)[0];
-      var tw = Q ? { dx: Q45.brow[side < 0 ? 'L' : 'R'].x - bx, sx: Q45.brow[side < 0 ? 'L' : 'R'].sx } : st.turnLocal ? sphereShift(bx, st.turnLocal, 46) : { dx: 0, sx: 1 };
+      var tw = K === 'q90' ? { dx: Q90.brow.x - bx, sx: Q90.brow.sx } : Q ? { dx: Q45.brow[side < 0 ? 'L' : 'R'].x - bx, sx: Q45.brow[side < 0 ? 'L' : 'R'].sx } : st.turnLocal ? sphereShift(bx, st.turnLocal, 46) : { dx: 0, sx: 1 };
       out.brows += turnWrap(brow(bs, bp, side, C, bv), tw.dx, tw.sx, bx);
     });
 
@@ -475,22 +493,31 @@
     if (!m) throw new Error('thiếu dáng miệng ' + st.mouth);
     var mv = paramValues(asset, 'mouth', MOUTH_PARAMS);
     var mouthG = '<g transform="translate(0 ' + mv.y + ') translate(100 131) scale(' + mv.size + ') translate(-100 -131)">' + m(C) + '</g>';
-    out.mouth += Q ? turnWrap(mouthG, Q45.mouth.dx, Q45.mouth.sx, 100) : mouthG;
+    if (!BACK) out.mouth += K === 'q90' ? turnWrap(mouthG, Q90.mouth.dx, Q90.mouth.sx, 100) : Q ? turnWrap(mouthG, Q45.mouth.dx, Q45.mouth.sx, 100) : mouthG;
 
     st.fx.forEach(function (id) {
       var f = LIB.fx[id];
       if (!f) throw new Error('thiếu hiệu ứng ' + id);
-      if (Q && f.face) { var r = f.draw(C); for (var l in r) out[l] += faceRemap(r[l]); }
+      if (f.face && BACK) return;   // hiệu ứng bám mặt không thấy từ phía sau
+      if (f.face && (Q || K === 'q90')) { var r = f.draw(C); for (var l in r) out[l] += faceRemap(r[l]); }
       else put(f.draw(C), '', true);
     });
     applyTurn(out, st.turnLocal, st, C);
-    if (Q) {
-      // tóc chưa có bản vẽ 45°: thêm lưỡi liềm tóc phía sau đầu; tay xa ra sau thân; hiệu ứng nền (bụi, gió) đổi phía
-      if (fbSlots.some(function (x) { return x.indexOf('hair:') === 0; })) out.hairFront = crescentOf(C, -1, Q45.phi) + out.hairFront;
+    if (TURNED[K]) {
+      // tóc chưa có bản vẽ góc này: thêm lưỡi liềm tóc phía sau đầu; tay xa ra sau thân; hiệu ứng nền (bụi, gió) đổi phía
+      if (!BACK && fbSlots.some(function (x) { return x.indexOf('hair:') === 0; })) out.hairFront = crescentOf(C, -1, Q45.phi) + out.hairFront;
       farArmBack(out, st, C, 'L');
       if (out.fxBack) out.fxBack = '<g transform="translate(200 0) scale(-1 1)">' + out.fxBack + '</g>';
-      st.fallback45 = fbSlots;
     }
+    if (BACK) {
+      // thấy lưng: không khuôn mặt; đồ sau lưng (áo choàng, bao) ra trước thân; tóc phía sau thành lớp trước đầu
+      FACE_LAYERS.forEach(function (l) { out[l] = ''; });
+      if (out.backItem) { out.body += out.backItem; out.backItem = ''; }
+      if (fbSlots.some(function (x) { return x.indexOf('hair:') === 0; })) { out.hairFront = out.hairBack; out.hairBack = ''; }
+      // sau lưng hẳn: đồ cầm tay khuất sau thân
+      if (K === 'q180') ['L', 'R'].forEach(function (s) { out['held' + s + 'b'] += out['held' + s]; out['held' + s] = ''; });
+    }
+    if (K) st.fallback45 = fbSlots;
     // nằm: cả người xoay theo root; hiệu ứng ở fxFront/fxBack (chữ Zzz, !!, pháo giấy) xoay ngược quanh đầu để luôn đứng thẳng
     var rr = ((LIB.postures[st.posture] || {}).base || {}).root;
     if (rr && rr.rot) ['fxFront', 'fxBack'].forEach(function (l) {
@@ -601,8 +628,8 @@
       } else addTrackJoint(pose, j, m.tracks[j], u);
     }
     if (m.breath !== false && !still && !pz.noBreath) pose.body.sy *= 1 + Math.sin(t * 2.4) * 0.012;
-    if (st.kind === 'q45') {
-      // bản chuẩn 45° quay trái: dữ liệu động tác viết cho hướng phải → đảo x/góc của thân để nghiêng, lắc về phía trước mặt
+    if (TURNED[st.kind]) {
+      // bản chuẩn 45° / 90° / 135° quay trái: dữ liệu động tác viết cho hướng phải → đảo x/góc của thân để nghiêng, lắc về phía trước mặt
       ['root', 'pelvis', 'body', 'head', 'hem'].forEach(function (j) { pose[j].x = -pose[j].x; pose[j].rot = -pose[j].rot; });
     }
     // "trọng lực" cho đồ cầm tay: nếu động tác không tự điều khiển bàn tay,
@@ -615,16 +642,18 @@
     pose.head.sx *= hs; pose.head.sy *= hs;
     if (st.turnLocal) {
       // thân quay ít hơn đầu: vai và hông trượt về phía quay, vai xa thu vào trong nhiều hơn
-      var tb = st.turnLocal * (st.kind === 'q45' ? Q45.body : TURN.body), near = st.turnLocal < 0 ? 'R' : 'L', far = near === 'R' ? 'L' : 'R';
+      var tb = st.turnLocal * (TURNED[st.kind] ? Q45.body : TURN.body), near = st.turnLocal < 0 ? 'R' : 'L', far = near === 'R' ? 'L' : 'R';
       var inward = function (s) { return s === 'L' ? 1 : -1; };
       pose['arm' + far].x += inward(far) * 9 * Math.abs(tb) + tb * -4;
       pose['arm' + near].x += inward(near) * 3 * Math.abs(tb) + tb * -4;
       pose['thigh' + far].x += inward(far) * 4 * Math.abs(tb);
       pose['thigh' + near].x += tb * -2;
-      if (st.kind === 'q45') ['L', 'R'].forEach(function (sd) {
+      if (TURNED[st.kind]) ['L', 'R'].forEach(function (sd) {
         var a = Math.abs(pose['arm' + sd].rot);
-        if (a > 110) pose['arm' + sd].x += Q45.mouth.dx * Math.min(1, (a - 110) / 30);
+        if (a > 110) pose['arm' + sd].x += (st.kind === 'q90' ? Q90 : Q45).mouth.dx * Math.min(1, (a - 110) / 30);
       });
+      // nhìn ngang: vai và hông phía xa thu hẳn vào sau thân
+      if (st.kind === 'q90') { pose.armL.x += 7; pose.thighL.x += 5; pose.thighR.x -= 2; }
     }
     if (st.mirror) pose.root.sx *= -1;
     return pose;
@@ -702,7 +731,7 @@
               posture: { enum: Object.keys(LIB.postures) },
               move: { enum: Object.keys(LIB.moves) },
               facing: { enum: ['left', 'right'] },
-              view: { enum: ['front', 'left', 'right', 'left45', 'right45'] },
+              view: { enum: VIEW_ORDER.slice() },
               spot: { enum: SCENE.spotOrder.slice() },
               fx: { type: 'array', maxItems: 3, items: { enum: Object.keys(LIB.fx) } },
               say: { type: 'string', maxLength: 120 },
@@ -865,15 +894,19 @@
       }
     });
     add('motion', 'Động tác hợp lệ trên khung xương', !mbad.length, mbad.filter(function (x, i, a) { return a.indexOf(x) === i; }).join('; '));
-    // độ phủ 45°: linh kiện nào đã có bản vẽ nghiêng thật (thiếu thì engine trượt parallax) — thông tin, không chặn
-    var cov = [], miss = [];
+    // độ phủ góc nhìn: linh kiện nào đã có bản vẽ thật cho 45° / 90° / sau-45° / sau lưng (thiếu thì engine dùng bản gần nhất) — thông tin, không chặn
+    var cov = [], miss = [], miss8 = [];
     Object.keys(LIB.slots).forEach(function (slot) {
       var ref = partRef(asset, slot), p = ref && getPart(slot, ref, asset.pack);
       if (!p || ref === 'none' || /^held[LR]$/.test(slot)) return;
       (p.views && p.views.q45 ? cov : miss).push(slot + ':' + p.id);
+      var lack = VIEW_KINDS.filter(function (k) { return !(p.views && p.views[k]); });
+      if (lack.length) miss8.push(slot + ':' + p.id + ' (' + lack.join(', ') + ')');
     });
     res.push({ id: 'view45', label: 'Bản vẽ nghiêng 45°: ' + cov.length + '/' + (cov.length + miss.length) + ' linh kiện', ok: true, info: true,
       detail: miss.length ? 'chưa có (dùng trượt): ' + miss.join(', ') : 'đủ — nghiêng 45° vẽ thật' });
+    res.push({ id: 'views8', label: 'Bản vẽ 8 hướng (45° · 90° · sau-45° · sau lưng)', ok: true, info: true,
+      detail: miss8.length ? 'thiếu: ' + miss8.slice(0, 6).join('; ') : 'đủ — 8 hướng vẽ thật' });
     var pbad = [];
     if (opts && opts.poses) LIB.activityOrder.forEach(function (id) {
       var a = LIB.activities[id];
@@ -987,7 +1020,9 @@
     var C = { P: P, A: RIG.anchors, shape: (getPart('head', 'round') || {}).shape, ink: INK, asset: { key: 'item/' + slot + '-' + p.id, id: 'item' }, flip: false, st: {}, view: view || 'front' };
     var vals = {};
     if (p.params) Object.keys(p.params).forEach(function (k) { vals[k] = num((params || {})[k], p.params[k].def, p.params[k].min, p.params[k].max); });
-    var res = ((view === 'q45' && p.views && p.views.q45) || p.draw)(C, {}, vals) || {};
+    var kind = VIEW_KIND[view] || view, fn = p.draw;   // nhận cả tên góc (left90…) lẫn dáng góc (q90…)
+    if (p.views && VIEW_FALLBACK[kind]) VIEW_FALLBACK[kind].some(function (k) { return p.views[k] && (fn = p.views[k]); });
+    var res = fn(C, {}, vals) || {};
     var wrap = p.params ? paramTransform(p.params, vals) : '';
     var out = '';
     RIG.layers.forEach(function (l) { if (res[l[0]]) out += wrap ? '<g transform="' + wrap + '">' + res[l[0]] + '</g>' : res[l[0]]; });
@@ -1131,6 +1166,15 @@
     if (['drawn', 'same', 'face45', 'body45'].indexOf(mode) < 0) errs.push('views.q45: bắt buộc, chọn mode drawn (kèm layers) | same | face45 | body45 — xem quy trình 45°');
     d.views = { q45: { mode: mode } };
     if (mode === 'drawn') d.views.q45.layers = layers(v.layers, 'views.q45.layers');
+    // 8 hướng (tuỳ chọn): q90 nghiêng hẳn · q135 sau-45° · q180 sau lưng. drawn | same (= bản 45°) | front (= bản chính diện) | hide
+    ['q90', 'q135', 'q180'].forEach(function (k) {
+      var w = def.views && def.views[k];
+      if (w == null) return;
+      var m = typeof w === 'string' ? w : w.mode;
+      if (['drawn', 'same', 'front', 'hide'].indexOf(m) < 0) { errs.push('views.' + k + ': mode drawn (kèm layers) | same | front | hide'); return; }
+      d.views[k] = { mode: m };
+      if (m === 'drawn') d.views[k].layers = layers(w.layers, 'views.' + k + '.layers');
+    });
     if (def.params) {
       d.params = {};
       Object.keys(def.params).slice(0, 6).forEach(function (k) {
@@ -1163,7 +1207,13 @@
     else if (q.mode === 'same') q45 = front;
     else if (q.mode === 'face45') q45 = function (C) { var o = front(C); for (var l in o) o[l] = G.GenChibi.helpers.face45(C, o[l], l === 'mask'); return o; };
     else q45 = function (C) { var o = front(C), H = G.GenChibi.helpers; for (var l in o) o[l] = l === 'hem' ? H.body45(o[l], H.HEM) : l === 'body' ? H.body45(o[l], H.TORSO_UP) : o[l]; return o; };
-    var part = { slot: d.slot, id: d.id, label: d.label, draw: front, views: { q45: q45 }, params: d.params, data: d, icon: d.icon,
+    var views = { q45: q45 };
+    ['q90', 'q135', 'q180'].forEach(function (k) {
+      var w = d.views[k];
+      if (!w) return;
+      views[k] = w.mode === 'drawn' ? draw(w.layers) : w.mode === 'same' ? q45 : w.mode === 'front' ? front : function () { return null; };
+    });
+    var part = { slot: d.slot, id: d.id, label: d.label, draw: front, views: views, params: d.params, data: d, icon: d.icon,
       source: 'data:' + packId, license: P.license, pack: packId };
     LIB.parts[packId + '/' + d.slot + ':' + d.id] = part;
     P.counts.part = Object.keys(LIB.parts).filter(function (k) { return k.indexOf(packId + '/') === 0 && LIB.parts[k].kind !== 'scenery'; }).length;
@@ -1418,7 +1468,7 @@
     getPart: getPart, partsOfSlot: partsOfSlot, partRef: partRef, traitsOf: traitsOf,
     resolveState: resolveState, palette: palette, paramValues: paramValues,
     compose: compose, poseAt: poseAt, chainTransforms: chainTransforms, neutralPose: neutralPose, svgString: svgString,
-    shadowOf: shadowOf, handsBusy: handsBusy, Q45: Q45, faceRemap: faceRemap,
+    shadowOf: shadowOf, handsBusy: handsBusy, Q45: Q45, Q90: Q90, faceRemap: faceRemap, VIEW_ORDER: VIEW_ORDER, VIEW_KIND: VIEW_KIND, VIEW_KINDS: VIEW_KINDS,
     checkDataPart: checkDataPart, registerDataPart: registerDataPart, blockingGates: blockingGates,
     ITEM: ITEM, ITEMS: ITEMS, ITEM_ORDER: ITEM_ORDER, items: function () { return ITEM_ORDER.map(function (k) { return ITEMS[k]; }); },
     SCENE: SCENE, SCENES: SCENES, SCENE_ORDER: SCENE_ORDER, scenes: function () { return SCENE_ORDER.map(function (k) { return SCENES[k]; }); },

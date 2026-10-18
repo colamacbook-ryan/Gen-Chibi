@@ -30,7 +30,7 @@ const acts = GC.LIB.activityOrder;
 GC.assets().forEach(a => {
   const g = GC.gate(a, { poses: true }).find(x => x.id === "poses");
   if (!g || !g.ok) { bad++; console.log("   ✗ hoạt động", a.key, g && g.detail); }
-  acts.forEach(id => [0, 0.21, 0.5].forEach(t => ["left", "right"].forEach(f => ["front", "left", "right", "left45", "right45"].forEach(v => {
+  acts.forEach(id => [0, 0.21, 0.5].forEach(t => ["left", "right"].forEach(f => GC.VIEW_ORDER.forEach(v => {
     const svg = GC.svgString(a, GC.LIB.activities[id].state || "normal", { director: { activity: id, facing: f, view: v }, t });
     if (/NaN|undefined/.test(svg)) { bad++; console.log("   ✗", a.key, id, "t=" + t, f, v, "SVG có NaN/undefined"); }
   }))));
@@ -50,13 +50,20 @@ if (ok.length || ko.length !== 2) { bad++; console.log("   ✗ đạo diễn:", 
 const gcl = GC.assets().find(a => a.id === "ma-no-canh");
 const cov = GC.gate(gcl).find(x => x.id === "view45");
 if (!cov || !/đủ/.test(cov.detail)) { bad++; console.log("   ✗ Ma-nơ-canh (khung) chưa đủ bản vẽ 45°:", cov && cov.detail); }
+const cov8 = GC.gate(gcl).find(x => x.id === "views8");
+if (!cov8 || !/đủ/.test(cov8.detail)) { bad++; console.log("   ✗ Ma-nơ-canh (khung) chưa đủ 8 hướng:", cov8 && cov8.detail); }
+// rào 8 hướng: linh kiện của KHUNG phải vẽ đủ 4 dáng góc (khung là quy cách — asset dựng từ khung mượn được góc gần nhất, khung thì không)
+Object.values(GC.LIB.parts).filter(p => GC.PACKS[p.pack].group === "frame" && p.id !== "none" && !/^held[LR]$/.test(p.slot) && p.kind !== "scenery").forEach(p => {
+  const lack = GC.VIEW_KINDS.filter(k => !(p.views && p.views[k]));
+  if (lack.length) { bad++; console.log("   ✗ linh kiện khung thiếu góc:", p.pack + "/" + p.slot + ":" + p.id, lack.join(", ")); }
+});
 // rào quy trình (docs/QUY-TRINH-LINH-KIEN.md): linh kiện thư viện chính thức phải có bản 45°, license và nguồn
 Object.values(GC.LIB.parts).filter(p => ["official", "frame"].indexOf(GC.PACKS[p.pack].group) >= 0 && p.id !== "none" && !/^held[LR]$/.test(p.slot) && p.kind !== "scenery").forEach(p => {
   if (!(p.views && p.views.q45)) { bad++; console.log("   ✗ linh kiện chính thức thiếu bản 45°:", p.pack + "/" + p.slot + ":" + p.id); }
   if (!p.license || !p.source) { bad++; console.log("   ✗ linh kiện thiếu license/nguồn:", p.pack + "/" + p.slot + ":" + p.id); }
 });
 if (bad) process.exit(1);
-console.log("   ✓", acts.length, "hoạt động ×", GC.assets().length, "nhân vật × 3 thời điểm × 2 hướng × 5 góc nhìn; kịch bản có hoạt động được kiểm");
+console.log("   ✓", acts.length, "hoạt động ×", GC.assets().length, "nhân vật × 3 thời điểm × 2 hướng ×", GC.VIEW_ORDER.length, "góc nhìn; kịch bản có hoạt động được kiểm");
 '
 
 echo "2b) linh kiện dữ liệu: bộ lọc SVG an toàn"
@@ -88,6 +95,11 @@ const noq = GC.checkDataPart({ id: "x-1", slot: "hat", layers: { hat: "<path d=\
 if (!noq.errors.some(e => /q45/.test(e))) { bad++; console.log("   ✗ không bắt buộc 45°"); }
 const lay = GC.checkDataPart({ id: "x-2", slot: "hat", layers: { propFront: "<path d=\"M0,0\"/>" }, views: { q45: "same" } });
 if (!lay.errors.length) { bad++; console.log("   ✗ cho dùng lớp đạo cụ"); }
+// linh kiện dữ liệu 8 hướng (tuỳ chọn): drawn | same | front | hide; mode lạ bị chặn; đăng ký xong dựng được mọi góc
+if (!GC.checkDataPart({ id: "x-4", slot: "hat", layers: { hat: "<path d=\"M0,0\"/>" }, views: { q45: "same", q90: "bay" } }).errors.some(e => /q90/.test(e))) { bad++; console.log("   ✗ mode góc 90° lạ vẫn qua"); }
+const d8 = GC.registerDataPart("afi.khung", { id: "x-8", slot: "hat", layers: { hat: "<path d=\"M50,80 L150,80 L100,40 Z\" fill=\"{hat}\"/>" }, views: { q45: "same", q90: { mode: "drawn", layers: { hat: "<path d=\"M60,80 L140,80 L96,40 Z\" fill=\"{hat}\"/>" } }, q135: "front", q180: "hide" } });
+if (d8.errors.length || !["q45", "q90", "q135", "q180"].every(k => d8.part.views[k]) || d8.part.views.q180({ P: {} }) !== null) { bad++; console.log("   ✗ linh kiện dữ liệu 8 hướng:", d8.errors); }
+else delete GC.LIB.parts["afi.khung/hat:x-8"];
 // hồi quy review bảo mật v0.3.0
 const t0 = Date.now();
 GC.sanitizeSvg("<g transform=\"" + ("translate(1)" + " ".repeat(100)).repeat(6) + "x\"></g>");

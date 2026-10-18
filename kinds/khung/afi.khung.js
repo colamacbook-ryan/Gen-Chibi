@@ -20,7 +20,8 @@
       for (var x in (extra || {})) p[x] = extra[x];
       D.part(p);
     }
-    function same(fn) { return { q45: fn }; }
+    // đủ 4 dáng góc (45° · ngang · 3/4 sau · sau lưng); thiếu thì rơi về bản gần nhất
+    function views(q45, q90, q135, q180) { return { q45: q45, q90: q90, q135: q135, q180: q180 }; }
 
     /* ================= VẬT PHẨM: khối đại diện theo dáng =================
      * Vật cầm tay neo ở lòng bàn tay (gripR 128,193 · gripL 72,193). Đồ mặc theo đúng lớp của bộ phận. */
@@ -51,9 +52,9 @@
     function cap(C, dx) {
       dx = dx || 0;
       return { hat: '<path d="M' + (54 + dx) + ',84 C' + (54 + dx) + ',52 ' + (76 + dx) + ',40 ' + (100 + dx) + ',40 C' + (124 + dx) + ',40 ' + (146 + dx) + ',52 ' + (146 + dx) + ',84 Z" fill="' + C.P.hat + '"' + stroke(2.6) + '/>' +
-        '<path d="M50,82 L150,82 L150,90 L50,90 Z" fill="' + C.P.accent + '"' + stroke(2.2) + '/>' + shadow('M' + (130 + dx) + ',48 C' + (142 + dx) + ',58 ' + (146 + dx) + ',70 ' + (146 + dx) + ',84 L' + (134 + dx) + ',84 Z', 0.12) };
+        '<path d="M' + (50 + dx) + ',82 L' + (150 + dx) + ',82 L' + (150 + dx) + ',90 L' + (50 + dx) + ',90 Z" fill="' + C.P.accent + '"' + stroke(2.2) + '/>' + shadow('M' + (130 + dx) + ',48 C' + (142 + dx) + ',58 ' + (146 + dx) + ',70 ' + (146 + dx) + ',84 L' + (134 + dx) + ',84 Z', 0.12) };
     }
-    part('hat', 'khoi-mu', 'Khối đội đầu (mũ, khăn, nón)', function (C) { return cap(C); }, { params: HAT_H, views: same(function (C) { return cap(C, -6); }) });
+    part('hat', 'khoi-mu', 'Khối đội đầu (mũ, khăn, nón)', function (C) { return cap(C); }, { params: HAT_H, views: views(function (C) { return cap(C, -6); }, function (C) { return cap(C, -8); }, function (C) { return cap(C, 4); }, function (C) { return cap(C, 0); }) });
     function cloth(C) {
       var c = C.P.robe;
       return res({
@@ -63,22 +64,30 @@
       }, H.sleeves(C, c, C.P.trim));
     }
     part('outfit', 'khoi-ao', 'Khối khoác thân (áo, giáp, bào)', cloth, { params: { width: { label: 'Độ rộng', min: 0.88, max: 1.18, step: 0.01, def: 1, type: 'scaleX', pivot: [100, 180] } },
-      views: same(function (C) { var o = cloth(C); o.body = o.body.replace(shadow(H.TORSO_UP_SH, 0.1), shadow('M108,146 L124,146 L132.7,194 L112,194 Z', 0.12)); return o; }) });
+      views: views(cloth45, function (C) {
+        var o = cloth(C), w = function (x) { return '<g transform="translate(96 0) scale(0.72 1) translate(-100 0)">' + x + '</g>'; };
+        o.body = w(o.body); o.hem = w(o.hem); return o;
+      }, cloth45, cloth) });
+    function cloth45(C) { var o = cloth(C); o.body = o.body.replace(shadow(H.TORSO_UP_SH, 0.1), shadow('M108,146 L124,146 L132.7,194 L112,194 Z', 0.12)); return o; }
     function cape(C, dx) {
       dx = dx || 0;
       return { backItem: '<path d="M' + (76 + dx) + ',150 L' + (124 + dx) + ',150 L' + (148 + dx) + ',222 L' + (52 + dx) + ',222 Z" fill="' + C.P.cape + '"' + stroke(2.6) + '/>' + shadow('M' + (124 + dx) + ',150 L' + (148 + dx) + ',222 L' + (132 + dx) + ',222 Z', 0.15) };
     }
-    part('back', 'khoi-choang', 'Khối sau lưng (áo choàng, bao, cánh)', function (C) { return cape(C); }, { views: same(function (C) { return cape(C, 8); }) });
+    part('back', 'khoi-choang', 'Khối sau lưng (áo choàng, bao, cánh)', function (C) { return cape(C); }, { views: views(function (C) { return cape(C, 8); }, function (C) {
+      return { backItem: '<path d="M106,150 L122,150 L140,222 L112,222 Z" fill="' + C.P.cape + '"' + stroke(2.6) + '/>' };
+    }, function (C) { return cape(C, 6); }, function (C) { return cape(C, 0); }) });
     function boots(C) {
       var b = '<rect x="77" y="214" width="21" height="13" rx="5" fill="' + C.P.boots + '"' + stroke(2.4) + '/>';
       return { footL: b, footR: mir(b) };
     }
-    part('shoes', 'khoi-giay', 'Khối giày (ủng, dép, guốc)', boots, { views: same(function (C) {
+    function bootsSide(C) {
       var b = '<rect x="75" y="215" width="24" height="12.5" rx="5" fill="' + C.P.boots + '"' + stroke(2.4) + '/>';
       return { footL: b, footR: '<g transform="translate(22 -1)">' + b + '</g>' };
-    }) });
+    }
+    part('shoes', 'khoi-giay', 'Khối giày (ủng, dép, guốc)', boots, { views: views(bootsSide, bootsSide, bootsSide, boots) });
     function band(C) { return { mask: '<path d="M56,98 C80,92 120,92 144,98 L144,116 C120,111 80,111 56,116 Z" fill="' + C.P.accent + '" fill-opacity=".85"/>' }; }
-    part('mask', 'khoi-mat-na', 'Khối che mặt (mặt nạ, băng mắt, sơn mặt)', band, { views: same(function (C) { return { mask: H.face45(C, band(C).mask, true) }; }) });
+    part('mask', 'khoi-mat-na', 'Khối che mặt (mặt nạ, băng mắt, sơn mặt)', band, { views: views(mask45, mask45, function () { return null; }, function () { return null; }) });
+    function mask45(C) { return { mask: H.face45(C, band(C).mask, true) }; }
 
     /* ================= NHÂN VẬT KHUNG ================= */
     D.asset({

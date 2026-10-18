@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.7.0 — 8 hướng nhìn (2.5D)
+- **Engine:** thêm góc 90° (nhìn ngang), 135° (quay lưng chéo) và sau lưng — đủ 8 hướng: `front · left45/right45 · left90/right90 · left135/right135 · back` (giữ `left/right` 3/4 nhẹ). Bên phải = lật gương; sau lưng engine tự giấu mặt, đưa vật sau lưng (áo choàng…) lên trước thân, vật cầm tay ra sau thân; 90° chỉ một mắt.
+- Linh kiện thiếu góc nào thì **mượn góc gần nhất** (90° → 45°; 135° → sau lưng → 45°; sau lưng → chính diện); cổng kiểm có mục thông tin "Bản vẽ 8 hướng".
+- **Khung vẽ đủ 8 hướng:** đầu, thân, chân, bàn chân ma-nơ-canh; khối mũ, áo, áo choàng, giày, che mặt. Test chặn: linh kiện khung thiếu góc nào là trượt; dựng 32 hoạt động × 10 góc không NaN.
+- Linh kiện dữ liệu (MCP `save_part`) khai báo được `views.q90 | q135 | q180` = `drawn` | `same` | `front` | `hide`.
+- Studio: chọn được 10 góc ở Thư viện, Tư thế & hoạt động, Bộ khung chuẩn; bàn soát linh kiện 5 góc; nút **Sprite 8 hướng** (một hàng PNG, vòng theo chiều kim đồng hồ). MCP `render_character` / `render_item` nhận 10 góc.
+
 ## v0.6.0 — Xưởng: bộ khung chuẩn không chủ đề
 - **Bộ khung chuẩn** cho mọi asset (kiểu greybox của làm game), thay cho nội dung Tam Quốc:
   - **Nhân vật:** ma-nơ-canh đầu trọc, không quần áo — đủ 18 biểu cảm × 32 hoạt động × 5 góc nhìn; mọi nhân vật mới bắt đầu từ ma-nơ-canh.
