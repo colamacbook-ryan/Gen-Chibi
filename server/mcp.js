@@ -274,6 +274,9 @@ class MCP {
         const errs = GC.checkCast(cast, sc);
         if (errs.length) return toolError(errs.join('; '));
         const opts = { cast: cast.map(m => Object.assign({}, m, { asset: this.findAsset(String(m.character)) })) };
+        const has = (o, k) => typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k);
+        if (args.time !== undefined && !has(GC.SCENE.times, args.time)) return toolError('time: chọn ' + GC.SCENE.timeOrder.join(' | '));
+        if (args.weather !== undefined && !has(GC.SCENE.weathers, args.weather)) return toolError('weather: chọn ' + GC.SCENE.weatherOrder.join(' | '));
         if (args.time) opts.time = args.time; if (args.weather) opts.weather = args.weather;
         let svg;
         try { svg = GC.sceneSvg(sc, opts); } catch (e) { return toolError('Không dựng được: ' + e.message); }

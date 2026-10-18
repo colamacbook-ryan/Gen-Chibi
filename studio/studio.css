@@ -192,6 +192,7 @@ table.grid tr[aria-selected="true"] td { background: var(--accent-soft); }
 .dscene .actor { position: absolute; transition: left .5s ease, top .5s ease; }
 .dscene .actor .gc-full, .dscene .actor .gc-idle { position: absolute; inset: 0; width: 100%; height: 100%; }
 .dscene .actor.dim { opacity: .7; }
-.dscene .tint { position: absolute; inset: 0; pointer-events: none; }
+.dscene > img.fg { z-index: 3; pointer-events: none; }
 .dscene .actor .stage { position: absolute; inset: 0; background: none; }
 .dscene .bubble { top: 0; left: -10%; right: -10%; font-size: 12px; }
+.dscene .actor.speaking { z-index: 4 !important; }   /* đang nói: bóng thoại nổi trên lớp trước */

@@ -717,7 +717,9 @@
     var errs = [], S = directorSchema(cast).properties.steps.items.properties;
     if (!ev || typeof ev !== 'object') return ['Kịch bản phải là một object JSON.'];
     if (typeof ev.title !== 'string' || !ev.title) errs.push('Thiếu "title".');
-    if (ev.scene !== undefined && !getScene(ev.scene)) errs.push('Cảnh "' + ev.scene + '" không có (xem list_scenes).');
+    var evScene = ev.scene !== undefined ? getScene(ev.scene) : null;
+    if (ev.scene !== undefined && !evScene) errs.push('Cảnh "' + String(ev.scene).slice(0, 60) + '" không có (xem list_scenes).');
+    var at = {};   // diễn viên → chỗ đứng hiện tại (giữ nguyên đến khi bước sau đổi)
     if (!Array.isArray(ev.steps) || !ev.steps.length) return errs.concat('Thiếu "steps" (mảng ít nhất 1 cảnh).');
     if (ev.steps.length > 12) errs.push('Tối đa 12 cảnh.');
     ev.steps.forEach(function (s, i) {
@@ -735,6 +737,12 @@
       if (s.fx !== undefined) {
         if (!Array.isArray(s.fx) || s.fx.length > 3) errs.push(n + 'fx phải là mảng tối đa 3 phần tử.');
         else s.fx.forEach(function (f) { if (S.fx.items.enum.indexOf(f) < 0) errs.push(n + 'hiệu ứng "' + f + '" không có trong kho.'); });
+      }
+      if (s.spot !== undefined && S.spot.enum.indexOf(s.spot) >= 0) {
+        if (ev.scene === undefined) errs.push(n + '"spot" chỉ dùng khi kịch bản có "scene".');
+        else if (evScene && evScene.spots.indexOf(s.spot) < 0) errs.push(n + 'chỗ đứng "' + s.spot + '" không mở trong cảnh này (' + evScene.spots.join(', ') + ').');
+        else if (Object.keys(at).some(function (a) { return a !== s.actor && at[a] === s.spot; })) errs.push(n + 'chỗ đứng "' + s.spot + '" đang có diễn viên khác.');
+        else if (typeof s.actor === 'string') at[s.actor] = s.spot;
       }
       if (typeof s.say !== 'string') errs.push(n + 'thiếu "say".');
       else if (s.say.length > 120) errs.push(n + '"say" dài quá 120 ký tự.');
@@ -759,7 +767,8 @@
     L.push('- move: ' + Object.keys(LIB.moves).map(function (k) { var m = LIB.moves[k]; return k + ' (' + m.label + (m.postures ? '; tư thế: ' + m.postures.join('/') : '') + ')'; }).join(', '));
     if (SCENE_ORDER.length) {
       L.push('', 'Cảnh (scene, tuỳ chọn — đặt cả sự kiện vào một cảnh có sẵn; mỗi bước chọn spot = chỗ đứng của diễn viên):');
-      SCENE_ORDER.forEach(function (k) { L.push('- ' + k + ': ' + SCENES[k].name + (SCENES[k].description ? ' — ' + SCENES[k].description : '')); });
+      var one = function (t) { return String(t || '').replace(/\s+/g, ' ').trim(); };   // chữ do người dùng / agent đặt không tạo được dòng giả trong prompt
+      SCENE_ORDER.forEach(function (k) { L.push('- ' + k + ': ' + one(SCENES[k].name) + (SCENES[k].description ? ' — ' + one(SCENES[k].description) : '')); });
       L.push('- spot: ' + SCENE.spotOrder.map(function (k) { return k + ' (' + SCENE.spots[k].label + ')'; }).join(', '));
     }
     L.push('', 'Schema:', JSON.stringify(directorSchema(cast), null, 2), '', 'Sự kiện: <mô tả sự kiện ở đây>');
@@ -1232,11 +1241,11 @@
     d.id = String(def.id || ''); d.name = plain(def.name || def.id, 40); d.han = plain(def.han, 12); d.description = plain(def.description, 300);
     var L = def.layers && typeof def.layers === 'object' ? def.layers : {};
     d.layers = {};
-    Object.keys(L).forEach(function (slot) {
-      if (!own(SCENE.slots, slot) || !SCENE.slots[slot].canvas) { errs.push('layers.' + slot + ': lớp lạ (chọn ' + SCENE.layerOrder.join(', ') + '; đạo cụ đặt trong deco)'); return; }
+    Object.keys(L).slice(0, 12).forEach(function (slot) {
+      if (!own(SCENE.slots, slot) || !SCENE.slots[slot].canvas) { errs.push('layers.' + String(slot).slice(0, 40) + ': lớp lạ (chọn ' + SCENE.layerOrder.join(', ') + '; đạo cụ đặt trong deco)'); return; }
       var r = typeof L[slot] === 'string' ? { part: L[slot] } : L[slot] || {};
       var p = sceneryOk(slot, r.part);
-      if (!p) { errs.push('layers.' + slot + ': phông "' + r.part + '" không có trong bộ phận ' + slot + ' (xem get_catalog › scenery)'); return; }
+      if (!p) { errs.push('layers.' + slot + ': phông "' + String(r.part).slice(0, 40) + '" không có trong bộ phận ' + slot + ' (xem get_catalog › scenery)'); return; }
       d.layers[slot] = { part: p.pack + '/' + p.id, dx: num(r.dx, 0, -320, 320), flip: r.flip === true };
     });
     SCENE.layerOrder.forEach(function (k) { if (SCENE.slots[k].required && !own(L, k)) errs.push('layers.' + k + ': bắt buộc (' + SCENE.slots[k].label + ')'); });
@@ -1246,13 +1255,13 @@
       if (i >= SCENE.budget.deco) { if (i === SCENE.budget.deco) errs.push('deco: tối đa ' + SCENE.budget.deco + ' đạo cụ (ngân sách hiệu năng)'); return; }
       var r = typeof x === 'string' ? { part: x } : x || {};
       var p = sceneryOk('deco', r.part);
-      if (!p) { errs.push('deco[' + i + ']: đạo cụ "' + r.part + '" không có (xem get_catalog › scenery.deco)'); return; }
+      if (!p) { errs.push('deco[' + i + ']: đạo cụ "' + String(r.part).slice(0, 40) + '" không có (xem get_catalog › scenery.deco)'); return; }
       d.deco.push({ part: p.pack + '/' + p.id, x: num(r.x, 320, 0, 640), y: num(r.y, 300, 150, 360), scale: num(r.scale, 1, 0.3, 2.5),
         flip: r.flip === true, z: ['back', 'mid', 'front'].indexOf(r.z) >= 0 ? r.z : 'back' });
     });
     d.palette = {};
     if (def.palette && typeof def.palette === 'object') Object.keys(def.palette).slice(0, 24).forEach(function (k) {
-      if (!own(SCENE.defaults, k)) { errs.push('palette.' + k + ': token màu cảnh lạ (' + Object.keys(SCENE.defaults).join(', ') + ')'); return; }
+      if (!own(SCENE.defaults, k)) { errs.push('palette.' + String(k).slice(0, 40) + ': token màu cảnh lạ (' + Object.keys(SCENE.defaults).join(', ') + ')'); return; }
       if (!HEX.test(String(def.palette[k]))) { errs.push('palette.' + k + ': cần mã hex'); return; }
       d.palette[k] = String(def.palette[k]);
     });
@@ -1264,12 +1273,12 @@
       if (!Array.isArray(def.spots) || !def.spots.length) errs.push('spots: mảng chỗ đứng, ít nhất 1 (' + SCENE.spotOrder.join(', ') + ')');
       else {
         var bad = def.spots.filter(function (x) { return SCENE.spotOrder.indexOf(x) < 0; });
-        if (bad.length) errs.push('spots: chỗ đứng lạ ' + bad.join(', ') + ' (chọn ' + SCENE.spotOrder.join(', ') + ')');
+        if (bad.length) errs.push('spots: chỗ đứng lạ ' + bad.slice(0, 5).map(function (x) { return String(x).slice(0, 40); }).join(', ') + ' (chọn ' + SCENE.spotOrder.join(', ') + ')');
         d.spots = SCENE.spotOrder.filter(function (x) { return def.spots.indexOf(x) >= 0; });
       }
     }
     d.kind = 'scene'; d.status = ['draft', 'review', 'approved'].indexOf(def.status) >= 0 ? def.status : 'draft';
-    return { errors: errs, def: errs.length ? null : d };
+    return { errors: errs.slice(0, 20), def: errs.length ? null : d };
   }
   function registerScene(packId, def) {
     var c = checkScene(def);
@@ -1286,16 +1295,16 @@
     var errs = [], used = {}, S = directorSchema([]).properties.steps.items.properties;
     var spots = (scene && scene.spots) || SCENE.spotOrder;
     if (!Array.isArray(cast)) return ['cast: cần mảng'];
-    if (cast.length > SCENE.budget.cast) errs.push('cast: tối đa ' + SCENE.budget.cast + ' diễn viên (ngân sách diễn đủ ≤ 8)');
+    if (cast.length > SCENE.budget.cast) return ['cast: tối đa ' + SCENE.budget.cast + ' diễn viên (ngân sách diễn đủ ≤ 8)'];
     cast.forEach(function (m, i) {
       var n = 'cast[' + i + ']: ';
       if (!m || typeof m !== 'object') { errs.push(n + 'cần object'); return; }
-      if (!m.asset && !getAsset(m.character)) errs.push(n + 'không có nhân vật "' + m.character + '" (xem list_characters)');
-      if (typeof m.spot !== 'string' || spots.indexOf(m.spot) < 0) errs.push(n + 'chỗ đứng "' + m.spot + '" không có trong cảnh (' + spots.join(', ') + ')');
+      if (!m.asset && !getAsset(m.character)) errs.push(n + 'không có nhân vật "' + String(m.character).slice(0, 40) + '" (xem list_characters)');
+      if (typeof m.spot !== 'string' || spots.indexOf(m.spot) < 0) errs.push(n + 'chỗ đứng "' + String(m.spot).slice(0, 40) + '" không có trong cảnh (' + spots.join(', ') + ')');
       else if (own(used, m.spot)) errs.push(n + 'chỗ đứng "' + m.spot + '" đã có người');
       else used[m.spot] = 1;
       if (m.state !== undefined && LIB.stateOrder.indexOf(m.state) < 0) errs.push(n + 'trạng thái "' + m.state + '" không có trong kho');
-      CAST_KEYS.forEach(function (k) { if (m[k] !== undefined && S[k].enum.indexOf(m[k]) < 0) errs.push(n + k + ' "' + m[k] + '" không có trong kho'); });
+      CAST_KEYS.forEach(function (k) { if (m[k] !== undefined && S[k].enum.indexOf(m[k]) < 0) errs.push(n + k + ' "' + String(m[k]).slice(0, 40) + '" không có trong kho'); });
       if (m.t !== undefined && !(typeof m.t === 'number' && isFinite(m.t) && m.t >= 0 && m.t <= 60)) errs.push(n + 't: số giây 0–60');
     });
     return errs;
@@ -1328,7 +1337,8 @@
     return '<g>' + s + '</g>';
   }
   // Dựng cảnh: phông theo lớp → đạo cụ sau → hàng sau → đạo cụ giữa → hàng trước → đạo cụ trước → tiền cảnh → thời tiết → màu giờ.
-  // opts: cast (xem checkCast), time / weather (xem thử, không đổi cảnh), size (bề ngang px)
+  // opts: cast (xem checkCast), time / weather (xem thử, không đổi cảnh), size (bề ngang px),
+  //       part: 'back' | 'front' — tách lớp cho sân khấu có diễn viên sống (Studio đặt diễn viên giữa hai ảnh)
   function sceneSvg(scene, opts) {
     opts = opts || {};
     var time = own(SCENE.times, opts.time) ? opts.time : scene.time, weather = own(SCENE.weathers, opts.weather) ? opts.weather : scene.weather;
@@ -1353,7 +1363,7 @@
     function actor(m) {
       var a = m.asset || getAsset(m.character);
       if (!a) throw new Error('không có nhân vật ' + m.character);
-      var sp = SCENE.spots[m.spot] || SCENE.spots.center, dir = {};
+      var sp = own(SCENE.spots, m.spot) ? SCENE.spots[m.spot] : SCENE.spots.center, dir = {};
       CAST_KEYS.forEach(function (k) { if (m[k] !== undefined) dir[k] = m[k]; });
       // từ hai diễn viên: tự quay 45° về phía giữa sân khấu (đứng nói chuyện với nhau), trừ khi đã chọn góc
       if (!dir.view && cast.length > 1 && sp.face) dir.view = sp.face > 0 ? 'right45' : 'left45';
@@ -1365,8 +1375,13 @@
     var s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + SCENE.W + ' ' + SCENE.H + '"' + (W ? ' width="' + W + '" height="' + Math.round(W * SCENE.H / SCENE.W) + '"' : '') + '>';
     var sky = scene.layers.sky && part('sky', scene.layers.sky.part);
     var Wt = SCENE.weathers[weather] || {};
-    s += layer('sky') + (time === 'night' && sky && sky.outdoor ? starsSvg(seed) : '') + layer('far') + (Wt.back ? weatherSvg(weather, seed, P) : '') + layer('mid') + layer('ground');
-    s += deco('back') + row(true) + deco('mid') + row(false) + deco('front') + layer('front');
+    var only = opts.part;
+    if (only !== 'front') {
+      s += layer('sky') + (time === 'night' && sky && sky.outdoor ? starsSvg(seed) : '') + layer('far') + (Wt.back ? weatherSvg(weather, seed, P) : '') + layer('mid') + layer('ground');
+      s += deco('back') + row(true) + deco('mid') + row(false);
+      if (only === 'back') return s + '</svg>';
+    }
+    s += deco('front') + layer('front');
     if (!Wt.overTint && !Wt.back) s += weatherSvg(weather, seed, P);
     if (T.tint) s += '<rect x="0" y="0" width="' + SCENE.W + '" height="' + SCENE.H + '" fill="' + T.tint[0] + '" opacity="' + T.tint[1] + '"/>';
     if (Wt.overTint) s += weatherSvg(weather, seed, P);

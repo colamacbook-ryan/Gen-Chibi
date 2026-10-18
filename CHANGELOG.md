@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.5.1 — Vá theo review v0.5.0 (cảnh)
+- Review: không có blocker; không chèn được script/markup vào SVG cảnh, không prototype pollution, không ghi đè thư viện chính thức, không path traversal.
+- **Phông "Trời quang" thiếu tham số màu ở hai đám mây** → 6 cảnh mất mây và SVG chứa `NaN`/`undefined`. Đã sửa; **rào mới**: test quét mọi cảnh × giờ × thời tiết và mọi phông × giờ, cấm `NaN`, `undefined`, `null`, `[object`, `Infinity`.
+- **Mã nhúng web**: JSON trong `<script>` được escape (`<` `>` `&` U+2028/2029) — tên do agent đặt chứa `</script>` không thoát ra trang của người dùng. Test hồi quy trên trình duyệt.
+- Đạo diễn: `spot` chỉ dùng khi có `scene`, phải là chỗ đứng cảnh mở, hai diễn viên không đứng cùng chỗ; Studio báo khi diễn viên nhiều hơn chỗ đứng.
+- Sân khấu đạo diễn dựng hai lớp (nền sau diễn viên · lớp trước: đạo cụ trước, tiền cảnh, thời tiết, màu giờ) — hết nhuộm màu giờ hai lần, đúng thứ tự như ảnh tĩnh.
+- `render_scene` giờ / thời tiết lạ → lỗi rõ ràng; lỗi cảnh tối đa 20 dòng, giá trị lặp lại bị cắt (không khuếch đại dữ liệu); mô tả cảnh không tạo dòng giả trong prompt đạo diễn; id gradient trời theo giờ (bàn soát ngày/đêm không lẫn); tra chỗ đứng qua `own()`.
+
 ## v0.5.0 — Loại asset thứ ba: cảnh · Studio tách Thư viện / Xưởng
 - **Cảnh** = phối phông có sẵn theo 6 lớp (trời, cảnh xa, công trình, mặt đất, đạo cụ, tiền cảnh) + bảng màu + giờ (ngày / bình minh / hoàng hôn / đêm) + thời tiết (mưa, tuyết, hoa rơi, lá bay, sương, đom đóm). Phông chỉ dùng token màu cảnh nên đổi giờ không phải vẽ lại.
 - Thư viện chính thức `afi.scenes`: 27 phông → 8 cảnh (Thảo lư Long Trung, Doanh trại lúc chiều, Dưới chân thành, Bờ sông Xích Bích, Thư phòng, Rừng trúc đêm, Vườn đào, Núi tuyết). Rào test: mọi phông chính thức phải được ít nhất một cảnh dùng.

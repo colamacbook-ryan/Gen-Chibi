@@ -45,16 +45,16 @@
     /* ---------- trời / tường */
     S('sky', 'open', 'Trời quang', function (C) {
       var P = C.P, night = C.time === 'night';
-      return '<defs><linearGradient id="gsSkyOpen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + P.sky + '"/><stop offset="1" stop-color="' + P.skyLow + '"/></linearGradient></defs>' +
-        '<rect x="0" y="0" width="640" height="360" fill="url(#gsSkyOpen)"/>' +
+      return '<defs><linearGradient id="gsSkyOpen' + C.time + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + P.sky + '"/><stop offset="1" stop-color="' + P.skyLow + '"/></linearGradient></defs>' +
+        '<rect x="0" y="0" width="640" height="360" fill="url(#gsSkyOpen' + C.time + ')"/>' +
         '<circle cx="512" cy="74" r="46" fill="' + P.sun + '" opacity="0.28"/><circle cx="512" cy="74" r="27" fill="' + P.sun + '"/>' +
         (night ? '<circle cx="527" cy="63" r="22" fill="' + P.sky + '"/>' : '') +
-        cloud(P, 112, 74, 1) + cloud(318, 46, 0.78) + cloud(612, 132, 0.66);
+        cloud(P, 112, 74, 1) + cloud(P, 318, 46, 0.78) + cloud(P, 612, 132, 0.66);
     }, { outdoor: true });
     S('sky', 'plain', 'Trời trơn', function (C) {
       var P = C.P;
-      return '<defs><linearGradient id="gsSkyPlain" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + P.sky + '"/><stop offset="1" stop-color="' + P.skyLow + '"/></linearGradient></defs>' +
-        '<rect x="0" y="0" width="640" height="360" fill="url(#gsSkyPlain)"/>';
+      return '<defs><linearGradient id="gsSkyPlain' + C.time + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + P.sky + '"/><stop offset="1" stop-color="' + P.skyLow + '"/></linearGradient></defs>' +
+        '<rect x="0" y="0" width="640" height="360" fill="url(#gsSkyPlain' + C.time + ')"/>';
     }, { outdoor: true });
     S('sky', 'indoor-wall', 'Tường gỗ trong nhà', function (C) {
       var P = C.P, s = '<rect x="0" y="0" width="640" height="360" fill="' + P.wall + '"/>';

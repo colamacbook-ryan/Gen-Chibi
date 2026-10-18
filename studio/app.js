@@ -1066,7 +1066,9 @@
       if (curScene) {
         (ev && ev.steps || []).forEach(function (st) { if (st.spot && !spotOf[st.actor]) spotOf[st.actor] = st.spot; });
         var free = ['midLeft', 'midRight', 'left', 'right', 'center', 'backLeft', 'backRight', 'back'].filter(function (k) { return curScene.spots.indexOf(k) >= 0 && !Object.keys(spotOf).some(function (a) { return spotOf[a] === k; }); });
-        picked.forEach(function (id) { if (!spotOf[id]) spotOf[id] = free.shift() || curScene.spots[0]; });
+        var over = 0;
+        picked.forEach(function (id) { if (!spotOf[id]) { var f = free.shift(); if (!f) over++; spotOf[id] = f || curScene.spots[0]; } });
+        if (over) toast('Cảnh "' + curScene.name + '" chỉ mở ' + curScene.spots.length + ' chỗ đứng — ' + over + ' diễn viên đang đứng chồng; bớt diễn viên hoặc chọn cảnh khác.');
       }
       buildStage();
     }
@@ -1099,7 +1101,8 @@
       insts = {}; cards = {}; clear(stageBox);
       if (curScene) {
         stageBox.className = 'dscene';
-        stageBox.appendChild(h('img', { class: 'bg', alt: curScene.name, src: svgURL(GC.sceneSvg(curScene)) }));
+        // nền (sau diễn viên) + lớp trước (đạo cụ trước, tiền cảnh, thời tiết, màu giờ): diễn viên sống nằm giữa, đúng thứ tự như ảnh tĩnh
+        stageBox.appendChild(h('img', { class: 'bg', alt: curScene.name, src: svgURL(GC.sceneSvg(curScene, { part: 'back' })) }));
         picked.forEach(function (id) {
           var a = cast.filter(function (x) { return x.id === id; })[0];
           var st = h('div', { class: 'stage' }), el = h('div', { class: 'actor', title: a.name }, st);
@@ -1108,8 +1111,7 @@
           cards[id] = el; insts[id] = R.full(st, a, 'normal');
           var d0 = sceneDir(id); if (d0) insts[id].setState('normal', d0);
         });
-        var T = GC.SCENE.times[curScene.time];
-        if (T && T.tint) stageBox.appendChild(h('div', { class: 'tint', style: 'background:' + T.tint[0] + ';opacity:' + T.tint[1] }));
+        stageBox.appendChild(h('img', { class: 'bg fg', alt: '', src: svgURL(GC.sceneSvg(curScene, { part: 'front' })) }));
         return;
       }
       stageBox.className = 'dstage';
