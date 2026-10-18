@@ -15,6 +15,17 @@ echo "   ✓ cú pháp"
 # luật cấu trúc: không đặt animation/transform CSS lên nhóm lớp của khung xương (lỗi mắt đứng yên v0.1.3)
 if grep -nE "\[data-l=[^]]*\][^{]*\{[^}]*(animation|transform)" engine/render.js studio/*.css 2>/dev/null; then echo "   ✗ CSS đặt transform/animation lên nhóm lớp [data-l]"; exit 1; fi
 echo "   ✓ không có CSS đè transform của khung xương"
+# luật cấu trúc: không có method trùng tên trong một class (method sau đè method trước, không báo lỗi — lỗi castOf v0.9.0)
+node -e '
+const fs = require("fs"); let bad = 0;
+for (const f of fs.readdirSync("server").filter(x => x.endsWith(".js")).map(x => "server/" + x)) {
+  const seen = Object.create(null);
+  fs.readFileSync(f, "utf8").split("\n").forEach((l, i) => { const m = l.match(/^  (?:async )?([A-Za-z_]\w*)\([^)]*\) \{/); if (!m || /^(if|for|while|switch|catch)$/.test(m[1])) return;
+    if (seen[m[1]]) { bad++; console.log("   ✗ " + f + ": method \"" + m[1] + "\" trùng (dòng " + seen[m[1]] + " và " + (i + 1) + ")"); } else seen[m[1]] = i + 1; });
+}
+if (bad) process.exit(1);
+' || exit 1
+echo "   ✓ không có method trùng tên trong class (server)"
 
 echo "2) cổng kiểm thư viện"
 node -e '
@@ -269,16 +280,20 @@ printf '%s\n' \
  '{"jsonrpc":"2.0","id":30,"method":"tools/call","params":{"name":"list_projects","arguments":{}}}' \
  '{"jsonrpc":"2.0","id":31,"method":"tools/call","params":{"name":"save_project","arguments":{"id":"Sai Id","name":"x"}}}' \
  '{"jsonrpc":"2.0","id":32,"method":"tools/call","params":{"name":"save_item","arguments":{"item":{"id":"ci-proj2","name":"x","type":"weapon","rarity":"rare","project":"../x","equip":{"part":"khoi-que-dai"}}}}}' \
+ '{"jsonrpc":"2.0","id":33,"method":"tools/call","params":{"name":"save_work","arguments":{"title":"Phim MCP","project":"ci-chu-de","logline":"thử"}}}' \
+ '{"jsonrpc":"2.0","id":34,"method":"tools/call","params":{"name":"save_shot","arguments":{"work":"phim-mcp","shot":{"title":"Mở đầu","scene":"afi.khung/san-khau-chuan","cast":["ma-no-canh"],"event":{"title":"Mở","steps":[{"actor":"ma-no-canh","state":"vow","spot":"center","say":"Bắt đầu!"}]}}}}}' \
+ '{"jsonrpc":"2.0","id":35,"method":"tools/call","params":{"name":"save_shot","arguments":{"work":"phim-mcp","shot":{"title":"Lạ","scene":"afi.khung/khong-co","cast":["ai-do"]}}}}' \
+ '{"jsonrpc":"2.0","id":36,"method":"tools/call","params":{"name":"get_work","arguments":{"id":"phim-mcp"}}}' \
  | GC_PORT=$PORT node server/mcp-stdio.js > "$H/mcp.out"
 node -e '
 const L = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n").map(JSON.parse);
 const by = id => L.find(r => r.id === id);
 const ok = (c, m) => { if (!c) { console.log("   ✗", m); process.exit(1); } };
 ok(by(1).result.protocolVersion === "2025-06-18", "bắt tay");
-ok(by(2).result.tools.length === 25, "25 tool");
+ok(by(2).result.tools.length === 29, "29 tool");
 ok(!by(3).result.isError && JSON.parse(by(3).result.content[0].text).saved, "lưu nhân vật hợp lệ");
 ok(by(4).result.isError, "chặn linh kiện lạ");
-console.log("   ✓ MCP: bắt tay, 25 tool, lưu hợp lệ, chặn linh kiện lạ");
+console.log("   ✓ MCP: bắt tay, 29 tool, lưu hợp lệ, chặn linh kiện lạ");
 const spec = JSON.parse(by(5).result.content[0].text);
 ok(spec.slots[0].slot === "hat" && spec.example && spec.views.q45, "get_part_spec có khung + ví dụ");
 ok(!by(6).result.isError && /<svg/.test(by(6).result.content[1].resource.text), "preview_part trả bàn soát SVG");
@@ -310,6 +325,12 @@ const pj = JSON.parse(by(30).result.content[0].text).find(p => p.id === "ci-chu-
 ok(pj && pj.name === "Chủ đề CI" && pj.items === 1 && pj.characters === 1, "list_projects đếm asset theo dự án: " + JSON.stringify(pj));
 ok(by(31).result.isError, "chặn id dự án sai");
 ok(by(32).result.isError && /project/.test(by(32).result.content[0].text), "chặn project không phải slug");
+ok(JSON.parse(by(33).result.content[0].text).saved, "save_work tạo tác phẩm");
+ok(JSON.parse(by(34).result.content[0].text).hasEvent, "save_shot: phân cảnh có bối cảnh + diễn viên + lời thoại");
+ok(by(35).result.isError && /khong-co/.test(by(35).result.content[0].text) && /ai-do/.test(by(35).result.content[0].text), "save_shot chặn bối cảnh / diễn viên không có trong Thư viện");
+const gw = JSON.parse(by(36).result.content[0].text);
+ok(gw.shots.length === 1 && gw.shots[0].event.scene === "afi.khung/san-khau-chuan" && gw.project === "ci-chu-de", "get_work trả tác phẩm đủ phân cảnh");
+console.log("   ✓ MCP tác phẩm: save_work → save_shot (lời thoại qua cổng đạo diễn) → get_work; chặn asset không có");
 console.log("   ✓ MCP dự án chủ đề: tạo → lưu item / nhân vật vào dự án → đếm; chặn id lạ");
 console.log("   ✓ MCP cảnh: chuẩn phông → soát → lưu phông → phối cảnh → dựng có diễn viên → kịch bản trong cảnh; chặn đè chính thức");
 ' "$H/mcp.out"

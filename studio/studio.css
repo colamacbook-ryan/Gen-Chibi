@@ -221,3 +221,21 @@ table.grid tr[aria-selected="true"] td { background: var(--accent-soft); }
 ul.gates { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 12px; }
 ul.gates li.ok b { color: var(--ok, #2e8b57); } ul.gates li.bad b { color: var(--bad, #c0392b); } ul.gates li.info b { color: var(--fg2); }
 @media (max-width: 1200px) { .split.create { grid-template-columns: minmax(0, 1fr); } }
+/* Tạo tác › Tác phẩm: chat AI đạo diễn · kịch bản · phân cảnh · cảnh thành phẩm · sân khấu final */
+.works { display: grid; grid-template-columns: 360px minmax(0, 1fr) minmax(0, 1.15fr); gap: 14px; align-items: start; }
+.works .col-chat { position: sticky; top: 0; }
+.chatlog { display: grid; gap: 6px; max-height: 52vh; overflow: auto; padding-right: 2px; }
+.chatlog .msg { padding: 6px 9px; border-radius: 8px; font-size: 13px; line-height: 1.45; white-space: pre-wrap; }
+.chatlog .msg.user { background: var(--accent-soft); justify-self: end; max-width: 88%; }
+.chatlog .msg.assistant { background: var(--raised); border: 1px solid var(--line); max-width: 96%; }
+.chatlog .msg.err { color: var(--bad, #c0392b); font-size: 12px; }
+.toollog { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 5px; }
+.toollog span { font-size: 10.5px; font-family: var(--mono, monospace); padding: 0 5px; border-radius: 8px; border: 1px solid var(--line); }
+.toollog .ok { color: var(--ok, #2e8b57); } .toollog .bad { color: var(--bad, #c0392b); }
+.shot { border: 1px solid var(--line); border-radius: 6px; padding: 8px; display: grid; gap: 6px; background: var(--surface); }
+.shot input[type=text] { flex: 1; }
+.shot textarea { width: 100%; }
+.stillgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+.titlecard { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 6px; background: #1d1d1f; color: #f4f1ea; }
+.titlecard b { font-size: 22px; } .titlecard span { font-size: 12px; opacity: .7; letter-spacing: .08em; text-transform: uppercase; }
+@media (max-width: 1400px) { .works { grid-template-columns: 340px minmax(0, 1fr); } .works > :last-child { grid-column: 1 / -1; } }

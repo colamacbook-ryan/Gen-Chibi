@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.9.0 — Giai đoạn ③: Tạo tác — làm phim với AI đạo diễn
+- **Tạo tác › Tác phẩm** — 5 khu trên một trang: **chat với AI đạo diễn** (lịch sử lưu cùng tác phẩm, kèm nhật ký tool ✓/✗; nút nhanh: viết kịch bản, chia phân cảnh, viết lời thoại, kiểm thiếu) · **kịch bản** (logline + kịch bản tổng) · **phân cảnh** (mô tả, bối cảnh, dàn diễn viên ≤ 8, lời thoại; lưu, AI viết lời thoại, diễn thử, đổi thứ tự, bỏ) · **cảnh thành phẩm** (ảnh tĩnh từng phân cảnh) · **sân khấu final** (diễn cả chuỗi: thẻ tiêu đề → bối cảnh → diễn viên sống + bóng thoại).
+- **AI đạo diễn tự dùng Xưởng:** phân cảnh trỏ tới nhân vật / bối cảnh không có trong Thư viện thì cổng chặn và chỉ đường; AI tạo từ bộ khung chuẩn (`save_character` / `save_item` / `save_scene` với `project` của tác phẩm) rồi mới dùng. Mọi ghi qua cùng cổng kiểm với MCP.
+- MCP thêm `list_works`, `get_work`, `save_work`, `save_shot` (29 tool) — agent ngoài làm phim y như AI trong Studio. HTTP: `/api/works`, `/api/works/:id`, `/api/works/:id/shots`, `/api/works/:id/chat`. Tác phẩm có phiên bản (bản cũ giữ ở versions/).
+- Prompt đạo diễn biết 8 hướng nhìn (left90 / left135 / back…).
+- Điều hướng Tạo tác: Tác phẩm · Diễn thử một cảnh · Trợ lý AI.
+- Rào mới: không có method trùng tên trong class ở server (lỗi đè method im lặng); test AI giả lập đi trọn luồng tác phẩm (thiếu nhân vật → tự tạo ở Xưởng → phân cảnh → lời thoại sai thì sửa); test trình duyệt diễn cả chuỗi.
+
 ## v0.8.0 — Giai đoạn ②: tạo asset từ khung → Thư viện theo dự án chủ đề
 - **Xưởng › Tạo asset mới** — 4 bước trên một trang: ① chọn khung (ma-nơ-canh · 10 khối vật phẩm · 2 sân khấu chuẩn) + dự án; ② tham số & chi tiết (linh kiện từng bộ phận, tham số, bảng màu, mắt / mày, dấu nhận diện, tính cách — vật phẩm: loại, độ hiếm, độ dài / cỡ, màu, chỉ số — bối cảnh: lớp phông, giờ, thời tiết, màu); ③ soát (nhân vật 8 hướng + 4 hoạt động; vật phẩm icon + thẻ + mặc lên ma-nơ-canh 4 góc; bối cảnh như chọn / đêm / có diễn viên); ④ cổng kiểm & lưu. Khung không bị sửa — bản của bạn là bản sao.
 - **Dự án chủ đề:** mọi asset của người dùng có trường `project`. Trang **Thư viện › Dự án chủ đề** (tạo dự án, xem asset theo dự án, **tải gói dự án JSON** gồm công thức + linh kiện tự vẽ đang dùng). Thư viện nhân vật / trang bị / cảnh chia mục theo dự án; đổi dự án ngay ở khung "Dùng".

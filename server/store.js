@@ -24,6 +24,8 @@ class Store {
     this.itemDir = path.join(dataDir, 'items');
     this.sceneDir = path.join(dataDir, 'scenes');
     this.projectFile = path.join(dataDir, 'projects.json');
+    this.workDir = path.join(dataDir, 'works');
+    fs.mkdirSync(this.workDir, { recursive: true });
     [this.assetDir, this.verDir, this.trashDir, this.eventDir, this.partDir, this.itemDir, this.sceneDir].forEach(d => fs.mkdirSync(d, { recursive: true }));
   }
   fileOf(key) { return key.replace('/', '~'); }
@@ -98,6 +100,21 @@ class Store {
     const rec = { id: p.id, name, description: String(p.description || '').replace(/[\u0000-\u001F\u007F]/g, '').slice(0, 300), createdAt: old ? old.createdAt : new Date().toISOString(), updatedAt: new Date().toISOString() };
     if (!old && list.length >= 200) throw Object.assign(new Error('tối đa 200 dự án'), { code: 400 });
     writeJSON(this.projectFile, old ? list.map(x => x.id === p.id ? rec : x) : list.concat(rec));
+    return rec;
+  }
+  // tác phẩm (giai đoạn ③): kịch bản + phân cảnh + chat với AI đạo diễn. works/<id>.json, bản cũ ở versions/works~<id>
+  listWorks() {
+    return fs.readdirSync(this.workDir).filter(f => f.endsWith('.json')).map(f => readJSON(path.join(this.workDir, f), null)).filter(Boolean)
+      .map(w => ({ id: w.id, title: w.title, project: w.project || '', shots: (w.shots || []).length, done: (w.shots || []).filter(s => s.event).length, version: w.version, savedAt: w.savedAt }))
+      .sort((a, b) => String(b.savedAt).localeCompare(String(a.savedAt)));
+  }
+  getWork(id) { return /^[a-z0-9][a-z0-9-]{0,63}$/.test(String(id)) ? readJSON(path.join(this.workDir, id + '.json'), null) : null; }
+  saveWork(w) {
+    if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(String(w.id || ''))) throw Object.assign(new Error('id tác phẩm không hợp lệ'), { code: 400 });
+    const file = path.join(this.workDir, w.id + '.json'), old = readJSON(file, null);
+    const rec = Object.assign({}, w, { version: old ? (old.version || 1) + 1 : 1, savedAt: new Date().toISOString() });
+    if (old) writeJSON(path.join(this.verDir, 'works~' + w.id, old.version + '.json'), old);
+    writeJSON(file, rec);
     return rec;
   }
   listEvents() {

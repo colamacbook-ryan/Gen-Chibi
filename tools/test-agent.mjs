@@ -8,7 +8,7 @@ import path from 'path';
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const MOCK = 7490, APP = 7491;
 const HAT = { id: 'ai-hat', slot: 'hat', label: 'Mũ do AI vẽ', layers: { hat: '<path d="M52,80 L100,28 L148,80 Z" fill="{hat}" stroke="{ink}" stroke-width="2.8"/>' }, views: { q45: 'same' } };
-const steps = [
+let steps = [
   ['get_part_spec', { slot: 'hat' }],
   ['save_part', { part: Object.assign({}, HAT, { layers: { hat: '<path d="M0,0" onload="alert(1)"/>' } }) }],
   ['save_part', { part: HAT }],
@@ -47,6 +47,27 @@ try {
   ok(parts.some(p => p.id === 'ai-hat') && assets.some(a => a.id === 'ai-mix' && a.look.parts.hat === 'local.my/ai-hat'), 'kết quả nằm trong kho, đúng chuẩn');
   const put = await fetch('http://127.0.0.1:' + APP + '/api/assets/local.my/lach-cong', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify({ name: 'Lách', look: { eyes: 'round', brows: 'normal', parts: { hat: 'ufo' } } }) });
   ok(put.status === 422, 'API HTTP của Studio cũng đi qua cổng kiểm (linh kiện lạ → 422)');
+  // Giai đoạn ③: AI đạo diễn của một tác phẩm — thiếu nhân vật thì tự tạo ở Xưởng (từ khung, đúng dự án), rồi chia phân cảnh và viết lời thoại
+  const w = await api('POST', '/api/works', { title: 'Phim CI', project: 'ci-phim' });
+  ok(w.id === 'phim-ci' && w.project === 'ci-phim', 'tạo tác phẩm qua API');
+  const EV = { title: 'Gặp nhau', steps: [{ actor: 'ai-be-na', state: 'proud', spot: 'left', say: 'Chào!' }, { actor: 'ma-no-canh', state: 'shock', spot: 'right', say: 'Ơ, bạn là ai?' }] };
+  steps = [
+    ['list_characters', {}],
+    ['save_shot', { work: 'phim-ci', shot: { title: 'Gặp gỡ', scene: 'afi.khung/san-khau-chuan', cast: ['ai-be-na', 'ma-no-canh'] } }],
+    ['save_character', { asset: { id: 'ai-be-na', name: 'Bé Na', project: 'ci-phim', look: { eyes: 'round', brows: 'normal', parts: { hat: 'afi.khung/khoi-mu' }, palette: { hat: '#e05a5a' } } } }],
+    ['save_shot', { work: 'phim-ci', shot: { title: 'Gặp gỡ', description: 'Bé Na gặp ma-nơ-canh', scene: 'afi.khung/san-khau-chuan', cast: ['ai-be-na', 'ma-no-canh'] } }],
+    ['save_shot', { work: 'phim-ci', shot: { id: 'canh-1', event: Object.assign({}, EV, { steps: [{ actor: 'ai-be-na', state: 'bay', say: 'x' }] }) } }],
+    ['save_shot', { work: 'phim-ci', shot: { id: 'canh-1', event: EV } }]
+  ];
+  const c = await api('POST', '/api/works/phim-ci/chat', { message: 'Làm cảnh Bé Na gặp ma-nơ-canh.' });
+  const CL = c.log || []; if (process.env.DBG) console.log(JSON.stringify(CL, null, 1));
+  ok(CL[1] && !CL[1].ok && /ai-be-na/.test(CL[1].summary), 'phân cảnh dùng nhân vật chưa có → bị chặn, chỉ đường sang Xưởng');
+  ok(CL[2] && CL[2].ok, 'AI tự tạo nhân vật thiếu ở Xưởng');
+  ok(CL[3] && CL[3].ok && CL[4] && !CL[4].ok && /bay/.test(CL[4].summary) && CL[5] && CL[5].ok, 'phân cảnh + lời thoại qua cổng kiểm của đạo diễn (sai thì sửa)');
+  const wf = await api('GET', '/api/works/phim-ci'), na = (await api('GET', '/api/assets')).find(a => a.id === 'ai-be-na');
+  ok(wf.shots.length === 1 && wf.shots[0].event && wf.shots[0].event.scene === 'afi.khung/san-khau-chuan' && wf.shots[0].cast.length === 2, 'tác phẩm có phân cảnh đủ cảnh + diễn viên + lời thoại');
+  ok(na && na.project === 'ci-phim', 'nhân vật AI tạo nằm trong dự án của tác phẩm');
+  ok(wf.chat.length === 2 && wf.chat[1].log.length === 6, 'lịch sử chat được lưu cùng tác phẩm (kèm nhật ký tool)');
 } catch (e) { fail = 1; console.log('   ✗', e.message); }
 finally { srv.kill(); mock.close(); }
 process.exit(fail);

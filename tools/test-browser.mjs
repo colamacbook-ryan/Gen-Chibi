@@ -92,7 +92,7 @@ try {
       }
       if (label === 'Bộ khung chuẩn' && (await q.$$('.libcard')).length < 10) throw new Error('trang Bộ khung chuẩn thiếu khối vật phẩm');
     }
-    await q.click('.nav-item:has-text("Đạo diễn AI")'); await q.waitForTimeout(300);
+    await q.click('.nav-item:has-text("Diễn thử một cảnh")'); await q.waitForTimeout(300);
     await q.selectOption('select[aria-label="Cảnh"]', 'afi.khung/san-khau-chuan'); await q.click('button:text-is("Diễn")'); await q.waitForTimeout(600);
     const actors = await q.$$('.dscene .actor'), picked = await q.$$('.fxchips button[aria-pressed="true"]');
     if (!actors.length || actors.length !== picked.length) throw new Error('sân khấu cảnh: ' + actors.length + ' diễn viên / ' + picked.length + ' được chọn');
@@ -147,6 +147,20 @@ try {
     await q.click('.nav-item.zone-lib:has-text("Trang bị")'); await q.waitForTimeout(400);
     if (!(await q.$('.seg button:has-text("Dự án · Dự án CI")'))) throw new Error('Thư viện không có mục theo dự án');
     if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
+    // Giai đoạn ③: Tác phẩm — phân cảnh (bối cảnh + diễn viên + lời thoại) → cảnh thành phẩm → sân khấu final diễn cả chuỗi
+    await q.evaluate(async () => {
+      const post = (u, b) => fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify(b) }).then(r => { if (!r.ok) throw new Error(u + ' ' + r.status); return r.json(); });
+      await post('api/works', { title: 'Phim CI', project: 'ci-du-an' });
+      for (const t of ['Một', 'Hai']) await post('api/works/phim-ci/shots', { shot: { title: 'Cảnh ' + t, scene: 'afi.khung/san-khau-chuan', cast: ['ma-no-canh'], event: { title: t, steps: [{ actor: 'ma-no-canh', state: 'shock', spot: 'center', say: 'Cảnh ' + t, hold: 1 }] } } });
+      localStorage.setItem('gc-route', JSON.stringify({ page: 'works' }));
+    });
+    await q.reload(); await q.waitForTimeout(900);
+    if ((await q.$$('.stillgrid .libcard img')).length !== 2 || (await q.$$('.shot')).length !== 2) throw new Error('trang Tác phẩm thiếu phân cảnh / cảnh thành phẩm');
+    await q.click('button:has-text("Diễn toàn bộ")'); await q.waitForTimeout(300);
+    if (!(await q.$('.dscene .titlecard'))) throw new Error('sân khấu final không mở bằng thẻ tiêu đề phân cảnh');
+    await q.waitForSelector('.dscene .actor .bubble', { timeout: 4000 });
+    if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
+    console.log('  ✓ Tác phẩm: phân cảnh → cảnh thành phẩm → sân khấu final diễn cả chuỗi (thẻ tiêu đề + diễn viên + thoại)');
     console.log('  ✓ Tạo asset mới: chọn khung → soát → cổng → lưu nhân vật / vật phẩm / bối cảnh vào dự án; Thư viện xếp theo dự án chủ đề');
   } catch (e) { fail = 1; console.log('  ✗ Tạo asset mới / dự án:', e.message); }
   finally { await b4.close(); srv4.kill(); }

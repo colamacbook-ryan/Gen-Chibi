@@ -1,6 +1,6 @@
 # gen-chibi — Đặc tả 3 giai đoạn (v3)
 
-> **Trạng thái:** Ryan đã duyệt hướng ngày 2026-10-18 ("ok làm đi"). Đang làm giai đoạn ①.
+> **Trạng thái:** Ryan đã duyệt hướng ngày 2026-10-18 ("ok làm đi"). Đã dựng đủ ① ② ③ (v0.7.0 → v0.9.0) — chờ Ryan dùng thử và góp ý.
 > v3 viết lại theo đúng lời Ryan, thay cho v1–v2 (nằm trong lịch sử git).
 > © 2026 Afi Labs — All rights reserved.
 
@@ -38,7 +38,8 @@ Tam Quốc đã cất khỏi bản đang chạy; sau này làm lại như một 
 Giao diện gồm 5 khu: **chat với AI · kịch bản · mô tả phân cảnh · cảnh thành phẩm · sân khấu diễn bản cuối**.
 - AI viết kịch bản → chia phân cảnh → dựng từng cảnh từ asset trong Thư viện → ghép thành chuỗi dài.
 - **Thiếu nhân vật / vật phẩm / phân cảnh nào thì AI tự vào Xưởng tạo thêm** (theo đúng quy cách, qua cổng kiểm) → lưu Thư viện → lấy ra dùng.
-- Đề xuất (chờ Ryan): asset AI tự tạo dùng ngay trong dự án đó; muốn vào thư viện chung thì Ryan duyệt.
+- Đã làm: asset AI tự tạo lưu vào **dự án của tác phẩm** (trạng thái nháp), dùng được ngay. Chờ Ryan: có cần bước duyệt trước khi asset AI tạo được dùng ở dự án khác không.
+- Tác phẩm = logline + kịch bản tổng + danh sách phân cảnh (mô tả, bối cảnh, ≤ 8 diễn viên, lời thoại / diễn xuất) + lịch sử chat. Mọi ghi qua cùng cổng kiểm với MCP; agent ngoài (MCP) làm được y như AI trong Studio.
 
 ---
 
@@ -49,4 +50,4 @@ Giao diện gồm 5 khu: **chat với AI · kịch bản · mô tả phân cản
 | 1b | Cất Tam Quốc khỏi bản chạy; đạo cụ thành khối; Studio Xưởng hiển thị khung + quy cách; test chuyển sang khung | xong — v0.6.0 |
 | 1c | 8 hướng nhìn (2.5D): 45° · 90° · 135° · sau lưng cho engine + mọi linh kiện khung; sprite 8 hướng | xong — v0.7.0 |
 | 2 | Giao diện tạo asset từ khung (chọn khung → tham số → soát → lưu thư viện theo dự án chủ đề) | xong — v0.8.0 (Xưởng › Tạo asset mới; Thư viện › Dự án chủ đề; MCP `list_projects` / `save_project`) |
-| 3 | Tạo tác: chat AI đạo diễn, kịch bản, phân cảnh, cảnh thành phẩm, sân khấu final; AI tự gọi Xưởng khi thiếu | |
+| 3 | Tạo tác: chat AI đạo diễn, kịch bản, phân cảnh, cảnh thành phẩm, sân khấu final; AI tự gọi Xưởng khi thiếu | xong — v0.9.0 (Tạo tác › Tác phẩm; MCP `list_works` / `get_work` / `save_work` / `save_shot`) |

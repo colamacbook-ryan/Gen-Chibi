@@ -66,6 +66,10 @@ const TOOLS = [
   { name: 'render_scene', title: 'Dựng cảnh', description: 'SVG 640×360 của một cảnh (key đã lưu hoặc scene nháp), có thể đặt dàn diễn viên: cast = [{ character, spot, state?, activity?, posture?, move?, motion?, facing?, view? }] (≤ 8). Từ hai diễn viên trở lên, ai chưa chọn view sẽ tự quay 45° về giữa. time / weather để xem thử biến thể.', inputSchema: obj({ key: { type: 'string' }, scene: { type: 'object' }, cast: { type: 'array', items: { type: 'object' } }, time: { type: 'string', enum: ['day', 'dawn', 'dusk', 'night'] }, weather: { type: 'string', enum: ['clear', 'rain', 'snow', 'petals', 'leaves', 'mist', 'fireflies'] } }), annotations: { readOnlyHint: true } },
   { name: 'list_projects', title: 'Dự án chủ đề', description: 'Các dự án chủ đề của Thư viện (mỗi asset của người dùng thuộc một dự án): id, tên, mô tả, số nhân vật / item / cảnh. Lưu asset vào dự án bằng trường "project": "<id>" trong save_character / save_item / save_scene.', inputSchema: obj({}), annotations: { readOnlyHint: true } },
   { name: 'save_project', title: 'Tạo / sửa dự án chủ đề', description: 'Tạo hoặc đổi tên một dự án chủ đề (id slug, name, description). Không xoá asset.', inputSchema: obj({ id: { type: 'string', description: 'slug: chữ thường, số, gạch nối' }, name: { type: 'string' }, description: { type: 'string' } }, ['id', 'name']) },
+  { name: 'list_works', title: 'Danh sách tác phẩm', description: 'Các tác phẩm (phim / truyện) đang làm ở khu Tạo tác: id, tên, dự án chủ đề, số phân cảnh, số cảnh đã có lời thoại.', inputSchema: obj({}), annotations: { readOnlyHint: true } },
+  { name: 'get_work', title: 'Xem tác phẩm', description: 'Toàn bộ một tác phẩm: kịch bản, danh sách phân cảnh (mô tả, cảnh, dàn diễn viên, lời thoại / diễn xuất).', inputSchema: obj({ id: { type: 'string' } }, ['id']), annotations: { readOnlyHint: true } },
+  { name: 'save_work', title: 'Lưu tác phẩm', description: 'Tạo hoặc sửa phần chung của tác phẩm: title, project (dự án chủ đề), logline (một câu), script (kịch bản tổng, văn xuôi). Không đụng phân cảnh. Bỏ id để tạo mới.', inputSchema: obj({ id: { type: 'string' }, title: { type: 'string' }, project: { type: 'string' }, logline: { type: 'string' }, script: { type: 'string' } }) },
+  { name: 'save_shot', title: 'Lưu phân cảnh', description: 'Thêm / sửa / bỏ một phân cảnh của tác phẩm. shot = { id? (bỏ trống = thêm mới), title, description (mô tả phân cảnh), scene (key cảnh trong Thư viện, xem list_scenes), cast (≤ 8 nhân vật: id hoặc key, xem list_characters), event? (lời thoại + diễn xuất theo get_director_schema; engine tự đặt event.scene = scene) }. position = vị trí chèn (0 = đầu). remove = true để bỏ phân cảnh. Thiếu nhân vật / cảnh thì tạo ở Xưởng trước (save_character / save_scene với project của tác phẩm).', inputSchema: obj({ work: { type: 'string' }, shot: { type: 'object' }, position: { type: 'integer' }, remove: { type: 'boolean' } }, ['work', 'shot']) },
   { name: 'get_app_version', title: 'Phiên bản ứng dụng', description: 'Phiên bản đang chạy, bản mới nhất trên GitHub Releases, ghi chú phát hành, bản có thể quay về và lịch sử cập nhật. check=false để không hỏi GitHub.', inputSchema: obj({ check: { type: 'boolean', description: 'hỏi GitHub bản mới nhất (mặc định true)' } }), annotations: { readOnlyHint: true, openWorldHint: true } },
   { name: 'update_app', title: 'Cập nhật ứng dụng', description: 'Tải bản mới nhất từ GitHub Releases (kiểm SHA-256, sao lưu dữ liệu) rồi khởi động lại. Bản mới lỗi thì launcher tự quay về bản cũ. Kết nối ngắt vài giây; gọi get_app_version sau ~15 giây để xác nhận. force=true áp cả bản từng bị bỏ qua vì lần trước chạy lỗi.', inputSchema: obj({ force: { type: 'boolean' } }), annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: true } },
   { name: 'rollback_app', title: 'Quay về bản trước', description: 'Chạy lại bản cài trước đó (sao lưu dữ liệu trước khi đổi). Cần confirm = "ROLLBACK".', inputSchema: obj({ confirm: { type: 'string', enum: ['ROLLBACK'] } }, ['confirm']), annotations: { destructiveHint: true } }
@@ -75,6 +79,9 @@ function text(t, extra) { return Object.assign({ content: [{ type: 'text', text:
 function json(v) { return { content: [{ type: 'text', text: JSON.stringify(v, null, 2) }], structuredContent: Array.isArray(v) ? { items: v } : v }; }
 function toolError(msg) { return { content: [{ type: 'text', text: msg }], isError: true }; }
 function clone(o) { return JSON.parse(JSON.stringify(o)); }
+function slugOf(s) {
+  return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50);
+}
 
 class MCP {
   // system (tuỳ chọn): { updater, restartSoon } — để agent tự kiểm và cập nhật phiên bản
@@ -235,6 +242,16 @@ class MCP {
       case 'get_app_version': case 'update_app': case 'rollback_app': return this.appTool(name, args, ctx || {});
       case 'get_part_spec': return json(this.partSpec(args.slot));
       case 'list_projects': { this.sync(); return json(this.projects()); }
+      case 'list_works': return json(this.store.listWorks());
+      case 'get_work': { const w = this.store.getWork(String(args.id || '')); return w ? json(this.workView(w)) : toolError('Không có tác phẩm ' + args.id + '. Gọi list_works.'); }
+      case 'save_work': {
+        try { const w = this.saveWorkChecked(args); return json({ saved: true, id: w.id, version: w.version, studio: 'Studio › Tạo tác › Tác phẩm › ' + w.title }); }
+        catch (e) { return Object.assign(json({ saved: false, errors: e.errors || [e.message] }), { isError: true }); }
+      }
+      case 'save_shot': {
+        try { const r = this.saveShotChecked(args); return json(r); }
+        catch (e) { return Object.assign(json({ saved: false, errors: e.errors || [e.message] }), { isError: true }); }
+      }
       case 'save_project': {
         try { return json(this.store.saveProject(args)); } catch (e) { return toolError(e.message); }
       }
@@ -409,6 +426,93 @@ class MCP {
     if (c.errors.length) throw Object.assign(new Error('Cảnh chưa đạt: ' + c.errors.slice(0, 6).join('; ')), { code: 422, errors: c.errors });
     const rec = this.store.saveScene(c.def, note);
     return this.GC.registerScene(MY_PACK, rec).def;
+  }
+  /* ---- TÁC PHẨM: kịch bản → phân cảnh → lời thoại; mọi phân cảnh chỉ dùng asset có trong Thư viện ---- */
+  workView(w) { return Object.assign({}, w, { chat: undefined, chatCount: (w.chat || []).length }); }
+  saveWorkChecked(args) {
+    const GC = this.GC, errs = [];
+    const plain = (t, n) => String(t == null ? '' : t).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '').slice(0, n);
+    let w = args.id ? this.store.getWork(String(args.id)) : null;
+    if (args.id && !w && !/^[a-z0-9][a-z0-9-]{0,63}$/.test(String(args.id))) errs.push('id: chữ thường, số, gạch nối');
+    if (!w) {
+      const title = plain(args.title, 80).trim();
+      if (!title) errs.push('title: tác phẩm mới cần tên');
+      let id = args.id ? String(args.id) : slugOf(title) || 'tac-pham', n = 2;
+      if (!args.id) { const base = id; while (this.store.getWork(id)) id = base + '-' + n++; }
+      w = { id, title, project: '', logline: '', script: '', shots: [], chat: [], kind: 'work', createdAt: new Date().toISOString() };
+    }
+    if (args.title !== undefined && plain(args.title, 80).trim()) w.title = plain(args.title, 80).trim();
+    if (args.project !== undefined) {
+      if (args.project !== '' && !GC.projectId(args.project)) errs.push('project: slug dự án (xem list_projects)');
+      else w.project = GC.projectId(args.project);
+    }
+    if (args.logline !== undefined) w.logline = plain(args.logline, 300);
+    if (args.script !== undefined) w.script = plain(args.script, 8000);
+    if (errs.length) throw Object.assign(new Error(errs.join('; ')), { code: 422, errors: errs });
+    return this.store.saveWork(w);
+  }
+  shotCast(list, errs) {
+    const out = [];
+    (Array.isArray(list) ? list : []).slice(0, 12).forEach(ref => {
+      const a = typeof ref === 'string' ? this.findAsset(ref) : null;
+      if (!a) { errs.push('cast: không có nhân vật "' + String(ref).slice(0, 60) + '" trong Thư viện (list_characters) — thiếu thì tạo ở Xưởng (save_character)'); return; }
+      if (out.some(x => x.id === a.id)) { errs.push('cast: "' + a.id + '" lặp'); return; }
+      out.push(a);
+    });
+    if (out.length > 8) errs.push('cast: tối đa 8 diễn viên một cảnh (ngân sách hiệu năng)');
+    return out;
+  }
+  saveShotChecked(args) {
+    const GC = this.GC, errs = [];
+    const w = this.store.getWork(String(args.work || ''));
+    if (!w) throw Object.assign(new Error('Không có tác phẩm ' + args.work + ' (list_works / save_work)'), { code: 404 });
+    this.sync();
+    const plain = (t, n) => String(t == null ? '' : t).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '').slice(0, n);
+    const s = args.shot && typeof args.shot === 'object' ? args.shot : {};
+    const shots = w.shots || [];
+    let i = s.id ? shots.findIndex(x => x.id === s.id) : -1;
+    if (args.remove) {
+      if (i < 0) throw Object.assign(new Error('Không có phân cảnh ' + s.id), { code: 404 });
+      shots.splice(i, 1); w.shots = shots;
+      const rec = this.store.saveWork(w);
+      return { saved: true, removed: s.id, shots: rec.shots.length };
+    }
+    if (s.id && i < 0 && !/^[a-z0-9][a-z0-9-]{0,39}$/.test(String(s.id))) errs.push('shot.id: chữ thường, số, gạch nối');
+    if (i < 0 && shots.length >= 40) errs.push('tối đa 40 phân cảnh một tác phẩm — tách thành tác phẩm mới');
+    const cur = i >= 0 ? Object.assign({}, shots[i]) : { id: s.id || null, title: '', description: '', scene: '', cast: [], event: null };
+    if (!cur.id) { let n = shots.length + 1; while (shots.some(x => x.id === 'canh-' + n)) n++; cur.id = 'canh-' + n; }
+    if (s.title !== undefined) cur.title = plain(s.title, 80);
+    if (s.description !== undefined) cur.description = plain(s.description, 1000);
+    if (s.scene !== undefined) {
+      const sc = s.scene ? GC.getScene(String(s.scene), MY_PACK) : null;
+      if (s.scene && !sc) errs.push('scene: không có cảnh "' + String(s.scene).slice(0, 60) + '" trong Thư viện (list_scenes) — thiếu thì tạo ở Xưởng (save_scene)');
+      else cur.scene = sc ? sc.key : '';
+    }
+    let cast = (cur.cast || []).map(k => this.findAsset(k)).filter(Boolean);
+    if (s.cast !== undefined) { cast = this.shotCast(s.cast, errs); cur.cast = cast.map(a => a.key); }
+    if (s.event !== undefined && s.event !== null) {
+      const ev = JSON.parse(JSON.stringify(s.event));
+      if (ev && typeof ev === 'object') { if (cur.scene) ev.scene = cur.scene; else delete ev.scene; if (!ev.title) ev.title = cur.title || w.title; }
+      const e2 = cast.length ? GC.director.validate(ev, cast) : ['event: phân cảnh cần cast trước khi viết lời thoại'];
+      if (e2.length) e2.slice(0, 10).forEach(x => errs.push('event: ' + x)); else cur.event = ev;
+    } else if (s.event === null) cur.event = null;
+    else if (cur.event && (s.scene !== undefined || s.cast !== undefined)) {
+      // đổi cảnh / dàn diễn viên: lời thoại cũ phải còn hợp lệ, không thì bỏ để viết lại (không giữ thứ không diễn được)
+      const ev = Object.assign({}, cur.event); if (cur.scene) ev.scene = cur.scene; else delete ev.scene;
+      if (GC.director.validate(ev, cast).length) cur.event = null; else cur.event = ev;
+    }
+    if (!cur.title) cur.title = 'Phân cảnh ' + (i >= 0 ? i + 1 : shots.length + 1);
+    if (errs.length) throw Object.assign(new Error('Phân cảnh chưa đạt: ' + errs.slice(0, 6).join('; ')), { code: 422, errors: errs });
+    if (i >= 0) {
+      shots[i] = cur;
+      if (Number.isInteger(args.position)) { shots.splice(i, 1); shots.splice(Math.max(0, Math.min(shots.length, args.position)), 0, cur); }   // đổi thứ tự
+    } else {
+      const pos = Number.isInteger(args.position) ? Math.max(0, Math.min(shots.length, args.position)) : shots.length;
+      shots.splice(pos, 0, cur);
+    }
+    w.shots = shots;
+    const rec = this.store.saveWork(w);
+    return { saved: true, work: rec.id, shot: cur.id, index: rec.shots.findIndex(x => x.id === cur.id), hasEvent: !!cur.event, shots: rec.shots.length };
   }
   // Từ vựng cảnh (catalog): lớp + phông, chỗ đứng, giờ, thời tiết, token màu, ngân sách
   sceneVocab() {

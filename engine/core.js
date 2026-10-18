@@ -792,7 +792,7 @@
     LIB.activityOrder.forEach(function (id) { var a = LIB.activities[id]; L.push('- ' + id + ': ' + a.label + (a.hint ? ' — ' + a.hint : '')); });
     L.push('', 'Muốn ghép tự do thì dùng posture (tư thế nền), move (di chuyển), motion (động tác tay), facing (left/right):');
     L.push('- posture: ' + Object.keys(LIB.postures).map(function (k) { return k + ' (' + LIB.postures[k].label + ')'; }).join(', '));
-    L.push('- view: front (chính diện) | left / right (nghiêng nhẹ 3/4) | left45 / right45 (nghiêng 45° vẽ thật — hợp khi hai nhân vật nói chuyện với nhau)');
+    L.push('- view: front (chính diện) | left / right (nghiêng nhẹ 3/4) | left45 / right45 (nghiêng 45° — hợp khi hai nhân vật nói chuyện với nhau) | left90 / right90 (nhìn ngang, đi ngang qua) | left135 / right135 (quay lưng chéo, bỏ đi) | back (quay lưng hẳn)');
     L.push('- move: ' + Object.keys(LIB.moves).map(function (k) { var m = LIB.moves[k]; return k + ' (' + m.label + (m.postures ? '; tư thế: ' + m.postures.join('/') : '') + ')'; }).join(', '));
     if (SCENE_ORDER.length) {
       L.push('', 'Cảnh (scene, tuỳ chọn — đặt cả sự kiện vào một cảnh có sẵn; mỗi bước chọn spot = chỗ đứng của diễn viên):');
