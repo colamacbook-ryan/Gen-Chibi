@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.11.1 — Hoàn thiện theo kiểm toàn vẹn (cortex)
+- Menu Xưởng tách hai nhóm: **Xưởng — tạo asset từ khung** (Tạo asset mới, bàn chỉnh, Trợ lý AI tạo asset) và **Khung chuẩn — quy cách · kiểm** (việc của Gen Labs). Mở Xưởng vào thẳng *Tạo asset mới*.
+- Bảng tình trạng tác phẩm: phân cảnh thiếu diễn viên / bối cảnh có nút **+ Nhân vật ở Xưởng** / **+ Bối cảnh ở Xưởng** (đúng dự án của tác phẩm).
+- Nhập gói lưu đè: báo rõ các mục trùng sẽ chuyển sang dự án nào.
+
 ## v0.11.0 — Thành phẩm: xuất phim, storyboard, gói dự án, dự án mẫu
 - **Xuất phim HTML độc lập** (Tạo tác › Tác phẩm › Xuất): một tệp .html chứa bộ phát + nhân vật + bối cảnh + lời thoại; mở bằng trình duyệt bất kỳ, không cần cài, không cần mạng — thẻ tiêu đề từng phân cảnh, bóng thoại có tên người nói, danh sách phân cảnh, toàn màn hình, phím cách. Chỉ nhúng trường cần để dựng hình; bộ phát mang giấy phép *chỉ để xem phim đó*.
 - **Storyboard SVG / PNG**: ảnh từng phân cảnh + mô tả + lời thoại; an toàn với emoji / ký tự điều khiển. Cùng **JSON** của tác phẩm.

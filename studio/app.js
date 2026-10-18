@@ -140,8 +140,8 @@
   //   THƯ VIỆN = asset đã qua cổng, xếp theo dự án chủ đề — xem, tải ảnh, chép mã;
   //   TẠO TÁC  = làm phim / truyện với AI đạo diễn từ asset trong Thư viện. Dòng chảy: Xưởng → Thư viện → Tạo tác (docs/spec/DAC-TA-3-GIAI-DOAN.md).
   var NAV = [
-    ['fab', 'Xưởng', 'khung chuẩn → tạo asset', [['khung', 'Bộ khung chuẩn'], ['create', 'Tạo asset mới'], ['characters', 'Bàn chỉnh nhân vật'], ['items', 'Bàn chỉnh vật phẩm'], ['scenes', 'Bàn chỉnh bối cảnh'], ['workshop', 'Trợ lý AI tạo asset'],
-      ['library', 'Kho linh kiện & phông'], ['poses', 'Khung tư thế & hoạt động'], ['states', 'Khung biểu cảm & động tác'], ['gates', 'Cổng kiểm & hiệu năng']]],
+    ['fab', 'Xưởng', 'tạo asset từ khung', [['create', 'Tạo asset mới'], ['characters', 'Bàn chỉnh nhân vật'], ['items', 'Bàn chỉnh vật phẩm'], ['scenes', 'Bàn chỉnh bối cảnh'], ['workshop', 'Trợ lý AI tạo asset']]],
+    ['fab', 'Khung chuẩn', 'quy cách · kiểm (Gen Labs giữ)', [['khung', 'Bộ khung chuẩn'], ['library', 'Kho linh kiện & phông'], ['poses', 'Khung tư thế & hoạt động'], ['states', 'Khung biểu cảm & động tác'], ['gates', 'Cổng kiểm & hiệu năng']]],
     ['lib', 'Thư viện', 'theo dự án chủ đề · lấy về dùng', [['projects', 'Dự án chủ đề'], ['lib-characters', 'Nhân vật'], ['lib-items', 'Vật phẩm'], ['lib-scenes', 'Bối cảnh']]],
     ['make', 'Tạo tác', 'làm phim / truyện với AI', [['works', 'Tác phẩm']]],
     ['sys', 'Hệ thống', '', [['ai', 'Cài đặt AI'], ['update', 'Cập nhật']]]
@@ -152,7 +152,7 @@
   //   Trang Hệ thống (Cài đặt AI, Cập nhật) có ở cả ba. Bấm sang trang của lớp khác → mở ứng dụng của lớp đó.
   var PAGES = {};
   var APPS = [
-    { id: 'xuong', zone: 'fab', name: 'Xưởng', desc: 'Bộ khung chuẩn (không chủ đề) → tạo asset: chọn khung, thêm tham số, soát mọi góc, qua cổng kiểm, lưu vào dự án.', home: 'khung' },
+    { id: 'xuong', zone: 'fab', name: 'Xưởng', desc: 'Bộ khung chuẩn (không chủ đề) → tạo asset: chọn khung, thêm tham số, soát mọi góc, qua cổng kiểm, lưu vào dự án.', home: 'create' },
     { id: 'thu-vien', zone: 'lib', name: 'Thư viện', desc: 'Asset đã qua cổng kiểm, xếp theo dự án chủ đề — xem, tải ảnh / sprite, chép mã, tải gói dự án.', home: 'projects' },
     { id: 'tao-tac', zone: 'make', name: 'Tạo tác', desc: 'Làm phim / truyện với AI đạo diễn: chat, kịch bản, phân cảnh, cảnh thành phẩm, sân khấu final.', home: 'works' }
   ];
@@ -1390,6 +1390,9 @@
       rs.filter(function (x) { return !x.ok; }).forEach(function (x) {
         readyBox.appendChild(h('button', { class: 'readyrow', onclick: function () { var e = document.getElementById('shot-' + x.shot.id); if (e) { e.scrollIntoView({ behavior: 'smooth', block: 'center' }); e.classList.add('flash'); setTimeout(function () { e.classList.remove('flash'); }, 1200); } } },
           h('span', { class: 'stepn', text: String(x.index + 1) }), h('span', { text: x.shot.title }), h('span', { class: 'note', text: 'thiếu: ' + x.missing.join(', ') }), h('span', { class: 'go', text: 'Sửa ›' })));
+        // thiếu diễn viên / bối cảnh mà Thư viện chưa có cái hợp → tạo ngay ở Xưởng, đúng dự án của tác phẩm
+        var need = x.missing.some(function (m) { return /diễn viên/.test(m); }) ? 'character' : x.missing.some(function (m) { return /bối cảnh/.test(m); }) ? 'scene' : null;
+        if (need) readyBox.lastChild.appendChild(h('span', { class: 'go', title: 'Mở Xưởng › Tạo asset mới (dự án ' + Projects.name(W.project || '') + ')', onclick: function (ev) { ev.stopPropagation(); go({ page: 'create', kind: need, project: W.project || '' }); } }, need === 'character' ? '+ Nhân vật ở Xưởng' : '+ Bối cảnh ở Xưởng'));
       });
     }
     loadList();

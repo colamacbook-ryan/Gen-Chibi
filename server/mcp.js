@@ -500,7 +500,7 @@ class MCP {
     scenes.forEach(x => { if (GC.SCENES[MY_PACK + '/' + x.id]) conflicts.push('cảnh ' + x.id); });
     chars.forEach(a => { if (GC.ASSETS[MY_PACK + '/' + String(a.id || '').toLowerCase()]) conflicts.push('nhân vật ' + a.id); });
     works.forEach(w => { if (S.getWork(String(w.id || ''))) conflicts.push('tác phẩm ' + w.id); });
-    if (conflicts.length && !(opts && opts.overwrite)) throw Object.assign(new Error('Trùng ' + conflicts.length + ' mục với Thư viện: ' + conflicts.slice(0, 8).join(', ') + (conflicts.length > 8 ? '…' : '') + ' — nhập lại với overwrite để lưu đè thành phiên bản mới'), { code: 409, conflicts });
+    if (conflicts.length && !(opts && opts.overwrite)) throw Object.assign(new Error('Trùng ' + conflicts.length + ' mục với Thư viện: ' + conflicts.slice(0, 8).join(', ') + (conflicts.length > 8 ? '…' : '') + ' — nhập lại với overwrite để lưu đè thành phiên bản mới (các mục trùng sẽ chuyển sang dự án ' + pid + ')'), { code: 409, conflicts });
     const note = 'Nhập gói dự án ' + pid, done = { parts: 0, items: 0, scenes: 0, characters: 0, works: 0, shots: 0 }, errors = [];
     const strip = r => { const o = clone(r); ['version', 'savedAt', 'note', '_note', 'key', 'pack', 'chat'].forEach(k => delete o[k]); return o; };
     const step = (kind, id, fn) => { try { fn(); done[kind]++; } catch (e) { errors.push({ kind, id: String(id || '').slice(0, 64), error: String(e.message).slice(0, 300) }); } };
