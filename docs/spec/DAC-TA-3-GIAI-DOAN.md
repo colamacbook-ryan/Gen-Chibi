@@ -38,7 +38,7 @@ Tam Quốc đã cất khỏi bản đang chạy; sau này làm lại như một 
 Giao diện gồm 5 khu: **chat với AI · kịch bản · mô tả phân cảnh · cảnh thành phẩm · sân khấu diễn bản cuối**.
 - AI viết kịch bản → chia phân cảnh → dựng từng cảnh từ asset trong Thư viện → ghép thành chuỗi dài.
 - **Thiếu nhân vật / vật phẩm / phân cảnh nào thì AI tự vào Xưởng tạo thêm** (theo đúng quy cách, qua cổng kiểm) → lưu Thư viện → lấy ra dùng.
-- Đã làm: asset AI tự tạo lưu vào **dự án của tác phẩm** (trạng thái nháp), dùng được ngay. Chờ Ryan: có cần bước duyệt trước khi asset AI tạo được dùng ở dự án khác không.
+- **Chốt (Ryan, 2026-10-18):** asset AI tự tạo lưu vào **dự án của tác phẩm** ở trạng thái nháp và dùng ngay — **không cần bước duyệt**.
 - Tác phẩm = logline + kịch bản tổng + danh sách phân cảnh (mô tả, bối cảnh, ≤ 8 diễn viên, lời thoại / diễn xuất) + lịch sử chat. Mọi ghi qua cùng cổng kiểm với MCP; agent ngoài (MCP) làm được y như AI trong Studio.
 
 ---
