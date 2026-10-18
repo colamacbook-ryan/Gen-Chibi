@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # gen-chibi — lệnh quản lý trên máy chủ. install.sh thay __GC_HOME__ bằng thư mục cài.
-# © 2026 Afi Labs — All rights reserved.
+# © 2026 Gen Labs — All rights reserved.
 set -euo pipefail
 HOME_DIR="${GC_HOME:-__GC_HOME__}"
 [ -d "$HOME_DIR" ] || { echo "Không thấy thư mục cài $HOME_DIR" >&2; exit 1; }

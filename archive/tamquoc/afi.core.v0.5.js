@@ -1,5 +1,5 @@
 /* gen-chibi — thư viện chính thức afi.core (loại asset: character)
- * © 2026 Afi Labs — All rights reserved. Mọi hình vẽ bằng code, không asset ngoài.
+ * © 2026 Gen Labs — All rights reserved. Mọi hình vẽ bằng code, không asset ngoài.
  * Quy ước: toạ độ theo tư thế nghỉ của RIG (khung 200 × 240); neo đọc từ C.A.
  * Nét: viền ngoài 2.6–3.2, chi tiết trong 1.4–2. Đổ bóng: đen 8–14 % (hợp mọi màu nền).
  */
@@ -18,8 +18,8 @@
   GC.helpers = { mir: mir, both: both, f: f, stroke: stroke, shadow: shadow, line: line, k: k };
 
   GC.pack({
-    id: 'afi.core', name: 'Afi Core', owner: 'Afi Labs', group: 'official', visibility: 'public', version: '0.2.0',
-    license: '© 2026 Afi Labs — All rights reserved', description: 'Khung chuẩn và linh kiện chung: dáng đầu, tóc, râu, trang phục, khuôn mặt, 18 biểu cảm, động tác, hiệu ứng.'
+    id: 'afi.core', name: 'Gen Labs Core', owner: 'Gen Labs', group: 'official', visibility: 'public', version: '0.2.0',
+    license: '© 2026 Gen Labs — All rights reserved', description: 'Khung chuẩn và linh kiện chung: dáng đầu, tóc, râu, trang phục, khuôn mặt, 18 biểu cảm, động tác, hiệu ứng.'
   }, function (D) {
 
     D.defaults({

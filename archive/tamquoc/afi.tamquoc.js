@@ -1,5 +1,5 @@
 /* gen-chibi — thư viện chính thức afi.tamquoc: linh kiện đặc trưng Tam Quốc + dàn tướng
- * © 2026 Afi Labs — All rights reserved.
+ * © 2026 Gen Labs — All rights reserved.
  * Dựng trên afi.core. Nguồn nhận diện: Second-Brain/01-projects/gen-agents/research/2026-10-16-tam-quoc-nhan-dien.md
  */
 (function (GC) {
@@ -8,8 +8,8 @@
   var mir = H.mir, both = H.both, stroke = H.stroke, shadow = H.shadow, line = H.line;
 
   GC.pack({
-    id: 'afi.tamquoc', name: 'Tam Quốc chibi', owner: 'Afi Labs', group: 'official', visibility: 'public', version: '0.2.0',
-    license: '© 2026 Afi Labs — All rights reserved',
+    id: 'afi.tamquoc', name: 'Tam Quốc chibi', owner: 'Gen Labs', group: 'official', visibility: 'public', version: '0.2.0',
+    license: '© 2026 Gen Labs — All rights reserved',
     description: 'Mặt nạ kinh kịch, khăn cuốn, áo hạc sưởng, binh khí đặc trưng và dàn tướng Tam Quốc theo hồ sơ nhận diện.'
   }, function (D) {
     function part(slot, id, label, draw, extra) {

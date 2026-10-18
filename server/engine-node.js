@@ -1,6 +1,6 @@
 // gen-chibi — nạp engine + thư viện (viết cho trình duyệt) vào Node để server dùng chung
 // schema, validator và prompt đạo diễn. Lõi không đụng DOM nên chạy được trong vm.
-// © 2026 Afi Labs — All rights reserved.
+// © 2026 Gen Labs — All rights reserved.
 'use strict';
 const fs = require('fs');
 const path = require('path');

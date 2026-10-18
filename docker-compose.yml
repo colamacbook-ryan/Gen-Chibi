@@ -1,5 +1,5 @@
 # gen-chibi — chạy bằng Docker (install.sh chép tệp này vào thư mục cài, cạnh .env)
-# © 2026 Afi Labs — All rights reserved.
+# © 2026 Gen Labs — All rights reserved.
 # Không build image riêng: dùng Node chính chủ, mã chạy nằm ở ./releases/<phiên bản>, con trỏ ./current.
 # Cập nhật = app tự tải bản mới vào ./releases rồi đổi ./current; launcher khởi động lại, tự rollback nếu lỗi.
 name: gen-chibi

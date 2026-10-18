@@ -1,5 +1,5 @@
 // gen-chibi — kết nối HTTPS có hỗ trợ proxy (HTTPS_PROXY / NO_PROXY), không dùng thư viện ngoài.
-// © 2026 Afi Labs — All rights reserved.
+// © 2026 Gen Labs — All rights reserved.
 // Node 22 không tự đọc biến proxy; người dùng sau proxy công ty sẽ không cập nhật hay gọi LLM được nếu thiếu phần này.
 'use strict';
 const http = require('http');

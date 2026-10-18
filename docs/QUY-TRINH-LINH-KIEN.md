@@ -90,10 +90,10 @@ Một loại asset mới không phải "một bộ vẽ mới" mà là **một c
 
 | | **Xưởng** (khuôn) | **Thư viện** (hàng mẫu) | **Tạo tác** (của tôi) |
 |---|---|---|---|
-| Chủ | Afi | Afi tuyển chọn | người dùng / agent |
+| Chủ | Gen Labs | Gen Labs tuyển chọn | người dùng / agent |
 | Chứa | khung xương, luật, linh kiện, phông, khung tư thế & biểu cảm, cổng kiểm | các bộ chủ đề đã duyệt: nhân vật, trang bị, cảnh | nhân vật, trang bị, cảnh, kịch bản của riêng mình; Đạo diễn AI, Trợ lý AI |
 | Việc | làm khuôn, soát, kiểm | xem biến thể và **lấy về**: ảnh (SVG, PNG, avatar, sprite, thẻ, cảnh) và mã (tham chiếu, MCP, nhúng web, JSON) | phối, sửa, lưu qua cổng ghi duy nhất, xuất thành phẩm |
 | Nhịp thay đổi | chậm (nền móng) | vừa (thêm theo bộ) | liên tục |
 
-Dòng chảy một chiều: **Xưởng → (duyệt, xuất bản) → Thư viện → (lấy về phối) → Tạo tác → (xuất) thành phẩm**; tạo tác tốt được Afi duyệt đưa lên Thư viện.
+Dòng chảy một chiều: **Xưởng → (duyệt, xuất bản) → Thư viện → (lấy về phối) → Tạo tác → (xuất) thành phẩm**; tạo tác tốt được Gen Labs duyệt đưa lên Thư viện.
 Asset chính thức không sửa tại chỗ: "Phối bản của tôi" tạo bản riêng trong "Của tôi". Hiện cả ba lớp là ba khu trong cùng Studio (phân theo vai trò); khi có khách thật, Tạo tác mới tách thành không gian riêng từng người.

@@ -2,7 +2,7 @@
 
 > **Trạng thái:** Ryan đã duyệt hướng ngày 2026-10-18 ("ok làm đi"). Đã dựng đủ ① ② ③ (v0.7.0 → v0.9.0) — chờ Ryan dùng thử và góp ý.
 > v3 viết lại theo đúng lời Ryan, thay cho v1–v2 (nằm trong lịch sử git).
-> © 2026 Afi Labs — All rights reserved.
+> © 2026 Gen Labs — All rights reserved.
 
 ## Lời Ryan (nguồn của bản này)
 > "bây giờ lo làm xưởng trước, và không tam quốc gì nữa hết, chỉ là 1 nhân vật đầu trọc chung chung không quần áo trang bị gì hết → vì bản chất là 1 bộ khung. và các vật phẩm đều là 1 khung đại diện hình khối, cây, tròn dẹt gì đấy đại diện cho khung của 1 dạng hình vật phẩm, bối cảnh vị trí nền đất quang cảnh, bầu trời đều như vậy. → đây là bộ khung chuẩn cho tất cả asset. → hình thành trọn bộ qui cách tiêu chuẩn thống nhất cho tất cả asset được tạo ra
@@ -22,7 +22,7 @@
 | Bối cảnh | **khối đại diện**: trời / tường, chân trời, khối nhà, nền có lưới tỉ lệ, tiền cảnh, khối hộp / trụ / cây / đá / bàn / cờ | 13 khối + 2 cảnh khung |
 | Quy cách | kích thước, điểm gắn, lớp, góc nhìn, tham số, màu, luật kiểm — **thống nhất cho mọi asset** | `docs/QUY-CACH-KHUNG.md` |
 
-**Luật:** khung do Afi giữ; AI và người dùng **không sửa khung**, chỉ tạo asset **từ** khung.
+**Luật:** khung do Gen Labs giữ; AI và người dùng **không sửa khung**, chỉ tạo asset **từ** khung.
 
 ## ② TẠO ASSET MỚI → THƯ VIỆN theo dự án chủ đề
 

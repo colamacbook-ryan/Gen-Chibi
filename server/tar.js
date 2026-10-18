@@ -1,5 +1,5 @@
 // gen-chibi — giải nén .tar.gz tối giản (ustar + pax), không phụ thuộc thư viện ngoài.
-// © 2026 Afi Labs — All rights reserved.
+// © 2026 Gen Labs — All rights reserved.
 // Chỉ nhận file thường và thư mục; chặn đường dẫn tuyệt đối, "..", symlink, hardlink.
 'use strict';
 const fs = require('fs');

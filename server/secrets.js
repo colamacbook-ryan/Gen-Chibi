@@ -1,5 +1,5 @@
 // gen-chibi — kho bí mật cục bộ: API key lưu mã hoá AES-256-GCM, không bao giờ trả về trình duyệt.
-// © 2026 Afi Labs — All rights reserved.
+// © 2026 Gen Labs — All rights reserved.
 // Khoá chủ lấy từ GC_MASTER_KEY (install.sh sinh ngẫu nhiên vào .env). Thiếu thì tự sinh tệp
 // data/.master-key (quyền 600) — chỉ dùng cho môi trường dev.
 'use strict';

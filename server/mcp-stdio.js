@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // gen-chibi — cầu stdio cho MCP: agent (Claude Code, Claude Desktop…) nói JSON-RPC qua stdin/stdout,
 // cầu chuyển tiếp từng thông điệp vào http://127.0.0.1:<cổng>/mcp của bản đang chạy.
-// © 2026 Afi Labs — All rights reserved.
+// © 2026 Gen Labs — All rights reserved.
 // Dùng: `genchibi mcp`  (hoặc: node <thư mục cài>/current/server/mcp-stdio.js)
 'use strict';
 const http = require('http');

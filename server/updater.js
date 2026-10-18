@@ -1,5 +1,5 @@
 // gen-chibi — bộ cập nhật: kiểm GitHub Releases, tải, kiểm SHA-256, giải nén, backup, chuyển phiên bản.
-// © 2026 Afi Labs — All rights reserved.
+// © 2026 Gen Labs — All rights reserved.
 // Không cầm docker.sock: app chỉ đổi con trỏ `current` rồi thoát mã 75; launcher khởi động lại,
 // tự kiểm sức khoẻ và rollback nếu bản mới hỏng (STD-06: auto-update + rollback).
 'use strict';

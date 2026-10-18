@@ -4,7 +4,7 @@
 # Tuỳ chọn: --dir <thư mục> (mặc định ~/gen-chibi) · --port <cổng> (7480) · --native (chạy bằng Node, không Docker)
 #           --version vX.Y.Z (mặc định bản mới nhất)
 # Repo private: đặt GC_GITHUB_TOKEN=<fine-grained token, Contents: Read-only> (xem README). Token được ghi vào .env, không in ra.
-# © 2026 Afi Labs — All rights reserved.
+# © 2026 Gen Labs — All rights reserved.
 set -euo pipefail
 
 REPO="${GC_REPO:-colamacbook-ryan/Gen-Chibi}"

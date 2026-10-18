@@ -1,5 +1,5 @@
 // gen-chibi — launcher: chạy server của phiên bản `current`, canh sức khoẻ sau cập nhật, tự rollback.
-// © 2026 Afi Labs — All rights reserved.
+// © 2026 Gen Labs — All rights reserved.
 // Nằm ở thư mục cài (ngoài releases/) để không bị thay giữa chừng khi cập nhật.
 'use strict';
 const fs = require('fs');

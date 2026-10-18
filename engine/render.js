@@ -1,5 +1,5 @@
 /* gen-chibi engine — render 0.3: tầng vẽ có ngân sách hiệu năng
- * © 2026 Afi Labs — All rights reserved.
+ * © 2026 Gen Labs — All rights reserved.
  *
  * Ba tầng (bài học L-42: 300 nhân vật diễn đủ cùng lúc = 1 fps):
  *   image  vẽ một lần ra ảnh SVG, cache theo (asset, phiên bản, trạng thái, khung). 0 chi phí mỗi khung hình.

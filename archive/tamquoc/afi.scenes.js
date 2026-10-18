@@ -1,5 +1,5 @@
 /* gen-chibi — thư viện cảnh chính thức afi.scenes (loại asset: cảnh)
- * © 2026 Afi Labs — All rights reserved.
+ * © 2026 Gen Labs — All rights reserved.
  * Phông vẽ bằng code, chỉ dùng token màu cảnh (P.sky, P.grass…) → đổi giờ / bảng màu không phải vẽ lại.
  * Cảnh = phối phông: 27 phông → 8 cảnh; mỗi phông dùng lại ở nhiều cảnh.
  * Khung toạ độ: phông toàn khung 640×360 (đường chân trời ~ y 230–260, mặt đất từ y ~258);
@@ -37,8 +37,8 @@
   }
 
   GC.pack({
-    id: 'afi.scenes', name: 'Cảnh Tam Quốc', owner: 'Afi Labs', group: 'official', visibility: 'public', version: '0.1.0',
-    license: '© 2026 Afi Labs — All rights reserved', description: 'Phông cảnh (trời, cảnh xa, công trình, mặt đất, đạo cụ, tiền cảnh) và các cảnh phối sẵn.'
+    id: 'afi.scenes', name: 'Cảnh Tam Quốc', owner: 'Gen Labs', group: 'official', visibility: 'public', version: '0.1.0',
+    license: '© 2026 Gen Labs — All rights reserved', description: 'Phông cảnh (trời, cảnh xa, công trình, mặt đất, đạo cụ, tiền cảnh) và các cảnh phối sẵn.'
   }, function (D) {
     function S(slot, id, label, draw, extra) { var o = { slot: slot, id: id, label: label, draw: draw, source: SRC }; for (var k in extra || {}) o[k] = extra[k]; D.scenery(o); }
 

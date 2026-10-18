@@ -1,5 +1,5 @@
 // gen-chibi — MCP server (Model Context Protocol), không phụ thuộc SDK.
-// © 2026 Afi Labs — All rights reserved.
+// © 2026 Gen Labs — All rights reserved.
 // Agent tự làm phần sáng tạo (viết công thức nhân vật, viết kịch bản); hệ thống cung cấp từ vựng,
 // kiểm theo cổng, dựng SVG và lưu. Không cần LLM API lõi.
 // Vận chuyển: HTTP (POST /mcp, JSON) và stdio (server/mcp-stdio.js chuyển tiếp vào /mcp).

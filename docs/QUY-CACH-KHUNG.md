@@ -1,8 +1,8 @@
 # Quy cách bộ khung chuẩn — áp dụng cho MỌI asset
 
-> Bộ khung `afi.khung` là quy cách vẽ thành hình. Asset nào tạo ra (bởi Afi, người dùng hay AI) cũng phải khớp quy cách này,
+> Bộ khung `afi.khung` là quy cách vẽ thành hình. Asset nào tạo ra (bởi Gen Labs, người dùng hay AI) cũng phải khớp quy cách này,
 > và được kiểm tự động bằng cổng kiểm trước khi vào Thư viện. Chi tiết kỹ thuật vẽ linh kiện: `docs/QUY-TRINH-LINH-KIEN.md`.
-> © 2026 Afi Labs — All rights reserved.
+> © 2026 Gen Labs — All rights reserved.
 
 ## 1. Nhân vật — khung ma-nơ-canh (`afi.khung/ma-no-canh`)
 

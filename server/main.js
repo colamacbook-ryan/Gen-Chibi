@@ -1,5 +1,5 @@
 // gen-chibi — server cục bộ (Node thuần, không phụ thuộc thư viện ngoài)
-// © 2026 Afi Labs — All rights reserved.
+// © 2026 Gen Labs — All rights reserved.
 // Phục vụ Studio + API (asset có phiên bản, kịch bản, core AI, cập nhật) + MCP cho agent.
 'use strict';
 const http = require('http');
@@ -76,7 +76,7 @@ function body(req, limit = 1024 * 1024) {
 const STATIC_ROOTS = ['engine', 'kinds', 'studio'];
 function serveStatic(req, res, urlPath) {
   let rel = decodeURIComponent(urlPath).replace(/^\/+/, '');
-  if (rel === '' || rel === 'index.html') rel = 'studio/index.html';
+  if (rel === '' || rel === 'index.html' || rel === 'xuong' || rel === 'thu-vien' || rel === 'tao-tac') rel = 'studio/index.html';   // 3 ứng dụng độc lập dùng chung một bộ mã
   if (rel === 'CHANGELOG.md' || rel === 'VERSION') return send(res, 200, fs.readFileSync(path.join(APP, rel)), MIME[path.extname(rel)] || 'text/plain; charset=utf-8');
   const top = rel.split('/')[0];
   if (!STATIC_ROOTS.includes(top) || rel.split('/').includes('..')) return fail(res, 404, 'không tìm thấy');

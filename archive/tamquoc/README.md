@@ -11,4 +11,4 @@ không còn nội dung chủ đề trong bản chạy. Sau này Tam Quốc sẽ 
 Muốn xem lại: nạp `engine/core.js` → `archive/tamquoc/afi.core.v0.5.js` → `afi.tamquoc.js` → `afi.items.js` → `afi.scenes.js`
 (thay cho `kinds/`). Thư mục này không nằm trong gói phát hành.
 
-© 2026 Afi Labs — All rights reserved.
+© 2026 Gen Labs — All rights reserved.

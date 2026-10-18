@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.10.0 — Ba ứng dụng độc lập · luồng làm việc liền mạch · Gen Labs
+- **Tách 3 lớp thành 3 ứng dụng riêng** (yêu cầu của Ryan): `/xuong`, `/thu-vien`, `/tao-tac` — mỗi ứng dụng một địa chỉ, chỉ có menu của lớp mình (+ Hệ thống), màu riêng phủ toàn giao diện, tự nhớ trang đang mở. Bấm sang việc của lớp khác thì mở đúng ứng dụng đó. Bản xem thử không server dùng `?app=…`.
+- **Màn chọn khu** (`/`): 3 thẻ ứng dụng + **Bắt đầu nhanh** 3 bước (tạo dự án → tạo asset từ khung → làm phim), tự đánh dấu bước đã xong và đưa nút cho bước kế tiếp.
+- **Luồng không đứt đoạn:** lưu asset xong có *Tạo tiếp* (cùng khung, cùng dự án) · *Xem trong Thư viện* · *Làm phim với dự án này*; trang dự án có *Làm phim với dự án này*; Xưởng và Tạo tác nhớ **dự án dùng gần nhất**; vào Tạo tác từ một dự án thì mở tác phẩm của dự án đó (chưa có thì gợi ý đặt tên); diễn viên / bối cảnh cùng dự án xếp lên trước; Thư viện trống thì Tạo tác chỉ đường sang Xưởng.
+- Cổng kiểm ở trang tạo asset: mục không chặn bản nháp (dấu nhận diện) hiện ⚠ "cần khi chuyển duyệt" thay vì ✗ đỏ.
+- Giao diện hoàn thiện: logo + tên khu, thanh chuyển khu, thẻ/khung/nút/ô nhập đồng bộ, phân cảnh gọn (nút ↑ ↓ ✕), cảnh thành phẩm 2 cột.
+- **Công ty: Gen Labs** (thay Afi Labs) ở license, mã nguồn, tài liệu, giao diện. **Tác giả: Ryan — 090.919.8823.** Mã thư viện (`afi.core`, `afi.khung`) giữ nguyên để không vỡ dữ liệu đã lưu.
+
 ## v0.9.1 — Vá theo review v0.9.0 (Tác phẩm)
 - Rời trang Tác phẩm khi AI đang trả lời: phản hồi đến muộn không còn dựng diễn viên "mồ côi" (vòng vẽ chạy mãi).
 - Một lượt AI đạo diễn / tác phẩm tại một thời điểm: Studio khoá nút gửi + nút nhanh; server trả 409 nếu lượt trước chưa xong.

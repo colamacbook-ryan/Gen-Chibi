@@ -1,5 +1,5 @@
 /* gen-chibi — BỘ KHUNG CHUẨN afi.khung (Xưởng · giai đoạn ①)
- * © 2026 Afi Labs — All rights reserved.
+ * © 2026 Gen Labs — All rights reserved.
  * Không chủ đề: ma-nơ-canh đầu trọc không quần áo, vật phẩm và bối cảnh là KHỐI ĐẠI DIỆN (kiểu greybox của làm game).
  * Mỗi khối là quy cách vẽ thành hình: đúng điểm gắn, kích thước, lớp, góc nhìn, tham số. Asset chủ đề sinh ra bằng cách
  * chọn một khung → thêm tham số / chi tiết → qua cổng kiểm. Màu chỉ dùng token để "thay áo" không phải vẽ lại.
@@ -11,8 +11,8 @@
   var SRC = 'afi.khung · khung chuẩn vẽ bằng code';
 
   GC.pack({
-    id: 'afi.khung', name: 'Bộ khung chuẩn', owner: 'Afi Labs', group: 'frame', visibility: 'private', version: '0.1.0',
-    license: '© 2026 Afi Labs — All rights reserved',
+    id: 'afi.khung', name: 'Bộ khung chuẩn', owner: 'Gen Labs', group: 'frame', visibility: 'private', version: '0.1.0',
+    license: '© 2026 Gen Labs — All rights reserved',
     description: 'Khối đại diện cho vật phẩm và bối cảnh, ma-nơ-canh mẫu, sân khấu chuẩn. Không chủ đề.'
   }, function (D) {
     function part(slot, id, label, draw, extra) {
@@ -100,7 +100,7 @@
         params: {},
         palette: {}   // dùng bảng màu xám mặc định của khung lõi
       },
-      expressions: {}, lines: {}, identity: { p1: 'Ma-nơ-canh đầu tròn, mặt trung tính', must: ['head:round'], source: 'Khung chuẩn Afi' }
+      expressions: {}, lines: {}, identity: { p1: 'Ma-nơ-canh đầu tròn, mặt trung tính', must: ['head:round'], source: 'Khung chuẩn Gen Labs' }
     });
 
     /* ================= VẬT PHẨM KHUNG (một khối = một item mẫu) ================= */

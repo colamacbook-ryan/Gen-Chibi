@@ -1,5 +1,5 @@
 /* gen-chibi — KHUNG LÕI afi.core (Xưởng · giai đoạn ①)
- * © 2026 Afi Labs — All rights reserved. Mọi hình vẽ bằng code, không asset ngoài.
+ * © 2026 Gen Labs — All rights reserved. Mọi hình vẽ bằng code, không asset ngoài.
  * Chỉ chứa phần dùng chung mọi chủ đề: bộ phận, dáng đầu, khuôn mặt (mắt / mày / miệng), 18 biểu cảm, hiệu ứng,
  * tư thế / di chuyển / động tác / 32 hoạt động, đạo cụ dạng khối, thân ma-nơ-canh. Không trang phục chủ đề
  * (bản cũ có tóc, râu, áo bào, giáp… cất ở archive/tamquoc/). Khối vật phẩm / bối cảnh: kinds/khung/afi.khung.js.
@@ -21,8 +21,8 @@
   GC.helpers = { mir: mir, both: both, f: f, stroke: stroke, shadow: shadow, line: line, k: k };
 
   GC.pack({
-    id: 'afi.core', name: 'Khung lõi', owner: 'Afi Labs', group: 'frame', visibility: 'private', version: '0.3.0',
-    license: '© 2026 Afi Labs — All rights reserved', description: 'Khung lõi dùng chung mọi chủ đề: bộ phận, dáng đầu, khuôn mặt, 18 biểu cảm, chuyển động, 32 hoạt động, đạo cụ khối, thân ma-nơ-canh.'
+    id: 'afi.core', name: 'Khung lõi', owner: 'Gen Labs', group: 'frame', visibility: 'private', version: '0.3.0',
+    license: '© 2026 Gen Labs — All rights reserved', description: 'Khung lõi dùng chung mọi chủ đề: bộ phận, dáng đầu, khuôn mặt, 18 biểu cảm, chuyển động, 32 hoạt động, đạo cụ khối, thân ma-nơ-canh.'
   }, function (D) {
 
     // bảng màu mặc định của khung: xám trung tính (greybox). Asset chủ đề đổi token để "thay áo", không vẽ lại.

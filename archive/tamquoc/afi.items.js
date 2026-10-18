@@ -1,13 +1,13 @@
 /* gen-chibi — thư viện item chính thức afi.items (loại asset: item trang bị)
- * © 2026 Afi Labs — All rights reserved.
+ * © 2026 Gen Labs — All rights reserved.
  * Item = phối: trỏ tới linh kiện có sẵn + bảng màu riêng + chỉ số + độ hiếm. Không vẽ thêm.
  * Cùng một linh kiện cho nhiều phẩm cấp (đao sắt thường ↔ Thanh Long đao huyền thoại).
  */
 (function (GC) {
   'use strict';
   GC.pack({
-    id: 'afi.items', name: 'Trang bị Tam Quốc', owner: 'Afi Labs', group: 'official', visibility: 'public', version: '0.1.0',
-    license: '© 2026 Afi Labs — All rights reserved', description: 'Item trang bị phối từ linh kiện chính thức: vũ khí, pháp khí, mũ, giáp, áo choàng, giày.'
+    id: 'afi.items', name: 'Trang bị Tam Quốc', owner: 'Gen Labs', group: 'official', visibility: 'public', version: '0.1.0',
+    license: '© 2026 Gen Labs — All rights reserved', description: 'Item trang bị phối từ linh kiện chính thức: vũ khí, pháp khí, mũ, giáp, áo choàng, giày.'
   }, function (D) {
     var I = function (def) { D.item(def); };
     // vũ khí — một linh kiện, nhiều phẩm cấp

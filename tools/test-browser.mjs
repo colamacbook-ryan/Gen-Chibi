@@ -72,18 +72,26 @@ try {
   const q = await b3.newPage({ viewport: { width: 1500, height: 950 } });
   const errs = []; q.on('pageerror', e => errs.push(e.message));
   try {
+    // "/" = màn chọn khu: 3 thẻ dẫn sang 3 ứng dụng độc lập
     await q.goto('http://localhost:7498/');
     await q.waitForFunction(() => /^v\d/.test(document.getElementById('verChip').textContent), null, { timeout: 5000 });
-    await q.waitForSelector('.nav-group.zone-make', { timeout: 5000 });
-    const zones = await q.$$eval('.nav-group', els => els.map(e => e.className));
-    if (!['zone-lib', 'zone-make', 'zone-fab'].every(k => zones.some(z => z.indexOf(k) >= 0))) throw new Error('thiếu lớp Thư viện / Tạo tác / Xưởng trong điều hướng');
-    const pages = await q.$$eval('.nav-item', els => els.length);
-    for (let i = 0; i < pages; i++) {
-      const btn = (await q.$$('.nav-item'))[i]; const label = (await btn.textContent()).trim();
+    await q.waitForSelector('.appcard', { timeout: 5000 });
+    const hrefs = await q.$$eval('.appcard', els => els.map(e => e.getAttribute('href')));
+    if (hrefs.join() !== '/xuong,/thu-vien,/tao-tac') throw new Error('màn chọn khu: ' + hrefs.join());
+    let pages = 0;
+    for (const [app, zone0] of [['xuong', 'zone-fab'], ['thu-vien', 'zone-lib'], ['tao-tac', 'zone-make']]) {
+    await q.goto('http://localhost:7498/' + app);
+    await q.waitForSelector('.nav-group.' + zone0, { timeout: 5000 });
+    // ỨNG DỤNG ĐỘC LẬP: chỉ có menu của lớp mình (+ Hệ thống), không lẫn lớp khác
+    const zones = await q.$$eval('.nav-group', els => els.map(e => e.className.replace('nav-group ', '')));
+    if (zones.some(z => z !== zone0 && z !== 'zone-sys')) throw new Error(app + ': menu lẫn lớp khác ' + zones.join(','));
+    const n = await q.$$eval('.nav-item', els => els.length); pages += n;
+    for (let i = 0; i < n; i++) {
+      const btn = (await q.$$('.nav-item'))[i]; const label = (await btn.textContent()).trim(), cls = await btn.getAttribute('class');
       await btn.click(); await q.waitForTimeout(350);
       const zone = await q.evaluate(() => document.body.getAttribute('data-zone')), tag = await q.textContent('.zone-tag');
       if (!zone || !tag) throw new Error('trang "' + label + '" thiếu nhãn khu');
-      if (zone === 'lib') {
+      if (zone === 'lib' && /zone-lib/.test(cls)) {
         // Thư viện không bày đồ của khung: bản cài mới thì trống (có lời dẫn); có asset đã tạo thì có thẻ + khu Dùng
         const cards = await q.$$('.libcard'), use = await q.$$('.usebar'), code = await q.$('textarea.code'), empty = await q.$('.lib-empty');
         if (!empty && (!cards.length || use.length < 2 || !code)) throw new Error('thư viện "' + label + '" thiếu thẻ hoặc khu Dùng');
@@ -91,7 +99,10 @@ try {
         if (code) { const txt = await code.inputValue(); if (!/\//.test(txt)) throw new Error('thư viện "' + label + '": mã tham chiếu rỗng'); }
       }
       if (label === 'Bộ khung chuẩn' && (await q.$$('.libcard')).length < 10) throw new Error('trang Bộ khung chuẩn thiếu khối vật phẩm');
+      if (!new RegExp('/' + app + '$').test(new URL(q.url()).pathname)) throw new Error('trang "' + label + '" rời khỏi ứng dụng ' + app);
     }
+    }
+    await q.goto('http://localhost:7498/tao-tac'); await q.waitForSelector('.nav-item');
     await q.click('.nav-item:has-text("Diễn thử một cảnh")'); await q.waitForTimeout(300);
     await q.selectOption('select[aria-label="Cảnh"]', 'afi.khung/san-khau-chuan'); await q.click('button:text-is("Diễn")'); await q.waitForTimeout(600);
     const actors = await q.$$('.dscene .actor'), picked = await q.$$('.fxchips button[aria-pressed="true"]');
@@ -102,9 +113,9 @@ try {
       Object.assign(a, { id: 'xss-ci', pack: 'local.my', name: '</script><img src=x onerror=alert(1)>', status: 'draft' }); delete a.key;
       const r = await fetch('api/assets/local.my/xss-ci', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify(a) });
       if (!r.ok) throw new Error('không lưu được nhân vật thử: ' + r.status);
-      localStorage.setItem('gc-route', JSON.stringify({ page: 'lib-characters', key: 'local.my/xss-ci' }));
+      localStorage.setItem('gc-route-thu-vien', JSON.stringify({ page: 'lib-characters', key: 'local.my/xss-ci' }));
     });
-    await q.reload(); await q.waitForTimeout(900);
+    await q.goto('http://localhost:7498/thu-vien'); await q.waitForTimeout(900);
     await q.click('button:text-is("Nhúng web")');
     const embed = await q.inputValue('textarea.code');
     const dataLine = embed.split('\n').find(l => /registerAsset/.test(l)) || '';
@@ -127,9 +138,9 @@ try {
     await q.evaluate(async () => {
       const r = await fetch('api/projects', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify({ id: 'ci-du-an', name: 'Dự án CI' }) });
       if (!r.ok) throw new Error('không tạo được dự án: ' + r.status);
-      localStorage.setItem('gc-route', JSON.stringify({ page: 'create', project: 'ci-du-an' }));
+      localStorage.setItem('gc-route-xuong', JSON.stringify({ page: 'create', project: 'ci-du-an' }));
     });
-    await q.reload(); await q.waitForTimeout(700);
+    await q.goto('http://localhost:7499/xuong'); await q.waitForTimeout(700);
     const saveIn = async kind => {
       if (kind) { await q.click('.split.create .seg button:has-text("' + kind + '")'); await q.waitForTimeout(250); }
       await q.click('.split.create .libcard'); await q.waitForTimeout(350);
@@ -141,6 +152,7 @@ try {
     await saveIn(null);
     await q.fill('.split.create input[type=text]', 'Nhân vật CI'); await q.waitForTimeout(200);
     await saveIn('Vật phẩm'); await saveIn('Bối cảnh');
+    await q.goto('http://localhost:7499/thu-vien'); await q.waitForSelector('.nav-item');
     await q.click('.nav-item:has-text("Dự án chủ đề")'); await q.waitForTimeout(500);
     const card = await q.textContent('.libcard.proj');
     if (!/Dự án CI/.test(card) || !/1 nhân vật · 1 trang bị · 1 cảnh/.test(card)) throw new Error('trang dự án: ' + card);
@@ -152,9 +164,9 @@ try {
       const post = (u, b) => fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify(b) }).then(r => { if (!r.ok) throw new Error(u + ' ' + r.status); return r.json(); });
       await post('api/works', { title: 'Phim CI', project: 'ci-du-an' });
       for (const t of ['Một', 'Hai']) await post('api/works/phim-ci/shots', { shot: { title: 'Cảnh ' + t, scene: 'afi.khung/san-khau-chuan', cast: ['ma-no-canh'], event: { title: t, steps: [{ actor: 'ma-no-canh', state: 'shock', spot: 'center', say: 'Cảnh ' + t, hold: 1 }] } } });
-      localStorage.setItem('gc-route', JSON.stringify({ page: 'works' }));
+      localStorage.setItem('gc-route-tao-tac', JSON.stringify({ page: 'works' }));
     });
-    await q.reload(); await q.waitForTimeout(900);
+    await q.goto('http://localhost:7499/tao-tac'); await q.waitForTimeout(900);
     if ((await q.$$('.stillgrid .libcard img')).length !== 2 || (await q.$$('.shot')).length !== 2) throw new Error('trang Tác phẩm thiếu phân cảnh / cảnh thành phẩm');
     await q.click('button:has-text("Diễn toàn bộ")'); await q.waitForTimeout(300);
     if (!(await q.$('.dscene .titlecard'))) throw new Error('sân khấu final không mở bằng thẻ tiêu đề phân cảnh');

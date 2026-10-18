@@ -1,5 +1,5 @@
 // gen-chibi — core AI: gọi LLM qua API chuẩn OpenAI (OpenRouter, DeepSeek, MiniMax, hoặc tuỳ chỉnh).
-// © 2026 Afi Labs — All rights reserved.
+// © 2026 Gen Labs — All rights reserved.
 // Nguyên tắc: LLM chỉ VIẾT JSON trong vocabulary đóng của kho; server kiểm bằng validator của engine,
 // sai thì gửi lại danh sách lỗi cho model sửa (tối đa 2 lần). Model nào dùng được thì đo bằng "Kiểm tra model".
 'use strict';

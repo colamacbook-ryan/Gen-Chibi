@@ -1,5 +1,5 @@
 // gen-chibi — lưu trữ cục bộ dùng chung cho API HTTP và MCP: asset có phiên bản, kịch bản sự kiện.
-// © 2026 Afi Labs — All rights reserved.
+// © 2026 Gen Labs — All rights reserved.
 'use strict';
 const fs = require('fs');
 const path = require('path');

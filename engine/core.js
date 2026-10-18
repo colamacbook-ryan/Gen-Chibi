@@ -1,5 +1,5 @@
 /* gen-chibi engine — core 0.2
- * © 2026 Afi Labs — All rights reserved.
+ * © 2026 Gen Labs — All rights reserved.
  *
  * Lõi không phụ thuộc thư viện ngoài. Gồm:
  *   1. RIG     khung xương chung của loại asset "character" (khớp, điểm neo, thứ tự lớp vẽ)

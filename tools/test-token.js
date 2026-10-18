@@ -1,7 +1,7 @@
 // Kiểm thử token GitHub cho repo private (Updater + install.sh), bằng "GitHub giả" cục bộ:
 //  - API chỉ trả bản phát hành / asset khi có Authorization: Bearer đúng, thiếu hoặc sai → 404 (như repo private)
 //  - asset API chuyển hướng (302) sang host khác (localhost) — server đích PHẢI nhận request KHÔNG có Authorization
-// © 2026 Afi Labs — All rights reserved.
+// © 2026 Gen Labs — All rights reserved.
 'use strict';
 const http = require('http');
 const fs = require('fs');
