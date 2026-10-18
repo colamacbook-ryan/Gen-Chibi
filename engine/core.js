@@ -1129,7 +1129,7 @@
     src = String(src || '');
     if (src.length > 20000) { errs.push(where + ': quá 20 000 ký tự'); return ''; }
     src = src.replace(/\s+/g, ' ');   // gộp khoảng trắng: regex tách thẻ chạy tuyến tính, không bậc hai
-    var out = '', stack = [], last = 0, m, re = /<\s*(\/?)\s*([a-zA-Z]+)((?:\s+[a-zA-Z:-]+\s*=\s*"[^"<>]*")*)\s*(\/?)\s*>/g;
+    var out = '', stack = [], inMark = [], last = 0, m, re = /<\s*(\/?)\s*([a-zA-Z]+)((?:\s+[a-zA-Z:-]+\s*=\s*"[^"<>]*")*)\s*(\/?)\s*>/g;
     while ((m = re.exec(src))) {
       if (src.slice(last, m.index).trim()) { errs.push(where + ': có chữ hoặc thẻ không hợp lệ gần "' + src.slice(last, m.index).trim().slice(0, 30) + '"'); return ''; }
       last = re.lastIndex;
@@ -1137,9 +1137,10 @@
       if (!own(SVG_TAGS, tag)) { errs.push(where + ': thẻ <' + tag + '> không được phép (chỉ g, path, circle, ellipse, rect, line, polyline, polygon)'); return ''; }
       if (close) {
         if (stack.pop() !== tag) { errs.push(where + ': thẻ đóng </' + tag + '> sai cặp'); return ''; }
+        inMark.pop();
         out += '</' + tag + '>'; continue;
       }
-      var attrs = '', am, ar = /([a-zA-Z:-]+)\s*=\s*"([^"<>]*)"/g, seen = {};
+      var attrs = '', am, ar = /([a-zA-Z:-]+)\s*=\s*"([^"<>]*)"/g, seen = {}, isMark = false;
       while ((am = ar.exec(m[3]))) {
         var k = am[1], v = am[2].trim(), rule = own(SVG_ATTRS, k) ? SVG_ATTRS[k] : null;
         if (own(seen, k)) { errs.push(where + ': thuộc tính "' + k + '" lặp lại'); return ''; }
@@ -1148,10 +1149,16 @@
         var special = (k === 'd' && v === '{shape}' && O.shape) || (k === 'class' && MARK_CLASS.test(v) && O.marks && tag === 'g');
         if (k === 'class' && MARK_CLASS.test(v) && !special) { errs.push(where + ': đánh dấu chiếu "' + v + '" chỉ dùng trên <g> trong views (góc nghiêng) của linh kiện nhân vật'); return ''; }
         if (!special && (rule === 'paint' ? !paintOk(v, T) : !rule.test(v))) { errs.push(where + ': giá trị ' + k + '="' + v.slice(0, 40) + '" không hợp lệ'); return ''; }
+        if (k === 'class' && MARK_CLASS.test(v)) isMark = true;
         attrs += ' ' + k + '="' + v + '"';
       }
+      // đánh dấu chiếu: một nhóm có nội dung, class là thuộc tính duy nhất, KHÔNG lồng trong đánh dấu khác
+      // (phép chiếu nhân đôi nội dung — lồng d tầng sẽ phình 2^d lần → treo trình duyệt / server)
+      if (isMark && (selfClose || Object.keys(seen).length !== 1)) { errs.push(where + ': <g class="gc-…"> phải là nhóm có nội dung và chỉ có thuộc tính class'); return ''; }
+      if (isMark && inMark.some(Boolean)) { errs.push(where + ': đánh dấu chiếu không được lồng trong đánh dấu chiếu khác'); return ''; }
+      if (selfClose && tag === 'g') { out += '<g' + attrs + '></g>'; continue; }   // chuẩn hoá: không có <g/> trong đầu ra
       out += '<' + tag + attrs + (selfClose ? '/>' : '>');
-      if (!selfClose) { if (tag !== 'g') { errs.push(where + ': <' + tag + '> phải tự đóng (/>)'); return ''; } stack.push(tag); }
+      if (!selfClose) { if (tag !== 'g') { errs.push(where + ': <' + tag + '> phải tự đóng (/>)'); return ''; } stack.push(tag); inMark.push(isMark); }
     }
     if (src.slice(last).trim()) { errs.push(where + ': có chữ thừa ở cuối'); return ''; }
     if (stack.length) { errs.push(where + ': thiếu </g>'); return ''; }
@@ -1226,21 +1233,25 @@
     return w;
   }
   function fillTokens(svg, P, shape) { return svg.replace(/\{([a-zA-Z]{1,20})\}/g, function (_, k) { return k === 'ink' ? INK : k === 'shape' ? shape || 'M100,100Z' : (own(P, k) && HEX.test(P[k]) ? P[k] : '#ff00ff'); }); }
-  // thay đánh dấu chiếu <g class="gc-…">…</g> bằng phép chiếu thật (helpers của thư viện lõi) — xử lý lồng nhau, quét tuyến tính
+  // thay đánh dấu chiếu <g class="gc-…">…</g> bằng phép chiếu thật (helpers của thư viện lõi). Vòng lặp tuyến tính, KHÔNG đệ quy vào
+  // nội dung (bộ lọc đã cấm lồng; đệ quy + phép chiếu nhân đôi = phình luỹ thừa); bỏ qua <g …/> tự đóng khi đếm cặp; nhóm không cân → để nguyên
   function expandMarks(svg, C) {
-    var i = svg.indexOf('<g class="gc-');
-    if (i < 0) return svg;
-    var m = /^<g class="gc-(f45c?|b45[th])">/.exec(svg.slice(i, i + 24));
-    if (!m) return svg;
-    var start = i + m[0].length, depth = 1, re = /<g[\s>]|<\/g>/g, x;
-    re.lastIndex = start;
-    while ((x = re.exec(svg))) { if (x[0] === '</g>') { if (!--depth) break; } else depth++; }
-    if (!x) return svg;
-    var H = G.GenChibi.helpers, inner = expandMarks(svg.slice(start, x.index), C), k = m[1];
-    var out = k === 'f45' ? H.face45(C, inner) : k === 'f45c' ? H.face45(C, inner, true) : H.body45(inner, k === 'b45h' ? H.HEM : H.TORSO_UP);
-    return svg.slice(0, i) + out + expandMarks(svg.slice(x.index + 4), C);
+    if (svg.indexOf('<g class="gc-') < 0) return svg;
+    var H = G.GenChibi.helpers, out = '', pos = 0, re = /<g\b[^>]*?(\/?)>|<\/g>/g, i, m, x;
+    while ((i = svg.indexOf('<g class="gc-', pos)) >= 0) {
+      m = /^<g class="gc-(f45c?|b45[th])">/.exec(svg.slice(i, i + 24));
+      if (!m) { out += svg.slice(pos, i + 1); pos = i + 1; continue; }
+      var start = i + m[0].length, depth = 1;
+      re.lastIndex = start;
+      while ((x = re.exec(svg))) { if (x[0] === '</g>') { if (!--depth) break; } else if (!x[1]) depth++; }
+      if (!x) break;
+      var inner = svg.slice(start, x.index), k = m[1];
+      out += svg.slice(pos, i) + (k === 'f45' ? H.face45(C, inner) : k === 'f45c' ? H.face45(C, inner, true) : H.body45(inner, k === 'b45h' ? H.HEM : H.TORSO_UP));
+      pos = x.index + 4;
+    }
+    return out + svg.slice(pos);
   }
-  var SHAPE_EL = /<path d="\{shape\}"[^>]*\/>/g;
+  var SHAPE_EL = /<path\b[^>]*\bd="\{shape\}"[^>]*\/>/g;   // viền đầu, mọi thứ tự thuộc tính
   // Đăng ký linh kiện dữ liệu vào một thư viện (pack phải có sẵn). Kiểm lại dù đã kiểm lúc lưu (phòng thủ nhiều lớp).
   function registerDataPart(packId, def) {
     packId = canonPack(packId);

@@ -353,6 +353,26 @@ const sq = m.saveAssetChecked({ id: "t-vuong", name: "Vuông", look: { eyes: "ro
 const front = GC.svgString(GC.ASSETS["local.my/t-vuong"], "normal"), q45 = GC.svgString(GC.ASSETS["local.my/t-vuong"], "normal", { director: { view: "left45" } });
 no(!front.includes(GC.getPart("head", "square").shape), "{shape} phải thành đúng viền đầu vuông ở chính diện");
 no(!q45.includes(GC.getPart("head", "square").shape45) || !/clip-path/.test(q45) || /gc-f45|\{shape\}/.test(q45), "45°: {shape} = viền đầu vuông 45°, gc-f45c thành phép chiếu có cắt theo đầu, không còn đánh dấu");
+// hồi quy review v0.13: lồng đánh dấu (phình 2^d) · <g/> tự đóng làm lệch cặp · đánh dấu kèm thuộc tính · id cắt theo góc · {shape} không đứng đầu
+const nest = "<circle cx=\"80\" cy=\"108\" r=\"3\" fill=\"#fff\"/>"; let deep = nest; for (let i = 0; i < 14; i++) deep = "<g class=\"gc-f45\">" + deep + "</g>";
+const mk = (q45) => ({ id: "t-r", slot: "mask", layers: { mask: "<path d=\"{shape}\" fill=\"#c00\"/>" }, views: { q45: { mode: "drawn", layers: { mask: q45 } } } });
+no(!GC.checkDataPart(mk(deep)).errors.length, "đánh dấu chiếu lồng nhau phải bị chặn (phình luỹ thừa)");
+no(!GC.checkDataPart(mk("<g class=\"gc-f45\" opacity=\".5\">" + nest + "</g>")).errors.length, "đánh dấu kèm thuộc tính khác phải bị chặn");
+no(!GC.checkDataPart(mk("<g class=\"gc-f45\"/>")).errors.length, "đánh dấu rỗng tự đóng phải bị chặn");
+const selfg = mk("<g><g class=\"gc-f45\"><g fill=\"#000\"/><path d=\"M0,0 L9,9\" stroke=\"#000\"/></g></g>");
+no(GC.checkDataPart(selfg).errors.length, "<g/> tự đóng trong đánh dấu là hợp lệ: " + GC.checkDataPart(selfg).errors);
+selfg.id = "t-selfg"; m.savePartChecked(selfg, "t"); m.saveAssetChecked({ id: "t-selfg-nv", name: "x", look: { eyes: "round", brows: "normal", parts: { mask: "local.my/t-selfg" } } }, "t");
+const sv = GC.svgString(GC.ASSETS["local.my/t-selfg-nv"], "normal", { director: { view: "left45" } });
+const opens = (sv.match(/<g\b[^>]*?(\/?)>/g) || []).filter(t => !t.endsWith("/>")).length, closes = (sv.match(/<\/g>/g) || []).length;
+no(opens !== closes || /class="gc-(f45|b45)/.test(sv), "<g/> tự đóng không được làm lệch cặp nhóm: " + opens + " mở / " + closes + " đóng");
+const CL = { id: "t-cl", slot: "mask", layers: { mask: "<path d=\"{shape}\" fill=\"#c00\"/>" }, views: { q45: { mode: "drawn", layers: { mask: "<path d=\"{shape}\" fill=\"#c00\"/><g class=\"gc-f45c\">" + nest + "</g>" } } } };
+m.savePartChecked(CL, "t"); m.saveAssetChecked({ id: "t-cl-nv", name: "x", look: { eyes: "round", brows: "normal", parts: { mask: "local.my/t-cl" } } }, "t");
+const id45 = /clipPath id="(gcH45[^"]+)"/.exec(GC.svgString(GC.ASSETS["local.my/t-cl-nv"], "normal", { director: { view: "left45" } }))[1];
+const id90 = /clipPath id="(gcH45[^"]+)"/.exec(GC.svgString(GC.ASSETS["local.my/t-cl-nv"], "normal", { director: { view: "left90" } }))[1];
+no(id45 === id90, "id cắt theo đầu phải khác nhau giữa các góc (bàn soát gộp nhiều góc trong một SVG)");
+const F45 = { id: "t-f45", slot: "mask", layers: { mask: "<path fill=\"#c00\" d=\"{shape}\"/>" + nest }, views: { q45: "face45" } };
+m.savePartChecked(F45, "t"); m.saveAssetChecked({ id: "t-f45-nv", name: "x", look: { eyes: "round", brows: "normal", parts: { head: "square", mask: "local.my/t-f45" } } }, "t");
+no(!GC.svgString(GC.ASSETS["local.my/t-f45-nv"], "normal", { director: { view: "left45" } }).includes(GC.getPart("head", "square").shape45), "face45: viền {shape} đứng sau thuộc tính khác vẫn giữ nguyên, không bị chiếu méo");
 // lời khuyên của cổng + 135° mượn bản sau lưng là bản vẽ thật (không đè tóc bằng lớp tóc sau)
 const HAIR = { id: "t-toc", slot: "hair", layers: { hairFront: "<path d=\"M52,102 C50,70 70,55 100,55 C130,55 150,70 148,102 Z\" fill=\"{hair}\"/>" }, views: { q45: "same" } };
 no(GC.partAdvice(GC.checkDataPart(HAIR).def).length !== 1, "tóc không có bản sau lưng phải được nhắc (sẽ biến mất khi quay lưng)");
@@ -378,7 +398,7 @@ const tmp = path.join(os.tmpdir(), "gc-tq-" + process.pid + ".json");
 cp.execFileSync(process.execPath, ["archive/tamquoc/port.js", tmp], { stdio: "ignore" });
 no(fs.readFileSync(tmp, "utf8") !== fs.readFileSync("studio/mau/tam-quoc.json", "utf8"), "studio/mau/tam-quoc.json lệch với archive/tamquoc/port.js — sửa ở port.js rồi chạy lại, không sửa tay gói");
 fs.unlinkSync(tmp);
-console.log("   ✓ {shape} khít dáng đầu · đánh dấu chiếu 45° chỉ trong views · chặn 7 kiểu dữ liệu sai · cổng nhắc tóc thiếu bản lưng · 135° mượn bản lưng · Tam Quốc qua cổng 100% (53 linh kiện · 13 trang bị · 8 cảnh · 7 tướng · 5 phân cảnh) · " + n + " ảnh sạch · gói bán trọn · tái lập được");
+console.log("   ✓ {shape} khít dáng đầu · đánh dấu chiếu 45° chỉ trong views · chặn 7 kiểu dữ liệu sai · cổng nhắc tóc thiếu bản lưng · 135° mượn bản lưng · chặn lồng đánh dấu / <g/> lệch cặp · Tam Quốc qua cổng 100% (53 linh kiện · 13 trang bị · 8 cảnh · 7 tướng · 5 phân cảnh) · " + n + " ảnh sạch · gói bán trọn · tái lập được");
 ' || exit 1
 echo "3) MCP"
 H="$(mktemp -d)"; PORT=7495

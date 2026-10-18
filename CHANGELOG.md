@@ -10,6 +10,7 @@
   - `get_part_spec` mô tả đủ các năng lực trên cho agent.
 - Tóc có bản **135° / sau lưng** (trước đây tóc búi / dựng / gọn biến mất khi nhân vật quay lưng).
 - Engine: ở 135° mượn bản sau lưng của linh kiện là bản vẽ thật — không còn đè tóc bằng lớp tóc sau (tóc chỉ có bản sau lưng từng biến mất ở 135°).
+- An toàn (theo review): đánh dấu chiếu **không được lồng nhau** (mỗi phép chiếu nhân đôi nội dung — lồng 14 tầng từng phình 336 ký tự thành 6,5 MB), phải là nhóm có nội dung chỉ mang `class`; `<g …/>` tự đóng được chuẩn hoá và không còn làm lệch cặp nhóm; thay đánh dấu là vòng lặp tuyến tính không đệ quy; id cắt theo đầu kèm góc nhìn (bàn soát nhiều góc trong một SVG); viền `{shape}` nhận mọi thứ tự thuộc tính.
 - Cổng linh kiện có **lời khuyên** (không chặn) cho lỗi qua được cổng nhưng lộ ra khi nhìn: tóc thiếu bản sau lưng, mặt nạ tô kín mặt chưa dùng `{shape}`, vật cầm tay thiếu icon — trả về ở `preview_part` / `save_part`.
 - Studio: chọn dự án mẫu — **Văn phòng vui** (xem luồng 10 giây) hoặc **Tam Quốc** (bộ chủ đề trọn vẹn).
 - `archive/tamquoc/port.js` — công cụ dev dựng lại gói từ nguồn; `tools/test.sh` (2f) chặn gói lệch nguồn, dựng 210 ảnh (7 tướng × 10 góc × 3 biểu cảm) không còn token / đánh dấu sót, chặn 7 kiểu dữ liệu sai.

@@ -143,7 +143,7 @@
     function face45(C, svg, clip) {
       var r = GC.faceRemap(svg);
       if (!clip) return r;
-      var id = 'gcH45' + String(C.asset.key || C.asset.id).replace(/[^a-zA-Z0-9]/g, '');
+      var id = 'gcH45' + String(C.view || '') + String(C.asset.key || C.asset.id).replace(/[^a-zA-Z0-9]/g, '');   // kèm góc: một SVG có thể chứa nhiều góc (bàn soát)
       return '<defs><clipPath id="' + id + '"><path d="' + C.shape + '"/></clipPath></defs><g clip-path="url(#' + id + ')">' + r + '</g>';
     }
     function body45(svg, shape) {
