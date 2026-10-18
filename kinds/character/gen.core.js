@@ -707,6 +707,158 @@
       armL: { rot: k(0, 150, 0.5, 120, 1, 150) }, foreL: { rot: k(0, 10, 1, 10) }, armR: { rot: k(0, -120, 0.5, -150, 1, -120) }, foreR: { rot: k(0, -10, 1, -10) } });
     M('flail', 'Vung tay hoảng loạn', 0.3, 0.25, { head: { rot: k(0, 5, 0.5, -5, 1, 5) },
       armL: { rot: k(0, 140, 0.5, 170, 1, 140) }, foreL: { rot: k(0, 40, 0.5, 0, 1, 40) }, armR: { rot: k(0, -170, 0.5, -140, 1, -170) }, foreR: { rot: k(0, 0, 0.5, -40, 1, 0) } }, { hide: ['tallL', 'tallR'] });
+    // ---- ngôn ngữ cơ thể của 18 cảm xúc (v0.15): hình bóng toàn thân khác nhau rõ — khối thân nghiêng, co / giãn, nảy, tay bất đối xứng,
+    //      tay "cao su" (sy > 1) khi vươn; không còn dáng hai tay chữ V. Đo bằng GC.poseDistance (tools/test.sh 2h). Động tác cũ giữ cho hoạt động.
+    M('ponder', 'Chống cằm, dồn trọng tâm', 3.2, 0.5, {
+      pelvis: { x: k(0, 5, 0.5, 6, 1, 5), rot: k(0, 6, 0.5, 7, 1, 6) },
+      body: { rot: k(0, -12, 0.5, -14, 1, -12) },
+      head: { rot: k(0, 12, 0.5, 15, 1, 12), y: k(0, 1, 1, 1) },
+      armL: { rot: k(0, -128, 0.5, -122, 1, -128), sy: k(0, 1.08, 1, 1.08) },
+      foreL: { rot: k(0, -52, 0.5, -46, 1, -52) },
+      armR: { rot: k(0, 64, 1, 64) },
+      foreR: { rot: k(0, 84, 1, 84) } });
+    M('gloat', 'Ngả người che miệng, chống nạnh', 0.9, 0.5, {
+      root: { sy: k(0, 1.02, 0.5, 1.04, 1, 1.02) },
+      pelvis: { x: k(0, -4, 1, -4) },
+      body: { rot: k(0, 9, 0.5, 11, 1, 9) },
+      head: { rot: k(0, -10, 0.5, -6, 1, -10) },
+      armL: { rot: k(0, -146, 0.5, -140, 1, -146) },
+      foreL: { rot: k(0, -40, 1, -40) },
+      armR: { rot: k(0, -48, 1, -48) },
+      foreR: { rot: k(0, 118, 1, 118) } });
+    M('grind', 'Cắm cúi gõ', 0.24, 0.5, {
+      root: { sy: k(0, 0.93, 1, 0.93), y: k(0, 2, 1, 2) },
+      body: { rot: k(0, 4, 1, 4), sy: k(0, 0.94, 1, 0.94) },
+      head: { y: k(0, 5, 1, 5), rot: k(0, 4, 0.5, 2, 1, 4) },
+      armL: { rot: k(0, -40, 0.5, -30, 1, -40) },
+      foreL: { rot: k(0, -70, 0.5, -82, 1, -70) },
+      armR: { rot: k(0, 40, 0.5, 30, 1, 40) },
+      foreR: { rot: k(0, 82, 0.5, 70, 1, 82) } });
+    M('covet', 'Khom người xoa tay, kiễng chân', 0.5, 0.5, {
+      root: { y: k(0, 0, 0.5, -7, 1, 0), sy: k(0, 1.04, 0.5, 0.96, 1, 1.04) },
+      body: { rot: k(0, -8, 0.5, 8, 1, -8), sy: k(0, 0.95, 1, 0.95) },
+      head: { rot: k(0, 6, 0.5, -6, 1, 6), y: k(0, 2, 1, 2) },
+      armL: { rot: k(0, -78, 0.5, -64, 1, -78) },
+      foreL: { rot: k(0, -78, 0.5, -96, 1, -78) },
+      armR: { rot: k(0, 64, 0.5, 78, 1, 64) },
+      foreR: { rot: k(0, 96, 0.5, 78, 1, 96) } });
+    M('nodOff', 'Gục đầu ngủ gật, người đổ lắc', 3.6, 0.5, {
+      root: { y: k(0, 4, 0.5, 6, 1, 4), sy: k(0, 0.95, 0.5, 0.93, 1, 0.95) },
+      pelvis: { x: k(0, -4, 0.5, 4, 1, -4) },
+      body: { rot: k(0, -13, 0.5, 13, 1, -13) },
+      head: { rot: k(0, 20, 0.45, 26, 0.55, -26, 1, 20), y: k(0, 7, 0.5, 9, 1, 7) },
+      armL: { rot: k(0, -6, 0.5, 6, 1, -6), sy: k(0, 1.12, 1, 1.12) },
+      armR: { rot: k(0, -6, 0.5, 6, 1, -6), sy: k(0, 1.12, 1, 1.12) } });
+    M('reel', 'Lảo đảo dang tay giữ thăng bằng', 1.4, 0.5, {
+      root: { x: k(0, -6, 0.25, 0, 0.5, 6, 0.75, 0, 1, -6), y: k(0, 0, 0.25, 3, 0.5, 0, 0.75, 3, 1, 0) },
+      pelvis: { rot: k(0, 8, 0.5, -8, 1, 8) },
+      body: { rot: k(0, -16, 0.5, 16, 1, -16) },
+      head: { rot: k(0, 14, 0.5, -14, 1, 14) },
+      armL: { rot: k(0, 70, 0.5, 40, 1, 70), sy: k(0, 1.2, 1, 1.2) },
+      foreL: { rot: k(0, -20, 1, -20) },
+      armR: { rot: k(0, -40, 0.5, -70, 1, -40), sy: k(0, 1.2, 1, 1.2) },
+      foreR: { rot: k(0, 20, 1, 20) } });
+    M('collapse', 'Xẹp người gục về trước', 3, 0.5, {
+      root: { y: k(0, 8, 0.5, 10, 1, 8), sy: k(0, 0.86, 0.5, 0.84, 1, 0.86), sx: k(0, 1.08, 1, 1.08) },
+      body: { rot: k(0, 10, 0.5, 12, 1, 10), sy: k(0, 0.9, 1, 0.9) },
+      head: { rot: k(0, 16, 0.5, 18, 1, 16), y: k(0, 9, 1, 9) },
+      armL: { rot: k(0, 4, 1, 4), sy: k(0, 1.25, 1, 1.25) },
+      armR: { rot: k(0, -2, 1, -2), sy: k(0, 1.25, 1, 1.25) } });
+    M('nurse', 'Nghiêng người ôm hông đau', 2.4, 0.5, {
+      root: { y: k(0, 5, 0.3, 8, 0.6, 5, 1, 5), sy: k(0, 0.95, 1, 0.95) },
+      pelvis: { x: k(0, -7, 1, -7), rot: k(0, -8, 0.3, -11, 1, -8) },
+      body: { rot: k(0, 20, 0.3, 24, 1, 20) },
+      head: { rot: k(0, -8, 1, -8) },
+      armR: { rot: k(0, 30, 1, 30) },
+      foreR: { rot: k(0, 96, 1, 96) },
+      armL: { rot: k(0, 14, 0.5, 22, 1, 14), sy: k(0, 1.1, 1, 1.1) },
+      shinL: { rot: k(0, -18, 0.3, -26, 1, -18) } });
+    M('loaf', 'Ngả người gối đầu', 3, 0.5, {
+      root: { sy: k(0, 0.97, 1, 0.97) },
+      pelvis: { x: k(0, 6, 1, 6), rot: k(0, -6, 1, -6) },
+      body: { rot: k(0, -14, 0.5, -16, 1, -14) },
+      head: { rot: k(0, -12, 0.5, -9, 1, -12) },
+      armL: { rot: k(0, -168, 1, -168), sy: k(0, 1.2, 1, 1.2) },
+      foreL: { rot: k(0, -70, 1, -70) },
+      armR: { rot: k(0, 168, 1, 168), sy: k(0, 1.2, 1, 1.2) },
+      foreR: { rot: k(0, 70, 1, 70) },
+      thighR: { rot: k(0, -18, 1, -18) } });
+    M('fury', 'Chồm tới, một nắm đấm vươn cao', 0.42, 0.5, {
+      root: { y: k(0, 0, 0.25, -6, 0.5, 0, 0.75, -3, 1, 0), sx: k(0, 1.05, 1, 1.05), sy: k(0, 1.03, 0.25, 0.96, 0.5, 1.03, 1, 1.03) },
+      pelvis: { x: k(0, -3, 1, -3) },
+      body: { rot: k(0, 12, 0.5, 15, 1, 12) },
+      head: { rot: k(0, -6, 0.5, -2, 1, -6) },
+      armR: { rot: k(0, -158, 0.5, -146, 1, -158), sy: k(0, 1.35, 1, 1.35) },
+      foreR: { rot: k(0, -8, 0.5, 6, 1, -8) },
+      armL: { rot: k(0, 24, 1, 24) },
+      foreL: { rot: k(0, 62, 1, 62) },
+      thighR: { rot: k(0, 0, 0.25, -22, 0.5, 0, 1, 0) } });
+    M('weep', 'Dụi mắt nấc', 0.6, 0.5, {
+      root: { y: k(0, 2, 0.5, 5, 1, 2), sy: k(0, 0.96, 0.5, 0.91, 1, 0.96) },
+      body: { rot: k(0, -7, 0.5, -9, 1, -7) },
+      head: { rot: k(0, 10, 0.25, 13, 0.5, 8, 0.75, 13, 1, 10), y: k(0, 3, 1, 3) },
+      armL: { rot: k(0, -132, 0.5, -124, 1, -132) },
+      foreL: { rot: k(0, -48, 0.5, -60, 1, -48) },
+      armR: { rot: k(0, 6, 1, 6), sy: k(0, 1.15, 1, 1.15) },
+      foreR: { rot: k(0, 6, 1, 6) } });
+    M('recoil', 'Bật ngửa, hai tay văng lệch', 0.3, 0.5, {
+      root: { y: k(0, -16, 0.5, -12, 1, -16), sy: k(0, 1.1, 0.5, 1.06, 1, 1.1), sx: k(0, 0.94, 1, 0.94) },
+      body: { rot: k(0, -16, 0.5, -13, 1, -16) },
+      head: { rot: k(0, -12, 1, -12) },
+      armL: { rot: k(0, 118, 0.5, 112, 1, 118), sy: k(0, 1.3, 1, 1.3) },
+      foreL: { rot: k(0, 30, 1, 30) },
+      armR: { rot: k(0, -62, 0.5, -70, 1, -62), sy: k(0, 1.25, 1, 1.25) },
+      foreR: { rot: k(0, -24, 1, -24) },
+      thighL: { rot: k(0, 26, 1, 26) },
+      shinL: { rot: k(0, -40, 1, -40) } });
+    M('chestOut', 'Ưỡn ngực chống nạnh', 1.2, 0.5, {
+      root: { sy: k(0, 1.05, 0.5, 1.07, 1, 1.05), sx: k(0, 0.97, 1, 0.97), y: k(0, 0, 0.5, -2, 1, 0) },
+      pelvis: { x: k(0, 3, 1, 3) },
+      body: { rot: k(0, -6, 0.5, -7, 1, -6) },
+      head: { rot: k(0, -10, 0.5, -12, 1, -10) },
+      armL: { rot: k(0, 46, 1, 46) },
+      foreL: { rot: k(0, -118, 1, -118) },
+      armR: { rot: k(0, 58, 0.5, 66, 1, 58) },
+      foreR: { rot: k(0, 92, 0.5, 100, 1, 92) } });
+    M('scramble', 'Chạy cuống, tay vung luân phiên', 0.36, 0.5, {
+      root: { y: k(0, 0, 0.25, -7, 0.5, 0, 0.75, -7, 1, 0) },
+      body: { rot: k(0, 14, 0.5, 18, 1, 14) },
+      head: { rot: k(0, -14, 0.5, -8, 1, -14) },
+      armL: { rot: k(0, 150, 0.5, 40, 1, 150), sy: k(0, 1.25, 1, 1.25) },
+      foreL: { rot: k(0, 20, 0.5, -30, 1, 20) },
+      armR: { rot: k(0, -40, 0.5, -150, 1, -40), sy: k(0, 1.25, 1, 1.25) },
+      foreR: { rot: k(0, 30, 0.5, -20, 1, 30) },
+      thighL: { rot: k(0, 0, 0.25, 24, 0.5, 0, 1, 0) },
+      thighR: { rot: k(0, 0, 0.5, 0, 0.75, -24, 1, 0) } });
+    M('resolve', 'Tấn vững, đấm thẳng tới trước', 0.65, 0.5, {
+      root: { sx: k(0, 1.06, 1, 1.06), sy: k(0, 0.97, 0.5, 1, 1, 0.97), y: k(0, 2, 0.5, 0, 1, 2) },
+      body: { rot: k(0, 8, 1, 8) },
+      head: { rot: k(0, -4, 1, -4) },
+      armR: { rot: k(0, -96, 0.5, -104, 1, -96), sy: k(0, 1.35, 0.5, 1.45, 1, 1.35) },
+      foreR: { rot: k(0, -12, 1, -12) },
+      armL: { rot: k(0, 30, 1, 30) },
+      foreL: { rot: k(0, -100, 1, -100) },
+      thighL: { rot: k(0, 18, 1, 18) },
+      thighR: { rot: k(0, -18, 1, -18) } });
+    M('waver', 'Nhún vai nghiêng đầu, lùi nửa người', 1.2, 0.5, {
+      root: { y: k(0, 0, 0.5, -3, 1, 0), sy: k(0, 1, 0.5, 0.94, 1, 1) },
+      pelvis: { x: k(0, -6, 1, -6) },
+      body: { rot: k(0, -13, 0.5, -15, 1, -13) },
+      head: { rot: k(0, 14, 0.5, 18, 1, 14) },
+      armL: { rot: k(0, 58, 0.5, 70, 1, 58) },
+      foreL: { rot: k(0, -78, 0.5, -90, 1, -78) },
+      armR: { rot: k(0, -34, 0.5, -46, 1, -34) },
+      foreR: { rot: k(0, 70, 0.5, 84, 1, 70) } });
+    M('plead', 'Khuỵu gối chắp tay run', 0.5, 0.5, {
+      root: { y: k(0, 10, 0.5, 11, 1, 10), sy: k(0, 0.88, 1, 0.88) },
+      body: { rot: k(0, 4, 0.5, 6, 1, 4), sy: k(0, 0.92, 1, 0.92) },
+      head: { y: k(0, 6, 1, 6), rot: k(0, 6, 0.5, 4, 1, 6) },
+      armL: { rot: k(0, -118, 0.5, -112, 1, -118) },
+      foreL: { rot: k(0, -64, 0.5, -70, 1, -64) },
+      armR: { rot: k(0, 118, 0.5, 112, 1, 118) },
+      foreR: { rot: k(0, 64, 0.5, 70, 1, 64) },
+      shinL: { rot: k(0, -22, 1, -22) },
+      shinR: { rot: k(0, 22, 1, 22) } });
     // nói chuyện / lắng nghe (v0.14 "Phim sống"): lời thoại thường không còn đứng trơ — tay khoa theo câu nói, người nghe gật gù
     M('talk', 'Khoa tay khi nói', 1.5, 0.25, { body: { y: k(0, 0, 0.5, -1.2, 1, 0), rot: k(0, -1.5, 0.5, 1.5, 1, -1.5) },
       head: { rot: k(0, -3, 0.25, 2, 0.5, -2, 0.75, 3, 1, -3) },
@@ -720,23 +872,23 @@
     /* ---------------- 18 TRẠNG THÁI = mắt + mày + miệng + hiệu ứng + động tác ---------------- */
     function S(id, label, hint, eyes, brows, mouth, fxs, motion) { D.state(id, { label: label, hint: hint, eyes: eyes, brows: brows, mouth: mouth, fx: fxs, motion: motion }); }
     S('normal', 'Bình thường', 'rảnh hoặc làm việc êm', 'normal', 'neutral', 'smile', [], 'idle');
-    S('work', 'Đang làm', 'đang tập trung làm việc', 'focus', 'determined', 'tongueOut', ['sweat'], 'typing');
-    S('think', 'Suy tư ông cụ non', 'đang nghĩ, phân vân', 'lookUp', 'think', 'flat', ['dots'], 'chinHand');
-    S('unsure', 'Nói không chắc', 'trả lời mà không chắc chắn', 'lookSide', 'worried', 'wavy', ['sweat', 'question'], 'shrug');
-    S('smug', 'Cười đê tiện', 'thắng kèo, mưu vừa thành, khoái chí', 'smug', 'smug', 'grin', ['blush', 'sparkles'], 'snicker');
-    S('greedy', 'Tham tiền', 'nhận thưởng, thấy tiền', 'money', 'raised', 'drool', ['coins', 'blush'], 'rubHands');
-    S('proud', 'Lên #1', 'đứng đầu bảng, chiến thắng', 'happy', 'raised', 'laugh', ['crown', 'confetti'], 'victory');
-    S('vow', 'Hứa quyết tâm', 'nhận việc lớn, thề chạy deadline', 'fierce', 'determined', 'shout', ['aura', 'sparkles'], 'fistPump');
-    S('beg', 'Van xin năn nỉ', 'chờ duyệt, xin thêm quota, xin tha', 'teary', 'sad', 'wavy', ['sweat', 'sparkles'], 'kowtow');
-    S('shock', 'Kinh ngạc', 'tin sét đánh, kết quả bất ngờ', 'wide', 'raised', 'oBig', ['speed', 'sweat', 'gloomLines', 'exclaim'], 'jolt');
-    S('panic', 'Hoảng loạn', 'sự cố, đổi công cụ gấp', 'wide', 'raised', 'shout', ['sweatMany', 'speed', 'exclaim'], 'panicRun');
-    S('rage', 'Nổi trận lôi đình', 'bị chơi xấu, bị cướp công', 'angry', 'angry', 'shout', ['vein', 'fire', 'steam'], 'stomp');
-    S('dizzy', 'Choáng váng (lỗi)', 'gặp lỗi, đầu óc quay cuồng', 'spiral', 'sad', 'wavy', ['stars', 'sweat'], 'wobble');
-    S('cry', 'Khóc thê thảm', 'bị phạt, thua lỗ, mất đồ', 'shut', 'sad', 'wail', ['tears', 'gloom'], 'sob');
-    S('injured', 'Nghỉ dưỡng thương', 'kiệt quỹ, đang hồi phục', 'half', 'sad', 'wavy', ['bandage', 'gloomLines'], 'limp');
-    S('exhausted', 'Hết quota', 'cạn sức, hồn lìa khỏi xác', 'empty', 'sad', 'oSmall', ['soul', 'gloomLines'], 'deflate');
-    S('lazy', 'Rảnh rỗi lười', 'không có việc, nằm ườn', 'half', 'neutral', 'cat', ['gum'], 'slouch');
-    S('sleep', 'Ngủ say', 'ngoài giờ, không có việc', 'closed', 'neutral', 'oSmall', ['zzz', 'snot'], 'doze');
+    S('work', 'Đang làm', 'đang tập trung làm việc', 'focus', 'determined', 'tongueOut', ['sweat'], 'grind');
+    S('think', 'Suy tư ông cụ non', 'đang nghĩ, phân vân', 'lookUp', 'think', 'flat', ['dots'], 'ponder');
+    S('unsure', 'Nói không chắc', 'trả lời mà không chắc chắn', 'lookSide', 'worried', 'wavy', ['sweat', 'question'], 'waver');
+    S('smug', 'Cười đê tiện', 'thắng kèo, mưu vừa thành, khoái chí', 'smug', 'smug', 'grin', ['blush', 'sparkles'], 'gloat');
+    S('greedy', 'Tham tiền', 'nhận thưởng, thấy tiền', 'money', 'raised', 'drool', ['coins', 'blush'], 'covet');
+    S('proud', 'Lên #1', 'đứng đầu bảng, chiến thắng', 'happy', 'raised', 'laugh', ['crown', 'confetti'], 'chestOut');
+    S('vow', 'Hứa quyết tâm', 'nhận việc lớn, thề chạy deadline', 'fierce', 'determined', 'shout', ['aura', 'sparkles'], 'resolve');
+    S('beg', 'Van xin năn nỉ', 'chờ duyệt, xin thêm quota, xin tha', 'teary', 'sad', 'wavy', ['sweat', 'sparkles'], 'plead');
+    S('shock', 'Kinh ngạc', 'tin sét đánh, kết quả bất ngờ', 'wide', 'raised', 'oBig', ['speed', 'sweat', 'gloomLines', 'exclaim'], 'recoil');
+    S('panic', 'Hoảng loạn', 'sự cố, đổi công cụ gấp', 'wide', 'raised', 'shout', ['sweatMany', 'speed', 'exclaim'], 'scramble');
+    S('rage', 'Nổi trận lôi đình', 'bị chơi xấu, bị cướp công', 'angry', 'angry', 'shout', ['vein', 'fire', 'steam'], 'fury');
+    S('dizzy', 'Choáng váng (lỗi)', 'gặp lỗi, đầu óc quay cuồng', 'spiral', 'sad', 'wavy', ['stars', 'sweat'], 'reel');
+    S('cry', 'Khóc thê thảm', 'bị phạt, thua lỗ, mất đồ', 'shut', 'sad', 'wail', ['tears', 'gloom'], 'weep');
+    S('injured', 'Nghỉ dưỡng thương', 'kiệt quỹ, đang hồi phục', 'half', 'sad', 'wavy', ['bandage', 'gloomLines'], 'nurse');
+    S('exhausted', 'Hết quota', 'cạn sức, hồn lìa khỏi xác', 'empty', 'sad', 'oSmall', ['soul', 'gloomLines'], 'collapse');
+    S('lazy', 'Rảnh rỗi lười', 'không có việc, nằm ườn', 'half', 'neutral', 'cat', ['gum'], 'loaf');
+    S('sleep', 'Ngủ say', 'ngoài giờ, không có việc', 'closed', 'neutral', 'oSmall', ['zzz', 'snot'], 'nodOff');
 
 
     /* ---------------- HOẠT ĐỘNG: tổ hợp đặt tên sẵn (agent gọi theo tên; vẫn ghép tự do được) ---------------- */

@@ -477,6 +477,51 @@ no(L1[0].say !== "" || /undefined/.test(JSON.stringify(L1[0])), "bước thiếu
 no(L1[1].hold !== 5 || L1[1].estimate >= 5, "hold không được trộn vào thời gian đọc (estimate " + L1[1].estimate + ")");
 console.log("   ✓ " + lines + " câu thoại: ai cũng ra sân · " + moves + " lần đi lại · " + talks + " câu khoa tay · " + shouts + " câu hét (đẩy máy) · " + thinks + " câu nghĩ · máy quay cận " + closes + " / hai người " + twos + " · " + nudges + " lần bước tới-lùi · khẩu hình + hướng nhìn + phản ứng mọi câu · lược đồ dàn dựng chặn giá trị sai");
 ' || exit 1
+echo "2h) ngôn ngữ cơ thể: 18 cảm xúc là 18 hình bóng toàn thân khác nhau rõ (đo bằng điểm mốc)"
+node -e '
+const { loadEngine } = require("./server/engine-node.js"); const GC = loadEngine(".");
+const no = (c, msg) => { if (c) { console.log("   ✗", msg); process.exit(1); } };
+const a = GC.ASSETS["gen.khung/ma-no-canh"], neutral = GC.poseAt(a, GC.resolveState(a, "normal", { motion: "rest" }), 0, true);
+// dáng đỉnh của mỗi cảm xúc = khung xa tư thế đứng nhất trong một chu kỳ động tác (chính diện)
+const peak = s => { const st = GC.resolveState(a, s), m = GC.LIB.motions[st.motion] || GC.LIB.motions.idle; let best = null, bd = -1;
+  for (let i = 0; i < 12; i++) { const p = GC.poseAt(a, st, (m.dur || 1) * i / 12, false), d = GC.poseDistance(p, neutral); if (d > bd) { bd = d; best = p; } } return { p: best, d: bd }; };
+const P = GC.LIB.stateOrder.map(s => [s, peak(s)]);
+no(P.length < 18, "thiếu cảm xúc");
+P.filter(x => x[0] !== "normal").forEach(([s, r]) => no(r.d < 11.5, s + ": dáng gần như đứng yên (" + r.d.toFixed(1) + " < 11.5) — cảm xúc phải đọc được bằng cả thân, không chỉ khuôn mặt"));
+let min = 1e9, at = "", sum = 0, n = 0;
+for (let i = 0; i < P.length; i++) for (let j = i + 1; j < P.length; j++) { const d = GC.poseDistance(P[i][1].p, P[j][1].p); sum += d; n++; if (d < min) { min = d; at = P[i][0] + "↔" + P[j][0]; } }
+no(min < 7.5, "hai cảm xúc gần như cùng dáng: " + at + " " + min.toFixed(1));
+console.log("   ✓ " + P.length + " cảm xúc · mỗi dáng cách đứng yên ≥ 11,5 · cặp gần nhất " + at + " " + min.toFixed(1) + " · trung bình cặp " + (sum / n).toFixed(1));
+' || exit 1
+echo "2i) biên đạo liên hoàn: màn Tử Long 30 giây (29 hành vi không lặp, mượt, máy quay + thời gian + hiệu ứng)"
+node -e '
+const fs = require("fs"), os = require("os"), path = require("path"), vm = require("vm");
+const { MCP } = require("./server/mcp.js"); const { Store } = require("./server/store.js"); const { loadEngine } = require("./server/engine-node.js");
+const GC = loadEngine("."), C = GC.choreo, no = (c, msg) => { if (c) { console.log("   ✗", msg); process.exit(1); } };
+const m = new MCP({ engine: GC, store: new Store(fs.mkdtempSync(path.join(os.tmpdir(), "gc-ch-"))), version: "t", system: {} });
+no(m.importProject(JSON.parse(fs.readFileSync("studio/mau/tam-quoc.json", "utf8")), {}).errors.length, "tam-quoc không qua cổng");
+const D = C.demos["tu-long-30s"], t0 = Date.now(), tl = C.build(GC.ASSETS[D.character], D), ms = Date.now() - t0, M = C.measure(tl);
+no(ms > 1500, "dựng màn 30 giây quá chậm: " + ms + " ms");
+no(Math.abs(M.real - 30) > 0.25, "màn mẫu phải dài 30 ± 0,25 giây thật: " + M.real.toFixed(2));
+no(M.behaviors < 24 || M.unique !== M.behaviors, "phải ≥ 24 hành vi và không hành vi nào lặp: " + M.unique + "/" + M.behaviors);
+no(M.move.p99 > 24 || M.move.max > 36, "chuyển động giật: p99 " + M.move.p99.toFixed(1) + " (≤ 24) · lớn nhất " + M.move.max.toFixed(1) + " lúc " + M.move.maxAt.toFixed(2) + " s (≤ 36)");
+no(M.turns.max > 48, "đổi góc nhìn giật " + M.turns.max.toFixed(1) + " (≤ 48)");
+no(M.variety.minPair < 7.5, "hai hành vi cùng dáng: " + M.variety.minPairAt + " " + M.variety.minPair.toFixed(1));
+no(M.time.slowmo < 0.8 || M.time.hitstops < 3, "thiếu slow-mo / hit-stop");
+no(M.views < 4 || M.faces < 20 || M.sfx < 30 || M.fx < 25, "thiếu góc nhìn / nét mặt / âm thanh / hiệu ứng: " + JSON.stringify({ views: M.views, faces: M.faces, sfx: M.sfx, fx: M.fx }));
+// mọi tiếng động đều có trong bộ âm thanh tổng hợp; mọi nét mặt / hiệu ứng nhân vật đều có trong thư viện
+const SFX = fs.readFileSync("engine/audio.js", "utf8");
+tl.events.forEach(e => [].concat(e.sfx || []).forEach(n => no(!new RegExp("\\b" + n + ":").test(SFX), "tiếng " + n + " không có trong engine/audio.js")));
+tl.faces.forEach(f => { const F = f.full; no(F.eyes && !GC.LIB.eyePoses[F.eyes] || F.brows && !GC.LIB.browPoses[F.brows] || F.mouth && !GC.LIB.mouths[F.mouth] || (F.fx || []).some(x => !GC.LIB.fx[x]), "nét mặt lạ: " + JSON.stringify(F)); });
+// khung hình Node: SVG đủ lớp, không NaN; tua đúng giờ (giờ thật ↔ giờ truyện đơn điệu)
+for (const r of [0, 7.3, 14.9, 22.1, M.real]) { const s = C.frameSVG(tl, r); no(/NaN|undefined/.test(s) || s.length < 20000, "khung " + r + " s hỏng"); }
+let last = -1; for (let r = 0; r <= M.real; r += 0.05) { const s = C.realToStory(tl, r); no(s < last - 1e-9, "giờ truyện chạy lùi ở " + r); last = s; }
+// góc binh khí quay nhiều vòng: viết góc tự nhiên, engine đi đường ngắn; then chốt spin giữ số vòng
+no(!tl.keys.some(k => k.spin), "múa thương phải có then chốt spin");
+// clip lạ / tư thế lạ báo lỗi rõ
+let e1 = null; try { C.build(GC.ASSETS[D.character], { steps: [{ clip: "khong-co" }] }); } catch (x) { e1 = x; } no(!e1 || !/khong-co/.test(e1.message), "clip lạ phải báo lỗi");
+console.log("   ✓ " + M.behaviors + " hành vi không lặp · " + M.real.toFixed(2) + " s thật (" + M.story.toFixed(2) + " s truyện, slow-mo " + M.time.slowmo + " s, " + M.time.hitstops + " lần khựng) · " + M.keys + " then chốt · dựng " + ms + " ms · dịch chuyển/khung p99 " + M.move.p99.toFixed(1) + " max " + M.move.max.toFixed(1) + " · đổi góc " + M.turns.n + " lần (max " + M.turns.max.toFixed(1) + ") · cặp dáng gần nhất " + M.variety.minPair.toFixed(1) + " · " + M.sfx + " tiếng · " + M.fx + " hiệu ứng");
+' || exit 1
 echo "3) MCP"
 H="$(mktemp -d)"; PORT=7495
 (echo > /dev/tcp/127.0.0.1/$PORT) 2>/dev/null && { echo "Cổng $PORT đang bị chiếm"; exit 1; }
