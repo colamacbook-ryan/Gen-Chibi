@@ -397,6 +397,17 @@ let es = null; try { m.exportProject("mau-tam-quoc", { sale: true }); } catch (x
 no(!es || es.code !== 403, "bộ mẫu Gen Labs không được xuất gói bán");
 const bk = m.exportProject("mau-tam-quoc");
 no(!bk.sample || bk.sample.owner !== "Gen Labs" || bk.characters.length !== 7 || bk.items.length !== 13 || bk.scenes.length !== 8, "sao lưu bộ mẫu phải đủ và giữ dấu mẫu");
+// linh kiện bộ mẫu gắn vào nhân vật của dự án KHÁC: gói bán chặn (403 nêu tên mục), sao lưu mang dấu, nhập lại ở máy khác vẫn chặn (review v0.14 #2)
+m.store.saveProject({ id: "cua-toi", name: "Của tôi" });
+m.saveAssetChecked({ id: "nv-cua-toi", name: "Của tôi", project: "cua-toi", status: "published", identity: { must: ["hair:tq-toc-gon"] }, look: { eyes: "round", brows: "normal", parts: { hair: "local.my/tq-toc-gon", heldR: "local.my/tq-thuong-bac" } } }, "t");
+let es2 = null; try { m.exportProject("cua-toi", { sale: true }); } catch (x) { es2 = x; }
+no(!es2 || es2.code !== 403 || !/tq-toc-gon/.test(es2.message), "gói bán dùng linh kiện bộ mẫu phải bị chặn và nêu tên: " + (es2 && es2.message));
+const bk2 = m.exportProject("cua-toi");
+no(!bk2.provenance || !bk2.provenance["part:hair:tq-toc-gon"] || bk2.sample, "sao lưu dự án riêng phải mang dấu nguồn gốc từng mục mẫu (không mang dấu cả dự án)");
+const m3 = new MCP({ engine: loadEngine("."), store: new Store(fs.mkdtempSync(path.join(os.tmpdir(), "gc-pv-"))), version: "t", system: {} });
+no(m3.importProject(JSON.parse(JSON.stringify(bk2)), {}).errors.length, "nhập lại sao lưu lỗi");
+let es3 = null; try { m3.exportProject("cua-toi", { sale: true }); } catch (x) { es3 = x; }
+no(!es3 || es3.code !== 403, "nhập lại sao lưu ở máy khác không được rửa dấu bộ mẫu");
 m.store.saveProject({ id: "mau-tam-quoc", name: "Đổi tên" });
 no(!m.store.listProjects().find(p => p.id === "mau-tam-quoc").sample, "sửa tên dự án không được gỡ dấu bộ mẫu");
 // mỗi tướng một bộ dấu nhận diện riêng (CNS-025)
@@ -414,7 +425,7 @@ const tmp = path.join(os.tmpdir(), "gc-tq-" + process.pid + ".json");
 cp.execFileSync(process.execPath, ["archive/tamquoc/port.js", tmp], { stdio: "ignore" });
 no(fs.readFileSync(tmp, "utf8") !== fs.readFileSync("studio/mau/tam-quoc.json", "utf8"), "studio/mau/tam-quoc.json lệch với archive/tamquoc/port.js — sửa ở port.js rồi chạy lại, không sửa tay gói");
 fs.unlinkSync(tmp);
-console.log("   ✓ {shape} khít dáng đầu · đánh dấu chiếu 45° chỉ trong views · chặn 7 kiểu dữ liệu sai · cổng nhắc tóc thiếu bản lưng · 135° mượn bản lưng · chặn lồng đánh dấu / <g/> lệch cặp · Tam Quốc qua cổng 100% (55 linh kiện · 13 trang bị · 8 cảnh · 7 tướng · 5 phân cảnh) · " + n + " ảnh sạch · bộ mẫu không xuất bán · dấu nhận diện riêng · tóc lưng tự phủ · chặn gói bản mới hơn · tái lập được");
+console.log("   ✓ {shape} khít dáng đầu · đánh dấu chiếu 45° chỉ trong views · chặn 7 kiểu dữ liệu sai · cổng nhắc tóc thiếu bản lưng · 135° mượn bản lưng · chặn lồng đánh dấu / <g/> lệch cặp · Tam Quốc qua cổng 100% (55 linh kiện · 13 trang bị · 8 cảnh · 7 tướng · 5 phân cảnh) · " + n + " ảnh sạch · bộ mẫu không xuất bán (kể cả linh kiện mẫu trong dự án khác, qua sao lưu → nhập lại) · dấu nhận diện riêng · tóc lưng tự phủ · chặn gói bản mới hơn · tái lập được");
 ' || exit 1
 echo "2g) phim sống: đạo diễn tự động (ra sân, đi lại, quay mặt, cử chỉ, máy quay, bong bóng, khẩu hình, âm thanh)"
 node -e '
@@ -459,6 +470,11 @@ no(GC.director.validate(ok, cast).length, "trường dàn dựng hợp lệ bị
 for (const [what, st] of [["to chính mình", { to: "tq-luu-bi" }], ["camera lạ", { camera: "drone" }], ["bubble lạ", { bubble: "yell" }], ["sfx lạ", { sfx: ["boom"] }]])
   no(!GC.director.validate({ title: "t", steps: [Object.assign({ actor: "tq-luu-bi", state: "normal", say: "A" }, st)] }, cast).length, "phải chặn " + what);
 no(!/camera/.test(GC.director.prompt(cast)), "prompt đạo diễn phải dạy dàn dựng");
+// review v0.14: thiếu say không ra chữ "undefined"; hold là khung hiện tối thiểu, không trộn vào thời gian đọc
+const shot1 = { title: "t", scene: "gen.khung/san-khau-chuan", cast: ["tq-luu-bi", "tq-quan-vu"], event: { title: "t", steps: [{ actor: "tq-luu-bi", state: "normal" }, { actor: "tq-quan-vu", state: "think", say: "...", hold: 5 }] } };
+const pl = GC.film.direct(shot1), L1 = pl.beats.filter(x => x.type === "line");
+no(L1[0].say !== "" || /undefined/.test(JSON.stringify(L1[0])), "bước thiếu say phải là chuỗi rỗng");
+no(L1[1].hold !== 5 || L1[1].estimate >= 5, "hold không được trộn vào thời gian đọc (estimate " + L1[1].estimate + ")");
 console.log("   ✓ " + lines + " câu thoại: ai cũng ra sân · " + moves + " lần đi lại · " + talks + " câu khoa tay · " + shouts + " câu hét (đẩy máy) · " + thinks + " câu nghĩ · máy quay cận " + closes + " / hai người " + twos + " · " + nudges + " lần bước tới-lùi · khẩu hình + hướng nhìn + phản ứng mọi câu · lược đồ dàn dựng chặn giá trị sai");
 ' || exit 1
 echo "3) MCP"

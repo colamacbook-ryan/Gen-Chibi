@@ -24,6 +24,7 @@ class Store {
     this.itemDir = path.join(dataDir, 'items');
     this.sceneDir = path.join(dataDir, 'scenes');
     this.projectFile = path.join(dataDir, 'projects.json');
+    this.provFile = path.join(dataDir, 'provenance.json');
     this.workDir = path.join(dataDir, 'works');
     fs.mkdirSync(this.workDir, { recursive: true });
     [this.assetDir, this.verDir, this.trashDir, this.eventDir, this.partDir, this.itemDir, this.sceneDir].forEach(d => fs.mkdirSync(d, { recursive: true }));
@@ -105,6 +106,17 @@ class Store {
     if (!old && list.length >= 200) throw Object.assign(new Error('tối đa 200 dự án'), { code: 400 });
     writeJSON(this.projectFile, old ? list.map(x => x.id === p.id ? rec : x) : list.concat(rec));
     return rec;
+  }
+  // dấu nguồn gốc BỘ MẪU theo từng mục — "part:<slot>:<id>" | "item:<id>" | "scene:<id>" | "char:<id>" → { owner, license }.
+  // Chỉ cổng nhập gói ghi (gói mẫu, hoặc gói sao lưu mang dấu); không có API gỡ: sửa / lưu bản mới vẫn giữ dấu (CNS-022).
+  provenance() { return readJSON(this.provFile, {}); }
+  markProvenance(keys, mark) {
+    const clean = (t, n) => String(t || '').replace(/[\u0000-\u001F\u007F]/g, '').trim().slice(0, n);
+    const m = { owner: clean(mark && mark.owner, 40) || 'Gen Labs', license: clean(mark && mark.license, 200) }, cur = this.provenance();
+    let n = 0;
+    keys.forEach(k => { if (typeof k === 'string' && k.length <= 160 && /^(part:[a-zA-Z]+|item|scene|char):[a-z0-9-]+$/.test(k) && !cur[k]) { cur[k] = m; n++; } });
+    if (n) writeJSON(this.provFile, cur);
+    return n;
   }
   // tác phẩm (giai đoạn ③): kịch bản + phân cảnh + chat với AI đạo diễn. works/<id>.json, bản cũ ở versions/works~<id>
   listWorks() {

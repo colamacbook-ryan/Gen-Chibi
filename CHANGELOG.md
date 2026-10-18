@@ -12,6 +12,8 @@ Ryan xem phim v0.13: "nhân vật chỉ biết đứng yên rồi nhúng nhúng�
 - Kịch bản có thể chỉ đạo từng câu: `to`, `camera` (close / two / wide), `bubble` (say / shout / think / whisper), `sfx` — AI đạo diễn được dạy các trường này và được nhắc đổi `spot` để nhân vật đi lại.
 - Hai phim mẫu viết lại có dàn dựng + giọng riêng (Văn phòng vui, Tam Quốc).
 - Theo kiểm toàn vẹn (cortex): **bộ mẫu Tam Quốc** mang dấu Gen Labs — xem, sửa thử, làm phim; **không xuất gói bán** (sao lưu vẫn giữ dấu; đổi tên không gỡ được); gói làm bằng bản gen-chibi mới hơn → báo cập nhật trước khi ghi; tóc dữ liệu thiếu bản sau lưng → khung tự phủ mảng tóc theo viền đầu; Lưu Bị có **song kiếm**, Triệu Vân có **thương bạc tua đỏ** — mỗi tướng một bộ dấu nhận diện riêng.
+- Theo review mã: `hold` (giữ khung) lại có hiệu lực — câu "..." `hold: 5` hiện đủ 5 giây; câu hét ở toàn cảnh zoom quanh tâm khung (không lệch góc trái trên); bước thoại thiếu `say` không còn hiện chữ "undefined"; bấm diễn rồi dừng ngay trong cùng nhịp không còn bật nhạc sau khi đã dừng; phim xuất ra chốt sẵn giọng từng nhân vật (giống Studio).
+- **Dấu nguồn gốc bộ mẫu theo từng mục** (review mã, CNS-022): linh kiện / trang bị / cảnh / nhân vật nhập từ bộ mẫu mang dấu riêng; gói bán của **dự án khác** dùng tới chúng bị chặn (403, nêu tên mục); gói sao lưu mang dấu theo, nhập lại ở máy khác vẫn chặn.
 - Kiểm thử: `tools/test.sh` 2g (đạo diễn tự động: ra sân, đi lại, bong bóng, máy quay, khẩu hình, phản ứng mọi câu; lược đồ chặn giá trị sai), 2f mở rộng; trình duyệt đo đúng điều người xem thấy (nhân vật di chuyển, miệng nhép, máy quay cận, bong bóng có đuôi + thẻ tên, âm thanh bật).
 
 ## v0.13.0 — Bài thử khung: bộ chủ đề Tam Quốc dựng từ khung

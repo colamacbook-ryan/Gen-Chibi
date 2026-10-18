@@ -81,6 +81,12 @@ function text(t, extra) { return Object.assign({ content: [{ type: 'text', text:
 function json(v) { return { content: [{ type: 'text', text: JSON.stringify(v, null, 2) }], structuredContent: Array.isArray(v) ? { items: v } : v }; }
 function toolError(msg) { return { content: [{ type: 'text', text: msg }], isError: true }; }
 function clone(o) { return JSON.parse(JSON.stringify(o)); }
+// khoá dấu nguồn gốc bộ mẫu (store.markProvenance) của mọi mục trong một gói dự án
+function provKeys(b) {
+  const arr = x => Array.isArray(x) ? x.filter(v => v && typeof v === 'object') : [];
+  return [].concat(arr(b.parts).map(p => 'part:' + p.slot + ':' + p.id), arr(b.items).map(x => 'item:' + x.id), arr(b.scenes).map(x => 'scene:' + x.id),
+    arr(b.characters).map(a => 'char:' + String(a.id || '').toLowerCase()));
+}
 function slugOf(s) {
   return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50);
 }
@@ -495,6 +501,13 @@ class MCP {
     const out = { format: 'gen-chibi.project/1', kind: sale ? 'sale' : 'backup', license: '© 2026 Gen Labs — All rights reserved', project: { id: P.id, name: P.name, description: P.description || '' }, warnings,
       sample: P.sample || undefined,   // sao lưu bộ mẫu vẫn mang dấu mẫu → nhập lại ở máy khác vẫn không xuất bán được
       characters: chars.map(clean), items: items.map(clean), scenes: scenes.map(clean), parts: Object.values(used), works, exportedAt: new Date().toISOString() };
+    // mục của bộ mẫu dùng trong dự án KHÁC (linh kiện Tam Quốc gắn vào nhân vật của bạn…): gói bán chặn, gói sao lưu mang dấu theo
+    const prov = S.provenance(), marked = provKeys(out).filter(k => prov[k]);
+    if (sale && marked.length) {
+      const owner = prov[marked[0]].owner || 'Gen Labs', names = marked.slice(0, 6).map(k => k.split(':').pop()).join(', ') + (marked.length > 6 ? '…' : '');
+      throw Object.assign(new Error('Gói bán đang dùng ' + marked.length + ' mục của bộ mẫu ' + owner + ' (' + names + ') — bộ mẫu chỉ để xem, sửa thử, làm phim. Thay bằng linh kiện / trang bị / cảnh của riêng bạn rồi xuất lại.'), { code: 403, sample: marked });
+    }
+    if (marked.length) out.provenance = marked.reduce((o, k) => (o[k] = prov[k], o), {});
     // gói cần những thư viện nào (khung, chủ đề…) để mở được ở bản cài khác
     const packs = {}; JSON.stringify(out).replace(/"([a-z0-9]+(?:\.[a-z0-9-]+)+)\/[a-z0-9-]+"/g, (_, pk) => { const c = GC.canonPack(pk); if (c !== MY_PACK && GC.PACKS[c]) packs[c] = 1; return _; });
     out.requires = { engine: this.version, packs: Object.keys(packs).sort() };
@@ -550,6 +563,10 @@ class MCP {
       }));
     } finally { this._bulk = false; }
     const total = Object.keys(done).reduce((n, k) => n + done[k], 0);
+    // dấu nguồn gốc bộ mẫu: gói mẫu đánh dấu mọi mục của nó; gói sao lưu mang dấu nào thì giữ dấu đó (không "rửa" dấu qua sao lưu → nhập lại)
+    const mark = b.sample && typeof b.sample === 'object' ? b.sample : null;
+    if (mark) S.markProvenance(provKeys(b), mark);
+    if (b.provenance && typeof b.provenance === 'object') Object.keys(b.provenance).slice(0, 2000).forEach(k => { const v = b.provenance[k]; if (v && typeof v === 'object') S.markProvenance([k], v); });
     // bộ mẫu (Gen Labs): dự án mang dấu chủ sở hữu + giấy phép, xuất bán bị chặn (CNS-022)
     const sample = b.sample && typeof b.sample === 'object' ? { owner: b.sample.owner, license: b.sample.license } : null;
     if (total || !errors.length) S.saveProject({ id: pid, name: P.name || pid, description: P.description || '' }, sample ? { sample } : undefined);   // không tạo dự án rỗng khi mọi mục đều hỏng
