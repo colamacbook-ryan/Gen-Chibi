@@ -67,6 +67,10 @@ try {
   const wf = await api('GET', '/api/works/phim-ci'), na = (await api('GET', '/api/assets')).find(a => a.id === 'ai-be-na');
   ok(wf.shots.length === 1 && wf.shots[0].event && wf.shots[0].event.scene === 'afi.khung/san-khau-chuan' && wf.shots[0].cast.length === 2, 'tác phẩm có phân cảnh đủ cảnh + diễn viên + lời thoại');
   ok(na && na.project === 'ci-phim', 'nhân vật AI tạo nằm trong dự án của tác phẩm');
+  const keep = await api('POST', '/api/works/phim-ci/shots', { shot: { id: 'canh-1' }, remove: 'false' });
+  ok(keep.shots && keep.shots.length === 1, 'remove phải là true thật mới bỏ phân cảnh ("false" không xoá)');
+  const many = await fetch('http://127.0.0.1:' + APP + '/api/works/phim-ci/shots', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify({ shot: { id: 7, title: 'x' } }) });
+  ok(many.status === 422, 'shot.id không phải chuỗi bị chặn');
   ok(wf.chat.length === 2 && wf.chat[1].log.length === 6, 'lịch sử chat được lưu cùng tác phẩm (kèm nhật ký tool)');
 } catch (e) { fail = 1; console.log('   ✗', e.message); }
 finally { srv.kill(); mock.close(); }

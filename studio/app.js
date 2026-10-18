@@ -1260,7 +1260,7 @@
       return wait(1400, r);
     }
     return {
-      show: show, destroy: function () { run++; destroy(); },
+      show: function (s) { run++; return show(s); }, destroy: function () { run++; destroy(); },   // show huỷ vòng diễn đang chạy
       stop: function () { run++; bubbles(); prog.textContent = 'Đã dừng'; },
       play: function (list, title) {
         var r = ++run, i = 0;
@@ -1290,12 +1290,14 @@
     } }, '+ Tác phẩm mới'));
     var chatLog = h('div', { class: 'chatlog' }), chatIn = h('textarea', { rows: 3, placeholder: 'Nói với AI đạo diễn: ý tưởng, sửa cảnh, thêm nhân vật…' });
     var sendB = h('button', { class: 'btn primary', onclick: function () { send(chatIn.value); } }, 'Gửi');
-    var logline = h('input', { type: 'text', maxlength: 300, placeholder: 'Logline — một câu tóm tắt', style: 'width:100%' });
-    var script = h('textarea', { rows: 6, maxlength: 8000, placeholder: 'Kịch bản tổng (văn xuôi). AI đạo diễn đọc mục này để chia phân cảnh.' });
+    // bản nháp chưa lưu (kịch bản + từng phân cảnh): vẽ lại sau chat / lưu cảnh khác không được xoá chữ đang gõ dở
+    var draftScript = null, drafts = {}, alive = true, busy = false;
+    var logline = h('input', { type: 'text', maxlength: 300, placeholder: 'Logline — một câu tóm tắt', style: 'width:100%', oninput: function () { draftScript = { logline: logline.value, script: script.value }; } });
+    var script = h('textarea', { rows: 6, maxlength: 8000, placeholder: 'Kịch bản tổng (văn xuôi). AI đạo diễn đọc mục này để chia phân cảnh.', oninput: function () { draftScript = { logline: logline.value, script: script.value }; } });
     var shotsBox = h('div', { class: 'stack' }), stills = h('div', { class: 'stillgrid' });
     var prog = h('span', { class: 'note mono', text: 'Chưa diễn' }), stage = h('div', { class: 'dscene' });
     var player = makePlayer(stage, prog);
-    onLeave(function () { player.destroy(); });
+    onLeave(function () { alive = false; player.destroy(); });   // phản hồi đến sau khi rời trang thì bỏ qua (không dựng diễn viên mồ côi)
     var QUICK = [['Viết kịch bản', 'Từ ý tưởng trong kịch bản tổng, viết logline + kịch bản hoàn chỉnh rồi lưu (save_work).'],
       ['Chia phân cảnh', 'Chia kịch bản thành các phân cảnh (save_shot): mỗi cảnh một bối cảnh trong Thư viện + dàn diễn viên. Thiếu thì tạo ở Xưởng.'],
       ['Viết lời thoại', 'Viết lời thoại + diễn xuất cho mọi phân cảnh chưa có (save_shot với event).'],
@@ -1322,28 +1324,32 @@
         if (id) { pick.value = id; open(id); } else paint();
       }).catch(function (e) { toast(e.message); });
     }
-    function open(id) { Store.api('GET', 'api/works/' + id).then(function (w) { W = w; route.work = w.id; paint(); }).catch(function (e) { toast(e.message); }); }
+    function open(id) { Store.api('GET', 'api/works/' + id).then(function (w) { if (!alive) return; if (!W || W.id !== w.id) { drafts = {}; draftScript = null; } W = w; route.work = w.id; paint(); }).catch(function (e) { toast(e.message); }); }
     function saveScript() {
       if (!W) return;
-      Store.api('POST', 'api/works', { id: W.id, logline: logline.value, script: script.value }).then(function () { toast('Đã lưu kịch bản.'); open(W.id); }).catch(function (e) { toast(e.message); });
+      Store.api('POST', 'api/works', { id: W.id, logline: logline.value, script: script.value }).then(function () { draftScript = null; toast('Đã lưu kịch bản.'); open(W.id); }).catch(function (e) { toast(e.message); });
     }
     function saveShot(body) {
       if (!W) { toast('Tạo tác phẩm trước.'); return Promise.reject(); }
-      return Store.api('POST', 'api/works/' + W.id + '/shots', body).then(function (w) { W = w; paint(); return w; }).catch(function (e) { toast(e.message); throw e; });
+      return Store.api('POST', 'api/works/' + W.id + '/shots', body).then(function (w) { if (body.shot && body.shot.id) delete drafts[body.shot.id]; if (!alive) return w; W = w; paint(); return w; }).catch(function (e) { toast(e.message); throw e; });
     }
     function send(text) {
       text = String(text || '').trim();
-      if (!W || !text) return;
-      sendB.disabled = true; sendB.textContent = 'AI đang làm…'; chatIn.value = '';
+      if (!W || !text || busy) return;
+      busy = true; setBusy(true); chatIn.value = '';
       chatLog.appendChild(h('div', { class: 'msg user', text: text }));
-      Store.api('POST', 'api/works/' + W.id + '/chat', { message: text }).then(function (res) { W = res.work; renderNav(); paint(); })
-        .catch(function (e) { chatLog.appendChild(h('div', { class: 'msg err', text: e.message })); })
-        .then(function () { sendB.disabled = false; sendB.textContent = 'Gửi'; });
+      Store.api('POST', 'api/works/' + W.id + '/chat', { message: text }).then(function (res) { if (!alive) return; W = res.work; renderNav(); paint(); })
+        .catch(function (e) { if (alive) chatLog.appendChild(h('div', { class: 'msg err', text: e.message })); })
+        .then(function () { busy = false; if (alive) setBusy(false); });
+    }
+    function setBusy(on) {   // một lượt AI tại một thời điểm: khoá nút gửi và các nút nhanh
+      sendB.disabled = on; sendB.textContent = on ? 'AI đang làm…' : 'Gửi';
+      Array.prototype.forEach.call(quick.children, function (b) { b.disabled = on; });
     }
     function paint() {
       clear(chatLog); clear(shotsBox); clear(stills);
       if (!W) { shotsBox.appendChild(h('div', { class: 'note lib-empty', text: 'Tạo một tác phẩm (ô phía trên) để bắt đầu: viết ý tưởng vào kịch bản, rồi nhờ AI đạo diễn chia phân cảnh.' })); return; }
-      logline.value = W.logline || ''; script.value = W.script || '';
+      logline.value = draftScript ? draftScript.logline : W.logline || ''; script.value = draftScript ? draftScript.script : W.script || '';
       (W.chat || []).forEach(function (m) {
         var el = h('div', { class: 'msg ' + m.role, text: m.content || (m.role === 'assistant' ? '(đã làm, không lời)' : '') });
         if (m.log && m.log.length) { var lg = h('div', { class: 'toollog' }); m.log.forEach(function (x) { lg.appendChild(h('span', { class: x.ok ? 'ok' : 'bad', title: x.summary, text: (x.ok ? '✓ ' : '✗ ') + x.tool })); }); el.appendChild(lg); }
@@ -1353,15 +1359,16 @@
       chatLog.scrollTop = chatLog.scrollHeight;
       var chars = GC.assets(), scenes = GC.scenes();
       W.shots.forEach(function (s, i) {
-        var t = h('input', { type: 'text', value: s.title, maxlength: 80 }), d = h('textarea', { rows: 2, maxlength: 1000, placeholder: 'Mô tả phân cảnh' }); d.value = s.description || '';
+        var dr = drafts[s.id] || (drafts[s.id] = null), keep = function () { drafts[s.id] = { title: t.value, description: d.value, scene: sc.value, cast: cast.slice() }; };
+        var t = h('input', { type: 'text', value: dr ? dr.title : s.title, maxlength: 80, oninput: function () { keep(); } }), d = h('textarea', { rows: 2, maxlength: 1000, placeholder: 'Mô tả phân cảnh', oninput: function () { keep(); } }); d.value = dr ? dr.description : s.description || '';
         var sc = h('select', { 'aria-label': 'Bối cảnh' }); sc.appendChild(h('option', { value: '', text: '— bối cảnh —' }));
         scenes.forEach(function (x) { sc.appendChild(h('option', { value: x.key, text: x.name + (x.project ? ' · ' + Projects.name(x.project) : '') })); });
-        sc.value = s.scene || '';
-        var cast = (s.cast || []).slice(), cb = h('div', { class: 'fxchips' });
+        sc.value = dr ? dr.scene : s.scene || ''; sc.onchange = keep;
+        var cast = (dr ? dr.cast : s.cast || []).slice(), cb = h('div', { class: 'fxchips' });
         chars.forEach(function (a) {
           var b = h('button', { 'aria-pressed': String(cast.indexOf(a.key) >= 0), onclick: function () {
             var j = cast.indexOf(a.key); if (j >= 0) cast.splice(j, 1); else if (cast.length < 8) cast.push(a.key); else { toast('Tối đa 8 diễn viên một cảnh.'); return; }
-            b.setAttribute('aria-pressed', String(j < 0));
+            b.setAttribute('aria-pressed', String(j < 0)); keep();
           } }, a.name);
           cb.appendChild(b);
         });

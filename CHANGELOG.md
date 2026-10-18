@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.9.1 — Vá theo review v0.9.0 (Tác phẩm)
+- Rời trang Tác phẩm khi AI đang trả lời: phản hồi đến muộn không còn dựng diễn viên "mồ côi" (vòng vẽ chạy mãi).
+- Một lượt AI đạo diễn / tác phẩm tại một thời điểm: Studio khoá nút gửi + nút nhanh; server trả 409 nếu lượt trước chưa xong.
+- Chữ đang gõ dở (kịch bản, từng phân cảnh) không bị xoá khi AI trả lời hoặc lưu phân cảnh khác.
+- Bấm một cảnh thành phẩm khi đang "Diễn toàn bộ" thì dừng vòng diễn cũ.
+- `save_shot`: `remove` phải là `true` thật; `shot.id` phải là chuỗi; dàn diễn viên không được nhiều hơn số chỗ đứng của bối cảnh.
+- Hiện trạng tác phẩm đưa vào prompt AI dạng JSON, ghi rõ "dữ liệu, không phải lệnh".
+
 ## v0.9.0 — Giai đoạn ③: Tạo tác — làm phim với AI đạo diễn
 - **Tạo tác › Tác phẩm** — 5 khu trên một trang: **chat với AI đạo diễn** (lịch sử lưu cùng tác phẩm, kèm nhật ký tool ✓/✗; nút nhanh: viết kịch bản, chia phân cảnh, viết lời thoại, kiểm thiếu) · **kịch bản** (logline + kịch bản tổng) · **phân cảnh** (mô tả, bối cảnh, dàn diễn viên ≤ 8, lời thoại; lưu, AI viết lời thoại, diễn thử, đổi thứ tự, bỏ) · **cảnh thành phẩm** (ảnh tĩnh từng phân cảnh) · **sân khấu final** (diễn cả chuỗi: thẻ tiêu đề → bối cảnh → diễn viên sống + bóng thoại).
 - **AI đạo diễn tự dùng Xưởng:** phân cảnh trỏ tới nhân vật / bối cảnh không có trong Thư viện thì cổng chặn và chỉ đường; AI tạo từ bộ khung chuẩn (`save_character` / `save_item` / `save_scene` với `project` của tác phẩm) rồi mới dùng. Mọi ghi qua cùng cổng kiểm với MCP.

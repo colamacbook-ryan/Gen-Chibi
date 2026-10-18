@@ -470,14 +470,14 @@ class MCP {
     const plain = (t, n) => String(t == null ? '' : t).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '').slice(0, n);
     const s = args.shot && typeof args.shot === 'object' ? args.shot : {};
     const shots = w.shots || [];
-    let i = s.id ? shots.findIndex(x => x.id === s.id) : -1;
-    if (args.remove) {
+    let i = typeof s.id === 'string' && s.id ? shots.findIndex(x => x.id === s.id) : -1;
+    if (args.remove === true) {
       if (i < 0) throw Object.assign(new Error('Không có phân cảnh ' + s.id), { code: 404 });
       shots.splice(i, 1); w.shots = shots;
       const rec = this.store.saveWork(w);
       return { saved: true, removed: s.id, shots: rec.shots.length };
     }
-    if (s.id && i < 0 && !/^[a-z0-9][a-z0-9-]{0,39}$/.test(String(s.id))) errs.push('shot.id: chữ thường, số, gạch nối');
+    if (s.id !== undefined && s.id !== null && s.id !== '' && (typeof s.id !== 'string' || (i < 0 && !/^[a-z0-9][a-z0-9-]{0,39}$/.test(s.id)))) errs.push('shot.id: chuỗi chữ thường, số, gạch nối');
     if (i < 0 && shots.length >= 40) errs.push('tối đa 40 phân cảnh một tác phẩm — tách thành tác phẩm mới');
     const cur = i >= 0 ? Object.assign({}, shots[i]) : { id: s.id || null, title: '', description: '', scene: '', cast: [], event: null };
     if (!cur.id) { let n = shots.length + 1; while (shots.some(x => x.id === 'canh-' + n)) n++; cur.id = 'canh-' + n; }
@@ -501,6 +501,8 @@ class MCP {
       const ev = Object.assign({}, cur.event); if (cur.scene) ev.scene = cur.scene; else delete ev.scene;
       if (GC.director.validate(ev, cast).length) cur.event = null; else cur.event = ev;
     }
+    const scObj = cur.scene && GC.getScene(cur.scene);
+    if (scObj && cast.length > scObj.spots.length) errs.push('cast: bối cảnh "' + scObj.name + '" chỉ mở ' + scObj.spots.length + ' chỗ đứng — bớt diễn viên hoặc chọn bối cảnh khác');
     if (!cur.title) cur.title = 'Phân cảnh ' + (i >= 0 ? i + 1 : shots.length + 1);
     if (errs.length) throw Object.assign(new Error('Phân cảnh chưa đạt: ' + errs.slice(0, 6).join('; ')), { code: 422, errors: errs });
     if (i >= 0) {
