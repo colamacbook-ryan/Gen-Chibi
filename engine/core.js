@@ -759,9 +759,18 @@
   var FILM_BUBBLES = ['say', 'shout', 'think', 'whisper'];
   var FILM_SFX = ['pop', 'whoosh', 'step', 'sting', 'hit', 'boing', 'sparkle', 'rumble', 'drip', 'sad', 'snore', 'party', 'hmm', 'gong', 'chime', 'swish', 'tick'];
   // từ vựng HÀNH ĐỘNG (biên đạo, v0.15) nằm ở engine/choreo.js + kinds/character/gen.choreo.js — chưa nạp thì kịch bản không có action
-  function filmActions() { var C = G.GenChibi && G.GenChibi.choreo; return { act: (C && C.ACTIONS) || {}, react: (C && C.REACTS) || {} }; }
+  // cast (tuỳ chọn): chỉ đòn của KHUNG + đòn của gói động tác thuộc dự án của dàn diễn viên (prompt / lược đồ không phình theo mọi gói — CNS-046);
+  // bộ kiểm vẫn nhận mọi đòn đã nạp (gọi không kèm cast)
+  function filmActions(cast) {
+    var C = G.GenChibi && G.GenChibi.choreo, all = (C && C.ACTIONS) || {}, act = all;
+    if (cast && C && C.PACKS) {
+      var pj = {}; cast.forEach(function (a) { pj[a.project || ''] = 1; });
+      act = {}; Object.keys(all).forEach(function (k) { var pk = all[k].pack, P = C.PACKS[pk]; if (pk === C.FRAME_PACK || !P || pj[P.project || '']) act[k] = all[k]; });
+    }
+    return { act: act, react: (C && C.REACTS) || {} };
+  }
   function directorSchema(cast) {
-    var FA = filmActions();
+    var FA = filmActions(cast);
     return {
       $schema: 'https://json-schema.org/draft/2020-12/schema',
       title: 'gen-chibi event', type: 'object', required: ['title', 'steps'], additionalProperties: false,
@@ -841,6 +850,9 @@
       var FA = filmActions(), ac = s.action !== undefined && own(FA.act, s.action) ? FA.act[s.action] : null;
       if (s.action !== undefined && !ac) errs.push(n + 'action "' + String(s.action).slice(0, 40) + '" không có (chọn: ' + Object.keys(FA.act).join(', ') + ').');
       if (ac && ac.attack && s.target === undefined) errs.push(n + 'đòn "' + s.action + '" cần "target" (người bị đánh).');
+      // needs (v0.16): đòn binh khí chỉ cho người cầm binh khí — gợi ý đòn thay thế người này làm được
+      var who = cast.filter(function (a) { return a.id === s.actor; })[0], CH = G.GenChibi && G.GenChibi.choreo;
+      if (ac && who && CH && CH.canDo && !CH.canDo(who, ac)) errs.push(n + '"' + s.actor + '" không ' + (CH.MOTION.needs[ac.needs] || ac.needs) + ' nên không làm được "' + s.action + '" (làm được: ' + CH.actionsFor(who).filter(function (k) { return !!FA.act[k].attack === !!ac.attack; }).join(', ') + ').');
       if (s.target !== undefined && (S.target.enum.indexOf(s.target) < 0 || s.target === s.actor)) errs.push(n + '"target" phải là một diễn viên khác trong dàn diễn viên.');
       if (s.target !== undefined && !(ac && ac.attack)) errs.push(n + '"target" chỉ đi với đòn đánh (' + Object.keys(FA.act).filter(function (k) { return FA.act[k].attack; }).join(', ') + ').');
       if (s.react !== undefined && !own(FA.react, s.react)) errs.push(n + 'react chọn: ' + Object.keys(FA.react).join(', ') + '.');
@@ -873,11 +885,14 @@
     L.push('- to: id người nghe (mặc định: người vừa nói) · camera: ' + FILM_CAMERAS.join(' | ') + ' (close = cận người nói, two = hai người, wide = toàn cảnh)');
     L.push('- bubble: ' + FILM_BUBBLES.join(' | ') + ' (mặc định: hét khi rage/shock/panic/vow có "!", nghĩ khi think/sleep) · sfx: ' + FILM_SFX.join(', '));
     L.push('- Đổi spot giữa các bước để nhân vật đi lại trên sân khấu (đừng để mọi người đứng yên cả cảnh); xen activity (bow, salute, point, wave, cheer, attack…) cho câu thoại có hành động.');
-    var FA = filmActions();
+    var FA = filmActions(cast);
     if (Object.keys(FA.act).length) {
       L.push('', 'Hành động (action, tuỳ chọn — biên đạo võ thuật / cử chỉ toàn thân, có máy quay, slow-mo, khựng hình khi trúng đòn, hiệu ứng, âm thanh):');
-      L.push('- đòn đánh (cần target = người bị đánh): ' + Object.keys(FA.act).filter(function (k) { return FA.act[k].attack; }).map(function (k) { return k + ' (' + FA.act[k].label + ')'; }).join(', '));
-      L.push('- một mình: ' + Object.keys(FA.act).filter(function (k) { return !FA.act[k].attack; }).map(function (k) { return k + ' (' + FA.act[k].label + ')'; }).join(', '));
+      var tag = function (k) { var a = FA.act[k]; return k + ' (' + a.label + (a.needs ? ', cần binh khí' : '') + (a.ranged ? ', ném từ xa' : '') + ')'; };
+      L.push('- đòn đánh (cần target = người bị đánh): ' + Object.keys(FA.act).filter(function (k) { return FA.act[k].attack; }).map(tag).join(', '));
+      L.push('- một mình: ' + Object.keys(FA.act).filter(function (k) { return !FA.act[k].attack; }).map(tag).join(', '));
+      var CH = G.GenChibi.choreo;
+      if (CH && CH.actionsFor) L.push('- Ai làm được gì (đòn "cần binh khí" chỉ dành cho người cầm binh khí): ' + cast.map(function (a) { return a.id + ' → ' + CH.actionsFor(a).filter(function (k) { return FA.act[k]; }).join(', '); }).join(' · '));
       L.push('- react (phản ứng của target, mặc định hit): ' + Object.keys(FA.react).map(function (k) { return k + ' (' + FA.react[k].label + ')'; }).join(', '));
       L.push('- Cảnh đấu: hai người cùng hàng trước (left, midLeft, center, midRight, right), cách nhau ít nhất một chỗ đứng; người ra đòn tự áp sát / lùi cho trúng. "say" có thể là "" khi chỉ ra đòn, hoặc một tiếng hô ngắn. Tối đa 3 đòn một phân cảnh; xen câu thoại giữa các đòn. Hài kiểu phim võ, không máu.');
     }
@@ -1284,6 +1299,12 @@
       if (d.slot !== 'heldL' && d.slot !== 'heldR') errs.push('tall / upright: chỉ cho vật cầm tay (heldL, heldR)');
       else { if (def.tall === true) d.tall = true; if (def.upright === false) d.upright = false; }
     }
+    // grip (v0.16, CNS-044): vật cầm tay là gì — weapon (binh khí: mở các đòn "cần binh khí") · tool (dụng cụ) · prop (đạo cụ: quạt, sách…)
+    if (def.grip !== undefined) {
+      if (d.slot !== 'heldL' && d.slot !== 'heldR') errs.push('grip: chỉ cho vật cầm tay (heldL, heldR)');
+      else if (['weapon', 'tool', 'prop'].indexOf(def.grip) < 0) errs.push('grip: chọn weapon | tool | prop');
+      else d.grip = def.grip;
+    }
     if (def.params) {
       d.params = {};
       Object.keys(def.params).slice(0, 6).forEach(function (k) {
@@ -1357,7 +1378,7 @@
       views[k] = w.mode === 'drawn' ? draw(w.layers) : w.mode === 'same' ? q45 : w.mode === 'front' ? front : function () { return null; };
     });
     var part = { slot: d.slot, id: d.id, label: d.label, draw: front, views: views, params: d.params, data: d, icon: d.icon,
-      eyeArea: d.eyeArea, tall: d.tall, upright: d.upright, source: 'data:' + packId, license: P.license, pack: packId };
+      eyeArea: d.eyeArea, tall: d.tall, upright: d.upright, grip: d.grip, source: 'data:' + packId, license: P.license, pack: packId };
     LIB.parts[packId + '/' + d.slot + ':' + d.id] = part;
     P.counts.part = Object.keys(LIB.parts).filter(function (k) { return k.indexOf(packId + '/') === 0 && LIB.parts[k].kind !== 'scenery'; }).length;
     return { errors: [], def: d, part: part };

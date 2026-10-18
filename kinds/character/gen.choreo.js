@@ -1,24 +1,12 @@
-/* gen-chibi — thư viện biên đạo gen.core: tư thế then chốt + hành vi (clip) + màn diễn mẫu "Tử Long 30 giây"
+/* gen-chibi — bộ động tác của KHUNG (gen.dong-tac): tư thế then chốt + hành vi (clip) + từ vựng hành động trung lập chủ đề
+ * (tay không + hài + đòn binh khí chung). Đòn riêng chủ đề = gói động tác dữ liệu (engine/choreo.js › checkPack / registerPack).
  * © 2026 Gen Labs — All rights reserved.
  * Quy ước tư thế: xem đầu engine/choreo.js (góc nghiêng viết theo bản quay TRÁI: phía trước là −x, tay / chân gần là R;
  * tay xoay + = vung ra trước; đùi + = đá ra trước; cẳng chân − = gập gối; gốc rot − = đổ người ra trước).
  */
 (function (GC) {
   'use strict';
-  var C = GC.choreo, P = C.pose, S = C.swapLR;
-  function mix() { var o = {}; for (var i = 0; i < arguments.length; i++) { var a = arguments[i]; for (var k in a) o[k] = typeof a[k] === 'object' && !Array.isArray(a[k]) ? Object.assign({}, o[k], a[k]) : a[k]; } return o; }
-  // xoay cả người quanh một điểm trên thân (lộn, ngã) thay vì quanh bàn chân: trả về { root: { rot, x, y } }
-  // extra.ground: đặt điểm thấp nhất (đỉnh đầu / mông / chân) chạm đất rồi cộng thêm extra.y (âm = bay lên)
-  function about(deg, cx, cy, extra) {
-    extra = extra || {};
-    var r = deg * Math.PI / 180, cs = Math.cos(r), sn = Math.sin(r), dx = cx - 100, dy = cy - 228;
-    var o = { root: { rot: deg, x: dx - (dx * cs - dy * sn) + (extra.x || 0), y: dy - (dx * sn + dy * cs) + (extra.y || 0) } };
-    if (extra.ground) {
-      var rotY = function (px, py) { return cy + (px - cx) * sn + (py - cy) * cs; };   // y sau khi xoay quanh (cx, cy)
-      o.root.y += 228 - Math.max(rotY(100, 96) + 52, rotY(100, 228), rotY(100, 205) + 12);
-    }
-    return o;
-  }
+  var C = GC.choreo, P = C.pose, S = C.swapLR, mix = C.mix, about = C.about;
 
   /* ---------------- tư thế nghiêng (q90, quay trái) ---------------- */
   P('stand', {});
@@ -47,8 +35,6 @@
     armR: { rot: 40 }, foreR: { rot: 40 }, wR: -60, armL: { rot: 50 }, foreL: { rot: 40 } });
   P('airTuck', { root: { y: -96, sy: 1, sx: 1 }, thighR: { rot: 70 }, shinR: { rot: -110 }, thighL: { rot: 56 }, shinL: { rot: -100 }, body: { rot: -2 }, head: { rot: 6 },
     armR: { rot: 168 }, foreR: { rot: 12 }, wR: 176, armL: { rot: 160 }, foreL: { rot: 20 } });
-  P('plunge', { root: { rot: -10, sy: 0.82, sx: 1.12 }, pelvis: { y: 2 }, thighR: { rot: 64 }, shinR: { rot: -84 }, thighL: { rot: -30 }, shinL: { rot: -50 }, body: { rot: -16 }, head: { rot: -10 },
-    armR: { rot: 120 }, foreR: { rot: -20 }, wR: 172, armL: { rot: 110 }, foreL: { rot: -10 } });
   P('hero', { root: { sy: 1.02 }, body: { rot: 6 }, head: { rot: 8 }, hem: { rot: 6 }, thighR: { rot: 16, sy: 1.2 }, shinR: { rot: -4 }, thighL: { rot: -18, sy: 1.2 }, armR: { rot: 62 }, foreR: { rot: 24 }, wR: -24, armL: { rot: -30 }, foreL: { rot: 56 } });
   P('hitBack', mix({ body: { rot: 14 }, head: { rot: 26, x: 4 }, thighR: { rot: 30 }, shinR: { rot: -10 }, thighL: { rot: -4 }, armR: { rot: 96 }, foreR: { rot: 30 }, wR: 30, armL: { rot: 120 }, foreL: { rot: 20 } }, about(22, 100, 170)));
   P('sitFloor', { root: { y: 15, sy: 0.96 }, thighR: { rot: 84 }, shinR: { rot: -8 }, thighL: { rot: 76 }, shinL: { rot: -14 }, body: { rot: 6 }, head: { rot: 4 },
@@ -70,7 +56,6 @@
   P('fSquash', { root: { sy: 0.82, sx: 1.14 }, pelvis: { y: 2 }, head: { rot: 0 }, armL: { rot: 40 }, foreL: { rot: 30 }, armR: { rot: -40 }, foreR: { rot: -30 }, wR: 10, thighL: { rot: 20 }, shinL: { rot: -24 }, thighR: { rot: -20 }, shinR: { rot: 24 } });
   P('fReach', { pelvis: { x: -3, rot: -4 }, body: { rot: 14 }, head: { rot: 12, x: 2 }, armL: { rot: 174, sy: 1.45 }, foreL: { rot: 18, sy: 1.25 }, armR: { rot: -40 }, foreR: { rot: 10 }, wR: 22, thighR: { rot: -6 } });
   P('fReach2', { pelvis: { x: 3, rot: 4 }, body: { rot: -10 }, head: { rot: -12, x: -2 }, armL: { rot: 62 }, foreL: { rot: 96 }, armR: { rot: -150, sy: 1.35 }, foreR: { rot: -20 }, wR: 10, thighL: { rot: 6 } });
-  P('fTwirl', { body: { rot: -2 }, head: { rot: -6 }, armR: { rot: -166 }, foreR: { rot: -6 }, wR: 0, armL: { rot: 30 }, foreL: { rot: 40 }, thighR: { rot: -6 }, thighL: { rot: 6 } });
   P('fFlourish', { root: { rot: 4 }, pelvis: { x: 2 }, body: { rot: 6 }, head: { rot: 10, x: 2 }, armR: { rot: -64 }, foreR: { rot: -46 }, wR: 120, armL: { rot: -40 }, foreL: { rot: -70 }, thighR: { rot: -14, sy: 1.2 }, thighL: { rot: 4 } });
   P('fShoulder', { body: { rot: 2 }, armR: { rot: -48 }, foreR: { rot: -118 }, wR: 64, armL: { rot: 20 }, foreL: { rot: 30 } });
   P('fHop', { $: 'fShoulder', root: { y: -16, sy: 1.08, sx: 0.95 }, armL: { rot: 150 }, foreL: { rot: 20 }, thighL: { rot: 24 }, shinL: { rot: -40 }, thighR: { rot: -10 } });
@@ -118,53 +103,22 @@
     faces: [[0.9, { eyes: 'happy', mouth: 'cat' }]],
     events: [[0.6, { sfx: 'pop', gain: 0.6 }], [0.95, { sfx: 'pop', gain: 0.5 }]],
     cam: [[0, { z: 1.45, lead: 0, fy: 0.6, lag: 3 }], [1.3, { z: 1.75, fy: 0.62 }, 'lin']] });
-  clip('twirl', { label: 'Múa thương', view: 'front', face: { eyes: 'smug', brows: 'smug', mouth: 'grin' },
-    keys: [[0.2, mix(C.POSES.fTwirl, { wR: -40 }), 'back'], [0.55, mix(C.POSES.fTwirl, { wR: 320, body: { rot: 3 } }), 'in', { spin: 1 }], [0.9, mix(C.POSES.fTwirl, { wR: 700, body: { rot: -3 }, root: { y: -4 } }), 'lin', { spin: 1 }], [1.15, mix(C.POSES.fTwirl, { wR: 860, armR: { rot: -120 } }), 'out', { spin: 1 }], [1.4, mix(C.POSES.fFlourish, { wR: 1000 }), 'out', { spin: 1 }]],
-    events: [[0.4, { sfx: 'swish', gain: 0.6 }], [0.62, { sfx: 'swish', gain: 0.7 }], [0.82, { sfx: 'swish', gain: 0.8 }], [1.02, { sfx: 'swish', gain: 0.8 }]],
-    cam: [[0.1, { z: 1.6, fy: 0.85, lead: 0 }], [1.4, { z: 1.85, fy: 0.62, lead: 50 }, 'io']] });
   clip('guard', { label: 'Thủ thế', view: 'q90', face: { eyes: 'fierce', brows: 'angry', mouth: 'flat', fx: [] },
     keys: [[0.12, mix(C.POSES.guard, { root: { sy: 0.9 } }), 'out'], [0.6, 'guard', 'sine']],
     events: [[0.05, { letterbox: 1, music: 'epic' }], [0.2, { at: 'tip', fx: 'glint', sfx: 'chime', gain: 0.7, size: 1.4 }]],
     cam: [[0.05, { z: 2.1, lead: 70, fy: 0.62, roll: -3, lag: 5 }, 'snap']] });
-  clip('thrust', { label: 'Đâm thương', view: 'q90', face: { eyes: 'fierce', brows: 'angry', mouth: 'shout' },
+  clip('thrust', { label: 'Đâm thẳng', view: 'q90', face: { eyes: 'fierce', brows: 'angry', mouth: 'shout' },
     keys: [[0.16, 'coil', 'out'], [0.26, 'lunge', 'snap'], [0.42, mix(C.POSES.lunge, { root: { x: -12 } }), 'out'], [0.64, 'guard', 'io']],
     travel: [[0, 0], [0.16, -6, 'out'], [0.26, 34, 'snap'], [0.64, 40, 'out']],
     events: [[0.16, { sfx: 'swish' }], [0.26, { at: 'tip', fx: 'impact', hitstop: 0.07, shake: 4, sfx: 'hit' }], [0.26, { fx: 'smear', smear: 0.1 }], [0.28, { at: 'tip', fx: 'text', text: 'VÚT!', dy: -26, size: 0.9 }]],
     cam: [[0.2, { z: 2.2, lead: 90, roll: -4 }, 'snap'], [0.6, { z: 1.9, roll: -2 }]] });
-  clip('sweep', { label: 'Quét thương', view: 'q90', face: { eyes: 'fierce', brows: 'angry', mouth: 'bite' },
+  clip('sweep', { label: 'Quét ngang', view: 'q90', face: { eyes: 'fierce', brows: 'angry', mouth: 'bite' },
     keys: [[0.16, mix(C.POSES.guard, { wR: 60, armR: { rot: -20 }, foreR: { rot: 30 }, root: { rot: 4 }, body: { rot: 8 } }), 'out'],
       [0.3, mix(C.POSES.crouch, { wR: -150, armR: { rot: 100 }, foreR: { rot: 0 }, root: { rot: -12, sy: 0.86 } }), 'snap'],
       [0.55, mix(C.POSES.crouch, { wR: -170, armR: { rot: 110 }, foreR: { rot: -6 }, root: { rot: -10, sy: 0.86 } }), 'out'], [0.75, 'guard', 'io']],
     travel: [[0, 0], [0.3, 18, 'snap'], [0.6, 22, 'out']],
     events: [[0.2, { sfx: 'swish', gain: 0.9 }], [0.3, { fx: 'smear', smear: 0.14 }], [0.32, { at: 'tip', fx: 'dust', size: 0.8 }], [0.32, { at: 'tip', fx: 'spark', size: 0.8, hit: true }]],
     cam: [[0.1, { z: 1.8, lead: 70, fy: 0.45, roll: 2 }]] });
-  // xoay một vòng: các góc nhìn nối nhau 0,09 s (đọc ra "xoay người"), thương giữ ngang ra ngoài
-  var spinK = [], views = ['q90', 'front', 'q90', 'back', 'q90', 'front', 'q90', 'back', 'q90'], dirs = [1, 1, -1, 1, 1, 1, -1, 1, 1];
-  views.forEach(function (v, i) {
-    var p = v === 'front' ? mix(C.POSES.fStand, { armR: { rot: -86 }, foreR: { rot: -4 }, wR: 92, armL: { rot: 60 }, root: { y: -6 } })
-      : v === 'back' ? mix(C.POSES.fStand, { armL: { rot: 86 }, foreL: { rot: 4 }, armR: { rot: 10 }, wR: -92, root: { y: -6 } })
-      : mix(C.POSES.guard, { armR: { rot: 92 }, foreR: { rot: 0 }, wR: -92, root: { y: -4 } });
-    spinK.push([0.1 + i * 0.085, p, 'lin', { view: v, dir: dirs[i], hide: v === 'q90' ? [] : ['heldR'] }]);
-  });
-  spinK.push([0.1 + 9 * 0.085 + 0.14, 'guard', 'out', { view: 'q90', dir: 1 }]);
-  clip('spin', { label: 'Xoay người chém vòng', view: 'q90', face: { eyes: 'fierce', brows: 'angry', mouth: 'shout', fx: ['wind'] }, keys: spinK,
-    travel: [[0, 0], [0.9, 30, 'io']],
-    events: [[0.12, { sfx: 'swish' }], [0.45, { sfx: 'swish' }], [0.5, { at: 'chest', fx: 'ring', size: 0.9 }], [0.8, { at: 'chest', fx: 'ring', size: 1.1 }], [0.8, { at: 'tip', fx: 'spark', size: 1, hit: true, sfx: 'hit', gain: 0.7 }]],
-    cam: [[0.1, { z: 1.7, lead: 30, fy: 0.55, roll: 0 }], [0.9, { z: 1.55, roll: 3 }]] });
-  clip('leap', { label: 'Tung người lên cao', view: 'q90', face: { eyes: 'fierce', brows: 'determined', mouth: 'flat', fx: [] },
-    keys: [[0.2, 'crouch', 'out'], [0.34, mix(C.POSES.crouch, { root: { y: -30, sy: 1.18, sx: 0.88 }, thighR: { rot: 10 }, shinR: { rot: -6 }, thighL: { rot: -6 }, shinL: { rot: -4 }, armR: { rot: 150 }, wR: 120 }), 'snap'],
-      [0.75, 'airTuck', 'up', { ez: { 'root.y': 'up' } }], [1.05, mix(C.POSES.airTuck, { root: { y: -100 }, wR: -178 }), 'sine']],
-    travel: [[0, 0], [0.34, 10, 'in'], [1.05, 90, 'out']],
-    speed: [[0, 1], [0.55, 1], [0.66, 0.3], [1.05, 0.3]],
-    events: [[0.32, { sfx: 'whoosh' }], [0.34, { at: 'feet', fx: 'dust', size: 1 }], [0.36, { lines: 0.5 }], [0.62, { grade: 'cool' }]],
-    cam: [[0.2, { z: 1.5, lead: 40, fy: 0.5, roll: 0, lag: 5 }], [0.9, { z: 1.6, fy: 1.05, roll: 6, lag: 6 }, 'io']] });
-  clip('plunge', { label: 'Bổ thương xuống đất', view: 'q90', face: { eyes: 'fierce', brows: 'angry', mouth: 'shout' },
-    keys: [[0.12, mix(C.POSES.airTuck, { root: { y: -84, rot: -10 }, wR: 168, thighR: { rot: 30 }, shinR: { rot: -40 } }), 'in'], [0.26, 'plunge', 'down', { ez: { 'root.y': 'down' } }], [0.6, mix(C.POSES.plunge, { root: { sy: 0.86 } }), 'out']],
-    travel: [[0, 0], [0.26, 50, 'in']],
-    speed: [[0, 0.3], [0.08, 1.4], [0.3, 1]],
-    events: [[0.05, { grade: 'none', sfx: 'whoosh' }], [0.26, { at: 'tip', fx: 'impact', size: 1.6, hitstop: 0.13, shake: 13, flash: 0.75, sfx: ['rumble', 'hit'] }],
-      [0.26, { at: 'tip', fx: 'ring', size: 1.4 }], [0.26, { at: 'tip', fx: 'debris', size: 1.2 }], [0.27, { at: 'feet', fx: 'dust', size: 1.5 }], [0.28, { at: 'tip', fx: 'text', text: 'RẦM!', dy: -70, size: 1.5, color: '#ff7a1f' }]],
-    cam: [[0.08, { z: 1.5, fy: 0.7, roll: 0, lag: 9 }, 'snap'], [0.26, { z: 1.75, fy: 0.45, roll: -4, lag: 12 }, 'snap'], [0.6, { z: 1.55, roll: 0 }]] });
   clip('heroPose', { label: 'Tạo dáng anh hùng', view: 'q90', face: { eyes: 'smug', brows: 'smug', mouth: 'smile', fx: ['sparkles'] },
     keys: [[0.35, mix(C.POSES.hero, { root: { sy: 0.96 } }), 'io'], [0.6, 'hero', 'back'], [0.95, mix(C.POSES.hero, { head: { rot: 10 } }), 'sine']],
     events: [[0.2, { letterbox: 0, sfx: 'sparkle' }], [0.45, { at: 'head', fx: 'glint', dx: -30, dy: -30, size: 1.4 }]],
@@ -219,14 +173,7 @@
     travel: [[0, 0], [0.16, 0], [0.42, -34, 'out']],
     events: [[0.16, { at: 'hand', dy: -40, fx: 'spark', size: 1.3, hitstop: 0.08, shake: 5, sfx: ['hit', 'chime'], flash: 0.35, flashColor: '#fff2c4' }], [0.18, { at: 'feet', fx: 'dust', size: 0.9, push: -1 }]],
     cam: [[0.08, { z: 2.1, fy: 0.6, lead: 50, roll: 3, lag: 8 }, 'snap']] });
-  clip('counter', { label: 'Phản đòn liên hoàn', view: 'q90', face: { eyes: 'fierce', brows: 'angry', mouth: 'shout' },
-    keys: [[0.1, mix(C.POSES.coil, { wR: -84 }), 'out'], [0.16, mix(C.POSES.jab, { wR: -92 }), 'snap'], [0.26, mix(C.POSES.coil, { wR: -86 }), 'out'], [0.32, mix(C.POSES.jab, { wR: -90, root: { x: -12 } }), 'snap'],
-      [0.44, mix(C.POSES.crouch, { wR: -130, armR: { rot: 80 } }), 'out'], [0.56, mix(C.POSES.upper, { wR: 48 }), 'snap', { ez: { 'root.y': 'up' } }], [0.9, mix(C.POSES.ready, { wR: -42 }), 'down', { ez: { 'root.y': 'down' } }]],
-    travel: [[0, 0], [0.16, 16, 'snap'], [0.32, 34, 'snap'], [0.56, 48, 'snap']],
-    events: [[0.12, { sfx: 'swish', gain: 0.7 }], [0.16, { at: 'tip', fx: 'spark', size: 0.8, sfx: 'hit', gain: 0.6, hit: true }], [0.28, { sfx: 'swish', gain: 0.7 }], [0.32, { at: 'tip', fx: 'spark', size: 0.9, sfx: 'hit', gain: 0.7, hit: true }],
-      [0.5, { sfx: 'swish', gain: 1 }], [0.56, { fx: 'smear', smear: 0.12 }], [0.56, { at: 'tip', fx: 'impact', size: 1.2, hitstop: 0.09, shake: 7, sfx: 'hit' }], [0.58, { at: 'tip', fx: 'text', text: 'XOẸT!', dy: -20, size: 1.1, rot: -14 }]],
-    cam: [[0.1, { z: 2.0, lead: 90, fy: 0.55, roll: -2, lag: 7 }], [0.56, { z: 2.25, fy: 0.75, roll: 4 }, 'snap'], [0.9, { z: 1.7, roll: 0 }]] });
-  clip('victory', { label: 'Vác thương vui sướng', view: 'front', face: { eyes: 'happy', brows: 'raised', mouth: 'laugh', fx: ['sparkles'] },
+  clip('victory', { label: 'Nhảy cẫng vui mừng', view: 'front', face: { eyes: 'happy', brows: 'raised', mouth: 'laugh', fx: ['sparkles'] },
     keys: [[0.24, mix(C.POSES.fShoulder, { wR: 64 }), 'back'], [0.44, mix(C.POSES.fHop, { wR: 64 }), 'up'], [0.62, mix(C.POSES.fShoulder, { wR: 64, root: { sy: 0.92 } }), 'down'], [0.82, mix(C.POSES.fHop, { wR: 64 }), 'up'], [1.0, mix(C.POSES.fShoulder, { wR: 64, root: { sy: 0.94 } }), 'down'], [1.1, mix(C.POSES.fShoulder, { wR: 64 }), 'out']],
     events: [[0.1, { sfx: 'party', gain: 0.7, grade: 'none' }], [0.62, { sfx: 'step', gain: 0.4 }], [1.0, { sfx: 'step', gain: 0.4 }]],
     cam: [[0.1, { z: 1.45, fy: 0.55, lead: 0, roll: 0, lag: 4 }]] });
@@ -245,12 +192,6 @@
     keys: [[0.22, mix(C.POSES.fWave, { wR: 30 }), 'back'], [0.42, mix(C.POSES.fWave2, { wR: 30 }), 'sine'], [0.62, mix(C.POSES.fWave, { wR: 30 }), 'sine'], [0.82, mix(C.POSES.fWave2, { wR: 30 }), 'sine'], [1.0, mix(C.POSES.fWave, { wR: 30 }), 'sine']],
     events: [[0.25, { sfx: 'chime', gain: 0.5 }]],
     cam: [[0.1, { z: 2.3, fy: 0.85, lead: 0, roll: 0, lag: 4 }, 'io']] });
-  clip('finale', { label: 'Tạo dáng kết', view: 'front', face: { eyes: 'smug', brows: 'smug', mouth: 'smile', fx: ['sparkles'] },
-    keys: [[0.14, mix(C.POSES.fSquash, { wR: 10 }), 'out'], [0.34, mix(C.POSES.fFinal, { wR: 40 }), 'back'], [0.72, mix(C.POSES.fFinal, { wR: 40, head: { rot: -9 } }), 'sine']],
-    speed: [[0.34, 1], [0.44, 0.16], [0.72, 0.16]],
-    events: [[0.3, { sfx: 'swish' }], [0.34, { flash: 0.5, sfx: 'gong', gain: 0.8, grade: 'gold', letterbox: 1 }], [0.36, { at: 'tip', fx: 'glint', size: 1.8 }],
-      [0.4, { title: 'Thường Sơn Triệu Tử Long', sub: 'gen-chibi · biên đạo liên hoàn 30 giây', hold: 4 }], [0.72, { music: null }]],
-    cam: [[0.1, { z: 1.9, fy: 0.75, lead: 0, roll: 0, lag: 6 }], [0.34, { z: 1.55, fy: 0.62, roll: -5, lag: 8 }, 'snap']] });
 
   /* ---------------- dùng trong PHIM (v0.15): thủ thế chờ, áp sát / lùi, trúng đòn — duel() ghép với hành động + phản ứng ---------------- */
   // giữ một dáng (mặc định thủ thế) trong st.dur giây, thở nhẹ — chờ tới lượt / chờ đối thủ ra đòn
@@ -282,41 +223,72 @@
     travel: [[0, 0], [0.06, 0], [0.14, -16, 'snap'], [0.46, -54, 'out']],
     events: [[0.2, { at: 'feet', fx: 'dust', size: 0.8, push: -1 }]] });
 
-  // TỪ VỰNG PHIM: bước kịch bản { action, target, react } → clip của người đánh + clip phản ứng của người bị đánh
-  //   attack: cần target, có điểm va chạm (sự kiện hitstop / hit); contact: giây trong clip phản ứng lúc "chạm"
-  //   shock: (đv khung) đòn đập đất — mũi binh khí nhắm cách mặt trước thân đối thủ chừng này, chấn động làm phần còn lại
-  C.ACTIONS = {
-    thrust: { label: 'Đâm thẳng', clips: ['thrust'], attack: true },
-    sweep: { label: 'Quét ngang', clips: ['sweep'], attack: true },
-    combo: { label: 'Liên hoàn ba đòn', clips: ['counter'], attack: true },
-    spin: { label: 'Xoay người chém vòng', clips: ['spin'], attack: true },
-    leap: { label: 'Tung người bổ xuống', clips: ['leap', 'plunge'], attack: true, shock: 70 },   // bổ xuống ĐẤT trước mặt đối thủ — trúng bằng chấn động (vòng sóng), không bằng mũi thương
-    twirl: { label: 'Múa binh khí', clips: ['twirl'] },
+  /* ---------------- TAY KHÔNG + HÀI (v0.16, Q10): đấm, đá, xô, ném — ai cũng làm được, không cần binh khí ---------------- */
+  P('fistGuard', { $: 'guard', armR: { rot: 40 }, foreR: { rot: 96 }, armL: { rot: 46 }, foreL: { rot: 100 } });
+  P('fistCoil', { $: 'coil', armR: { rot: 30 }, foreR: { rot: 104 }, armL: { rot: 40 }, foreL: { rot: 104 } });
+  // chibi đầu to, tay chân ngắn: đổ người tới thì đầu vượt cả nắm tay → tay không ĐỨNG THẲNG / NGẢ RA SAU, vươn tay ngang tầm mặt đối thủ
+  P('jabR', { $: 'fistGuard', root: { rot: 2, x: -4, sy: 0.97 }, body: { rot: 2 }, head: { rot: -2 }, thighR: { rot: 42 }, thighL: { rot: -32 }, armR: { rot: 104, sy: 1.8 }, foreR: { rot: -4, sy: 1.5 } });   // tay cao su: duỗi dài đúng khung ra đòn (hoạt hình 2D)
+  P('crossL', { $: 'fistGuard', root: { rot: 6, x: -8 }, body: { rot: 6 }, head: { rot: 4 }, thighR: { rot: 46 }, shinR: { rot: -14 }, thighL: { rot: -38 }, armL: { rot: 108, sy: 2 }, foreL: { rot: -6, sy: 1.6 }, armR: { rot: 30 }, foreR: { rot: 104 } });
+  P('kickChamber', { $: 'guard', root: { rot: 8, y: -4 }, body: { rot: 10 }, head: { rot: 4 }, thighR: { rot: 96 }, shinR: { rot: -110 }, thighL: { rot: -6 }, shinL: { rot: -6 },
+    armR: { rot: 30 }, foreR: { rot: 90 }, armL: { rot: 20 }, foreL: { rot: 100 } });
+  P('kickOut', { $: 'guard', root: { rot: 16, y: -2 }, body: { rot: 14 }, head: { rot: 8 }, thighR: { rot: 94, sy: 1.5 }, shinR: { rot: 0, sy: 1.6 }, footR: { rot: -12 }, thighL: { rot: -10 }, shinL: { rot: -4 },
+    armR: { rot: 10 }, foreR: { rot: 80 }, armL: { rot: -10 }, foreL: { rot: 60 } });
+  P('shoveLoad', { $: 'coil', armR: { rot: 60 }, foreR: { rot: 80 }, armL: { rot: 70 }, foreL: { rot: 80 } });
+  P('shove', { $: 'fistGuard', root: { rot: 6, x: -6 }, body: { rot: 8 }, head: { rot: 6 }, thighR: { rot: 44 }, thighL: { rot: -36 }, armR: { rot: 110, sy: 1.7 }, foreR: { rot: -8, sy: 1.4 }, armL: { rot: 114, sy: 1.8 }, foreL: { rot: -8, sy: 1.5 } });   // đẩy MẶT (trò hề quen thuộc)
+  P('throwWind', { $: 'ready', root: { rot: 10, x: 6 }, body: { rot: 12 }, head: { rot: 6 }, thighR: { rot: 20 }, thighL: { rot: -20 }, armR: { rot: -150 }, foreR: { rot: -40 }, armL: { rot: 70 }, foreL: { rot: 20 } });
+  P('throwRelease', { $: 'lunge', root: { rot: -12, x: -8 }, body: { rot: -10 }, armR: { rot: 130 }, foreR: { rot: 10 }, armL: { rot: 20 }, foreL: { rot: 40 } });
+  clip('punch', { label: 'Đấm liên hai cú', view: 'q90', face: { eyes: 'fierce', brows: 'angry', mouth: 'shout' },
+    keys: [[0.1, 'fistCoil', 'out'], [0.18, 'jabR', 'snap'], [0.3, 'fistGuard', 'out'], [0.4, 'crossL', 'snap'], [0.66, 'fistGuard', 'io']],
+    travel: [[0, 0], [0.18, 14, 'snap'], [0.4, 30, 'snap'], [0.66, 32, 'out']],
+    events: [[0.14, { sfx: 'swish', gain: 0.6 }], [0.18, { at: 'hand', fx: 'spark', size: 0.7, sfx: 'hit', gain: 0.6, hit: true }], [0.34, { sfx: 'swish', gain: 0.7 }],
+      [0.4, { at: 'handL', fx: 'impact', size: 1, hitstop: 0.07, shake: 4, sfx: 'hit' }], [0.42, { at: 'handL', fx: 'text', text: 'BỐP!', dy: -24, size: 1, color: '#ff4d3d', rot: -8 }]],
+    cam: [[0.1, { z: 2.0, lead: 70, fy: 0.6, roll: -2, lag: 6 }], [0.4, { z: 2.2, roll: 3 }, 'snap'], [0.66, { z: 1.9, roll: 0 }]] });
+  clip('kick', { label: 'Đá thẳng', view: 'q90', face: { eyes: 'fierce', brows: 'angry', mouth: 'bite' },
+    keys: [[0.14, 'kickChamber', 'out'], [0.3, 'kickOut', 'snap'], [0.48, 'kickChamber', 'out'], [0.72, 'fistGuard', 'io']],
+    travel: [[0, 0], [0.14, 10, 'out'], [0.3, 42, 'snap'], [0.72, 46, 'out']],
+    events: [[0.22, { sfx: 'whoosh', gain: 0.8 }], [0.3, { at: 'foot', fx: 'impact', size: 1.1, hitstop: 0.08, shake: 5, sfx: 'hit' }], [0.32, { at: 'foot', fx: 'text', text: 'BỊCH!', dy: -30, size: 1.1, color: '#ff4d3d', rot: 8 }]],
+    cam: [[0.1, { z: 1.9, lead: 60, fy: 0.5, roll: 0, lag: 6 }], [0.3, { z: 2.1, roll: -3 }, 'snap'], [0.72, { z: 1.8, roll: 0 }]] });
+  clip('push', { label: 'Đẩy mặt', view: 'q90', face: { eyes: 'fierce', brows: 'angry', mouth: 'bite' },
+    keys: [[0.14, 'shoveLoad', 'out'], [0.28, 'shove', 'snap'], [0.5, { $: 'shove', root: { rot: 8, x: -8 } }, 'out'], [0.75, 'ready', 'io']],
+    travel: [[0, 0], [0.28, 30, 'snap'], [0.5, 36, 'out']],
+    events: [[0.2, { sfx: 'whoosh', gain: 0.6 }], [0.28, { at: 'hand', fx: 'impact', size: 0.9, hitstop: 0.06, shake: 3, sfx: 'boing' }], [0.3, { at: 'hand', fx: 'text', text: 'HUỴCH!', dy: -30, size: 1, color: '#ff9a3c', rot: -6 }]],
+    cam: [[0.1, { z: 1.9, lead: 50, fy: 0.55, roll: 0, lag: 6 }]] });
+  // ném: buông tay ở sự kiện release — duel() tự tính đường bay tới ngực đối thủ + lúc trúng; cất đồ cầm tay phải trong lúc ném
+  clip('throw', { label: 'Ném', view: 'q90', face: { eyes: 'smug', brows: 'smug', mouth: 'grin' }, hide: ['heldR', 'tallR'],
+    keys: [[0.14, 'throwWind', 'out'], [0.3, { $: 'throwWind', armR: { rot: -160 }, root: { rot: 12, x: 8 } }, 'sine'], [0.38, 'throwRelease', 'snap'],
+      [0.56, { $: 'throwRelease', root: { rot: -16 }, armR: { rot: 160 }, foreR: { rot: 20 }, armL: { rot: 10 } }, 'out'], [0.85, 'ready', 'io']],
+    travel: [[0, 0], [0.38, 12, 'snap'], [0.6, 14, 'out']],
+    events: [[0.3, { sfx: 'whoosh', gain: 0.7 }], [0.38, { release: true, sfx: 'swish', gain: 0.6 }]],
+    cam: [[0.1, { z: 1.6, lead: 90, fy: 0.55, roll: 0, lag: 6 }]] });
+
+  // TỪ VỰNG PHIM của BỘ KHUNG (trung lập chủ đề, Q10 — ADR 0006): bước kịch bản { action, target, react } → clip người đánh + clip phản ứng
+  //   attack: cần target, có điểm va chạm (sự kiện hitstop / hit; điểm đánh = "at" của sự kiện: tip / hand / handL / foot)
+  //   needs: 'weapon' — chỉ diễn viên cầm binh khí (heldR) mới dùng được; ranged: đòn ném (art: vật ném)
+  //   Đòn riêng của một chủ đề (vd. thương / kiếm kiểu Tử Long) nằm trong GÓI ĐỘNG TÁC của bộ chủ đề đó, không ở khung.
+  Object.assign(C.ACTIONS, {
+    punch: { label: 'Đấm liên hai cú', clips: ['punch'], attack: true, aim: 'head', hint: 'tay không, đánh gần vào mặt' },
+    kick: { label: 'Đá thẳng', clips: ['kick'], attack: true, hint: 'tay không' },
+    push: { label: 'Đẩy mặt', clips: ['push'], attack: true, aim: 'head', hint: 'hài, không đau' },
+    throw: { label: 'Ném cà chua', clips: ['throw'], attack: true, ranged: true, art: 'tomato', hint: 'hài, ném từ xa — không cần áp sát' },
+    thrust: { label: 'Đâm thẳng (binh khí)', clips: ['thrust'], attack: true, needs: 'weapon' },
+    sweep: { label: 'Quét ngang (binh khí)', clips: ['sweep'], attack: true, needs: 'weapon' },
     rage: { label: 'Dậm chân nổi giận', clips: ['rage'] },
     hero: { label: 'Tạo dáng anh hùng', clips: ['heroPose'] },
-    victory: { label: 'Vác binh khí vui mừng', clips: ['victory'] },
+    victory: { label: 'Nhảy cẫng vui mừng', clips: ['victory'] },
     dance: { label: 'Nhảy mừng', clips: ['dance'] },
     salute: { label: 'Ôm quyền thi lễ', clips: ['salute'] },
+    wave: { label: 'Vẫy chào', clips: ['wave'] },
     stretch: { label: 'Vươn vai', clips: ['stretch'] },
     scratch: { label: 'Gãi đầu', clips: ['scratch'] },
     startle: { label: 'Giật nảy mình', clips: ['startle'] },
     flip: { label: 'Lộn ngược ra sau', clips: ['backflip'] }
-  };
-  C.REACTS = {
+  });
+  Object.assign(C.REACTS, {
     hit: { label: 'Trúng đòn', clips: ['hurt'], contact: 0.06 },
     fall: { label: 'Ngã lộn rồi bật dậy', clips: ['hurt', 'tumble', 'kipUp'], contact: 0.06 },
     ko: { label: 'Ngã choáng', clips: ['hurt', 'tumble', 'dizzy'], contact: 0.06 },
     block: { label: 'Gạt đỡ', clips: ['block'], contact: 0.16 },
     dodge: { label: 'Lộn ra sau né', clips: ['backflip'], contact: 0.3, miss: true }
-  };
-
-  // nhịp riêng từng hành vi trong màn mẫu (< 1 = nhanh hơn bản gốc của clip) — tổng đúng 30 giây thật
-  var TEMPO = { sneakIn: 0.8, peek: 0.85, stretch: 0.8, twirl: 0.85, heroPose: 0.85, rage: 0.85, victory: 0.85, dance: 0.8, salute: 0.8, wave: 0.85 };
-  // màn diễn mẫu: Triệu Vân (bộ mẫu Tam Quốc) — 29 hành vi không lặp, nối liền, 30 giây
-  C.demos['tu-long-30s'] = {
-    title: 'Tử Long 30 giây', character: 'local.my/tq-trieu-van', scene: 'local.my/tq-vuon-dao', scale: 0.62, ground: 330, world: 1280, x0: -40, dir: 1,
-    weapon: { R: { angle: 13, tip: 201, butt: 41 } },
-    steps: ['sneakIn', 'peek', 'scratch', 'startle', 'run', 'skid', 'stretch', 'twirl', 'guard', 'thrust', 'sweep', 'spin', 'leap', 'plunge', 'heroPose',
-      'hitReact', 'tumble', 'dizzy', 'kipUp', 'rage', 'dash', 'backflip', 'block', 'counter', 'victory', 'dance', 'salute', 'wave', 'finale'].map(function (id) { return { clip: id, tempo: TEMPO[id] }; })
-  };
+  });
+  Object.keys(C.ACTIONS).forEach(function (k) { if (!C.ACTIONS[k].pack) C.ACTIONS[k].pack = C.FRAME_PACK; });
 })(typeof window !== 'undefined' ? window.GenChibi : globalThis.GenChibi);

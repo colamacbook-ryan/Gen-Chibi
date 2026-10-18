@@ -384,7 +384,7 @@ no(!GC.svgString(GC.ASSETS["local.my/t-toc-nv"], "normal", { director: { view: "
 const b = JSON.parse(fs.readFileSync("studio/mau/tam-quoc.json", "utf8"));
 const r = m.importProject(b, {});
 no(r.errors.length, "Tam Quốc có mục không qua cổng: " + JSON.stringify(r.errors.slice(0, 3)));
-no(JSON.stringify(r.counts) !== JSON.stringify({ parts: 55, items: 13, scenes: 8, characters: 7, works: 1, shots: 6 }), "Tam Quốc thiếu mục: " + JSON.stringify(r.counts));
+no(JSON.stringify(r.counts) !== JSON.stringify({ parts: 55, items: 13, scenes: 8, characters: 7, motionPacks: 1, works: 1, shots: 6 }), "Tam Quốc thiếu mục: " + JSON.stringify(r.counts));
 const tq = GC.assets().filter(a => a.project === "mau-tam-quoc");
 let n = 0;
 for (const a of tq) for (const v of GC.VIEW_ORDER) for (const st of ["normal", "rage", "shock"]) {
@@ -573,7 +573,7 @@ const { MCP } = require("./server/mcp.js"); const { Store } = require("./server/
 const GC = loadEngine("."), C = GC.choreo, no = (c, msg) => { if (c) { console.log("   ✗", msg); process.exit(1); } };
 const m = new MCP({ engine: GC, store: new Store(fs.mkdtempSync(path.join(os.tmpdir(), "gc-ch-"))), version: "t", system: {} });
 no(m.importProject(JSON.parse(fs.readFileSync("studio/mau/tam-quoc.json", "utf8")), {}).errors.length, "tam-quoc không qua cổng");
-const D = C.demos["tu-long-30s"], t0 = Date.now(), tl = C.build(GC.ASSETS[D.character], D), ms = Date.now() - t0, M = C.measure(tl);
+const D = C.demos["tuLong30s"], t0 = Date.now(), tl = C.build(GC.ASSETS[D.character], D), ms = Date.now() - t0, M = C.measure(tl);
 no(ms > 1500, "dựng màn 30 giây quá chậm: " + ms + " ms");
 no(Math.abs(M.real - 30) > 0.25, "màn mẫu phải dài 30 ± 0,25 giây thật: " + M.real.toFixed(2));
 no(M.behaviors < 24 || M.unique !== M.behaviors, "phải ≥ 24 hành vi và không hành vi nào lặp: " + M.unique + "/" + M.behaviors);

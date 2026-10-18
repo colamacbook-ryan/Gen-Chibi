@@ -40,6 +40,14 @@
     if (!(s.cast || []).length) miss.push('diễn viên'); else if (acts.length < s.cast.length) miss.push((s.cast.length - acts.length) + ' diễn viên không còn trong Thư viện');
     if (!s.event) miss.push('lời thoại');
     if (sc && acts.length > sc.spots.length) miss.push('dàn diễn viên nhiều hơn chỗ đứng');
+    // hành động (v0.16, CNS-042): đòn phải có (khung hoặc gói động tác đã nạp) và người làm phải làm được (needs) — thiếu thì BÁO, không lặng lẽ bỏ đòn
+    var C = GC.choreo, AC = (C && C.ACTIONS) || {};
+    (s.event && s.event.steps || []).forEach(function (st) {
+      if (!st || !st.action) return;
+      if (!Object.prototype.hasOwnProperty.call(AC, st.action)) { miss.push('đòn "' + st.action + '" không có — cài / cập nhật gói động tác có đòn này'); return; }
+      var who = acts.filter(function (a) { return a.id === st.actor; })[0];
+      if (who && C.canDo && !C.canDo(who, AC[st.action])) miss.push(who.name + ' không làm được "' + AC[st.action].label + '" (cần binh khí)');
+    });
     return miss;
   }
   function readiness(work) {
@@ -107,7 +115,7 @@
     var list = actors(shot).slice(0, budget), ids = list.map(function (a) { return a.id; });
     var home = spots(shot, sc, ids), cur = {}, state = {}, steps = (ev.steps || []).filter(function (s) { return ids.indexOf(s.actor) >= 0; });
     var sky = sc.layers && sc.layers.sky && GC.getPart && GC.getPart('sky', sc.layers.sky.part);
-    var plan = { scene: sc, mood: moodOf(steps), ambient: { time: sc.time || 'day', weather: sc.weather || 'clear', indoor: !!(sky && sky.outdoor === false) }, cast: [], beats: [] };
+    var plan = { scene: sc, mood: moodOf(steps), ambient: { time: sc.time || 'day', weather: sc.weather || 'clear', indoor: !!(sky && sky.outdoor === false) }, cast: [], beats: [], warnings: [] };
     // ra sân: ai đứng nửa trái vào từ trái, nửa phải vào từ phải; so le để không ùa vào cùng lúc
     list.forEach(function (a, i) {
       var to = home[a.id];
@@ -124,6 +132,7 @@
       var me = s.actor, base = GC.LIB.states[s.state] || GC.LIB.states.normal;
       if (s.spot && GC.SCENE.spots[s.spot]) row[me] = GC.SCENE.spots[s.spot];
       var ac = s.action && own(AC, s.action) ? AC[s.action] : null, silent = ac && !String(s.say || '').trim();   // ra đòn không hô: chỉ có nhịp hành động
+      if (s.action && !ac) plan.warnings.push('bước ' + (i + 1) + ': đòn "' + s.action + '" không có — bỏ qua (cài / cập nhật gói động tác)');
       var line = { type: 'line', i: i, actor: me, say: s.say == null ? '' : String(s.say), state: s.state, hold: s.hold || 0 };
       // đi tới chỗ mới khi spot đổi (chạy khi hoảng / giận hoặc đường xa)
       if (s.spot && s.spot !== cur[me]) {
@@ -187,7 +196,7 @@
         try {
           if (tg) tl = C.duel({ a: Pa, b: { asset: byId[tg], x: sx(cur[tg]), y: row[tg].y, k: row[tg].k }, action: s.action, react: beat.react, walls: walls });
           else { var o = to || nearest(me, ids, cur); tl = C.solo({ a: Pa, action: s.action, dir: o && sx(cur[o]) < Pa.x ? -1 : 1, walls: walls }); }
-        } catch (e) { tl = null; }   // đòn chưa dựng được (thiếu clip…) → bỏ hành động, câu thoại vẫn diễn
+        } catch (e) { tl = null; plan.warnings.push('bước ' + (i + 1) + ': không dựng được đòn "' + s.action + '" — ' + String(e.message).slice(0, 120)); }   // bỏ hành động, câu thoại vẫn diễn — nhưng BÁO (CNS-042)
         if (tl) {
           beat.real = Math.round(tl.real * 100) / 100; beat.dir = tl.duel.dir;
           beat.from = [Pa.x, tg ? sx(cur[tg]) : null];

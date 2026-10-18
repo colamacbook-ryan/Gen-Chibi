@@ -6,9 +6,6 @@
 <!--page-->
 <title>Tử Long 30 giây</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:wght@700;800&family=Be+Vietnam+Pro:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
 <style>
 /* Phòng chiếu sơn mài: nền then sơn mài, chữ bạc như giáp Triệu Vân, điểm nhấn đỏ tua thương, vàng viền giáp. Một cột, sân khấu 16:9 là trung tâm. */
 :root {
@@ -131,11 +128,12 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
 <script>
 (function () {
   var GC = window.GenChibi, $ = function (id) { return document.getElementById(id); };
-  GC.pack({ id: 'local.my', name: 'Của tôi', owner: 'Người tạo', group: 'mine', license: 'Thuộc người tạo' }, function () {});
+  GC.pack({ id: 'local.my', name: 'Bộ mẫu Tam Quốc', owner: 'Gen Labs', group: 'mine', license: '© 2026 Gen Labs' }, function () {});
   DATA.parts.forEach(function (p) { GC.registerDataPart('local.my', p); });
   DATA.items.forEach(function (x) { GC.registerItem('local.my', x); });
   DATA.scenes.forEach(function (x) { GC.registerScene('local.my', x); });
   DATA.characters.forEach(function (a) { GC.registerAsset('local.my', a); });
+  (DATA.motionPacks || []).forEach(function (m) { GC.choreo.registerPack('local.my', m); });
   var D = GC.choreo.demos[DEMO], tl = GC.choreo.build(GC.ASSETS[D.character], D), A = GC.audio;
   var seek = $('seek'), cur = -1, started = false, fmt = function (v) { return v.toFixed(1).replace('.', ','); };
   seek.max = tl.real.toFixed(2);

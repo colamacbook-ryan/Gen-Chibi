@@ -62,8 +62,325 @@
     for (var k in spec) o[/L$/.test(k) && IDX[k + '.x'] !== undefined ? k.replace(/L$/, 'R') : /R$/.test(k) && IDX[k + '.x'] !== undefined ? k.replace(/R$/, 'L') : k] = spec[k];
     return o;
   }
+  // trộn tư thế (khớp nào có ở sau đè kênh của khớp đó) + xoay cả người quanh một điểm trên thân — dùng khi VIẾT tư thế / gói động tác
+  function mix() { var o = {}; for (var i = 0; i < arguments.length; i++) { var a = arguments[i]; for (var k in a) o[k] = typeof a[k] === 'object' && !Array.isArray(a[k]) ? Object.assign({}, o[k], a[k]) : a[k]; } return o; }
+  // xoay cả người quanh một điểm trên thân (lộn, ngã) thay vì quanh bàn chân: trả về { root: { rot, x, y } }
+  // extra.ground: đặt điểm thấp nhất (đỉnh đầu / mông / chân) chạm đất rồi cộng thêm extra.y (âm = bay lên)
+  function about(deg, cx, cy, extra) {
+    extra = extra || {};
+    var r = deg * Math.PI / 180, cs = Math.cos(r), sn = Math.sin(r), dx = cx - 100, dy = cy - 228;
+    var o = { root: { rot: deg, x: dx - (dx * cs - dy * sn) + (extra.x || 0), y: dy - (dx * sn + dy * cs) + (extra.y || 0) } };
+    if (extra.ground) {
+      var rotY = function (px, py) { return cy + (px - cx) * sn + (py - cy) * cs; };   // y sau khi xoay quanh (cx, cy)
+      o.root.y += 228 - Math.max(rotY(100, 96) + 52, rotY(100, 228), rotY(100, 205) + 12);
+    }
+    return o;
+  }
   function pose(id, spec) { POSES[id] = spec; return spec; }
   function clip(id, def) { def.id = id; CLIPS[id] = def; if (ORDER.indexOf(id) < 0) ORDER.push(id); return def; }
+
+  /* ------------------------------------- 2b. GÓI ĐỘNG TÁC (dữ liệu, v0.16) */
+  // Loại asset thứ tư: tư thế + clip + hành động (+ màn diễn) dạng JSON thuần, đi qua cổng như linh kiện / cảnh.
+  // Không có hàm (make), không có HTML; mọi số kẹp khoảng, mọi tên tra trong từ vựng. Khi nạp, tư thế / clip của gói mang tiền tố
+  // "<id gói>:" nên không đè được khung; id HÀNH ĐỘNG là chung toàn hệ (kịch bản gọi bằng tên) → trùng với khung / gói khác thì chặn.
+  var FRAME_PACK = 'gen.dong-tac';
+  var MOTION = {
+    format: 'gen-chibi.motion/1',
+    views: ['front', 'back', 'q45', 'q90', 'q135'],
+    points: ['tip', 'butt', 'hand', 'handL', 'head', 'chest', 'feet', 'foot'],
+    fx: ['impact', 'spark', 'glint', 'dust', 'ring', 'debris', 'smear', 'text', 'projectile'],
+    sfx: ['pop', 'whoosh', 'step', 'sting', 'hit', 'boing', 'sparkle', 'rumble', 'drip', 'sad', 'snore', 'party', 'hmm', 'gong', 'chime', 'swish', 'tick'],
+    music: ['calm', 'tense', 'epic', 'comic', 'sad'],
+    grades: ['none', 'cool', 'warm', 'dark', 'gold'],
+    arts: ['rock', 'tomato'],
+    needs: { weapon: 'cầm binh khí ở tay phải (bộ phận heldR)' },
+    hide: ['heldR', 'heldL', 'tallR', 'tallL'],
+    budget: { poses: 64, clips: 48, actions: 32, shows: 4, keys: 64, events: 48, travel: 32, cam: 16, speed: 16, faces: 16, clipDur: 12, actionClips: 6, showSteps: 60, bytes: 300000 }
+  };
+  var PACKS = {}, PACK_ORDER = [];
+  var ID_RE = /^[a-z][A-Za-z0-9]{1,31}$/, PACK_RE = /^[a-z0-9][a-z0-9-]{1,39}$/, HEXC = /^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/;
+  var hasOwn = function (o, k) { return o != null && Object.prototype.hasOwnProperty.call(o, k); };
+  function plainText(s, n) { return String(s == null ? '' : s).replace(/[<>&"`]/g, '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, n); }
+  // kiểm một gói (dữ liệu người dùng / agent / gói nhập) → { errors, def } — def là bản CHUẨN HOÁ dựng lại từ đầu (không giữ khoá lạ)
+  function checkPack(def) {
+    var errs = [], d = {}, B = MOTION.budget, E = function (m) { if (errs.length < 30) errs.push(m); };
+    if (!def || typeof def !== 'object' || Array.isArray(def)) return { errors: ['gói động tác phải là object'], def: null };
+    try { if (JSON.stringify(def).length > B.bytes) return { errors: ['gói quá lớn (tối đa ' + B.bytes / 1000 + ' KB)'], def: null }; }
+    catch (x) { return { errors: ['gói không phải JSON thuần'], def: null }; }
+    if (!PACK_RE.test(String(def.id || ''))) E('id: chữ thường, số, gạch nối, 2–40 ký tự');
+    d.id = String(def.id || ''); d.name = plainText(def.name || def.id, 40); d.description = plainText(def.description, 300);
+    var num = function (v, lo, hi, path, dflt) {
+      if (v === undefined && dflt !== undefined) return dflt;
+      if (typeof v !== 'number' || !isFinite(v) || v < lo || v > hi) { E(path + ': cần số trong khoảng ' + lo + '…' + hi); return lo; }
+      return v;
+    };
+    var oneOf = function (v, list, path) { if (list.indexOf(v) < 0) { E(path + ': chọn ' + list.join(', ')); return list[0]; } return v; };
+    var obj = function (v, path) { if (!v || typeof v !== 'object' || Array.isArray(v)) { E(path + ': cần object'); return null; } return v; };
+    var arr = function (v, max, path) { if (v === undefined) return []; if (!Array.isArray(v)) { E(path + ': cần mảng'); return []; } if (v.length > max) E(path + ': tối đa ' + max + ' phần tử'); return v.slice(0, max); };
+    var ids = function (o, max, path) {
+      if (o === undefined) return [];
+      if (!obj(o, path)) return [];
+      var ks = Object.keys(o);
+      if (ks.length > max) E(path + ': tối đa ' + max);
+      return ks.slice(0, max).filter(function (k) { if (!ID_RE.test(k)) { E(path + '.' + k.slice(0, 32) + ': id camelCase 2–32 ký tự (vd. "spinSlash")'); return false; } return true; });
+    };
+    var POS = { x: [-400, 400], y: [-400, 400], rot: [-2160, 2160], sx: [0.1, 3], sy: [0.1, 3] };
+    var localPoses = def.poses && typeof def.poses === 'object' ? def.poses : {};
+    var poseRef = function (name, path) {
+      if (typeof name !== 'string' || !(hasOwn(localPoses, name) || hasOwn(POSES, name)) || name.indexOf(':') >= 0) { E(path + ': không có tư thế "' + String(name).slice(0, 32) + '" (tư thế của gói hoặc của khung)'); return null; }
+      return name;
+    };
+    var pose = function (p, path) {
+      if (typeof p === 'string') return poseRef(p, path);
+      if (!obj(p, path)) return null;
+      var o = {};
+      Object.keys(p).forEach(function (k) {
+        if (k === '$') { o.$ = poseRef(p.$, path + '.$'); return; }
+        if (k === 'wR' || k === 'wL') { o[k] = num(p[k], -2160, 2160, path + '.' + k); return; }
+        if (J.indexOf(k) < 0 || k === 'stage') { E(path + '.' + k.slice(0, 32) + ': khớp lạ (' + J.filter(function (j) { return j !== 'stage'; }).join(', ') + ', wR, wL)'); return; }
+        var ch = obj(p[k], path + '.' + k); if (!ch) return;
+        o[k] = {};
+        Object.keys(ch).forEach(function (c) {
+          if (!hasOwn(POS, c)) { E(path + '.' + k + '.' + c.slice(0, 16) + ': kênh lạ (x, y, rot, sx, sy)'); return; }
+          o[k][c] = num(ch[c], POS[c][0], POS[c][1], path + '.' + k + '.' + c);
+        });
+      });
+      return o;
+    };
+    var L = GC.LIB || {};
+    var face = function (f, path) {
+      if (!obj(f, path)) return {};
+      var o = {};
+      Object.keys(f).forEach(function (k) {
+        var v = f[k];
+        if (k === 'eyes' && hasOwn(L.eyePoses, v)) o.eyes = v;
+        else if (k === 'brows' && hasOwn(L.browPoses, v)) o.brows = v;
+        else if (k === 'mouth' && hasOwn(L.mouths, v)) o.mouth = v;
+        else if (k === 'fx' && Array.isArray(v) && v.length <= 3 && v.every(function (x) { return hasOwn(L.fx, x); })) o.fx = v.slice();
+        else E(path + '.' + String(k).slice(0, 16) + ': giá trị nét mặt lạ (xem get_catalog: eyePoses, browPoses, mouths, fx)');
+      });
+      return o;
+    };
+    var ease = function (v, path) { return v === undefined ? undefined : oneOf(v, Object.keys(EASE), path); };
+    var hideList = function (v, path) { if (!Array.isArray(v) || v.length > 4 || v.some(function (x) { return MOTION.hide.indexOf(x) < 0; })) { E(path + ': mảng trong ' + MOTION.hide.join(', ')); return []; } return v.slice(); };
+    var times = function (list, path, tmax) {   // [[t, …]] — t tăng dần, trong 0…tmax
+      var prev = -1;
+      list.forEach(function (q, i) {
+        if (!Array.isArray(q) || typeof q[0] !== 'number') { E(path + '[' + i + ']: cần [giây, …]'); return; }
+        num(q[0], 0, tmax, path + '[' + i + '][0]');
+        if (q[0] < prev) E(path + '[' + i + ']: thời điểm phải tăng dần'); prev = q[0];
+      });
+    };
+    var EVN = { gain: [0, 1.5], dx: [-300, 300], dy: [-300, 300], size: [0.1, 4], hitstop: [0, 0.4], shake: [0, 30], flash: [0, 1], push: [-1, 1],
+      lines: [0, 3], ghosts: [0, 3], smear: [0, 0.6], rot: [-45, 45], flight: [0.1, 2], hold: [0, 8], letterbox: [0, 1] };
+    var event = function (e, path) {
+      if (!obj(e, path)) return {};
+      var o = {};
+      Object.keys(e).forEach(function (k) {
+        var v = e[k], p = path + '.' + String(k).slice(0, 16);
+        if (hasOwn(EVN, k)) o[k] = num(v, EVN[k][0], EVN[k][1], p);
+        else if (k === 'sfx') { var s = Array.isArray(v) ? v : [v]; if (!s.length || s.length > 3 || s.some(function (x) { return MOTION.sfx.indexOf(x) < 0; })) E(p + ': chọn tối đa 3 trong ' + MOTION.sfx.join(', ')); else o.sfx = Array.isArray(v) ? s.slice() : v; }
+        else if (k === 'at') o.at = oneOf(v, MOTION.points, p);
+        else if (k === 'fx') o.fx = oneOf(v, MOTION.fx, p);
+        else if (k === 'from') { if (typeof v === 'number') o.from = num(v, -600, 600, p); else o.from = oneOf(v, MOTION.points, p); }
+        else if (k === 'hit' || k === 'release') { if (typeof v !== 'boolean') E(p + ': true / false'); else o[k] = v; }
+        else if (k === 'text') o.text = plainText(v, 16);
+        else if (k === 'title') o.title = plainText(v, 60);
+        else if (k === 'sub') o.sub = plainText(v, 80);
+        else if (k === 'color' || k === 'flashColor') { if (!HEXC.test(String(v))) E(p + ': mã hex'); else o[k] = String(v); }
+        else if (k === 'style') o.style = oneOf(v, ['h', 'r'], p);
+        else if (k === 'grade') o.grade = oneOf(v, MOTION.grades, p);
+        else if (k === 'art') o.art = oneOf(v, MOTION.arts, p);
+        else if (k === 'music') { if (v === null) o.music = null; else o.music = oneOf(v, MOTION.music, p); }
+        else if (k === 'ambient') {
+          var am = obj(v, p), S = GC.SCENE || { times: {}, weathers: {} };
+          if (am) { o.ambient = {}; if (am.time !== undefined) { if (hasOwn(S.times, am.time)) o.ambient.time = am.time; else E(p + '.time: giờ lạ'); } if (am.weather !== undefined) { if (hasOwn(S.weathers, am.weather)) o.ambient.weather = am.weather; else E(p + '.weather: thời tiết lạ'); } }
+        }
+        else E(p + ': khoá sự kiện lạ');
+      });
+      return o;
+    };
+    var CAMK = { z: [0.6, 4], fy: [0, 1.6], lead: [-300, 300], roll: [-30, 30], lag: [0, 20] };
+    var cam = function (c, path) { if (!obj(c, path)) return {}; var o = {}; Object.keys(c).forEach(function (k) { if (hasOwn(CAMK, k)) o[k] = num(c[k], CAMK[k][0], CAMK[k][1], path + '.' + k); else E(path + '.' + String(k).slice(0, 16) + ': khoá máy quay lạ (z, fy, lead, roll, lag)'); }); return o; };
+    // ---- tư thế
+    d.poses = {};
+    ids(def.poses, B.poses, 'poses').forEach(function (k) { d.poses[k] = pose(def.poses[k], 'poses.' + k) || {}; if (typeof d.poses[k] === 'string') d.poses[k] = { $: d.poses[k] }; });
+    Object.keys(d.poses).forEach(function (k) {   // kế thừa vòng tròn trong gói (a → b → a) làm treo lúc dựng → chặn ở cổng
+      var seen = {}, n = k;
+      while (n && hasOwn(d.poses, n)) { if (seen[n]) { E('poses.' + k + ': kế thừa "$" vòng tròn'); break; } seen[n] = 1; n = d.poses[n].$; }
+    });
+    // ---- clip
+    d.clips = {};
+    var localClips = def.clips && typeof def.clips === 'object' ? def.clips : {};
+    ids(def.clips, B.clips, 'clips').forEach(function (k) {
+      var c = obj(def.clips[k], 'clips.' + k), P = 'clips.' + k, o = {};
+      if (!c) return;
+      Object.keys(c).forEach(function (f) {
+        if (['label', 'view', 'face', 'hide', 'keys', 'travel', 'speed', 'faces', 'events', 'cam', 'dur'].indexOf(f) < 0) E(P + '.' + String(f).slice(0, 16) + ': trường lạ (make / hàm không được phép trong gói dữ liệu)');
+      });
+      o.label = plainText(c.label || k, 40);
+      if (c.view !== undefined) o.view = oneOf(c.view, MOTION.views, P + '.view');
+      if (c.face !== undefined) o.face = face(c.face, P + '.face');
+      if (c.hide !== undefined) o.hide = hideList(c.hide, P + '.hide');
+      var tmax = B.clipDur;
+      var keys = arr(c.keys, B.keys, P + '.keys');
+      if (!keys.length) E(P + '.keys: cần ít nhất 1 tư thế then chốt');
+      times(keys, P + '.keys', tmax);
+      o.keys = keys.map(function (q, i) {
+        var kp = P + '.keys[' + i + ']', r = [q[0], pose(q[1], kp + '[1]')];
+        if (q[2] !== undefined) r.push(ease(q[2], kp + '[2]'));
+        if (q[3] !== undefined) {
+          var x = obj(q[3], kp + '[3]'), xo = {};
+          if (x) Object.keys(x).forEach(function (f) {
+            var v = x[f];
+            if (f === 'ez') { var ez = obj(v, kp + '.ez'); if (ez) { xo.ez = {}; Object.keys(ez).forEach(function (ch) { if (!hasOwn(IDX, ch)) E(kp + '.ez.' + ch.slice(0, 24) + ': kênh lạ (vd. "root.y")'); else xo.ez[ch] = ease(ez[ch], kp + '.ez.' + ch); }); } }
+            else if (f === 'spin') xo.spin = !!v;
+            else if (f === 'dir') { if (v !== 1 && v !== -1) E(kp + '.dir: 1 hoặc -1'); else xo.dir = v; }
+            else if (f === 'view') xo.view = oneOf(v, MOTION.views, kp + '.view');
+            else if (f === 'face') xo.face = face(v, kp + '.face');
+            else if (f === 'hide') xo.hide = hideList(v, kp + '.hide');
+            else E(kp + '.' + String(f).slice(0, 16) + ': khoá lạ (ez, spin, dir, view, face, hide)');
+          });
+          if (r.length === 2) r.push('io');
+          r.push(xo);
+        }
+        return r;
+      });
+      if (c.travel !== undefined) { var tr = arr(c.travel, B.travel, P + '.travel'); times(tr, P + '.travel', tmax); o.travel = tr.map(function (q, i) { var r = [q[0], num(q[1], -900, 900, P + '.travel[' + i + '][1]')]; if (q[2] !== undefined) r.push(ease(q[2], P + '.travel[' + i + '][2]')); return r; }); }
+      if (c.speed !== undefined) { var sp = arr(c.speed, B.speed, P + '.speed'); times(sp, P + '.speed', tmax); o.speed = sp.map(function (q, i) { return [q[0], num(q[1], 0.05, 4, P + '.speed[' + i + '][1]')]; }); }
+      if (c.faces !== undefined) { var fs = arr(c.faces, B.faces, P + '.faces'); times(fs, P + '.faces', tmax); o.faces = fs.map(function (q, i) { return [q[0], face(q[1], P + '.faces[' + i + ']')]; }); }
+      if (c.events !== undefined) { var ev = arr(c.events, B.events, P + '.events'); times(ev, P + '.events', tmax); o.events = ev.map(function (q, i) { return [q[0], event(q[1], P + '.events[' + i + ']')]; }); }
+      if (c.cam !== undefined) { var cm = arr(c.cam, B.cam, P + '.cam'); times(cm, P + '.cam', tmax); o.cam = cm.map(function (q, i) { var r = [q[0], cam(q[1], P + '.cam[' + i + ']')]; if (q[2] !== undefined) r.push(ease(q[2], P + '.cam[' + i + '][2]')); return r; }); }
+      if (c.dur !== undefined) o.dur = num(c.dur, 0.05, tmax, P + '.dur');
+      // tổng trong một clip (CNS-043): khựng hình ≤ 1,2 s · ≤ 4 sự kiện bóng mờ / vạch tốc độ · ≤ 2 thẻ tiêu đề
+      var EV = (o.events || []).map(function (q) { return q[1] || {}; });
+      if (EV.reduce(function (n, e) { return n + (e.hitstop || 0); }, 0) > 1.2) E(P + '.events: tổng hitstop tối đa 1,2 s');
+      if (EV.filter(function (e) { return e.ghosts || e.lines; }).length > 4) E(P + '.events: tối đa 4 sự kiện ghosts / lines');
+      if (EV.filter(function (e) { return e.title; }).length > 2) E(P + '.events: tối đa 2 thẻ tiêu đề');
+      d.clips[k] = o;
+    });
+    var clipRef = function (id, path) {
+      if (typeof id === 'string' && hasOwn(localClips, id)) return id;
+      if (typeof id === 'string' && id.indexOf(':') < 0 && hasOwn(CLIPS, id) && !CLIPS[id].make) return id;
+      E(path + ': không có clip "' + String(id).slice(0, 32) + '" (clip của gói hoặc của khung; hold / stepIn chỉ dùng trong màn diễn)'); return null;
+    };
+    // ---- hành động
+    d.actions = {};
+    ids(def.actions, B.actions, 'actions').forEach(function (k) {
+      var a = obj(def.actions[k], 'actions.' + k), P = 'actions.' + k, o = {};
+      if (!a) return;
+      Object.keys(a).forEach(function (f) { if (['label', 'clips', 'attack', 'needs', 'shock', 'ranged', 'art', 'hint', 'aim'].indexOf(f) < 0) E(P + '.' + String(f).slice(0, 16) + ': trường lạ'); });
+      o.label = plainText(a.label || k, 40);
+      if (a.hint !== undefined) o.hint = plainText(a.hint, 120);
+      var cl = arr(a.clips, B.actionClips, P + '.clips');
+      if (!cl.length) E(P + '.clips: cần 1–' + B.actionClips + ' clip');
+      o.clips = cl.map(function (c, i) { return clipRef(c, P + '.clips[' + i + ']'); });
+      if (a.attack !== undefined) o.attack = a.attack === true;
+      if (a.needs !== undefined) { if (!hasOwn(MOTION.needs, a.needs)) E(P + '.needs: chọn ' + Object.keys(MOTION.needs).join(', ')); else o.needs = a.needs; }
+      if (a.shock !== undefined) o.shock = num(a.shock, 0, 200, P + '.shock');
+      if (a.ranged !== undefined) o.ranged = a.ranged === true;
+      if (a.art !== undefined) o.art = oneOf(a.art, MOTION.arts, P + '.art');
+      if (a.aim !== undefined) o.aim = oneOf(a.aim, ['body', 'head'], P + '.aim');
+      if (o.ranged && !o.attack) E(P + ': ranged chỉ dùng cho đòn đánh (attack: true)');
+      // đòn đánh phải có điểm va chạm (sự kiện hit / hitstop) — đòn ném: phải có sự kiện release (lúc buông tay)
+      if (o.attack) {
+        var evs = []; o.clips.forEach(function (c) { var cc = c && (d.clips[c] || (CLIPS[c] && !hasOwn(localClips, c) ? CLIPS[c] : null)); if (cc) (cc.events || []).forEach(function (e) { evs.push(e[1] || {}); }); });
+        if (o.ranged ? !evs.some(function (e) { return e.release; }) : !evs.some(function (e) { return e.hit || e.hitstop > 0; })) E(P + ': ' + (o.ranged ? 'đòn ném cần một sự kiện { release: true } lúc buông tay' : 'đòn đánh cần ít nhất một sự kiện va chạm { hit: true } hoặc { hitstop }'));
+      }
+      d.actions[k] = o;
+    });
+    // ---- màn diễn (show): một diễn viên diễn liền nhiều clip
+    d.shows = {};
+    ids(def.shows, B.shows, 'shows').forEach(function (k) {
+      var s = obj(def.shows[k], 'shows.' + k), P = 'shows.' + k, o = {};
+      if (!s) return;
+      Object.keys(s).forEach(function (f) { if (['title', 'character', 'scene', 'scale', 'ground', 'world', 'x0', 'dir', 'steps', 'weapon'].indexOf(f) < 0) E(P + '.' + String(f).slice(0, 16) + ': trường lạ'); });
+      o.title = plainText(s.title || k, 60);
+      if (s.character !== undefined) { if (typeof s.character !== 'string' || s.character.length > 80) E(P + '.character: key nhân vật'); else o.character = s.character; }
+      if (s.scene !== undefined) { if (typeof s.scene !== 'string' || s.scene.length > 80) E(P + '.scene: key cảnh'); else o.scene = s.scene; }
+      o.scale = num(s.scale, 0.3, 1.2, P + '.scale', 0.62); o.ground = num(s.ground, 200, 360, P + '.ground', 330);
+      o.world = num(s.world, 640, 2560, P + '.world', 640); o.x0 = num(s.x0, -200, 2560, P + '.x0', 120);
+      o.dir = s.dir === -1 ? -1 : 1;
+      if (s.weapon !== undefined) { var w = obj(s.weapon, P + '.weapon'), wr = w && obj(w.R, P + '.weapon.R'); if (wr) o.weapon = { R: { angle: num(wr.angle, -180, 180, P + '.weapon.R.angle', 0), tip: num(wr.tip, 0, 400, P + '.weapon.R.tip', 24), butt: num(wr.butt, 0, 200, P + '.weapon.R.butt', 0) } }; }
+      var st = arr(s.steps, B.showSteps, P + '.steps');
+      if (!st.length) E(P + '.steps: cần ít nhất 1 bước');
+      o.steps = st.map(function (x, i) {
+        var q = P + '.steps[' + i + ']', r = {};
+        if (!obj(x, q)) return { clip: 'hold' };
+        Object.keys(x).forEach(function (f) { if (['clip', 'tempo', 'dir', 'view', 'face', 'dur', 'pose', 'dist', 'label'].indexOf(f) < 0) E(q + '.' + String(f).slice(0, 16) + ': trường lạ'); });
+        if (x.clip === 'hold' || x.clip === 'stepIn') r.clip = x.clip; else r.clip = clipRef(x.clip, q + '.clip');
+        if (x.tempo !== undefined) r.tempo = num(x.tempo, 0.3, 3, q + '.tempo');
+        if (x.dir !== undefined) { if (x.dir !== 1 && x.dir !== -1) E(q + '.dir: 1 hoặc -1'); else r.dir = x.dir; }
+        if (x.view !== undefined) r.view = oneOf(x.view, MOTION.views, q + '.view');
+        if (x.face !== undefined) r.face = face(x.face, q + '.face');
+        if (x.dur !== undefined) r.dur = num(x.dur, 0.1, 8, q + '.dur');
+        if (x.pose !== undefined) r.pose = poseRef(x.pose, q + '.pose');
+        if (x.dist !== undefined) r.dist = num(x.dist, -600, 600, q + '.dist');
+        if (x.label !== undefined) r.label = plainText(x.label, 40);
+        return r;
+      });
+      d.shows[k] = o;
+    });
+    // tổng thời lượng clip của màn diễn (giới hạn vòng dựng / bộ nhớ khung hình): ≤ 90 giây
+    Object.keys(d.shows).forEach(function (k) {
+      var tot = 0; d.shows[k].steps.forEach(function (x) { var c = x.clip && (d.clips[x.clip] || CLIPS[x.clip]); if (!c) return; var dd = c.dur != null ? c.dur : c.keys && c.keys.length ? c.keys[c.keys.length - 1][0] : (x.dur || 1); tot += dd / (x.tempo || 1); });
+      if (tot > 90) E('shows.' + k + ': dài quá 90 giây');
+    });
+    if (def.project != null && def.project !== '' && !/^[a-z0-9][a-z0-9-]{0,39}$/.test(String(def.project))) E('project: slug dự án');
+    d.project = def.project ? String(def.project) : '';
+    d.status = def.status === 'published' ? 'published' : 'draft';
+    d.kind = 'motion'; d.format = MOTION.format;
+    return { errors: errs, def: errs.length ? null : d };
+  }
+  // gỡ mọi thứ một gói đã nạp (nạp lại bản mới / xoá gói)
+  function unregisterPack(key) {
+    var P = PACKS[key]; if (!P) return;
+    var pre = P.id + ':';
+    Object.keys(POSES).forEach(function (k) { if (k.indexOf(pre) === 0) delete POSES[k]; });
+    Object.keys(CLIPS).forEach(function (k) { if (k.indexOf(pre) === 0) { delete CLIPS[k]; var i = ORDER.indexOf(k); if (i >= 0) ORDER.splice(i, 1); } });
+    var C = GC.choreo;
+    Object.keys(C.ACTIONS).forEach(function (k) { if (C.ACTIONS[k].pack === key) delete C.ACTIONS[k]; });
+    Object.keys(C.demos).forEach(function (k) { if (C.demos[k].pack === key) delete C.demos[k]; });
+    delete PACKS[key]; PACK_ORDER.splice(PACK_ORDER.indexOf(key), 1);
+  }
+  // nạp gói đã qua cổng vào bộ biên đạo: đặt tiền tố tên, chặn trùng id hành động / màn diễn với khung và gói khác
+  function registerPack(packNs, def) {
+    var c = checkPack(def);
+    if (c.errors.length) return c;
+    var d = c.def, key = packNs + '/' + d.id, pre = d.id + ':', C = GC.choreo, errs = [];
+    Object.keys(d.actions).forEach(function (k) { var x = C.ACTIONS[k]; if (x && x.pack !== key) errs.push('actions.' + k + ': trùng id hành động của ' + (x.pack === FRAME_PACK ? 'bộ khung' : 'gói ' + x.pack) + ' — đổi tên'); });
+    Object.keys(d.shows).forEach(function (k) { var x = C.demos[k]; if (x && x.pack !== key) errs.push('shows.' + k + ': trùng id màn diễn — đổi tên'); });
+    if (errs.length) return { errors: errs, def: null };
+    unregisterPack(key);
+    var P = function (n) { return n && hasOwn(d.poses, n) ? pre + n : n; };
+    var Cl = function (n) { return n && hasOwn(d.clips, n) ? pre + n : n; };
+    var fixPose = function (p) { if (typeof p === 'string') return P(p); var o = Object.assign({}, p); if (o.$) o.$ = P(o.$); return o; };
+    Object.keys(d.poses).forEach(function (k) { POSES[pre + k] = fixPose(d.poses[k]); });
+    Object.keys(d.clips).forEach(function (k) {
+      var c0 = d.clips[k], cc = JSON.parse(JSON.stringify(c0));
+      cc.keys = c0.keys.map(function (q) { var r = q.slice(); r[1] = fixPose(q[1]); return r; });
+      cc.pack = key; clip(pre + k, cc);
+    });
+    Object.keys(d.actions).forEach(function (k) { C.ACTIONS[k] = Object.assign({}, d.actions[k], { clips: d.actions[k].clips.map(Cl), pack: key }); });
+    Object.keys(d.shows).forEach(function (k) { var s = JSON.parse(JSON.stringify(d.shows[k])); s.steps.forEach(function (x) { x.clip = Cl(x.clip); if (x.pose) x.pose = P(x.pose); }); s.pack = key; C.demos[k] = s; });
+    d.pack = packNs; d.key = key; d.version = def.version || 1;
+    PACKS[key] = d; PACK_ORDER.push(key);
+    return { errors: [], def: d };
+  }
+  // cầm binh khí ở tay phải? (đòn needs: 'weapon')
+  // có binh khí? (đòn needs: 'weapon') — tay phải cầm TRANG BỊ loại "Vũ khí", hoặc linh kiện khai grip: 'weapon' (CNS-044).
+  // Không đoán theo độ dài: quạt lông dài 95 vẫn là đạo cụ; khối "que" của khung chỉ là dáng, chưa phải binh khí
+  function hasWeapon(asset) {
+    if (!asset) return false;
+    var eq = asset.look && asset.look.equip, it = eq && eq.heldR && GC.getItem ? GC.getItem(eq.heldR, asset.pack) : null;
+    if (it) return it.type === 'weapon';
+    var ref = GC.partRef ? GC.partRef(asset, 'heldR') : null;
+    if (!ref || /(^|\/)none$/.test(ref)) return false;
+    var p = GC.getPart('heldR', ref, asset.pack);
+    return !!(p && p.grip === 'weapon');
+  }
+  function canDo(asset, act) { var a = typeof act === 'string' ? (GC.choreo.ACTIONS || {})[act] : act; return !!a && (!a.needs || (a.needs === 'weapon' && hasWeapon(asset))); }
+  function actionsFor(asset) { var A = GC.choreo.ACTIONS || {}; return Object.keys(A).filter(function (k) { return canDo(asset, A[k]); }); }
 
   /* --------------------------------------------------------- 3. LÒ XO */
   // kênh lắc theo: [kênh, ω (rad/s), ζ] — ω nhỏ, ζ nhỏ = trễ nhiều, nảy nhiều (vạt áo); đầu / cẳng tay / binh khí trễ vừa
@@ -168,6 +485,10 @@
     var actors = (S.actors || []).map(function (a, ai) { return compileActor(a, ai, out); });
     if (!actors.length) throw new Error('choreo: cảnh chưa có diễn viên');
     var T = Math.max.apply(null, actors.map(function (A) { return A.T; })), nF = Math.ceil(T * HZ) + 2;
+    // trần cứng lúc chạy (phòng thủ lớp hai sau cổng gói — CNS-043): dòng thời gian ≤ 180 s, ≤ 600 sự kiện, tổng khựng hình ≤ 12 s
+    if (!(T > 0 && T <= 180)) throw new Error('choreo: dòng thời gian ' + (isFinite(T) ? T.toFixed(1) + ' s' : 'lỗi') + ' — tối đa 180 s');
+    if (out.evs.length > 600) throw new Error('choreo: quá nhiều sự kiện (' + out.evs.length + ' > 600)');
+    if (out.evs.reduce(function (n, e) { return n + Math.min(0.4, e.hitstop > 0 ? e.hitstop : 0); }, 0) > 12) throw new Error('choreo: tổng khựng hình quá 12 s');
     actors.forEach(function (A) { bake(A, nF); });
     var evs = out.evs.sort(function (p, q) { return p.t - q.t; }), cams = out.cams.sort(function (p, q) { return p.t - q.t; }), spd = out.spd;
     evs.forEach(function (e, i) { e.i = i; });
@@ -217,7 +538,7 @@
   function handWeapon(asset) { var w = weaponOf(asset); return w && w.tip ? { R: w } : {}; }
   function weaponOf(asset) {
     var ref = asset && GC.partRef ? GC.partRef(asset, 'heldR') : null;
-    if (!ref || ref === 'none') return {};
+    if (!ref || /(^|\/)none$/.test(ref)) return {};   // 'none' / 'gen.core/none' = tay không
     var p = GC.getPart('heldR', ref, asset.pack), w = { angle: 0, tip: 24, butt: 0 };
     var L = p && (p.layers || (p.data && p.data.layers)), art = L && (L.heldR || '');   // linh kiện dữ liệu giữ bản gốc ở p.data
     var ck = ref + '#' + (typeof art === 'string' ? art.length + ':' + art.slice(0, 64) + art.slice(-64) : !!(p && p.tall));   // sửa bản vẽ → khoá khác
@@ -256,6 +577,8 @@
     for (var t = 0; t <= tl.T; t += 1 / 60) { var a = pointAt(tl, t, 'head', 0), b = pointAt(tl, t, 'head', 1), d = Math.hypot(a[0] - b[0], a[1] - b[1]); if (d < g) g = d; }
     return g;
   }
+  var STRIKES = ['tip', 'hand', 'handL', 'foot', 'head', 'chest'];
+  function strikeOf(e) { return STRIKES.indexOf(e.at) >= 0 ? e.at : 'tip'; }
   function impacts(tl, ai) { return tl.events.filter(function (e) { return (e.a || 0) === (ai || 0) && (e.hitstop > 0 || e.hit); }); }
   function duel(spec) {
     var AC = GC.choreo.ACTIONS || {}, RE = GC.choreo.REACTS || {}, has = Object.prototype.hasOwnProperty;
@@ -271,34 +594,54 @@
     // tầm theo cú VƯƠN XA NHẤT (liên hoàn: cú đâm, không phải cú hất thương lên trời); phản ứng khớp cú CUỐI
     var reach = function (tl) {
       var hs = impacts(tl, 0), best = null;
-      hs.forEach(function (e) { var tip = pointAt(tl, e.t, 'tip', 0), root = xAt(tl.actors[0], e.t), ahead = (tip[0] - root) * dir; if (!best || ahead > best.ahead) best = { e: e, ahead: ahead, root: root }; });
+      // điểm đánh của từng cú = nơi sự kiện va chạm đặt hiệu ứng (mũi binh khí / nắm tay / bàn chân), mặc định mũi binh khí
+      hs.forEach(function (e) { var tip = pointAt(tl, e.t, strikeOf(e), 0), root = xAt(tl.actors[0], e.t), ahead = (tip[0] - root) * dir; if (!best || ahead > best.ahead) best = { e: e, ahead: ahead, root: root }; });
       return best;
     };
-    var solo1 = build({ actors: [actorSpec(A, dir, hold0)], world: W0 }), r1 = reach(solo1);
-    if (!r1) throw new Error('choreo: đòn ' + spec.action + ' không có điểm va chạm');
-    var front = B.x - dir * (26 + (act.shock || 0)) * kB, minGap = 102 * Math.max(A.k || 0.8, kB), ts = (A.k || 0.8) / 0.62;   // ≥ bề rộng đầu chibi (~104 đv khung): hai đầu không chồng nhau
-    var have = (r1.root - A.x) * dir, delta = (front - A.x) * dir - r1.ahead - have, steps, lone;
-    // chỗ lùi sau lưng người ra đòn (tới mép sân / tới người đứng xem, chừa một thân) — đòn bay xa hơn khoảng cách hai người
-    // thì phải lùi lấy đà; hết chỗ lùi → lùi hết chỗ, phần còn lại thu ngắn chính quãng bay của đòn
-    var room = Math.max(0, dir > 0 ? A.x - 36 : W0 - 36 - A.x);
-    walls.forEach(function (w) { var bd = (A.x - w) * dir; if (bd > 0) room = Math.min(room, Math.max(0, bd - 100 * (A.k || 0.8))); });
-    var plan = function (delta) {
-      var st = mk(), back = delta, sc = 1;
-      if (delta < -room && have > 10) { back = -room; sc = Math.max(0.2, (have + delta + room) / have); }
-      if (sc < 1) st.forEach(function (x, i) { if (i) x.tscale = sc; });
-      if (Math.abs(back) > 8) st.splice(1, 0, { clip: 'stepIn', dist: back / ts });
-      return st;
-    };
-    // hai vòng: chèn bước áp sát làm lò xo của binh khí lúc va chạm hơi khác → đo lại, chỉnh phần dư
-    for (var it = 0; it < 2; it++) {
-      delta = Math.max(-420, Math.min(420, delta));
-      var gap = (B.x - (A.x + dir * (have + delta))) * dir;   // không áp sát quá một thân người
-      if (gap < minGap) delta -= minGap - gap;
-      steps = plan(delta);
+    var steps, lone, delta = 0, plan = null;
+    if (act.ranged) {
+      // ĐÒN NÉM: đứng tại chỗ, vật bay từ tay lúc buông (sự kiện release của clip) tới ngực đối thủ; va chạm = lúc buông + thời gian bay theo quãng xa
+      steps = mk(); lone = build({ actors: [actorSpec(A, dir, steps)], world: W0 });
+      var rel = lone.events.filter(function (e) { return (e.a || 0) === 0 && e.release; })[0];
+      if (!rel) throw new Error('choreo: đòn ném ' + spec.action + ' thiếu sự kiện release');
+      var hp = pointAt(lone, rel.t, 'hand', 0), bt = build({ actors: [actorSpec(B, -dir, [{ clip: 'hold', dur: 0.3, pose: 'guard' }])], world: W0 }), cp = pointAt(bt, 0.2, 'chest', 0);
+      var fl = Math.max(0.22, Math.min(0.9, Math.abs(cp[0] - hp[0]) / 560)), tLoc = rel.t - lone.actors[0].segments[rel.step].t0 + fl, art = act.art || 'rock';
+      steps[rel.step].events = [[tLoc, { fx: 'projectile', x: cp[0], y: cp[1], x0: hp[0], y0: hp[1], flight: fl, art: art }],
+        [tLoc, { x: cp[0], y: cp[1], fx: 'impact', size: 0.9, hitstop: 0.07, shake: 4, sfx: 'hit', hit: true }],
+        [tLoc + 0.02, { x: cp[0], y: cp[1] - 26, fx: 'text', text: art === 'tomato' ? 'BẸP!' : 'BỐP!', size: 1, color: art === 'tomato' ? '#e8402a' : '#ff4d3d', rot: 8 }]];
       lone = build({ actors: [actorSpec(A, dir, steps)], world: W0 });
-      var r2 = reach(lone), tipX = pointAt(lone, r2.e.t, 'tip', 0)[0], miss = (front - tipX) * dir;
-      if (Math.abs(miss) < 3 || Math.abs(delta) <= 8 && Math.abs(miss) < 8) break;
-      delta += miss;
+    } else {
+      var solo1 = build({ actors: [actorSpec(A, dir, hold0)], world: W0 }), r1 = reach(solo1);
+      if (!r1) throw new Error('choreo: đòn ' + spec.action + ' không có điểm va chạm');
+      // đích: binh khí → mặt trước THÂN đối thủ (đập đất: cách thêm "shock"); tay không (aim: 'head') → MẶT đối thủ — chibi đầu to, tay chân ngắn:
+      // đấm vào thân thì hai đầu đã chồng nhau, nên tay không đứng thẳng / ngả ra sau và đánh vào mặt (đo tâm đầu đối thủ lúc thủ thế)
+      var front = B.x - dir * (26 + (act.shock || 0)) * kB;
+      if (act.aim === 'head') { var bh = build({ actors: [actorSpec(B, -dir, [{ clip: 'hold', dur: 0.3, pose: POSES.fistGuard ? 'fistGuard' : 'guard' }])], world: W0 }); front = pointAt(bh, 0.2, 'head', 0)[0] - dir * 52 * 0.7 * kB; }
+      var minGap = 64 * Math.max(A.k || 0.8, kB), ts = (A.k || 0.8) / 0.62;   // ≥ bề rộng thân (hai thân không lồng nhau); hai đầu do rào đầu bên dưới lo
+      var have = (r1.root - A.x) * dir;
+      delta = (front - A.x) * dir - r1.ahead - have;
+      // chỗ lùi sau lưng người ra đòn (tới mép sân / tới người đứng xem, chừa một thân) — đòn bay xa hơn khoảng cách hai người
+      // thì phải lùi lấy đà; hết chỗ lùi → lùi hết chỗ, phần còn lại thu ngắn chính quãng bay của đòn
+      var room = Math.max(0, dir > 0 ? A.x - 36 : W0 - 36 - A.x);
+      walls.forEach(function (w) { var bd = (A.x - w) * dir; if (bd > 0) room = Math.min(room, Math.max(0, bd - 100 * (A.k || 0.8))); });
+      plan = function (delta) {
+        var st = mk(), back = delta, sc = 1;
+        if (delta < -room && have > 10) { back = -room; sc = Math.max(0.2, (have + delta + room) / have); }
+        if (sc < 1) st.forEach(function (x, i) { if (i) x.tscale = sc; });
+        if (Math.abs(back) > 8) st.splice(1, 0, { clip: 'stepIn', dist: back / ts });
+        return st;
+      };
+      // hai vòng: chèn bước áp sát làm lò xo của binh khí lúc va chạm hơi khác → đo lại, chỉnh phần dư
+      for (var it = 0; it < 2; it++) {
+        delta = Math.max(-420, Math.min(420, delta));
+        var gap = (B.x - (A.x + dir * (have + delta))) * dir;   // không áp sát quá một thân người
+        if (gap < minGap) delta -= minGap - gap;
+        steps = plan(delta);
+        lone = build({ actors: [actorSpec(A, dir, steps)], world: W0 });
+        var r2 = reach(lone), tipX = pointAt(lone, r2.e.t, strikeOf(r2.e), 0)[0], miss = (front - tipX) * dir;
+        if (Math.abs(miss) < 3 || Math.abs(delta) <= 8 && Math.abs(miss) < 8) break;
+        delta += miss;
+      }
     }
     // né / đỡ: canh cú ĐẦU (tránh hoặc gạt cả chuỗi); trúng / ngã / choáng: canh cú CUỐI (đòn kết liễu)
     var stage = function (steps, lone) {
@@ -316,6 +659,7 @@
     // đã cách minGap → đo cả màn, thiếu thì lùi người ra đòn đúng phần thiếu (chịu mũi binh khí ngắn đi một chút, ghi vào duel.short)
     var headGap = 90 * Math.max(A.k || 0.8, kB), short = 0, out, g;
     for (var hg = 0; hg < 3; hg++) {
+      if (act.ranged) { out = stage(steps, lone); g = minHead(out.tl); break; }   // ném: đứng xa, không áp sát
       out = stage(steps, lone); g = minHead(out.tl);
       if (g >= headGap - 1 || hg === 2) break;
       var back = headGap - g + 2; short += back; delta -= back;
@@ -324,6 +668,7 @@
     }
     var tl = out.tl;
     if (re.miss) impacts(tl, 0).forEach(function (e) { delete e.hitstop; if (e.fx === 'impact') e.fx = 'spark'; if (e.sfx === 'hit' || (e.sfx && e.sfx.indexOf && e.sfx.indexOf('hit') >= 0)) e.sfx = 'swish'; e.miss = true; e.hit = true; });
+    if (re.miss && act.ranged) tl.events.forEach(function (e) { if ((e.a || 0) === 0 && e.fx === 'text' && e.t >= out.tImp - 0.01) e.text = 'VÈO!'; });   // ném trượt: không "BỐP!"
     // giờ thật đổi khi bỏ khựng hình (né) → dựng lại bảng giờ
     if (re.miss) retime(tl);
     tl.duel = { dir: dir, impact: out.tImp, reach: out.tReach, react: spec.react || 'hit', action: spec.action, short: Math.round(short), head: Math.round(g),
@@ -417,6 +762,7 @@
     if (what === 'head') return at('head', 100, 96);
     if (what === 'chest') return at('body', 100, 170);
     if (what === 'hand') return at('handR', 128, 193);
+    if (what === 'foot') return at('footR', 108, 226);   // mũi bàn chân gần (đá)
     if (what === 'handL') return at('handL', 72, 193);
     return [F.x, F.G];   // feet
   }
@@ -470,8 +816,12 @@
       if (kind === 'projectile') {
         var fl = e.flight || 0.35; age = r - (e.rt - fl);
         if (age < 0 || age > fl) return;
-        var q = age / fl, x0 = e.x + e.dir * (e.from || 260), y0 = e.y - 40, x = x0 + (e.x - x0) * q, y = y0 + (e.y - y0) * q - Math.sin(q * Math.PI) * 30;
-        live++; out += '<g transform="translate(' + f1(x) + ' ' + f1(y) + ') rotate(' + Math.round(q * 720) + ')"><path d="M-7,-5 L4,-8 L9,1 L3,8 L-8,5 Z" fill="#8a8178" stroke="#2b211d" stroke-width="1.6" stroke-linejoin="round"/></g>';
+        // điểm xuất phát: x0 / y0 thật (đòn ném: tay lúc buông) hoặc lệch "from" đơn vị về phía trước (đá bay vào khung)
+        var x0 = e.x0 != null ? e.x0 : e.x + e.dir * (typeof e.from === 'number' ? e.from : 260), y0 = e.y0 != null ? e.y0 : e.y - 40;
+        var q = age / fl, x = x0 + (e.x - x0) * q, y = y0 + (e.y - y0) * q - Math.sin(q * Math.PI) * Math.min(60, 30 + Math.abs(e.x - x0) * 0.08);
+        live++; out += '<g transform="translate(' + f1(x) + ' ' + f1(y) + ') rotate(' + Math.round(q * 720) + ')">' + (e.art === 'tomato'
+          ? '<circle r="7.5" fill="#e8402a" stroke="#2b211d" stroke-width="1.6"/><path d="M-3,-7 L0,-4 L3,-7 L1,-9 L-1,-9 Z" fill="#4c9a3a" stroke="#2b211d" stroke-width="1"/>'
+          : '<path d="M-7,-5 L4,-8 L9,1 L3,8 L-8,5 Z" fill="#8a8178" stroke="#2b211d" stroke-width="1.6" stroke-linejoin="round"/>') + '</g>';
         return;
       }
       var life = LIFE[kind] || 0;
@@ -549,9 +899,10 @@
     '<linearGradient id="gcc-band" x1="0" x2="1"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset=".5" stop-color="#000" stop-opacity=".5"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient></defs>';
   // bóng mờ (afterimage) khi lướt: vẽ lại diễn viên ở các thời điểm trước, mờ dần
   function ghostsSvg(tl, r, s, asSvg) {
-    var out = '';
+    var out = '', live = 0;
     tl.events.forEach(function (e) {
-      if (!e.ghosts || r < e.rt || r > e.rt + e.ghosts) return;
+      if (!e.ghosts || r < e.rt || r > e.rt + e.ghosts || live >= 2) return;   // ≤ 2 vệt bóng mờ một khung (mỗi vệt = 3 bản vẽ diễn viên)
+      live++;
       [0.05, 0.1, 0.15].forEach(function (d, i) { var F = finalAt(tl, Math.max(0, s - d), e.a); out += asSvg(F, ' opacity="' + (0.34 - i * 0.1).toFixed(2) + '"'); });
     });
     return out;
@@ -695,8 +1046,10 @@
 
   GC.choreo = {
     HZ: HZ, EASE: EASE, POSES: POSES, CLIPS: CLIPS, ORDER: ORDER, SPRINGS: SPRINGS,
-    pose: pose, clip: clip, resolve: resolve, swapLR: swapLR,
+    pose: pose, clip: clip, resolve: resolve, swapLR: swapLR, mix: mix, about: about,
     build: build, duel: duel, solo: solo, impacts: impacts, finalAt: finalAt, allAt: allAt, pointAt: pointAt, weaponOf: weaponOf, fxSvg: fxSvg, overlaySvg: overlaySvg, storyToReal: storyToReal, realToStory: realToStory, camAt: camAt,
-    frameSVG: frameSVG, player: player, measure: measure, demos: {}
+    frameSVG: frameSVG, player: player, measure: measure, demos: {}, ACTIONS: {}, REACTS: {},
+    MOTION: MOTION, FRAME_PACK: FRAME_PACK, PACKS: PACKS, packs: function () { return PACK_ORDER.map(function (k) { return PACKS[k]; }); },
+    checkPack: checkPack, registerPack: registerPack, unregisterPack: unregisterPack, hasWeapon: hasWeapon, canDo: canDo, actionsFor: actionsFor
   };
 })(typeof window !== 'undefined' ? window.GenChibi : globalThis.GenChibi);

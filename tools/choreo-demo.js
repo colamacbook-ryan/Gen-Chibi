@@ -2,12 +2,12 @@
 // gen-chibi — xuất một màn BIÊN ĐẠO thành trang HTML tự chạy (không cần server, không cần mạng)
 // © 2026 Gen Labs — All rights reserved.
 //   node tools/choreo-demo.js [demo] [ra.html] [--fragment]
-//   demo mặc định: tu-long-30s (Triệu Vân, bộ mẫu Tam Quốc). --fragment: bỏ <!doctype>/<html>/<head>/<body> (trang được bọc sẵn khung)
+//   demo mặc định: tuLong30s (Triệu Vân, bộ mẫu Tam Quốc). --fragment: bỏ <!doctype>/<html>/<head>/<body> (trang được bọc sẵn khung)
 'use strict';
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const ROOT = path.join(__dirname, '..');
 const args = process.argv.slice(2), frag = args.includes('--fragment'), pos = args.filter(a => !a.startsWith('--'));
-const demoId = pos[0] || 'tu-long-30s', out = pos[1] || path.join(ROOT, 'choreo-' + demoId + '.html');
+const demoId = pos[0] || 'tuLong30s', out = pos[1] || path.join(ROOT, 'choreo-' + demoId + '.html');
 const SCRIPTS = ['engine/core.js', 'engine/render.js', 'engine/audio.js', 'engine/choreo.js', 'kinds/character/gen.core.js', 'kinds/khung/gen.khung.js', 'kinds/character/gen.choreo.js'];
 const bundle = JSON.parse(fs.readFileSync(path.join(ROOT, 'studio/mau/tam-quoc.json'), 'utf8'));
 const version = fs.readFileSync(path.join(ROOT, 'VERSION'), 'utf8').trim();
@@ -17,11 +17,12 @@ const ctx = { window: {}, console }; vm.createContext(ctx);
 SCRIPTS.filter(f => !/render|audio/.test(f)).forEach(f => vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f }));
 const GC = ctx.window.GenChibi;
 function load(G, B) {
-  G.pack({ id: 'local.my', name: 'Của tôi', owner: 'Người tạo', group: 'mine', license: 'Thuộc người tạo' }, function () {});
+  G.pack({ id: 'local.my', name: 'Bộ mẫu Tam Quốc', owner: 'Gen Labs', group: 'mine', license: '© 2026 Gen Labs' }, function () {});
   B.parts.forEach(p => G.registerDataPart('local.my', p));
   B.items.forEach(x => G.registerItem('local.my', x));
   B.scenes.forEach(x => G.registerScene('local.my', x));
   B.characters.forEach(a => G.registerAsset('local.my', a));
+  (B.motionPacks || []).forEach(m => { const r = G.choreo.registerPack('local.my', m); if (r.errors.length) throw new Error('gói động tác ' + m.id + ': ' + r.errors.join('; ')); });
 }
 load(GC, bundle);
 const D = GC.choreo.demos[demoId];
@@ -33,7 +34,11 @@ const chapters = tl.segments.map(s => ({ id: s.id, label: s.label, t: +GC.choreo
 
 // 2. trang: engine nhúng thẳng (không tải gì từ ngoài) + dữ liệu bộ mẫu cần cho nhân vật + cảnh
 const usedScene = D.scene.split('/')[1], usedChar = D.character.split('/')[1];
-const DATA = { parts: bundle.parts, items: bundle.items, scenes: bundle.scenes.filter(s => s.id === usedScene), characters: bundle.characters.filter(a => a.id === usedChar) };
+// chỉ nhúng thứ màn diễn cần (CNS-040): nhân vật + cảnh + trang bị nhân vật mặc + linh kiện chúng trỏ tới + gói động tác chứa màn diễn
+const refd = (txt, id) => new RegExp('["/:]' + id.replace(/[-]/g, '\\-') + '"').test(txt);
+const chars = bundle.characters.filter(a => a.id === usedChar), scenes = bundle.scenes.filter(s => s.id === usedScene);
+const items = bundle.items.filter(x => refd(JSON.stringify(chars), x.id)), used = JSON.stringify([chars, scenes, items]);
+const DATA = { parts: bundle.parts.filter(p => refd(used, p.id)), items, scenes, characters: chars, motionPacks: (bundle.motionPacks || []).filter(m => m.shows && m.shows[demoId]) };
 const safe = s => s.replace(/<\/script/gi, '<\\/script').replace(/<!--/g, '<\\!--');
 const json = v => safe(JSON.stringify(v)).replace(/[\u2028\u2029]/g, c => '\\u' + c.charCodeAt(0).toString(16));
 const f2 = v => (Math.round(v * 10) / 10).toLocaleString('vi-VN');

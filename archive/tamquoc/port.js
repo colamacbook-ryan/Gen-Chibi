@@ -33,6 +33,7 @@ const tidy = s => String(s || '').replace(/\s+/g, ' ').trim().replace(INK_RE, '"
 
 /* ---------- 2. linh kiện nhân vật ---------- */
 // id cũ → id mới (tiền tố tq- để không đụng linh kiện khác trong "Của tôi")
+const GRIP = { 'tq-kiem': 'weapon', 'tq-xa-mau': 'weapon', 'tq-dao-thanh-long': 'weapon', 'tq-thuong-bac': 'weapon', 'tq-quat-long': 'prop', 'tq-bau-ruou': 'prop' };
 const PARTS = {
   'afi.core/hair:neat': 'tq-toc-gon', 'afi.core/hair:long-back': 'tq-toc-dai', 'afi.core/hair:topknot': 'tq-buoi-toc', 'afi.core/hair:spiky': 'tq-toc-dung',
   'afi.core/beard:goatee': 'tq-rau-de', 'afi.core/beard:long3': 'tq-rau-ba-chom', 'afi.core/beard:tiger': 'tq-rau-ho', 'afi.core/beard:long-thin': 'tq-rau-thua',
@@ -73,6 +74,7 @@ const parts = Object.keys(PARTS).map(k => {
   if (p.eyeArea) d.eyeArea = p.eyeArea;
   if (p.tall) d.tall = true;
   if (p.upright === false) d.upright = false;
+  if (GRIP[d.id]) d.grip = GRIP[d.id];   // v0.16 (CNS-044): binh khí mở đòn "cần binh khí"; quạt / bầu rượu là đạo cụ
   return d;
 });
 const ref = (slot, oldRef) => {
@@ -148,7 +150,7 @@ parts.push({ id: 'tq-thuong-bac', slot: 'heldR', label: 'Thương bạc tua đ�
     '<rect x="123" y="35" width="10" height="5" rx="1.5" fill="{accent}" stroke="{ink}" stroke-width="1.6"/>' +
     '<path d="M123,40 C114,48 116,62 128,66 C140,62 142,48 133,40 Z" fill="{tassel}" stroke="{ink}" stroke-width="2" stroke-linejoin="round"/>' +
     '<path d="M122,48 C121,54 123,58 126,61 M134,48 C135,54 133,58 130,61" fill="none" stroke="#000" stroke-width="1.2" stroke-opacity="0.2" stroke-linecap="round"/></g>' },
-  views: { q45: 'same' }, icon: { cx: 146, cy: 112, size: 196, rot: 32 }, tall: true, license: LICENSE, source: SOURCE });
+  views: { q45: 'same' }, icon: { cx: 146, cy: 112, size: 196, rot: 32 }, tall: true, grip: 'weapon', license: LICENSE, source: SOURCE });
 
 const look = (o, extra) => {
   const parts = {}; Object.keys(o.parts).forEach(sl => { parts[sl] = /^local\.my\//.test(o.parts[sl]) ? o.parts[sl] : ref(sl, o.parts[sl]); });
@@ -234,9 +236,11 @@ const works = [{
 const bundle = {
   format: 'gen-chibi.project/1', kind: 'sample', license: LICENSE,
   // version: đổi mỗi khi nội dung bộ mẫu đổi — Studio thấy máy đang giữ bản cũ thì mời "Cập nhật bộ mẫu" (khớp SAMPLES trong studio/app.js)
-  sample: { owner: 'Gen Labs', license: '© 2026 Gen Labs — bộ mẫu trưng bày: xem, sửa thử, làm phim; không bán lại, không phân phối', version: '2026.10.18-dau-tap' },
+  sample: { owner: 'Gen Labs', license: '© 2026 Gen Labs — bộ mẫu trưng bày: xem, sửa thử, làm phim; không bán lại, không phân phối', version: '2026.10.19-dong-tac' },
   project: { id: 'mau-tam-quoc', name: 'Tam Quốc (bộ chủ đề mẫu)', description: 'Bộ chủ đề trọn vẹn dựng từ khung: 7 tướng, 13 trang bị, 8 bối cảnh, 28 linh kiện nhân vật, 27 phông — và phim 6 phân cảnh có dàn dựng, giọng nói, âm thanh, một màn đấu võ. Bộ mẫu của Gen Labs: xem gói bán trông thế nào (xem trước), không xuất bán.' },
-  requires: { packs: [] }, parts: parts.concat(sceneryParts), items, scenes, characters, works
+  requires: { packs: [] }, parts: parts.concat(sceneryParts), items, scenes, characters, works,
+  // gói động tác của bộ (v0.16, Q10): đòn thương / kiếm kiểu Tử Long + màn "Tử Long 30 giây" — dữ liệu, qua cổng như mọi asset
+  motionPacks: [require('./dong-tac.js')(require(path.join(APP, 'server/engine-node.js')).loadEngine(APP))]
 };
 const out = process.argv[2] ? path.resolve(process.argv[2]) : path.join(APP, 'studio/mau/tam-quoc.json');   // tham số: ghi ra chỗ khác (test so khớp)
 fs.writeFileSync(out, JSON.stringify(bundle, null, 1) + '\n');

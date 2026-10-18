@@ -306,7 +306,7 @@ try {
 // khung vẽ rẻ (≤ 8 ms), nhân vật đổi góc nhìn + nét mặt khi diễn, tua được, âm thanh bật khi bấm xem
 {
   const out = path.join(home, 'choreo.html');
-  execFileSync(process.execPath, [path.join(ROOT, 'tools/choreo-demo.js'), 'tu-long-30s', out], { stdio: 'ignore' });
+  execFileSync(process.execPath, [path.join(ROOT, 'tools/choreo-demo.js'), 'tuLong30s', out], { stdio: 'ignore' });
   const b6 = await pw.chromium.launch(), q = await b6.newPage({ viewport: { width: 1280, height: 900 } }), errs = [];
   q.on('pageerror', e => errs.push(e.message)); q.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
   try {

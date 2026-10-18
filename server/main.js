@@ -278,6 +278,11 @@ async function route(req, res) {
     const b = await body(req);
     try { return send(res, 200, mcp.saveSceneChecked(b.scene, b.note || 'Lưu trong Studio')); } catch (e) { return send(res, e.code || 400, { error: e.message, errors: e.errors || null }); }
   }
+  if (p === '/api/motion-packs' && m === 'GET') return send(res, 200, store.listMotionPacks());
+  if (p === '/api/motion-packs' && m === 'POST') {
+    const b = await body(req, 400 * 1024);
+    try { return send(res, 200, mcp.saveMotionPackChecked(b.pack, b.note || 'Lưu trong Studio')); } catch (e) { return send(res, e.code || 400, { error: e.message, errors: e.errors || null }); }
+  }
   if (p === '/api/parts' && m === 'POST') {
     const b = await body(req, 400 * 1024);
     try { return send(res, 200, mcp.savePartChecked(b.part, b.note || 'Lưu trong Studio')); } catch (e) { return send(res, e.code || 400, { error: e.message, errors: e.errors || null }); }

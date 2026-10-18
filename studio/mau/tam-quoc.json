@@ -5,7 +5,7 @@
  "sample": {
   "owner": "Gen Labs",
   "license": "© 2026 Gen Labs — bộ mẫu trưng bày: xem, sửa thử, làm phim; không bán lại, không phân phối",
-  "version": "2026.10.18-dau-tap"
+  "version": "2026.10.19-dong-tac"
  },
  "project": {
   "id": "mau-tam-quoc",
@@ -671,7 +671,8 @@
     "size": 120,
     "rot": 21
    },
-   "tall": true
+   "tall": true,
+   "grip": "weapon"
   },
   {
    "id": "tq-bau-ruou",
@@ -691,7 +692,8 @@
     "cy": 198,
     "size": 50,
     "rot": 0
-   }
+   },
+   "grip": "prop"
   },
   {
    "id": "tq-quat-long",
@@ -712,7 +714,8 @@
     "size": 132,
     "rot": -24
    },
-   "tall": true
+   "tall": true,
+   "grip": "prop"
   },
   {
    "id": "tq-xa-mau",
@@ -733,7 +736,8 @@
     "size": 196,
     "rot": 32
    },
-   "tall": true
+   "tall": true,
+   "grip": "weapon"
   },
   {
    "id": "tq-dao-thanh-long",
@@ -754,7 +758,8 @@
     "size": 196,
     "rot": 32
    },
-   "tall": true
+   "tall": true,
+   "grip": "weapon"
   },
   {
    "id": "tq-mat-den",
@@ -851,6 +856,7 @@
     "rot": 32
    },
    "tall": true,
+   "grip": "weapon",
    "license": "© 2026 Gen Labs — All rights reserved",
    "source": "Gen Labs — bộ Tam Quốc v0.5 dựng lại từ khung (archive/tamquoc/port.js)"
   },
@@ -2582,6 +2588,1966 @@
      }
     }
    ]
+  }
+ ],
+ "motionPacks": [
+  {
+   "id": "tq-dong-tac",
+   "name": "Đòn thương Tử Long",
+   "project": "mau-tam-quoc",
+   "status": "published",
+   "description": "Gói động tác của bộ mẫu Tam Quốc: liên hoàn ba đòn, xoay người chém vòng, tung người bổ thương xuống đất, múa thương — kèm màn diễn \"Tử Long 30 giây\" (29 hành vi không lặp).",
+   "poses": {
+    "fTwirl": {
+     "body": {
+      "rot": -2
+     },
+     "head": {
+      "rot": -6
+     },
+     "armR": {
+      "rot": -166
+     },
+     "foreR": {
+      "rot": -6
+     },
+     "wR": 0,
+     "armL": {
+      "rot": 30
+     },
+     "foreL": {
+      "rot": 40
+     },
+     "thighR": {
+      "rot": -6
+     },
+     "thighL": {
+      "rot": 6
+     }
+    },
+    "plunge": {
+     "root": {
+      "rot": -10,
+      "sy": 0.82,
+      "sx": 1.12
+     },
+     "pelvis": {
+      "y": 2
+     },
+     "thighR": {
+      "rot": 64
+     },
+     "shinR": {
+      "rot": -84
+     },
+     "thighL": {
+      "rot": -30
+     },
+     "shinL": {
+      "rot": -50
+     },
+     "body": {
+      "rot": -16
+     },
+     "head": {
+      "rot": -10
+     },
+     "armR": {
+      "rot": 120
+     },
+     "foreR": {
+      "rot": -20
+     },
+     "wR": 172,
+     "armL": {
+      "rot": 110
+     },
+     "foreL": {
+      "rot": -10
+     }
+    }
+   },
+   "clips": {
+    "twirl": {
+     "label": "Múa thương",
+     "view": "front",
+     "face": {
+      "eyes": "smug",
+      "brows": "smug",
+      "mouth": "grin"
+     },
+     "keys": [
+      [
+       0.2,
+       {
+        "body": {
+         "rot": -2
+        },
+        "head": {
+         "rot": -6
+        },
+        "armR": {
+         "rot": -166
+        },
+        "foreR": {
+         "rot": -6
+        },
+        "wR": -40,
+        "armL": {
+         "rot": 30
+        },
+        "foreL": {
+         "rot": 40
+        },
+        "thighR": {
+         "rot": -6
+        },
+        "thighL": {
+         "rot": 6
+        }
+       },
+       "back"
+      ],
+      [
+       0.55,
+       {
+        "body": {
+         "rot": 3
+        },
+        "head": {
+         "rot": -6
+        },
+        "armR": {
+         "rot": -166
+        },
+        "foreR": {
+         "rot": -6
+        },
+        "wR": 320,
+        "armL": {
+         "rot": 30
+        },
+        "foreL": {
+         "rot": 40
+        },
+        "thighR": {
+         "rot": -6
+        },
+        "thighL": {
+         "rot": 6
+        }
+       },
+       "in",
+       {
+        "spin": 1
+       }
+      ],
+      [
+       0.9,
+       {
+        "body": {
+         "rot": -3
+        },
+        "head": {
+         "rot": -6
+        },
+        "armR": {
+         "rot": -166
+        },
+        "foreR": {
+         "rot": -6
+        },
+        "wR": 700,
+        "armL": {
+         "rot": 30
+        },
+        "foreL": {
+         "rot": 40
+        },
+        "thighR": {
+         "rot": -6
+        },
+        "thighL": {
+         "rot": 6
+        },
+        "root": {
+         "y": -4
+        }
+       },
+       "lin",
+       {
+        "spin": 1
+       }
+      ],
+      [
+       1.15,
+       {
+        "body": {
+         "rot": -2
+        },
+        "head": {
+         "rot": -6
+        },
+        "armR": {
+         "rot": -120
+        },
+        "foreR": {
+         "rot": -6
+        },
+        "wR": 860,
+        "armL": {
+         "rot": 30
+        },
+        "foreL": {
+         "rot": 40
+        },
+        "thighR": {
+         "rot": -6
+        },
+        "thighL": {
+         "rot": 6
+        }
+       },
+       "out",
+       {
+        "spin": 1
+       }
+      ],
+      [
+       1.4,
+       {
+        "root": {
+         "rot": 4
+        },
+        "pelvis": {
+         "x": 2
+        },
+        "body": {
+         "rot": 6
+        },
+        "head": {
+         "rot": 10,
+         "x": 2
+        },
+        "armR": {
+         "rot": -64
+        },
+        "foreR": {
+         "rot": -46
+        },
+        "wR": 1000,
+        "armL": {
+         "rot": -40
+        },
+        "foreL": {
+         "rot": -70
+        },
+        "thighR": {
+         "rot": -14,
+         "sy": 1.2
+        },
+        "thighL": {
+         "rot": 4
+        }
+       },
+       "out",
+       {
+        "spin": 1
+       }
+      ]
+     ],
+     "events": [
+      [
+       0.4,
+       {
+        "sfx": "swish",
+        "gain": 0.6
+       }
+      ],
+      [
+       0.62,
+       {
+        "sfx": "swish",
+        "gain": 0.7
+       }
+      ],
+      [
+       0.82,
+       {
+        "sfx": "swish",
+        "gain": 0.8
+       }
+      ],
+      [
+       1.02,
+       {
+        "sfx": "swish",
+        "gain": 0.8
+       }
+      ]
+     ],
+     "cam": [
+      [
+       0.1,
+       {
+        "z": 1.6,
+        "fy": 0.85,
+        "lead": 0
+       }
+      ],
+      [
+       1.4,
+       {
+        "z": 1.85,
+        "fy": 0.62,
+        "lead": 50
+       },
+       "io"
+      ]
+     ]
+    },
+    "spin": {
+     "label": "Xoay người chém vòng",
+     "view": "q90",
+     "face": {
+      "eyes": "fierce",
+      "brows": "angry",
+      "mouth": "shout",
+      "fx": [
+       "wind"
+      ]
+     },
+     "keys": [
+      [
+       0.1,
+       {
+        "root": {
+         "sy": 0.94,
+         "sx": 1.04,
+         "y": -4
+        },
+        "pelvis": {
+         "y": 1
+        },
+        "thighR": {
+         "rot": 34
+        },
+        "shinR": {
+         "rot": -20
+        },
+        "thighL": {
+         "rot": -30
+        },
+        "shinL": {
+         "rot": -26
+        },
+        "body": {
+         "rot": -8
+        },
+        "head": {
+         "rot": -4
+        },
+        "armR": {
+         "rot": 92
+        },
+        "foreR": {
+         "rot": 0
+        },
+        "wR": -92,
+        "armL": {
+         "rot": 84
+        },
+        "foreL": {
+         "rot": 10
+        }
+       },
+       "lin",
+       {
+        "view": "q90",
+        "dir": 1,
+        "hide": []
+       }
+      ],
+      [
+       0.185,
+       {
+        "armR": {
+         "rot": -86
+        },
+        "foreR": {
+         "rot": -4
+        },
+        "wR": 92,
+        "armL": {
+         "rot": 60
+        },
+        "foreL": {
+         "rot": 14
+        },
+        "root": {
+         "y": -6
+        }
+       },
+       "lin",
+       {
+        "view": "front",
+        "dir": 1,
+        "hide": [
+         "heldR"
+        ]
+       }
+      ],
+      [
+       0.27,
+       {
+        "root": {
+         "sy": 0.94,
+         "sx": 1.04,
+         "y": -4
+        },
+        "pelvis": {
+         "y": 1
+        },
+        "thighR": {
+         "rot": 34
+        },
+        "shinR": {
+         "rot": -20
+        },
+        "thighL": {
+         "rot": -30
+        },
+        "shinL": {
+         "rot": -26
+        },
+        "body": {
+         "rot": -8
+        },
+        "head": {
+         "rot": -4
+        },
+        "armR": {
+         "rot": 92
+        },
+        "foreR": {
+         "rot": 0
+        },
+        "wR": -92,
+        "armL": {
+         "rot": 84
+        },
+        "foreL": {
+         "rot": 10
+        }
+       },
+       "lin",
+       {
+        "view": "q90",
+        "dir": -1,
+        "hide": []
+       }
+      ],
+      [
+       0.355,
+       {
+        "armR": {
+         "rot": 10
+        },
+        "foreR": {
+         "rot": 8
+        },
+        "wR": -92,
+        "armL": {
+         "rot": 86
+        },
+        "foreL": {
+         "rot": 4
+        },
+        "root": {
+         "y": -6
+        }
+       },
+       "lin",
+       {
+        "view": "back",
+        "dir": 1,
+        "hide": [
+         "heldR"
+        ]
+       }
+      ],
+      [
+       0.44000000000000006,
+       {
+        "root": {
+         "sy": 0.94,
+         "sx": 1.04,
+         "y": -4
+        },
+        "pelvis": {
+         "y": 1
+        },
+        "thighR": {
+         "rot": 34
+        },
+        "shinR": {
+         "rot": -20
+        },
+        "thighL": {
+         "rot": -30
+        },
+        "shinL": {
+         "rot": -26
+        },
+        "body": {
+         "rot": -8
+        },
+        "head": {
+         "rot": -4
+        },
+        "armR": {
+         "rot": 92
+        },
+        "foreR": {
+         "rot": 0
+        },
+        "wR": -92,
+        "armL": {
+         "rot": 84
+        },
+        "foreL": {
+         "rot": 10
+        }
+       },
+       "lin",
+       {
+        "view": "q90",
+        "dir": 1,
+        "hide": []
+       }
+      ],
+      [
+       0.525,
+       {
+        "armR": {
+         "rot": -86
+        },
+        "foreR": {
+         "rot": -4
+        },
+        "wR": 92,
+        "armL": {
+         "rot": 60
+        },
+        "foreL": {
+         "rot": 14
+        },
+        "root": {
+         "y": -6
+        }
+       },
+       "lin",
+       {
+        "view": "front",
+        "dir": 1,
+        "hide": [
+         "heldR"
+        ]
+       }
+      ],
+      [
+       0.61,
+       {
+        "root": {
+         "sy": 0.94,
+         "sx": 1.04,
+         "y": -4
+        },
+        "pelvis": {
+         "y": 1
+        },
+        "thighR": {
+         "rot": 34
+        },
+        "shinR": {
+         "rot": -20
+        },
+        "thighL": {
+         "rot": -30
+        },
+        "shinL": {
+         "rot": -26
+        },
+        "body": {
+         "rot": -8
+        },
+        "head": {
+         "rot": -4
+        },
+        "armR": {
+         "rot": 92
+        },
+        "foreR": {
+         "rot": 0
+        },
+        "wR": -92,
+        "armL": {
+         "rot": 84
+        },
+        "foreL": {
+         "rot": 10
+        }
+       },
+       "lin",
+       {
+        "view": "q90",
+        "dir": -1,
+        "hide": []
+       }
+      ],
+      [
+       0.6950000000000001,
+       {
+        "armR": {
+         "rot": 10
+        },
+        "foreR": {
+         "rot": 8
+        },
+        "wR": -92,
+        "armL": {
+         "rot": 86
+        },
+        "foreL": {
+         "rot": 4
+        },
+        "root": {
+         "y": -6
+        }
+       },
+       "lin",
+       {
+        "view": "back",
+        "dir": 1,
+        "hide": [
+         "heldR"
+        ]
+       }
+      ],
+      [
+       0.78,
+       {
+        "root": {
+         "sy": 0.94,
+         "sx": 1.04,
+         "y": -4
+        },
+        "pelvis": {
+         "y": 1
+        },
+        "thighR": {
+         "rot": 34
+        },
+        "shinR": {
+         "rot": -20
+        },
+        "thighL": {
+         "rot": -30
+        },
+        "shinL": {
+         "rot": -26
+        },
+        "body": {
+         "rot": -8
+        },
+        "head": {
+         "rot": -4
+        },
+        "armR": {
+         "rot": 92
+        },
+        "foreR": {
+         "rot": 0
+        },
+        "wR": -92,
+        "armL": {
+         "rot": 84
+        },
+        "foreL": {
+         "rot": 10
+        }
+       },
+       "lin",
+       {
+        "view": "q90",
+        "dir": 1,
+        "hide": []
+       }
+      ],
+      [
+       1.005,
+       "guard",
+       "out",
+       {
+        "view": "q90",
+        "dir": 1
+       }
+      ]
+     ],
+     "travel": [
+      [
+       0,
+       0
+      ],
+      [
+       0.9,
+       30,
+       "io"
+      ]
+     ],
+     "events": [
+      [
+       0.12,
+       {
+        "sfx": "swish"
+       }
+      ],
+      [
+       0.45,
+       {
+        "sfx": "swish"
+       }
+      ],
+      [
+       0.5,
+       {
+        "at": "chest",
+        "fx": "ring",
+        "size": 0.9
+       }
+      ],
+      [
+       0.8,
+       {
+        "at": "chest",
+        "fx": "ring",
+        "size": 1.1
+       }
+      ],
+      [
+       0.8,
+       {
+        "at": "tip",
+        "fx": "spark",
+        "size": 1,
+        "hit": true,
+        "sfx": "hit",
+        "gain": 0.7
+       }
+      ]
+     ],
+     "cam": [
+      [
+       0.1,
+       {
+        "z": 1.7,
+        "lead": 30,
+        "fy": 0.55,
+        "roll": 0
+       }
+      ],
+      [
+       0.9,
+       {
+        "z": 1.55,
+        "roll": 3
+       }
+      ]
+     ]
+    },
+    "leap": {
+     "label": "Tung người lên cao",
+     "view": "q90",
+     "face": {
+      "eyes": "fierce",
+      "brows": "determined",
+      "mouth": "flat",
+      "fx": []
+     },
+     "keys": [
+      [
+       0.2,
+       "crouch",
+       "out"
+      ],
+      [
+       0.34,
+       {
+        "root": {
+         "sy": 1.18,
+         "sx": 0.88,
+         "y": -30
+        },
+        "pelvis": {
+         "y": 2
+        },
+        "thighR": {
+         "rot": 10
+        },
+        "shinR": {
+         "rot": -6
+        },
+        "thighL": {
+         "rot": -6
+        },
+        "shinL": {
+         "rot": -4
+        },
+        "body": {
+         "rot": -8
+        },
+        "head": {
+         "rot": -6
+        },
+        "armR": {
+         "rot": 150
+        },
+        "foreR": {
+         "rot": 40
+        },
+        "wR": 120,
+        "armL": {
+         "rot": 50
+        },
+        "foreL": {
+         "rot": 40
+        }
+       },
+       "snap"
+      ],
+      [
+       0.75,
+       "airTuck",
+       "up",
+       {
+        "ez": {
+         "root.y": "up"
+        }
+       }
+      ],
+      [
+       1.05,
+       {
+        "root": {
+         "y": -100,
+         "sy": 1,
+         "sx": 1
+        },
+        "thighR": {
+         "rot": 70
+        },
+        "shinR": {
+         "rot": -110
+        },
+        "thighL": {
+         "rot": 56
+        },
+        "shinL": {
+         "rot": -100
+        },
+        "body": {
+         "rot": -2
+        },
+        "head": {
+         "rot": 6
+        },
+        "armR": {
+         "rot": 168
+        },
+        "foreR": {
+         "rot": 12
+        },
+        "wR": -178,
+        "armL": {
+         "rot": 160
+        },
+        "foreL": {
+         "rot": 20
+        }
+       },
+       "sine"
+      ]
+     ],
+     "travel": [
+      [
+       0,
+       0
+      ],
+      [
+       0.34,
+       10,
+       "in"
+      ],
+      [
+       1.05,
+       90,
+       "out"
+      ]
+     ],
+     "speed": [
+      [
+       0,
+       1
+      ],
+      [
+       0.55,
+       1
+      ],
+      [
+       0.66,
+       0.3
+      ],
+      [
+       1.05,
+       0.3
+      ]
+     ],
+     "events": [
+      [
+       0.32,
+       {
+        "sfx": "whoosh"
+       }
+      ],
+      [
+       0.34,
+       {
+        "at": "feet",
+        "fx": "dust",
+        "size": 1
+       }
+      ],
+      [
+       0.36,
+       {
+        "lines": 0.5
+       }
+      ],
+      [
+       0.62,
+       {
+        "grade": "cool"
+       }
+      ]
+     ],
+     "cam": [
+      [
+       0.2,
+       {
+        "z": 1.5,
+        "lead": 40,
+        "fy": 0.5,
+        "roll": 0,
+        "lag": 5
+       }
+      ],
+      [
+       0.9,
+       {
+        "z": 1.6,
+        "fy": 1.05,
+        "roll": 6,
+        "lag": 6
+       },
+       "io"
+      ]
+     ]
+    },
+    "plunge": {
+     "label": "Bổ thương xuống đất",
+     "view": "q90",
+     "face": {
+      "eyes": "fierce",
+      "brows": "angry",
+      "mouth": "shout"
+     },
+     "keys": [
+      [
+       0.12,
+       {
+        "root": {
+         "y": -84,
+         "sy": 1,
+         "sx": 1,
+         "rot": -10
+        },
+        "thighR": {
+         "rot": 30
+        },
+        "shinR": {
+         "rot": -40
+        },
+        "thighL": {
+         "rot": 56
+        },
+        "shinL": {
+         "rot": -100
+        },
+        "body": {
+         "rot": -2
+        },
+        "head": {
+         "rot": 6
+        },
+        "armR": {
+         "rot": 168
+        },
+        "foreR": {
+         "rot": 12
+        },
+        "wR": 168,
+        "armL": {
+         "rot": 160
+        },
+        "foreL": {
+         "rot": 20
+        }
+       },
+       "in"
+      ],
+      [
+       0.26,
+       "plunge",
+       "down",
+       {
+        "ez": {
+         "root.y": "down"
+        }
+       }
+      ],
+      [
+       0.6,
+       {
+        "root": {
+         "rot": -10,
+         "sy": 0.86,
+         "sx": 1.12
+        },
+        "pelvis": {
+         "y": 2
+        },
+        "thighR": {
+         "rot": 64
+        },
+        "shinR": {
+         "rot": -84
+        },
+        "thighL": {
+         "rot": -30
+        },
+        "shinL": {
+         "rot": -50
+        },
+        "body": {
+         "rot": -16
+        },
+        "head": {
+         "rot": -10
+        },
+        "armR": {
+         "rot": 120
+        },
+        "foreR": {
+         "rot": -20
+        },
+        "wR": 172,
+        "armL": {
+         "rot": 110
+        },
+        "foreL": {
+         "rot": -10
+        }
+       },
+       "out"
+      ]
+     ],
+     "travel": [
+      [
+       0,
+       0
+      ],
+      [
+       0.26,
+       50,
+       "in"
+      ]
+     ],
+     "speed": [
+      [
+       0,
+       0.3
+      ],
+      [
+       0.08,
+       1.4
+      ],
+      [
+       0.3,
+       1
+      ]
+     ],
+     "events": [
+      [
+       0.05,
+       {
+        "grade": "none",
+        "sfx": "whoosh"
+       }
+      ],
+      [
+       0.26,
+       {
+        "at": "tip",
+        "fx": "impact",
+        "size": 1.6,
+        "hitstop": 0.13,
+        "shake": 13,
+        "flash": 0.75,
+        "sfx": [
+         "rumble",
+         "hit"
+        ]
+       }
+      ],
+      [
+       0.26,
+       {
+        "at": "tip",
+        "fx": "ring",
+        "size": 1.4
+       }
+      ],
+      [
+       0.26,
+       {
+        "at": "tip",
+        "fx": "debris",
+        "size": 1.2
+       }
+      ],
+      [
+       0.27,
+       {
+        "at": "feet",
+        "fx": "dust",
+        "size": 1.5
+       }
+      ],
+      [
+       0.28,
+       {
+        "at": "tip",
+        "fx": "text",
+        "text": "RẦM!",
+        "dy": -70,
+        "size": 1.5,
+        "color": "#ff7a1f"
+       }
+      ]
+     ],
+     "cam": [
+      [
+       0.08,
+       {
+        "z": 1.5,
+        "fy": 0.7,
+        "roll": 0,
+        "lag": 9
+       },
+       "snap"
+      ],
+      [
+       0.26,
+       {
+        "z": 1.75,
+        "fy": 0.45,
+        "roll": -4,
+        "lag": 12
+       },
+       "snap"
+      ],
+      [
+       0.6,
+       {
+        "z": 1.55,
+        "roll": 0
+       }
+      ]
+     ]
+    },
+    "counter": {
+     "label": "Phản đòn liên hoàn",
+     "view": "q90",
+     "face": {
+      "eyes": "fierce",
+      "brows": "angry",
+      "mouth": "shout"
+     },
+     "keys": [
+      [
+       0.1,
+       {
+        "root": {
+         "rot": 6,
+         "x": 6,
+         "sy": 0.92,
+         "sx": 1.06
+        },
+        "body": {
+         "rot": 8
+        },
+        "head": {
+         "rot": -2
+        },
+        "thighR": {
+         "rot": 26
+        },
+        "shinR": {
+         "rot": -30
+        },
+        "thighL": {
+         "rot": -24
+        },
+        "shinL": {
+         "rot": -30
+        },
+        "armR": {
+         "rot": 24
+        },
+        "foreR": {
+         "rot": 46
+        },
+        "wR": -84,
+        "armL": {
+         "rot": 60
+        },
+        "foreL": {
+         "rot": 40
+        }
+       },
+       "out"
+      ],
+      [
+       0.16,
+       {
+        "$": "lunge",
+        "root": {
+         "rot": -9,
+         "x": -6,
+         "sy": 0.97
+        },
+        "thighR": {
+         "rot": 44
+        },
+        "thighL": {
+         "rot": -34
+        },
+        "armR": {
+         "rot": 90
+        },
+        "foreR": {
+         "rot": 0
+        },
+        "wR": -92
+       },
+       "snap"
+      ],
+      [
+       0.26,
+       {
+        "root": {
+         "rot": 6,
+         "x": 6,
+         "sy": 0.92,
+         "sx": 1.06
+        },
+        "body": {
+         "rot": 8
+        },
+        "head": {
+         "rot": -2
+        },
+        "thighR": {
+         "rot": 26
+        },
+        "shinR": {
+         "rot": -30
+        },
+        "thighL": {
+         "rot": -24
+        },
+        "shinL": {
+         "rot": -30
+        },
+        "armR": {
+         "rot": 24
+        },
+        "foreR": {
+         "rot": 46
+        },
+        "wR": -86,
+        "armL": {
+         "rot": 60
+        },
+        "foreL": {
+         "rot": 40
+        }
+       },
+       "out"
+      ],
+      [
+       0.32,
+       {
+        "$": "lunge",
+        "root": {
+         "rot": -9,
+         "x": -12,
+         "sy": 0.97
+        },
+        "thighR": {
+         "rot": 44
+        },
+        "thighL": {
+         "rot": -34
+        },
+        "armR": {
+         "rot": 90
+        },
+        "foreR": {
+         "rot": 0
+        },
+        "wR": -90
+       },
+       "snap"
+      ],
+      [
+       0.44,
+       {
+        "root": {
+         "sy": 0.84,
+         "sx": 1.1
+        },
+        "pelvis": {
+         "y": 2
+        },
+        "thighR": {
+         "rot": 50
+        },
+        "shinR": {
+         "rot": -70
+        },
+        "thighL": {
+         "rot": 30
+        },
+        "shinL": {
+         "rot": -64
+        },
+        "body": {
+         "rot": -8
+        },
+        "head": {
+         "rot": -6
+        },
+        "armR": {
+         "rot": 80
+        },
+        "foreR": {
+         "rot": 40
+        },
+        "wR": -130,
+        "armL": {
+         "rot": 50
+        },
+        "foreL": {
+         "rot": 40
+        }
+       },
+       "out"
+      ],
+      [
+       0.56,
+       {
+        "root": {
+         "rot": 8,
+         "y": -16,
+         "sy": 1.08,
+         "sx": 0.96
+        },
+        "body": {
+         "rot": 10
+        },
+        "head": {
+         "rot": 12
+        },
+        "thighR": {
+         "rot": 40
+        },
+        "shinR": {
+         "rot": -50
+        },
+        "thighL": {
+         "rot": -10
+        },
+        "shinL": {
+         "rot": -10
+        },
+        "armR": {
+         "rot": 178
+        },
+        "foreR": {
+         "rot": 10
+        },
+        "wR": 48,
+        "armL": {
+         "rot": 140
+        },
+        "foreL": {
+         "rot": 10
+        }
+       },
+       "snap",
+       {
+        "ez": {
+         "root.y": "up"
+        }
+       }
+      ],
+      [
+       0.9,
+       {
+        "thighR": {
+         "rot": 12
+        },
+        "shinR": {
+         "rot": -10
+        },
+        "thighL": {
+         "rot": -10
+        },
+        "shinL": {
+         "rot": -8
+        },
+        "body": {
+         "rot": -3
+        },
+        "armR": {
+         "rot": 38
+        },
+        "foreR": {
+         "rot": 46
+        },
+        "wR": -42,
+        "armL": {
+         "rot": 36
+        },
+        "foreL": {
+         "rot": 40
+        }
+       },
+       "down",
+       {
+        "ez": {
+         "root.y": "down"
+        }
+       }
+      ]
+     ],
+     "travel": [
+      [
+       0,
+       0
+      ],
+      [
+       0.16,
+       16,
+       "snap"
+      ],
+      [
+       0.32,
+       34,
+       "snap"
+      ],
+      [
+       0.56,
+       48,
+       "snap"
+      ]
+     ],
+     "events": [
+      [
+       0.12,
+       {
+        "sfx": "swish",
+        "gain": 0.7
+       }
+      ],
+      [
+       0.16,
+       {
+        "at": "tip",
+        "fx": "spark",
+        "size": 0.8,
+        "sfx": "hit",
+        "gain": 0.6,
+        "hit": true
+       }
+      ],
+      [
+       0.28,
+       {
+        "sfx": "swish",
+        "gain": 0.7
+       }
+      ],
+      [
+       0.32,
+       {
+        "at": "tip",
+        "fx": "spark",
+        "size": 0.9,
+        "sfx": "hit",
+        "gain": 0.7,
+        "hit": true
+       }
+      ],
+      [
+       0.5,
+       {
+        "sfx": "swish",
+        "gain": 1
+       }
+      ],
+      [
+       0.56,
+       {
+        "fx": "smear",
+        "smear": 0.12
+       }
+      ],
+      [
+       0.56,
+       {
+        "at": "tip",
+        "fx": "impact",
+        "size": 1.2,
+        "hitstop": 0.09,
+        "shake": 7,
+        "sfx": "hit"
+       }
+      ],
+      [
+       0.58,
+       {
+        "at": "tip",
+        "fx": "text",
+        "text": "XOẸT!",
+        "dy": -20,
+        "size": 1.1,
+        "rot": -14
+       }
+      ]
+     ],
+     "cam": [
+      [
+       0.1,
+       {
+        "z": 2,
+        "lead": 90,
+        "fy": 0.55,
+        "roll": -2,
+        "lag": 7
+       }
+      ],
+      [
+       0.56,
+       {
+        "z": 2.25,
+        "fy": 0.75,
+        "roll": 4
+       },
+       "snap"
+      ],
+      [
+       0.9,
+       {
+        "z": 1.7,
+        "roll": 0
+       }
+      ]
+     ]
+    },
+    "finale": {
+     "label": "Tạo dáng kết",
+     "view": "front",
+     "face": {
+      "eyes": "smug",
+      "brows": "smug",
+      "mouth": "smile",
+      "fx": [
+       "sparkles"
+      ]
+     },
+     "keys": [
+      [
+       0.14,
+       {
+        "root": {
+         "sy": 0.82,
+         "sx": 1.14
+        },
+        "pelvis": {
+         "y": 2
+        },
+        "head": {
+         "rot": 0
+        },
+        "armL": {
+         "rot": 40
+        },
+        "foreL": {
+         "rot": 30
+        },
+        "armR": {
+         "rot": -40
+        },
+        "foreR": {
+         "rot": -30
+        },
+        "wR": 10,
+        "thighL": {
+         "rot": 20
+        },
+        "shinL": {
+         "rot": -24
+        },
+        "thighR": {
+         "rot": -20
+        },
+        "shinR": {
+         "rot": 24
+        }
+       },
+       "out"
+      ],
+      [
+       0.34,
+       {
+        "root": {
+         "sy": 1.02
+        },
+        "pelvis": {
+         "x": 2,
+         "rot": 4
+        },
+        "body": {
+         "rot": -5
+        },
+        "head": {
+         "rot": -8
+        },
+        "armR": {
+         "rot": -60
+        },
+        "foreR": {
+         "rot": -40
+        },
+        "wR": 40,
+        "armL": {
+         "rot": 128
+        },
+        "foreL": {
+         "rot": -64
+        },
+        "thighL": {
+         "rot": 12
+        },
+        "thighR": {
+         "rot": -8
+        }
+       },
+       "back"
+      ],
+      [
+       0.72,
+       {
+        "root": {
+         "sy": 1.02
+        },
+        "pelvis": {
+         "x": 2,
+         "rot": 4
+        },
+        "body": {
+         "rot": -5
+        },
+        "head": {
+         "rot": -9
+        },
+        "armR": {
+         "rot": -60
+        },
+        "foreR": {
+         "rot": -40
+        },
+        "wR": 40,
+        "armL": {
+         "rot": 128
+        },
+        "foreL": {
+         "rot": -64
+        },
+        "thighL": {
+         "rot": 12
+        },
+        "thighR": {
+         "rot": -8
+        }
+       },
+       "sine"
+      ]
+     ],
+     "speed": [
+      [
+       0.34,
+       1
+      ],
+      [
+       0.44,
+       0.16
+      ],
+      [
+       0.72,
+       0.16
+      ]
+     ],
+     "events": [
+      [
+       0.3,
+       {
+        "sfx": "swish"
+       }
+      ],
+      [
+       0.34,
+       {
+        "flash": 0.5,
+        "sfx": "gong",
+        "gain": 0.8,
+        "grade": "gold",
+        "letterbox": 1
+       }
+      ],
+      [
+       0.36,
+       {
+        "at": "tip",
+        "fx": "glint",
+        "size": 1.8
+       }
+      ],
+      [
+       0.4,
+       {
+        "title": "Thường Sơn Triệu Tử Long",
+        "sub": "gen-chibi · biên đạo liên hoàn 30 giây",
+        "hold": 4
+       }
+      ],
+      [
+       0.72,
+       {
+        "music": null
+       }
+      ]
+     ],
+     "cam": [
+      [
+       0.1,
+       {
+        "z": 1.9,
+        "fy": 0.75,
+        "lead": 0,
+        "roll": 0,
+        "lag": 6
+       }
+      ],
+      [
+       0.34,
+       {
+        "z": 1.55,
+        "fy": 0.62,
+        "roll": -5,
+        "lag": 8
+       },
+       "snap"
+      ]
+     ]
+    }
+   },
+   "actions": {
+    "combo": {
+     "label": "Liên hoàn ba đòn",
+     "clips": [
+      "counter"
+     ],
+     "attack": true,
+     "needs": "weapon"
+    },
+    "spin": {
+     "label": "Xoay người chém vòng",
+     "clips": [
+      "spin"
+     ],
+     "attack": true,
+     "needs": "weapon"
+    },
+    "leap": {
+     "label": "Tung người bổ xuống",
+     "clips": [
+      "leap",
+      "plunge"
+     ],
+     "attack": true,
+     "needs": "weapon",
+     "shock": 70,
+     "hint": "bổ xuống đất trước mặt đối thủ — trúng bằng chấn động"
+    },
+    "twirl": {
+     "label": "Múa thương",
+     "clips": [
+      "twirl"
+     ],
+     "needs": "weapon"
+    }
+   },
+   "shows": {
+    "tuLong30s": {
+     "title": "Tử Long 30 giây",
+     "character": "local.my/tq-trieu-van",
+     "scene": "local.my/tq-vuon-dao",
+     "scale": 0.62,
+     "ground": 330,
+     "world": 1280,
+     "x0": -40,
+     "dir": 1,
+     "weapon": {
+      "R": {
+       "angle": 13,
+       "tip": 201,
+       "butt": 41
+      }
+     },
+     "steps": [
+      {
+       "clip": "sneakIn",
+       "tempo": 0.8
+      },
+      {
+       "clip": "peek",
+       "tempo": 0.85
+      },
+      {
+       "clip": "scratch"
+      },
+      {
+       "clip": "startle"
+      },
+      {
+       "clip": "run"
+      },
+      {
+       "clip": "skid"
+      },
+      {
+       "clip": "stretch",
+       "tempo": 0.8
+      },
+      {
+       "clip": "twirl",
+       "tempo": 0.85
+      },
+      {
+       "clip": "guard"
+      },
+      {
+       "clip": "thrust"
+      },
+      {
+       "clip": "sweep"
+      },
+      {
+       "clip": "spin"
+      },
+      {
+       "clip": "leap"
+      },
+      {
+       "clip": "plunge"
+      },
+      {
+       "clip": "heroPose",
+       "tempo": 0.85
+      },
+      {
+       "clip": "hitReact"
+      },
+      {
+       "clip": "tumble"
+      },
+      {
+       "clip": "dizzy"
+      },
+      {
+       "clip": "kipUp"
+      },
+      {
+       "clip": "rage",
+       "tempo": 0.85
+      },
+      {
+       "clip": "dash"
+      },
+      {
+       "clip": "backflip"
+      },
+      {
+       "clip": "block"
+      },
+      {
+       "clip": "counter"
+      },
+      {
+       "clip": "victory",
+       "tempo": 0.85
+      },
+      {
+       "clip": "dance",
+       "tempo": 0.8
+      },
+      {
+       "clip": "salute",
+       "tempo": 0.8
+      },
+      {
+       "clip": "wave",
+       "tempo": 0.85
+      },
+      {
+       "clip": "finale"
+      }
+     ]
+    }
+   }
   }
  ]
 }
