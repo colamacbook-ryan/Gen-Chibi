@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!--page-->
+<title>Tử Long 30 giây</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:wght@700;800&family=Be+Vietnam+Pro:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Phòng chiếu sơn mài: nền then sơn mài, chữ bạc như giáp Triệu Vân, điểm nhấn đỏ tua thương, vàng viền giáp. Một cột, sân khấu 16:9 là trung tâm. */
+:root {
+  --lacquer: #17110f; --panel: #211916; --line: #3b2c26; --silver: #efe7df; --muted: #ab9b90;
+  --tassel: #d9473a; --trim: #d6a646; --focus: #f2c46b;
+  --display: "Alegreya", "Iowan Old Style", Georgia, serif;
+  --body: "Be Vietnam Pro", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { background: var(--lacquer); color: var(--silver); }
+body { font: 15px/1.6 var(--body); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-block: 28px 56px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 28px; }
+.eyebrow { margin: 0; font: 500 12px/1.4 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--trim); }
+h1 { margin: 6px 0 8px; font: 800 clamp(34px, 6vw, 58px)/1.02 var(--display); letter-spacing: -.01em; text-wrap: balance; }
+h1 em { font-style: normal; color: var(--tassel); }
+.lede { margin: 0; max-width: 68ch; color: var(--muted); }
+h2 { margin: 0 0 12px; font: 700 22px/1.2 var(--display); text-wrap: balance; }
+.screen { position: relative; aspect-ratio: 16 / 9; max-width: 100%; background: #000; border-radius: 6px; overflow: hidden; box-shadow: 0 0 0 1px var(--line), 0 24px 60px -24px #000; }
+.screen svg.gcc-stage { display: block; width: 100%; height: 100%; }
+.big { position: absolute; inset: 0; display: grid; place-items: end start; padding: clamp(12px, 3vw, 28px); background: linear-gradient(180deg, transparent 55%, rgba(10, 6, 5, .6)); border: 0; color: var(--silver); cursor: pointer; font: 600 15px var(--body); }
+.big span { display: inline-flex; align-items: center; gap: 12px; padding: 14px 22px 14px 18px; border-radius: 999px; background: var(--tassel); box-shadow: 0 10px 30px -8px rgba(217, 71, 58, .7); }
+.big svg { width: 22px; height: 22px; fill: currentColor; }
+.big:focus-visible span, .btn:focus-visible, .chap button:focus-visible, input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.bar { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.btn { flex: none; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line); background: var(--panel); color: var(--silver); cursor: pointer; }
+.btn svg { width: 18px; height: 18px; fill: currentColor; }
+.btn:hover { border-color: var(--trim); }
+.scrub { position: relative; flex: 1; min-width: 0; height: 40px; }
+.ticks { position: absolute; left: 0; right: 0; top: 50%; height: 14px; transform: translateY(-50%); pointer-events: none; }
+.ticks i { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--line); }
+.ticks i.on { background: var(--trim); }
+#seek { position: absolute; inset: 0; width: 100%; margin: 0; background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer; }
+#seek::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--tassel) var(--p, 0%), var(--line) var(--p, 0%)); }
+#seek::-moz-range-track { height: 4px; border-radius: 2px; background: var(--line); }
+#seek::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--tassel); }
+#seek::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%; background: var(--silver); border: 2px solid var(--tassel); }
+#seek::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--silver); border: 2px solid var(--tassel); }
+.time { flex: none; font: 500 13px var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); min-width: 9ch; text-align: right; }
+.now { margin: 8px 0 0; font: 600 16px var(--body); min-height: 1.6em; }
+.now b { font: 500 13px var(--mono); color: var(--trim); margin-right: 8px; }
+.cols { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 28px; align-items: start; }
+@media (max-width: 820px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+.chap { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 6px; }
+.chap button { width: 100%; display: flex; gap: 10px; align-items: baseline; padding: 7px 10px; border: 1px solid transparent; border-radius: 6px; background: var(--panel); color: var(--silver); font: 14px/1.3 var(--body); text-align: left; cursor: pointer; }
+.chap button:hover { border-color: var(--line); }
+.chap button b { flex: none; width: 2ch; font: 500 12px var(--mono); color: var(--muted); text-align: right; }
+.chap button span { flex: 1; min-width: 0; }
+.chap button small { flex: none; font: 500 11px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.chap button.on { border-color: var(--tassel); background: #2b1b17; }
+.chap button.on b { color: var(--tassel); }
+dl { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 16px; }
+dt { font: 500 13px var(--mono); color: var(--trim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+dd { margin: 0; color: var(--silver); }
+dd small { display: block; color: var(--muted); font-size: 13px; }
+.note { margin: 14px 0 0; font-size: 13px; color: var(--muted); max-width: 60ch; }
+.inside { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px 24px; }
+.inside h3 { margin: 0 0 4px; font: 600 15px var(--body); color: var(--silver); }
+.inside p { margin: 0; font-size: 14px; color: var(--muted); }
+code { font: 500 13px var(--mono); color: var(--silver); }
+footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 16px; }
+@media (prefers-reduced-motion: reduce) { .big span { box-shadow: none; } }
+</style>
+<main class="wrap">
+  <header>
+    <p class="eyebrow">gen-chibi {{VERSION}} · biên đạo liên hoàn</p>
+    <h1>Tử Long <em>30 giây</em></h1>
+    <p class="lede">Một nhân vật diễn liền 29 hành vi, không hành vi nào lặp lại: rón rén, giật mình, chạy, múa thương, đâm, quét, xoay, tung người, bổ xuống, trúng đá, lộn, choáng, bật dậy, nổi giận, lướt, lộn ngược, gạt đỡ, phản đòn, nhảy mừng, thi lễ, vẫy chào. Máy quay, slow-mo, hit-stop, hiệu ứng và âm thanh đều do engine tính theo từng khung hình. Trang này không chứa file video nào.</p>
+  </header>
+
+  <section aria-label="Màn diễn">
+    <div class="screen" id="screen">
+      <button class="big" id="big" type="button" aria-label="Xem màn diễn có tiếng"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg>Xem · bật tiếng</span></button>
+    </div>
+    <div class="bar">
+      <button class="btn" id="play" type="button" aria-label="Phát"><svg viewBox="0 0 24 24" aria-hidden="true"><path id="playIcon" d="M7 4.5v15l13-7.5z"/></svg></button>
+      <div class="scrub"><div class="ticks" id="ticks"></div><input id="seek" type="range" min="0" step="0.01" value="0" aria-label="Tua"></div>
+      <span class="time" id="time">0,0 / {{REAL}} s</span>
+      <button class="btn" id="mute" type="button" aria-label="Tắt tiếng"><svg viewBox="0 0 24 24" aria-hidden="true"><path id="muteIcon" d="M4 9h4l5-4v14l-5-4H4zM16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" stroke="currentColor" stroke-width="1.8" fill-rule="evenodd"/></svg></button>
+    </div>
+    <p class="now" id="now" aria-live="polite"></p>
+  </section>
+
+  <div class="cols">
+    <section aria-labelledby="h-chap">
+      <h2 id="h-chap">{{BEHAVIORS}} hành vi, bấm để tua tới</h2>
+      <ol class="chap" id="chap"></ol>
+    </section>
+    <section aria-labelledby="h-num">
+      <h2 id="h-num">Đo được</h2>
+      <dl>
+        <dt>{{REAL}} s</dt><dd>thời lượng thật, gồm slow-mo và hit-stop</dd>
+        <dt>{{UNIQUE}} / {{BEHAVIORS}}</dt><dd>hành vi khác nhau, không lặp<small>dáng đỉnh của hai hành vi gần nhau nhất cách {{MINPAIR}} đv, trung bình {{MEANPAIR}} đv</small></dd>
+        <dt>{{KEYS}}</dt><dd>tư thế then chốt, nội suy + lò xo ra 120 khung/giây</dd>
+        <dt>{{P99}} đv</dt><dd>99% khung hình: điểm mốc cơ thể dịch chuyển dưới mức này<small>trung vị {{P50}} đv · lớn nhất {{MAXMOVE}} đv, lúc lướt tới (nhân vật cao ~150 đv)</small></dd>
+        <dt>{{TURNS}} lần</dt><dd>đổi góc nhìn (nghiêng, 3/4, chính diện, sau lưng)<small>cú đổi lớn nhất {{MAXTURN}} đv: bản vẽ đổi góc, đi qua góc 45° ở giữa</small></dd>
+        <dt>{{SLOW}} s · {{HITSTOPS}}</dt><dd>truyện chạy chậm (slow-mo) · lần khựng hình khi trúng đòn</dd>
+        <dt>{{SFX}} · {{FX}}</dt><dd>tiếng động tổng hợp · hiệu ứng (vệt chém, va chạm, bụi, vòng sóng, chữ tượng thanh)</dd>
+        <dt>{{FACES}}</dt><dd>lần đổi nét mặt</dd>
+      </dl>
+      <p class="note">Số đo do chính engine tính lúc xuất trang (<code>tools/choreo-demo.js</code>, 60 khung/giây). Đơn vị "đv" là đơn vị cảnh 640×360.</p>
+    </section>
+  </div>
+
+  <section aria-labelledby="h-in">
+    <h2 id="h-in">Bên trong</h2>
+    <div class="inside">
+      <div><h3>Tư thế then chốt</h3><p>Mỗi hành vi là vài dáng chính (lấy đà, ra đòn, dư lực). Engine nội suy giữa chúng với nhịp riêng: chậm dần, bật nhanh, vượt quá rồi về, rơi tự do.</p></div>
+      <div><h3>Lò xo cho phần lắc theo</h3><p>Đầu, vạt áo, cẳng tay và ngọn thương đi trễ một nhịp rồi nảy lại, nên chuyển động có quán tính thay vì cứng như con rối.</p></div>
+      <div><h3>Hai đồng hồ</h3><p>Giờ truyện và giờ thật tách nhau: slow-mo khi tung người, khựng hình 70–130 ms khi trúng đòn, tua nhanh lúc bổ xuống.</p></div>
+      <div><h3>Máy quay có thị sai</h3><p>Bám nhân vật kiểu lò xo, dẫn khung về hướng chạy, cận mặt khi giật mình, nghiêng khi bay. Bốn lớp cảnh trôi bốn tốc độ khác nhau.</p></div>
+    </div>
+  </section>
+
+  <footer>© 2026 Gen Labs — All rights reserved. Nhân vật và cảnh lấy từ bộ mẫu Tam Quốc của gen-chibi (trưng bày, không bán).</footer>
+</main>
+{{SCRIPTS}}
+{{BOOT}}
+<script>
+(function () {
+  var GC = window.GenChibi, $ = function (id) { return document.getElementById(id); };
+  GC.pack({ id: 'local.my', name: 'Của tôi', owner: 'Người tạo', group: 'mine', license: 'Thuộc người tạo' }, function () {});
+  DATA.parts.forEach(function (p) { GC.registerDataPart('local.my', p); });
+  DATA.items.forEach(function (x) { GC.registerItem('local.my', x); });
+  DATA.scenes.forEach(function (x) { GC.registerScene('local.my', x); });
+  DATA.characters.forEach(function (a) { GC.registerAsset('local.my', a); });
+  var D = GC.choreo.demos[DEMO], tl = GC.choreo.build(GC.ASSETS[D.character], D), A = GC.audio;
+  var seek = $('seek'), cur = -1, started = false, fmt = function (v) { return v.toFixed(1).replace('.', ','); };
+  seek.max = tl.real.toFixed(2);
+  var chap = $('chap'), ticks = $('ticks'), btns = [], marks = [];
+  CHAPTERS.forEach(function (c, i) {
+    var li = document.createElement('li'), b = document.createElement('button'), n = document.createElement('b'), s = document.createElement('span'), t = document.createElement('small');
+    b.type = 'button'; n.textContent = i + 1; s.textContent = c.label; t.textContent = fmt(c.t) + ' s';
+    b.appendChild(n); b.appendChild(s); b.appendChild(t);
+    b.onclick = function () { started = true; $('big').hidden = true; P.seek(c.t); P.play(); sync(); };
+    li.appendChild(b); chap.appendChild(li); btns.push(b);
+    var m = document.createElement('i'); m.style.left = (c.t / tl.real * 100) + '%'; ticks.appendChild(m); marks.push(m);
+  });
+  function tick(r) {
+    var i = 0; for (var k = 0; k < CHAPTERS.length; k++) if (CHAPTERS[k].t <= r + 1e-3) i = k;
+    if (i !== cur) {
+      if (cur >= 0) { btns[cur].classList.remove('on'); marks[cur].classList.remove('on'); }
+      cur = i; btns[i].classList.add('on'); marks[i].classList.add('on');
+      $('now').innerHTML = ''; var b = document.createElement('b'); b.textContent = (i + 1) + '/' + CHAPTERS.length; $('now').appendChild(b); $('now').appendChild(document.createTextNode(CHAPTERS[i].label));
+    }
+    seek.value = r.toFixed(2); seek.style.setProperty('--p', (r / tl.real * 100) + '%');
+    $('time').textContent = fmt(r) + ' / ' + fmt(tl.real) + ' s';
+  }
+  var P = GC.choreo.player($('screen'), tl, { onTick: tick, onEnd: sync });
+  $('screen').appendChild($('big'));
+  // khung nghỉ: cú đâm "VÚT!" — trang đứng yên vẫn cho thấy màn diễn trông thế nào
+  var poster = CHAPTERS.filter(function (c) { return c.id === 'thrust'; })[0];
+  P.seek(poster ? poster.t + 0.42 : 0);
+  function sync() {
+    $('playIcon').setAttribute('d', P.playing ? 'M6 4.5h4.5v15H6zM13.5 4.5H18v15h-4.5z' : 'M7 4.5v15l13-7.5z');
+    $('play').setAttribute('aria-label', P.playing ? 'Tạm dừng' : 'Phát');
+  }
+  function start() { if (!started) { started = true; P.seek(0); } $('big').hidden = true; P.play(); sync(); }
+  $('big').onclick = start;
+  $('play').onclick = function () { if (P.playing) P.pause(); else start(); sync(); };
+  seek.oninput = function () { started = true; $('big').hidden = true; P.seek(+seek.value); };
+  if (A) {
+    var setMute = function () { $('muteIcon').setAttribute('d', A.muted ? 'M4 9h4l5-4v14l-5-4H4zM16 9l5 6M21 9l-5 6' : 'M4 9h4l5-4v14l-5-4H4zM16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12'); $('mute').setAttribute('aria-label', A.muted ? 'Bật tiếng' : 'Tắt tiếng'); };
+    $('mute').onclick = function () { A.setMuted(!A.muted); setMute(); };
+    setMute();
+  } else $('mute').hidden = true;
+  document.addEventListener('keydown', function (e) {
+    if (e.code === 'Space' && (e.target === document.body || e.target === seek)) { e.preventDefault(); $('play').onclick(); }
+  });
+})();
+</script>
+<!--/page-->
+</html>

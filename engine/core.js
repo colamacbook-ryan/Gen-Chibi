@@ -453,7 +453,7 @@
     // đồ cầm tay: động tác cần tay trống thì cất; đồ dài cất khi tay đưa vào giữa mặt;
     // động tác cầm đạo cụ riêng (bát, sách, bút…) thì thay đồ của nhân vật
     var mo = LIB.motions[st.motion] || {};
-    var hide = (mo.hide || []).slice();
+    var hide = (mo.hide || []).concat(director && Array.isArray(director.hide) ? director.hide.filter(function (x) { return /^(held|tall)[LR]$/.test(x); }) : []);   // biên đạo (choreo) cất / rút binh khí
     if (handsBusy(st)) hide.push('heldL', 'heldR');
     ['L', 'R'].forEach(function (s) {
       var pid = mo.hold && mo.hold[s];
@@ -650,6 +650,10 @@
       if (!st.upright || !st.upright[s] || (!armsOff && m.tracks['hand' + s] && m.tracks['hand' + s].rot)) return;
       pose['hand' + s].rot = -(pose['arm' + s].rot + pose['fore' + s].rot + pose.body.rot + pose.pelvis.rot + pose.root.rot);
     });
+    return finishPose(asset, st, pose);
+  }
+  // bước chung cuối mọi tư thế (động tác lặp lẫn biên đạo choreo): cỡ đầu theo tham số, vai / hông trượt khi quay 3/4, lật gương
+  function finishPose(asset, st, pose) {
     var hs = paramValues(asset, 'rig', HEAD_PARAMS).size;
     pose.head.sx *= hs; pose.head.sy *= hs;
     if (st.turnLocal) {
@@ -688,6 +692,32 @@
     var pv = RIG.joints[j].pivot;
     return 'translate(' + (pv[0] + p.x).toFixed(2) + ' ' + (pv[1] + p.y).toFixed(2) + ') rotate(' +
       p.rot.toFixed(2) + ') scale(' + p.sx.toFixed(3) + ' ' + p.sy.toFixed(3) + ') translate(' + (-pv[0]) + ' ' + (-pv[1]) + ')';
+  }
+  // điểm mốc cơ thể của một tư thế (toạ độ khung 200×240): ghép ma trận affine theo chuỗi khớp — đúng phép biến đổi SVG ở chainTransforms.
+  // Dùng đo KHOẢNG CÁCH HÌNH BÓNG giữa các tư thế (v0.15: tư thế phải khác nhau rõ, không chỉ khác khuôn mặt — Ryan)
+  var KEYPOINTS = { head: ['head', 100, 96], chest: ['body', 100, 170], pelvis: ['pelvis', 100, 202], elbowL: ['foreL', 74, 177], elbowR: ['foreR', 126, 177],
+    handL: ['handL', 72, 193], handR: ['handR', 128, 193], kneeL: ['shinL', 89, 212], kneeR: ['shinR', 111, 212], footL: ['footL', 87, 225], footR: ['footR', 113, 225] };
+  function matMul(A, B) { return [A[0] * B[0] + A[2] * B[1], A[1] * B[0] + A[3] * B[1], A[0] * B[2] + A[2] * B[3], A[1] * B[2] + A[3] * B[3], A[0] * B[4] + A[2] * B[5] + A[4], A[1] * B[4] + A[3] * B[5] + A[5]]; }
+  // ma trận affine [a b c d e f] của từng khớp (toạ độ khung → toạ độ khung đã biến đổi) — choreo dùng tìm mũi binh khí, chân, đầu
+  function jointMatrices(pose) {
+    var M = {};
+    JOINT_IDS.forEach(function (j) {
+      var p = pose[j], pv = RIG.joints[j].pivot, par = RIG.joints[j].parent, r = p.rot * Math.PI / 180, c = Math.cos(r), s = Math.sin(r);
+      var a = c * p.sx, b = s * p.sx, c2 = -s * p.sy, d = c * p.sy, tx = pv[0] + p.x, ty = pv[1] + p.y;
+      var L = [a, b, c2, d, tx - (a * pv[0] + c2 * pv[1]), ty - (b * pv[0] + d * pv[1])];
+      M[j] = par ? matMul(M[par], L) : L;
+    });
+    return M;
+  }
+  function keyPoints(pose) {
+    var M = jointMatrices(pose), out = {};
+    for (var k in KEYPOINTS) { var q = KEYPOINTS[k], m = M[q[0]]; out[k] = [m[0] * q[1] + m[2] * q[2] + m[4], m[1] * q[1] + m[3] * q[2] + m[5]]; }
+    return out;
+  }
+  function poseDistance(p1, p2) {
+    var a = keyPoints(p1), b = keyPoints(p2), s = 0, n = 0;
+    for (var k in a) { s += Math.sqrt(Math.pow(a[k][0] - b[k][0], 2) + Math.pow(a[k][1] - b[k][1], 2)); n++; }
+    return s / n;
   }
   function chainTransforms(pose) {
     var chain = {};
@@ -1531,6 +1561,22 @@
     if (Wt.overTint) s += weatherSvg(weather, seed, P);
     return s + '</svg>';
   }
+  // Từng lớp phông riêng (chuỗi SVG, chưa bọc <svg>) — máy quay có thị sai (choreo) cuộn mỗi lớp một tốc độ
+  function sceneLayers(scene, opts) {
+    opts = opts || {};
+    var time = own(SCENE.times, opts.time) ? opts.time : scene.time, weather = own(SCENE.weathers, opts.weather) ? opts.weather : scene.weather;
+    var T = SCENE.times[time] || SCENE.times.day, P = Object.assign({}, SCENE.defaults, scene.palette || {}, T.P);
+    var C = { P: P, W: SCENE.W, H: SCENE.H, time: time, ink: INK }, out = {}, seed = String(scene.key || scene.id);
+    Object.keys(SCENE.slots).forEach(function (slot) {
+      var L = scene.layers[slot], p = L && sceneryOk(slot, L.part);
+      if (!p) return;
+      var art = p.draw(C) || '', tf = L.flip ? 'translate(' + (SCENE.W + (L.dx || 0)) + ' 0) scale(-1 1)' : L.dx ? 'translate(' + L.dx + ' 0)' : '';
+      out[slot] = tf ? '<g transform="' + tf + '">' + art + '</g>' : art;
+    });
+    out.weather = weatherSvg(weather, seed, P);
+    out.tint = T.tint ? '<rect x="0" y="0" width="' + SCENE.W + '" height="' + SCENE.H + '" fill="' + T.tint[0] + '" opacity="' + T.tint[1] + '"/>' : '';
+    return out;
+  }
   // Cổng kiểm cảnh — cùng tinh thần cổng nhân vật / item: dữ liệu, license phông, dựng được, đặt được diễn viên ở MỌI chỗ đứng, ngân sách
   function sceneGate(scene) {
     var res = [], c = checkScene(scene);
@@ -1561,12 +1607,12 @@
     pack: pack, registerAsset: registerAsset, migrate: migrate,
     getPart: getPart, partsOfSlot: partsOfSlot, partRef: partRef, traitsOf: traitsOf,
     resolveState: resolveState, palette: palette, paramValues: paramValues,
-    compose: compose, poseAt: poseAt, chainTransforms: chainTransforms, neutralPose: neutralPose, svgString: svgString,
+    compose: compose, poseAt: poseAt, finishPose: finishPose, jointMatrices: jointMatrices, chainTransforms: chainTransforms, keyPoints: keyPoints, poseDistance: poseDistance, neutralPose: neutralPose, svgString: svgString,
     shadowOf: shadowOf, handsBusy: handsBusy, Q45: Q45, Q90: Q90, faceRemap: faceRemap, VIEW_ORDER: VIEW_ORDER, VIEW_KIND: VIEW_KIND, VIEW_KINDS: VIEW_KINDS, FILM: { cameras: FILM_CAMERAS, bubbles: FILM_BUBBLES, sfx: FILM_SFX },
     checkDataPart: checkDataPart, registerDataPart: registerDataPart, partAdvice: partAdvice, blockingGates: blockingGates,
     ITEM: ITEM, ITEMS: ITEMS, ITEM_ORDER: ITEM_ORDER, items: function () { return ITEM_ORDER.map(function (k) { return ITEMS[k]; }); },
     SCENE: SCENE, SCENES: SCENES, SCENE_ORDER: SCENE_ORDER, scenes: function () { return SCENE_ORDER.map(function (k) { return SCENES[k]; }); },
-    getScene: getScene, getAsset: getAsset, checkScene: checkScene, registerScene: registerScene, sceneSvg: sceneSvg, sceneGate: sceneGate,
+    getScene: getScene, getAsset: getAsset, checkScene: checkScene, registerScene: registerScene, sceneSvg: sceneSvg, sceneLayers: sceneLayers, sceneGate: sceneGate,
     checkCast: checkCast, checkScenery: checkScenery, svgBody: svgBody,
     scenery: function (slot) { return Object.keys(LIB.parts).map(function (k) { return LIB.parts[k]; }).filter(function (p) { return p.kind === 'scenery' && (!slot || p.slot === slot); }); },
     canon: canon, canonPack: canonPack, statusOf: statusOf, projectId: projectId, getItem: getItem, checkItem: checkItem, registerItem: registerItem, itemSvg: itemSvg, itemGate: itemGate, partAlone: partAlone, sanitizeSvg: function (s0) { var e = []; var r = sanitizeSvg(s0, e, 'svg'); return { svg: r, errors: e }; },

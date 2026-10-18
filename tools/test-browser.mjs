@@ -1,7 +1,7 @@
 // Kiểm thử trong trình duyệt (chạy cục bộ, cần Playwright): mọi lớp gắn vào đầu phải đi cùng đầu.
 // Dùng: node tools/test-browser.mjs   (tự dựng server tạm ở cổng 7496)
 import { createRequire } from 'module';
-import { spawn } from 'child_process';
+import { spawn, execFileSync } from 'child_process';
 import { mkdtempSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
@@ -167,7 +167,7 @@ try {
     if ((await q.$$('.stillgrid .libcard img')).length !== 2 || (await q.$$('.shot')).length !== 2) throw new Error('trang Tác phẩm thiếu phân cảnh / cảnh thành phẩm');
     await q.click('button:has-text("Diễn toàn bộ")'); await q.waitForTimeout(300);
     if (!(await q.$('.gcp .gcp-title'))) throw new Error('sân khấu final không mở bằng thẻ tiêu đề phân cảnh');
-    await q.waitForSelector('.gcp .gcp-actor .gcp-bubble', { timeout: 4000 });
+    await q.waitForSelector('.gcp .gcp-bub', { timeout: 6000 });   // bong bóng truyện tranh (v0.14: lớp phủ .gcp-bub, không còn gắn trong diễn viên)
     if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
     console.log('  ✓ Tác phẩm: phân cảnh → cảnh thành phẩm → sân khấu final diễn cả chuỗi (thẻ tiêu đề + diễn viên + thoại)');
     // Kịch bản lẻ do agent gửi qua MCP (save_event) → "+ Thành phân cảnh" → tác phẩm thêm 1 phân cảnh sẵn sàng
@@ -188,7 +188,7 @@ try {
     f.on('pageerror', e => ferr.push(e.message)); f.on('requestfailed', r => ferr.push('mạng: ' + r.url()));
     await f.goto('file://' + filmPath); await f.waitForTimeout(500);
     if ((await f.$$('#chapters li')).length !== 3) throw new Error('phim xuất ra thiếu danh sách phân cảnh');
-    await f.click('#big'); await f.waitForSelector('.gcp .gcp-title', { timeout: 3000 }); await f.waitForSelector('.gcp-actor .gcp-bubble', { timeout: 5000 });
+    await f.click('#big'); await f.waitForSelector('.gcp .gcp-title', { timeout: 3000 }); await f.waitForSelector('.gcp .gcp-bub', { timeout: 6000 });
     if (ferr.length) throw new Error('phim xuất ra lỗi: ' + ferr.slice(0, 3).join(' | '));
     await f.close();
     const [sb] = await Promise.all([q.waitForEvent('download'), q.click('button:has-text("Storyboard SVG")')]);
@@ -280,5 +280,36 @@ try {
     console.log('  ✓ Bộ chủ đề mẫu Tam Quốc một chạm: 7 tướng · 13 trang bị · 8 bối cảnh · dấu bộ mẫu Gen Labs (không xuất bán) → phim 5/5 phân cảnh sẵn sàng');
   } catch (e) { fail = 1; console.log('  ✗ dự án mẫu một chạm:', e.message); }
   finally { await b5.close(); srv5.kill(); }
+}
+// Biên đạo liên hoàn: trang "Tử Long 30 giây" xuất bằng tools/choreo-demo.js chạy độc lập (file://), không lỗi, phát thật,
+// khung vẽ rẻ (≤ 8 ms), nhân vật đổi góc nhìn + nét mặt khi diễn, tua được, âm thanh bật khi bấm xem
+{
+  const out = path.join(home, 'choreo.html');
+  execFileSync(process.execPath, [path.join(ROOT, 'tools/choreo-demo.js'), 'tu-long-30s', out], { stdio: 'ignore' });
+  const b6 = await pw.chromium.launch(), q = await b6.newPage({ viewport: { width: 1280, height: 900 } }), errs = [];
+  q.on('pageerror', e => errs.push(e.message)); q.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
+  try {
+    await q.goto('file://' + out); await q.waitForSelector('.gcc-stage');
+    if (await q.$$eval('#chap li', l => l.length) !== 29) throw new Error('danh sách hành vi phải đủ 29');
+    await q.click('#big');
+    const seen = new Set(), sigs = new Set();
+    for (let i = 0; i < 12; i++) {
+      await q.waitForTimeout(250);
+      const o = await q.evaluate(() => ({ now: document.getElementById('now').textContent, eyes: (document.querySelector('.gcc-actor') || {}).innerHTML.length }));
+      seen.add(o.now); sigs.add(o.eyes);
+    }
+    const t = await q.evaluate(() => parseFloat(document.getElementById('time').textContent.replace(',', '.')));
+    if (t < 2) throw new Error('trình phát không chạy (' + t + ' s)');
+    if (seen.size < 2 || sigs.size < 3) throw new Error('nhân vật không đổi hành vi / bản vẽ khi diễn');
+    const cost = await q.evaluate(() => { const s = document.getElementById('seek'), t0 = performance.now(); for (let i = 0; i < 40; i++) { s.value = (i * 0.75).toFixed(2); s.oninput(); } return (performance.now() - t0) / 40; });
+    if (cost > 8) throw new Error('một khung vẽ tốn ' + cost.toFixed(1) + ' ms (ngân sách 8 ms)');
+    await q.evaluate(() => { const s = document.getElementById('seek'); s.value = 14.4; s.oninput(); });
+    if (!/Bổ thương/.test(await q.textContent('#now'))) throw new Error('tua tới 14,4 s phải là "Bổ thương xuống đất": ' + await q.textContent('#now'));
+    const audio = await q.evaluate(() => window.GenChibi.audio && window.GenChibi.audio.info().ctx);
+    if (!audio) throw new Error('âm thanh không bật khi bấm xem');
+    if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
+    console.log('  ✓ Biên đạo Tử Long 30 giây: trang độc lập chạy · 29 hành vi · đổi bản vẽ khi diễn · khung vẽ ' + cost.toFixed(1) + ' ms · tua đúng hành vi · âm thanh bật');
+  } catch (e) { fail = 1; console.log('  ✗ biên đạo liên hoàn:', e.message); }
+  finally { await b6.close(); }
 }
 process.exit(fail);
