@@ -21,7 +21,8 @@ class Store {
     this.trashDir = path.join(dataDir, 'trash');
     this.eventDir = path.join(dataDir, 'events');
     this.partDir = path.join(dataDir, 'parts');
-    [this.assetDir, this.verDir, this.trashDir, this.eventDir, this.partDir].forEach(d => fs.mkdirSync(d, { recursive: true }));
+    this.itemDir = path.join(dataDir, 'items');
+    [this.assetDir, this.verDir, this.trashDir, this.eventDir, this.partDir, this.itemDir].forEach(d => fs.mkdirSync(d, { recursive: true }));
   }
   fileOf(key) { return key.replace('/', '~'); }
   listAssets() {
@@ -66,6 +67,18 @@ class Store {
     const old = readJSON(file, null);
     const rec = Object.assign({}, def, { version: old ? (old.version || 1) + 1 : 1, savedAt: new Date().toISOString(), note: String(note || '').slice(0, 200) });
     if (old) writeJSON(path.join(this.verDir, 'parts~' + name, old.version + '.json'), old);
+    writeJSON(file, rec);
+    return rec;
+  }
+  // item trang bị (đã qua engine.checkItem): <id>.json, giữ bản cũ trong versions/items~<id>
+  listItems() {
+    return fs.readdirSync(this.itemDir).filter(f => f.endsWith('.json')).map(f => readJSON(path.join(this.itemDir, f), null)).filter(Boolean);
+  }
+  saveItem(def, note) {
+    if (!/^[a-z0-9][a-z0-9-]{1,63}$/.test(def.id)) throw Object.assign(new Error('id item không hợp lệ'), { code: 400 });
+    const file = path.join(this.itemDir, def.id + '.json'), old = readJSON(file, null);
+    const rec = Object.assign({}, def, { version: old ? (old.version || 1) + 1 : 1, savedAt: new Date().toISOString(), note: String(note || '').slice(0, 200) });
+    if (old) writeJSON(path.join(this.verDir, 'items~' + def.id, old.version + '.json'), old);
     writeJSON(file, rec);
     return rec;
   }

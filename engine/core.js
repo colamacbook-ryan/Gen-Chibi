@@ -82,6 +82,8 @@
   };
   var ASSETS = {};      // 'pack/id' → asset nhân vật
   var ASSET_ORDER = [];
+  var ITEMS = {};       // 'pack/id' → item trang bị (loại asset thứ hai)
+  var ITEM_ORDER = [];
 
   // Mỗi mục đăng ký mang theo `pack` để biết chủ, license, nhóm thư viện.
   function pack(meta, fill) {
@@ -114,7 +116,8 @@
       prop: function (id, def) { def.id = id; LIB.props[id] = tag(def, 'prop'); },
       activity: function (id, def) { def.id = id; LIB.activities[id] = tag(def, 'activity'); if (LIB.activityOrder.indexOf(id) < 0) LIB.activityOrder.push(id); },
       defaults: function (pal) { for (var k in pal) LIB.defaults[k] = pal[k]; },
-      asset: function (def) { registerAsset(P.id, def); }
+      asset: function (def) { registerAsset(P.id, def); },
+      item: function (def) { var r = registerItem(P.id, def); if (r.errors.length) throw new Error('item ' + def.id + ': ' + r.errors.join('; ')); }
     };
     fill(D);
     return P;
@@ -161,7 +164,12 @@
   function partsOfSlot(slot) {
     return Object.keys(LIB.parts).map(function (k) { return LIB.parts[k]; }).filter(function (p) { return p.slot === slot; });
   }
-  function partRef(asset, slot) { return asset.look.parts[slot] || (LIB.slots[slot] || {}).fallback; }
+  // Nhân vật mặc item (look.equip.<slot> = "pack/id") → linh kiện, tham số, bảng màu của item thắng look.parts
+  function equipped(asset, slot) {
+    var ref = asset.look && asset.look.equip && asset.look.equip[slot];
+    return ref ? getItem(ref, asset.pack) : null;
+  }
+  function partRef(asset, slot) { var it = equipped(asset, slot); return it ? it.equip.part : asset.look.parts[slot] || (LIB.slots[slot] || {}).fallback; }
 
   /* ------------------------------------------------------------ 3. RESOLVE */
   var SRC = { lib: 'Kho', asset: 'Nhân vật', director: 'Đạo diễn' };
@@ -346,7 +354,8 @@
   }
   // Giá trị tham số đã kẹp vào khoảng cho phép
   function paramValues(asset, slot, defs) {
-    var raw = ((asset.look.params || {})[slot]) || {}, out = {};
+    var it = equipped(asset, slot);
+    var raw = (it ? it.equip.params : ((asset.look.params || {})[slot])) || {}, out = {};
     for (var k in defs) out[k] = num(raw[k], defs[k].def, defs[k].min, defs[k].max);
     return out;
   }
@@ -397,7 +406,9 @@
       if (!p) throw new Error('thiếu linh kiện ' + slot + ':' + ref);
       var vals = p.params ? paramValues(asset, slot, p.params) : {};
       var native = Q && p.views && p.views.q45;
-      var res = (native ? p.views.q45 : p.draw)(C, st, vals);
+      var it = equipped(asset, slot);
+      var Cs = it && it.equip.palette ? Object.assign({}, C, { P: Object.assign({}, C.P, it.equip.palette) }) : C;   // màu item chỉ áp lên linh kiện của nó
+      var res = (native ? p.views.q45 : p.draw)(Cs, st, vals);
       if (Q && !native && res && !/^held[LR]$/.test(slot)) fbSlots.push(slot + ':' + p.id);
       put(res, p.params ? paramTransform(p.params, vals) : '', Q && !native && !/^held[LR]$/.test(slot));
     });
@@ -746,6 +757,11 @@
       else if (!getPart(slot, look.parts[slot], asset.pack)) missing.push(slot + ':' + look.parts[slot]);
     });
     if (!LIB.eyeStyles[look.eyes]) missing.push('eyes:' + look.eyes);
+    Object.keys(look.equip || {}).forEach(function (slot) {
+      var it = getItem(look.equip[slot], asset.pack);
+      if (!it) missing.push('equip.' + slot + ':' + look.equip[slot]);
+      else if (it.equip.slot !== slot) missing.push('equip.' + slot + ': item ' + it.key + ' mặc ở ' + it.equip.slot);
+    });
     if (!LIB.browStyles[look.brows]) missing.push('brows:' + look.brows);
     add('parts', 'Linh kiện có trong thư viện', !missing.length, missing.join(', '));
 
@@ -848,6 +864,156 @@
     return gates.filter(function (g) { return !g.ok && !g.info && !(g.id === 'identity' && (status || 'draft') === 'draft'); });
   }
 
+
+  /* -------------------------------------------- 8. ITEM TRANG BỊ (loại asset thứ hai) */
+  // Item = mặc được (trỏ tới một linh kiện + tham số + bảng màu riêng) + tự đứng được (icon, thẻ: tên, độ hiếm, chỉ số).
+  // Không vẽ lại: một linh kiện → nhiều item (đao sắt thường / Thanh Long đao huyền thoại chỉ khác màu, chỉ số, độ hiếm).
+  var ITEM = {
+    types: {
+      weapon: { label: 'Vũ khí', slots: ['heldR'] }, offhand: { label: 'Tay phụ', slots: ['heldL'] },
+      talisman: { label: 'Pháp khí', slots: ['heldR', 'heldL'] }, helmet: { label: 'Mũ / khăn', slots: ['hat'] },
+      armor: { label: 'Áo giáp / áo', slots: ['outfit'] }, cloak: { label: 'Áo choàng', slots: ['back'] },
+      boots: { label: 'Giày', slots: ['shoes'] }, mask: { label: 'Mặt nạ', slots: ['mask'] }
+    },
+    rarity: {
+      common: { label: 'Thường', color: '#9aa0a6', glow: '#e9eaec' }, uncommon: { label: 'Tốt', color: '#4caf6a', glow: '#dff3e4' },
+      rare: { label: 'Hiếm', color: '#3d7fd1', glow: '#dde9f8' }, epic: { label: 'Sử thi', color: '#9b5cd0', glow: '#efe3f8' },
+      legendary: { label: 'Huyền thoại', color: '#e08a1e', glow: '#fdecd2' }
+    },
+    rarityOrder: ['common', 'uncommon', 'rare', 'epic', 'legendary'],
+    stats: { atk: 'Công', def: 'Thủ', spd: 'Tốc', int: 'Trí', hp: 'Sinh lực', luk: 'Vận may' },
+    // khung icon theo bộ phận (toạ độ tư thế nghỉ): tâm, cạnh vuông, góc xoay để vật dài nằm chéo như icon túi đồ
+    frames: {
+      heldR: { cx: 146, cy: 112, size: 200, rot: 32 }, heldL: { cx: 66, cy: 150, size: 120, rot: 0 },
+      hat: { cx: 100, cy: 66, size: 150, rot: 0 }, outfit: { cx: 100, cy: 182, size: 108, rot: 0 }, back: { cx: 100, cy: 188, size: 116, rot: 0 },
+      shoes: { cx: 100, cy: 221, size: 70, rot: 0 }, mask: { cx: 100, cy: 100, size: 116, rot: 0 }
+    }
+  };
+  function esc(t) { return String(t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function getItem(ref, preferPack) {
+    if (!ref) return null;
+    ref = String(ref);
+    if (ref.indexOf('/') > 0) return own(ITEMS, ref) ? ITEMS[ref] : null;
+    if (preferPack && own(ITEMS, preferPack + '/' + ref)) return ITEMS[preferPack + '/' + ref];
+    for (var i = 0; i < ITEM_ORDER.length; i++) if (ITEMS[ITEM_ORDER[i]].id === ref) return ITEMS[ITEM_ORDER[i]];
+    return null;
+  }
+  // Kiểm + chuẩn hoá item (dữ liệu thuần: chữ được escape khi vẽ, màu chỉ nhận hex, linh kiện phải có thật và đúng bộ phận)
+  function checkItem(def) {
+    var errs = [], d = {};
+    if (!def || typeof def !== 'object') return { errors: ['item phải là object'], def: null };
+    if (!/^[a-z0-9][a-z0-9-]{1,63}$/.test(String(def.id || ''))) errs.push('id: chữ thường, số, gạch nối, 2–64 ký tự');
+    d.id = String(def.id || ''); d.name = String(def.name || def.id || '').slice(0, 40); d.han = String(def.han || '').slice(0, 12);
+    if (typeof def.type !== 'string' || !own(ITEM.types, def.type)) errs.push('type: chọn ' + Object.keys(ITEM.types).join(' | '));
+    if (typeof def.rarity !== 'string' || !own(ITEM.rarity, def.rarity)) errs.push('rarity: chọn ' + ITEM.rarityOrder.join(' | '));
+    d.type = def.type; d.rarity = def.rarity;
+    var eq = def.equip || {};
+    var slot = typeof eq.slot === 'string' ? eq.slot : (own(ITEM.types, def.type) ? ITEM.types[def.type].slots[0] : '');
+    if (own(ITEM.types, def.type) && ITEM.types[def.type].slots.indexOf(slot) < 0) errs.push('equip.slot "' + slot + '" không hợp với loại ' + def.type + ' (' + ITEM.types[def.type].slots.join('/') + ')');
+    var part = slot && getPart(slot, eq.part);
+    if (!part) errs.push('equip.part "' + eq.part + '" không có trong bộ phận ' + slot + ' (xem get_catalog › slots)');
+    d.equip = { slot: slot, part: part ? part.pack + '/' + part.id : String(eq.part || ''), params: {}, palette: {} };
+    if (eq.params && typeof eq.params === 'object' && part && part.params) Object.keys(eq.params).forEach(function (k) {
+      if (!own(part.params, k)) { errs.push('equip.params.' + k + ': linh kiện không có tham số này'); return; }
+      d.equip.params[k] = num(eq.params[k], part.params[k].def, part.params[k].min, part.params[k].max);
+    });
+    if (eq.palette && typeof eq.palette === 'object') Object.keys(eq.palette).slice(0, 12).forEach(function (k) {
+      if (!own(LIB.defaults, k)) { errs.push('equip.palette.' + k + ': token màu lạ'); return; }
+      if (!HEX.test(String(eq.palette[k]))) { errs.push('equip.palette.' + k + ': cần mã hex'); return; }
+      d.equip.palette[k] = String(eq.palette[k]);
+    });
+    d.stats = {};
+    Object.keys(def.stats || {}).forEach(function (k) {
+      if (!own(ITEM.stats, k)) { errs.push('stats.' + k + ': chỉ số lạ (' + Object.keys(ITEM.stats).join(', ') + ')'); return; }
+      var v = def.stats[k];
+      if (typeof v !== 'number' || !isFinite(v) || v < 0 || v > 999) { errs.push('stats.' + k + ': số 0–999'); return; }
+      d.stats[k] = Math.round(v);
+    });
+    d.description = String(def.description || '').slice(0, 200); d.lore = String(def.lore || '').slice(0, 600);
+    var ic = def.icon || {};
+    d.icon = { zoom: num(ic.zoom, 1, 0.5, 2.5), dx: num(ic.dx, 0, -80, 80), dy: num(ic.dy, 0, -80, 80), rot: num(ic.rot, 0, -180, 180) };
+    d.kind = 'item'; d.status = ['draft', 'review', 'approved'].indexOf(def.status) >= 0 ? def.status : 'draft';
+    return { errors: errs, def: errs.length ? null : d };
+  }
+  function registerItem(packId, def) {
+    var c = checkItem(def);
+    if (c.errors.length) return c;
+    var d = c.def; d.pack = packId; d.key = packId + '/' + d.id; d.version = def.version || 1;
+    if (!own(ITEMS, d.key)) ITEM_ORDER.push(d.key);
+    ITEMS[d.key] = d;
+    if (PACKS[packId]) PACKS[packId].counts.item = ITEM_ORDER.filter(function (k) { return k.indexOf(packId + '/') === 0; }).length;
+    return { errors: [], def: d };
+  }
+  // Vẽ riêng một linh kiện (không có nhân vật) ở tư thế nghỉ — nền cho icon / thẻ item
+  function partAlone(slot, ref, palette, params, view) {
+    var p = getPart(slot, ref);
+    if (!p) return '';
+    var P = Object.assign({}, LIB.defaults, palette || {});
+    var C = { P: P, A: RIG.anchors, shape: (getPart('head', 'round') || {}).shape, ink: INK, asset: { key: 'item/' + slot + '-' + p.id, id: 'item' }, flip: false, st: {}, view: view || 'front' };
+    var vals = {};
+    if (p.params) Object.keys(p.params).forEach(function (k) { vals[k] = num((params || {})[k], p.params[k].def, p.params[k].min, p.params[k].max); });
+    var res = ((view === 'q45' && p.views && p.views.q45) || p.draw)(C, {}, vals) || {};
+    var wrap = p.params ? paramTransform(p.params, vals) : '';
+    var out = '';
+    RIG.layers.forEach(function (l) { if (res[l[0]]) out += wrap ? '<g transform="' + wrap + '">' + res[l[0]] + '</g>' : res[l[0]]; });
+    return out;
+  }
+  // mode: icon (vuông, nền theo độ hiếm) | card (thẻ 240×330: icon, tên, loại, độ hiếm, chỉ số, mô tả)
+  function itemSvg(item, opts) {
+    opts = opts || {};
+    // khung icon là thuộc tính của LINH KIỆN (part.icon) — vẽ một lần, mọi item dùng nó đều hưởng; khung theo bộ phận chỉ là mặc định
+    var pp = getPart(item.equip.slot, item.equip.part);
+    var R = ITEM.rarity[item.rarity] || ITEM.rarity.common, F = (pp && pp.icon) || ITEM.frames[item.equip.slot] || { cx: 100, cy: 120, size: 200, rot: 0 };
+    var art = partAlone(item.equip.slot, item.equip.part, item.equip.palette, item.equip.params, opts.view);
+    var sz = F.size / item.icon.zoom, cx = F.cx - item.icon.dx, cy = F.cy - item.icon.dy, rot = F.rot + item.icon.rot;
+    var id = 'gi' + String(item.key || item.id).replace(/[^a-zA-Z0-9]/g, '');
+    function icon(x, y, w) {
+      return '<svg x="' + x + '" y="' + y + '" width="' + w + '" height="' + w + '" viewBox="' + (cx - sz / 2).toFixed(1) + ' ' + (cy - sz / 2).toFixed(1) + ' ' + sz.toFixed(1) + ' ' + sz.toFixed(1) + '">' +
+        '<g transform="rotate(' + rot + ' ' + cx + ' ' + cy + ')">' + art + '</g></svg>';
+    }
+    var tile = function (x, y, w) {
+      return '<defs><radialGradient id="' + id + 'g"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="' + R.glow + '"/></radialGradient></defs>' +
+        '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + w + '" rx="' + (w * 0.12) + '" fill="url(#' + id + 'g)" stroke="' + R.color + '" stroke-width="' + Math.max(2, w * 0.025) + '"/>';
+    };
+    if (opts.mode !== 'card') {
+      var W = opts.size || 128;
+      return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + W + '" width="' + W + '" height="' + W + '">' + tile(2, 2, W - 4) + icon(W * 0.08, W * 0.08, W * 0.84) + '</svg>';
+    }
+    var s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 330" width="240" height="330" font-family="Arial, Helvetica, sans-serif">' +
+      '<rect x="1.5" y="1.5" width="237" height="327" rx="14" fill="#fbfaf7" stroke="' + R.color + '" stroke-width="3"/>' +
+      '<rect x="1.5" y="1.5" width="237" height="26" rx="12" fill="' + R.color + '"/><rect x="1.5" y="16" width="237" height="12" fill="' + R.color + '"/>' +
+      '<text x="12" y="19" font-size="12" font-weight="700" fill="#fff">' + esc(R.label.toUpperCase()) + '</text>' +
+      '<text x="228" y="19" font-size="11" text-anchor="end" fill="#fff">' + esc((ITEM.types[item.type] || {}).label || item.type) + '</text>' +
+      tile(50, 36, 140) + icon(58, 44, 124) +
+      '<text x="120" y="200" font-size="17" font-weight="700" text-anchor="middle" fill="#2b211d">' + esc(item.name) + '</text>' +
+      (item.han ? '<text x="120" y="218" font-size="12" text-anchor="middle" fill="#8a7f72">' + esc(item.han) + '</text>' : '');
+    var y = 236;
+    ITEM_STAT_KEYS().forEach(function (k) {
+      if (!(k in item.stats)) return;
+      var v = item.stats[k];
+      s += '<text x="16" y="' + (y + 9) + '" font-size="11" fill="#5b524a">' + esc(ITEM.stats[k]) + '</text>' +
+        '<rect x="74" y="' + y + '" width="120" height="10" rx="5" fill="#ece8df"/><rect x="74" y="' + y + '" width="' + Math.max(4, Math.min(120, v / 100 * 120)).toFixed(1) + '" height="10" rx="5" fill="' + R.color + '"/>' +
+        '<text x="224" y="' + (y + 9) + '" font-size="11" text-anchor="end" fill="#2b211d">' + v + '</text>';
+      y += 15;
+    });
+    if (item.description) s += '<text x="120" y="' + Math.min(318, y + 14) + '" font-size="10.5" text-anchor="middle" fill="#6d645a">' + esc(item.description.slice(0, 44)) + '</text>';
+    return s + '</svg>';
+  }
+  function ITEM_STAT_KEYS() { return Object.keys(ITEM.stats); }
+  // Cổng kiểm item — cùng tinh thần cổng nhân vật: linh kiện có thật, license rõ, 45° của linh kiện, dựng được icon/thẻ
+  function itemGate(item) {
+    var res = [], c = checkItem(item);
+    res.push({ id: 'data', label: 'Dữ liệu item hợp lệ (loại, độ hiếm, linh kiện, màu, chỉ số)', ok: !c.errors.length, detail: c.errors.slice(0, 4).join('; ') });
+    if (c.errors.length) return res;
+    var p = getPart(c.def.equip.slot, c.def.equip.part);
+    res.push({ id: 'license', label: 'License linh kiện rõ ràng', ok: !!(p && p.license), detail: p ? p.pack + ' · ' + (p.license || 'thiếu') : '' });
+    res.push({ id: 'view45', label: 'Linh kiện có bản 45°', ok: true, info: true,
+      detail: /^held[LR]$/.test(c.def.equip.slot) ? 'vật cầm tay: dùng chung mọi góc nhìn' : p && p.views && p.views.q45 ? 'có' : 'chưa (engine trượt tạm)' });
+    var okR = true; try { itemSvg(Object.assign({ key: 'gate' }, c.def), { mode: 'card' }); } catch (e) { okR = false; }
+    res.push({ id: 'render', label: 'Dựng được icon và thẻ', ok: okR, detail: '' });
+    return res;
+  }
+
   /* --------------------------------------------- 7. LINH KIỆN DẠNG DỮ LIỆU */
   // Linh kiện do người dùng / agent tạo (qua MCP, Studio) là DỮ LIỆU, không phải code:
   // SVG thuộc tập con chặt, màu là hex hoặc token bảng màu {robe}, 45° chọn chế độ drawn | same | face45 | body45.
@@ -917,6 +1083,11 @@
       return o;
     }
     d.layers = layers(def.layers, 'layers');
+    if (def.icon) {   // khung icon khi linh kiện được dùng làm item (vật cầm tay…)
+      var ic = def.icon;
+      if (![ic.cx, ic.cy, ic.size].every(function (x) { return typeof x === 'number' && isFinite(x); })) errs.push('icon: cần cx, cy, size (số)');
+      else d.icon = { cx: num(ic.cx, 100, -50, 250), cy: num(ic.cy, 120, -50, 300), size: num(ic.size, 120, 20, 320), rot: num(ic.rot, 0, -180, 180) };
+    }
     var v = (def.views && def.views.q45) || null;
     var mode = v && (typeof v === 'string' ? v : v.mode);
     if (['drawn', 'same', 'face45', 'body45'].indexOf(mode) < 0) errs.push('views.q45: bắt buộc, chọn mode drawn (kèm layers) | same | face45 | body45 — xem quy trình 45°');
@@ -947,7 +1118,7 @@
     else if (q.mode === 'same') q45 = front;
     else if (q.mode === 'face45') q45 = function (C) { var o = front(C); for (var l in o) o[l] = G.GenChibi.helpers.face45(C, o[l], l === 'mask'); return o; };
     else q45 = function (C) { var o = front(C), H = G.GenChibi.helpers; for (var l in o) o[l] = l === 'hem' ? H.body45(o[l], H.HEM) : l === 'body' ? H.body45(o[l], H.TORSO_UP) : o[l]; return o; };
-    var part = { slot: d.slot, id: d.id, label: d.label, draw: front, views: { q45: q45 }, params: d.params, data: d,
+    var part = { slot: d.slot, id: d.id, label: d.label, draw: front, views: { q45: q45 }, params: d.params, data: d, icon: d.icon,
       source: 'data:' + packId, license: P.license, pack: packId };
     LIB.parts[packId + '/' + d.slot + ':' + d.id] = part;
     P.counts.part = Object.keys(LIB.parts).filter(function (k) { return k.indexOf(packId + '/') === 0; }).length;
@@ -962,7 +1133,9 @@
     resolveState: resolveState, palette: palette, paramValues: paramValues,
     compose: compose, poseAt: poseAt, chainTransforms: chainTransforms, neutralPose: neutralPose, svgString: svgString,
     shadowOf: shadowOf, handsBusy: handsBusy, Q45: Q45, faceRemap: faceRemap,
-    checkDataPart: checkDataPart, registerDataPart: registerDataPart, blockingGates: blockingGates, sanitizeSvg: function (s0) { var e = []; var r = sanitizeSvg(s0, e, 'svg'); return { svg: r, errors: e }; },
+    checkDataPart: checkDataPart, registerDataPart: registerDataPart, blockingGates: blockingGates,
+    ITEM: ITEM, ITEMS: ITEMS, ITEM_ORDER: ITEM_ORDER, items: function () { return ITEM_ORDER.map(function (k) { return ITEMS[k]; }); },
+    getItem: getItem, checkItem: checkItem, registerItem: registerItem, itemSvg: itemSvg, itemGate: itemGate, partAlone: partAlone, sanitizeSvg: function (s0) { var e = []; var r = sanitizeSvg(s0, e, 'svg'); return { svg: r, errors: e }; },
     assets: function () { return ASSET_ORDER.map(function (k) { return ASSETS[k]; }); },
     director: { schema: directorSchema, validate: validateEvent, prompt: directorPrompt },
     gate: gate,

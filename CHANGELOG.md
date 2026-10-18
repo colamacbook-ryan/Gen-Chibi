@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.4.0 — Loại asset thứ hai: item trang bị
+- **Item trang bị** = phối: trỏ tới linh kiện có sẵn + bảng màu riêng (chỉ áp lên linh kiện đó) + tham số + độ hiếm + chỉ số. Một linh kiện cho nhiều phẩm cấp (Đao sắt thường ↔ Thanh Long Yển Nguyệt Đao huyền thoại) — không vẽ thêm.
+- Từ vựng đóng: 8 loại (vũ khí, tay phụ, pháp khí, mũ/khăn, giáp/áo, áo choàng, giày, mặt nạ) → bộ phận mặc; 5 độ hiếm; 6 chỉ số.
+- **Tự đứng được**: icon theo độ hiếm và thẻ item (tên, Hán tự, loại, độ hiếm, chỉ số, mô tả). Khung icon là thuộc tính của linh kiện (`part.icon`) — vẽ một lần, mọi item dùng chung.
+- **Mặc được**: nhân vật có `look.equip.<slot>`; mọi thứ của khung tự áp dụng (45°, 32 hoạt động, bàn soát, trait theo linh kiện).
+- Thư viện chính thức `afi.items`: 13 item (Thanh Long đao, Xà mâu, Đao sắt, Thương gỗ, Kiếm sắt, Quạt lông vũ, Bầu rượu, Khăn cuốn, Khăn chiến đỏ, Giáp đồng, Giáp bạc Thường Sơn, Áo choàng đỏ, Ủng da).
+- **Một cổng ghi**: `saveItemChecked` cho MCP (4 tool mới: `list_items`, `validate_item`, `save_item`, `render_item` — 19 tool), HTTP `POST /api/items` và AI trong chatroom. Item chính thức không bị ghi đè — sửa sẽ tạo bản trong "Của tôi".
+- Studio › **Trang bị**: lưới icon theo loại, thẻ, mặc thử lên mọi nhân vật (chính diện / 45° / tấn công / chạy), sửa độ hiếm, linh kiện, bảng màu, chỉ số.
+- Linh kiện dữ liệu (agent tạo) khai báo được khung icon.
+- `docs/QUY-TRINH-LINH-KIEN.md` mục 7: **quy trình thêm một loại asset** (8 phần), item là ví dụ mẫu.
+
 ## v0.3.1 — Vá bảo mật cho tạo linh kiện (review v0.3.0)
 - **ReDoS** (cao): regex kiểm `transform` có thể bị chuỗi ~1 300 ký tự làm treo server (mọi lối ghi, kể cả link MCP). Viết lại không chồng lấn; gộp khoảng trắng trước khi tách thẻ để bộ lọc chạy tuyến tính.
 - **MCP / AI trong chatroom không còn ghi đè được nhân vật của thư viện chính thức** (trước đây truyền `pack: "afi.tamquoc"` là đè được). Chỉ Studio của chủ máy được lưu bản chỉnh trong thư viện chính thức.

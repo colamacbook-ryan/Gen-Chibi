@@ -108,6 +108,31 @@ console.log("   ✓", Object.keys(attacks).length, "kiểu tấn công bị ch�
 console.log("   ✓ hồi quy bảo mật: không ReDoS, không tra prototype, không attr trùng, MCP/AI không ghi đè thư viện chính thức, không che id chính thức");
 '
 
+echo "2c) item trang bị (loại asset thứ hai)"
+node -e '
+const { loadEngine } = require("./server/engine-node"); const GC = loadEngine(process.cwd());
+let bad = 0; const no = (c, m) => { if (c) { bad++; console.log("   ✗", m); } };
+GC.items().forEach(i => GC.itemGate(i).forEach(g => no(!g.ok, i.key + ": " + g.label + " " + g.detail)));
+const B = { id: "item-mau", name: "X", type: "weapon", rarity: "rare", equip: { part: "afi.tamquoc/guandao" } };
+const err = d => GC.checkItem(Object.assign({}, B, d)).errors.length;
+no(err({}), "item mẫu phải hợp lệ (nếu không, các phép chặn dưới đây vô nghĩa): " + GC.checkItem(B).errors.join("; "));
+no(!err({ type: "boots" }), "loại không khớp linh kiện vẫn qua");
+no(!err({ equip: { part: "khong-co" } }), "linh kiện lạ vẫn qua");
+no(!err({ equip: { part: "afi.tamquoc/guandao", palette: { metal: "red; x" } } }), "màu không phải hex vẫn qua");
+no(!err({ equip: { part: "afi.tamquoc/guandao", palette: { constructor: "#fff" } } }), "token màu prototype vẫn qua");
+no(!err({ stats: { atk: 5000 } }), "chỉ số ngoài 0–999 vẫn qua");
+no(!err({ rarity: "mythic" }), "độ hiếm lạ vẫn qua");
+const card = GC.itemSvg(Object.assign({ key: "t" }, GC.checkItem(Object.assign({}, B, { name: "<script>alert(1)</script>" })).def), { mode: "card" });
+no(/<script/.test(card), "tên item không được escape trong thẻ");
+const qv = JSON.parse(JSON.stringify(GC.ASSETS["afi.tamquoc/quan-vu"])); qv.key = "t/qv"; qv.look.equip = { heldR: "afi.items/dao-sat", outfit: "afi.items/giap-bac", back: "afi.items/ao-choang-do" };
+no(GC.blockingGates(GC.gate(qv, { poses: true }), "review").length, "nhân vật mặc trang bị không qua cổng");
+no(GC.partRef(qv, "heldR") !== "afi.tamquoc/guandao", "trang bị không thay linh kiện");
+qv.look.equip = { heldR: "afi.items/giap-bac" };
+no(!GC.gate(qv).find(g => g.id === "parts" && !g.ok), "mặc item sai bộ phận vẫn qua");
+if (bad) process.exit(1);
+console.log("   ✓", GC.items().length, "item chính thức đạt cổng; chặn loại/linh kiện/màu/chỉ số/độ hiếm sai; thẻ escape chữ; nhân vật mặc trang bị đạt cổng");
+'
+
 echo "3) MCP"
 H="$(mktemp -d)"; PORT=7495
 (echo > /dev/tcp/127.0.0.1/$PORT) 2>/dev/null && { echo "Cổng $PORT đang bị chiếm"; exit 1; }
@@ -126,16 +151,20 @@ printf '%s\n' \
  '{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"save_part","arguments":{"part":{"id":"ci-hat","slot":"hat","label":"Mũ CI","layers":{"hat":"<path d=\"M50,80 L100,30 L150,80 Z\" fill=\"{hat}\" stroke=\"{ink}\" stroke-width=\"2.8\"/>"},"views":{"q45":"same"}}}}}' \
  '{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"save_character","arguments":{"asset":{"id":"ci-mix","name":"Phối","look":{"eyes":"round","brows":"normal","parts":{"hat":"local.my/ci-hat"}},"identity":{"must":["hat:ci-hat"]}}}}}' \
  '{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"render_character","arguments":{"key":"ci-mix","view":"left45","activity":"run"}}}' \
+ '{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"save_item","arguments":{"item":{"id":"ci-dao","name":"Đao CI","type":"weapon","rarity":"epic","equip":{"part":"guandao","palette":{"metal":"#ffcc00"}},"stats":{"atk":77}}}}}' \
+ '{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"render_item","arguments":{"key":"ci-dao","mode":"card"}}}' \
+ '{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"save_character","arguments":{"asset":{"id":"ci-equip","name":"Mặc đồ","look":{"eyes":"round","brows":"normal","parts":{},"equip":{"heldR":"local.my/ci-dao"}}}}}}' \
+ '{"jsonrpc":"2.0","id":14,"method":"tools/call","params":{"name":"render_item","arguments":{"key":"ci-dao","mode":"equipped","character":"ci-equip","view":"left45","activity":"attack"}}}' \
  | GC_PORT=$PORT node server/mcp-stdio.js > "$H/mcp.out"
 node -e '
 const L = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n").map(JSON.parse);
 const by = id => L.find(r => r.id === id);
 const ok = (c, m) => { if (!c) { console.log("   ✗", m); process.exit(1); } };
 ok(by(1).result.protocolVersion === "2025-06-18", "bắt tay");
-ok(by(2).result.tools.length === 15, "15 tool");
+ok(by(2).result.tools.length === 19, "19 tool");
 ok(!by(3).result.isError && JSON.parse(by(3).result.content[0].text).saved, "lưu nhân vật hợp lệ");
 ok(by(4).result.isError, "chặn linh kiện lạ");
-console.log("   ✓ MCP: bắt tay, 15 tool, lưu hợp lệ, chặn linh kiện lạ");
+console.log("   ✓ MCP: bắt tay, 19 tool, lưu hợp lệ, chặn linh kiện lạ");
 const spec = JSON.parse(by(5).result.content[0].text);
 ok(spec.slots[0].slot === "hat" && spec.example && spec.views.q45, "get_part_spec có khung + ví dụ");
 ok(!by(6).result.isError && /<svg/.test(by(6).result.content[1].resource.text), "preview_part trả bàn soát SVG");
@@ -144,6 +173,11 @@ ok(JSON.parse(by(8).result.content[0].text).saved, "save_part lưu linh kiện")
 ok(!by(9).result.isError, "phối nhân vật bằng linh kiện mới");
 ok(!by(10).result.isError && /<svg/.test(by(10).result.content[1].resource.text), "dựng nhân vật dùng linh kiện mới ở 45° + chạy");
 console.log("   ✓ MCP tạo linh kiện: chuẩn → soát → chặn SVG độc → lưu → phối nhân vật → dựng 45°");
+ok(JSON.parse(by(11).result.content[0].text).saved, "save_item");
+ok(/Đao CI/.test(by(12).result.content[1].resource.text), "render_item card");
+ok(!by(13).result.isError, "nhân vật mặc item của tôi");
+ok(!by(14).result.isError && /<svg/.test(by(14).result.content[1].resource.text), "render_item equipped 45° + tấn công");
+console.log("   ✓ MCP item: lưu → thẻ → nhân vật mặc → dựng 45° tấn công");
 ' "$H/mcp.out"
 kill $SP 2>/dev/null || true
 

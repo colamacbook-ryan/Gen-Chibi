@@ -61,3 +61,18 @@ Ba lối vào, **một** cổng: không có đường nào ghi thẳng vào kho.
 - Linh kiện của agent là **dữ liệu SVG** (tập con an toàn, token màu) — engine đọc rồi dựng lại, kiểm lại cả khi Studio nạp.
 - Tool `preview_part` trả bàn soát; `get_part_spec` trả chính khung sườn này ở dạng máy đọc được — agent luôn nhận chuẩn từ hệ thống, không tự đoán.
 - Test `tools/test-agent.mjs` dùng LLM giả lập để khẳng định: AI chỉ ghi qua tool, SVG độc bị chặn, tool hệ thống bị từ chối, API HTTP không lách được cổng.
+
+## 7. Thêm một LOẠI asset (ví dụ mẫu: item trang bị)
+
+Một loại asset mới không phải "một bộ vẽ mới" mà là **một cách phối mới trên cùng khung**. Đủ 8 phần thì cắm vào nhà xưởng:
+
+| # | Phần | Item trang bị làm thế nào |
+|---|---|---|
+| 1 | **Từ vựng đóng** (enum) | `GC.ITEM`: loại → bộ phận mặc, độ hiếm, chỉ số — AI chỉ chọn trong danh sách |
+| 2 | **Dữ liệu phối, không vẽ lại** | item trỏ tới linh kiện có sẵn + bảng màu riêng (chỉ áp lên linh kiện đó) + tham số; một linh kiện → nhiều item (Đao sắt ↔ Thanh Long đao) |
+| 3 | **Hàm kiểm** (`check…`) | `checkItem`: dữ liệu thuần, màu hex theo token, chỉ số 0–999, linh kiện có thật và đúng bộ phận; chữ escape khi vẽ |
+| 4 | **Cổng kiểm** (`…Gate`) | `itemGate`: dữ liệu, license linh kiện, 45° (thông tin), dựng được |
+| 5 | **Tự đứng được** | `itemSvg`: icon (khung icon là thuộc tính của **linh kiện** — `part.icon`) và thẻ |
+| 6 | **Nối với loại khác** | nhân vật mặc qua `look.equip.<slot>` → mọi thứ của khung (45°, 32 hoạt động, bàn soát) tự áp dụng |
+| 7 | **Một cổng ghi** | `saveItemChecked` dùng chung cho MCP (`list_items`, `validate_item`, `save_item`, `render_item`), HTTP (`POST /api/items`) và AI trong chatroom (tự có tool) |
+| 8 | **Studio + test** | trang Trang bị (lưới, thẻ, mặc thử, sửa); test chặn dữ liệu xấu với **mẫu hợp lệ làm mốc** (test phải khẳng định mẫu đạt trước, nếu không phép chặn vô nghĩa) |

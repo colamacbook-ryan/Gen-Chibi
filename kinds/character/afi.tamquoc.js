@@ -132,7 +132,7 @@
       return { heldL: '<path d="M72,184 C64,184 63,192 67,197 C58,201 58,215 72,217 C86,215 86,201 77,197 C81,192 80,184 72,184 Z" fill="#d9a441"' + stroke(2.2) + '/>' +
         shadow('M77,197 C86,201 86,215 72,217 C80,212 81,203 75,199 Z', 0.15) +
         '<rect x="69" y="179" width="6" height="6" rx="1.5" fill="' + C.P.wood + '"' + stroke(1.6) + '/><path d="M66,197 L78,197" stroke="' + C.P.tassel + '" stroke-width="2.4"/>' };
-    });
+    }, { icon: { cx: 72, cy: 198, size: 50, rot: 0 } });
     // quạt lông vũ 羽扇: từng chiếc lông, cán vàng, tua đỏ
     part('heldR', 'feather-fan', 'Quạt lông vũ (羽扇)', function (C) {
       var fs = '', angs = [-52, -34, -17, 0, 17, 34, 52];
@@ -148,20 +148,20 @@
           '<rect x="126" y="160" width="8" height="30" rx="3" fill="' + C.P.accent + '"' + stroke(2) + '/>' + line('M127,170 L133,170 M127,178 L133,178', 1.2, '#7a5a12') +
           fs + '<ellipse cx="130" cy="163" rx="9" ry="5" fill="' + C.P.accent + '"' + stroke(2) + '/></g>'
       };
-    }, { tall: true });
+    }, { tall: true, icon: { cx: 144, cy: 158, size: 132, rot: -24 } });
     part('heldR', 'serpent-spear', 'Xà mâu (丈八蛇矛)', function (C) {
       return { heldR: '<g transform="rotate(13 128 193)"><rect x="125.5" y="34" width="5" height="200" rx="2" fill="' + C.P.wood + '"' + stroke(2) + '/>' +
         '<path d="M124,38 C119,28 132,24 126,14 C121,6 127,0 130,-10 C137,1 132,8 134,16 C139,26 130,30 132,38 Z" fill="' + C.P.metal + '"' + stroke(2.2) + '/>' +
         line('M128,34 C124,26 131,20 128,12', 1.2, '#fff', 0.7) +
         '<path d="M121,40 L135,40 L139,57 L117,57 Z" fill="' + C.P.tassel + '"' + stroke(2) + '/></g>' };
-    }, { tall: true });
+    }, { tall: true, icon: { cx: 146, cy: 112, size: 196, rot: 32 } });
     part('heldR', 'guandao', 'Thanh Long Yển Nguyệt Đao', function (C) {
       return { heldR: '<g transform="rotate(13 128 193)"><rect x="125.5" y="46" width="5" height="188" rx="2" fill="' + C.P.wood + '"' + stroke(2) + '/>' +
         '<path d="M130,48 C152,46 168,28 166,0 C158,16 146,26 130,26 Z" fill="' + C.P.metal + '"' + stroke(2.4) + '/>' + line('M134,42 C150,38 160,24 162,8', 1.4, '#fff', 0.7) +
         '<path d="M130,48 L130,26 C125,31 124,41 130,48 Z" fill="#2f7a4f"' + stroke(1.8) + '/>' +
         '<path d="M126,30 L117,21 L126,41 Z" fill="' + C.P.metal + '"' + stroke(1.8) + '/>' +
         '<path d="M121,50 L135,50 L139,66 L117,66 Z" fill="' + C.P.tassel + '"' + stroke(2) + '/></g>' };
-    }, { tall: true });
+    }, { tall: true, icon: { cx: 146, cy: 112, size: 196, rot: 32 } });
 
     /* ---------------- trait đặc trưng gói ---------------- */
     D.trait({ id: 'feather-fan', label: 'Cầm quạt → phe phẩy, che miệng cười', if: { heldR: ['feather-fan'] }, over: { normal: { motion: 'fanWave' }, smug: { motion: 'fanSmirk' }, think: { motion: 'chinHandFan' } } });

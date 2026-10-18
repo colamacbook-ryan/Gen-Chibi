@@ -204,6 +204,11 @@ async function route(req, res) {
 
   // ---- asset có phiên bản
   if (p === '/api/parts' && m === 'GET') return send(res, 200, store.listParts());
+  if (p === '/api/items' && m === 'GET') return send(res, 200, store.listItems());
+  if (p === '/api/items' && m === 'POST') {
+    const b = await body(req);
+    try { return send(res, 200, mcp.saveItemChecked(b.item, b.note || 'Lưu trong Studio')); } catch (e) { return send(res, e.code || 400, { error: e.message, errors: e.errors || null }); }
+  }
   if (p === '/api/parts' && m === 'POST') {
     const b = await body(req, 400 * 1024);
     try { return send(res, 200, mcp.savePartChecked(b.part, b.note || 'Lưu trong Studio')); } catch (e) { return send(res, e.code || 400, { error: e.message, errors: e.errors || null }); }

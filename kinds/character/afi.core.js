@@ -355,7 +355,7 @@
           '<rect x="119" y="171" width="18" height="5" rx="2" fill="' + C.P.accent + '"' + stroke(1.8) + '/>' +
           '<rect x="126" y="176" width="4" height="22" rx="1.5" fill="' + C.P.wood + '"' + stroke(1.6) + '/></g>'
       };
-    }, { tall: true });
+    }, { tall: true, icon: { cx: 146, cy: 152, size: 120, rot: 21 } });
 
     /* ---------------- MẮT: KIỂU × DÁNG ---------------- */
     D.eyeStyle('round', { label: 'Tròn to', w: 9, h: 11 });

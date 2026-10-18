@@ -28,6 +28,7 @@ const INSTRUCTIONS = [
   'Quy trình kịch bản: list_characters → get_director_schema → viết event JSON → validate_event → save_event. Owner mở Studio › Đạo diễn AI để diễn.',
   'Tư thế & hoạt động: mỗi cảnh có thể thêm activity (ăn, ngủ, chạy, tấn công…) hoặc tự ghép posture × move × motion, facing left/right. render_character nhận các khoá này để xem thử.',
   'Tạo linh kiện (đúng quy trình nhà xưởng): get_part_spec → vẽ chính diện + chọn chế độ 45° → preview_part (soát trên ma-nơ-canh, sửa đến khi đạt) → save_part → dùng trong look.parts của nhân vật. Linh kiện là DỮ LIỆU SVG (tập con an toàn), không phải code.',
+  'Item trang bị (loại asset thứ hai): list_items → viết item (phối linh kiện có sẵn + bảng màu + chỉ số + độ hiếm) → validate_item → save_item → render_item (icon / card / equipped). Nhân vật mặc qua look.equip.<slot>.',
   'Phiên bản: get_app_version xem bản đang chạy và bản mới trên GitHub; update_app cập nhật ngay (tự rollback nếu bản mới lỗi); rollback_app quay về bản trước.',
   'Luật: chỉ dùng id có trong catalog; màu là mã hex; tham số nằm trong khoảng min–max; nhân vật mới lưu vào thư viện "local.my"; luôn khai báo identity.must (dấu nhận diện bắt buộc). Biểu cảm luôn khoa trương, hài, không máu.'
 ].join('\n');
@@ -46,6 +47,10 @@ const TOOLS = [
   { name: 'get_part_spec', title: 'Chuẩn tạo linh kiện', description: 'Khung sườn để tự vẽ linh kiện mới: khung 200×240, neo khuôn mặt/thân, lớp nên dùng cho từng bộ phận, token màu, tập SVG cho phép, quy tắc góc 45° (drawn | same | face45 | body45) và ví dụ hoàn chỉnh. Gọi trước khi vẽ.', inputSchema: obj({ slot: { type: 'string', description: 'bộ phận muốn vẽ (hat, outfit, hair…); bỏ trống = tất cả' } }), annotations: { readOnlyHint: true } },
   { name: 'preview_part', title: 'Soát linh kiện', description: 'Kiểm linh kiện chưa lưu (SVG an toàn, lớp, tham số, 45°) rồi mặc lên ma-nơ-canh chuẩn: 4 góc nhìn × đứng / kinh ngạc / chạy / ngồi. Trả lỗi cụ thể hoặc một ảnh SVG bàn soát để xem và sửa.', inputSchema: obj({ part: { type: 'object', description: '{ id, slot, label, layers: { lớp: svg }, views: { q45: "same" | "face45" | "body45" | { mode: "drawn", layers } }, params? }' } }, ['part']), annotations: { readOnlyHint: true } },
   { name: 'save_part', title: 'Lưu linh kiện', description: 'Kiểm rồi lưu linh kiện vào thư viện "Của tôi" (local.my), có phiên bản. Sau khi lưu, nhân vật dùng được qua look.parts.<slot> = "local.my/<id>".', inputSchema: obj({ part: { type: 'object' }, note: { type: 'string' } }, ['part']) },
+  { name: 'list_items', title: 'Danh sách item', description: 'Item trang bị hiện có (chính thức + của người dùng): key, tên, loại, độ hiếm, bộ phận mặc, linh kiện, chỉ số. Lọc theo type / rarity.', inputSchema: obj({ type: { type: 'string' }, rarity: { type: 'string' } }), annotations: { readOnlyHint: true } },
+  { name: 'validate_item', title: 'Kiểm item', description: 'Kiểm item chưa lưu: loại ↔ bộ phận, linh kiện có thật, màu hex theo token, chỉ số 0–999, dựng được icon/thẻ. Item = phối linh kiện có sẵn (hoặc linh kiện tự tạo qua save_part) + bảng màu riêng + chỉ số + độ hiếm.', inputSchema: obj({ item: { type: 'object', description: '{ id, name, han?, type, rarity, equip: { slot?, part, params?, palette? }, stats?, description?, lore?, icon? }' } }, ['item']), annotations: { readOnlyHint: true } },
+  { name: 'save_item', title: 'Lưu item', description: 'Kiểm rồi lưu item vào thư viện "Của tôi" (có phiên bản). Nhân vật mặc qua look.equip.<slot> = "local.my/<id>".', inputSchema: obj({ item: { type: 'object' }, note: { type: 'string' } }, ['item']) },
+  { name: 'render_item', title: 'Dựng item', description: 'SVG của item: mode icon (ô vuông theo độ hiếm), card (thẻ: tên, loại, độ hiếm, chỉ số, mô tả) hoặc equipped (mặc lên nhân vật character, có thể kèm view/activity).', inputSchema: obj({ key: { type: 'string' }, item: { type: 'object' }, mode: { type: 'string', enum: ['icon', 'card', 'equipped'] }, character: { type: 'string' }, view: { type: 'string', enum: ['front', 'left', 'right', 'left45', 'right45'] }, activity: { type: 'string' } }), annotations: { readOnlyHint: true } },
   { name: 'get_app_version', title: 'Phiên bản ứng dụng', description: 'Phiên bản đang chạy, bản mới nhất trên GitHub Releases, ghi chú phát hành, bản có thể quay về và lịch sử cập nhật. check=false để không hỏi GitHub.', inputSchema: obj({ check: { type: 'boolean', description: 'hỏi GitHub bản mới nhất (mặc định true)' } }), annotations: { readOnlyHint: true, openWorldHint: true } },
   { name: 'update_app', title: 'Cập nhật ứng dụng', description: 'Tải bản mới nhất từ GitHub Releases (kiểm SHA-256, sao lưu dữ liệu) rồi khởi động lại. Bản mới lỗi thì launcher tự quay về bản cũ. Kết nối ngắt vài giây; gọi get_app_version sau ~15 giây để xác nhận. force=true áp cả bản từng bị bỏ qua vì lần trước chạy lỗi.', inputSchema: obj({ force: { type: 'boolean' } }), annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: true } },
   { name: 'rollback_app', title: 'Quay về bản trước', description: 'Chạy lại bản cài trước đó (sao lưu dữ liệu trước khi đổi). Cần confirm = "ROLLBACK".', inputSchema: obj({ confirm: { type: 'string', enum: ['ROLLBACK'] } }, ['confirm']), annotations: { destructiveHint: true } }
@@ -67,6 +72,7 @@ class MCP {
     if (!this.GC.PACKS[MY_PACK]) this.GC.pack({ id: MY_PACK, name: 'Của tôi', owner: 'Bạn', group: 'mine', visibility: 'private', license: 'Thuộc người tạo' }, () => {});
     if (!this.GC.PACKS[TMP_PACK]) this.GC.pack({ id: TMP_PACK, name: 'Bàn soát (tạm)', owner: 'Bạn', group: 'mine', visibility: 'private', license: 'Thuộc người tạo' }, () => {});
     (this.store.listParts ? this.store.listParts() : []).forEach(d => this.GC.registerDataPart(MY_PACK, d));
+    (this.store.listItems ? this.store.listItems() : []).forEach(d => { const r = this.GC.registerItem(MY_PACK, d); if (r.errors.length) console.warn('bỏ item', d.id, r.errors); });
   }
   sync() { this.store.listAssets().forEach(a => this.GC.registerAsset(a.pack, clone(a))); }
 
@@ -96,6 +102,8 @@ class MCP {
       postures: Object.keys(L.postures).map(id => ({ id, label: L.postures[id].label, handsBusy: !!L.postures[id].handsBusy })),
       moves: Object.keys(L.moves).map(id => ({ id, label: L.moves[id].label, postures: L.moves[id].postures || null })),
       props: Object.keys(L.props).map(id => ({ id, label: L.props[id].label })),
+      items: { types: Object.keys(GC.ITEM.types).map(k => ({ id: k, label: GC.ITEM.types[k].label, slots: GC.ITEM.types[k].slots })), rarity: GC.ITEM.rarityOrder.map(k => ({ id: k, label: GC.ITEM.rarity[k].label })),
+        stats: GC.ITEM.stats, count: GC.items().length },
       composition: 'Khung hình = state (nét mặt) × activity (đặt sẵn) hoặc posture × move × motion, cộng facing left/right và view front/left/right (nghiêng nhẹ) / left45/right45 (nghiêng 45° vẽ thật ở mức linh kiện; linh kiện chưa có bản 45° thì engine trượt).',
       fx: Object.keys(L.fx).map(id => ({ id, label: L.fx[id].label })),
       traits: L.traits.map(t => ({ id: t.id, label: t.label })),
@@ -197,6 +205,36 @@ class MCP {
       }
       case 'get_app_version': case 'update_app': case 'rollback_app': return this.appTool(name, args, ctx || {});
       case 'get_part_spec': return json(this.partSpec(args.slot));
+      case 'list_items': {
+        return json(GC.items().filter(i => (!args.type || i.type === args.type) && (!args.rarity || i.rarity === args.rarity))
+          .map(i => ({ key: i.key, name: i.name, type: i.type, rarity: i.rarity, slot: i.equip.slot, part: i.equip.part, stats: i.stats })));
+      }
+      case 'validate_item': {
+        const c = GC.checkItem(args.item);
+        return json({ ok: !c.errors.length, errors: c.errors, gates: c.errors.length ? [] : GC.itemGate(c.def) });
+      }
+      case 'save_item': {
+        let rec;
+        try { rec = this.saveItemChecked(args.item, args.note || 'Lưu qua MCP'); }
+        catch (e) { return Object.assign(json({ saved: false, errors: e.errors || [e.message] }), { isError: true }); }
+        return json({ saved: true, key: rec.key, version: rec.version, use: 'Nhân vật mặc: look.equip.' + rec.equip.slot + ' = "' + rec.key + '"', studio: 'Studio › Trang bị › ' + rec.name });
+      }
+      case 'render_item': {
+        let it;
+        if (args.item) { const c = GC.checkItem(args.item); if (c.errors.length) return toolError(c.errors.join('; ')); it = Object.assign({ key: 'preview/' + c.def.id }, c.def); }
+        else it = GC.getItem(String(args.key || ''), MY_PACK);
+        if (!it) return toolError('Không có item ' + args.key + '. Gọi list_items.');
+        let svg;
+        if (args.mode === 'equipped') {
+          if (!args.item && !GC.ITEMS[it.key]) return toolError('equipped cần item đã lưu (key).');
+          const base = this.findAsset(String(args.character || 'gia-cat-luong'));
+          if (!base) return toolError('Không có nhân vật ' + args.character);
+          const a = clone(base); a.key = 'equip/' + it.key.replace(/[^a-z0-9]/gi, ''); a.look.equip = Object.assign({}, a.look.equip, { [it.equip.slot]: it.key });
+          const dir = {}; if (args.view) dir.view = args.view; if (args.activity && GC.LIB.activities[args.activity]) dir.activity = args.activity;
+          try { svg = GC.svgString(a, (GC.LIB.activities[dir.activity] || {}).state || 'normal', { director: dir }); } catch (e) { return toolError('Không dựng được: ' + e.message); }
+        } else svg = GC.itemSvg(it, { mode: args.mode === 'card' ? 'card' : 'icon', size: 160 });
+        return { content: [{ type: 'text', text: it.name + ' · ' + (GC.ITEM.rarity[it.rarity] || {}).label + ' · ' + (args.mode || 'icon') }, { type: 'resource', resource: { uri: 'genchibi://item/' + it.key + '/' + (args.mode || 'icon') + '.svg', mimeType: 'image/svg+xml', text: svg } }] };
+      }
       case 'preview_part': {
         const c = GC.checkDataPart(args.part);
         if (c.errors.length) return Object.assign(json({ ok: false, errors: c.errors, hint: 'Sửa đúng các lỗi trên rồi gọi lại preview_part. Chuẩn: get_part_spec.' }), { isError: true });
@@ -272,6 +310,18 @@ class MCP {
     const rec = this.store.savePart(c.def, note);
     this.GC.registerDataPart(MY_PACK, rec);
     return rec;
+  }
+  saveItemChecked(item, note) {
+    const c = this.GC.checkItem(item);
+    if (!c.errors.length) {
+      if (this.GC.items().some(i => i.id === c.def.id && i.pack !== MY_PACK)) c.errors.push('id "' + c.def.id + '" trùng item của thư viện chính thức — chọn id khác');
+      const bad = this.GC.itemGate(c.def).filter(g => !g.ok && !g.info);
+      bad.forEach(g => c.errors.push(g.label + (g.detail ? ': ' + g.detail : '')));
+    }
+    if (c.errors.length) throw Object.assign(new Error('Item chưa đạt: ' + c.errors.slice(0, 6).join('; ')), { code: 422, errors: c.errors });
+    const rec = this.store.saveItem(c.def, note);
+    const r = this.GC.registerItem(MY_PACK, rec);
+    return r.def;
   }
   // Tool cho AI trong chatroom (LLM API): đúng bộ tool MCP, trừ tool hệ thống (cập nhật/rollback app)
   toolsFor(channel) { return TOOLS.filter(t => channel !== 'ui' || !/^(update_app|rollback_app)$/.test(t.name)); }
