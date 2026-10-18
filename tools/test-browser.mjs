@@ -92,8 +92,21 @@ try {
     await q.selectOption('select[aria-label="Cảnh"]', 'afi.scenes/thao-lu'); await q.click('button:text-is("Diễn")'); await q.waitForTimeout(600);
     const actors = await q.$$('.dscene .actor'), picked = await q.$$('.fxchips button[aria-pressed="true"]');
     if (!actors.length || actors.length !== picked.length) throw new Error('sân khấu cảnh: ' + actors.length + ' diễn viên / ' + picked.length + ' được chọn');
+    // hồi quy: mã nhúng web không để tên do agent đặt thoát khỏi <script>
+    await q.evaluate(async () => {
+      const a = JSON.parse(JSON.stringify(window.GenChibi.ASSETS['afi.tamquoc/linh-que']));
+      Object.assign(a, { id: 'xss-ci', pack: 'local.my', name: '</script><img src=x onerror=alert(1)>', status: 'draft' }); delete a.key;
+      const r = await fetch('api/assets/local.my/xss-ci', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify(a) });
+      if (!r.ok) throw new Error('không lưu được nhân vật thử: ' + r.status);
+      localStorage.setItem('gc-route', JSON.stringify({ page: 'lib-characters', key: 'local.my/xss-ci' }));
+    });
+    await q.reload(); await q.waitForTimeout(900);
+    await q.click('button:text-is("Nhúng web")');
+    const embed = await q.inputValue('textarea.code');
+    const dataLine = embed.split('\n').find(l => /registerAsset/.test(l)) || '';
+    if (!/xss-ci/.test(dataLine) || /<\//.test(dataLine)) throw new Error('mã nhúng để chữ thoát khỏi <script>: ' + dataLine.slice(0, 120));
     if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
-    console.log('  ✓ Studio: ' + pages + ' trang mở không lỗi; Thư viện (thẻ theo nhóm + tải ảnh + chép mã) tách khỏi Xưởng; đạo diễn diễn trong cảnh');
+    console.log('  ✓ Studio: ' + pages + ' trang mở không lỗi; Thư viện (thẻ theo nhóm + tải ảnh + chép mã) tách khỏi Xưởng; đạo diễn diễn trong cảnh; mã nhúng không bị chèn script');
   } catch (e) { fail = 1; console.log('  ✗ Studio Thư viện/Xưởng:', e.message); }
   finally { await b3.close(); srv3.kill(); }
 }

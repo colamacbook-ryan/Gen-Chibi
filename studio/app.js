@@ -1209,6 +1209,8 @@
     return ['engine/core.js'].concat(withRender ? ['engine/render.js'] : [], ['kinds/character/afi.core.js', 'kinds/character/afi.tamquoc.js', 'kinds/item/afi.items.js', 'kinds/scene/afi.scenes.js'])
       .map(function (f) { return '<script src="' + f + '"></script>'; }).join('\n');
   }
+  // JSON đặt trong <script> của mã nhúng: escape < > & và U+2028/2029 — tên do agent đặt chứa "</script>" không thoát ra được
+  function jsonForScript(x) { return JSON.stringify(x).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029'); }
   function mcpCall(tool, args) { return '// Agent (MCP) hoặc AI trong Xưởng AI gọi:\n' + tool + ' ' + JSON.stringify(args, null, 2); }
 
   /* ============================================================ THƯ VIỆN: thành phẩm theo nhóm, lấy về dùng */
@@ -1288,8 +1290,8 @@
           ['Nhúng web', function () {
             var d = dir();
             return '<!-- gen-chibi · © 2026 Afi Labs. Chép thư mục engine/ và kinds/ từ bản cài vào cạnh trang này. -->\n<div id="chibi" style="width:248px;height:258px"></div>\n' + engineScripts(true) + '\n<script>\n  var GC = GenChibi; GC.render.injectCSS();\n' +
-              (mine ? '  GC.registerAsset("' + MY_PACK + '", ' + JSON.stringify(a) + ');\n' : '') +
-              '  var chibi = GC.render.full(document.getElementById("chibi"), GC.ASSETS["' + a.key + '"], "normal");\n  chibi.setState("' + u.state + '"' + (d ? ', ' + JSON.stringify(d) : '') + ');   // đổi biểu cảm / hoạt động khi cần\n</script>';
+              (mine ? '  GC.registerAsset("' + MY_PACK + '", ' + jsonForScript(a) + ');\n' : '') +
+              '  var chibi = GC.render.full(document.getElementById("chibi"), GC.ASSETS[' + jsonForScript(a.key) + '], "normal");\n  chibi.setState(' + jsonForScript(u.state) + (d ? ', ' + jsonForScript(d) : '') + ');   // đổi biểu cảm / hoạt động khi cần\n</script>';
           }],
           ['SVG', function () { return GC.svgString(a, u.state, { director: dir() }); }],
           ['JSON công thức', function () { return JSON.stringify(a, null, 2); }]
@@ -1412,8 +1414,8 @@
           ['Gọi qua MCP', function () { var x = { key: sc.key, cast: picker.cast() }; if (u.time !== sc.time) x.time = u.time; if (u.weather !== sc.weather) x.weather = u.weather; return mcpCall('render_scene', x); }],
           ['Nhúng web', function () {
             return '<!-- gen-chibi · © 2026 Afi Labs. Chép thư mục engine/ và kinds/ từ bản cài vào cạnh trang này. -->\n<div id="canh" style="width:640px"></div>\n' + engineScripts(false) + '\n<script>\n  var GC = GenChibi;\n' +
-              (sc.pack === MY_PACK ? '  GC.pack({ id: "' + MY_PACK + '", name: "Của tôi", owner: "Bạn", license: "Thuộc người tạo" }, function (D) { D.scene(' + JSON.stringify(sc) + '); });\n' : '') +
-              '  document.getElementById("canh").innerHTML = GC.sceneSvg(GC.SCENES["' + sc.key + '"], ' + JSON.stringify(opts()) + ');\n</script>';
+              (sc.pack === MY_PACK ? '  GC.pack({ id: "' + MY_PACK + '", name: "Của tôi", owner: "Bạn", license: "Thuộc người tạo" }, function (D) { D.scene(' + jsonForScript(sc) + '); });\n' : '') +
+              '  document.getElementById("canh").innerHTML = GC.sceneSvg(GC.SCENES[' + jsonForScript(sc.key) + '], ' + jsonForScript(opts()) + ');\n</script>';
           }],
           ['SVG', function () { return svg(); }],
           ['JSON cảnh', function () { return JSON.stringify(sc, null, 2); }]
