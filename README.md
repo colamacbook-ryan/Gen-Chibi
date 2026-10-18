@@ -2,7 +2,7 @@
 
 Nhà máy nhân vật chibi **vẽ bằng code**: một khung xương chuẩn, kho linh kiện có tham số, 18 biểu cảm khoa trương, động tác là dữ liệu, cổng kiểm tự động. Mỗi nhân vật là một **công thức JSON**; engine dựng ra SVG/PNG/sprite sheet hoặc nhân vật "sống" đổi biểu cảm lúc chạy.
 
-- **Studio** (desktop, kiểu Data Console): quản lý nhân vật, chỉnh linh kiện và tham số, ghi đè biểu cảm theo từng nhân vật, phiên bản, xuất bản.
+- **Studio** (desktop, kiểu Data Console), hai khu tách bạch: **Thư viện** — thành phẩm (nhân vật, trang bị, cảnh) duyệt theo nhóm, tải ảnh (SVG/PNG/sprite) và chép mã (tham chiếu, MCP, nhúng web, JSON); **Xưởng** — bàn phối, kho linh kiện & phông, khung tư thế/biểu cảm, AI, cổng kiểm.
 - **Đạo diễn AI**: LLM viết kịch bản sự kiện trong từ vựng đóng của kho; server kiểm và bắt model sửa nếu sai.
 - **MCP server**: agent (Claude Code, Claude Desktop…) nối thẳng vào để tự tạo nhân vật và kịch bản, không tốn LLM API lõi.
 - **Tự cập nhật** từ GitHub Releases: kiểm SHA-256, sao lưu dữ liệu trước khi đổi, tự chạy lại bản cũ nếu bản mới lỗi.
@@ -33,10 +33,13 @@ Một khung hình = **biểu cảm** (mặt) × **tư thế nền** (thân dư�
 
 - 32 hoạt động đặt sẵn: đứng, ngồi ghế, ngồi xếp bằng, quỳ, ngồi xổm, nằm · đi, chạy, rón rén, nhảy, bò, bay, bơi, bỏ chạy · ăn, uống, ngủ, đọc sách, viết · chém, đâm, phòng thủ, xông lên, ăn mừng · sợ hãi, ngất · cúi chào, ôm quyền, quỳ lạy, vẫy, chỉ tay, cổ vũ.
 - Ghép tự do: `{ "state": "panic", "posture": "stand", "move": "run", "motion": "flail", "facing": "left" }`.
-- Studio › Tư thế & hoạt động: xem và ghép thử, tải SVG.
+- Xưởng › Khung tư thế & hoạt động: xem và ghép thử, tải SVG.
 
 ## Item trang bị (loại asset thứ hai)
-Item = phối linh kiện có sẵn + bảng màu riêng + độ hiếm + chỉ số; tự đứng được (icon, thẻ) và mặc được lên nhân vật (`look.equip`). Studio › Trang bị; MCP `list_items` / `validate_item` / `save_item` / `render_item`.
+Item = phối linh kiện có sẵn + bảng màu riêng + độ hiếm + chỉ số; tự đứng được (icon, thẻ) và mặc được lên nhân vật (`look.equip`). Thư viện › Trang bị (tải icon/thẻ, chép mã), Xưởng › Bàn phối trang bị; MCP `list_items` / `validate_item` / `save_item` / `render_item`.
+
+## Cảnh (loại asset thứ ba)
+Cảnh = phối phông có sẵn (trời, cảnh xa, công trình, mặt đất, đạo cụ, tiền cảnh) + bảng màu + giờ (ngày, bình minh, hoàng hôn, đêm) + thời tiết (mưa, tuyết, hoa rơi, lá bay, sương, đom đóm). 27 phông → 8 cảnh Tam Quốc (Thảo lư, Doanh trại, Dưới chân thành, Xích Bích, Thư phòng, Rừng trúc đêm, Vườn đào, Núi tuyết). Nhân vật đứng vào 8 chỗ đứng chuẩn, tự quay 45° về phía nhau. Kịch bản đặt vào cảnh bằng `"scene"` + `"spot"`. MCP `list_scenes` / `validate_scene` / `save_scene` / `render_scene`; phông mới qua `get_part_spec` → `preview_part` → `save_part`.
 
 ## Quy trình tạo lập linh kiện
 Nhà xưởng giữ giá trị ở **khung sườn + quy trình**; nhân vật chỉ là phối linh kiện. Chuẩn tạo một linh kiện (toạ độ, lớp, góc nhìn chính diện + 45°, công cụ `face45`/`body45`, soát trên ma-nơ-canh, cổng kiểm, phát hành): [`docs/QUY-TRINH-LINH-KIEN.md`](docs/QUY-TRINH-LINH-KIEN.md).
@@ -48,7 +51,7 @@ claude mcp add gen-chibi -- genchibi mcp                                  # stdi
 claude mcp add --transport http gen-chibi http://localhost:7480/mcp       # HTTP
 ```
 
-Tool: `get_catalog`, `list_characters`, `get_character`, `validate_character`, `save_character`, `render_character`, `get_director_schema`, `validate_event`, `save_event`, `get_part_spec`, `preview_part`, `save_part`, `list_items`, `validate_item`, `save_item`, `render_item`, `get_app_version`, `update_app`, `rollback_app`.
+Tool: `get_catalog`, `list_characters`, `get_character`, `validate_character`, `save_character`, `render_character`, `get_director_schema`, `validate_event`, `save_event`, `get_part_spec`, `preview_part`, `save_part`, `list_items`, `validate_item`, `save_item`, `render_item`, `list_scenes`, `validate_scene`, `save_scene`, `render_scene`, `get_app_version`, `update_app`, `rollback_app`.
 
 Tạo linh kiện: `get_part_spec` → vẽ (SVG an toàn, token màu) → `preview_part` (bàn soát) → `save_part`. AI trong Studio › Xưởng AI dùng đúng bộ tool này — mọi lối ghi đi qua một cổng kiểm (xem `docs/QUY-TRINH-LINH-KIEN.md` mục 6).
 

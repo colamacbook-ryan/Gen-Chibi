@@ -62,4 +62,39 @@ try {
   } catch (e) { fail = 1; console.log('  ✗ đăng nhập Studio:', e.message); }
   finally { await b2.close(); srv2.kill(); }
 }
+// Studio tách hai khu: Thư viện (thành phẩm, lấy về dùng) và Xưởng (tạo lập). Mọi trang mở không lỗi;
+// thư viện có thẻ theo nhóm + khu "Dùng" (tải ảnh, chép mã); đạo diễn diễn được trong cảnh.
+{
+  const home3 = mkdtempSync(path.join(tmpdir(), 'gc-'));
+  const srv3 = spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home3, GC_PORT: '7498', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' });
+  await new Promise(r => setTimeout(r, 1200));
+  const b3 = await pw.chromium.launch();
+  const q = await b3.newPage({ viewport: { width: 1500, height: 950 } });
+  const errs = []; q.on('pageerror', e => errs.push(e.message));
+  try {
+    await q.goto('http://localhost:7498/');
+    await q.waitForFunction(() => /^v\d/.test(document.getElementById('verChip').textContent), null, { timeout: 5000 });
+    const zones = await q.$$eval('.nav-group', els => els.map(e => e.className));
+    if (!zones.some(z => /zone-lib/.test(z)) || !zones.some(z => /zone-fab/.test(z))) throw new Error('thiếu nhóm Thư viện / Xưởng trong điều hướng');
+    const pages = await q.$$eval('.nav-item', els => els.length);
+    for (let i = 0; i < pages; i++) {
+      const btn = (await q.$$('.nav-item'))[i]; const label = (await btn.textContent()).trim();
+      await btn.click(); await q.waitForTimeout(350);
+      const zone = await q.evaluate(() => document.body.getAttribute('data-zone')), tag = await q.textContent('.zone-tag');
+      if (!zone || !tag) throw new Error('trang "' + label + '" thiếu nhãn khu');
+      if (zone === 'lib') {
+        const cards = await q.$$('.libcard'), use = await q.$$('.usebar'), code = await q.$('textarea.code');
+        if (!cards.length || use.length < 2 || !code) throw new Error('thư viện "' + label + '" thiếu thẻ hoặc khu Dùng');
+        const txt = await code.inputValue(); if (!/\//.test(txt)) throw new Error('thư viện "' + label + '": mã tham chiếu rỗng');
+      }
+    }
+    await q.click('.nav-item:has-text("Đạo diễn AI")'); await q.waitForTimeout(300);
+    await q.selectOption('select[aria-label="Cảnh"]', 'afi.scenes/thao-lu'); await q.click('button:text-is("Diễn")'); await q.waitForTimeout(600);
+    const actors = await q.$$('.dscene .actor'), picked = await q.$$('.fxchips button[aria-pressed="true"]');
+    if (!actors.length || actors.length !== picked.length) throw new Error('sân khấu cảnh: ' + actors.length + ' diễn viên / ' + picked.length + ' được chọn');
+    if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
+    console.log('  ✓ Studio: ' + pages + ' trang mở không lỗi; Thư viện (thẻ theo nhóm + tải ảnh + chép mã) tách khỏi Xưởng; đạo diễn diễn trong cảnh');
+  } catch (e) { fail = 1; console.log('  ✗ Studio Thư viện/Xưởng:', e.message); }
+  finally { await b3.close(); srv3.kill(); }
+}
 process.exit(fail);

@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.5.0 — Loại asset thứ ba: cảnh · Studio tách Thư viện / Xưởng
+- **Cảnh** = phối phông có sẵn theo 6 lớp (trời, cảnh xa, công trình, mặt đất, đạo cụ, tiền cảnh) + bảng màu + giờ (ngày / bình minh / hoàng hôn / đêm) + thời tiết (mưa, tuyết, hoa rơi, lá bay, sương, đom đóm). Phông chỉ dùng token màu cảnh nên đổi giờ không phải vẽ lại.
+- Thư viện chính thức `afi.scenes`: 27 phông → 8 cảnh (Thảo lư Long Trung, Doanh trại lúc chiều, Dưới chân thành, Bờ sông Xích Bích, Thư phòng, Rừng trúc đêm, Vườn đào, Núi tuyết). Rào test: mọi phông chính thức phải được ít nhất một cảnh dùng.
+- **Chỗ đứng chuẩn của engine** (8 chỗ, hai hàng): mọi dàn diễn viên đặt được vào mọi cảnh, dựng bằng đúng khung nhân vật (45°, 32 hoạt động, trang bị). Từ hai diễn viên, ai chưa chọn góc tự quay 45° về giữa. Ngân sách: diễn viên ≤ 8, đạo cụ ≤ 10, hạt thời tiết ≤ 60; mưa/tuyết có hạt giống → ảnh ổn định.
+- **Một cổng ghi**: `saveSceneChecked` cho MCP (4 tool mới — 23 tool), `POST /api/scenes` và AI trong chatroom. Phông mới đi qua chính `get_part_spec` → `preview_part` (bàn soát ngày/đêm kèm diễn viên) → `save_part`, cùng bộ lọc SVG an toàn với token màu cảnh. Không ghi đè cảnh chính thức.
+- **Đạo diễn AI diễn trong cảnh**: kịch bản có `"scene"`, mỗi bước có `"spot"`; Studio đặt diễn viên đúng chỗ, phủ màu giờ.
+- **Studio tách hai khu**: **Thư viện** (xanh) — thành phẩm duyệt theo nhóm (Chính thức / Của tôi… rồi phe / loại / ngoài trời–trong nhà), xem biến thể và **lấy về dùng**: ảnh (SVG, PNG, avatar, sprite 18 biểu cảm, icon/thẻ item, cảnh 1280/1920, nền trống) và mã (mã tham chiếu, lệnh MCP, mã nhúng web, SVG, JSON công thức). **Xưởng** (hổ phách) — bàn phối nhân vật / trang bị / cảnh, kho linh kiện & phông (bàn soát phông), khung tư thế & biểu cảm, Xưởng AI, Đạo diễn AI, cổng kiểm. Trang "Xuất bản" cũ gộp vào khu Dùng của Thư viện.
+- `docs/QUY-TRINH-LINH-KIEN.md`: mục 7 có hai ví dụ (item, cảnh) + chuẩn phông; mục 8 mới: Thư viện và Xưởng.
+
 ## v0.4.1 — Vá độ bền cho item (review v0.4.0)
 - Review bảo mật v0.4.0: **không có lỗ hổng** (escape chữ, hex, prototype, path traversal, ghi đè chính thức đều đứng vững). Vá 4 điểm độ bền:
 - Item bị lưu lại sang bộ phận khác không còn làm vỡ nhân vật đang mặc nó (engine bỏ qua item lệch bộ phận); cổng ghi chặn đổi bộ phận của item đã lưu — muốn đổi thì tạo id mới.

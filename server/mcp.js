@@ -21,6 +21,13 @@ const EXAMPLE_PART = {
   views: { q45: { mode: 'drawn', layers: { hat: '<path d="M36,80 L92,22 L162,76 C128,86 68,88 36,80 Z" fill="#e8d39a" stroke="{ink}" stroke-width="2.8" stroke-linejoin="round"/><path d="M92,22 L104,82 M92,22 L72,82" fill="none" stroke="#b89a55" stroke-width="1.4"/><path d="M56,82 C76,92 112,92 134,82" fill="none" stroke="{accent}" stroke-width="2.4"/>' } } },
   params: { height: { label: 'Độ cao nón', type: 'scaleY', min: 0.85, max: 1.2, def: 1, pivot: [100, 80] } }
 };
+// phông cảnh mẫu (đạo cụ: gốc toạ độ ở chân vật, cao lên phía y âm)
+const EXAMPLE_SCENERY = {
+  id: 'den-da', slot: 'deco', label: 'Đèn đá',
+  svg: '<ellipse cx="0" cy="0" rx="24" ry="4" fill="#000000" opacity="0.12"/><rect x="-8" y="-40" width="16" height="40" fill="{stone}"/>' +
+    '<rect x="-20" y="-58" width="40" height="18" rx="3" fill="{stone}"/><rect x="-9" y="-55" width="18" height="12" fill="{light}"/>' +
+    '<path d="M-27,-58 L0,-78 L27,-58 Z" fill="{stone}"/><path d="M0,-78 L27,-58 L12,-58 Z" fill="#000000" opacity="0.12"/>'
+};
 
 const INSTRUCTIONS = [
   'gen-chibi dựng nhân vật chibi bằng code từ công thức JSON. Bạn (agent) viết công thức và kịch bản; hệ thống kiểm và dựng.',
@@ -29,6 +36,7 @@ const INSTRUCTIONS = [
   'Tư thế & hoạt động: mỗi cảnh có thể thêm activity (ăn, ngủ, chạy, tấn công…) hoặc tự ghép posture × move × motion, facing left/right. render_character nhận các khoá này để xem thử.',
   'Tạo linh kiện (đúng quy trình nhà xưởng): get_part_spec → vẽ chính diện + chọn chế độ 45° → preview_part (soát trên ma-nơ-canh, sửa đến khi đạt) → save_part → dùng trong look.parts của nhân vật. Linh kiện là DỮ LIỆU SVG (tập con an toàn), không phải code.',
   'Item trang bị (loại asset thứ hai): list_items → viết item (phối linh kiện có sẵn + bảng màu + chỉ số + độ hiếm) → validate_item → save_item → render_item (icon / card / equipped). Nhân vật mặc qua look.equip.<slot>.',
+  'Cảnh (loại asset thứ ba): list_scenes → viết cảnh (phối phông có sẵn theo lớp sky/far/mid/ground/front + deco + bảng màu + time + weather) → validate_scene → save_scene → render_scene (kèm cast: nhân vật đứng ở chỗ đứng chuẩn, có activity/view). Thiếu phông: get_part_spec slot=sky|far|mid|ground|front|deco → preview_part → save_part. Kịch bản đặt vào cảnh bằng event.scene + step.spot.',
   'Phiên bản: get_app_version xem bản đang chạy và bản mới trên GitHub; update_app cập nhật ngay (tự rollback nếu bản mới lỗi); rollback_app quay về bản trước.',
   'Luật: chỉ dùng id có trong catalog; màu là mã hex; tham số nằm trong khoảng min–max; nhân vật mới lưu vào thư viện "local.my"; luôn khai báo identity.must (dấu nhận diện bắt buộc). Biểu cảm luôn khoa trương, hài, không máu.'
 ].join('\n');
@@ -51,6 +59,10 @@ const TOOLS = [
   { name: 'validate_item', title: 'Kiểm item', description: 'Kiểm item chưa lưu: loại ↔ bộ phận, linh kiện có thật, màu hex theo token, chỉ số 0–999, dựng được icon/thẻ. Item = phối linh kiện có sẵn (hoặc linh kiện tự tạo qua save_part) + bảng màu riêng + chỉ số + độ hiếm.', inputSchema: obj({ item: { type: 'object', description: '{ id, name, han?, type, rarity, equip: { slot?, part, params?, palette? }, stats?, description?, lore?, icon? }' } }, ['item']), annotations: { readOnlyHint: true } },
   { name: 'save_item', title: 'Lưu item', description: 'Kiểm rồi lưu item vào thư viện "Của tôi" (có phiên bản). Nhân vật mặc qua look.equip.<slot> = "local.my/<id>".', inputSchema: obj({ item: { type: 'object' }, note: { type: 'string' } }, ['item']) },
   { name: 'render_item', title: 'Dựng item', description: 'SVG của item: mode icon (ô vuông theo độ hiếm), card (thẻ: tên, loại, độ hiếm, chỉ số, mô tả) hoặc equipped (mặc lên nhân vật character, có thể kèm view/activity).', inputSchema: obj({ key: { type: 'string' }, item: { type: 'object' }, mode: { type: 'string', enum: ['icon', 'card', 'equipped'] }, character: { type: 'string' }, view: { type: 'string', enum: ['front', 'left', 'right', 'left45', 'right45'] }, activity: { type: 'string' } }), annotations: { readOnlyHint: true } },
+  { name: 'list_scenes', title: 'Danh sách cảnh', description: 'Cảnh hiện có (chính thức + của người dùng): key, tên, giờ, thời tiết, các lớp phông, chỗ đứng.', inputSchema: obj({}), annotations: { readOnlyHint: true } },
+  { name: 'validate_scene', title: 'Kiểm cảnh', description: 'Kiểm cảnh chưa lưu: phông có thật đúng lớp, đạo cụ ≤ 10, màu hex theo token cảnh, giờ, thời tiết, chỗ đứng; dựng được và đặt được diễn viên ở mọi chỗ đứng. Cảnh = phối phông có sẵn (hoặc phông tự tạo qua save_part).', inputSchema: obj({ scene: { type: 'object', description: '{ id, name, han?, description?, layers: { sky, ground, far?, mid?, front? : "id phông" | { part, dx?, flip? } }, deco?: [{ part, x, y?, scale?, flip?, z?: back|mid|front }], palette?, time?: day|dawn|dusk|night, weather?: clear|rain|snow|petals|leaves|mist|fireflies, spots? }' } }, ['scene']), annotations: { readOnlyHint: true } },
+  { name: 'save_scene', title: 'Lưu cảnh', description: 'Kiểm rồi lưu cảnh vào thư viện "Của tôi" (có phiên bản). Kịch bản dùng qua event.scene = "local.my/<id>".', inputSchema: obj({ scene: { type: 'object' }, note: { type: 'string' } }, ['scene']) },
+  { name: 'render_scene', title: 'Dựng cảnh', description: 'SVG 640×360 của một cảnh (key đã lưu hoặc scene nháp), có thể đặt dàn diễn viên: cast = [{ character, spot, state?, activity?, posture?, move?, motion?, facing?, view? }] (≤ 8). Từ hai diễn viên trở lên, ai chưa chọn view sẽ tự quay 45° về giữa. time / weather để xem thử biến thể.', inputSchema: obj({ key: { type: 'string' }, scene: { type: 'object' }, cast: { type: 'array', items: { type: 'object' } }, time: { type: 'string', enum: ['day', 'dawn', 'dusk', 'night'] }, weather: { type: 'string', enum: ['clear', 'rain', 'snow', 'petals', 'leaves', 'mist', 'fireflies'] } }), annotations: { readOnlyHint: true } },
   { name: 'get_app_version', title: 'Phiên bản ứng dụng', description: 'Phiên bản đang chạy, bản mới nhất trên GitHub Releases, ghi chú phát hành, bản có thể quay về và lịch sử cập nhật. check=false để không hỏi GitHub.', inputSchema: obj({ check: { type: 'boolean', description: 'hỏi GitHub bản mới nhất (mặc định true)' } }), annotations: { readOnlyHint: true, openWorldHint: true } },
   { name: 'update_app', title: 'Cập nhật ứng dụng', description: 'Tải bản mới nhất từ GitHub Releases (kiểm SHA-256, sao lưu dữ liệu) rồi khởi động lại. Bản mới lỗi thì launcher tự quay về bản cũ. Kết nối ngắt vài giây; gọi get_app_version sau ~15 giây để xác nhận. force=true áp cả bản từng bị bỏ qua vì lần trước chạy lỗi.', inputSchema: obj({ force: { type: 'boolean' } }), annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: true } },
   { name: 'rollback_app', title: 'Quay về bản trước', description: 'Chạy lại bản cài trước đó (sao lưu dữ liệu trước khi đổi). Cần confirm = "ROLLBACK".', inputSchema: obj({ confirm: { type: 'string', enum: ['ROLLBACK'] } }, ['confirm']), annotations: { destructiveHint: true } }
@@ -73,6 +85,7 @@ class MCP {
     if (!this.GC.PACKS[TMP_PACK]) this.GC.pack({ id: TMP_PACK, name: 'Bàn soát (tạm)', owner: 'Bạn', group: 'mine', visibility: 'private', license: 'Thuộc người tạo' }, () => {});
     (this.store.listParts ? this.store.listParts() : []).forEach(d => this.GC.registerDataPart(MY_PACK, d));
     (this.store.listItems ? this.store.listItems() : []).forEach(d => { const r = this.GC.registerItem(MY_PACK, d); if (r.errors.length) console.warn('bỏ item', d.id, r.errors); });
+    (this.store.listScenes ? this.store.listScenes() : []).forEach(d => { const r = this.GC.registerScene(MY_PACK, d); if (r.errors.length) console.warn('bỏ cảnh', d.id, r.errors); });
   }
   sync() { this.store.listAssets().forEach(a => this.GC.registerAsset(a.pack, clone(a))); }
 
@@ -104,6 +117,7 @@ class MCP {
       props: Object.keys(L.props).map(id => ({ id, label: L.props[id].label })),
       items: { types: Object.keys(GC.ITEM.types).map(k => ({ id: k, label: GC.ITEM.types[k].label, slots: GC.ITEM.types[k].slots })), rarity: GC.ITEM.rarityOrder.map(k => ({ id: k, label: GC.ITEM.rarity[k].label })),
         stats: GC.ITEM.stats, count: GC.items().length },
+      scenes: this.sceneVocab(),
       composition: 'Khung hình = state (nét mặt) × activity (đặt sẵn) hoặc posture × move × motion, cộng facing left/right và view front/left/right (nghiêng nhẹ) / left45/right45 (nghiêng 45° vẽ thật ở mức linh kiện; linh kiện chưa có bản 45° thì engine trượt).',
       fx: Object.keys(L.fx).map(id => ({ id, label: L.fx[id].label })),
       traits: L.traits.map(t => ({ id: t.id, label: t.label })),
@@ -237,10 +251,45 @@ class MCP {
         } finally { if (tmp) { delete GC.ITEMS[tmp.key]; const i = GC.ITEM_ORDER.indexOf(tmp.key); if (i >= 0) GC.ITEM_ORDER.splice(i, 1); } }
         return { content: [{ type: 'text', text: it.name + ' · ' + (GC.ITEM.rarity[it.rarity] || {}).label + ' · ' + (args.mode || 'icon') }, { type: 'resource', resource: { uri: 'genchibi://item/' + it.key + '/' + (args.mode || 'icon') + '.svg', mimeType: 'image/svg+xml', text: svg } }] };
       }
+      case 'list_scenes': {
+        return json(GC.scenes().map(x => ({ key: x.key, name: x.name, han: x.han, time: x.time, weather: x.weather, layers: Object.keys(x.layers).reduce((m, k) => { m[k] = x.layers[k].part; return m; }, {}), deco: x.deco.length, spots: x.spots, description: x.description })));
+      }
+      case 'validate_scene': {
+        const c = GC.checkScene(args.scene);
+        return json({ ok: !c.errors.length, errors: c.errors, gates: c.errors.length ? [] : GC.sceneGate(c.def) });
+      }
+      case 'save_scene': {
+        let rec;
+        try { rec = this.saveSceneChecked(args.scene, args.note || 'Lưu qua MCP'); }
+        catch (e) { return Object.assign(json({ saved: false, errors: e.errors || [e.message] }), { isError: true }); }
+        return json({ saved: true, key: rec.key, version: rec.version, use: 'Kịch bản: event.scene = "' + rec.key + '"; dựng: render_scene key=' + rec.key, studio: 'Studio › Thư viện › Cảnh › ' + rec.name });
+      }
+      case 'render_scene': {
+        let sc;
+        if (args.scene) { const c = GC.checkScene(args.scene); if (c.errors.length) return toolError(c.errors.join('; ')); sc = Object.assign({ key: 'preview/' + c.def.id }, c.def); }
+        else sc = GC.getScene(String(args.key || ''), MY_PACK);
+        if (!sc) return toolError('Không có cảnh ' + args.key + '. Gọi list_scenes.');
+        this.sync();
+        const cast = args.cast || [];
+        const errs = GC.checkCast(cast, sc);
+        if (errs.length) return toolError(errs.join('; '));
+        const opts = { cast: cast.map(m => Object.assign({}, m, { asset: this.findAsset(String(m.character)) })) };
+        if (args.time) opts.time = args.time; if (args.weather) opts.weather = args.weather;
+        let svg;
+        try { svg = GC.sceneSvg(sc, opts); } catch (e) { return toolError('Không dựng được: ' + e.message); }
+        return { content: [{ type: 'text', text: sc.name + ' · ' + GC.SCENE.times[opts.time || sc.time].label + ' · ' + GC.SCENE.weathers[opts.weather || sc.weather].label + ' · ' + cast.length + ' diễn viên' },
+          { type: 'resource', resource: { uri: 'genchibi://scene/' + sc.key + '.svg', mimeType: 'image/svg+xml', text: svg } }] };
+      }
       case 'preview_part': {
         const c = GC.checkDataPart(args.part);
         if (c.errors.length) return Object.assign(json({ ok: false, errors: c.errors, hint: 'Sửa đúng các lỗi trên rồi gọi lại preview_part. Chuẩn: get_part_spec.' }), { isError: true });
         const r = GC.registerDataPart(TMP_PACK, c.def);
+        if (c.def.kind === 'scenery') {
+          try {
+            return { content: [{ type: 'text', text: 'Đạt kiểm dữ liệu. Bàn soát phông: đặt vào cảnh trung tính kèm Gia Cát Lượng, ban ngày và ban đêm. Kiểm: đúng khung 640×360 (đạo cụ: gốc ở chân), màu theo token cảnh, không che diễn viên. Ổn thì save_part.' },
+              { type: 'resource', resource: { uri: 'genchibi://bench/' + c.def.slot + '/' + c.def.id + '.svg', mimeType: 'image/svg+xml', text: this.sceneBench(c.def.slot, TMP_PACK + '/' + c.def.id) } }] };
+          } finally { delete GC.LIB.parts[TMP_PACK + '/' + c.def.slot + ':' + c.def.id]; }
+        }
         try {
           const svg = this.bench(c.def.slot, TMP_PACK + '/' + c.def.id, c.def.label);
           return {
@@ -255,8 +304,10 @@ class MCP {
         let rec;
         try { rec = this.savePartChecked(args.part, args.note || 'Lưu qua MCP'); }
         catch (e) { return Object.assign(json({ saved: false, errors: e.errors || [e.message] }), { isError: true }); }
+        if (rec.kind === 'scenery') return json({ saved: true, ref: MY_PACK + '/' + rec.id, slot: rec.slot, version: rec.version,
+          use: rec.slot === 'deco' ? 'Trong cảnh: deco: [{ part: "' + MY_PACK + '/' + rec.id + '", x, y }]' : 'Trong cảnh: layers.' + rec.slot + ' = "' + MY_PACK + '/' + rec.id + '"', studio: 'Studio › Xưởng › Kho linh kiện › Phông cảnh' });
         return json({ saved: true, ref: MY_PACK + '/' + rec.id, slot: rec.slot, version: rec.version,
-          use: 'Trong công thức nhân vật: look.parts.' + rec.slot + ' = "' + MY_PACK + '/' + rec.id + '"', studio: 'Studio › Thư viện linh kiện › ' + rec.label + ' (bấm để soát)' });
+          use: 'Trong công thức nhân vật: look.parts.' + rec.slot + ' = "' + MY_PACK + '/' + rec.id + '"', studio: 'Studio › Xưởng › Kho linh kiện › ' + rec.label + ' (bấm để soát)' });
       }
       default: return null;
     }
@@ -327,10 +378,57 @@ class MCP {
     const r = this.GC.registerItem(MY_PACK, rec);
     return r.def;
   }
+  saveSceneChecked(scene, note) {
+    const c = this.GC.checkScene(scene);
+    if (!c.errors.length) {
+      if (this.GC.scenes().some(x => x.id === c.def.id && x.pack !== MY_PACK)) c.errors.push('id "' + c.def.id + '" trùng cảnh của thư viện chính thức — chọn id khác');
+      this.GC.sceneGate(Object.assign({ key: MY_PACK + '/' + c.def.id }, c.def)).filter(g => !g.ok && !g.info).forEach(g => c.errors.push(g.label + (g.detail ? ': ' + g.detail : '')));
+    }
+    if (c.errors.length) throw Object.assign(new Error('Cảnh chưa đạt: ' + c.errors.slice(0, 6).join('; ')), { code: 422, errors: c.errors });
+    const rec = this.store.saveScene(c.def, note);
+    return this.GC.registerScene(MY_PACK, rec).def;
+  }
+  // Từ vựng cảnh (catalog): lớp + phông, chỗ đứng, giờ, thời tiết, token màu, ngân sách
+  sceneVocab() {
+    const GC = this.GC, S = GC.SCENE;
+    return {
+      canvas: { width: S.W, height: S.H }, count: GC.scenes().length,
+      layers: Object.keys(S.slots).reduce((m, k) => { m[k] = { label: S.slots[k].label, required: !!S.slots[k].required, scenery: GC.scenery(k).filter(p => p.pack !== TMP_PACK).map(p => ({ ref: p.pack + '/' + p.id, label: p.label })) }; return m; }, {}),
+      spots: S.spotOrder.map(k => ({ id: k, label: S.spots[k].label, x: S.spots[k].x, y: S.spots[k].y, scale: S.spots[k].k })),
+      times: S.timeOrder.map(k => ({ id: k, label: S.times[k].label })), weathers: S.weatherOrder.map(k => ({ id: k, label: S.weathers[k].label })),
+      paletteKeys: Object.keys(S.defaults), paletteDefaults: S.defaults, budget: S.budget
+    };
+  }
+  sceneSpec(slot) {
+    const GC = this.GC, S = GC.SCENE;
+    return {
+      standard: 'Phông là nguyên liệu của cảnh: vẽ một lần, dùng cho nhiều cảnh. Chỉ dùng token màu cảnh để đổi giờ (đêm, hoàng hôn) và bảng màu riêng của cảnh không phải vẽ lại.',
+      canvas: { width: S.W, height: S.H, horizon: '≈ y 230–260', groundFrom: 258, frontRow: 330, backRow: 280,
+        note: 'sky/far/mid/ground/front vẽ trên cả khung 640×360; deco (đạo cụ) vẽ quanh gốc (0,0) = chân vật, cao lên phía y âm (cao 40–200), engine đặt theo x, y, scale, flip' },
+      layers: Object.keys(S.slots).filter(k => !slot || k === slot).map(k => ({ slot: k, label: S.slots[k].label, examples: GC.scenery(k).filter(p => p.pack !== TMP_PACK).slice(0, 6).map(p => p.pack + '/' + p.id) })),
+      paint: { tokens: Object.keys(S.defaults).map(k => '{' + k + '}').concat('{ink}'), rule: 'fill/stroke: hex, "none" hoặc token cảnh {sky} {grass}… (KHÔNG dùng token nhân vật)' },
+      style: 'phẳng, mềm, viền mảnh hoặc không viền (nhân vật có viền đậm phải nổi lên trên phông); bóng: fill="#000000" opacity 0.06–0.14',
+      svg: 'cùng tập SVG an toàn như linh kiện (g, path, circle, ellipse, rect, line, polyline, polygon); ≤ 20 000 ký tự',
+      shape: '{ id, slot, label, svg: "<…/>", outdoor?: (chỉ sky) false nếu là trong nhà }',
+      example: EXAMPLE_SCENERY
+    };
+  }
+  // Bàn soát phông: cảnh trung tính + phông đang soát + Gia Cát Lượng, ngày và đêm cạnh nhau
+  sceneBench(slot, ref) {
+    const GC = this.GC, S = GC.SCENE;
+    const sc = { key: 'bench/' + slot, id: 'bench', layers: { sky: { part: 'afi.scenes/plain', dx: 0 }, ground: { part: 'afi.scenes/grass', dx: 0 } }, deco: [], palette: {}, time: 'day', weather: 'clear', spots: S.spotOrder.slice() };
+    if (slot === 'deco') sc.deco = [{ part: ref, x: 130, y: 300, scale: 1, flip: false, z: 'back' }, { part: ref, x: 500, y: 290, scale: 0.7, flip: true, z: 'back' }];
+    else sc.layers[slot] = { part: ref, dx: 0 };
+    const demo = this.findAsset('gia-cat-luong'), cast = demo ? [{ asset: demo, spot: 'center' }] : [];
+    const one = t => GC.sceneSvg(sc, { cast, time: t }).replace(/^<svg xmlns="http:\/\/www.w3.org\/2000\/svg" viewBox="0 0 640 360">/, '');
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1290 360"><svg x="0" y="0" width="640" height="360" viewBox="0 0 640 360">' + one('day') +
+      '<svg x="650" y="0" width="640" height="360" viewBox="0 0 640 360">' + one('night') + '</svg>';
+  }
   // Tool cho AI trong chatroom (LLM API): đúng bộ tool MCP, trừ tool hệ thống (cập nhật/rollback app)
   toolsFor(channel) { return TOOLS.filter(t => channel !== 'ui' || !/^(update_app|rollback_app)$/.test(t.name)); }
   partSpec(slot) {
     const GC = this.GC, A = GC.RIG.anchors;
+    if (slot && Object.prototype.hasOwnProperty.call(GC.SCENE.slots, slot)) return { kind: 'scenery', scenery: this.sceneSpec(slot) };
     const slots = Object.keys(GC.LIB.slots).filter(k => !slot || k === slot).map(k => ({ slot: k, label: GC.LIB.slots[k].label, layers: SLOT_LAYERS[k] || [],
       examples: GC.partsOfSlot(k).filter(p => p.id !== 'none' && p.pack !== TMP_PACK).slice(0, 6).map(p => p.pack + '/' + p.id) }));
     return {
@@ -352,7 +450,8 @@ class MCP {
         engineHandles: 'vị trí mắt/mày/miệng 45°, tay xa ra sau thân, lật gương, tư thế × di chuyển × động tác — linh kiện KHÔNG tự xử lý'
       },
       params: 'tuỳ chọn, tối đa 6: { label, type: scale|scaleX|scaleY|dx|dy, min, max, def, pivot: [x, y] }',
-      example: EXAMPLE_PART
+      example: EXAMPLE_PART,
+      scenery: slot ? undefined : 'Phông cảnh (sky, far, mid, ground, front, deco): gọi get_part_spec với slot đó để lấy khung riêng 640×360.'
     };
   }
   // Bàn soát: một SVG gộp — ma-nơ-canh mặc linh kiện × 4 góc nhìn × 4 tình huống

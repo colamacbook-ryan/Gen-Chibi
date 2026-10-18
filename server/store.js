@@ -22,7 +22,8 @@ class Store {
     this.eventDir = path.join(dataDir, 'events');
     this.partDir = path.join(dataDir, 'parts');
     this.itemDir = path.join(dataDir, 'items');
-    [this.assetDir, this.verDir, this.trashDir, this.eventDir, this.partDir, this.itemDir].forEach(d => fs.mkdirSync(d, { recursive: true }));
+    this.sceneDir = path.join(dataDir, 'scenes');
+    [this.assetDir, this.verDir, this.trashDir, this.eventDir, this.partDir, this.itemDir, this.sceneDir].forEach(d => fs.mkdirSync(d, { recursive: true }));
   }
   fileOf(key) { return key.replace('/', '~'); }
   listAssets() {
@@ -70,18 +71,22 @@ class Store {
     writeJSON(file, rec);
     return rec;
   }
-  // item trang bị (đã qua engine.checkItem): <id>.json, giữ bản cũ trong versions/items~<id>
-  listItems() {
-    return fs.readdirSync(this.itemDir).filter(f => f.endsWith('.json')).map(f => readJSON(path.join(this.itemDir, f), null)).filter(Boolean);
+  // asset dạng dữ liệu theo loại (item, cảnh — đã qua engine.check…): <id>.json, giữ bản cũ trong versions/<loại>~<id>
+  listKind(dir) {
+    return fs.readdirSync(dir).filter(f => f.endsWith('.json')).map(f => readJSON(path.join(dir, f), null)).filter(Boolean);
   }
-  saveItem(def, note) {
-    if (!/^[a-z0-9][a-z0-9-]{1,63}$/.test(def.id)) throw Object.assign(new Error('id item không hợp lệ'), { code: 400 });
-    const file = path.join(this.itemDir, def.id + '.json'), old = readJSON(file, null);
+  saveKind(dir, kind, def, note) {
+    if (!/^[a-z0-9][a-z0-9-]{1,63}$/.test(def.id)) throw Object.assign(new Error('id ' + kind + ' không hợp lệ'), { code: 400 });
+    const file = path.join(dir, def.id + '.json'), old = readJSON(file, null);
     const rec = Object.assign({}, def, { version: old ? (old.version || 1) + 1 : 1, savedAt: new Date().toISOString(), note: String(note || '').slice(0, 200) });
-    if (old) writeJSON(path.join(this.verDir, 'items~' + def.id, old.version + '.json'), old);
+    if (old) writeJSON(path.join(this.verDir, kind + '~' + def.id, old.version + '.json'), old);
     writeJSON(file, rec);
     return rec;
   }
+  listItems() { return this.listKind(this.itemDir); }
+  saveItem(def, note) { return this.saveKind(this.itemDir, 'items', def, note); }
+  listScenes() { return this.listKind(this.sceneDir); }
+  saveScene(def, note) { return this.saveKind(this.sceneDir, 'scenes', def, note); }
   listEvents() {
     return fs.readdirSync(this.eventDir).filter(f => f.endsWith('.json')).map(f => {
       const e = readJSON(path.join(this.eventDir, f), null);

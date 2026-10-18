@@ -15,7 +15,7 @@
   'use strict';
 
   var INK = '#2b211d';
-  var VERSION = '0.3.0';
+  var VERSION = '0.5.0';
 
   /* ---------------------------------------------------------------- 1. RIG */
   var RIG = {
@@ -84,6 +84,8 @@
   var ASSET_ORDER = [];
   var ITEMS = {};       // 'pack/id' → item trang bị (loại asset thứ hai)
   var ITEM_ORDER = [];
+  var SCENES = {};      // 'pack/id' → cảnh (loại asset thứ ba)
+  var SCENE_ORDER = [];
 
   // Mỗi mục đăng ký mang theo `pack` để biết chủ, license, nhóm thư viện.
   function pack(meta, fill) {
@@ -117,7 +119,14 @@
       activity: function (id, def) { def.id = id; LIB.activities[id] = tag(def, 'activity'); if (LIB.activityOrder.indexOf(id) < 0) LIB.activityOrder.push(id); },
       defaults: function (pal) { for (var k in pal) LIB.defaults[k] = pal[k]; },
       asset: function (def) { registerAsset(P.id, def); },
-      item: function (def) { var r = registerItem(P.id, def); if (r.errors.length) throw new Error('item ' + def.id + ': ' + r.errors.join('; ')); }
+      item: function (def) { var r = registerItem(P.id, def); if (r.errors.length) throw new Error('item ' + def.id + ': ' + r.errors.join('; ')); },
+      // phông (linh kiện của cảnh): draw(C) → chuỗi SVG trong khung 640×360 (đạo cụ cảnh: gốc toạ độ ở chân vật)
+      scenery: function (def) {
+        if (!own(SCENE.slots, def.slot)) throw new Error('bộ phận cảnh lạ: ' + def.slot);
+        def.kind = 'scenery'; def.license = def.license || P.license;
+        LIB.parts[P.id + '/' + def.slot + ':' + def.id] = tag(def, 'scenery');
+      },
+      scene: function (def) { var r = registerScene(P.id, def); if (r.errors.length) throw new Error('cảnh ' + def.id + ': ' + r.errors.join('; ')); }
     };
     fill(D);
     return P;
@@ -651,12 +660,17 @@
   // SVG tĩnh hoàn chỉnh (dùng cho ảnh cache, xuất file, gate). Không cần DOM.
   function svgString(asset, stateId, opts) {
     opts = opts || {};
+    var vb = (opts.crop ? RIG.crop : RIG.box).join(' ');
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="' + vb + '"' + (opts.size ? ' width="' + opts.size + '" height="' + opts.size + '"' : '') + '>' + svgBody(asset, stateId, opts) + '</svg>';
+  }
+  // Ruột SVG của nhân vật (toạ độ khung xương, chân ở 100,228) — để cảnh đặt nhân vật vào chỗ đứng
+  function svgBody(asset, stateId, opts) {
+    opts = opts || {};
     var c = compose(asset, stateId, opts.director);
     // opts.t: vẽ đúng khung hình tại giây thứ t (xuất sprite sheet, kiểm chuyển động); mặc định khung đứng yên đại diện
     var pose = poseAt(asset, c.state, opts.t || 0, typeof opts.t !== 'number');
     var chain = chainTransforms(pose);
-    var vb = (opts.crop ? RIG.crop : RIG.box).join(' ');
-    var s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="' + vb + '"' + (opts.size ? ' width="' + opts.size + '" height="' + opts.size + '"' : '') + '>';
+    var s = '';
     if (!opts.noShadow && !opts.crop) {
       var sd = shadowOf(c.state, pose);
       s += '<ellipse cx="' + sd.cx.toFixed(1) + '" cy="229" rx="' + sd.rx.toFixed(1) + '" ry="' + sd.ry.toFixed(1) + '" fill="rgba(20,24,22,' + (0.16 * sd.op).toFixed(3) + ')"/>';
@@ -664,7 +678,7 @@
     RIG.layers.forEach(function (l) {
       if (c.layers[l[0]]) s += '<g transform="' + chain[l[1]] + '">' + c.layers[l[0]] + '</g>';
     });
-    return s + '</svg>';
+    return s;
   }
 
   /* ----------------------------------------------------------- 6. DIRECTOR */
@@ -675,6 +689,7 @@
       title: 'gen-chibi event', type: 'object', required: ['title', 'steps'], additionalProperties: false,
       properties: {
         title: { type: 'string', maxLength: 60 },
+        scene: { enum: SCENE_ORDER.slice() },
         steps: {
           type: 'array', minItems: 1, maxItems: 12,
           items: {
@@ -688,6 +703,7 @@
               move: { enum: Object.keys(LIB.moves) },
               facing: { enum: ['left', 'right'] },
               view: { enum: ['front', 'left', 'right', 'left45', 'right45'] },
+              spot: { enum: SCENE.spotOrder.slice() },
               fx: { type: 'array', maxItems: 3, items: { enum: Object.keys(LIB.fx) } },
               say: { type: 'string', maxLength: 120 },
               hold: { type: 'number', minimum: 0.8, maximum: 6 }
@@ -701,6 +717,7 @@
     var errs = [], S = directorSchema(cast).properties.steps.items.properties;
     if (!ev || typeof ev !== 'object') return ['Kịch bản phải là một object JSON.'];
     if (typeof ev.title !== 'string' || !ev.title) errs.push('Thiếu "title".');
+    if (ev.scene !== undefined && !getScene(ev.scene)) errs.push('Cảnh "' + ev.scene + '" không có (xem list_scenes).');
     if (!Array.isArray(ev.steps) || !ev.steps.length) return errs.concat('Thiếu "steps" (mảng ít nhất 1 cảnh).');
     if (ev.steps.length > 12) errs.push('Tối đa 12 cảnh.');
     ev.steps.forEach(function (s, i) {
@@ -710,7 +727,7 @@
       if (S.actor.enum.indexOf(s.actor) < 0) errs.push(n + 'diễn viên "' + s.actor + '" không có trong dàn diễn viên.');
       if (S.state.enum.indexOf(s.state) < 0) errs.push(n + 'trạng thái "' + s.state + '" không có trong kho.');
       if (s.motion !== undefined && S.motion.enum.indexOf(s.motion) < 0) errs.push(n + 'động tác "' + s.motion + '" không có trong kho.');
-      ['activity', 'posture', 'move', 'facing', 'view'].forEach(function (k) {
+      ['activity', 'posture', 'move', 'facing', 'view', 'spot'].forEach(function (k) {
         if (s[k] !== undefined && S[k].enum.indexOf(s[k]) < 0) errs.push(n + k + ' "' + s[k] + '" không có trong kho.');
       });
       var mvd = s.move && LIB.moves[s.move];
@@ -740,6 +757,11 @@
     L.push('- posture: ' + Object.keys(LIB.postures).map(function (k) { return k + ' (' + LIB.postures[k].label + ')'; }).join(', '));
     L.push('- view: front (chính diện) | left / right (nghiêng nhẹ 3/4) | left45 / right45 (nghiêng 45° vẽ thật — hợp khi hai nhân vật nói chuyện với nhau)');
     L.push('- move: ' + Object.keys(LIB.moves).map(function (k) { var m = LIB.moves[k]; return k + ' (' + m.label + (m.postures ? '; tư thế: ' + m.postures.join('/') : '') + ')'; }).join(', '));
+    if (SCENE_ORDER.length) {
+      L.push('', 'Cảnh (scene, tuỳ chọn — đặt cả sự kiện vào một cảnh có sẵn; mỗi bước chọn spot = chỗ đứng của diễn viên):');
+      SCENE_ORDER.forEach(function (k) { L.push('- ' + k + ': ' + SCENES[k].name + (SCENES[k].description ? ' — ' + SCENES[k].description : '')); });
+      L.push('- spot: ' + SCENE.spotOrder.map(function (k) { return k + ' (' + SCENE.spots[k].label + ')'; }).join(', '));
+    }
     L.push('', 'Schema:', JSON.stringify(directorSchema(cast), null, 2), '', 'Sự kiện: <mô tả sự kiện ở đây>');
     return L.join('\n');
   }
@@ -891,14 +913,15 @@
     }
   };
   function esc(t) { return String(t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-  function getItem(ref, preferPack) {
-    if (!ref) return null;
-    ref = String(ref);
-    if (ref.indexOf('/') > 0) return own(ITEMS, ref) ? ITEMS[ref] : null;
-    if (preferPack && own(ITEMS, preferPack + '/' + ref)) return ITEMS[preferPack + '/' + ref];
-    for (var i = 0; i < ITEM_ORDER.length; i++) if (ITEMS[ITEM_ORDER[i]].id === ref) return ITEMS[ITEM_ORDER[i]];
+  // Tra asset đã đăng ký: "pack/id" hoặc "id" (ưu tiên thư viện preferPack, rồi theo thứ tự đăng ký)
+  function lookup(MAP, ORDER, ref, preferPack) {
+    if (!ref || typeof ref !== 'string') return null;
+    if (ref.indexOf('/') > 0) return own(MAP, ref) ? MAP[ref] : null;
+    if (preferPack && own(MAP, preferPack + '/' + ref)) return MAP[preferPack + '/' + ref];
+    for (var i = 0; i < ORDER.length; i++) if (MAP[ORDER[i]].id === ref) return MAP[ORDER[i]];
     return null;
   }
+  function getItem(ref, preferPack) { return lookup(ITEMS, ITEM_ORDER, ref, preferPack); }
   // Chữ thuần: bỏ ký tự điều khiển (XML không nhận) rồi cắt độ dài
   function plain(t, n) { return String(t == null ? '' : t).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '').slice(0, n); }
   // Kiểm + chuẩn hoá item (dữ liệu thuần: chữ được escape khi vẽ, màu chỉ nhận hex, linh kiện phải có thật và đúng bộ phận)
@@ -1034,8 +1057,10 @@
   };
   var PART_LAYERS_DENY = /^(prop|fx|stage)|b$/;
   function own(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }   // tra bảng không dính prototype (constructor, toString…)
-  function paintOk(v) { return /^#[0-9a-fA-F]{3,8}$/.test(v) || v === 'none' || (/^\{[a-zA-Z]{1,20}\}$/.test(v) && (v === '{ink}' || own(LIB.defaults, v.slice(1, -1)))); }
-  function sanitizeSvg(src, errs, where) {
+  function paintOk(v, T) { return /^#[0-9a-fA-F]{3,8}$/.test(v) || v === 'none' || (/^\{[a-zA-Z]{1,20}\}$/.test(v) && (v === '{ink}' || own(T, v.slice(1, -1)))); }
+  // tokens: bảng token màu hợp lệ (nhân vật: LIB.defaults; phông cảnh: SCENE.defaults)
+  function sanitizeSvg(src, errs, where, tokens) {
+    var T = tokens || LIB.defaults;
     src = String(src || '');
     if (src.length > 20000) { errs.push(where + ': quá 20 000 ký tự'); return ''; }
     src = src.replace(/\s+/g, ' ');   // gộp khoảng trắng: regex tách thẻ chạy tuyến tính, không bậc hai
@@ -1055,7 +1080,7 @@
         if (own(seen, k)) { errs.push(where + ': thuộc tính "' + k + '" lặp lại'); return ''; }
         seen[k] = 1;
         if (!rule) { errs.push(where + ': thuộc tính "' + k + '" không được phép'); return ''; }
-        if (rule === 'paint' ? !paintOk(v) : !rule.test(v)) { errs.push(where + ': giá trị ' + k + '="' + v.slice(0, 40) + '" không hợp lệ'); return ''; }
+        if (rule === 'paint' ? !paintOk(v, T) : !rule.test(v)) { errs.push(where + ': giá trị ' + k + '="' + v.slice(0, 40) + '" không hợp lệ'); return ''; }
         attrs += ' ' + k + '="' + v + '"';
       }
       out += '<' + tag + attrs + (selfClose ? '/>' : '>');
@@ -1070,8 +1095,9 @@
   function checkDataPart(def) {
     var errs = [], d = {};
     if (!def || typeof def !== 'object') return { errors: ['linh kiện phải là object'], def: null };
+    if (typeof def.slot === 'string' && own(SCENE.slots, def.slot)) return checkScenery(def);   // phông cảnh: cùng lối ghi, luật riêng
     if (!/^[a-z0-9][a-z0-9-]{1,39}$/.test(String(def.id || ''))) errs.push('id: chữ thường, số, gạch nối, 2–40 ký tự');
-    if (typeof def.slot !== 'string' || !own(LIB.slots, def.slot)) errs.push('slot "' + def.slot + '" không có; chọn trong: ' + Object.keys(LIB.slots).join(', '));
+    if (typeof def.slot !== 'string' || !own(LIB.slots, def.slot)) errs.push('slot "' + def.slot + '" không có; chọn trong: ' + Object.keys(LIB.slots).join(', ') + ' (phông cảnh: ' + Object.keys(SCENE.slots).join(', ') + ')');
     d.id = String(def.id || ''); d.slot = def.slot; d.label = String(def.label || def.id || '').slice(0, 40);
     d.description = String(def.description || '').slice(0, 300);
     function layers(src, where) {
@@ -1115,6 +1141,13 @@
     if (c.errors.length) return c;
     var d = c.def, P = PACKS[packId];
     if (!P) return { errors: ['thư viện ' + packId + ' chưa có'], def: null };
+    if (d.kind === 'scenery') {
+      var sp = { slot: d.slot, id: d.id, label: d.label, kind: 'scenery', outdoor: d.outdoor, data: d, source: 'data:' + packId, license: P.license, pack: packId,
+        draw: function (C) { return fillTokens(d.svg, C.P); } };
+      LIB.parts[packId + '/' + d.slot + ':' + d.id] = sp;
+      P.counts.scenery = Object.keys(LIB.parts).filter(function (k) { return k.indexOf(packId + '/') === 0 && LIB.parts[k].kind === 'scenery'; }).length;
+      return { errors: [], def: d, part: sp };
+    }
     function draw(L) { return function (C) { var o = {}; for (var l in L) o[l] = fillTokens(L[l], C.P); return o; }; }
     var front = draw(d.layers), q = d.views.q45, q45;
     if (q.mode === 'drawn') q45 = draw(q.layers);
@@ -1124,8 +1157,243 @@
     var part = { slot: d.slot, id: d.id, label: d.label, draw: front, views: { q45: q45 }, params: d.params, data: d, icon: d.icon,
       source: 'data:' + packId, license: P.license, pack: packId };
     LIB.parts[packId + '/' + d.slot + ':' + d.id] = part;
-    P.counts.part = Object.keys(LIB.parts).filter(function (k) { return k.indexOf(packId + '/') === 0; }).length;
+    P.counts.part = Object.keys(LIB.parts).filter(function (k) { return k.indexOf(packId + '/') === 0 && LIB.parts[k].kind !== 'scenery'; }).length;
     return { errors: [], def: d, part: part };
+  }
+
+  /* ------------------------------------------------- 9. CẢNH (loại asset thứ ba) */
+  // Cảnh = phối phông có sẵn (trời, cảnh xa, công trình, mặt đất, đạo cụ, tiền cảnh) + bảng màu + giờ + thời tiết.
+  // Không vẽ lại: một phông dùng cho nhiều cảnh; đổi giờ chỉ đổi token màu. Chỗ đứng thuộc ENGINE (mọi cảnh cùng một bộ)
+  // → mọi dàn diễn viên đặt được vào mọi cảnh; nhân vật dựng bằng đúng svgBody (đủ 45°, hoạt động, trang bị).
+  var SCENE = {
+    W: 640, H: 360,
+    slots: {
+      sky: { label: 'Trời / tường', canvas: true, required: true }, far: { label: 'Cảnh xa', canvas: true },
+      mid: { label: 'Công trình', canvas: true }, ground: { label: 'Mặt đất', canvas: true, required: true },
+      deco: { label: 'Đạo cụ cảnh', canvas: false }, front: { label: 'Tiền cảnh', canvas: true }
+    },
+    layerOrder: ['sky', 'far', 'mid', 'ground', 'front'],
+    // token màu của phông (tách khỏi bảng màu nhân vật)
+    defaults: {
+      sky: '#bfe0ef', skyLow: '#f4ecd4', sun: '#fff1b8', cloud: '#ffffff',
+      hillFar: '#c9dccd', hill: '#9cc3a2', ground: '#d8c79c', grass: '#93bf6b', path: '#cdb489',
+      water: '#86bcd8', stone: '#a9a49b', wood: '#9b6b44', woodDark: '#6e4a2f', roof: '#b9a36c',
+      wall: '#efe4ca', cloth: '#c8463a', leaf: '#5e9a58', bamboo: '#7fae5a', flower: '#f2a7b8', light: '#ffd27a'
+    },
+    // giờ: đổi token trời + phủ một lớp màu lên CẢ cảnh (nhân vật cũng nhuốm đêm / hoàng hôn → hợp khối)
+    times: {
+      day: { label: 'Ban ngày', P: {}, tint: null },
+      dawn: { label: 'Bình minh', P: { sky: '#cdd7ee', skyLow: '#ffd7bf', sun: '#ffe0b0', cloud: '#fff3ea' }, tint: ['#ffb08a', 0.07] },
+      dusk: { label: 'Hoàng hôn', P: { sky: '#f0a06a', skyLow: '#ffd89c', sun: '#ff8448', cloud: '#ffd2b0', hillFar: '#d9a98f' }, tint: ['#ff7a3d', 0.12] },
+      night: { label: 'Ban đêm', P: { sky: '#1e2a52', skyLow: '#3b3f72', sun: '#f3f0d2', cloud: '#4a5585', hillFar: '#3e4a6e' }, tint: ['#14204a', 0.34] }
+    },
+    timeOrder: ['day', 'dawn', 'dusk', 'night'],
+    // back: vẽ sau diễn viên (sương nằm trên sông / chân núi, không che mặt); overTint: sáng trên lớp màu giờ (đom đóm)
+    weathers: {
+      clear: { label: 'Quang', n: 0 }, rain: { label: 'Mưa', n: 56 }, snow: { label: 'Tuyết', n: 54 },
+      petals: { label: 'Hoa rơi', n: 26 }, leaves: { label: 'Lá bay', n: 20 }, mist: { label: 'Sương', n: 5, back: true },
+      fireflies: { label: 'Đom đóm', n: 22, overTint: true }
+    },
+    weatherOrder: ['clear', 'rain', 'snow', 'petals', 'leaves', 'mist', 'fireflies'],
+    // chỗ đứng: chân nhân vật ở (x, y), tỉ lệ k; face: hướng quay khi có từ hai diễn viên (1: sang phải, -1: sang trái, 0: chính diện)
+    spots: {
+      left: { label: 'Trái', x: 100, y: 330, k: 0.8, face: 1 }, midLeft: { label: 'Giữa trái', x: 210, y: 330, k: 0.8, face: 1 },
+      center: { label: 'Giữa', x: 320, y: 330, k: 0.8, face: 0 }, midRight: { label: 'Giữa phải', x: 430, y: 330, k: 0.8, face: -1 },
+      right: { label: 'Phải', x: 540, y: 330, k: 0.8, face: -1 },
+      backLeft: { label: 'Sau trái', x: 205, y: 280, k: 0.62, face: 1 }, back: { label: 'Sau giữa', x: 320, y: 280, k: 0.62, face: 0 },
+      backRight: { label: 'Sau phải', x: 435, y: 280, k: 0.62, face: -1 }
+    },
+    spotOrder: ['left', 'midLeft', 'center', 'midRight', 'right', 'backLeft', 'back', 'backRight'],
+    // ngân sách (L-42): cảnh là TẦNG ẢNH (SVG tĩnh); diễn viên ≤ 8 (= diễn đủ ≤ 8), đạo cụ ≤ 10, hạt thời tiết ≤ 60
+    budget: { cast: 8, deco: 10, particles: 60 }
+  };
+  function getScene(ref, preferPack) { return lookup(SCENES, SCENE_ORDER, ref, preferPack); }
+  function getAsset(ref, preferPack) { return lookup(ASSETS, ASSET_ORDER, ref, preferPack); }
+  function sceneryOk(slot, ref) { var p = typeof ref === 'string' && getPart(slot, ref); return p && p.kind === 'scenery' ? p : null; }
+  // Phông dạng dữ liệu (agent / người dùng tạo): MỘT chuỗi SVG cùng bộ lọc với linh kiện, token màu là token cảnh
+  function checkScenery(def) {
+    var errs = [], d = {};
+    if (!/^[a-z0-9][a-z0-9-]{1,39}$/.test(String(def.id || ''))) errs.push('id: chữ thường, số, gạch nối, 2–40 ký tự');
+    d.id = String(def.id || ''); d.slot = def.slot; d.kind = 'scenery';
+    d.label = plain(def.label || def.id, 40); d.description = plain(def.description, 300);
+    if (def.layers && def.svg === undefined) errs.push('phông cảnh dùng "svg" (một chuỗi SVG), không dùng "layers"');
+    else {
+      d.svg = sanitizeSvg(def.svg, errs, 'svg', SCENE.defaults);
+      if (!d.svg && !errs.length) errs.push('svg: chưa có gì để vẽ');
+    }
+    if (d.slot === 'sky') d.outdoor = def.outdoor !== false;
+    return { errors: errs, def: errs.length ? null : d };
+  }
+  // Kiểm + chuẩn hoá cảnh (dữ liệu thuần: phông phải có thật đúng bộ phận, màu hex theo token cảnh, số kẹp khoảng)
+  function checkScene(def) {
+    var errs = [], d = {};
+    if (!def || typeof def !== 'object') return { errors: ['cảnh phải là object'], def: null };
+    if (!/^[a-z0-9][a-z0-9-]{1,63}$/.test(String(def.id || ''))) errs.push('id: chữ thường, số, gạch nối, 2–64 ký tự');
+    d.id = String(def.id || ''); d.name = plain(def.name || def.id, 40); d.han = plain(def.han, 12); d.description = plain(def.description, 300);
+    var L = def.layers && typeof def.layers === 'object' ? def.layers : {};
+    d.layers = {};
+    Object.keys(L).forEach(function (slot) {
+      if (!own(SCENE.slots, slot) || !SCENE.slots[slot].canvas) { errs.push('layers.' + slot + ': lớp lạ (chọn ' + SCENE.layerOrder.join(', ') + '; đạo cụ đặt trong deco)'); return; }
+      var r = typeof L[slot] === 'string' ? { part: L[slot] } : L[slot] || {};
+      var p = sceneryOk(slot, r.part);
+      if (!p) { errs.push('layers.' + slot + ': phông "' + r.part + '" không có trong bộ phận ' + slot + ' (xem get_catalog › scenery)'); return; }
+      d.layers[slot] = { part: p.pack + '/' + p.id, dx: num(r.dx, 0, -320, 320), flip: r.flip === true };
+    });
+    SCENE.layerOrder.forEach(function (k) { if (SCENE.slots[k].required && !own(L, k)) errs.push('layers.' + k + ': bắt buộc (' + SCENE.slots[k].label + ')'); });
+    d.deco = [];
+    if (def.deco !== undefined && !Array.isArray(def.deco)) errs.push('deco: cần mảng');
+    (Array.isArray(def.deco) ? def.deco : []).forEach(function (x, i) {
+      if (i >= SCENE.budget.deco) { if (i === SCENE.budget.deco) errs.push('deco: tối đa ' + SCENE.budget.deco + ' đạo cụ (ngân sách hiệu năng)'); return; }
+      var r = typeof x === 'string' ? { part: x } : x || {};
+      var p = sceneryOk('deco', r.part);
+      if (!p) { errs.push('deco[' + i + ']: đạo cụ "' + r.part + '" không có (xem get_catalog › scenery.deco)'); return; }
+      d.deco.push({ part: p.pack + '/' + p.id, x: num(r.x, 320, 0, 640), y: num(r.y, 300, 150, 360), scale: num(r.scale, 1, 0.3, 2.5),
+        flip: r.flip === true, z: ['back', 'mid', 'front'].indexOf(r.z) >= 0 ? r.z : 'back' });
+    });
+    d.palette = {};
+    if (def.palette && typeof def.palette === 'object') Object.keys(def.palette).slice(0, 24).forEach(function (k) {
+      if (!own(SCENE.defaults, k)) { errs.push('palette.' + k + ': token màu cảnh lạ (' + Object.keys(SCENE.defaults).join(', ') + ')'); return; }
+      if (!HEX.test(String(def.palette[k]))) { errs.push('palette.' + k + ': cần mã hex'); return; }
+      d.palette[k] = String(def.palette[k]);
+    });
+    if (def.time !== undefined && (typeof def.time !== 'string' || !own(SCENE.times, def.time))) errs.push('time: chọn ' + SCENE.timeOrder.join(' | '));
+    if (def.weather !== undefined && (typeof def.weather !== 'string' || !own(SCENE.weathers, def.weather))) errs.push('weather: chọn ' + SCENE.weatherOrder.join(' | '));
+    d.time = own(SCENE.times, def.time) ? def.time : 'day'; d.weather = own(SCENE.weathers, def.weather) ? def.weather : 'clear';
+    d.spots = SCENE.spotOrder.slice();
+    if (def.spots !== undefined) {
+      if (!Array.isArray(def.spots) || !def.spots.length) errs.push('spots: mảng chỗ đứng, ít nhất 1 (' + SCENE.spotOrder.join(', ') + ')');
+      else {
+        var bad = def.spots.filter(function (x) { return SCENE.spotOrder.indexOf(x) < 0; });
+        if (bad.length) errs.push('spots: chỗ đứng lạ ' + bad.join(', ') + ' (chọn ' + SCENE.spotOrder.join(', ') + ')');
+        d.spots = SCENE.spotOrder.filter(function (x) { return def.spots.indexOf(x) >= 0; });
+      }
+    }
+    d.kind = 'scene'; d.status = ['draft', 'review', 'approved'].indexOf(def.status) >= 0 ? def.status : 'draft';
+    return { errors: errs, def: errs.length ? null : d };
+  }
+  function registerScene(packId, def) {
+    var c = checkScene(def);
+    if (c.errors.length) return c;
+    var d = c.def; d.pack = packId; d.key = packId + '/' + d.id; d.version = def.version || 1;
+    if (!own(SCENES, d.key)) SCENE_ORDER.push(d.key);
+    SCENES[d.key] = d;
+    if (PACKS[packId]) PACKS[packId].counts.scene = SCENE_ORDER.filter(function (k) { return k.indexOf(packId + '/') === 0; }).length;
+    return { errors: [], def: d };
+  }
+  // Dàn diễn viên đặt vào cảnh: [{ character, spot, state?, activity?, posture?, move?, motion?, facing?, view?, t? }]
+  var CAST_KEYS = ['activity', 'posture', 'move', 'motion', 'facing', 'view'];
+  function checkCast(cast, scene) {
+    var errs = [], used = {}, S = directorSchema([]).properties.steps.items.properties;
+    var spots = (scene && scene.spots) || SCENE.spotOrder;
+    if (!Array.isArray(cast)) return ['cast: cần mảng'];
+    if (cast.length > SCENE.budget.cast) errs.push('cast: tối đa ' + SCENE.budget.cast + ' diễn viên (ngân sách diễn đủ ≤ 8)');
+    cast.forEach(function (m, i) {
+      var n = 'cast[' + i + ']: ';
+      if (!m || typeof m !== 'object') { errs.push(n + 'cần object'); return; }
+      if (!m.asset && !getAsset(m.character)) errs.push(n + 'không có nhân vật "' + m.character + '" (xem list_characters)');
+      if (typeof m.spot !== 'string' || spots.indexOf(m.spot) < 0) errs.push(n + 'chỗ đứng "' + m.spot + '" không có trong cảnh (' + spots.join(', ') + ')');
+      else if (own(used, m.spot)) errs.push(n + 'chỗ đứng "' + m.spot + '" đã có người');
+      else used[m.spot] = 1;
+      if (m.state !== undefined && LIB.stateOrder.indexOf(m.state) < 0) errs.push(n + 'trạng thái "' + m.state + '" không có trong kho');
+      CAST_KEYS.forEach(function (k) { if (m[k] !== undefined && S[k].enum.indexOf(m[k]) < 0) errs.push(n + k + ' "' + m[k] + '" không có trong kho'); });
+      if (m.t !== undefined && !(typeof m.t === 'number' && isFinite(m.t) && m.t >= 0 && m.t <= 60)) errs.push(n + 't: số giây 0–60');
+    });
+    return errs;
+  }
+  // số giả ngẫu nhiên có hạt giống: cùng cảnh → cùng mưa/tuyết (ảnh cache ổn định, test so được)
+  function seeded(seed) {
+    var a = 0;
+    for (var i = 0; i < seed.length; i++) a = (a * 31 + seed.charCodeAt(i)) | 0;
+    return function () { a = (a + 0x6D2B79F5) | 0; var t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+  function f1(n) { return n.toFixed(1); }
+  function weatherSvg(w, seed, P) {
+    var W = SCENE.weathers[w];
+    if (!W || !W.n) return '';
+    var r = seeded(seed + ':' + w), s = '', n = Math.min(W.n, SCENE.budget.particles);
+    for (var i = 0; i < n; i++) {
+      var x = r() * 660 - 10, y = r() * 370 - 10;
+      if (w === 'rain') s += '<line x1="' + f1(x) + '" y1="' + f1(y) + '" x2="' + f1(x - 5) + '" y2="' + f1(y + 17) + '" stroke="#dbe8f5" stroke-width="1.4" stroke-linecap="round" opacity="' + (0.4 + r() * 0.4).toFixed(2) + '"/>';
+      else if (w === 'snow') s += '<circle cx="' + f1(x) + '" cy="' + f1(y) + '" r="' + (1.2 + r() * 2.4).toFixed(2) + '" fill="#ffffff" opacity="' + (0.7 + r() * 0.3).toFixed(2) + '"/>';
+      else if (w === 'petals') s += '<ellipse cx="' + f1(x) + '" cy="' + f1(y) + '" rx="3.6" ry="1.9" fill="' + P.flower + '" opacity="0.9" transform="rotate(' + Math.round(r() * 180) + ' ' + f1(x) + ' ' + f1(y) + ')"/>';
+      else if (w === 'leaves') s += '<path d="M' + f1(x) + ',' + f1(y) + ' q4,-5 9,0 q-4,5 -9,0 Z" fill="' + (i % 2 ? '#d98a3a' : '#b9c45a') + '" transform="rotate(' + Math.round(r() * 360) + ' ' + f1(x + 4) + ' ' + f1(y) + ')"/>';
+      else if (w === 'mist') s += '<ellipse cx="' + f1(x) + '" cy="' + f1(212 + i * 14) + '" rx="' + f1(170 + r() * 120) + '" ry="' + f1(15 + r() * 9) + '" fill="#ffffff" opacity="' + (0.24 + r() * 0.12).toFixed(2) + '"/>';
+      else if (w === 'fireflies') { y = 120 + r() * 220; s += '<circle cx="' + f1(x) + '" cy="' + f1(y) + '" r="6" fill="' + P.light + '" opacity="0.22"/><circle cx="' + f1(x) + '" cy="' + f1(y) + '" r="1.7" fill="#fff6c8"/>'; }
+    }
+    return '<g>' + s + '</g>';
+  }
+  function starsSvg(seed) {
+    var r = seeded(seed + ':stars'), s = '';
+    for (var i = 0; i < 34; i++) s += '<circle cx="' + f1(r() * 640) + '" cy="' + f1(r() * 150) + '" r="' + (0.6 + r() * 1.1).toFixed(2) + '" fill="#fffbe6" opacity="' + (0.5 + r() * 0.5).toFixed(2) + '"/>';
+    return '<g>' + s + '</g>';
+  }
+  // Dựng cảnh: phông theo lớp → đạo cụ sau → hàng sau → đạo cụ giữa → hàng trước → đạo cụ trước → tiền cảnh → thời tiết → màu giờ.
+  // opts: cast (xem checkCast), time / weather (xem thử, không đổi cảnh), size (bề ngang px)
+  function sceneSvg(scene, opts) {
+    opts = opts || {};
+    var time = own(SCENE.times, opts.time) ? opts.time : scene.time, weather = own(SCENE.weathers, opts.weather) ? opts.weather : scene.weather;
+    var T = SCENE.times[time] || SCENE.times.day;
+    var P = Object.assign({}, SCENE.defaults, scene.palette || {}, T.P);
+    var C = { P: P, W: SCENE.W, H: SCENE.H, time: time, ink: INK };
+    var seed = String(scene.key || scene.id);
+    function part(slot, ref) { var p = sceneryOk(slot, ref); if (!p) throw new Error('thiếu phông ' + slot + ':' + ref); return p; }
+    function layer(slot) {
+      var L = scene.layers[slot];
+      if (!L) return '';
+      var art = part(slot, L.part).draw(C) || '';
+      var tf = L.flip ? 'translate(' + (SCENE.W + L.dx) + ' 0) scale(-1 1)' : L.dx ? 'translate(' + L.dx + ' 0)' : '';
+      return tf ? '<g transform="' + tf + '">' + art + '</g>' : art;
+    }
+    function deco(z) {
+      return (scene.deco || []).filter(function (x) { return x.z === z; }).map(function (x) {
+        return '<g transform="translate(' + x.x + ' ' + x.y + ') scale(' + (x.flip ? -x.scale : x.scale) + ' ' + x.scale + ')">' + part('deco', x.part).draw(C) + '</g>';
+      }).join('');
+    }
+    var cast = (opts.cast || []).slice(0, SCENE.budget.cast);
+    function actor(m) {
+      var a = m.asset || getAsset(m.character);
+      if (!a) throw new Error('không có nhân vật ' + m.character);
+      var sp = SCENE.spots[m.spot] || SCENE.spots.center, dir = {};
+      CAST_KEYS.forEach(function (k) { if (m[k] !== undefined) dir[k] = m[k]; });
+      // từ hai diễn viên: tự quay 45° về phía giữa sân khấu (đứng nói chuyện với nhau), trừ khi đã chọn góc
+      if (!dir.view && cast.length > 1 && sp.face) dir.view = sp.face > 0 ? 'right45' : 'left45';
+      if (!dir.facing && sp.face) dir.facing = sp.face > 0 ? 'right' : 'left';
+      return '<g transform="translate(' + sp.x + ' ' + sp.y + ') scale(' + sp.k + ') translate(-100 -228)">' + svgBody(a, m.state || 'normal', { director: dir, t: m.t }) + '</g>';
+    }
+    function row(back) { return cast.filter(function (m) { return /^back/.test(m.spot) === back; }).map(actor).join(''); }
+    var W = opts.size || 0;
+    var s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + SCENE.W + ' ' + SCENE.H + '"' + (W ? ' width="' + W + '" height="' + Math.round(W * SCENE.H / SCENE.W) + '"' : '') + '>';
+    var sky = scene.layers.sky && part('sky', scene.layers.sky.part);
+    var Wt = SCENE.weathers[weather] || {};
+    s += layer('sky') + (time === 'night' && sky && sky.outdoor ? starsSvg(seed) : '') + layer('far') + (Wt.back ? weatherSvg(weather, seed, P) : '') + layer('mid') + layer('ground');
+    s += deco('back') + row(true) + deco('mid') + row(false) + deco('front') + layer('front');
+    if (!Wt.overTint && !Wt.back) s += weatherSvg(weather, seed, P);
+    if (T.tint) s += '<rect x="0" y="0" width="' + SCENE.W + '" height="' + SCENE.H + '" fill="' + T.tint[0] + '" opacity="' + T.tint[1] + '"/>';
+    if (Wt.overTint) s += weatherSvg(weather, seed, P);
+    return s + '</svg>';
+  }
+  // Cổng kiểm cảnh — cùng tinh thần cổng nhân vật / item: dữ liệu, license phông, dựng được, đặt được diễn viên ở MỌI chỗ đứng, ngân sách
+  function sceneGate(scene) {
+    var res = [], c = checkScene(scene);
+    res.push({ id: 'data', label: 'Dữ liệu cảnh hợp lệ (phông, đạo cụ, màu, giờ, thời tiết, chỗ đứng)', ok: !c.errors.length, detail: c.errors.slice(0, 4).join('; ') });
+    if (c.errors.length) return res;
+    var d = Object.assign({ key: scene.key || 'gate/' + c.def.id }, c.def);
+    var refs = Object.keys(d.layers).map(function (k) { return getPart(k, d.layers[k].part); }).concat(d.deco.map(function (x) { return getPart('deco', x.part); }));
+    var noLic = refs.filter(function (p) { return !p || !p.license; });
+    res.push({ id: 'license', label: 'License phông rõ ràng', ok: !noLic.length, detail: noLic.length ? noLic.length + ' phông thiếu license' : refs.length + ' phông' });
+    var okR = true, er = '';
+    try { sceneSvg(d); } catch (e) { okR = false; er = e.message; }
+    res.push({ id: 'render', label: 'Dựng được cảnh', ok: okR, detail: er });
+    var demo = ASSETS['afi.tamquoc/gia-cat-luong'] || ASSETS[ASSET_ORDER[0]], okC = true, ec = '';
+    if (demo) {
+      try { sceneSvg(d, { cast: d.spots.map(function (sp) { return { asset: demo, spot: sp }; }) }); } catch (e) { okC = false; ec = e.message; }
+      res.push({ id: 'cast', label: 'Đặt được diễn viên ở mọi chỗ đứng', ok: okC, detail: ec || d.spots.length + ' chỗ đứng' });
+    }
+    var sky = d.layers.sky && getPart('sky', d.layers.sky.part);
+    res.push({ id: 'budget', label: 'Ngân sách hiệu năng (tầng ảnh)', ok: true, info: true,
+      detail: d.deco.length + '/' + SCENE.budget.deco + ' đạo cụ · ' + Math.min((SCENE.weathers[d.weather] || {}).n || 0, SCENE.budget.particles) + '/' + SCENE.budget.particles + ' hạt · diễn viên ≤ ' + SCENE.budget.cast });
+    if (d.weather !== 'clear' && sky && !sky.outdoor) res.push({ id: 'indoor', label: 'Thời tiết trong nhà', ok: true, info: true, detail: 'phông trời "' + sky.label + '" là trong nhà — kiểm lại thời tiết' });
+    return res;
   }
 
   G.GenChibi = {
@@ -1138,6 +1406,10 @@
     shadowOf: shadowOf, handsBusy: handsBusy, Q45: Q45, faceRemap: faceRemap,
     checkDataPart: checkDataPart, registerDataPart: registerDataPart, blockingGates: blockingGates,
     ITEM: ITEM, ITEMS: ITEMS, ITEM_ORDER: ITEM_ORDER, items: function () { return ITEM_ORDER.map(function (k) { return ITEMS[k]; }); },
+    SCENE: SCENE, SCENES: SCENES, SCENE_ORDER: SCENE_ORDER, scenes: function () { return SCENE_ORDER.map(function (k) { return SCENES[k]; }); },
+    getScene: getScene, getAsset: getAsset, checkScene: checkScene, registerScene: registerScene, sceneSvg: sceneSvg, sceneGate: sceneGate,
+    checkCast: checkCast, checkScenery: checkScenery, svgBody: svgBody,
+    scenery: function (slot) { return Object.keys(LIB.parts).map(function (k) { return LIB.parts[k]; }).filter(function (p) { return p.kind === 'scenery' && (!slot || p.slot === slot); }); },
     getItem: getItem, checkItem: checkItem, registerItem: registerItem, itemSvg: itemSvg, itemGate: itemGate, partAlone: partAlone, sanitizeSvg: function (s0) { var e = []; var r = sanitizeSvg(s0, e, 'svg'); return { svg: r, errors: e }; },
     assets: function () { return ASSET_ORDER.map(function (k) { return ASSETS[k]; }); },
     director: { schema: directorSchema, validate: validateEvent, prompt: directorPrompt },

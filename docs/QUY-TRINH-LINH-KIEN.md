@@ -62,17 +62,34 @@ Ba lối vào, **một** cổng: không có đường nào ghi thẳng vào kho.
 - Tool `preview_part` trả bàn soát; `get_part_spec` trả chính khung sườn này ở dạng máy đọc được — agent luôn nhận chuẩn từ hệ thống, không tự đoán.
 - Test `tools/test-agent.mjs` dùng LLM giả lập để khẳng định: AI chỉ ghi qua tool, SVG độc bị chặn, tool hệ thống bị từ chối, API HTTP không lách được cổng.
 
-## 7. Thêm một LOẠI asset (ví dụ mẫu: item trang bị)
+## 7. Thêm một LOẠI asset (hai ví dụ mẫu: item trang bị, cảnh)
 
 Một loại asset mới không phải "một bộ vẽ mới" mà là **một cách phối mới trên cùng khung**. Đủ 8 phần thì cắm vào nhà xưởng:
 
-| # | Phần | Item trang bị làm thế nào |
+| # | Phần | Item trang bị | Cảnh |
+|---|---|---|---|
+| 1 | **Từ vựng đóng** (enum) | `GC.ITEM`: loại → bộ phận mặc, độ hiếm, chỉ số | `GC.SCENE`: 6 lớp phông, 8 chỗ đứng, 4 giờ, 7 thời tiết, token màu cảnh, ngân sách |
+| 2 | **Dữ liệu phối, không vẽ lại** | trỏ tới linh kiện có sẵn + bảng màu riêng + tham số; một linh kiện → nhiều item | trỏ tới phông có sẵn theo lớp (+ dịch, lật) + đạo cụ (vị trí, cỡ, lớp sâu) + bảng màu + giờ + thời tiết; 27 phông → 8 cảnh, đổi giờ chỉ đổi token |
+| 3 | **Hàm kiểm** (`check…`) | `checkItem` | `checkScene` (phông có thật đúng lớp, hex theo token cảnh, số kẹp khoảng, chữ thuần), `checkCast` (dàn diễn viên) |
+| 4 | **Cổng kiểm** (`…Gate`) | `itemGate`: dữ liệu, license, 45° (thông tin), dựng được | `sceneGate`: dữ liệu, license phông, dựng được, **đặt được diễn viên ở mọi chỗ đứng**, ngân sách (thông tin) |
+| 5 | **Tự đứng được** | `itemSvg`: icon, thẻ | `sceneSvg`: ảnh 640×360 (nền trống hoặc có diễn viên) |
+| 6 | **Nối với loại khác** | nhân vật mặc qua `look.equip.<slot>` | nhân vật đứng vào **chỗ đứng chuẩn của engine** (`cast`), dựng bằng đúng `svgBody` → đủ 45°, hoạt động, trang bị; kịch bản đặt vào cảnh bằng `event.scene` + `step.spot` |
+| 7 | **Một cổng ghi** | `saveItemChecked` (MCP, `POST /api/items`, AI chatroom) | `saveSceneChecked` (MCP `list_scenes` / `validate_scene` / `save_scene` / `render_scene`, `POST /api/scenes`, AI chatroom); phông mới đi qua chính `get_part_spec` → `preview_part` → `save_part` của linh kiện |
+| 8 | **Studio + test** | Thư viện › Trang bị; Xưởng › Bàn phối trang bị; test với mẫu hợp lệ làm mốc | Thư viện › Cảnh; Xưởng › Bàn phối cảnh + Kho linh kiện & phông; test với mẫu hợp lệ làm mốc + **rào "phông chính thức phải được ít nhất một cảnh dùng"** |
+
+### Phông cảnh (nguyên liệu của cảnh)
+- Khung 640×360. `sky` / `far` / `mid` / `ground` / `front` vẽ trên cả khung (chân trời ≈ y 230–260, mặt đất từ y ≈ 258); `deco` (đạo cụ) vẽ quanh gốc (0,0) = chân vật, cao lên phía y âm — engine đặt theo x, y, cỡ, lật.
+- Chỉ dùng **token màu cảnh** (`{sky}`, `{grass}`, `{wood}`…) — đổi giờ (đêm, hoàng hôn) và bảng màu riêng của từng cảnh không phải vẽ lại. Không dùng token nhân vật.
+- Phong cách phẳng, mềm, viền mảnh hoặc không viền: nhân vật viền đậm phải nổi lên trên phông.
+- Thứ tự vẽ: trời → (sao khi đêm) → cảnh xa → (sương) → công trình → mặt đất → đạo cụ sau → hàng sau → đạo cụ giữa → hàng trước → đạo cụ trước → tiền cảnh → thời tiết → màu giờ → (đom đóm).
+- Ngân sách (L-42): cảnh là tầng ảnh (SVG tĩnh); diễn viên ≤ 8, đạo cụ ≤ 10, hạt thời tiết ≤ 60; mưa/tuyết sinh bằng số giả ngẫu nhiên có hạt giống → cùng cảnh luôn ra cùng ảnh (cache ổn định).
+
+## 8. Thư viện và Xưởng — hai khu, không trộn
+
+| | **Thư viện** (thành phẩm · lấy về dùng) | **Xưởng** (tạo lập · phối · kiểm) |
 |---|---|---|
-| 1 | **Từ vựng đóng** (enum) | `GC.ITEM`: loại → bộ phận mặc, độ hiếm, chỉ số — AI chỉ chọn trong danh sách |
-| 2 | **Dữ liệu phối, không vẽ lại** | item trỏ tới linh kiện có sẵn + bảng màu riêng (chỉ áp lên linh kiện đó) + tham số; một linh kiện → nhiều item (Đao sắt ↔ Thanh Long đao) |
-| 3 | **Hàm kiểm** (`check…`) | `checkItem`: dữ liệu thuần, màu hex theo token, chỉ số 0–999, linh kiện có thật và đúng bộ phận; chữ escape khi vẽ |
-| 4 | **Cổng kiểm** (`…Gate`) | `itemGate`: dữ liệu, license linh kiện, 45° (thông tin), dựng được |
-| 5 | **Tự đứng được** | `itemSvg`: icon (khung icon là thuộc tính của **linh kiện** — `part.icon`) và thẻ |
-| 6 | **Nối với loại khác** | nhân vật mặc qua `look.equip.<slot>` → mọi thứ của khung (45°, 32 hoạt động, bàn soát) tự áp dụng |
-| 7 | **Một cổng ghi** | `saveItemChecked` dùng chung cho MCP (`list_items`, `validate_item`, `save_item`, `render_item`), HTTP (`POST /api/items`) và AI trong chatroom (tự có tool) |
-| 8 | **Studio + test** | trang Trang bị (lưới, thẻ, mặc thử, sửa); test chặn dữ liệu xấu với **mẫu hợp lệ làm mốc** (test phải khẳng định mẫu đạt trước, nếu không phép chặn vô nghĩa) |
+| Nội dung | Nhân vật, Trang bị, Cảnh — duyệt theo nhóm (Chính thức / Của tôi / Nhóm / Cộng đồng, rồi phe / loại / ngoài trời–trong nhà) | Bàn phối nhân vật / trang bị / cảnh, Kho linh kiện & phông, khung tư thế & biểu cảm, Xưởng AI, Đạo diễn AI, Cổng kiểm |
+| Việc làm | Xem biến thể (biểu cảm, hoạt động, góc, giờ, thời tiết, diễn viên) rồi **lấy về**: ảnh (SVG, PNG, avatar, sprite sheet, thẻ, nền 1920) và mã (mã tham chiếu, lệnh MCP, mã nhúng web, SVG, JSON công thức) | Sửa, phối, soát, lưu qua cổng ghi duy nhất |
+| Cầu nối | "Tạo / sửa trong Xưởng ›" | "Xem trong Thư viện ›" |
+
+Asset chính thức không sửa tại chỗ: "Phối bản của tôi trong Xưởng" tạo bản riêng trong "Của tôi".

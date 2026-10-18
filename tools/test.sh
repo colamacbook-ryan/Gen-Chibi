@@ -2,7 +2,8 @@
 # Bộ kiểm thử chạy trong CI và trước mỗi lần phát hành.
 #   1) cú pháp mọi tệp JS + script bash
 #   2) cổng kiểm của mọi nhân vật trong thư viện chính thức (chạy engine trong Node)
-#   3) MCP: bắt tay, danh sách tool, tạo nhân vật, chặn linh kiện lạ
+#   2c/2d) item trang bị, cảnh (loại asset thứ hai, thứ ba)
+#   3) MCP: bắt tay, danh sách tool, tạo nhân vật / linh kiện / item / cảnh, chặn dữ liệu xấu
 #   4) tự cập nhật end-to-end (tools/test-update.sh)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -50,7 +51,7 @@ const gcl = GC.assets().find(a => a.id === "gia-cat-luong");
 const cov = GC.gate(gcl).find(x => x.id === "view45");
 if (!cov || !/đủ/.test(cov.detail)) { bad++; console.log("   ✗ Gia Cát Lượng chưa đủ bản vẽ 45°:", cov && cov.detail); }
 // rào quy trình (docs/QUY-TRINH-LINH-KIEN.md): linh kiện thư viện chính thức phải có bản 45°, license và nguồn
-Object.values(GC.LIB.parts).filter(p => GC.PACKS[p.pack].group === "official" && p.id !== "none" && !/^held[LR]$/.test(p.slot)).forEach(p => {
+Object.values(GC.LIB.parts).filter(p => GC.PACKS[p.pack].group === "official" && p.id !== "none" && !/^held[LR]$/.test(p.slot) && p.kind !== "scenery").forEach(p => {
   if (!(p.views && p.views.q45)) { bad++; console.log("   ✗ linh kiện chính thức thiếu bản 45°:", p.pack + "/" + p.slot + ":" + p.id); }
   if (!p.license || !p.source) { bad++; console.log("   ✗ linh kiện thiếu license/nguồn:", p.pack + "/" + p.slot + ":" + p.id); }
 });
@@ -142,6 +143,56 @@ no(vo, "item lệch bộ phận làm vỡ nhân vật: " + (vo && vo.message));
 console.log("   ✓", GC.items().length, "item chính thức đạt cổng; chặn loại/linh kiện/màu/chỉ số/độ hiếm sai; thẻ escape chữ; nhân vật mặc trang bị đạt cổng");
 '
 
+echo "2d) cảnh (loại asset thứ ba)"
+node -e '
+const { loadEngine } = require("./server/engine-node"); const GC = loadEngine(process.cwd());
+let bad = 0; const no = (c, m) => { if (c) { bad++; console.log("   ✗", m); } };
+GC.scenes().forEach(s => GC.sceneGate(s).forEach(g => no(!g.ok, s.key + ": " + g.label + " " + g.detail)));
+GC.scenery().filter(p => GC.PACKS[p.pack].group === "official").forEach(p => no(!p.license || !p.source, "phông thiếu license/nguồn: " + p.pack + "/" + p.slot + ":" + p.id));
+// phông chính thức phải được dùng lại: mỗi phông nằm trong ít nhất một cảnh (thư viện là nguyên liệu, không vẽ thừa)
+GC.scenery().filter(p => p.pack === "afi.scenes").forEach(p => { const ref = p.pack + "/" + p.id; no(!GC.scenes().some(s => Object.values(s.layers).some(l => l.part === ref) || s.deco.some(d => d.part === ref)), "phông không cảnh nào dùng: " + ref); });
+const B = { id: "canh-mau", name: "Mẫu", layers: { sky: "open", ground: "grass" } };
+const err = d => GC.checkScene(Object.assign({}, B, d)).errors.length;
+no(err({}), "cảnh mẫu phải hợp lệ: " + GC.checkScene(B).errors.join("; "));
+no(!err({ layers: { sky: "open" } }), "thiếu mặt đất vẫn qua");
+no(!err({ layers: { sky: "open", ground: "grass", far: "khong-co" } }), "phông lạ vẫn qua");
+no(!err({ layers: { sky: "grass", ground: "grass" } }), "phông sai lớp vẫn qua");
+no(!err({ layers: { sky: "open", ground: "grass", hat: "x" } }), "lớp lạ vẫn qua");
+no(!err({ layers: { sky: { part: 7 }, ground: "grass" } }), "part không phải chuỗi vẫn qua");
+no(!err({ palette: { grass: "red" } }), "màu không phải hex vẫn qua");
+no(!err({ palette: { robe: "#ffffff" } }), "token màu nhân vật vẫn qua ở cảnh");
+no(!err({ palette: { constructor: "#ffffff" } }), "token prototype vẫn qua");
+no(!err({ time: "noon" }) || !err({ weather: "storm" }), "giờ / thời tiết lạ vẫn qua");
+no(!err({ spots: ["left", "san-khau"] }) || !err({ spots: [] }), "chỗ đứng lạ / rỗng vẫn qua");
+no(!err({ deco: new Array(11).fill({ part: "rock", x: 100 }) }), "quá ngân sách 10 đạo cụ vẫn qua");
+const c0 = GC.checkScene(Object.assign({}, B, { name: "A\u0000<b>", deco: [{ part: "rock", x: 9999, scale: 99 }] })).def;
+no(/[\u0000]/.test(c0.name) || c0.deco[0].x !== 640 || c0.deco[0].scale !== 2.5, "chữ / số không được làm sạch, kẹp khoảng");
+// diễn viên
+const sc = GC.getScene("thao-lu");
+no(GC.checkCast([{ character: "gia-cat-luong", spot: "left" }, { character: "quan-vu", spot: "right", activity: "attack", view: "left45" }], sc).length, "dàn diễn viên hợp lệ bị chặn");
+no(!GC.checkCast([{ character: "khong-co", spot: "left" }], sc).length, "nhân vật lạ vẫn qua");
+no(!GC.checkCast([{ character: "quan-vu", spot: "left" }, { character: "gia-cat-luong", spot: "left" }], sc).length, "hai người cùng chỗ đứng vẫn qua");
+no(!GC.checkCast([{ character: "quan-vu", spot: "__proto__" }], sc).length, "chỗ đứng prototype vẫn qua");
+no(!GC.checkCast(new Array(9).fill(0).map((x, i) => ({ character: "quan-vu", spot: GC.SCENE.spotOrder[i % 8] })), sc).length, "quá 8 diễn viên vẫn qua");
+const a1 = GC.sceneSvg(sc, { cast: [{ character: "gia-cat-luong", spot: "midLeft" }, { character: "quan-vu", spot: "midRight" }] });
+no(a1 !== GC.sceneSvg(sc, { cast: [{ character: "gia-cat-luong", spot: "midLeft" }, { character: "quan-vu", spot: "midRight" }] }), "dựng cảnh không ổn định (ảnh cache sẽ nhảy)");
+GC.SCENE.timeOrder.forEach(t => GC.SCENE.weatherOrder.forEach(w => { try { GC.sceneSvg(sc, { time: t, weather: w }); } catch (e) { no(true, "dựng " + t + "/" + w + ": " + e.message); } }));
+// phông dạng dữ liệu: cùng bộ lọc SVG, token cảnh
+const okS = GC.checkDataPart({ id: "da-ci", slot: "deco", label: "Đá", svg: "<circle cx=\"0\" cy=\"-10\" r=\"10\" fill=\"{stone}\"/>" });
+no(okS.errors.length, "phông dữ liệu hợp lệ bị chặn: " + okS.errors.join("; "));
+no(!GC.checkDataPart({ id: "da-ci", slot: "deco", svg: "<circle r=\"1\" onload=\"x\"/>" }).errors.length, "phông có on* vẫn qua");
+no(!GC.checkDataPart({ id: "da-ci", slot: "deco", svg: "<image href=\"x\"/>" }).errors.length, "phông có <image> vẫn qua");
+no(!GC.checkDataPart({ id: "da-ci", slot: "deco", svg: "<circle r=\"1\" fill=\"{robe}\"/>" }).errors.length, "phông dùng token nhân vật vẫn qua");
+no(!GC.checkDataPart({ id: "da-ci", slot: "deco", layers: { hat: "<g/>" } }).errors.length, "phông dùng layers (sai khuôn) vẫn qua");
+// đạo diễn: kịch bản đặt vào cảnh
+const cast = GC.assets();
+no(GC.director.validate({ title: "t", scene: "afi.scenes/thao-lu", steps: [{ actor: "gia-cat-luong", state: "normal", spot: "left", say: "a" }] }, cast).length, "kịch bản có cảnh hợp lệ bị chặn");
+no(!GC.director.validate({ title: "t", scene: "khong-co", steps: [{ actor: "gia-cat-luong", state: "normal", say: "a" }] }, cast).length, "cảnh lạ vẫn qua");
+no(!GC.director.validate({ title: "t", steps: [{ actor: "gia-cat-luong", state: "normal", spot: "tren-troi", say: "a" }] }, cast).length, "chỗ đứng lạ vẫn qua");
+if (bad) process.exit(1);
+console.log("   ✓", GC.scenes().length, "cảnh chính thức ×", GC.SCENE.timeOrder.length, "giờ ×", GC.SCENE.weatherOrder.length, "thời tiết; ", GC.scenery().length, "phông đều được dùng; chặn dữ liệu xấu; dàn diễn viên; phông dữ liệu; kịch bản có cảnh");
+'
+
 echo "3) MCP"
 H="$(mktemp -d)"; PORT=7495
 (echo > /dev/tcp/127.0.0.1/$PORT) 2>/dev/null && { echo "Cổng $PORT đang bị chiếm"; exit 1; }
@@ -167,16 +218,24 @@ printf '%s\n' \
  '{"jsonrpc":"2.0","id":15,"method":"tools/call","params":{"name":"save_item","arguments":{"item":{"id":"ci-dao","name":"Đổi bộ phận","type":"helmet","rarity":"common","equip":{"part":"local.my/ci-hat"}}}}}' \
  '{"jsonrpc":"2.0","id":16,"method":"tools/call","params":{"name":"render_item","arguments":{"item":{"id":"ci-nhap","name":"Nháp","type":"weapon","rarity":"rare","equip":{"part":"guandao","palette":{"metal":"#12ab34"}}},"mode":"equipped","character":"ci-equip"}}}' \
  '{"jsonrpc":"2.0","id":17,"method":"tools/call","params":{"name":"list_items","arguments":{}}}' \
+ '{"jsonrpc":"2.0","id":18,"method":"tools/call","params":{"name":"get_part_spec","arguments":{"slot":"deco"}}}' \
+ '{"jsonrpc":"2.0","id":19,"method":"tools/call","params":{"name":"preview_part","arguments":{"part":{"id":"ci-den","slot":"deco","label":"Đèn CI","svg":"<rect x=\"-8\" y=\"-40\" width=\"16\" height=\"40\" fill=\"{stone}\"/>"}}}}' \
+ '{"jsonrpc":"2.0","id":20,"method":"tools/call","params":{"name":"save_part","arguments":{"part":{"id":"ci-den","slot":"deco","label":"Đèn CI","svg":"<rect x=\"-8\" y=\"-40\" width=\"16\" height=\"40\" fill=\"{stone}\"/>"}}}}' \
+ '{"jsonrpc":"2.0","id":21,"method":"tools/call","params":{"name":"save_scene","arguments":{"scene":{"id":"ci-canh","name":"Cảnh CI","layers":{"sky":"open","ground":"dirt"},"deco":[{"part":"local.my/ci-den","x":200}],"time":"night","weather":"rain"}}}}' \
+ '{"jsonrpc":"2.0","id":22,"method":"tools/call","params":{"name":"render_scene","arguments":{"key":"ci-canh","cast":[{"character":"ci-equip","spot":"left","activity":"attack"},{"character":"gia-cat-luong","spot":"right"}]}}}' \
+ '{"jsonrpc":"2.0","id":23,"method":"tools/call","params":{"name":"save_scene","arguments":{"scene":{"id":"thao-lu","name":"Đè","layers":{"sky":"open","ground":"dirt"}}}}}' \
+ '{"jsonrpc":"2.0","id":24,"method":"tools/call","params":{"name":"validate_event","arguments":{"event":{"title":"CI","scene":"local.my/ci-canh","steps":[{"actor":"gia-cat-luong","state":"normal","spot":"left","say":"Mưa rồi"}]}}}}' \
+ '{"jsonrpc":"2.0","id":25,"method":"tools/call","params":{"name":"render_scene","arguments":{"scene":{"id":"ci-nhap","layers":{"sky":"open","ground":"grass"}},"cast":[{"character":"gia-cat-luong","spot":"san-khau"}]}}}' \
  | GC_PORT=$PORT node server/mcp-stdio.js > "$H/mcp.out"
 node -e '
 const L = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n").map(JSON.parse);
 const by = id => L.find(r => r.id === id);
 const ok = (c, m) => { if (!c) { console.log("   ✗", m); process.exit(1); } };
 ok(by(1).result.protocolVersion === "2025-06-18", "bắt tay");
-ok(by(2).result.tools.length === 19, "19 tool");
+ok(by(2).result.tools.length === 23, "23 tool");
 ok(!by(3).result.isError && JSON.parse(by(3).result.content[0].text).saved, "lưu nhân vật hợp lệ");
 ok(by(4).result.isError, "chặn linh kiện lạ");
-console.log("   ✓ MCP: bắt tay, 19 tool, lưu hợp lệ, chặn linh kiện lạ");
+console.log("   ✓ MCP: bắt tay, 23 tool, lưu hợp lệ, chặn linh kiện lạ");
 const spec = JSON.parse(by(5).result.content[0].text);
 ok(spec.slots[0].slot === "hat" && spec.example && spec.views.q45, "get_part_spec có khung + ví dụ");
 ok(!by(6).result.isError && /<svg/.test(by(6).result.content[1].resource.text), "preview_part trả bàn soát SVG");
@@ -194,6 +253,16 @@ ok(by(15).result.isError && /bộ phận/.test(by(15).result.content[0].text), "
 ok(!by(16).result.isError && /12ab34/i.test(by(16).result.content[1].resource.text), "render_item equipped với item nháp phải mặc thử được");
 ok(!/ci-nhap/.test(JSON.stringify(by(17).result)), "item nháp không được lưu lại sau khi dựng");
 console.log("   ✓ MCP item: chặn đổi bộ phận · mặc thử item nháp không để lại dấu");
+const ss = JSON.parse(by(18).result.content[0].text);
+ok(ss.kind === "scenery" && ss.scenery.example && ss.scenery.canvas.width === 640, "get_part_spec phông có khung 640×360 + ví dụ");
+ok(!by(19).result.isError && /<svg/.test(by(19).result.content[1].resource.text), "preview_part phông trả bàn soát cảnh");
+ok(JSON.parse(by(20).result.content[0].text).saved, "save_part lưu phông");
+ok(JSON.parse(by(21).result.content[0].text).saved, "save_scene phối phông tự tạo");
+ok(!by(22).result.isError && /<svg/.test(by(22).result.content[1].resource.text), "render_scene có dàn diễn viên (nhân vật mặc item của tôi)");
+ok(by(23).result.isError && /chính thức/.test(by(23).result.content[0].text), "không ghi đè cảnh chính thức");
+ok(JSON.parse(by(24).result.content[0].text).ok, "kịch bản đặt vào cảnh của tôi");
+ok(by(25).result.isError && /chỗ đứng/.test(by(25).result.content[0].text), "render_scene chặn chỗ đứng lạ");
+console.log("   ✓ MCP cảnh: chuẩn phông → soát → lưu phông → phối cảnh → dựng có diễn viên → kịch bản trong cảnh; chặn đè chính thức");
 ' "$H/mcp.out"
 kill $SP 2>/dev/null || true
 
