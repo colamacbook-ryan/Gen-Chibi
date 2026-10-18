@@ -45,7 +45,9 @@ claude mcp add gen-chibi -- genchibi mcp                                  # stdi
 claude mcp add --transport http gen-chibi http://localhost:7480/mcp       # HTTP
 ```
 
-Tool: `get_catalog`, `list_characters`, `get_character`, `validate_character`, `save_character`, `render_character`, `get_director_schema`, `validate_event`, `save_event`, `get_app_version`, `update_app`, `rollback_app`.
+Tool: `get_catalog`, `list_characters`, `get_character`, `validate_character`, `save_character`, `render_character`, `get_director_schema`, `validate_event`, `save_event`, `get_part_spec`, `preview_part`, `save_part`, `get_app_version`, `update_app`, `rollback_app`.
+
+Tạo linh kiện: `get_part_spec` → vẽ (SVG an toàn, token màu) → `preview_part` (bàn soát) → `save_part`. AI trong Studio › Xưởng AI dùng đúng bộ tool này — mọi lối ghi đi qua một cổng kiểm (xem `docs/QUY-TRINH-LINH-KIEN.md` mục 6).
 
 ### Mở MCP ra Internet — một lệnh, một link
 Cần một tên miền do Cloudflare quản lý DNS (gói miễn phí là đủ).

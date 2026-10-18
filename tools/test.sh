@@ -58,6 +58,39 @@ if (bad) process.exit(1);
 console.log("   ✓", acts.length, "hoạt động ×", GC.assets().length, "nhân vật × 3 thời điểm × 2 hướng × 5 góc nhìn; kịch bản có hoạt động được kiểm");
 '
 
+echo "2b) linh kiện dữ liệu: bộ lọc SVG an toàn"
+node -e '
+const { loadEngine } = require("./server/engine-node"); const GC = loadEngine(process.cwd());
+let bad = 0;
+const attacks = {
+  "thẻ script": "<script>alert(1)</script>",
+  "onload": "<path d=\"M0,0 L1,1\" onload=\"alert(1)\"/>",
+  "url()": "<path d=\"M0,0\" fill=\"url(javascript:alert(1))\"/>",
+  "style": "<path d=\"M0,0\" style=\"fill:red\"/>",
+  "href": "<g href=\"javascript:alert(1)\"></g>",
+  "image": "<image href=\"x.png\"/>",
+  "foreignObject": "<foreignObject><div/></foreignObject>",
+  "text": "<text>hi</text>",
+  "chữ thừa": "<path d=\"M0,0\"/>hello",
+  "nháy đơn": "<path d='M0,0'/>",
+  "comment": "<!-- x --><path d=\"M0,0\"/>",
+  "entity": "<path d=\"M0,0&#x3C;\"/>",
+  "token lạ": "<path d=\"M0,0\" fill=\"{evil}\"/>",
+  "transform lạ": "<g transform=\"url(#x)\"></g>",
+  "g không đóng": "<g>",
+  "lồng sai": "<g><path d=\"M0,0\"></g>"
+};
+for (const k in attacks) { const r = GC.sanitizeSvg(attacks[k]); if (!r.errors.length) { bad++; console.log("   ✗ lọt:", k, r.svg); } }
+const good = GC.sanitizeSvg("<g transform=\"translate(2 3)\"><path d=\"M38,78 L100,22 Z\" fill=\"{hat}\" stroke=\"{ink}\" stroke-width=\"2.8\"/><circle cx=\"1\" cy=\"2\" r=\"3\" fill=\"#fff\"/></g>");
+if (good.errors.length) { bad++; console.log("   ✗ chặn nhầm SVG hợp lệ:", good.errors); }
+const noq = GC.checkDataPart({ id: "x-1", slot: "hat", layers: { hat: "<path d=\"M0,0\"/>" } });
+if (!noq.errors.some(e => /q45/.test(e))) { bad++; console.log("   ✗ không bắt buộc 45°"); }
+const lay = GC.checkDataPart({ id: "x-2", slot: "hat", layers: { propFront: "<path d=\"M0,0\"/>" }, views: { q45: "same" } });
+if (!lay.errors.length) { bad++; console.log("   ✗ cho dùng lớp đạo cụ"); }
+if (bad) process.exit(1);
+console.log("   ✓", Object.keys(attacks).length, "kiểu tấn công bị chặn; SVG hợp lệ qua; 45° bắt buộc; lớp sân khấu bị cấm");
+'
+
 echo "3) MCP"
 H="$(mktemp -d)"; PORT=7495
 (echo > /dev/tcp/127.0.0.1/$PORT) 2>/dev/null && { echo "Cổng $PORT đang bị chiếm"; exit 1; }
@@ -70,18 +103,35 @@ printf '%s\n' \
  '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
  '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"save_character","arguments":{"asset":{"id":"ci-test","name":"CI","look":{"eyes":"round","brows":"normal","parts":{"hat":"warrior-band"}},"identity":{"must":["hat:warrior-band"]}}}}}' \
  '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"save_character","arguments":{"asset":{"id":"ci-bad","name":"Bad","look":{"eyes":"round","brows":"normal","parts":{"hat":"ufo"}},"identity":{"must":["hat:ufo"]}}}}}' \
+ '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"get_part_spec","arguments":{"slot":"hat"}}}' \
+ '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"preview_part","arguments":{"part":{"id":"ci-hat","slot":"hat","label":"Mũ CI","layers":{"hat":"<path d=\"M50,80 L100,30 L150,80 Z\" fill=\"{hat}\" stroke=\"{ink}\" stroke-width=\"2.8\"/>"},"views":{"q45":"same"}}}}}' \
+ '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"preview_part","arguments":{"part":{"id":"ci-evil","slot":"hat","layers":{"hat":"<path d=\"M0,0\" onload=\"alert(1)\"/>"},"views":{"q45":"same"}}}}}' \
+ '{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"save_part","arguments":{"part":{"id":"ci-hat","slot":"hat","label":"Mũ CI","layers":{"hat":"<path d=\"M50,80 L100,30 L150,80 Z\" fill=\"{hat}\" stroke=\"{ink}\" stroke-width=\"2.8\"/>"},"views":{"q45":"same"}}}}}' \
+ '{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"save_character","arguments":{"asset":{"id":"ci-mix","name":"Phối","look":{"eyes":"round","brows":"normal","parts":{"hat":"local.my/ci-hat"}},"identity":{"must":["hat:ci-hat"]}}}}}' \
+ '{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"render_character","arguments":{"key":"ci-mix","view":"left45","activity":"run"}}}' \
  | GC_PORT=$PORT node server/mcp-stdio.js > "$H/mcp.out"
 node -e '
 const L = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n").map(JSON.parse);
 const by = id => L.find(r => r.id === id);
 const ok = (c, m) => { if (!c) { console.log("   ✗", m); process.exit(1); } };
 ok(by(1).result.protocolVersion === "2025-06-18", "bắt tay");
-ok(by(2).result.tools.length === 12, "12 tool");
+ok(by(2).result.tools.length === 15, "15 tool");
 ok(!by(3).result.isError && JSON.parse(by(3).result.content[0].text).saved, "lưu nhân vật hợp lệ");
 ok(by(4).result.isError, "chặn linh kiện lạ");
-console.log("   ✓ MCP: bắt tay, 12 tool, lưu hợp lệ, chặn linh kiện lạ");
+console.log("   ✓ MCP: bắt tay, 15 tool, lưu hợp lệ, chặn linh kiện lạ");
+const spec = JSON.parse(by(5).result.content[0].text);
+ok(spec.slots[0].slot === "hat" && spec.example && spec.views.q45, "get_part_spec có khung + ví dụ");
+ok(!by(6).result.isError && /<svg/.test(by(6).result.content[1].resource.text), "preview_part trả bàn soát SVG");
+ok(by(7).result.isError && /onload/.test(by(7).result.content[0].text), "preview_part chặn SVG độc");
+ok(JSON.parse(by(8).result.content[0].text).saved, "save_part lưu linh kiện");
+ok(!by(9).result.isError, "phối nhân vật bằng linh kiện mới");
+ok(!by(10).result.isError && /<svg/.test(by(10).result.content[1].resource.text), "dựng nhân vật dùng linh kiện mới ở 45° + chạy");
+console.log("   ✓ MCP tạo linh kiện: chuẩn → soát → chặn SVG độc → lưu → phối nhân vật → dựng 45°");
 ' "$H/mcp.out"
 kill $SP 2>/dev/null || true
+
+echo "3b) AI trong chatroom (LLM API) đi đúng cổng nhà xưởng"
+node tools/test-agent.mjs || exit 1
 
 echo "4) khoá truy cập"
 bash tools/test-auth.sh || exit 1

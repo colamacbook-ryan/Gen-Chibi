@@ -773,7 +773,9 @@
     var must = (asset.identity && asset.identity.must) || [];
     var lost = must.filter(function (m) {
       var sp = m.split(':');
-      return sp[0] === 'eyes' ? look.eyes !== sp[1] : partRef(asset, sp[0]) !== sp[1];
+      // so theo mã linh kiện: "hat:ci-hat" khớp cả "ci-hat" lẫn "local.my/ci-hat"
+      var id = function (r) { return String(r || '').split('/').pop(); };
+      return sp[0] === 'eyes' ? look.eyes !== sp[1] : id(partRef(asset, sp[0])) !== id(sp[1]);
     });
     add('identity', 'Dấu nhận diện bắt buộc (' + must.length + ')', must.length > 0 && !lost.length,
       must.length ? lost.join(', ') : 'chưa khai báo identity.must');
@@ -839,6 +841,114 @@
     return res;
   }
 
+
+  // Luật chặn DUY NHẤT cho mọi lối ghi (MCP, Studio/HTTP, AI trong chatroom):
+  // lỗi cấu trúc/an toàn chặn ở mọi trạng thái; dấu nhận diện bắt buộc khi chờ duyệt / đã duyệt; mục thông tin không chặn.
+  function blockingGates(gates, status) {
+    return gates.filter(function (g) { return !g.ok && !g.info && !(g.id === 'identity' && (status || 'draft') === 'draft'); });
+  }
+
+  /* --------------------------------------------- 7. LINH KIỆN DẠNG DỮ LIỆU */
+  // Linh kiện do người dùng / agent tạo (qua MCP, Studio) là DỮ LIỆU, không phải code:
+  // SVG thuộc tập con chặt, màu là hex hoặc token bảng màu {robe}, 45° chọn chế độ drawn | same | face45 | body45.
+  // Bộ lọc ĐỌC rồi DỰNG LẠI SVG từ những gì đã kiểm (không chép nguyên văn đầu vào) → không chèn được script/link/style.
+  var SVG_TAGS = { g: 1, path: 1, circle: 1, ellipse: 1, rect: 1, line: 1, polyline: 1, polygon: 1 };
+  var NUM = /^-?\d{1,5}(\.\d{1,4})?$/;
+  var SVG_ATTRS = {
+    d: /^[MmLlHhVvCcSsQqTtAaZz0-9eE.,\-\s]{1,8000}$/, points: /^[0-9eE.,\-\s]{1,4000}$/,
+    cx: NUM, cy: NUM, r: NUM, rx: NUM, ry: NUM, x: NUM, y: NUM, width: NUM, height: NUM, x1: NUM, y1: NUM, x2: NUM, y2: NUM,
+    'stroke-width': NUM, opacity: NUM, 'fill-opacity': NUM, 'stroke-opacity': NUM,
+    'stroke-linecap': /^(butt|round|square)$/, 'stroke-linejoin': /^(miter|round|bevel)$/, 'fill-rule': /^(nonzero|evenodd)$/,
+    transform: /^(\s*(translate|rotate|scale|skewX|skewY|matrix)\(\s*[-0-9.eE,\s]{1,80}\)\s*){1,6}$/,
+    fill: 'paint', stroke: 'paint', class: /^(chb-bob|chb-flicker|chb-twinkle|chb-quiver|chb-pulse)$/
+  };
+  var PART_LAYERS_DENY = /^(prop|fx|stage)|b$/;
+  function paintOk(v) { return /^#[0-9a-fA-F]{3,8}$/.test(v) || v === 'none' || (/^\{[a-zA-Z]{1,20}\}$/.test(v) && (v === '{ink}' || LIB.defaults[v.slice(1, -1)] !== undefined)); }
+  function sanitizeSvg(src, errs, where) {
+    src = String(src || '');
+    if (src.length > 20000) { errs.push(where + ': quá 20 000 ký tự'); return ''; }
+    var out = '', stack = [], last = 0, m, re = /<\s*(\/?)\s*([a-zA-Z]+)((?:\s+[a-zA-Z:-]+\s*=\s*"[^"<>]*")*)\s*(\/?)\s*>/g;
+    while ((m = re.exec(src))) {
+      if (src.slice(last, m.index).trim()) { errs.push(where + ': có chữ hoặc thẻ không hợp lệ gần "' + src.slice(last, m.index).trim().slice(0, 30) + '"'); return ''; }
+      last = re.lastIndex;
+      var close = m[1] === '/', tag = m[2], selfClose = m[4] === '/';
+      if (!SVG_TAGS[tag]) { errs.push(where + ': thẻ <' + tag + '> không được phép (chỉ g, path, circle, ellipse, rect, line, polyline, polygon)'); return ''; }
+      if (close) {
+        if (stack.pop() !== tag) { errs.push(where + ': thẻ đóng </' + tag + '> sai cặp'); return ''; }
+        out += '</' + tag + '>'; continue;
+      }
+      var attrs = '', am, ar = /([a-zA-Z:-]+)\s*=\s*"([^"<>]*)"/g;
+      while ((am = ar.exec(m[3]))) {
+        var k = am[1], v = am[2].trim(), rule = SVG_ATTRS[k];
+        if (!rule) { errs.push(where + ': thuộc tính "' + k + '" không được phép'); return ''; }
+        if (rule === 'paint' ? !paintOk(v) : !rule.test(v)) { errs.push(where + ': giá trị ' + k + '="' + v.slice(0, 40) + '" không hợp lệ'); return ''; }
+        attrs += ' ' + k + '="' + v + '"';
+      }
+      out += '<' + tag + attrs + (selfClose ? '/>' : '>');
+      if (!selfClose) { if (tag !== 'g') { errs.push(where + ': <' + tag + '> phải tự đóng (/>)'); return ''; } stack.push(tag); }
+    }
+    if (src.slice(last).trim()) { errs.push(where + ': có chữ thừa ở cuối'); return ''; }
+    if (stack.length) { errs.push(where + ': thiếu </g>'); return ''; }
+    return out;
+  }
+  var PART_PARAM_TYPES = { scale: 1, scaleX: 1, scaleY: 1, dx: 1, dy: 1 };
+  // Kiểm + chuẩn hoá một linh kiện dữ liệu. Trả { errors, def } — def đã lọc sạch, sẵn để lưu hoặc đăng ký.
+  function checkDataPart(def) {
+    var errs = [], d = {};
+    if (!def || typeof def !== 'object') return { errors: ['linh kiện phải là object'], def: null };
+    if (!/^[a-z0-9][a-z0-9-]{1,39}$/.test(String(def.id || ''))) errs.push('id: chữ thường, số, gạch nối, 2–40 ký tự');
+    if (!LIB.slots[def.slot]) errs.push('slot "' + def.slot + '" không có; chọn trong: ' + Object.keys(LIB.slots).join(', '));
+    d.id = String(def.id || ''); d.slot = def.slot; d.label = String(def.label || def.id || '').slice(0, 40);
+    d.description = String(def.description || '').slice(0, 300);
+    function layers(src, where) {
+      var o = {}, n = 0;
+      if (!src || typeof src !== 'object') { errs.push(where + ': cần object { lớp: svg }'); return o; }
+      Object.keys(src).forEach(function (l) {
+        if (LAYER_IDS.indexOf(l) < 0 || PART_LAYERS_DENY.test(l)) { errs.push(where + ': lớp "' + l + '" không dùng được cho linh kiện'); return; }
+        var c = sanitizeSvg(src[l], errs, where + '.' + l);
+        if (c) { o[l] = c; n++; }
+      });
+      if (!n) errs.push(where + ': chưa có lớp nào vẽ được');
+      return o;
+    }
+    d.layers = layers(def.layers, 'layers');
+    var v = (def.views && def.views.q45) || null;
+    var mode = v && (typeof v === 'string' ? v : v.mode);
+    if (['drawn', 'same', 'face45', 'body45'].indexOf(mode) < 0) errs.push('views.q45: bắt buộc, chọn mode drawn (kèm layers) | same | face45 | body45 — xem quy trình 45°');
+    d.views = { q45: { mode: mode } };
+    if (mode === 'drawn') d.views.q45.layers = layers(v.layers, 'views.q45.layers');
+    if (def.params) {
+      d.params = {};
+      Object.keys(def.params).slice(0, 6).forEach(function (k) {
+        var q = def.params[k] || {};
+        if (!/^[a-zA-Z]{1,20}$/.test(k) || !PART_PARAM_TYPES[q.type] || !isFinite(q.min) || !isFinite(q.max) || !(q.min < q.max)) { errs.push('params.' + k + ': cần type (scale|scaleX|scaleY|dx|dy), min < max'); return; }
+        var def0 = isFinite(q.def) ? +q.def : (q.type === 'dx' || q.type === 'dy' ? 0 : 1);
+        d.params[k] = { label: String(q.label || k).slice(0, 30), type: q.type, min: +q.min, max: +q.max, step: isFinite(q.step) ? +q.step : 0.01,
+          def: Math.max(+q.min, Math.min(+q.max, def0)), pivot: Array.isArray(q.pivot) && q.pivot.length === 2 && q.pivot.every(isFinite) ? [+q.pivot[0], +q.pivot[1]] : [100, 100] };
+      });
+    }
+    return { errors: errs, def: errs.length ? null : d };
+  }
+  function fillTokens(svg, P) { return svg.replace(/\{([a-zA-Z]{1,20})\}/g, function (_, k) { return k === 'ink' ? INK : (P[k] || '#ff00ff'); }); }
+  // Đăng ký linh kiện dữ liệu vào một thư viện (pack phải có sẵn). Kiểm lại dù đã kiểm lúc lưu (phòng thủ nhiều lớp).
+  function registerDataPart(packId, def) {
+    var c = checkDataPart(def);
+    if (c.errors.length) return c;
+    var d = c.def, P = PACKS[packId];
+    if (!P) return { errors: ['thư viện ' + packId + ' chưa có'], def: null };
+    function draw(L) { return function (C) { var o = {}; for (var l in L) o[l] = fillTokens(L[l], C.P); return o; }; }
+    var front = draw(d.layers), q = d.views.q45, q45;
+    if (q.mode === 'drawn') q45 = draw(q.layers);
+    else if (q.mode === 'same') q45 = front;
+    else if (q.mode === 'face45') q45 = function (C) { var o = front(C); for (var l in o) o[l] = G.GenChibi.helpers.face45(C, o[l], l === 'mask'); return o; };
+    else q45 = function (C) { var o = front(C), H = G.GenChibi.helpers; for (var l in o) o[l] = l === 'hem' ? H.body45(o[l], H.HEM) : l === 'body' ? H.body45(o[l], H.TORSO_UP) : o[l]; return o; };
+    var part = { slot: d.slot, id: d.id, label: d.label, draw: front, views: { q45: q45 }, params: d.params, data: d,
+      source: 'data:' + packId, license: P.license, pack: packId };
+    LIB.parts[packId + '/' + d.slot + ':' + d.id] = part;
+    P.counts.part = Object.keys(LIB.parts).filter(function (k) { return k.indexOf(packId + '/') === 0; }).length;
+    return { errors: [], def: d, part: part };
+  }
+
   G.GenChibi = {
     version: VERSION, INK: INK, RIG: RIG, LIB: LIB, PACKS: PACKS, ASSETS: ASSETS, ASSET_ORDER: ASSET_ORDER,
     FACE_PARAMS: FACE_PARAMS, SRC: SRC,
@@ -847,6 +957,7 @@
     resolveState: resolveState, palette: palette, paramValues: paramValues,
     compose: compose, poseAt: poseAt, chainTransforms: chainTransforms, neutralPose: neutralPose, svgString: svgString,
     shadowOf: shadowOf, handsBusy: handsBusy, Q45: Q45, faceRemap: faceRemap,
+    checkDataPart: checkDataPart, registerDataPart: registerDataPart, blockingGates: blockingGates, sanitizeSvg: function (s0) { var e = []; var r = sanitizeSvg(s0, e, 'svg'); return { svg: r, errors: e }; },
     assets: function () { return ASSET_ORDER.map(function (k) { return ASSETS[k]; }); },
     director: { schema: directorSchema, validate: validateEvent, prompt: directorPrompt },
     gate: gate,

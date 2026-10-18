@@ -46,3 +46,18 @@ vị trí mắt/mày/miệng ở 45° (`GC.Q45`), hiệu ứng bám mặt (`fx.f
 ## 5. Nhân vật = phối, không vẽ
 
 Nhân vật chỉ là công thức JSON: chọn linh kiện + tham số + màu + nét riêng (`expressions`, `identity`). Muốn nhân vật có thêm khả năng (góc nhìn, tư thế mới…) → **bổ sung linh kiện / khung**, không sửa nhân vật.
+
+## 6. Một cổng ghi duy nhất — mọi agent dùng cùng chuẩn
+
+Ba lối vào, **một** cổng: không có đường nào ghi thẳng vào kho.
+
+| Ai tạo | Đi qua | Cổng kiểm |
+|---|---|---|
+| Agent ngoài (Claude Code, Claude web/desktop, Cursor…) | MCP — 15 tool | `saveAssetChecked` / `savePartChecked` |
+| AI trong chatroom Studio (LLM API: OpenRouter, DeepSeek, MiniMax…) | Vòng function-calling trên **đúng bộ tool MCP** (trừ tool hệ thống), cùng chỉ dẫn MCP | như trên |
+| Người dùng Studio / gọi API HTTP | `PUT /api/assets`, `POST /api/parts` → cùng hai hàm | như trên |
+
+- Luật chặn duy nhất `GC.blockingGates`: lỗi cấu trúc/an toàn (linh kiện lạ, license, tham số, không dựng được biểu cảm/hoạt động) chặn ở mọi trạng thái; dấu nhận diện bắt buộc khi "chờ duyệt"/"đã duyệt".
+- Linh kiện của agent là **dữ liệu SVG** (tập con an toàn, token màu) — engine đọc rồi dựng lại, kiểm lại cả khi Studio nạp.
+- Tool `preview_part` trả bàn soát; `get_part_spec` trả chính khung sườn này ở dạng máy đọc được — agent luôn nhận chuẩn từ hệ thống, không tự đoán.
+- Test `tools/test-agent.mjs` dùng LLM giả lập để khẳng định: AI chỉ ghi qua tool, SVG độc bị chặn, tool hệ thống bị từ chối, API HTTP không lách được cổng.

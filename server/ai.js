@@ -125,6 +125,65 @@ class AI {
     }
   }
 
+  async chatTools(c, messages, tools) {
+    const body = { model: c.model, messages, tools, tool_choice: 'auto', temperature: Math.min(c.temperature, 0.7), max_tokens: 3000 };
+    return request('POST', c.baseUrl + '/chat/completions', { headers: this.headers(c), body, timeout: 120000 });
+  }
+
+  // AI trong chatroom: vòng lặp function-calling trên ĐÚNG bộ tool MCP (mcp.toolsFor('ui')) và đúng chỉ dẫn MCP.
+  // Model không bao giờ ghi thẳng vào kho: mọi tạo/sửa đi qua tool → cổng kiểm của engine → lưu. Tool lỗi → model đọc lỗi và sửa.
+  async agent({ messages, model }, mcp, instructions) {
+    const c = this.config();
+    if (model) c.model = model;
+    if (!c.model) throw Object.assign(new Error('Chưa chọn model'), { code: 400 });
+    const tools = mcp.toolsFor('ui');
+    const allowed = new Set(tools.map(t => t.name));
+    const fns = tools.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.inputSchema } }));
+    const hist = (Array.isArray(messages) ? messages : []).slice(-20)
+      .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+      .map(m => ({ role: m.role, content: m.content.slice(0, 4000) }));
+    if (!hist.length || hist[hist.length - 1].role !== 'user') throw Object.assign(new Error('cần tin nhắn của người dùng'), { code: 400 });
+    const msgs = [{ role: 'system', content: [
+      'Bạn là trợ lý sản xuất của nhà xưởng gen-chibi, trả lời tiếng Việt, ngắn gọn.',
+      'LUẬT: chỉ tạo/sửa nhân vật, linh kiện, kịch bản bằng tool của nhà xưởng (save_character, save_part, save_event). Không bao giờ coi một JSON viết ra trong tin nhắn là đã lưu.',
+      'Trước khi viết: get_catalog / get_part_spec / get_director_schema. Sau khi viết: validate_* hoặc preview_part. Tool trả lỗi → đọc lỗi, sửa, gọi lại. Dùng đúng id có trong kho.',
+      instructions
+    ].join('\n') }].concat(hist);
+    const log = [], renders = [], usage = { prompt: 0, completion: 0 };
+    for (let round = 1; round <= 10; round++) {
+      const r = await this.chatTools(c, msgs, fns);
+      if (r && r.usage) { usage.prompt += r.usage.prompt_tokens || 0; usage.completion += r.usage.completion_tokens || 0; }
+      const msg = r && r.choices && r.choices[0] && r.choices[0].message;
+      if (!msg) throw Object.assign(new Error('model không trả lời'), { code: 502 });
+      const calls = Array.isArray(msg.tool_calls) ? msg.tool_calls.slice(0, 6) : [];
+      msgs.push({ role: 'assistant', content: msg.content || '', tool_calls: calls.length ? calls : undefined });
+      if (!calls.length) return { reply: msg.content || '', log, renders, rounds: round, usage, model: c.model };
+      for (const call of calls) {
+        const name = call.function && call.function.name;
+        let args = {}, text, ok = false;
+        try { args = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (e) { args = null; }
+        if (!allowed.has(name)) text = 'Tool "' + name + '" không có trong nhà xưởng.';
+        else if (!args) text = 'arguments không phải JSON hợp lệ.';
+        else {
+          const res = await mcp.callTool(name, args, { channel: 'ui' });
+          ok = !!res && !res.isError;
+          const parts = (res && res.content) || [];
+          text = parts.map(p => {
+            if (p.type === 'text') return p.text;
+            if (p.type === 'resource' && p.resource && /svg/.test(p.resource.mimeType)) {
+              if (renders.length < 6) renders.push({ tool: name, svg: p.resource.text });
+              return '[Ảnh SVG ' + p.resource.text.length + ' ký tự — đã hiển thị cho người dùng]';
+            }
+            return '';
+          }).join('\n') || (ok ? 'ok' : 'lỗi');
+        }
+        log.push({ tool: name, ok, summary: String(text).replace(/\s+/g, ' ').slice(0, 160) });
+        msgs.push({ role: 'tool', tool_call_id: call.id, content: String(text).slice(0, 12000) });
+      }
+    }
+    return { reply: 'Dừng sau 10 lượt gọi tool — hãy chia nhỏ yêu cầu.', log, renders, rounds: 10, usage, model: c.model };
+  }
+
   castFrom(ids, extraAssets) {
     const all = this.GC.assets().concat(extraAssets || []);
     const byId = {};

@@ -8,7 +8,7 @@ const path = require('path');
 const { Updater, RESTART_CODE } = require('./updater');
 const { Secrets } = require('./secrets');
 const { AI } = require('./ai');
-const { MCP } = require('./mcp');
+const { MCP, INSTRUCTIONS: MCP_INSTRUCTIONS } = require('./mcp');
 const { Store, KEY, readJSON, writeJSON } = require('./store');
 const { loadEngine } = require('./engine-node');
 
@@ -180,6 +180,11 @@ async function route(req, res) {
   }
   if (p === '/api/ai/bench' && m === 'GET') return send(res, 200, ai.bench());
   if (p === '/api/ai/test' && m === 'POST') { const b = await body(req); return send(res, 200, await ai.test(typeof b.model === 'string' ? b.model : '')); }
+  if (p === '/api/ai/agent' && m === 'POST') {
+    const b = await body(req);
+    try { return send(res, 200, await ai.agent({ messages: b.messages, model: typeof b.model === 'string' ? b.model : '' }, mcp, MCP_INSTRUCTIONS)); }
+    catch (e) { return fail(res, e.code || 502, e.message); }
+  }
   if (p === '/api/ai/director' && m === 'POST') {
     const b = await body(req);
     try { return send(res, 200, await ai.director(b, store.listAssets())); } catch (e) { return fail(res, e.code || 502, e.message); }
@@ -198,6 +203,11 @@ async function route(req, res) {
   if (em && m === 'GET') { const e = store.getEvent(em[1]); return e ? send(res, 200, e) : fail(res, 404, 'không có kịch bản này'); }
 
   // ---- asset có phiên bản
+  if (p === '/api/parts' && m === 'GET') return send(res, 200, store.listParts());
+  if (p === '/api/parts' && m === 'POST') {
+    const b = await body(req, 400 * 1024);
+    try { return send(res, 200, mcp.savePartChecked(b.part, b.note || 'Lưu trong Studio')); } catch (e) { return send(res, e.code || 400, { error: e.message, errors: e.errors || null }); }
+  }   // linh kiện dữ liệu của thư viện "Của tôi"
   if (p === '/api/assets' && m === 'GET') return send(res, 200, store.listAssets());
   const am = p.match(/^\/api\/assets\/([^/]+)\/([^/]+)(\/versions(?:\/(\d+))?)?$/);
   if (am) {
@@ -208,7 +218,12 @@ async function route(req, res) {
       return send(res, 200, store.versionsOf(key));
     }
     if (m === 'GET') { const a = store.getAsset(key); return a ? send(res, 200, a) : fail(res, 404, 'chưa có bản lưu'); }
-    if (m === 'PUT') { const b = await body(req); return send(res, 200, store.saveAsset(key, b, b._note)); }
+    if (m === 'PUT') {
+      // Studio ghi qua CÙNG cổng kiểm với MCP và AI (mcp.saveAssetChecked) — không có lối ghi thẳng
+      const b = await body(req), sp = key.split('/');
+      try { return send(res, 200, mcp.saveAssetChecked(Object.assign({}, b, { pack: sp[0], id: sp[1] }), b._note || 'Chỉnh trong Studio')); }
+      catch (e) { return send(res, e.code || 400, { error: e.message, gates: e.gates || null }); }
+    }
     if (m === 'DELETE') return store.trashAsset(key) ? send(res, 200, { ok: true }) : fail(res, 404, 'chưa có bản lưu');
   }
   return fail(res, 404, 'không có API này');

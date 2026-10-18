@@ -78,7 +78,12 @@
       return fetch('api/info', { headers: this.headers() }).then(function (r) {
         if (r.status === 401) return self.login(!!self.token());
         if (!r.ok) throw 0;
-        return r.json().then(function (info) { self.mode = 'server'; self.info = info; return self.api('GET', 'api/assets'); })
+        return r.json().then(function (info) { self.mode = 'server'; self.info = info; return self.api('GET', 'api/parts').catch(function () { return []; }); })
+          .then(function (parts) {
+            // linh kiện dữ liệu (agent tạo qua MCP): engine kiểm lại SVG trước khi đăng ký — phòng thủ nhiều lớp
+            (parts || []).forEach(function (d) { var r0 = GC.registerDataPart(MY_PACK, d); if (r0.errors.length) console.warn('bỏ linh kiện', d.id, r0.errors); });
+            return self.api('GET', 'api/assets');
+          })
           .then(function (list) { (list || []).forEach(function (a) { GC.registerAsset(a.pack, a); }); });
       }).catch(function () {
           self.mode = 'browser';
@@ -88,7 +93,9 @@
     save: function (asset, note) {
       var key = asset.pack + '/' + asset.id;
       if (this.mode === 'server') {
-        return this.api('PUT', 'api/assets/' + key, Object.assign({}, asset, { _note: note })).then(function (rec) { return GC.registerAsset(rec.pack, rec); });
+        // server kiểm bằng CÙNG cổng với MCP/AI; không đạt thì báo rõ cổng nào chặn
+        return this.api('PUT', 'api/assets/' + key, Object.assign({}, asset, { _note: note })).then(function (rec) { return GC.registerAsset(rec.pack, rec); })
+          .catch(function (e) { toast(e.message); throw e; });
       }
       var rec = clone(asset);
       rec.version = (rec.version || 0) + 1; rec.savedAt = new Date().toISOString();
@@ -117,7 +124,7 @@
   /* ============================================================ điều hướng */
   var NAV = [
     ['Tài nguyên', [['characters', 'Nhân vật'], ['poses', 'Tư thế & hoạt động'], ['library', 'Thư viện linh kiện'], ['states', 'Biểu cảm & động tác']]],
-    ['Sản xuất', [['director', 'Đạo diễn AI'], ['export', 'Xuất bản']]],
+    ['Sản xuất', [['workshop', 'Xưởng AI (chat)'], ['director', 'Đạo diễn AI'], ['export', 'Xuất bản']]],
     ['Hệ thống', [['ai', 'Cài đặt AI'], ['gates', 'Cổng kiểm & hiệu năng'], ['update', 'Cập nhật']]]
   ];
   var route = { page: 'characters' };
@@ -788,6 +795,59 @@
     }
     paintGrid();
     play();
+  };
+
+
+  /* ============================================================ trang: Xưởng AI (chat) */
+  // AI chạy bằng LLM API của người dùng, nhưng CHỈ tạo/sửa qua bộ tool của nhà xưởng (cùng bộ với MCP)
+  // → cùng cổng kiểm, cùng chuẩn với mọi asset khác. Lịch sử chat giữ trong trình duyệt này.
+  var chatLog = [];
+  PAGES.workshop = function () {
+    crumbs([{ t: 'Xưởng AI (chat)' }]);
+    var box = h('div', { class: 'stack', style: 'max-height:62vh;overflow:auto;padding:12px' });
+    var input = h('textarea', { rows: 3, placeholder: 'Ví dụ: Vẽ một chiếc nón lá (có bản 45°), rồi tạo nhân vật "Tiểu nhị" đội nón lá, áo bào nâu, đang chạy bưng trà.', style: 'width:100%' });
+    var send = h('button', { class: 'btn primary', onclick: go1 }, 'Gửi');
+    var clearB = h('button', { class: 'btn sm', onclick: function () { chatLog = []; paint(); } }, 'Xoá cuộc trò chuyện');
+    var status = h('span', { class: 'note' });
+    function bubble(m) {
+      var mine = m.role === 'user';
+      var el = h('div', { class: 'panel', style: 'padding:10px 12px;max-width:86%;' + (mine ? 'margin-left:auto;background:var(--accent-soft)' : '') },
+        h('div', { style: 'white-space:pre-wrap', text: m.content || '' }));
+      if (m.log && m.log.length) el.appendChild(h('div', { class: 'row', style: 'margin-top:6px;gap:4px' }, m.log.map(function (l) {
+        return h('span', { class: 'tag', title: l.summary, style: l.ok ? '' : 'border-color:var(--danger);color:var(--danger)', text: (l.ok ? '✓ ' : '✗ ') + l.tool });
+      })));
+      if (m.renders && m.renders.length) el.appendChild(h('div', { class: 'row', style: 'margin-top:8px' }, m.renders.map(function (r) {
+        return h('img', { src: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(r.svg), alt: r.tool, style: 'max-width:' + (r.tool === 'preview_part' ? '100%' : '180px') + ';background:#fff;border-radius:6px' });
+      })));
+      return el;
+    }
+    function paint() {
+      clear(box);
+      if (!chatLog.length) box.appendChild(h('div', { class: 'note', text: 'AI ở đây dùng đúng bộ tool của nhà xưởng (giống agent nối qua MCP): tra kho, xem chuẩn linh kiện, soát trên ma-nơ-canh, lưu qua cổng kiểm. Nó không tự ghi được gì ngoài các tool đó.' }));
+      chatLog.forEach(function (m) { box.appendChild(bubble(m)); });
+      box.scrollTop = box.scrollHeight;
+    }
+    function go1() {
+      var t = input.value.trim();
+      if (!t || send.disabled) return;
+      chatLog.push({ role: 'user', content: t }); input.value = ''; paint();
+      send.disabled = true; status.textContent = 'AI đang làm (gọi tool của nhà xưởng)…';
+      Store.api('POST', 'api/ai/agent', { messages: chatLog.map(function (m) { return { role: m.role, content: m.content }; }) }).then(function (r) {
+        chatLog.push({ role: 'assistant', content: r.reply, log: r.log, renders: r.renders });
+        status.textContent = r.rounds + ' lượt · ' + r.model + ' · ' + (r.usage.prompt + r.usage.completion) + ' token';
+        // linh kiện / nhân vật mới: nạp lại để Studio thấy ngay
+        return Store.api('GET', 'api/parts').then(function (ps) { ps.forEach(function (d) { GC.registerDataPart(MY_PACK, d); }); return Store.api('GET', 'api/assets'); })
+          .then(function (as) { as.forEach(function (a) { GC.registerAsset(a.pack, a); }); });
+      }).catch(function (e) { chatLog.push({ role: 'assistant', content: 'Lỗi: ' + e.message }); status.textContent = ''; })
+        .then(function () { send.disabled = false; paint(); });
+    }
+    input.addEventListener('keydown', function (e) { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) go1(); });
+    var off = Store.mode !== 'server';
+    $('view').appendChild(h('div', { class: 'stack' },
+      h('div', { class: 'panel' }, h('h3', null, 'Xưởng AI', h('span', { class: 'r note', text: 'cùng bộ tool + cùng cổng kiểm với agent MCP · model: Cài đặt AI' })),
+        off ? h('div', { class: 'pad note', text: 'Cần chạy bản cài trên máy (server) và nhập LLM API key ở Cài đặt AI.' }) : box,
+        off ? null : h('div', { class: 'pad stack' }, input, h('div', { class: 'row' }, send, clearB, status, h('span', { class: 'note', text: 'Ctrl+Enter để gửi' }))))));
+    paint();
   };
 
   /* ============================================================ trang: Đạo diễn AI */

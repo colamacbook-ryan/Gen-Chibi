@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.3.0 — Tạo linh kiện qua MCP + một cổng ghi duy nhất cho mọi agent
+- **Linh kiện dạng dữ liệu**: agent/người dùng tạo linh kiện bằng SVG thuộc tập con an toàn (path, circle, ellipse, rect, line, polyline, polygon, g), màu là hex hoặc token bảng màu `{robe}`. Engine đọc rồi dựng lại SVG — chặn script, on*, url(), style, href, image, text, comment, entity (16 kiểu tấn công trong test). Bắt buộc khai báo 45°: `drawn` | `same` | `face45` | `body45`.
+- **3 tool MCP mới** (15 tool): `get_part_spec` (khung sườn dạng máy đọc + ví dụ), `preview_part` (bàn soát: ma-nơ-canh × 4 góc × 4 tình huống, một ảnh SVG), `save_part` (lưu vào "Của tôi", có phiên bản). Nhân vật dùng ngay qua `look.parts.<slot> = "local.my/<id>"`.
+- **Một cổng ghi duy nhất**: MCP, API HTTP của Studio (`PUT /api/assets`, `POST /api/parts`) và AI trong chatroom cùng đi qua `saveAssetChecked` / `savePartChecked`. Trước đây `PUT /api/assets` lưu thẳng không qua cổng kiểm — đã đóng.
+- **Luật chặn chung** `GC.blockingGates`: lỗi cấu trúc/an toàn chặn mọi trạng thái; dấu nhận diện bắt buộc khi chờ duyệt / đã duyệt.
+- **Xưởng AI (chat)** trong Studio: AI chạy bằng LLM API của người dùng nhưng chỉ làm việc qua đúng bộ tool MCP (trừ cập nhật/rollback app), cùng chỉ dẫn; hiện từng lượt gọi tool và ảnh bàn soát/dựng hình.
+- Cổng nhận diện so theo mã linh kiện (khớp cả `ci-hat` lẫn `local.my/ci-hat`).
+- Test mới: bộ lọc SVG (tấn công), luồng MCP tạo linh kiện → phối → dựng 45°, `tools/test-agent.mjs` (AI chatroom với LLM giả lập đi đúng cổng).
+
 ## v0.2.3 — Phủ đủ 45° + quy trình tạo lập linh kiện
 - **Toàn bộ 24 linh kiện chính thức có bản 45° vẽ thật** (thêm: tóc búi, tóc dựng, râu ba chòm, râu hổ, râu dài mảnh, khăn buộc trán, mũ vải mềm, mũ quan, áo bào, giáp trận, áo choàng, 3 mặt nạ kinh kịch) → cả 5 nhân vật tự đủ 45° mà không sửa nhân vật nào.
 - **Công cụ chiếu 45° dùng chung** `GC.helpers.face45` (chi tiết bám mặt, cùng phép chiếu với mắt/miệng của engine) và `body45` (chi tiết trên thân, dồn về đường giữa áo mới).

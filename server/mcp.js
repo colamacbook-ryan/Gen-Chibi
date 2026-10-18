@@ -8,12 +8,26 @@
 const PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const SERVER_INFO = { name: 'gen-chibi', title: 'gen-chibi — nhà máy nhân vật chibi bằng code' };
 const MY_PACK = 'local.my';
+const TMP_PACK = 'local.preview';
+// lớp nên dùng cho từng bộ phận (theo thư viện chính thức)
+const SLOT_LAYERS = {
+  head: ['head', 'ears', 'shade'], mask: ['mask'], hair: ['hairFront', 'hairBack'], beard: ['beard', 'mustache'], hat: ['hat', 'hairBack'],
+  outfit: ['body', 'hem', 'armL', 'foreL', 'armR', 'foreR'], back: ['backItem'], legwear: ['thighL', 'shinL', 'thighR', 'shinR'], shoes: ['footL', 'footR'],
+  heldL: ['heldL'], heldR: ['heldR']
+};
+const EXAMPLE_PART = {
+  id: 'non-la', slot: 'hat', label: 'Nón lá',
+  layers: { hat: '<path d="M38,78 L100,22 L162,78 C130,86 70,86 38,78 Z" fill="#e8d39a" stroke="{ink}" stroke-width="2.8" stroke-linejoin="round"/><path d="M100,22 L118,80 M100,22 L82,80" fill="none" stroke="#b89a55" stroke-width="1.4"/><path d="M60,80 C80,92 120,92 140,80" fill="none" stroke="{accent}" stroke-width="2.4"/>' },
+  views: { q45: { mode: 'drawn', layers: { hat: '<path d="M36,80 L92,22 L162,76 C128,86 68,88 36,80 Z" fill="#e8d39a" stroke="{ink}" stroke-width="2.8" stroke-linejoin="round"/><path d="M92,22 L104,82 M92,22 L72,82" fill="none" stroke="#b89a55" stroke-width="1.4"/><path d="M56,82 C76,92 112,92 134,82" fill="none" stroke="{accent}" stroke-width="2.4"/>' } } },
+  params: { height: { label: 'Độ cao nón', type: 'scaleY', min: 0.85, max: 1.2, def: 1, pivot: [100, 80] } }
+};
 
 const INSTRUCTIONS = [
   'gen-chibi dựng nhân vật chibi bằng code từ công thức JSON. Bạn (agent) viết công thức và kịch bản; hệ thống kiểm và dựng.',
   'Quy trình tạo nhân vật: get_catalog → (tuỳ chọn) get_character một nhân vật mẫu → viết asset mới → validate_character → sửa đến khi đạt → save_character → render_character để xem.',
   'Quy trình kịch bản: list_characters → get_director_schema → viết event JSON → validate_event → save_event. Owner mở Studio › Đạo diễn AI để diễn.',
   'Tư thế & hoạt động: mỗi cảnh có thể thêm activity (ăn, ngủ, chạy, tấn công…) hoặc tự ghép posture × move × motion, facing left/right. render_character nhận các khoá này để xem thử.',
+  'Tạo linh kiện (đúng quy trình nhà xưởng): get_part_spec → vẽ chính diện + chọn chế độ 45° → preview_part (soát trên ma-nơ-canh, sửa đến khi đạt) → save_part → dùng trong look.parts của nhân vật. Linh kiện là DỮ LIỆU SVG (tập con an toàn), không phải code.',
   'Phiên bản: get_app_version xem bản đang chạy và bản mới trên GitHub; update_app cập nhật ngay (tự rollback nếu bản mới lỗi); rollback_app quay về bản trước.',
   'Luật: chỉ dùng id có trong catalog; màu là mã hex; tham số nằm trong khoảng min–max; nhân vật mới lưu vào thư viện "local.my"; luôn khai báo identity.must (dấu nhận diện bắt buộc). Biểu cảm luôn khoa trương, hài, không máu.'
 ].join('\n');
@@ -29,6 +43,9 @@ const TOOLS = [
   { name: 'get_director_schema', title: 'Schema kịch bản', description: 'JSON Schema + hướng dẫn viết kịch bản sự kiện cho các diễn viên đã chọn.', inputSchema: obj({ cast: { type: 'array', items: { type: 'string' }, description: 'id diễn viên; bỏ trống = tất cả' } }), annotations: { readOnlyHint: true } },
   { name: 'validate_event', title: 'Kiểm kịch bản', description: 'Kiểm một kịch bản sự kiện theo schema (diễn viên, biểu cảm, động tác, hiệu ứng có trong kho).', inputSchema: obj({ event: { type: 'object' }, cast: { type: 'array', items: { type: 'string' } } }, ['event']), annotations: { readOnlyHint: true } },
   { name: 'save_event', title: 'Lưu kịch bản', description: 'Kiểm rồi lưu kịch bản để owner mở và diễn trong Studio.', inputSchema: obj({ event: { type: 'object' }, author: { type: 'string', description: 'tên agent viết kịch bản' } }, ['event']) },
+  { name: 'get_part_spec', title: 'Chuẩn tạo linh kiện', description: 'Khung sườn để tự vẽ linh kiện mới: khung 200×240, neo khuôn mặt/thân, lớp nên dùng cho từng bộ phận, token màu, tập SVG cho phép, quy tắc góc 45° (drawn | same | face45 | body45) và ví dụ hoàn chỉnh. Gọi trước khi vẽ.', inputSchema: obj({ slot: { type: 'string', description: 'bộ phận muốn vẽ (hat, outfit, hair…); bỏ trống = tất cả' } }), annotations: { readOnlyHint: true } },
+  { name: 'preview_part', title: 'Soát linh kiện', description: 'Kiểm linh kiện chưa lưu (SVG an toàn, lớp, tham số, 45°) rồi mặc lên ma-nơ-canh chuẩn: 4 góc nhìn × đứng / kinh ngạc / chạy / ngồi. Trả lỗi cụ thể hoặc một ảnh SVG bàn soát để xem và sửa.', inputSchema: obj({ part: { type: 'object', description: '{ id, slot, label, layers: { lớp: svg }, views: { q45: "same" | "face45" | "body45" | { mode: "drawn", layers } }, params? }' } }, ['part']), annotations: { readOnlyHint: true } },
+  { name: 'save_part', title: 'Lưu linh kiện', description: 'Kiểm rồi lưu linh kiện vào thư viện "Của tôi" (local.my), có phiên bản. Sau khi lưu, nhân vật dùng được qua look.parts.<slot> = "local.my/<id>".', inputSchema: obj({ part: { type: 'object' }, note: { type: 'string' } }, ['part']) },
   { name: 'get_app_version', title: 'Phiên bản ứng dụng', description: 'Phiên bản đang chạy, bản mới nhất trên GitHub Releases, ghi chú phát hành, bản có thể quay về và lịch sử cập nhật. check=false để không hỏi GitHub.', inputSchema: obj({ check: { type: 'boolean', description: 'hỏi GitHub bản mới nhất (mặc định true)' } }), annotations: { readOnlyHint: true, openWorldHint: true } },
   { name: 'update_app', title: 'Cập nhật ứng dụng', description: 'Tải bản mới nhất từ GitHub Releases (kiểm SHA-256, sao lưu dữ liệu) rồi khởi động lại. Bản mới lỗi thì launcher tự quay về bản cũ. Kết nối ngắt vài giây; gọi get_app_version sau ~15 giây để xác nhận. force=true áp cả bản từng bị bỏ qua vì lần trước chạy lỗi.', inputSchema: obj({ force: { type: 'boolean' } }), annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: true } },
   { name: 'rollback_app', title: 'Quay về bản trước', description: 'Chạy lại bản cài trước đó (sao lưu dữ liệu trước khi đổi). Cần confirm = "ROLLBACK".', inputSchema: obj({ confirm: { type: 'string', enum: ['ROLLBACK'] } }, ['confirm']), annotations: { destructiveHint: true } }
@@ -48,6 +65,8 @@ class MCP {
     this.system = system || null;
     this.restarting = false;
     if (!this.GC.PACKS[MY_PACK]) this.GC.pack({ id: MY_PACK, name: 'Của tôi', owner: 'Bạn', group: 'mine', visibility: 'private', license: 'Thuộc người tạo' }, () => {});
+    if (!this.GC.PACKS[TMP_PACK]) this.GC.pack({ id: TMP_PACK, name: 'Bàn soát (tạm)', owner: 'Bạn', group: 'mine', visibility: 'private', license: 'Thuộc người tạo' }, () => {});
+    (this.store.listParts ? this.store.listParts() : []).forEach(d => this.GC.registerDataPart(MY_PACK, d));
   }
   sync() { this.store.listAssets().forEach(a => this.GC.registerAsset(a.pack, clone(a))); }
 
@@ -131,13 +150,10 @@ class MCP {
         return json({ ok: g.every(x => x.ok), gates: g });
       }
       case 'save_character': {
-        let a; try { a = this.prepare(args.asset); } catch (e) { return toolError(e.message); }
-        const g = GC.gate(a, { poses: true });
-        const blocking = g.filter(x => !x.ok);
-        if (blocking.length) return Object.assign(json({ saved: false, gates: g }), { isError: true });
-        const rec = this.store.saveAsset(a.key, a, args.note || 'Lưu qua MCP');
-        GC.registerAsset(rec.pack, clone(rec));
-        return json({ saved: true, key: rec.key, version: rec.version, studio: 'Mở Studio › Nhân vật › ' + rec.name });
+        let r;
+        try { r = this.saveAssetChecked(args.asset, args.note || 'Lưu qua ' + (ctx && ctx.channel === 'ui' ? 'AI trong Studio' : 'MCP')); }
+        catch (e) { return e.gates ? Object.assign(json({ saved: false, blocking: e.blocking, gates: e.gates }), { isError: true }) : toolError(e.message); }
+        return json({ saved: true, key: r.key, version: r.version, status: r.status, studio: 'Mở Studio › Nhân vật › ' + r.name });
       }
       case 'render_character': {
         let a;
@@ -178,6 +194,28 @@ class MCP {
         return json({ saved: true, id: rec.id, studio: 'Mở Studio › Đạo diễn AI › Kịch bản đã lưu › ' + args.event.title });
       }
       case 'get_app_version': case 'update_app': case 'rollback_app': return this.appTool(name, args, ctx || {});
+      case 'get_part_spec': return json(this.partSpec(args.slot));
+      case 'preview_part': {
+        const c = GC.checkDataPart(args.part);
+        if (c.errors.length) return Object.assign(json({ ok: false, errors: c.errors, hint: 'Sửa đúng các lỗi trên rồi gọi lại preview_part. Chuẩn: get_part_spec.' }), { isError: true });
+        const r = GC.registerDataPart(TMP_PACK, c.def);
+        try {
+          const svg = this.bench(c.def.slot, TMP_PACK + '/' + c.def.id, c.def.label);
+          return {
+            content: [
+              { type: 'text', text: 'Đạt kiểm dữ liệu. Bàn soát: ma-nơ-canh × 4 góc nhìn (chính diện, 3/4, 45° trái, 45° phải) × đứng / kinh ngạc / chạy / ngồi. 45°: ' + c.def.views.q45.mode + '. Kiểm: mép khớp đầu/thân, 45° không lệch, màu theo token. Ổn thì save_part.' },
+              { type: 'resource', resource: { uri: 'genchibi://bench/' + c.def.slot + '/' + c.def.id + '.svg', mimeType: 'image/svg+xml', text: svg } }
+            ]
+          };
+        } finally { delete GC.LIB.parts[TMP_PACK + '/' + c.def.slot + ':' + c.def.id]; if (r && r.errors.length) { /* đã báo ở trên */ } }
+      }
+      case 'save_part': {
+        let rec;
+        try { rec = this.savePartChecked(args.part, args.note || 'Lưu qua MCP'); }
+        catch (e) { return Object.assign(json({ saved: false, errors: e.errors || [e.message] }), { isError: true }); }
+        return json({ saved: true, ref: MY_PACK + '/' + rec.id, slot: rec.slot, version: rec.version,
+          use: 'Trong công thức nhân vật: look.parts.' + rec.slot + ' = "' + MY_PACK + '/' + rec.id + '"', studio: 'Studio › Thư viện linh kiện › ' + rec.label + ' (bấm để soát)' });
+      }
       default: return null;
     }
   }
@@ -211,6 +249,74 @@ class MCP {
     if (up.busy) return toolError('Đang cập nhật, thử lại sau.');
     try { const r = up.rollback(); this.restarting = true; sys.restartSoon(); return json(r); }
     catch (e) { return toolError(e.message); }
+  }
+  /* ---- CỔNG GHI DUY NHẤT: MCP, HTTP (Studio) và AI trong chatroom đều ghi qua hai hàm này ---- */
+  saveAssetChecked(raw, note) {
+    const a = this.prepare(raw);
+    const gates = this.GC.gate(a, { poses: true });
+    const blocking = this.GC.blockingGates(gates, a.status);
+    if (blocking.length) throw Object.assign(new Error('Chưa đạt cổng kiểm: ' + blocking.map(g => g.label + (g.detail ? ' (' + g.detail + ')' : '')).join('; ')), { code: 422, gates, blocking: blocking.map(g => g.id) });
+    const rec = this.store.saveAsset(a.key, a, note);
+    this.GC.registerAsset(rec.pack, clone(rec));
+    return rec;
+  }
+  savePartChecked(part, note) {
+    const c = this.GC.checkDataPart(part);
+    if (c.errors.length) throw Object.assign(new Error('Linh kiện chưa đạt: ' + c.errors.slice(0, 6).join('; ')), { code: 422, errors: c.errors });
+    const rec = this.store.savePart(c.def, note);
+    this.GC.registerDataPart(MY_PACK, rec);
+    return rec;
+  }
+  // Tool cho AI trong chatroom (LLM API): đúng bộ tool MCP, trừ tool hệ thống (cập nhật/rollback app)
+  toolsFor(channel) { return TOOLS.filter(t => channel !== 'ui' || !/^(update_app|rollback_app)$/.test(t.name)); }
+  partSpec(slot) {
+    const GC = this.GC, A = GC.RIG.anchors;
+    const slots = Object.keys(GC.LIB.slots).filter(k => !slot || k === slot).map(k => ({ slot: k, label: GC.LIB.slots[k].label, layers: SLOT_LAYERS[k] || [],
+      examples: GC.partsOfSlot(k).filter(p => p.id !== 'none' && p.pack !== TMP_PACK).slice(0, 6).map(p => p.pack + '/' + p.id) }));
+    return {
+      standard: 'docs/QUY-TRINH-LINH-KIEN.md — nhân vật = phối linh kiện; linh kiện tốt dùng cho hàng trăm nhân vật ở mọi biểu cảm, tư thế, góc nhìn.',
+      canvas: { box: GC.RIG.box, ground: 228, centerX: 100, note: 'toạ độ tư thế nghỉ, đơn vị SVG; đầu chiếm khoảng x 50–150, y 54–150; thân trên y 146–194 (thắt lưng), vạt 188–219; chân y 198–228' },
+      anchors: A,
+      joints: Object.keys(GC.RIG.joints).reduce((m, j) => { m[j] = { parent: GC.RIG.joints[j].parent, pivot: GC.RIG.joints[j].pivot }; return m; }, {}),
+      shapes: { headRound: 'M50,100 C50,68 72,54 100,54 C128,54 150,68 150,100 C150,130 128,147 100,147 C72,147 50,130 50,100 Z', torsoUp: GC.helpers.TORSO_UP, hem: GC.helpers.HEM },
+      slots,
+      paint: { tokens: Object.keys(GC.LIB.defaults).map(k => '{' + k + '}').concat('{ink}'), rule: 'fill/stroke chỉ nhận mã hex (#rrggbb), "none" hoặc token {robe}… — token đổi theo bảng màu của từng nhân vật nên linh kiện dùng chung được' },
+      style: { outline: 'stroke="{ink}" stroke-width 2.6–3.2, stroke-linejoin="round"', inner: 'chi tiết 1.4–2', shade: 'bóng: fill="#000" fill-opacity 0.08–0.14' },
+      svg: { tags: ['g', 'path', 'circle', 'ellipse', 'rect', 'line', 'polyline', 'polygon'], attributes: ['d', 'points', 'cx', 'cy', 'r', 'rx', 'ry', 'x', 'y', 'width', 'height', 'x1', 'y1', 'x2', 'y2', 'fill', 'stroke', 'stroke-width', 'opacity', 'fill-opacity', 'stroke-opacity', 'stroke-linecap', 'stroke-linejoin', 'fill-rule', 'transform', 'class'],
+        rules: 'thuộc tính dùng nháy kép; thẻ không phải g phải tự đóng />; không text, image, style, script, url(), on*; mỗi lớp ≤ 20 000 ký tự' },
+      views: {
+        q45: 'BẮT BUỘC. Bản chuẩn 45° quay mặt sang TRÁI màn hình (phía gáy ở bên phải); 45° phải = engine lật gương.',
+        modes: { drawn: 'tự vẽ lại lớp cho 45° (tóc, mũ, khăn, giày — vật có dáng riêng): chi tiết giữa dịch trái, phía gáy (phải) lộ khối sau, mặt bên tối hơn',
+          face45: 'chi tiết bám lên mặt (râu, ria, hoa văn mặt nạ): engine chiếu theo mắt gần/xa', body45: 'chi tiết trên thân (cổ áo, đai, giáp): dồn về đường giữa áo x = 88',
+          same: 'không đổi khi quay (ống quần, đồ tròn đều)' },
+        engineHandles: 'vị trí mắt/mày/miệng 45°, tay xa ra sau thân, lật gương, tư thế × di chuyển × động tác — linh kiện KHÔNG tự xử lý'
+      },
+      params: 'tuỳ chọn, tối đa 6: { label, type: scale|scaleX|scaleY|dx|dy, min, max, def, pivot: [x, y] }',
+      example: EXAMPLE_PART
+    };
+  }
+  // Bàn soát: một SVG gộp — ma-nơ-canh mặc linh kiện × 4 góc nhìn × 4 tình huống
+  bench(slot, ref, label) {
+    const GC = this.GC;
+    const m = { id: 'mannequin', name: 'Ma-nơ-canh', pack: 'afi.core', key: 'bench/' + ref.replace(/[^a-z0-9]/gi, ''), version: 1, kind: 'character',
+      look: { eyes: 'round', brows: 'normal', parts: { [slot]: ref }, params: {}, palette: {} }, expressions: {}, identity: { must: [] } };
+    if (slot === 'hair') m.look.parts.hat = 'none';
+    const views = [['front', 'Chính diện'], ['left', '3/4 trái'], ['left45', '45° trái'], ['right45', '45° phải']];
+    const cases = [['normal', null, 'Đứng'], ['shock', null, 'Kinh ngạc'], ['vow', 'run', 'Chạy'], ['normal', 'sit-floor', 'Ngồi']];
+    const W = 150, H = 156, L = 70, T = 26;
+    let out = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + (L + views.length * W) + ' ' + (T + cases.length * H + 8) + '" font-family="Arial, sans-serif" font-size="12">' +
+      '<rect width="100%" height="100%" fill="#f6f4ef"/>';
+    views.forEach((v, i) => { out += '<text x="' + (L + i * W + W / 2) + '" y="17" text-anchor="middle" fill="#555">' + v[1] + '</text>'; });
+    cases.forEach((c, r) => {
+      out += '<text x="8" y="' + (T + r * H + H / 2) + '" fill="#555">' + c[2] + '</text>';
+      views.forEach((v, i) => {
+        const dir = { view: v[0] }; if (c[1]) dir.activity = c[1];
+        const one = GC.svgString(m, c[0], { director: dir });
+        out += '<rect x="' + (L + i * W + 2) + '" y="' + (T + r * H + 2) + '" width="' + (W - 4) + '" height="' + (H - 4) + '" rx="6" fill="#fff"/>' +
+          one.replace('<svg xmlns="http://www.w3.org/2000/svg" viewBox=', '<svg x="' + (L + i * W + 2) + '" y="' + (T + r * H + 2) + '" width="' + (W - 4) + '" height="' + (H - 4) + '" viewBox=');
+      });
+    });
+    return out + '</svg>';
   }
   castOf(ids) {
     const all = this.GC.assets();
@@ -255,4 +361,4 @@ class MCP {
   }
 }
 
-module.exports = { MCP, TOOLS };
+module.exports = { MCP, TOOLS, INSTRUCTIONS };

@@ -20,7 +20,8 @@ class Store {
     this.verDir = path.join(dataDir, 'versions');
     this.trashDir = path.join(dataDir, 'trash');
     this.eventDir = path.join(dataDir, 'events');
-    [this.assetDir, this.verDir, this.trashDir, this.eventDir].forEach(d => fs.mkdirSync(d, { recursive: true }));
+    this.partDir = path.join(dataDir, 'parts');
+    [this.assetDir, this.verDir, this.trashDir, this.eventDir, this.partDir].forEach(d => fs.mkdirSync(d, { recursive: true }));
   }
   fileOf(key) { return key.replace('/', '~'); }
   listAssets() {
@@ -54,6 +55,19 @@ class Store {
     if (!fs.existsSync(file)) return false;
     fs.renameSync(file, path.join(this.trashDir, this.fileOf(key) + '-' + Date.now() + '.json'));
     return true;
+  }
+  // linh kiện dữ liệu (đã qua engine.checkDataPart): <slot>~<id>.json, giữ các bản cũ trong versions/parts
+  listParts() {
+    return fs.readdirSync(this.partDir).filter(f => f.endsWith('.json')).map(f => readJSON(path.join(this.partDir, f), null)).filter(Boolean);
+  }
+  savePart(def, note) {
+    if (!/^[a-zA-Z]{1,12}$/.test(def.slot) || !/^[a-z0-9][a-z0-9-]{1,39}$/.test(def.id)) throw Object.assign(new Error('slot/id không hợp lệ'), { code: 400 });
+    const name = def.slot + '~' + def.id, file = path.join(this.partDir, name + '.json');
+    const old = readJSON(file, null);
+    const rec = Object.assign({}, def, { version: old ? (old.version || 1) + 1 : 1, savedAt: new Date().toISOString(), note: String(note || '').slice(0, 200) });
+    if (old) writeJSON(path.join(this.verDir, 'parts~' + name, old.version + '.json'), old);
+    writeJSON(file, rec);
+    return rec;
   }
   listEvents() {
     return fs.readdirSync(this.eventDir).filter(f => f.endsWith('.json')).map(f => {
