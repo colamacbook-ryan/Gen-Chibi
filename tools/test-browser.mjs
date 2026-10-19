@@ -1,5 +1,5 @@
 // Kiểm thử trong trình duyệt (chạy cục bộ, cần Playwright): mọi lớp gắn vào đầu phải đi cùng đầu.
-// Dùng: node tools/test-browser.mjs   (tự dựng server tạm ở cổng 7496) · GC_ONLY=voice node tools/test-browser.mjs → chỉ nhóm giọng AI (cổng 7660)
+// Dùng: node tools/test-browser.mjs   (tự dựng server tạm ở cổng 7496) · GC_ONLY=voice node tools/test-browser.mjs → chỉ nhóm giọng AI (cổng 7660) · GC_ONLY=lib → chỉ Thư viện Âm thanh / Giọng (cổng 7662)
 import { createRequire } from 'module';
 import { spawn, execFileSync } from 'child_process';
 import { mkdtempSync } from 'fs';
@@ -103,7 +103,7 @@ if (!ONLY) {
       if (zone === 'lib' && /zone-lib/.test(cls)) {
         // Thư viện không bày đồ của khung: bản cài mới thì trống (có lời dẫn); có asset đã tạo thì có thẻ + khu Dùng
         const cards = await q.$$('.libcard'), use = await q.$$('.usebar'), code = await q.$('textarea.code'), empty = await q.$('.lib-empty');
-        if (!empty && (!cards.length || use.length < 2 || !code)) throw new Error('thư viện "' + label + '" thiếu thẻ hoặc khu Dùng');
+        if (!empty && !/^(Âm thanh|Giọng)$/.test(label) && (!cards.length || use.length < 2 || !code)) throw new Error('thư viện "' + label + '" thiếu thẻ hoặc khu Dùng');   // Âm thanh / Giọng là bảng Data Console, có test riêng (nhóm lib)
         if (cards.length && await q.$('.libcard img[alt="Ma-nơ-canh"]')) throw new Error('thư viện "' + label + '" bày đồ của khung');
         if (code) { const txt = await code.inputValue(); if (!/\//.test(txt)) throw new Error('thư viện "' + label + '": mã tham chiếu rỗng'); }
       }
@@ -941,6 +941,350 @@ if (!ONLY) {
     if (errsAll.length) throw new Error('lỗi trang: ' + errsAll.slice(0, 3).join(' | '));
   } catch (e) { fail = 1; console.log('  ✗ lời thoại chuyên nghiệp:', e.message); }
   finally { await b9.close(); srv9.kill(); }
+}
+// Thư viện › Âm thanh + Thư viện › Giọng (v0.18, Data Console STD-07). TUYỆT ĐỐI không gọi Google / mạng thật: api/voice* và api/sound-packs bị chặn và trả lời giả
+// bằng máy chủ trong bộ nhớ; mọi địa chỉ ngoài máy bị chặn và đếm. GC_ONLY=lib → chỉ nhóm này. GC_SHOTS=<thư mục> → chụp màn hình 1440×900 (tên lib-*), GC_SCHEME=light|dark.
+if (!ONLY || ONLY === 'lib') {
+  const fs = require('fs'), crypto = require('crypto'), GV = require('../engine/voices.js'), SND = require('../engine/sounds.js'), TQ = JSON.parse(fs.readFileSync(path.join(ROOT, 'kinds/sound/tq-am.json'), 'utf8'));
+  const home11 = mkdtempSync(path.join(tmpdir(), 'gc-')), PORT11 = 7662, URL11 = 'http://localhost:' + PORT11 + '/', SHOTS = process.env.GC_SHOTS || '', SCHEME = process.env.GC_SCHEME === 'light' ? 'light' : 'dark';
+  const srv11 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home11, GC_PORT: String(PORT11), GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
+  await new Promise(r => setTimeout(r, 1200));
+  const b11 = await pw.chromium.launch({ args: ['--allow-file-access-from-files'] });
+  const ctx11 = await b11.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true, colorScheme: SCHEME });
+  await ctx11.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://localhost:' + PORT11 });
+  const PROJ = 'mau-tam-quoc', WORK = 'tq-vuon-dao-xich-bich';
+  const wav = (sec, hz) => { const rate = 24000, n = Math.round(rate * sec), b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(rate, 24); b.writeUInt32LE(rate * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
+    for (let i = 0; i < n; i++) b.writeInt16LE(Math.round(9000 * Math.sin(2 * Math.PI * hz * i / rate) * Math.min(1, i / 600, (n - i) / 600)), 44 + i * 2); return b; };
+  const WAV = wav(0.6, 220), tomorrow = () => { const d = new Date(); d.setHours(24, 0, 0, 0); return d.toISOString(); };
+  // ---- "máy chủ" giả: giọng AI Google + gói âm ----
+  const M = { hasKey: false, off: false, today: 3, fresh: 0, budget: Infinity, designs: {}, ids: new Set(), haveRoles: {}, dry404: false, lines: [], casts: [], designCalls: [], leaks: [],
+    packs: [TQ], sound404: false, soundPosts: [], dailyCap: 200 };
+  const cfgOf = () => ({ enabled: M.hasKey && !M.off, off: M.off, model: 'gemini-3.8-flash-tts', hasKey: M.hasKey, keySource: M.hasKey ? 'voice' : '', blocked: [], today: M.today, cached: M.ids.size, keyUrl: 'https://aistudio.google.com/apikey',
+    roles: GV.roleList(), langs: GV.langList(), designs: M.designs, dailyCap: M.dailyCap, bad: [] });
+  // giọng AI mà "server" chọn cho một vai: đã thiết kế → giọng thiết kế; tiếng Việt → giọng dựng sẵn; ngôn ngữ khác → giọng thư viện theo mã vùng (en-US ≠ en-GB)
+  const castVoice = (role, lang, accent) => {
+    const d = M.designs[role + '|' + lang + '|' + accent];
+    if (d) return { voice: d.voice, source: 'design', label: role + ' (thiết kế)' };
+    const c = GV.cast({ id: role, voice: { role } }, { lang, accent });
+    return lang === 'vi' ? { voice: c.ai, source: 'prebuilt', label: c.ai + ' (có sẵn)' } : { voice: 'lib-' + c.libLang + '-' + c.ai.toLowerCase(), source: 'library', label: 'Thư viện ' + c.libLang };
+  };
+  const idOf = b => crypto.createHash('sha1').update(JSON.stringify([b.voice, b.role, b.lang, b.accent, b.state, b.bubble, b.text])).digest('hex');
+  await ctx11.route(/\/api\/voice(\/|\?|$)/, async route => {
+    const req = route.request(), u = new URL(req.url()), m = req.method(), p = u.pathname.replace(/^\/api\/voice/, '') || '/', body = req.postData() ? JSON.parse(req.postData()) : {};
+    const json = (status, o) => route.fulfill({ status, contentType: 'application/json; charset=utf-8', body: JSON.stringify(o) });
+    if (p === '/' && m === 'GET') return json(200, cfgOf());
+    if (p === '/cast' && m === 'POST') { M.casts.push(body); const out = {}; (body.actors || []).forEach(a => { out[a.id] = castVoice(a.role, body.lang, body.accent); }); return json(200, { lang: body.lang, accent: body.accent, cast: out }); }
+    if (p === '/design' && m === 'POST') {
+      M.designCalls.push(body);
+      if (!GV.canDesign(body.role)) return json(400, { error: 'Google chặn thiết kế giọng trẻ em (chính sách an toàn)' });
+      const voice = 'voice_gia_' + body.role + '_' + body.accent, id = crypto.createHash('sha1').update('design' + voice).digest('hex');
+      M.designs[body.role + '|' + body.lang + '|' + body.accent] = { voice, at: new Date().toISOString(), preview: 'api/voice/clip/' + id + '.wav' }; M.ids.add(id); M.today++;
+      return json(200, { voice, role: body.role, lang: body.lang, accent: body.accent, preview: 'api/voice/clip/' + id + '.wav' });
+    }
+    if (p === '/line' && m === 'POST') {
+      M.lines.push(body);
+      const id = idOf(body);
+      if (M.ids.has(id) || (body.dry && M.haveRoles[body.role + '|' + body.lang])) return json(200, { id, cached: true, seconds: 0.6, voice: body.voice, url: 'api/voice/clip/' + id + '.wav' });
+      if (body.dry) return M.dry404 ? json(404, { error: 'Câu này chưa đọc bằng giọng AI' }) : json(200, { found: false });   // server thật: dry chưa có clip = 200 { found: false }
+      if (!M.hasKey || M.off) return json(409, { error: 'Giọng AI đang tắt (Cài đặt AI › Giọng AI)' });
+      if (M.fresh >= M.budget) return json(429, { error: 'Hết lượt đọc giọng hôm nay', retryAt: new Date(Date.now() + 3 * 3600e3).toISOString() });
+      M.fresh++; M.today++; M.ids.add(id);
+      return json(200, { id, cached: false, seconds: 0.6, voice: body.voice, url: 'api/voice/clip/' + id + '.wav' });
+    }
+    if (p.startsWith('/clip/') && m === 'GET') return route.fulfill({ status: 200, contentType: 'audio/wav', body: WAV });
+    return json(404, { error: 'mock: chưa có ' + m + ' ' + p });
+  });
+  await ctx11.route(/\/api\/sound-packs$/, async route => {
+    const req = route.request(), m = req.method(), body = req.postData() ? JSON.parse(req.postData()) : {};
+    const json = (status, o) => route.fulfill({ status, contentType: 'application/json; charset=utf-8', body: JSON.stringify(o) });
+    if (M.sound404) return json(404, { error: 'không tìm thấy' });
+    if (m === 'GET') return json(200, M.packs);
+    M.soundPosts.push(body);
+    const pk = body.pack || {};
+    if (pk.id === 'server-chan') return json(422, { error: 'Gói âm chưa đạt: sounds.chan.layers[1].peak: máy chủ chặn (giả)', errors: ['sounds.chan.layers[1].peak: máy chủ chặn (giả)'] });
+    const c = SND.validateSoundPack(pk);
+    if (c.errors.length) return json(422, { error: 'Gói âm chưa đạt: ' + c.errors[0], errors: c.errors });
+    const rec = Object.assign({}, pk, { version: 1 }); M.packs = M.packs.filter(x => x.id !== rec.id).concat(rec);
+    return json(200, Object.assign({}, rec, { warnings: [] }));
+  });
+  // tác phẩm Tam Quốc có giọng đã chốt cho 2 nhân vật (work.voices) — server thật chốt khi Lồng tiếng / cast
+  await ctx11.route(new RegExp('/api/works/' + WORK + '$'), async route => {
+    const r = await route.fetch(); let j; try { j = await r.json(); } catch (e) { return route.fulfill({ response: r }); }
+    j.voices = { 'vi|bac': { 'tq-quan-vu': 'Alnilam', 'tq-luu-bi': 'Schedar' } };
+    return route.fulfill({ response: r, json: j });
+  });
+  await ctx11.route(u => !/^(http:\/\/localhost:|file:|data:|blob:|about:)/.test(u.href), route => { M.leaks.push(route.request().url()); return route.abort(); });
+  const errs11 = [], sleep = ms => new Promise(r => setTimeout(r, ms)), must = (c, msg) => { if (!c) throw new Error(msg); };
+  const SPY = `(() => { const A = window.GenChibi.audio; if (A.__spy) { A.__spy.sfx.length = 0; A.__spy.say.length = 0; return; } A.__spy = { sfx: [], say: [] }; const so = A.sfx;
+    A.sfx = function (n, o) { A.__spy.sfx.push({ name: n, delay: o && o.delay }); return so.apply(A, arguments); };
+    A.say = function (text, voice, hooks) { const c = hooks && hooks.clip; A.__spy.say.push({ text, lang: voice && voice.lang, role: voice && voice.role, gender: voice && voice.gender, clip: c ? 'buf:' + (c.byteLength || 0) : null }); return new Promise(r => setTimeout(r, 60)); }; })()`;
+  const SPY_T = `(() => { window.__toasts = []; new MutationObserver(() => { const t = document.getElementById('toast'); if (t && !t.hidden) window.__toasts.push(t.textContent); }).observe(document.getElementById('toast'), { childList: true, characterData: true, subtree: true, attributes: true }); })()`;
+  let q = null;
+  const open = async route => {   // mở Thư viện ở một trang con (đặt tuyến vào localStorage rồi nạp lại)
+    q = await ctx11.newPage(); q.on('pageerror', e => errs11.push(e.message)); q.on('dialog', d => d.accept());
+    await q.goto(URL11 + 'VERSION');   // cùng nguồn gốc, chưa chạy Studio: đặt tuyến vào localStorage rồi mới mở (một lần nạp duy nhất)
+    await q.evaluate(([r, pj]) => { localStorage.setItem('gc-route-thu-vien', JSON.stringify(r)); localStorage.setItem('gc-last-project', pj); }, [route, PROJ]);
+    await q.goto(URL11 + 'thu-vien'); await q.waitForFunction(() => window.GenChibi && /^v\d/.test(document.getElementById('verChip').textContent), null, { timeout: 8000 });
+    await q.evaluate(SPY); await q.evaluate(SPY_T); return q;
+  };
+  const shot = async (name) => { if (!SHOTS) return; fs.mkdirSync(SHOTS, { recursive: true }); await q.waitForTimeout(250); await q.screenshot({ path: path.join(SHOTS, 'lib-' + name + (SCHEME === 'light' ? '-light' : '') + '.png') }); };
+  const rowsOf = () => q.$$eval('.lc-t tbody tr[data-id]', es => es.map(e => e.getAttribute('data-id')));
+  const selOf = () => q.$eval('.lc-t tbody tr[aria-selected="true"]', e => e.getAttribute('data-id')).catch(() => '');
+  const spy = (k) => q.evaluate(k => window.GenChibi.audio.__spy[k].slice(), k);
+  const toasts = () => q.evaluate(() => window.__toasts.slice());
+  const waitRows = async n => { await q.waitForFunction(n => document.querySelectorAll('.lc-t tbody tr[data-id]').length === n, n, { timeout: 8000 }); };
+  const pollq = async (fn, what, ms) => { const t = Date.now(); for (;;) { let v = null; try { v = await fn(); } catch (e) { /* chưa có */ } if (v) return v; if (Date.now() - t > (ms || 6000)) throw new Error('hết giờ chờ: ' + what); await sleep(80); } };
+  const tab = async id => { await q.click('.lc-tabs button[data-tab="' + id + '"]'); await q.waitForSelector('.lc-tabs button[data-tab="' + id + '"][aria-selected="true"]'); };
+  try {
+    // ---- 0) dựng dữ liệu: bộ mẫu Tam Quốc vào thư viện (nhân vật có vai giọng + tác phẩm); gói âm tq-am do máy chủ giả trả ----
+    const boot = await ctx11.newPage(); boot.on('pageerror', e => errs11.push(e.message));
+    await boot.goto(URL11 + 'thu-vien'); await boot.waitForFunction(() => /^v\d/.test(document.getElementById('verChip').textContent), null, { timeout: 8000 });
+    await boot.evaluate(async () => {
+      const b = await fetch('studio/mau/tam-quoc.json').then(r => r.json());
+      const r = await fetch('api/projects/import', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify({ bundle: b, overwrite: true }) });
+      if (!r.ok) throw new Error('không nhập được bộ mẫu: ' + r.status + ' ' + (await r.text()).slice(0, 200));
+    });
+    await boot.close();
+
+    /* ================= A. THƯ VIỆN › ÂM THANH ================= */
+    await open({ page: 'lib-sounds' });
+    await q.waitForSelector('.lc-t tbody tr[data-id]');
+    // A1) bảng đủ 62 âm khung + 7 âm của mẫu Tam Quốc; 8 nhóm có số đếm; ID = tên âm; nav có số đếm; chữ cột A B C…
+    await waitRows(69);
+    const ids = await rowsOf();
+    must(new Set(ids).size === 69 && ids.includes('hit') && ids.includes('trong-tran') && ids.includes('ban-ten'), 'bảng âm thiếu / trùng ID: ' + ids.length);
+    must(SND.names().length === 62 && SND.list().filter(x => x.pack === 'gen.am').length === 62 && Object.keys(TQ.sounds).length === 7, 'dữ liệu gốc không còn 62 + 7 âm');
+    const chips = await q.$$eval('.lc-cats button', es => es.map(e => [e.getAttribute('data-cat'), +e.querySelector('.n').textContent]));
+    must(chips.length === 9 && chips[0][0] === '' && chips[0][1] === 69 && chips.slice(1).reduce((a, c) => a + c[1], 0) === 69, 'chip nhóm: ' + JSON.stringify(chips));
+    must((await q.textContent('.nav-item[aria-current="page"]')).includes('69'), 'nav Âm thanh thiếu số đếm 69');
+    must((await q.$$eval('.lc-t tr.letters th', es => es.map(e => e.textContent).join(''))).startsWith('ABCDEFGHIJ'), 'thiếu dải chữ cột A…J');
+    must(/69 âm · 8 nhóm/.test(await q.textContent('.lc-foot')), 'footer: ' + await q.textContent('.lc-foot'));
+    must(await q.$eval('.lc-insp', e => Math.round(e.getBoundingClientRect().width)) === 400, 'inspector phải rộng 400 px');
+    // A2) lọc theo nhóm · tìm không dấu · thẻ · gói · dự án
+    await q.click('.lc-cats button[data-cat="hai"]');
+    const nHai = await q.evaluate(() => window.GenChibi.sounds.list({ cat: 'hai' }).length);   // trong trang: gồm cả âm gói Tam Quốc
+    await waitRows(nHai);
+    must(await q.evaluate(ids => ids.every(id => window.GenChibi.sounds.get(id).cat === 'hai'), await rowsOf()), 'lọc nhóm "Hài hước" lẫn nhóm khác');
+    await q.click('.lc-cats button[data-cat="hai"]'); await waitRows(69);   // bấm lại = bỏ lọc
+    await q.fill('#lsQ', 'dau'); const nDau = await q.evaluate(() => window.GenChibi.sounds.list({ q: 'dau' }).length);
+    await waitRows(nDau); must(nDau >= 3, 'tìm "dau" quá ít kết quả: ' + nDau);
+    const dauIds = await rowsOf();
+    await q.fill('#lsQ', 'đầu'); await waitRows(nDau);   // có dấu / không dấu cho cùng kết quả
+    must((await rowsOf()).join() === dauIds.join(), 'tìm "đầu" khác "dau"');
+    await q.fill('#lsQ', 'trong tran'); await waitRows(await q.evaluate(() => window.GenChibi.sounds.list({ q: 'trong tran' }).length)); must((await rowsOf())[0] === 'trong-tran', 'tìm "trong tran" phải đưa trong-tran (khớp tên) lên đầu');
+    await q.fill('#lsQ', 'khongcogiha'); await q.waitForSelector('.lc-t td.lc-empty'); must((await rowsOf()).length === 0, 'tìm vô nghĩa vẫn ra hàng');
+    await q.fill('#lsQ', ''); await waitRows(69);
+    await q.fill('.lc-bar input[list="lsTags"]', 'trống'); await q.press('.lc-bar input[list="lsTags"]', 'Enter');
+    const nTag = await q.evaluate(() => window.GenChibi.sounds.list({ tag: 'trống' }).length); await waitRows(nTag);
+    must((await rowsOf()).includes('trong-tran') && await q.$('.lc-chipx:not([hidden])'), 'lọc thẻ "trống" hỏng');
+    await q.click('.lc-chipx button'); await waitRows(69);
+    await q.selectOption('.lc-bar select[aria-label="Lọc theo gói"]', 'tq-am'); await waitRows(7);
+    must((await rowsOf()).sort().join() === Object.keys(TQ.sounds).sort().join(), 'lọc gói tq-am không đủ 7 âm');
+    await q.selectOption('.lc-bar select[aria-label="Lọc theo gói"]', '');
+    await q.selectOption('.lc-bar select[aria-label="Lọc theo dự án"]', '-'); await waitRows(62);   // chỉ khung + gói chung: không có âm của Tam Quốc
+    must(!(await rowsOf()).includes('trong-tran'), 'dự án "không" vẫn thấy âm của gói Tam Quốc');
+    await q.selectOption('.lc-bar select[aria-label="Lọc theo dự án"]', PROJ); await waitRows(69);
+    await q.selectOption('.lc-bar select[aria-label="Lọc theo dự án"]', '');
+    // sắp xếp bấm tiêu đề cột: Giây tăng dần
+    await q.click('.lc-t th[data-col="4"] button'); const sorted = await q.$$eval('.lc-t tbody tr[data-id] td:nth-child(5)', es => es.map(e => +e.textContent.replace(',', '.')));
+    must(sorted.every((v, i) => !i || sorted[i - 1] <= v), 'sắp xếp cột Giây sai'); await q.click('.lc-t th[data-col="4"] button'); await q.click('.lc-t th[data-col="4"] button');   // desc rồi bỏ sắp xếp
+    console.log('  ✓ Thư viện › Âm thanh: bảng 69 âm (62 khung + 7 Tam Quốc), 8 nhóm có số đếm, inspector 400 px · lọc nhóm / thẻ / gói / dự án · tìm không dấu ("dau" = "đầu" = ' + nDau + ' âm) · sắp xếp cột');
+
+    // A3) ▶ trên hàng gọi sfx đúng tên; bàn phím ↑↓ / Space; chọn hàng → inspector
+    await q.click('[data-play="bonk"]');
+    must((await spy('sfx')).map(s => s.name).join() === 'bonk', 'bấm ▶ hàng bonk không gọi sfx("bonk"): ' + JSON.stringify(await spy('sfx')));
+    must(await selOf() === 'bonk' && /bonk/.test(await q.textContent('.lc-insp h3')), 'bấm ▶ phải chọn hàng + mở inspector');
+    await q.focus('.lc-t'); await q.keyboard.press('ArrowDown');
+    const next = ids[ids.indexOf('bonk') + 1]; must(await selOf() === next, 'ArrowDown phải sang hàng kế (' + next + '): ' + await selOf());
+    await q.keyboard.press('Space');
+    must((await spy('sfx')).map(s => s.name).join() === 'bonk,' + next, 'Space không nghe hàng đang chọn: ' + JSON.stringify(await spy('sfx')));
+    await q.keyboard.press('ArrowUp'); must(await selOf() === 'bonk', 'ArrowUp phải về bonk'); await q.keyboard.press('j'); must(await selOf() === next, 'phím j = xuống');
+    await q.keyboard.press('End'); must(await selOf() === ids[ids.length - 1], 'End phải tới hàng cuối'); await q.keyboard.press('Home'); must(await selOf() === ids[0], 'Home phải về hàng đầu');
+    await q.keyboard.press('/'); must(await q.evaluate(() => document.activeElement && document.activeElement.id) === 'lsQ', 'phím / phải nhảy vào ô tìm');
+    // âm có điểm va (wham): ghi chú ở inspector; chép tên / JSON bước / gọi MCP
+    await q.fill('#lsQ', ''); await q.click('tr[data-id="wham"] td.id'); await q.waitForSelector('.lc-insp h3 .mono:text-is("wham")');
+    must(/TRƯỚC khung trúng đòn/.test(await q.textContent('.lc-insp')), 'wham: thiếu ghi chú điểm va (hitAt)');
+    await q.click('.lc-insp button:has-text("Chép tên")'); must(await q.evaluate(() => navigator.clipboard.readText()) === 'wham', 'Chép tên không vào clipboard');
+    await q.click('.lc-insp .seg button:has-text("Bước kịch bản")'); await q.click('.lc-insp button:text-is("Chép")');
+    const step = JSON.parse(await q.evaluate(() => navigator.clipboard.readText()));
+    must(Array.isArray(step.sfx) && step.sfx.join() === 'wham' && step.actor && step.state, 'JSON bước kịch bản sai: ' + JSON.stringify(step));
+    must((await q.evaluate(() => window.GenChibi.sounds.lintSoundTrack([JSON.parse(document.querySelector('.lc-insp textarea.code').value)], { project: '' }))).filter(i => i.level === 'error').length === 0, 'bước kịch bản chép ra không qua S1–S7');
+    must(/Đã chép/.test((await toasts()).join('|')), 'thiếu thông báo đã chép');
+    await q.click('.lc-insp .seg button:has-text("Gọi MCP")'); const mcp = await q.inputValue('.lc-insp textarea.code');
+    must(/lint_sound_track/.test(mcp) && /"wham"/.test(mcp) && /list_sounds/.test(mcp) && /get_sound_pack/.test(mcp), 'đoạn gọi MCP thiếu: ' + mcp.slice(0, 200));
+    // âm của gói dự án: bước kịch bản mang dự án; tải WAV (renderWav có → tải được tệp RIFF)
+    await q.click('tr[data-id="trong-tran"] td.id'); await q.waitForSelector('.lc-insp h3 .mono:text-is("trong-tran")');
+    must(/Âm NHẤN/.test(await q.textContent('.lc-insp')) && /Tam Quốc/.test(await q.textContent('.lc-insp .lc-kv')), 'trong-tran: thiếu ghi chú âm nhấn / dự án');
+    await q.click('.lc-insp .seg button:has-text("Gọi MCP")'); must(/"project": "mau-tam-quoc"/.test(await q.inputValue('.lc-insp textarea.code')), 'gọi MCP của âm gói dự án phải mang project');
+    const dlp = q.waitForEvent('download', { timeout: 15000 }); await q.click('.lc-insp button:has-text("Tải WAV")'); const dl = await dlp;
+    must(dl.suggestedFilename() === 'trong-tran.wav', 'tên tệp WAV: ' + dl.suggestedFilename());
+    const wavBytes = fs.readFileSync(await dl.path()); must(wavBytes.slice(0, 4).toString() === 'RIFF' && wavBytes.slice(8, 12).toString() === 'WAVE' && wavBytes.length > 20000, 'WAV tải về không phải RIFF/WAVE đủ dài (' + wavBytes.length + ' byte)');
+    await q.click('.lc-insp button.tag >> nth=0'); await q.waitForSelector('.lc-chipx:not([hidden])');   // bấm thẻ trong inspector = lọc theo thẻ đó
+    const tg = (await q.textContent('.lc-chipx')).replace(/^thẻ: /, '').replace(/×$/, '').trim(); await waitRows(await q.evaluate(t => window.GenChibi.sounds.list({ tag: t }).length, tg)); must((await rowsOf()).includes('trong-tran'), 'lọc theo thẻ từ inspector không còn trong-tran');
+    await q.click('.lc-chipx button'); await waitRows(69);
+    await q.click('tr[data-id="hit"] td.id'); await q.waitForSelector('.lc-insp h3 .mono:text-is("hit")'); await shot('sounds-bang');
+    console.log('  ✓ Thư viện › Âm thanh: ▶ gọi sfx đúng tên · ↑↓ / J K / Home / End chọn hàng, Space nghe hàng chọn, / vào ô tìm · inspector: chép tên, chép JSON bước (qua S1–S7), đoạn gọi MCP (mang project), tải WAV (RIFF) · ghi chú điểm va / âm nhấn');
+
+    // A4) tab Luật ghép: S1–S7 lấy từ GC.sounds.RULES (một nguồn), quy trình từ guide(), công thức ▶ nghe chuỗi, kiểm thử chuỗi
+    await tab('rules');
+    const rules = await q.$$eval('tr[data-rule]', es => es.map(e => [e.getAttribute('data-rule'), e.children[2].textContent, e.children[1].textContent]));
+    const src = await q.evaluate(() => window.GenChibi.sounds.RULES.list.map(r => [r.code, r.rule, r.level]));
+    must(rules.length === 7 && rules.every((r, i) => r[0] === 'S' + (i + 1) && r[1] === src[i][1]), 'luật S1–S7 không khớp GC.sounds.RULES: ' + JSON.stringify(rules.map(r => r[0])));
+    must(rules.every((r, i) => (src[i][2] === 'error') === /Lỗi/.test(r[2])), 'mức lỗi / cảnh báo của luật sai');
+    must((await q.$$('.lc-steps li')).length >= 5 && /TRỐNG/.test(await q.textContent('.lc-steps')), 'quy trình ghép thiếu bước (lấy từ guide())');
+    const recs = await q.$$eval('.lc-recipe', es => es.map(e => e.getAttribute('data-id'))); must(recs.join() === SND.RECIPES.map(r => r.id).join(), 'công thức mẫu: ' + recs.join());
+    await q.evaluate(SPY); await q.click('button[data-recipe="vo-chuoi"]');
+    const rc = SND.RECIPES.find(r => r.id === 'vo-chuoi'), sq = await spy('sfx');
+    must(sq.length === rc.seq.length && sq.every((c, i) => c.name === rc.seq[i][1] && Math.abs((c.delay || 0) - rc.seq[i][0]) < 1e-9), 'nghe chuỗi vo-chuoi phải gọi sfx(tên, { delay }) theo seq: ' + JSON.stringify(sq));
+    await q.click('.lc-recipe[data-id="y-tuong"] button:has-text("Chép các bước")'); const rsteps = JSON.parse(await q.evaluate(() => navigator.clipboard.readText()));
+    must(rsteps.length === 2 && rsteps[0].sfx[0] === 'ding' && rsteps[1].sfx[0] === 'scramble', 'chép các bước công thức sai');
+    await q.click('#lsLintGo'); await q.waitForSelector('[data-lint]'); must((await q.getAttribute('[data-lint]', 'data-lint')).split('/')[0] === '0', 'chuỗi mẫu vo-chuoi không được có lỗi: ' + await q.textContent('.lc-lint [role=status]'));
+    await q.fill('#lsLintIn', JSON.stringify([{ actor: 'a', state: 'normal', say: 'Xin chào các bạn', sfx: ['hit', 'bonk', 'pow', 'zip', 'khong-co-am-nay'] }]));
+    await q.click('#lsLintGo'); await q.waitForFunction(() => { const e = document.querySelector('[data-lint]'); return e && e.getAttribute('data-lint').split('/')[0] !== '0'; });
+    const lintTxt = await q.textContent('.lc-issues'); must(/S1/.test(lintTxt) && /S6/.test(lintTxt) && /khong-co-am-nay/.test(lintTxt), 'kiểm luật phải báo S1 + S6: ' + lintTxt.slice(0, 200));
+    await q.fill('#lsLintIn', '{ không phải json'); await q.click('#lsLintGo'); await q.waitForSelector('.lc-msg.bad:has-text("Không phải JSON")');
+    await shot('sounds-luat');
+    console.log('  ✓ Thư viện › Âm thanh › Luật ghép: S1–S7 khớp GC.sounds.RULES (chữ + mức) · quy trình từ guide() · ' + recs.length + ' công thức, ▶ nghe chuỗi đúng delay, chép các bước · kiểm thử chuỗi báo S1 + S6');
+
+    // A5) tab Gói âm: danh sách · tải gói JSON · nhập (cổng kiểm cục bộ + máy chủ, lỗi kèm path) · máy chủ không có endpoint thì chỉ còn gói trong engine
+    await tab('packs');
+    const prow = await q.$$eval('tr[data-pack]', es => es.map(e => [e.getAttribute('data-pack'), e.children[3].textContent, e.children[4].textContent, e.children[2].textContent]));
+    must(prow.length === 2 && prow[0][0] === 'gen.am' && prow[0][2] === '62' && prow[1][0] === 'tq-am' && prow[1][2] === '7' && /Tam Quốc/.test(prow[1][3]), 'bảng gói âm: ' + JSON.stringify(prow));
+    const dgp = q.waitForEvent('download'); await q.click('tr[data-pack="tq-am"] button:has-text("Tải JSON")'); const dg = await dgp;
+    const gj = JSON.parse(fs.readFileSync(await dg.path(), 'utf8')); must(dg.suggestedFilename() === 'tq-am.json' && gj.format === 'gen-chibi.sound/1' && gj.id === 'tq-am' && Object.keys(gj.sounds).length === 7, 'gói tải về sai');
+    must(!(await q.$('tr[data-pack="gen.am"] button:has-text("Tải JSON")')), 'bộ khung gen.am không có nút tải gói');
+    const bad = { format: 'gen-chibi.sound/1', id: 'loi-goi', name: 'Gói lỗi', sounds: { 'am-hong': { label: 'Âm hỏng', cat: 'khong-co-nhom', tags: ['x'], use: 'thử', dur: 0.5, level: 1, layers: [{ k: 'tone', hz: 440, dur: 0.3, peak: 0.5 }] } } };
+    await q.fill('#lsImport', JSON.stringify(bad)); await q.click('#lsImportGo');
+    await q.waitForSelector('.lc-import ul.errs li'); const e1 = await q.$$eval('.lc-import ul.errs li', es => es.map(e => e.textContent));
+    must(e1.length >= 1 && /sounds\.am-hong/.test(e1.join('|')) && /cat/.test(e1.join('|')), 'lỗi cổng kiểm phải kèm path (sounds.am-hong…cat): ' + e1.join(' | '));
+    must(M.soundPosts.length === 0, 'gói không qua cổng kiểm cục bộ không được gửi lên máy chủ');
+    await q.fill('#lsImport', JSON.stringify(Object.assign({}, SND.EXAMPLE, { id: 'trung-ten', sounds: { hit: SND.EXAMPLE.sounds['vi-du-coc'] } })));   // tên âm "hit" trùng bộ khung
+    await q.click('#lsCheck'); await q.waitForFunction(() => /trùng tên âm của gói "gen\.am"/.test(document.querySelector('.lc-import').textContent));
+    await q.fill('#lsImport', '{ hỏng'); await q.click('#lsCheck'); await q.waitForSelector('.lc-import .lc-msg.bad:has-text("Không phải JSON")');
+    const ex = JSON.parse(JSON.stringify(SND.EXAMPLE)); ex.id = 'server-chan';   // qua cổng cục bộ, bị máy chủ giả từ chối
+    await q.fill('#lsImport', JSON.stringify(ex)); await q.click('#lsImportGo'); await q.waitForFunction(() => /sounds\.chan\.layers\[1\]\.peak/.test(document.querySelector('.lc-import').textContent));
+    must(M.soundPosts.length === 1 && M.soundPosts[0].pack.id === 'server-chan', 'chưa gửi gói lên máy chủ giả'); must(/máy chủ chặn/.test(await q.textContent('.lc-import ul.errs')), 'lỗi máy chủ không hiện kèm path');
+    await q.selectOption('.lc-import select', PROJ);
+    await q.fill('#lsImport', JSON.stringify(SND.EXAMPLE)); await q.click('#lsImportGo');
+    await q.waitForSelector('tr[data-pack="vi-du-am"]'); must(M.soundPosts.length === 2 && M.soundPosts[1].pack.id === 'vi-du-am' && M.soundPosts[1].pack.project === PROJ, 'POST api/sound-packs thiếu gói / dự án: ' + JSON.stringify(M.soundPosts[1] && M.soundPosts[1].pack.project));
+    must(await q.evaluate(() => window.GenChibi.sounds.has('vi-du-coc')), 'gói nhập xong chưa nạp vào GC.sounds'); must(/Đã nhập gói/.test((await toasts()).join('|')), 'thiếu thông báo nhập gói');
+    await tab('sounds'); await waitRows(71); await tab('packs');
+    must(/Phát hành|Nháp/.test(await q.textContent('tr[data-pack="vi-du-am"]')), 'hàng gói mới thiếu trạng thái');
+    await shot('sounds-goi'); await q.close();
+    M.sound404 = true; await open({ page: 'lib-sounds', tab: 'packs' }); await q.waitForSelector('tr[data-pack]');
+    must((await q.$$('tr[data-pack]')).length === 1 && await q.$eval('#lsImportGo', e => e.disabled) && /chưa có api\/sound-packs/.test(await q.textContent('.lc-import')), 'máy chủ không có api/sound-packs: chỉ còn gói trong engine, nút nhập khoá');
+    await q.fill('#lsImport', JSON.stringify(SND.EXAMPLE)); await q.click('#lsCheck'); await q.waitForSelector('.lc-import .lc-msg.ok');   // vẫn kiểm được gói
+    M.sound404 = false; M.packs = [TQ]; await q.close();
+    console.log('  ✓ Thư viện › Âm thanh › Gói âm: bảng gói (ID, dự án, phiên bản, số âm) · tải gói JSON · nhập: lỗi cổng kiểm hiện kèm path (cục bộ + máy chủ), trùng tên âm bị chặn, nhập đúng thì nạp ngay · endpoint 404 → chỉ gói trong engine, nút nhập khoá');
+
+    /* ================= B. THƯ VIỆN › GIỌNG ================= */
+    // B1) chưa có key: vẫn xem + nghe giọng máy, có lời nhắc và lối tới Cài đặt AI
+    M.hasKey = false;
+    await open({ page: 'lib-voices', project: PROJ });
+    await waitRows(22);
+    must((await rowsOf()).join() === GV.roleList().map(r => r.id).join(), 'bảng giọng không đủ 22 vai đúng thứ tự');
+    const rcells = await q.$$eval('tr[data-id="ong-lao"] td', es => es.map(e => e.textContent));
+    must(/ong-lao/.test(rcells.join('|')) && /Ông lão/.test(rcells[2]) && /Cao tuổi/.test(rcells[3]) && /Nam/.test(rcells[4]) && /Thường ngày/.test(rcells[5]) && /Được/.test(rcells[6]) && /slow, slightly raspy, wise/.test(rcells[7]), 'hàng ong-lao: ' + rcells.join(' | '));
+    must((await q.$$eval('tr[data-id] td:nth-child(7)', es => es.filter(e => /Google chặn/.test(e.textContent)).length)) === 4, '4 vai trẻ em phải ghi "Google chặn"');
+    must(/Chưa có key Google/.test(await q.textContent('.lv-banner')) && await q.$('#lvKey'), 'chưa có key mà thiếu lời nhắc + nút tới Cài đặt AI');
+    must((await q.$$eval('[data-ai]', es => es.every(e => e.disabled))) && (await q.$$('tr[data-id] [data-ai]')).length === 22, 'chưa có key: nút giọng AI phải mờ (22 hàng)');
+    must(M.casts.length === 0 && M.lines.length === 0, 'chưa có key mà vẫn hỏi cast / đọc: ' + M.casts.length + '/' + M.lines.length);
+    await q.evaluate(SPY); await q.click('[data-machine="ong-lao"]');
+    const s1 = (await spy('say'))[0]; must(s1 && /^Con à, đời người như chén trà/.test(s1.text) && s1.role === 'ong-lao' && s1.lang === 'vi-VN' && s1.gender === 'm', '▶ giọng máy ông lão (vi): ' + JSON.stringify(s1));
+    await q.click('tr[data-id="ba-lao"] td.id'); await q.click('#lvHear'); const s2 = (await spy('say'))[1]; must(s2 && s2.role === 'ba-lao' && s2.gender === 'f' && /Lại đây với bà/.test(s2.text), '▶ giọng máy bà lão: ' + JSON.stringify(s2));
+    await q.click('#lvKey'); await q.waitForSelector('#voice-panel', { timeout: 8000 });   // dẫn tới Cài đặt AI › Giọng AI
+    must(/Cài đặt AI/.test(await q.textContent('.crumbs')), 'nút lời nhắc phải dẫn tới Cài đặt AI › Giọng AI'); await q.close();
+    console.log('  ✓ Thư viện › Giọng (chưa có key): 22 vai đúng ID · cột nhóm tuổi / giới / văn-võ / phong cách / thiết kế được (4 vai trẻ em "Google chặn") · lời nhắc + lối tới Cài đặt AI · không gọi máy chủ giọng · ▶ giọng máy đọc đúng câu mẫu theo vai (ông lão vi: "Con à, đời người như chén trà…")');
+
+    // B2) có key: cast theo ngôn ngữ / giọng vùng · clip mẫu có sẵn (dry) nghe miễn phí · "Đọc mẫu bằng AI" gửi đúng vai / ngôn ngữ / vùng, xác nhận 2 bước
+    M.hasKey = true; M.haveRoles = { 'ong-lao|vi': true };
+    await open({ page: 'lib-voices', role: 'ong-lao', project: PROJ });
+    await waitRows(22); await q.waitForSelector('.lv-banner[data-state="ready"]');
+    await pollq(async () => (await q.$$eval('tr[data-id] [data-ai="play"], tr[data-id] [data-ai="read"]', es => es.length)) === 22, 'đủ 22 hàng đã kiểm clip mẫu', 10000);
+    must((await q.$$('tr[data-id="ong-lao"] [data-ai="play"]')).length === 1 && (await q.$$('tr[data-id="hai-huoc"] [data-ai="read"]')).length === 1, 'ong-lao có clip (▶ AI), hai-huoc chưa (Đọc AI · 1 lượt)');
+    must(M.lines.length >= 22 && M.lines.every(l => l.dry === true && l.voice && l.role && l.lang === 'vi' && l.accent === 'bac'), 'lần kiểm đầu chỉ được dùng dry (không tốn lượt): ' + M.lines.filter(l => !l.dry).length + ' lời gọi không dry');
+    must(M.casts.length === 22 && M.casts.every(c => c.actors.length === 1 && c.actors[0].id === c.actors[0].role), 'cast mỗi vai một lần: ' + M.casts.length + ' lời gọi · ' + [...new Set(M.casts.map(c => c.actors.map(a => a.id).join()))].length + ' vai khác nhau · ' + M.casts.map(c => c.actors[0].id + ':' + c.lang + '/' + c.accent).slice(0, 30).join(' '));
+    const cast0 = castVoice('ong-lao', 'vi', 'bac').voice;
+    must(await q.textContent('[data-cast="ong-lao"]').then(t => t.includes(cast0)), 'inspector: giọng AI sẽ dùng phải là ' + cast0);
+    await q.evaluate(SPY); await q.click('tr[data-id="ong-lao"] [data-ai="play"]');
+    await pollq(async () => (await spy('say')).length === 1, 'nghe clip có sẵn');
+    const aiSay = (await spy('say'))[0]; must(/^buf:\d+/.test(aiSay.clip || '') && aiSay.role === 'ong-lao' && /^Con à/.test(aiSay.text), '▶ AI phải phát clip có sẵn: ' + JSON.stringify(aiSay));
+    must(M.fresh === 0 && M.lines.filter(l => !l.dry).length === 0, '▶ AI với clip có sẵn không được tốn lượt (fresh=' + M.fresh + ')');
+    // đổi ngôn ngữ / giọng vùng → cast đổi (tiếng Anh Mỹ ≠ Anh Anh), câu mẫu đổi theo ngôn ngữ
+    await q.selectOption('#lvLang', 'en'); await q.waitForFunction(() => /Hello|Mom|My child/.test(document.querySelector('.lv-line').textContent));
+    const enUS = castVoice('ong-lao', 'en', 'us').voice, enGB = castVoice('ong-lao', 'en', 'uk').voice; must(enUS !== enGB && enUS !== cast0, 'mock cast không đổi theo ngôn ngữ / vùng');
+    await q.waitForFunction(v => document.querySelector('[data-cast="ong-lao"]') && document.querySelector('[data-cast="ong-lao"]').textContent.includes(v), enUS, { timeout: 8000 });
+    await q.selectOption('#lvAccent', 'uk'); await q.waitForFunction(v => document.querySelector('[data-cast="ong-lao"]') && document.querySelector('[data-cast="ong-lao"]').textContent.includes(v), enGB, { timeout: 8000 });
+    must(/My child, life is like a cup of tea/.test(await q.textContent('.lv-line')), 'câu mẫu tiếng Anh của ông lão sai'); must(/English|Tiếng Anh/.test(await q.textContent('.lc-foot')) && /Anh Anh/.test(await q.textContent('.lc-foot')), 'footer phải nói ngôn ngữ + vùng đang chọn');
+    await q.evaluate(SPY); await q.click('#lvHear'); const sEn = (await spy('say'))[0]; must(sEn.lang === 'en-GB' && /^My child/.test(sEn.text), '▶ giọng máy en-uk: ' + JSON.stringify(sEn));
+    for (const [lang, acc, re] of [['zh', 'tw', /孩子，人生就像一杯茶/], ['yue', 'hk', /乖仔，人生好似一杯茶/]]) {
+      await q.selectOption('#lvLang', lang); if (acc !== 'hk') await q.selectOption('#lvAccent', acc);
+      await q.waitForFunction(([l, a]) => document.querySelector('#lvLang').value === l && document.querySelector('#lvAccent').value === a, [lang, acc]); must(re.test(await q.textContent('.lv-line')), 'câu mẫu ' + lang + '/' + acc + ' của ông lão sai');
+    }
+    await q.selectOption('#lvLang', 'vi'); await q.selectOption('#lvAccent', 'bac'); await q.waitForFunction(() => /Con à, đời người/.test(document.querySelector('.lv-line').textContent));
+    // "Đọc mẫu bằng AI (1 lượt)": chưa có clip → báo trước, bấm 2 lần mới đọc, gửi đúng vai / ngôn ngữ / vùng / giọng
+    await q.click('tr[data-id="hai-huoc"] td.id'); await q.waitForSelector('.lc-insp h3 .mono:text-is("hai-huoc")');
+    await pollq(async () => (await q.$$('.lc-insp [data-ai="read"]')).length === 1, 'nút Đọc mẫu bằng AI trong inspector');
+    must(/Đọc mẫu bằng AI \(1 lượt\)/.test(await q.textContent('.lc-insp [data-ai="read"]')), 'nhãn nút phải là "Đọc mẫu bằng AI (1 lượt)"');
+    const nLines = M.lines.length; await q.evaluate(SPY); await q.click('.lc-insp [data-ai="read"]');
+    must(/tốn 1 lượt/.test(await q.textContent('.lc-insp [data-ai="read"]')) && M.lines.length === nLines && M.fresh === 0, 'bấm lần 1 chỉ báo trước tốn lượt, chưa đọc');
+    await q.click('.lc-insp [data-ai="read"]'); await pollq(async () => M.fresh === 1, 'đã đọc 1 câu mới');
+    const rd = M.lines.filter(l => !l.dry).pop(), hv = castVoice('hai-huoc', 'vi', 'bac').voice;
+    must(rd.role === 'hai-huoc' && rd.lang === 'vi' && rd.accent === 'bac' && rd.voice === hv && rd.state === 'normal' && rd.bubble === 'say' && /^Ối trời ơi/.test(rd.text), 'đọc mẫu gửi sai vai / ngôn ngữ / vùng / giọng: ' + JSON.stringify(rd));
+    await pollq(async () => (await spy('say')).length === 1, 'phát clip vừa đọc'); must(M.fresh === 1 && M.today === 4, 'đúng 1 lượt');
+    await pollq(async () => (await q.$$('.lc-insp [data-ai="play"]')).length === 1 && (await q.$$('tr[data-id="hai-huoc"] [data-ai="play"]')).length === 1, 'sau khi đọc: hàng + inspector chuyển thành ▶ AI (clip có sẵn)', 8000);
+    // hết lượt: báo giờ thử lại, không phát, không khoá giao diện
+    M.budget = 1; await q.click('tr[data-id="nu-hai-huoc"] td.id'); await pollq(async () => (await q.$$('.lc-insp [data-ai="read"]')).length === 1, 'nu-hai-huoc chưa có clip');
+    await q.click('.lc-insp [data-ai="read"]'); await q.click('.lc-insp [data-ai="read"]');
+    await q.waitForFunction(() => /Hết lượt hôm nay — thử lại lúc \d{2}:\d{2}/.test(document.querySelector('.lc-insp').textContent), null, { timeout: 8000 });
+    must(M.fresh === 1 && (await q.$$('.lc-insp [data-ai="read"]')).length === 1 && !(await q.$eval('.lc-insp [data-ai="read"]', e => e.disabled)), 'hết lượt: nút phải bấm lại được, không có clip mới'); M.budget = Infinity;
+    // dry 404 (phiên bản server khác): vẫn coi là "chưa có clip"
+    M.dry404 = true; await q.selectOption('#lvAccent', 'nam'); await pollq(async () => (await q.$$('tr[data-id] [data-ai="read"], tr[data-id] [data-ai="play"]')).length === 22, 'kiểm lại 22 hàng (dry 404)', 10000);
+    must((await q.$$('tr[data-id="hai-huoc"] [data-ai="read"]')).length === 1, 'dry 404 phải hiểu là chưa có clip'); M.dry404 = false; await q.selectOption('#lvAccent', 'bac');
+    console.log('  ✓ Thư viện › Giọng (có key): cast mỗi vai một lần, kiểm clip mẫu bằng dry (không tốn lượt) · ▶ AI phát clip có sẵn · đổi ngôn ngữ / vùng → cast + câu mẫu đổi (vi · en Mỹ/Anh · zh Đài · yue Hồng Kông) · "Đọc mẫu bằng AI (1 lượt)" báo trước, bấm 2 lần, gửi đúng role / lang / accent / giọng · hết lượt báo giờ thử lại');
+
+    // B3) thiết kế giọng: vai trẻ em bị chặn kèm lý do; vai khác bấm 2 lần mới tốn lượt, xong thì cast đổi sang giọng thiết kế
+    await q.click('tr[data-id="be-gai"] td.id'); await q.waitForSelector('.lc-insp h3 .mono:text-is("be-gai")');
+    must(await q.$eval('#lvDesign', e => e.disabled) && /Google không cho thiết kế giọng trẻ em/.test(await q.textContent('[data-why="design"]')), 'vai trẻ em phải mờ nút thiết kế kèm lý do');
+    must(/vai trẻ em: không thiết kế được/.test(await q.textContent('.lc-insp .lc-kv')), 'vai trẻ em: chân dung phải ghi không thiết kế được');
+    await q.click('tr[data-id="quan-su"] td.id'); await q.waitForSelector('.lc-insp h3 .mono:text-is("quan-su")'); await q.waitForFunction(() => { const b = document.getElementById('lvDesign'); return b && !b.disabled; });
+    await q.click('#lvDesign'); must(/tốn 1 lượt/.test(await q.textContent('#lvDesign')) && M.designCalls.length === 0, 'thiết kế: lần bấm 1 chỉ xác nhận');
+    await q.evaluate(SPY); await q.click('#lvDesign'); await pollq(async () => M.designCalls.length === 1, 'đã gọi thiết kế');
+    must(M.designCalls[0].role === 'quan-su' && M.designCalls[0].lang === 'vi' && M.designCalls[0].accent === 'bac', 'thiết kế gửi sai: ' + JSON.stringify(M.designCalls[0]));
+    await pollq(async () => /voice_gia_quan-su_bac/.test(await q.textContent('[data-cast="quan-su"]')), 'cast chuyển sang giọng thiết kế', 8000);
+    must(/đã thiết kế/.test(await q.textContent('tr[data-id="quan-su"]')) && /Thiết kế lại giọng cho vai này/.test(await q.textContent('#lvDesign')), 'thiết kế xong: hàng + nút phải đổi'); await pollq(async () => (await spy('say')).length >= 1, 'nghe thử mẫu thiết kế');
+    // nhân vật dùng vai (trong dự án Tam Quốc): Quan Vũ + Trương Phi dùng võ tướng
+    await q.click('tr[data-id="vo-tuong"] td.id'); await q.waitForSelector('.lc-insp h3 .mono:text-is("vo-tuong")');
+    const users = await q.$$eval('.lv-chars button', es => es.map(e => e.getAttribute('data-char')));
+    must(users.slice().sort().join() === 'local.my/tq-quan-vu,local.my/tq-truong-phi', 'nhân vật dùng vai võ tướng trong Tam Quốc: ' + users.join()); must(/Tam Quốc/.test(await q.textContent('.lc-insp')), 'inspector phải nói dự án đang lọc');
+    must(/Quan Vũ/.test(await q.textContent('tr[data-id="vo-tuong"]')) && /Trương Phi/.test(await q.textContent('tr[data-id="vo-tuong"]')), 'cột "Nhân vật dùng vai" thiếu tên');
+    await q.fill('#lvQ', 'ong lao'); await waitRows(1); must((await rowsOf())[0] === 'ong-lao', 'tìm không dấu "ong lao"'); await q.fill('#lvQ', 'quan vu'); await waitRows(1); must((await rowsOf())[0] === 'vo-tuong', 'tìm theo tên nhân vật (Quan Vũ) phải ra vai võ tướng');
+    await q.fill('#lvQ', ''); await waitRows(22); await q.click('.lc-cats button[data-age="cao-tuoi"]'); await waitRows(2); await q.click('.lc-cats button[data-age="cao-tuoi"]'); await waitRows(22);
+    await q.click('tr[data-id="ong-lao"] td.id'); await q.waitForSelector('.lc-insp h3 .mono:text-is("ong-lao")'); await pollq(async () => (await q.$$('.lc-insp [data-ai="play"]')).length === 1, 'ong-lao: clip có sẵn trong inspector', 8000);
+    await shot('voices-bang');
+    console.log('  ✓ Thư viện › Giọng › thiết kế: vai trẻ em mờ nút kèm lý do Google chặn · thiết kế bấm 2 lần, gửi đúng vai / ngôn ngữ / vùng, cast + hàng đổi sang giọng thiết kế · nhân vật Tam Quốc dùng vai (Quan Vũ, Trương Phi → võ tướng) · lọc tuổi + tìm không dấu'); await q.close();
+
+    // B4) tab Giọng của tác phẩm: nhân vật → vai → giọng chốt (work.voices) → ▶ nghe
+    await open({ page: 'lib-voices', tab: 'works', work: WORK, project: PROJ });
+    await q.waitForSelector('#lvWork option[value="' + WORK + '"]', { state: 'attached' }); await q.waitForFunction(w => document.querySelector('#lvWork').value === w, WORK);
+    await pollq(async () => (await rowsOf()).length > 0 && /Alnilam/.test(await q.textContent('tr[data-id="tq-quan-vu"]')), 'bảng giọng chốt của tác phẩm', 8000);
+    const wr = await rowsOf(); must(wr.includes('tq-quan-vu') && wr.includes('tq-luu-bi') && wr.includes('tq-tao-thao'), 'bảng tác phẩm thiếu nhân vật: ' + wr.join());
+    must(/Võ tướng/.test(await q.textContent('tr[data-id="tq-quan-vu"]')) && /Chốt trong tác phẩm/.test(await q.textContent('tr[data-id="tq-quan-vu"]')) && /Schedar/.test(await q.textContent('tr[data-id="tq-luu-bi"]')), 'cột vai / giọng chốt sai');
+    must(/Chưa chốt/.test(await q.textContent('tr[data-id="tq-tao-thao"]')), 'nhân vật chưa chốt phải ghi "Chưa chốt"');
+    must(/Ngôn ngữ phim: Tiếng Việt/.test(await q.textContent('.lc-body')), 'thiếu ngôn ngữ phim');
+    await q.evaluate(SPY); await q.click('tr[data-id="tq-quan-vu"] [data-machine]'); const sw = (await spy('say'))[0]; must(sw && sw.role === 'vo-tuong' && /^Ta là đại tướng/.test(sw.text), '▶ giọng máy nhân vật tác phẩm: ' + JSON.stringify(sw));
+    await pollq(async () => (await q.$$('tr[data-id="tq-quan-vu"] [data-ai="read"], tr[data-id="tq-quan-vu"] [data-ai="play"]')).length === 1, 'kiểm clip của Quan Vũ'); must(M.lines.some(l => l.voice === 'Alnilam' && l.role === 'vo-tuong' && l.dry === true && l.lang === 'vi'), 'kiểm clip phải dùng giọng chốt Alnilam (dry)');
+    must(await q.$eval('tr[data-id="tq-tao-thao"] [data-ai]', e => e.disabled), 'nhân vật chưa chốt giọng: nút giọng AI mờ');
+    await q.click('tr[data-id="tq-quan-vu"] td.id'); await q.waitForSelector('.lc-insp h3 .mono:text-is("tq-quan-vu")'); await shot('voices-tac-pham');
+    must(!(await q.$eval('#lvCastAll', e => e.disabled)), 'có tác phẩm + có máy chủ: nút "Chốt giọng cả dàn" phải bấm được');
+    await q.selectOption('#lvWork', ''); await pollq(async () => (await rowsOf()).length === 7, 'không chọn tác phẩm: 7 nhân vật của dự án', 6000);
+    must(await q.$eval('#lvCastAll', e => e.disabled), 'không chọn tác phẩm thì không chốt giọng cả dàn được');
+    console.log('  ✓ Thư viện › Giọng › Giọng của tác phẩm: nhân vật → vai → giọng chốt (work.voices) · nguồn (chốt / chưa chốt) · ▶ máy + ▶ AI dùng đúng giọng chốt (dry) · chưa chốt thì nút AI mờ · không chọn tác phẩm = nhân vật theo dự án'); await q.close();
+
+    must(M.leaks.length === 0, 'có yêu cầu ra ngoài máy: ' + M.leaks.slice(0, 3).join(' | '));
+    must(errs11.length === 0, 'lỗi trang: ' + errs11.slice(0, 3).join(' | '));
+  } catch (e) { fail = 1; console.log('  ✗ Thư viện Âm thanh / Giọng:', e.message); if (errs11.length) console.log('    lỗi trang:', errs11.slice(0, 3).join(' | ')); if (q) { try { console.log('    trang:', (await q.evaluate(() => (document.querySelector('.view') || document.body).innerText)).replace(/\s+/g, ' ').slice(0, 500)); } catch (e2) { /* trang đã đóng */ } } }
+  finally { await b11.close(); srv11.kill(); }
 }
 // Giọng AI theo vai (v0.17): Cài đặt AI (dán key → tự bật) · bảng bộ giọng vai (22 vai, vai trẻ em không thiết kế được) · ô ngôn ngữ phim lưu vào tác phẩm ·
 // Lồng tiếng AI (đủ câu, dừng đúng khi hết lượt) · bộ phát dùng clip và rơi về giọng máy khi clip lỗi · phim xuất có giọng AI nhúng, chạy file:// không gọi mạng ·

@@ -3386,7 +3386,8 @@
       tbl.appendChild(h('thead', null, th));
       var tb = h('tbody'); tbl.appendChild(tb);
       S.packs().forEach(function (p) {
-        var smp = sampleOf(p.project), act = h('span', { class: 'acts' },
+        var smp = p.status === 'published' ? sampleOf(p.project) : null, act = h('span', { class: 'acts' },   // dấu "bộ mẫu" chỉ cho gói phát hành của dự án mẫu (gói người dùng nhập vào đó vẫn là nháp của họ)
+
           h('button', { class: 'btn sm', type: 'button', onclick: function () { st.tab = 'sounds'; st.pack = p.id; st.cat = ''; remember(); paintTabs(); paintTab(); } }, 'Xem âm'),
           p.frame ? null : lcBtn('down', 'Tải JSON', { label: 'Tải gói ' + p.id, fn: function () { download(p.id + '.json', JSON.stringify(S.pack(p.id), null, 2), 'application/json'); } }));
         tb.appendChild(h('tr', { 'data-pack': p.id }, h('td', { class: 'id', text: p.id }), h('td', null, p.frame ? 'Bộ âm chuẩn (khung)' : p.name),
@@ -3630,14 +3631,14 @@
       var c = AiVoice.cfg;
       if (lvReady()) {
         var cap = typeof c.dailyCap === 'number' && c.dailyCap > 0 ? ' / ' + c.dailyCap : '';
-        banner.appendChild(h('div', { class: 'banner lv-banner ok', 'data-ai': 'ready' }, lcState('ok', 'Giọng AI sẵn sàng'), h('span', { class: 'note mono', text: 'hôm nay ' + (c.today || 0) + cap + ' câu · ' + (c.cached || 0) + ' câu đã lưu' }),
+        banner.appendChild(h('div', { class: 'banner lv-banner ok', 'data-state': 'ready' }, lcState('ok', 'Giọng AI sẵn sàng'), h('span', { class: 'note mono', text: 'hôm nay ' + (c.today || 0) + cap + ' câu · ' + (c.cached || 0) + ' câu đã lưu' }),
           h('span', { class: 'sp' }), h('span', { class: 'note', text: 'Clip mẫu đã có thì nghe miễn phí; đọc mới và thiết kế giọng tốn lượt Google (báo trước, bấm 2 lần).' })));
         return;
       }
       var head = !server ? 'Bản xem thử' : !c ? 'Chưa đọc được trạng thái giọng AI' : !c.hasKey ? 'Chưa có key Google' : 'Giọng AI đang tắt';
       var tail = !server ? 'không có máy chủ — vẫn xem và nghe được giọng máy (miễn phí, giọng dự phòng của trình duyệt). Giọng AI cần bản cài.'
         : 'vẫn xem và nghe được giọng máy (miễn phí, giọng dự phòng của trình duyệt). ' + (c && c.hasKey ? 'Bật lại để nghe giọng AI.' : 'Muốn nghe giọng AI: dán key Google (miễn phí, dán là chạy).');
-      banner.appendChild(h('div', { class: 'banner lv-banner acc', 'data-ai': 'off', role: 'status' }, lcState('warn', head), h('span', { class: 'note', text: tail }), h('span', { class: 'sp' }),
+      banner.appendChild(h('div', { class: 'banner lv-banner acc', 'data-state': 'off', role: 'status' }, lcState('warn', head), h('span', { class: 'note', text: tail }), h('span', { class: 'sp' }),
         server ? h('button', { class: 'btn sm', type: 'button', id: 'lvKey', onclick: function () { go({ page: 'ai', focus: 'voice' }); } }, c && c.hasKey ? 'Bật ở Cài đặt AI › Giọng AI' : 'Dán key ở Cài đặt AI › Giọng AI') : null));
     }
     function paintTabs() {
@@ -3865,7 +3866,7 @@
         var chot = (W && W.voices && W.voices[L.lang + '|' + L.accent]) || {};
         rows = actors.map(function (a) {
           var own = a.voice && typeof a.voice.ai === 'string' ? a.voice.ai : '', ch = typeof chot[a.id] === 'string' ? chot[a.id] : '';
-          return { id: a.id, a: a, role: AiVoice.roleOf(a), explicit: !!(a.voice && a.voice.role), accent: AiVoice.accentOf(a, L.lang, L.accent), chot: ch, own: own, voice: ch || own, src: ch ? 'chốt' : own ? 'tay' : 'chưa' };
+          return { id: a.id, a: a, role: AiVoice.roleOf(a), explicit: !!(a.voice && a.voice.role), accent: AiVoice.accentOf(a, L.lang, L.accent), chot: ch, own: own, voice: ch || own, src: ch ? 'chot' : own ? 'tay' : 'chua' };
         });
         langNote.textContent = (W ? 'Ngôn ngữ phim: ' : 'Ngôn ngữ đang chọn (đổi ở tab Bộ giọng vai): ') + V.LANGS[L.lang].label + ' · ' + accLabel(L.lang, L.accent);
         castB.disabled = !(W && server && rows.length);
