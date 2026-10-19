@@ -819,44 +819,44 @@
     if (!Array.isArray(ev.steps) || !ev.steps.length) return errs.concat('steps: thiếu "steps" (mảng ít nhất 1 bước).');
     if (ev.steps.length > 12) errs.push('steps: tối đa 12 bước.');
     ev.steps.forEach(function (s, i) {
-      var n = 'steps[' + i + ']: ', f = function (k) { return 'steps[' + i + '].' + k + ': '; };   // đường dẫn máy đọc được (agent sửa đúng chỗ; Studio đặt lỗi cạnh hàng)
+      var n = 'steps[' + i + ']: ', pathOf = function (k) { return 'steps[' + i + '].' + k + ': '; };   // đường dẫn máy đọc được (agent sửa đúng chỗ; Studio đặt lỗi cạnh hàng)
       if (!s || typeof s !== 'object') { errs.push(n + 'phải là object.'); return; }
-      Object.keys(s).forEach(function (k) { if (!S[k]) errs.push(f(k) + 'khoá lạ "' + k + '".'); });
-      if (S.actor.enum.indexOf(s.actor) < 0) errs.push(f('actor') + 'diễn viên "' + s.actor + '" không có trong dàn diễn viên.');
-      if (S.state.enum.indexOf(s.state) < 0) errs.push(f('state') + 'trạng thái "' + s.state + '" không có trong kho.');
-      if (s.motion !== undefined && S.motion.enum.indexOf(s.motion) < 0) errs.push(f('motion') + 'động tác "' + s.motion + '" không có trong kho.');
+      Object.keys(s).forEach(function (k) { if (!S[k]) errs.push(pathOf(k) + 'khoá lạ "' + k + '".'); });
+      if (S.actor.enum.indexOf(s.actor) < 0) errs.push(pathOf('actor') + 'diễn viên "' + s.actor + '" không có trong dàn diễn viên.');
+      if (S.state.enum.indexOf(s.state) < 0) errs.push(pathOf('state') + 'trạng thái "' + s.state + '" không có trong kho.');
+      if (s.motion !== undefined && S.motion.enum.indexOf(s.motion) < 0) errs.push(pathOf('motion') + 'động tác "' + s.motion + '" không có trong kho.');
       ['activity', 'posture', 'move', 'facing', 'view', 'spot'].forEach(function (k) {
-        if (s[k] !== undefined && S[k].enum.indexOf(s[k]) < 0) errs.push(f(k) + k + ' "' + s[k] + '" không có trong kho.');
+        if (s[k] !== undefined && S[k].enum.indexOf(s[k]) < 0) errs.push(pathOf(k) + k + ' "' + s[k] + '" không có trong kho.');
       });
       var mvd = s.move && LIB.moves[s.move];
-      if (mvd && mvd.postures && s.posture && mvd.postures.indexOf(s.posture) < 0) errs.push(f('move') + 'di chuyển "' + s.move + '" không đi với tư thế "' + s.posture + '" (hợp: ' + mvd.postures.join(', ') + ').');
+      if (mvd && mvd.postures && s.posture && mvd.postures.indexOf(s.posture) < 0) errs.push(pathOf('move') + 'di chuyển "' + s.move + '" không đi với tư thế "' + s.posture + '" (hợp: ' + mvd.postures.join(', ') + ').');
       if (s.fx !== undefined) {
-        if (!Array.isArray(s.fx) || s.fx.length > 3) errs.push(f('fx') + 'fx phải là mảng tối đa 3 phần tử.');
-        else s.fx.forEach(function (f) { if (S.fx.items.enum.indexOf(f) < 0) errs.push(f('fx') + 'hiệu ứng "' + f + '" không có trong kho.'); });
+        if (!Array.isArray(s.fx) || s.fx.length > 3) errs.push(pathOf('fx') + 'fx phải là mảng tối đa 3 phần tử.');
+        else s.fx.forEach(function (f) { if (S.fx.items.enum.indexOf(f) < 0) errs.push(pathOf('fx') + 'hiệu ứng "' + f + '" không có trong kho.'); });
       }
       if (s.spot !== undefined && S.spot.enum.indexOf(s.spot) >= 0) {
-        if (ev.scene === undefined) errs.push(f('spot') + '"spot" chỉ dùng khi kịch bản có "scene".');
-        else if (evScene && evScene.spots.indexOf(s.spot) < 0) errs.push(f('spot') + 'chỗ đứng "' + s.spot + '" không mở trong cảnh này (' + evScene.spots.join(', ') + ').');
-        else if (Object.keys(at).some(function (a) { return a !== s.actor && at[a] === s.spot; })) errs.push(f('spot') + 'chỗ đứng "' + s.spot + '" đang có diễn viên khác.');
+        if (ev.scene === undefined) errs.push(pathOf('spot') + '"spot" chỉ dùng khi kịch bản có "scene".');
+        else if (evScene && evScene.spots.indexOf(s.spot) < 0) errs.push(pathOf('spot') + 'chỗ đứng "' + s.spot + '" không mở trong cảnh này (' + evScene.spots.join(', ') + ').');
+        else if (Object.keys(at).some(function (a) { return a !== s.actor && at[a] === s.spot; })) errs.push(pathOf('spot') + 'chỗ đứng "' + s.spot + '" đang có diễn viên khác.');
         else if (typeof s.actor === 'string') at[s.actor] = s.spot;
       }
-      if (typeof s.say !== 'string') errs.push(f('say') + 'thiếu "say".');
-      else if (s.say.length > 120) errs.push(f('say') + '"say" dài quá 120 ký tự.');
-      if (s.hold !== undefined && !(typeof s.hold === 'number' && s.hold >= 0.8 && s.hold <= 6)) errs.push(f('hold') + '"hold" phải trong khoảng 0.8–6 giây.');
-      if (s.to !== undefined && (S.to.enum.indexOf(s.to) < 0 || s.to === s.actor)) errs.push(f('to') + '"to" phải là một diễn viên khác trong dàn diễn viên.');
-      if (s.camera !== undefined && FILM_CAMERAS.indexOf(s.camera) < 0) errs.push(f('camera') + 'camera chọn: ' + FILM_CAMERAS.join(', ') + '.');
-      if (s.bubble !== undefined && FILM_BUBBLES.indexOf(s.bubble) < 0) errs.push(f('bubble') + 'bubble chọn: ' + FILM_BUBBLES.join(', ') + '.');
-      if (s.sfx !== undefined && (!Array.isArray(s.sfx) || s.sfx.length > 3 || s.sfx.some(function (x) { return FILM_SFX.indexOf(x) < 0; }))) errs.push(f('sfx') + 'sfx: mảng tối đa 3, chọn trong ' + FILM_SFX.join(', ') + '.');
+      if (typeof s.say !== 'string') errs.push(pathOf('say') + 'thiếu "say".');
+      else if (s.say.length > 120) errs.push(pathOf('say') + '"say" dài quá 120 ký tự.');
+      if (s.hold !== undefined && !(typeof s.hold === 'number' && s.hold >= 0.8 && s.hold <= 6)) errs.push(pathOf('hold') + '"hold" phải trong khoảng 0.8–6 giây.');
+      if (s.to !== undefined && (S.to.enum.indexOf(s.to) < 0 || s.to === s.actor)) errs.push(pathOf('to') + '"to" phải là một diễn viên khác trong dàn diễn viên.');
+      if (s.camera !== undefined && FILM_CAMERAS.indexOf(s.camera) < 0) errs.push(pathOf('camera') + 'camera chọn: ' + FILM_CAMERAS.join(', ') + '.');
+      if (s.bubble !== undefined && FILM_BUBBLES.indexOf(s.bubble) < 0) errs.push(pathOf('bubble') + 'bubble chọn: ' + FILM_BUBBLES.join(', ') + '.');
+      if (s.sfx !== undefined && (!Array.isArray(s.sfx) || s.sfx.length > 3 || s.sfx.some(function (x) { return FILM_SFX.indexOf(x) < 0; }))) errs.push(pathOf('sfx') + 'sfx: mảng tối đa 3, chọn trong ' + FILM_SFX.join(', ') + '.');
       var FA = filmActions(), ac = s.action !== undefined && own(FA.act, s.action) ? FA.act[s.action] : null;
-      if (s.action !== undefined && !ac) errs.push(f('action') + 'action "' + String(s.action).slice(0, 40) + '" không có (chọn: ' + Object.keys(FA.act).join(', ') + ').');
-      if (ac && ac.attack && s.target === undefined) errs.push(f('target') + 'đòn "' + s.action + '" cần "target" (người bị đánh).');
+      if (s.action !== undefined && !ac) errs.push(pathOf('action') + 'action "' + String(s.action).slice(0, 40) + '" không có (chọn: ' + Object.keys(FA.act).join(', ') + ').');
+      if (ac && ac.attack && s.target === undefined) errs.push(pathOf('target') + 'đòn "' + s.action + '" cần "target" (người bị đánh).');
       // needs (v0.16): đòn binh khí chỉ cho người cầm binh khí — gợi ý đòn thay thế người này làm được
       var who = cast.filter(function (a) { return a.id === s.actor; })[0], CH = G.GenChibi && G.GenChibi.choreo;
-      if (ac && who && CH && CH.canDo && !CH.canDo(who, ac)) errs.push(f('action') + '"' + s.actor + '" không ' + (CH.MOTION.needs[ac.needs] || ac.needs) + ' nên không làm được "' + s.action + '" (làm được: ' + CH.actionsFor(who).filter(function (k) { return !!FA.act[k].attack === !!ac.attack; }).join(', ') + ').');
-      if (s.target !== undefined && (S.target.enum.indexOf(s.target) < 0 || s.target === s.actor)) errs.push(f('target') + '"target" phải là một diễn viên khác trong dàn diễn viên.');
-      if (s.target !== undefined && !(ac && ac.attack)) errs.push(f('target') + '"target" chỉ đi với đòn đánh (' + Object.keys(FA.act).filter(function (k) { return FA.act[k].attack; }).join(', ') + ').');
-      if (s.react !== undefined && !own(FA.react, s.react)) errs.push(f('react') + 'react chọn: ' + Object.keys(FA.react).join(', ') + '.');
-      else if (s.react !== undefined && s.target === undefined) errs.push(f('react') + '"react" là phản ứng của "target" — cần có target.');
+      if (ac && who && CH && CH.canDo && !CH.canDo(who, ac)) errs.push(pathOf('action') + '"' + s.actor + '" không ' + (CH.MOTION.needs[ac.needs] || ac.needs) + ' nên không làm được "' + s.action + '" (làm được: ' + CH.actionsFor(who).filter(function (k) { return !!FA.act[k].attack === !!ac.attack; }).join(', ') + ').');
+      if (s.target !== undefined && (S.target.enum.indexOf(s.target) < 0 || s.target === s.actor)) errs.push(pathOf('target') + '"target" phải là một diễn viên khác trong dàn diễn viên.');
+      if (s.target !== undefined && !(ac && ac.attack)) errs.push(pathOf('target') + '"target" chỉ đi với đòn đánh (' + Object.keys(FA.act).filter(function (k) { return FA.act[k].attack; }).join(', ') + ').');
+      if (s.react !== undefined && !own(FA.react, s.react)) errs.push(pathOf('react') + 'react chọn: ' + Object.keys(FA.react).join(', ') + '.');
+      else if (s.react !== undefined && s.target === undefined) errs.push(pathOf('react') + '"react" là phản ứng của "target" — cần có target.');
     });
     return errs;
   }

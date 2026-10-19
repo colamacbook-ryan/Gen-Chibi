@@ -58,7 +58,18 @@ const clone = o => JSON.parse(JSON.stringify(o));
     no(ms > 6000, 'dựng thử gói nặng nhất cổng cho qua phải có trần ≤ ~4 s (đo ' + ms + ' ms)');
     no(!rv.isError && ms > 4500, 'gói chạm trần thời gian phải báo lỗi "quá nặng"');
     no(Object.keys(m.GC.choreo.ACTIONS).some(k => /^a\d+x$/.test(k)), 'dựng thử xong phải gỡ sạch gói tạm');
-    console.log('   ✓ cổng gói động tác: 15 kiểu tấn công bị chặn đúng chỗ (không ném lỗi, < 0,5 s) · lọc chữ HTML · chặn đè đòn khung / tên activity / khoá prototype · gói nặng nhất cổng cho qua dựng thử ' + ms + ' ms (trần 4 s) · gỡ sạch gói tạm');
+    // nhánh từ chối: hạn chót dựng thử (tiêm 30 ms) — gói "quá nặng" bị trả lỗi, gỡ sạch, không lưu
+    { const T = loadEngine(ROOT), mt = new MCP({ engine: T, store: new Store(fs.mkdtempSync(path.join(os.tmpdir(), 'gc-mo-'))), version: 't', system: {}, smokeMs: 30 });
+      const rs = await mt.callTool('validate_motion_pack', { pack: big }), ss = await mt.callTool('save_motion_pack', { pack: Object.assign({}, big, { id: 'ci-nang-2' }) });
+      no(!rs.isError || !/quá nặng/.test(rs.content[0].text), 'hết hạn chót dựng thử phải báo "quá nặng": ' + rs.content[0].text.slice(0, 120));
+      no(!ss.isError || mt.store.listMotionPacks().length || Object.keys(T.choreo.ACTIONS).some(k => /^a\d+x$/.test(k)), 'gói quá nặng không được lưu / để sót đòn'); }
+    // ≤ 8 gói động tác mỗi gói dự án (mỗi gói phải dựng thử)
+    { const { m: m9 } = fresh(), b9 = { format: 'gen-chibi.project/1', project: { id: 'ci-chin', name: 'Chín gói' }, motionPacks: Array.from({ length: 9 }, (x, i) => Object.assign(base(), { id: 'ci-goi-' + i, actions: { ['ciHit' + i]: base().actions.ciHit } })) };
+      let e9 = null; try { m9.importProject(b9, {}); } catch (e) { e9 = e; }
+      no(!e9 || !/motionPacks/.test(e9.message), 'gói dự án có 9 gói động tác phải bị chặn (tối đa 8): ' + (e9 ? e9.message : 'không lỗi'));
+      const b8 = Object.assign({}, b9, { motionPacks: b9.motionPacks.slice(0, 8) }); let e8 = null; try { m9.importProject(b8, {}); } catch (e) { e8 = e; }
+      no(e8, '8 gói động tác phải nhập được: ' + (e8 && e8.message)); }
+    console.log('   ✓ cổng gói động tác: 15 kiểu tấn công bị chặn đúng chỗ (không ném lỗi, < 0,5 s) · lọc chữ HTML · chặn đè đòn khung / tên activity / khoá prototype · gói nặng nhất cổng cho qua dựng thử ' + ms + ' ms (trần 4 s); hết hạn chót → "quá nặng", không lưu · gỡ sạch gói tạm · tối đa 8 gói / gói dự án');
   }
 
   // ---------- 2. hình học đòn tay không — đo ĐỘC LẬP: ma trận khớp của tư thế cuối × toạ độ bản vẽ (không qua pointAt / hàm của engine)
@@ -67,20 +78,21 @@ const clone = o => JSON.parse(JSON.stringify(o));
     const A = GC.ASSETS['local.my/mau-be-na'], B = GC.ASSETS['local.my/mau-sep-tu'], K = 0.8;
     const P = (tl, t, ai, joint, x, y) => { const F = C.finalAt(tl, t, ai), M = GC.jointMatrices(F.pose)[joint]; return [F.x + ((M[0] * x + M[2] * y + M[4]) - 100) * F.K, F.G + (M[1] * x + M[3] * y + M[5] - 228) * F.K]; };
     let n = 0;
-    for (const [xa, xb] of [[240, 420], [200, 520], [430, 250], [120, 600]]) {
-      const duel = act => C.duel({ a: { asset: A, x: xa, y: 330, k: K }, b: { asset: B, x: xb, y: 330, k: K }, action: act, react: 'hit' });
+    const SP = GC.SCENE.spots, pairs = [['left', 'right'], ['left', 'midRight'], ['midLeft', 'midRight'], ['left', 'center'], ['right', 'left'], ['midRight', 'midLeft'], ['center', 'left']].map(q => [SP[q[0]].x, SP[q[1]].x]);
+    for (const re of ['hit', 'fall', 'ko']) for (const [xa, xb] of pairs) {
+      const duel = act => C.duel({ a: { asset: A, x: xa, y: 330, k: K }, b: { asset: B, x: xb, y: 330, k: K }, action: act, react: act === 'throw' ? 'hit' : re });
       // đấm: nắm tay gần nhất chạm MẶT TRƯỚC của đầu đối thủ (±14), đúng tầm cao của đầu
       let tl = duel('punch'), d = tl.duel, t = d.reach, hd = P(tl, t, 1, 'head', 100, 96), front = hd[0] - d.dir * 52 * 0.7 * K;
       const fist = [P(tl, t, 0, 'handR', 128, 193), P(tl, t, 0, 'handL', 72, 193)].sort((a, b) => Math.abs(a[0] - front) - Math.abs(b[0] - front))[0];
-      no(Math.abs(fist[0] - front) > 14 || Math.abs(fist[1] - hd[1]) > 52 * K, 'đấm (' + xa + '→' + xb + '): nắm tay ' + fist.map(Math.round) + ' không chạm mặt trước đầu ' + Math.round(front) + ',' + Math.round(hd[1]));
+      no(Math.abs(fist[0] - front) > 14 || Math.abs(fist[1] - hd[1]) > 52 * K, 'đấm / ' + re + ' (' + xa + '→' + xb + '): nắm tay ' + fist.map(Math.round) + ' không chạm mặt trước đầu ' + Math.round(front) + ',' + Math.round(hd[1]));
       // đá: bàn chân chạm mặt trước thân (gốc − hướng × nửa thân 26) ±16
       tl = duel('kick'); d = tl.duel; t = d.reach;
       const foot = P(tl, t, 0, 'footR', 108, 226), bf = C.finalAt(tl, t, 1).x - d.dir * 26 * K;
-      no(Math.abs(foot[0] - bf) > 16, 'đá (' + xa + '→' + xb + '): bàn chân ' + Math.round(foot[0]) + ' lệch mặt trước thân ' + Math.round(bf));
+      no(Math.abs(foot[0] - bf) > 16, 'đá / ' + re + ' (' + xa + '→' + xb + '): bàn chân ' + Math.round(foot[0]) + ' lệch mặt trước thân ' + Math.round(bf));
       // đẩy mặt: lòng bàn tay nằm trên mặt đối thủ (trong bán kính đầu)
       tl = duel('push'); d = tl.duel; t = d.reach; hd = P(tl, t, 1, 'head', 100, 96);
       const palm = [P(tl, t, 0, 'handR', 128, 193), P(tl, t, 0, 'handL', 72, 193)].map(p => Math.hypot(p[0] - hd[0], p[1] - hd[1])).sort((a, b) => a - b)[0];
-      no(palm > 52 * K, 'đẩy mặt (' + xa + '→' + xb + '): bàn tay cách tâm đầu ' + Math.round(palm) + ' (> bán kính đầu)');
+      no(palm > 52 * K, 'đẩy mặt / ' + re + ' (' + xa + '→' + xb + '): bàn tay cách tâm đầu ' + Math.round(palm) + ' (> bán kính đầu)');
       // ném: quả ném rời ĐÚNG bàn tay lúc buông, bay tới ngực đối thủ lúc trúng (±6)
       tl = duel('throw'); const rel = tl.events.find(e => e.release), pr = tl.events.find(e => e.fx === 'projectile');
       no(!rel || !pr, 'ném: thiếu sự kiện buông tay / quả ném');
@@ -89,7 +101,16 @@ const clone = o => JSON.parse(JSON.stringify(o));
       no(Math.hypot(pr.x - chest[0], pr.y - chest[1]) > 6, 'ném (' + xa + '→' + xb + '): quả ném không tới ngực đối thủ');
       n += 4;
     }
-    console.log('   ✓ hình học đòn tay không (đo độc lập từ ma trận khớp, ' + n + ' màn, 4 khoảng cách, cả hai hướng): đấm chạm mặt trước đầu ±14 · đá chạm thân ±16 · đẩy mặt trong bán kính đầu · ném rời tay → tới ngực ±6');
+    // không chồng đầu: mọi đòn tay không × 5 phản ứng × các cặp chỗ đứng thật (đánh xong lùi về / thu ngắn đúng phần thiếu)
+    const Hd = (tl, t, ai) => P(tl, t, ai, 'head', 100, 96);
+    let worst = 1e9, nn = 0;
+    for (const act of ['punch', 'kick', 'push']) for (const re of ['hit', 'fall', 'ko', 'block', 'dodge']) for (const [xa, xb] of pairs) {
+      const tl = C.duel({ a: { asset: A, x: xa, y: 330, k: K }, b: { asset: B, x: xb, y: 330, k: K }, action: act, react: re });
+      let g = 1e9; for (let t = 0; t <= tl.T; t += 1 / 60) { const a = Hd(tl, t, 0), b = Hd(tl, t, 1); g = Math.min(g, Math.hypot(a[0] - b[0], a[1] - b[1])); }
+      no(g < 90 * K - 2, act + ' / ' + re + ' (' + xa + '→' + xb + '): hai đầu chồng nhau (tâm cách ' + g.toFixed(0) + ' < ' + (90 * K - 2) + ')');
+      worst = Math.min(worst, g); nn++;
+    }
+    console.log('   ✓ hình học đòn tay không (đo độc lập từ ma trận khớp, ' + n + ' màn = 4 đòn × trúng / ngã / choáng × ' + pairs.length + ' cặp chỗ đứng thật, hai hướng): đấm chạm mặt trước đầu ±14 · đá chạm thân ±16 · đẩy mặt trong bán kính đầu · ném rời tay → tới ngực ±6 · ' + nn + ' màn (3 đòn × 5 phản ứng): tâm hai đầu ≥ ' + worst.toFixed(0) + ' suốt màn');
   }
 
   // ---------- 3. bộ mẫu: chặn bán theo NỘI DUNG từng clip (đổi id gói / id đòn / tên clip / tên tư thế / thêm tư thế thừa) · sao lưu tự đủ · dữ liệu trước v0.16
@@ -181,10 +202,26 @@ const clone = o => JSON.parse(JSON.stringify(o));
       no(!er || typeof er !== 'object' || er.code !== /^\[([A-Z_]+)\]/.exec(t)[1] || typeof er.message !== 'string' || !Array.isArray(er.details) || !er.details.length || !er.hint, name + ': structuredContent.error thiếu code / message / details / hint');
       codes[er.code] = (codes[er.code] || 0) + 1;
     }
+    const okStep = { actor: 'mau-be-na', state: 'normal', say: '' }, castK = ['local.my/mau-be-na', 'local.my/mau-sep-tu'];
+    const badField = { actor: 'ai-do', state: 'khong-co', motion: 'khong-co', activity: 'khong-co', posture: 'khong-co', move: 'khong-co', facing: 'khong-co', view: 'khong-co',
+      spot: 'khong-co', fx: ['khong-co'], say: 7, hold: 99, to: 'mau-be-na', camera: 'khong-co', bubble: 'khong-co', sfx: ['khong-co'], action: 'khong-co', target: 'mau-be-na', react: 'khong-co' };
+    for (const [k, v] of Object.entries(badField)) {
+      const step = Object.assign({}, okStep, { [k]: v }); if (k === 'target' || k === 'react') Object.assign(step, { action: 'punch', target: k === 'target' ? v : 'mau-sep-tu' });
+      let r; try { r = await m.callTool('validate_event', { event: { title: 't', steps: [step] }, cast: castK }, {}); } catch (e) { no(true, 'validate_event ném lỗi khi ' + k + ' sai: ' + e.message); }
+      no(!r.isError || !r.structuredContent.error.details.some(d => d.path === 'steps[0].' + k), 'trường ' + k + ' sai phải báo đúng steps[0].' + k + ': ' + JSON.stringify(r.structuredContent && r.structuredContent.error && r.structuredContent.error.details));
+    }
+    // luật nhiều bước: hai diễn viên cùng chỗ đứng → steps[1].spot (bản sửa đường dẫn từng làm mất luật này vì trùng tên biến)
+    const two = await m.callTool('validate_event', { event: { title: 't', scene: 'gen.khung/san-khau-chuan', steps: [Object.assign({}, okStep, { spot: 'left' }), { actor: 'mau-sep-tu', state: 'normal', say: '', spot: 'left' }] }, cast: castK }, {});
+    no(!two.isError || !two.structuredContent.error.details.some(d => d.path === 'steps[1].spot'), 'hai diễn viên cùng chỗ đứng phải báo steps[1].spot: ' + JSON.stringify(two.structuredContent && (two.structuredContent.error || two.structuredContent)).slice(0, 200));
+    const wk = m.saveWorkChecked({ id: 'ci-hop-dong', title: 'Hợp đồng lỗi', project: 'mau-van-phong-vui' });
+    const sh = await m.callTool('save_shot', { work: wk.id, shot: { title: 'x', cast: castK, event: { title: 'x', steps: [Object.assign({}, okStep, { fx: ['khong-co'] })] } } }, {});
+    no(!sh.isError || !sh.structuredContent.error.details.some(d => d.path === 'shot.event.steps[0].fx'), 'save_shot phải chỉ shot.event.steps[0].fx: ' + JSON.stringify(sh.structuredContent.error.details));
+    const rr = await m.callTool('render_action', { character: 'mau-be-na', action: 'punch', react: 'khong-co' }, {});
+    no(!rr.isError || rr.structuredContent.error.code !== 'NOT_FOUND' || !rr.structuredContent.error.allowed, 'render_action phản ứng lạ phải NOT_FOUND kèm danh sách');
     const ev = await m.callTool('validate_event', { event: { title: 't', steps: [{ actor: 'mau-be-na', state: 'normal', say: '', action: 'thrust', target: 'mau-sep-tu' }] }, cast: ['local.my/mau-be-na', 'local.my/mau-sep-tu'] });
     no(!ev.structuredContent.error.details.some(d => d.path === 'steps[0].action'), 'lỗi kịch bản phải chỉ đường dẫn steps[i].field: ' + JSON.stringify(ev.structuredContent.error.details));
     const cf = await m.callTool('import_project', { bundle: sample('van-phong-vui') });
     no(cf.structuredContent.error.code !== 'CONFLICT' || !Array.isArray(cf.structuredContent.conflicts), 'nhập trùng phải là CONFLICT kèm conflicts');
-    console.log('   ✓ hợp đồng lỗi: ' + calls.length + ' lời gọi hỏng ở mọi tool có thể thất bại → [CODE] + error{code,message,details,hint} (' + Object.entries(codes).map(([k, v]) => k + ' ' + v).join(', ') + ') · lỗi kịch bản chỉ steps[i].field · nhập trùng = CONFLICT');
+    console.log('   ✓ hợp đồng lỗi: ' + calls.length + ' lời gọi hỏng ở mọi tool có thể thất bại → [CODE] + error{code,message,details,hint} (' + Object.entries(codes).map(([k, v]) => k + ' ' + v).join(', ') + ') · ' + Object.keys(badField).length + ' trường kịch bản làm hỏng lần lượt → không ném lỗi, chỉ đúng steps[0].<trường> (save_shot: shot.event.…) · nhập trùng = CONFLICT');
   }
 })().catch(e => { console.log('   ✗', e.stack || e.message); process.exit(1); });

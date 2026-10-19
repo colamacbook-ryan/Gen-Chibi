@@ -8,7 +8,9 @@ A motion pack is pure JSON data (`gen-chibi.motion/1`); the gate rejects anythin
    the framework pose names you can build on, and a complete example.
 2. `list_actions` — action ids already taken (framework + other packs). **Action ids are global**: pick new ones.
    `list_motion_packs` / `get_motion_pack` with `{ "key" }` — read an existing pack to learn from or to edit (save it again with the same `id`).
-3. Write the pack (see example and the rules below), `"project": "<id>"`.
+3. Write the pack (see example and the rules below), `"project": "<id>"`. Which actions a cast may use in a
+   script: framework actions + actions of packs in the cast's projects + packs with no project (shared). Always
+   set `project` (golden rule 3) unless the owner asks for a shared pack.
 4. `validate_motion_pack` with `{ "pack": <pack> }` — runs the gate **and builds every action** on the frame
    mannequin (attacks against a second mannequin). Fix every `details[].path`.
 5. `save_motion_pack` with `{ "pack": <pack>, "note": "…" }`.

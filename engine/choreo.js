@@ -690,13 +690,20 @@
     // va chạm (đổ người tới) → mới phải lùi cả đòn (đòn ngắn đi, ghi vào duel.short)
     var headGap = 90 * Math.max(A.k || 0.8, kB), short = 0, recoil = 0, out, g, mh;
     if (!ts) ts = (A.k || 0.8) / 0.62;
-    for (var hg = 0; hg < 4; hg++) {
+    // Bước lùi chỉ cứu được chồng đầu xảy ra SAU khi đòn dứt; chồng đầu ngay trong lúc thu đòn / đối thủ ngã chúi (review cortex CNS-079)
+    // thì lùi không đủ → quay về cách chắc chắn: lùi cả đòn. Vòng cuối luôn là bản đã đo đạt, hoặc bản tốt nhất đo được.
+    var lastPost = null;
+    for (var hg = 0; hg < 6; hg++) {
       var cp = steps.map(function (x) { return Object.assign({}, x); });   // stage() sửa bước (dur, thêm hold) — mỗi vòng dựng từ bản sao
       if (act.ranged) { out = stage(cp, lone); g = minHead(out.tl); break; }   // ném: đứng xa, không áp sát
       out = stage(cp, lone); mh = minHead(out.tl, out.tReach + 0.05); g = mh.g;
-      if (g >= headGap - 1 || hg === 3) break;
-      if (mh.pre >= headGap - 1) { recoil += headGap - mh.post + 4; continue; }
-      var back = headGap - mh.pre + 2; short += back; delta -= back;
+      if (g >= headGap - 1 || hg === 5) break;
+      // thiếu TRƯỚC va chạm → thu ngắn đúng phần thiếu đó (phần sau để bước lùi lo); chỉ thiếu SAU → lùi về; lùi không đỡ → thu ngắn
+      var back;
+      if (mh.pre < headGap - 1) back = headGap - mh.pre + 2;
+      else if (recoil < 160 && (lastPost === null || mh.post > lastPost + 2)) { lastPost = mh.post; recoil += headGap - mh.post + 4; continue; }
+      else back = headGap - mh.post + 2;
+      short += back; delta -= back;
       steps = plan(delta);
       lone = build({ actors: [actorSpec(A, dir, steps)], world: W0 });
     }

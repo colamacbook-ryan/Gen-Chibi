@@ -174,9 +174,10 @@ function slugOf(s) {
 }
 
 class MCP {
-  // system (tuỳ chọn): { updater, restartSoon } — để agent tự kiểm và cập nhật phiên bản
-  constructor({ engine, store, version, system }) {
+  // system (tuỳ chọn): { updater, restartSoon } — để agent tự kiểm và cập nhật phiên bản; smokeMs: hạn chót dựng thử gói động tác (test hạ xuống)
+  constructor({ engine, store, version, system, smokeMs }) {
     this.GC = engine;
+    this.smokeMs = smokeMs || 4000;
     this.store = store;
     this.version = version;
     this.system = system || null;
@@ -404,6 +405,7 @@ class MCP {
         if (!C.canDo(A, act)) return toolError((A.name || A.id) + ' không làm được "' + act.label + '" (cần cầm binh khí)', { code: 'VALIDATION_FAILED', allowed: C.actionsFor(A) });
         const B = args.partner ? this.findAsset(String(args.partner)) : null;
         if (args.partner && !B) return toolError('Không có nhân vật ' + args.partner, { code: 'NOT_FOUND' });
+        if (args.react !== undefined && !Object.prototype.hasOwnProperty.call(C.REACTS, String(args.react))) return toolError('react: không có phản ứng "' + String(args.react).slice(0, 40) + '"', { code: 'NOT_FOUND', allowed: Object.keys(C.REACTS) });
         // số từ client không tin: kẹp fps / cell đúng inputSchema (cell đi thẳng vào thuộc tính SVG)
         const fmt = ['sheet', 'frames', 'meta'].indexOf(args.format) >= 0 ? args.format : 'sheet', fps = Math.max(4, Math.min(30, Math.round(+args.fps) || 12)), cell = Math.max(48, Math.min(512, Math.round(+args.cell) || 160));
         let an; try { an = C.animate(C.actionTimeline({ asset: A, action: args.action, partner: B, react: args.react }), { fps, maxFrames: fmt === 'frames' ? 60 : 120 }); } catch (e) { return toolError(e, { code: 'INTERNAL' }); }
@@ -448,7 +450,10 @@ class MCP {
       }
       case 'save_shot': {
         try { const r = this.saveShotChecked(args); return json(r); }
-        catch (e) { return legacyError({ saved: false, errors: e.errors || [e.message] }, e); }
+        catch (e) {   // lỗi kịch bản chỉ đường dẫn tính từ tham số của tool: shot.event.steps[i].field (CNS-080)
+          const errs = (e.errors || [e.message]).map(x => typeof x === 'string' && /^(event|scene|cast|title)\b/.test(x) ? 'shot.' + x : x);
+          return legacyError({ saved: false, errors: errs }, e, { errors: errs });
+        }
       }
       case 'save_project': {
         try { return json(this.store.saveProject(args)); } catch (e) { return toolError(e); }
@@ -703,7 +708,7 @@ class MCP {
     return C.registerPack(MY_PACK, rec).def;
   }
   motionSmoke(d) {
-    const GC = this.GC, C = GC.choreo, M = GC.ASSETS['gen.khung/ma-no-canh'], errs = [], t0 = Date.now(), LIMIT = 4000;
+    const GC = this.GC, C = GC.choreo, M = GC.ASSETS['gen.khung/ma-no-canh'], errs = [], t0 = Date.now(), LIMIT = this.smokeMs;
     const late = () => { if (Date.now() - t0 > LIMIT) { if (errs.indexOf(SLOW) < 0) errs.push(SLOW); return true; } return false; };
     const SLOW = 'pack: dựng thử quá ' + LIMIT / 1000 + ' s — gói quá nặng (bớt hành động / clip / sự kiện)';
     Object.keys(d.actions).forEach(k => {
@@ -906,7 +911,7 @@ class MCP {
       const ev = JSON.parse(JSON.stringify(s.event));
       if (ev && typeof ev === 'object') { if (cur.scene) ev.scene = cur.scene; else delete ev.scene; if (!ev.title) ev.title = cur.title || w.title; }
       const e2 = cast.length ? GC.director.validate(ev, cast) : ['event: phân cảnh cần cast trước khi viết lời thoại'];
-      if (e2.length) e2.slice(0, 10).forEach(x => errs.push('event: ' + x)); else cur.event = ev;
+      if (e2.length) e2.slice(0, 10).forEach(x => errs.push(/^[A-Za-z0-9_.\[\]]+: /.test(x) ? 'event.' + x : 'event: ' + x)); else cur.event = ev;   // đường dẫn liền: event.steps[i].field
     } else if (s.event === null) cur.event = null;
     else if (cur.event && (s.scene !== undefined || s.cast !== undefined)) {
       // đổi cảnh / dàn diễn viên: lời thoại cũ phải còn hợp lệ, không thì bỏ để viết lại (không giữ thứ không diễn được)

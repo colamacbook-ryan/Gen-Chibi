@@ -14,7 +14,9 @@
    - `look.equip.<slot>` = item keys (`local.my/<item-id>`), e.g. a weapon in `heldR`;
    - `look.palette` = hex colours for keys in `paletteKeys`; `look.params` = numbers inside each part's min–max;
    - `identity.must` = the distinctive parts (`"<slot>:<part-id>"`) — required to publish.
-5. `validate_character` with `{ "asset": <recipe> }` — every gate must be `ok: true`.
+5. `validate_character` with `{ "asset": <recipe> }` → `ok: true` when no gate BLOCKS the asset's status (a draft
+   does not need `identity.must`; unmet non-blocking gates come back as `warnings`). On failure it is a
+   `[VALIDATION_FAILED]` error whose `details[].path` names the gate (`gates.<id>`).
 6. `save_character` with `{ "asset": <recipe>, "note": "why" }` → `saved: true`, `key: "local.my/<id>"`.
 7. `render_character` with `{ "key": "local.my/<id>", "state": "proud" }` (any state from the catalog) — look at it.
 
