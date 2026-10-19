@@ -40,11 +40,13 @@
   `list_events` lists them. Prefer `save_shot` when you know the work.
 
 ## Owner's review notes (read them before fixing a film)
-- `get_work` returns `review`: `{ "shots": { "<shot id>": { "status": "draft" | "fix" | "ok", "notes": [{ "id", "text", "step"?, "at" }] } }, "note" }`.
+- `get_work` returns `review`: `{ "shots": { "<shot id>": { "status": "draft" | "fix" | "ok", "notes": [{ "id", "text", "step"?, "at", "by" }] } }, "note" }` (`by`: `owner` | `ai` | `agent` | `system` — set by the server).
   The owner marks each shot in Studio › Tạo tác › Xem & duyệt: `fix` = needs changes, `ok` = approved ("Đạt"). `step` (1-based) points at one step of the shot.
 - When asked to fix a film "according to the notes": read `review`, edit only the shots with status `fix` (or the noted steps) with `save_shot`,
-  then tell the owner what changed. Do not set `ok` yourself — only the owner approves. A shot edited after `ok` returns to `draft` automatically.
-- `save_work` accepts `review` (same shape, merged per shot; unknown keys are rejected; notes are clamped to 400 characters).
+  then tell the owner what changed. You cannot set `ok` — the server rejects it; only the owner approves, in Studio. A shot edited after `ok` returns to `draft` automatically.
+- `save_work` accepts `review` (same shape, merged per shot; unknown keys are rejected; notes are clamped to 400 characters) but only to set `draft` / `fix` and to ADD notes
+  (the server stamps them `by: "agent"`). To keep the notes already there, resend them unchanged (same `id` + `text`) or omit `notes`. You cannot delete or edit the owner's notes,
+  change `review.note`, or send `review: null` — those calls fail; tell the owner instead.
 
 ## Staging tips
 - Fighters stand in the front row (`left`, `midLeft`, `center`, `midRight`, `right`), at least one spot apart.

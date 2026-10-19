@@ -12,6 +12,8 @@ const PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const SERVER_INFO = { name: 'gen-chibi', title: 'gen-chibi — nhà máy asset chibi bằng code (nhân vật, vật phẩm, bối cảnh, gói động tác, phim)' };
 const MY_PACK = 'local.my';
 const TMP_PACK = 'local.preview';
+// kênh ghi → nhãn tác giả (CNS-116 / 127): owner = chủ trong Studio (HTTP, không qua callTool) · ai = dock cột phải · agent = MCP (token, link, stdio)
+const byOf = ctx => (ctx && ctx.channel === 'ui' ? 'ai' : 'agent');
 // lớp nên dùng cho từng bộ phận (theo thư viện chính thức)
 const SLOT_LAYERS = {
   head: ['head', 'ears', 'shade'], mask: ['mask'], hair: ['hairFront', 'hairBack'], beard: ['beard', 'mustache'], hat: ['hat', 'hairBack'],
@@ -81,7 +83,7 @@ const TOOLS = [
   { name: 'save_project', title: 'Tạo / sửa dự án chủ đề', description: 'Tạo hoặc đổi tên một dự án chủ đề (id slug, name, description). Không xoá asset.', inputSchema: obj({ id: { type: 'string', description: 'slug: chữ thường, số, gạch nối' }, name: { type: 'string' }, description: { type: 'string' } }, ['id', 'name']) },
   { name: 'list_works', title: 'Danh sách tác phẩm', description: 'Các tác phẩm (phim / truyện) đang làm ở khu Tạo tác: id, tên, dự án chủ đề, số phân cảnh, số cảnh đã có lời thoại.', inputSchema: obj({}), annotations: { readOnlyHint: true } },
   { name: 'get_work', title: 'Xem tác phẩm', description: 'Toàn bộ một tác phẩm: kịch bản, danh sách phân cảnh (mô tả, cảnh, dàn diễn viên, lời thoại / diễn xuất) và review (trạng thái duyệt + ghi chú của chủ cho từng cảnh — đọc để sửa theo).', inputSchema: obj({ id: { type: 'string' } }, ['id']), annotations: { readOnlyHint: true } },
-  { name: 'save_work', title: 'Lưu tác phẩm', description: 'Tạo hoặc sửa phần chung của tác phẩm: title, project (dự án chủ đề), logline (một câu), script (kịch bản tổng, văn xuôi), lang (ngôn ngữ lời thoại vi | en | zh | yue (Quảng Đông) — mặc định vi) + accent (giọng vùng: bac / nam / trung · us / uk · pt / tw · hk). Không đụng phân cảnh (nhưng đổi project thì kiểm lại âm của các phân cảnh theo gói âm của dự án mới — S6). Bỏ id để tạo mới.', inputSchema: obj({ id: { type: 'string' }, title: { type: 'string' }, project: { type: 'string' }, logline: { type: 'string' }, script: { type: 'string' }, lang: { type: 'string', enum: Object.keys(GV.LANGS) }, accent: { type: 'string' }, review: { type: 'object', description: 'Duyệt từng cảnh: { shots: { <id phân cảnh>: { status: draft | fix | ok, notes: [{ text, step? }] } }, note? } — gộp theo từng cảnh (gửi lại một cảnh = thay ghi chú của cảnh đó). Chủ duyệt đặt trong Studio › Tạo tác › Xem & duyệt; đọc bằng get_work › review.' } }) },
+  { name: 'save_work', title: 'Lưu tác phẩm', description: 'Tạo hoặc sửa phần chung của tác phẩm: title, project (dự án chủ đề), logline (một câu), script (kịch bản tổng, văn xuôi), lang (ngôn ngữ lời thoại vi | en | zh | yue (Quảng Đông) — mặc định vi) + accent (giọng vùng: bac / nam / trung · us / uk · pt / tw · hk). Không đụng phân cảnh (nhưng đổi project thì kiểm lại âm của các phân cảnh theo gói âm của dự án mới — S6). Bỏ id để tạo mới.', inputSchema: obj({ id: { type: 'string' }, title: { type: 'string' }, project: { type: 'string' }, logline: { type: 'string' }, script: { type: 'string' }, lang: { type: 'string', enum: Object.keys(GV.LANGS) }, accent: { type: 'string' }, review: { type: 'object', description: 'Duyệt từng cảnh: { shots: { <id phân cảnh>: { status: draft | fix | ok, notes: [{ text, step? }] } }, note? } — MÁY ĐỌC / THÊM, KHÔNG THAY CHỦ: agent và trợ lý chỉ đặt draft / fix và THÊM ghi chú (server gắn nhãn tác giả "by"); không đặt "ok" (Đạt chỉ chủ đặt trong Studio), không xoá / sửa ghi chú đã có, không ghi note chung, không gửi review: null. Muốn thêm ghi chú: gửi notes = các ghi chú cũ (nguyên id + text) + ghi chú mới (không id) — hoặc bỏ notes để giữ nguyên. Đọc bằng get_work › review.' } }) },
   { name: 'save_shot', title: 'Lưu phân cảnh', description: 'Thêm / sửa / bỏ một phân cảnh của tác phẩm. Lời thoại có step.sfx thì chạy luật ghép âm S1–S7 (lint_sound_track): lỗi → từ chối kèm path, cảnh báo → trả kèm warnings. shot = { id? (bỏ trống = thêm mới), title, description (mô tả phân cảnh), scene (key cảnh trong Thư viện, xem list_scenes), cast (≤ 8 nhân vật: id hoặc key, xem list_characters), event? (lời thoại + diễn xuất theo get_director_schema; engine tự đặt event.scene = scene) }. position = vị trí chèn (0 = đầu). remove = true để bỏ phân cảnh. Thiếu nhân vật / cảnh thì tạo ở Xưởng trước (save_character / save_scene với project của tác phẩm).', inputSchema: obj({ work: { type: 'string' }, shot: { type: 'object' }, position: { type: 'integer' }, remove: { type: 'boolean' } }, ['work', 'shot']) },
   { name: 'export_project', title: 'Xuất gói dự án', description: 'Gói JSON của một dự án chủ đề (gen-chibi.project/1): nhân vật, item, cảnh, linh kiện / phông tự vẽ đang dùng, gói động tác, gói âm, tác phẩm. Dùng để sao lưu, chuyển máy, bán / chia sẻ bộ asset theo chủ đề.', inputSchema: obj({ id: { type: 'string', description: 'id dự án (list_projects)' }, sale: { type: 'boolean', description: 'true = GÓI BÁN: chỉ asset trạng thái published (phát hành), không kèm tác phẩm' } }, ['id']), annotations: { readOnlyHint: true } },
   { name: 'import_project', title: 'Nhập gói dự án', description: 'Nhập một gói gen-chibi.project/1 vào Thư viện. Mọi linh kiện, item, cảnh, nhân vật, gói động tác, gói âm, tác phẩm đi qua đúng cổng kiểm như khi tạo mới. Trùng id thì báo danh sách trùng; overwrite = true để lưu đè thành phiên bản mới (bản cũ vẫn giữ trong lịch sử).', inputSchema: obj({ bundle: { type: 'object' }, overwrite: { type: 'boolean' } }, ['bundle']) },
@@ -555,7 +557,7 @@ class MCP {
       case 'install_sample': {
         const S = this.samples().find(x => x.id === String(args.id || ''));
         if (!S) return toolError('Không có bộ mẫu ' + args.id, { code: 'NOT_FOUND', allowed: this.samples().map(x => x.id) });
-        try { return json(this.importProject(JSON.parse(fs.readFileSync(S.path, 'utf8')), { overwrite: args.overwrite === true })); } catch (e) { return toolError(e); }
+        try { return json(this.importProject(JSON.parse(fs.readFileSync(S.path, 'utf8')), { overwrite: args.overwrite === true, by: byOf(ctx) })); } catch (e) { return toolError(e); }
       }
       case 'list_events': return json(this.store.listEvents().map(e => ({ id: e.id, title: e.title, author: e.author, savedAt: e.savedAt, steps: (e.event && e.event.steps || e.steps || []).length })));
       case 'get_app_version': case 'update_app': case 'rollback_app': return this.appTool(name, args, ctx || {});
@@ -564,7 +566,7 @@ class MCP {
       case 'list_works': return json(this.listWorks());
       case 'export_project': { try { return json(this.exportProject(String(args.id || ''), { sale: args.sale === true })); } catch (e) { return toolError(e); } }
       case 'import_project': {
-        try { return json(this.importProject(args.bundle, { overwrite: args.overwrite === true })); }
+        try { return json(this.importProject(args.bundle, { overwrite: args.overwrite === true, by: byOf(ctx) })); }
         catch (e) { return legacyError({ imported: false, conflicts: e.conflicts || null }, e, e.conflicts ? { code: 'CONFLICT', errors: e.conflicts.map(c => 'conflicts: ' + c), hint: 'Đã có các mục này — gọi lại với overwrite: true để lưu đè (tạo phiên bản mới), hoặc đổi id.' } : {}); }
       }
       case 'get_work': { const w = this.store.getWork(String(args.id || '')); return w ? json(this.workView(w)) : toolError('Không có tác phẩm ' + args.id + '. Gọi list_works.'); }
@@ -573,7 +575,7 @@ class MCP {
         try { return json(this.proposeEdit(args)); } catch (e) { return toolError(e, e.allowed ? { allowed: e.allowed } : undefined); }
       }
       case 'save_work': {
-        try { const w = this.saveWorkChecked(args, { noApprove: !!(ctx && ctx.channel === 'ui') }); return json(Object.assign({ saved: true, id: w.id, version: w.version, studio: 'Studio › Tạo tác › Tác phẩm › ' + w.title }, w.warnings ? { warnings: w.warnings } : {})); }
+        try { const w = this.saveWorkChecked(args, { by: byOf(ctx) }); return json(Object.assign({ saved: true, id: w.id, version: w.version, studio: 'Studio › Tạo tác › Tác phẩm › ' + w.title }, w.warnings ? { warnings: w.warnings } : {})); }
         catch (e) { return legacyError({ saved: false, errors: e.errors || [e.message] }, e); }
       }
       case 'save_shot': {
@@ -1024,10 +1026,16 @@ class MCP {
         // lang / accent / voices (giọng đã chốt của dàn) đi theo gói — L-61 (CNS-083)
         const rec = this.saveWorkChecked(Object.assign({ id: String(w.id || ''), title: w.title, project: pid, logline: w.logline || '', script: w.script || '' },
           w.lang !== undefined ? { lang: w.lang } : {}, w.accent !== undefined ? { accent: w.accent } : {}, w.voices !== undefined ? { voices: w.voices } : {}));
-        const mem = Object.assign(S.getWork(rec.id), { shots: [], chat: [] });   // nhập = thay trọn phân cảnh; lịch sử chat cũ không còn khớp → bỏ
+        const cur = S.getWork(rec.id), oldShots = {};
+        (cur.shots || []).forEach(x => { oldShots[x.id] = x; });
+        const mem = Object.assign(cur, { shots: [], chat: [] });   // nhập = thay trọn phân cảnh; lịch sử chat cũ không còn khớp → bỏ
         (Array.isArray(w.shots) ? w.shots.slice(0, 40) : []).forEach(s => step('shots', w.id + '/' + (s && s.id), () => this.saveShotChecked({ work: rec.id, shot: { id: s.id, title: s.title, description: s.description, scene: s.scene, cast: s.cast, event: s.event || undefined } }, { work: mem })));
-        if (w.review !== undefined && w.review !== null) {   // duyệt từng cảnh đi theo gói (sau phân cảnh: id cảnh phải có thật)
-          const re = [], rv = cleanReview(w.review, mem, re);
+        // cảnh trùng id mà nội dung khác (nhập đè) → "Đạt" cũ về "Nháp" như mọi đường sửa cảnh (CNS-116); duyệt + đề xuất của cảnh không còn trong gói thì bỏ theo
+        mem.shots.forEach(x => { if (Object.prototype.hasOwnProperty.call(oldShots, x.id)) reviewTouched(mem, oldShots[x.id], x); });
+        if (mem.review && mem.review.shots) Object.keys(mem.review.shots).forEach(id => { if (!mem.shots.some(x => x.id === id)) delete mem.review.shots[id]; });
+        if (mem.proposals) mem.proposals = mem.proposals.filter(p => mem.shots.some(x => x.id === p.shot));
+        if (w.review !== undefined && w.review !== null) {   // duyệt từng cảnh đi theo gói (sau phân cảnh: id cảnh phải có thật); kênh không phải chủ không mang vào "Đạt" / xoá ghi chú
+          const re = [], rv = cleanReview(w.review, mem, re, { by: (opts && opts.by) || 'owner' });
           if (re.length) errors.push({ kind: 'review', id: String(w.id).slice(0, 64), error: re.slice(0, 3).join('; ').slice(0, 300) }); else if (rv) mem.review = rv;
         }
         S.saveWork(mem);   // ghi MỘT lần cho cả tác phẩm
@@ -1542,16 +1550,22 @@ function cleanAnchors(list) {
   return out.slice(0, 8);
 }
 // work.review — trạng thái duyệt từng cảnh + ghi chú (gắn cảnh, tuỳ chọn gắn bước). Trả bản mới (gộp vào bản cũ theo từng cảnh); lỗi → errs (đường dẫn máy đọc được).
-// Chặn khoá lạ ở mọi tầng, kẹp độ dài, id ghi chú + giờ do SERVER đặt; kênh AI ('ui') không được đặt "Đạt" — chỉ chủ duyệt
+// Chặn khoá lạ ở mọi tầng, kẹp độ dài, id ghi chú + giờ + tác giả (by) do SERVER đặt.
+// QUYỀN THEO TÁC GIẢ (CNS-116 / Q18): opts.by = 'owner' (chủ, Studio — POST /api/works) làm được mọi việc; 'ai' (dock cột phải) và 'agent' (MCP: token / link / stdio)
+// chỉ đặt Nháp / Cần sửa và THÊM ghi chú — không đặt "Đạt", không xoá / sửa ghi chú đã có, không đổi ghi chú chung, không xoá duyệt
 const REVIEW_STATUS = ['draft', 'fix', 'ok'];
 function cleanReview(raw, w, errs, opts) {
   const prev = w.review && typeof w.review === 'object' ? w.review : { shots: {}, note: '' }, now = new Date().toISOString();
+  const by = (opts && opts.by) || 'owner', owner = by === 'owner';
   const plain = (t, n) => String(t == null ? '' : t).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '').trim().slice(0, n);
-  if (raw === null) return undefined;
+  if (raw === null) { if (!owner) { errs.push('review: chỉ chủ xoá được duyệt — kênh ' + by + ' chỉ đặt Nháp / Cần sửa và thêm ghi chú'); return prev; } return undefined; }
   if (typeof raw !== 'object' || Array.isArray(raw)) { errs.push('review: cần object { shots, note }'); return prev; }
   Object.keys(raw).forEach(k => { if (k !== 'shots' && k !== 'note' && k !== 'updatedAt') errs.push('review.' + k + ': khoá lạ (chỉ có shots, note)'); });   // updatedAt: server đặt, bản xuất ra mang theo — nhập lại thì bỏ qua
   const out = { shots: Object.assign({}, prev.shots), note: prev.note || '', updatedAt: now };
-  if (raw.note !== undefined) out.note = plain(raw.note, 600);
+  if (raw.note !== undefined) {
+    const nt = plain(raw.note, 600);
+    if (owner || nt === out.note) out.note = nt; else errs.push('review.note: ghi chú chung là của chủ — kênh ' + by + ' chỉ thêm ghi chú vào từng cảnh (review.shots.<id>.notes)');
+  }
   if (raw.shots !== undefined) {
     if (!raw.shots || typeof raw.shots !== 'object' || Array.isArray(raw.shots)) { errs.push('review.shots: cần object { <id phân cảnh>: { status, notes } }'); return out; }
     const ids = new Set((w.shots || []).map(s => s.id)), keys = Object.keys(raw.shots);
@@ -1563,21 +1577,28 @@ function cleanReview(raw, w, errs, opts) {
       Object.keys(r).forEach(k => { if (k !== 'status' && k !== 'notes' && k !== 'at') errs.push(P + '.' + k + ': khoá lạ (chỉ có status, notes)'); });
       const status = r.status === undefined ? (old && old.status) || 'draft' : r.status;
       if (REVIEW_STATUS.indexOf(status) < 0) { errs.push(P + '.status: ' + REVIEW_STATUS.join(' | ')); return; }
-      if (status === 'ok' && opts && opts.noApprove && !(old && old.status === 'ok')) { errs.push(P + '.status: chỉ chủ duyệt mới đặt "ok" (Đạt) — AI chỉ đặt draft / fix'); return; }
+      if (status === 'ok' && !owner && !(old && old.status === 'ok')) { errs.push(P + '.status: chỉ chủ duyệt mới đặt "ok" (Đạt), trong Studio — kênh ' + by + ' chỉ đặt draft / fix'); return; }
       const oldNotes = old && Array.isArray(old.notes) ? old.notes : [], notes = [];
       let next = oldNotes.reduce((m, n) => Math.max(m, +String(n.id).slice(1) || 0), 0);
       if (r.notes !== undefined && !Array.isArray(r.notes)) { errs.push(P + '.notes: cần mảng'); return; }
+      if (!owner && r.notes !== undefined) {   // chỉ THÊM: mọi ghi chú đã có phải còn nguyên (id + chữ + bước); ghi chú mới không mang id
+        oldNotes.forEach(o => {
+          const m = r.notes.find(n => n && typeof n === 'object' && n.id === o.id);
+          if (!m) errs.push(P + '.notes: ghi chú ' + o.id + ' đã có — kênh ' + by + ' không được xoá, chỉ thêm ghi chú mới (bỏ trường notes để giữ nguyên)');
+          else if (plain(m.text, 400) !== o.text || m.step !== o.step) errs.push(P + '.notes: ghi chú ' + o.id + ' đã có — kênh ' + by + ' không được sửa, chỉ thêm ghi chú mới');
+        });
+      }
       const src = r.notes === undefined ? oldNotes : r.notes;
       if (src.length > 12) errs.push(P + '.notes: tối đa 12 ghi chú một cảnh');
       src.slice(0, 12).forEach((n, i) => {
         const NP = P + '.notes[' + i + ']';
         if (!n || typeof n !== 'object' || Array.isArray(n)) { errs.push(NP + ': cần object { text, step? }'); return; }
-        Object.keys(n).forEach(k => { if (['id', 'text', 'step', 'at'].indexOf(k) < 0) errs.push(NP + '.' + k + ': khoá lạ (chỉ có text, step)'); });
+        Object.keys(n).forEach(k => { if (['id', 'text', 'step', 'at', 'by'].indexOf(k) < 0) errs.push(NP + '.' + k + ': khoá lạ (chỉ có text, step)'); });   // at / by: server đặt, gửi lại thì bỏ qua
         const text = plain(n.text, 400);
         if (!text) { errs.push(NP + '.text: ghi chú không được trống'); return; }
         if (n.step !== undefined && !(Number.isInteger(n.step) && n.step >= 1 && n.step <= 12)) { errs.push(NP + '.step: số nguyên 1–12 (số thứ tự bước)'); return; }
         const was = typeof n.id === 'string' ? oldNotes.find(o => o.id === n.id) : null;
-        const rec = { id: was ? was.id : 'n' + (++next), text, at: was && was.at ? was.at : now };
+        const rec = { id: was ? was.id : 'n' + (++next), text, at: was && was.at ? was.at : now, by: was ? was.by || 'owner' : by };   // ghi chú cũ chưa có by = của chủ
         if (n.step !== undefined) rec.step = n.step;
         notes.push(rec);
       });
@@ -1593,7 +1614,7 @@ function reviewTouched(w, before, after) {
   const sig = s => JSON.stringify([s.title, s.description, s.scene, s.cast, s.event]);
   if (sig(before) === sig(after)) return;
   rv.status = 'draft'; rv.at = new Date().toISOString();
-  if (rv.notes.length < 12) rv.notes.push({ id: 'n' + (rv.notes.reduce((m, n) => Math.max(m, +String(n.id).slice(1) || 0), 0) + 1), text: 'Cảnh đã đổi sau khi duyệt — cần xem lại.', at: rv.at });
+  if (rv.notes.length < 12) rv.notes.push({ id: 'n' + (rv.notes.reduce((m, n) => Math.max(m, +String(n.id).slice(1) || 0), 0) + 1), text: 'Cảnh đã đổi sau khi duyệt — cần xem lại.', at: rv.at, by: 'system' });
 }
 
 module.exports = { MCP, TOOLS, INSTRUCTIONS, workInstructions, ZONES, UI_TOOLS, cleanContext, cleanAnchors };
