@@ -552,6 +552,25 @@
       e.style.zIndex = Math.round(p.y / 10);
     }
     function wait(ms, r) { return new Promise(function (ok, no) { timers.push(setTimeout(function () { if (r === run) ok(); else no('stop'); }, ms)); }); }
+    // chờ điều trình duyệt phải VẼ ra mới xong (khung hình, chuyển tiếp CSS): máy chậm / khung hình thưa thì hình chạy SAU đồng hồ hẹn giờ.
+    // Tab ẩn (trình duyệt thôi vẽ) → thôi chờ, như trước. Dừng giữa chừng → 'stop'.
+    function painted(p, r) {
+      return new Promise(function (ok, no) {
+        var done = false, fin = function () { if (done) return; done = true; if (r === run) ok(); else no('stop'); };
+        p.then(fin, fin);
+        (function poll() { timers.push(setTimeout(function () { if (done) return; if (r !== run || document.hidden) fin(); else poll(); }, 200)); })();
+      });
+    }
+    // sân khấu đứng yên: mọi chuyển tiếp đang chạy của diễn viên (đi / bước tới / lùi) và máy quay (lướt / đẩy) đã xong TRÊN MÀN HÌNH.
+    // Bố cục lời thoại tính theo chỗ đích (pos, camState); mở bong bóng khi hình còn ở chỗ cũ là đè đầu (CNS-099)
+    function settle(r) {
+      var list = Object.keys(els).map(function (k) { return els[k]; }).concat(cam ? [cam] : []), an = [];
+      list.forEach(function (e) {
+        if (!e.getAnimations) return;
+        e.getAnimations().forEach(function (a) { var t = a.effect && a.effect.getComputedTiming(); if (t && isFinite(t.endTime) && a.playState !== 'finished') an.push(a.finished.catch(function () {})); });
+      });
+      return an.length ? painted(Promise.all(an), r) : (r === run ? Promise.resolve() : Promise.reject('stop'));
+    }
     function sfx(name, o) { if (A && name) A.sfx(name, o); }
     // dự án của tác phẩm (chọn gói âm): opts.project / setProject — chuỗi hoặc hàm; thiếu thì direct() tự suy từ bối cảnh / diễn viên
     var projectOpt = opts.project;
@@ -675,7 +694,7 @@
       return { heads: heads, bodies: bodies, decor: decor, mouth: mouth ? { x: mouth[0], y: mouth[1] } : { x: W / 2, y: H * 0.4 } };
     }
     function bubble(line) {
-      var c = plan.cast.filter(function (x) { return x.id === line.actor; })[0] || {}, mode = 'bubble', on = false, rig = null;
+      var c = plan.cast.filter(function (x) { return x.id === line.actor; })[0] || {}, mode = 'bubble', on = false, closed = false, rig = null;
       var b = el('div', 'gcp-bub ' + line.bubble), svg = svgEl('svg', { 'aria-hidden': 'true', focusable: 'false' }), nm = el('span', 'nm', c.name || line.actor), tx = el('span', 'tx');
       nm.style.background = chipColor(c.color);
       b.appendChild(svg); b.appendChild(nm); b.appendChild(tx);
@@ -721,11 +740,14 @@
         mode: function () { return mode; },
         layout: layout,
         word: function (i) { for (var j = 0; j < ws.length; j++) { ws[j].classList.toggle('on', j <= i); ws[j].classList.toggle('cur', j === i); } },
-        show: function () {
-          var go = function () { layout(true); requestAnimationFrame(function () { on = true; b.classList.add('on'); }); };
-          if (fontsOk) go(); else fontsReady.then(go);   // đo chữ khi phông đã về (chưa có thì đo bằng phông dự phòng, vẫn đúng)
+        // → Promise: xong khi bong bóng ĐÃ HIỆN ở một khung hình thật — người gọi tính giờ đọc từ đó (máy chậm: khung tới trễ cả giây thì câu không bị "hiện 0,1 s rồi tắt")
+        show: function (r) {
+          return painted(new Promise(function (ok) {
+            var go = function () { layout(true); requestAnimationFrame(function () { if (!closed) { on = true; b.classList.add('on'); } ok(); }); };
+            if (fontsOk) go(); else fontsReady.then(go);   // đo chữ khi phông đã về (chưa có thì đo bằng phông dự phòng, vẫn đúng)
+          }), r);
         },
-        close: function () { on = false; b.classList.remove('on'); setTimeout(function () { b.remove(); }, 200); }
+        close: function () { closed = true; on = false; b.classList.remove('on'); setTimeout(function () { b.remove(); }, 200); }   // khung hình tới trễ sau close: không mở lại
       };
       return api;
     }
@@ -772,7 +794,8 @@
     }
     function speak(line, r) {
       var id = line.actor, dir = Object.assign({}, line.director, line.face[id] ? { view: line.face[id] } : {});
-      var mouth = lipSync(id, line, dir), voice = voiceOf(id), b = bubble(line), done = false;
+      // bước im (không chữ — chỉ diễn + âm, vd. thề trước khi nói, v0.18): KHÔNG mở bong bóng rỗng; vẫn diễn, phát âm, giữ khung theo hold
+      var spoken = !!String(line.say || '').trim(), mouth = lipSync(id, line, dir), voice = voiceOf(id), b = spoken ? bubble(line) : null, done = false;
       bub = b;
       act(id, line.state, dir);
       Object.keys(els).forEach(function (k) { els[k].classList.toggle('speaking', k === id); });   // người nói luôn ở lớp trên
@@ -792,7 +815,16 @@
       var cp = clipFor(line);   // có voiceClip thì hỏi giọng thu sẵn ngay (song song với bước vào cảnh), tới lúc nói đã sẵn
       return wait(260, r).then(function () { return cp ? gate(cp, line, r) : null; }).then(function (clip) {
         if (r !== run) return Promise.reject('stop');
-        b.show(); sfx('pop', { gain: 0.5, pan: panOf(id) }); var t0 = Date.now();
+        if (!b) return wait(Math.max(380, (line.hold || 0) * 1000), r);
+        // mở bong bóng khi sân khấu đã đứng yên trên màn hình; giờ đọc + hold tính từ lúc bong bóng THẬT SỰ hiện (CNS-099)
+        return settle(r).then(function () { return b.show(r); }).then(function () { return say(clip); });
+      }).then(function () {
+        done = true; mouth(0); if (b) b.close(); bub = null;
+        if (nudged && r === run) { els[id].style.transitionDuration = '.4s'; place(id, home); timers.push(setTimeout(function () { if (els[id]) els[id].style.transitionDuration = '0s'; }, 420)); }
+      }, function (e) { done = true; if (b) b.close(); bub = null; throw e; });
+      function say(clip) {
+        if (r !== run) return Promise.reject('stop');
+        sfx('pop', { gain: 0.5, pan: panOf(id) }); var t0 = Date.now();
         var n = String(line.say).split(/\s+/).filter(Boolean).length;
         var hooks = { onMouth: function (v) { if (r === run && !done) mouth(v); }, onWord: function (i) { if (r === run && !done) b.word(i); } };
         if (clip) hooks.clip = clip;
@@ -800,10 +832,7 @@
         var talk = A ? A.say(line.say, voice, hooks) : fallbackSay(line, n, hooks, r);
         var cap = wait((line.estimate * 2.2 + 3) * 1000, r);   // giọng đọc treo (onend không về) cũng không làm kẹt phim
         return Promise.race([talk, cap]).then(function () { b.word(n); mouth(0); return wait(Math.max(380, (line.hold || 0) * 1000 - (Date.now() - t0)), r); });   // hold = khung hiện tối thiểu
-      }).then(function () {
-        done = true; mouth(0); b.close(); bub = null;
-        if (nudged && r === run) { els[id].style.transitionDuration = '.4s'; place(id, home); timers.push(setTimeout(function () { if (els[id]) els[id].style.transitionDuration = '0s'; }, 420)); }
-      }, function (e) { done = true; b.close(); bub = null; throw e; });
+      }
     }
     // không có engine/audio.js: vẫn nhép miệng + hiện chữ theo thời gian đọc ước tính
     function fallbackSay(line, n, hooks, r) {
