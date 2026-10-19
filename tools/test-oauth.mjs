@@ -473,9 +473,10 @@ try {
     const oa = new OAuth({ dir: dirA, publicUrl: A, now: () => now }), cA = oa.register({ client_name: 'c', redirect_uris: [CB] }).body, aA = approve(oa, cA), xA = xchg(oa, cA, aA);
     ok(xA.status === 200 && !!oa.verify(xA.body.access_token), 'miền A: cấp token, verify được');
     const ob = new OAuth({ dir: dirA, publicUrl: Bu, now: () => now });
+    const purged = Object.keys(ob.s.tokens).length === 0 && Object.keys(ob.s.grants).length === 0;   // ngay sau khi dựng, trước mọi lời gọi
     ok(ob.verify(xA.body.access_token) === null, 'dựng lại OAuth trên cùng thư mục với miền B: access token cũ → verify null');
     x = ob.token({ grant_type: 'refresh_token', refresh_token: xA.body.refresh_token, client_id: cA.client_id }); ok(x.status === 400 && x.body.error === 'invalid_grant', '…refresh token cũ → invalid_grant (không đổi được access token mang aud mới)');
-    ok(Object.keys(ob.s.tokens).length === 0 && Object.keys(ob.s.grants).length === 0, '…khởi tạo đã quét bỏ token + grant có aud khác H/mcp hiện tại');
+    ok(purged, '…khởi tạo đã quét bỏ token + grant có aud khác H/mcp hiện tại (kiểm ngay sau khi dựng, chưa gọi gì)');
     const raw2 = JSON.parse(readFileSync(path.join(dirA, 'oauth.json'), 'utf8')); ok(Object.keys(raw2.tokens).length === 0, '…và ghi xuống oauth.json');
     // nhánh kiểm aud trong token() (không dựa vào quét lúc khởi tạo): token cũ xuất hiện giữa chừng
     const oc = new OAuth({ dir: mkdtempSync(path.join(tmpdir(), 'gc-oauthaud2-')), publicUrl: A, now: () => now }), cC = oc.register({ client_name: 'c', redirect_uris: [CB] }).body, xC = xchg(oc, cC, approve(oc, cC));
