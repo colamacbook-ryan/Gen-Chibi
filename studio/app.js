@@ -3388,7 +3388,7 @@
       S.packs().forEach(function (p) {
         var smp = p.status === 'published' ? sampleOf(p.project) : null, act = h('span', { class: 'acts' },   // dấu "bộ mẫu" chỉ cho gói phát hành của dự án mẫu (gói người dùng nhập vào đó vẫn là nháp của họ)
 
-          h('button', { class: 'btn sm', type: 'button', onclick: function () { st.tab = 'sounds'; st.pack = p.id; st.cat = ''; remember(); paintTabs(); paintTab(); } }, 'Xem âm'),
+          lcBtn(null, 'Xem âm', { label: 'Xem âm của gói ' + p.id, fn: function () { st.tab = 'sounds'; st.pack = p.id; st.cat = ''; remember(); paintTabs(); paintTab(); } }),
           p.frame ? null : lcBtn('down', 'Tải JSON', { label: 'Tải gói ' + p.id, fn: function () { download(p.id + '.json', JSON.stringify(S.pack(p.id), null, 2), 'application/json'); } }));
         tb.appendChild(h('tr', { 'data-pack': p.id }, h('td', { class: 'id', text: p.id }), h('td', null, p.frame ? 'Bộ âm chuẩn (khung)' : p.name),
           h('td', { text: p.project ? Projects.name(p.project) : p.frame ? 'mọi dự án' : 'dùng chung' }), h('td', { class: 'v', text: 'v' + p.version }), h('td', { class: 'v', text: String(p.count) }),
@@ -3450,7 +3450,7 @@
       var note = net.server ? null : h('p', { class: 'lc-msg', text: Store.mode === 'server' ? 'Máy chủ này chưa có api/sound-packs — chỉ xem được gói có sẵn trong engine; vẫn kiểm gói được nhưng chưa lưu được.' : 'Bản xem thử không có máy chủ: kiểm được gói nhưng không lưu được. Cài bản máy chủ để nhập gói.' });
       box.appendChild(h('div', { class: 'stack' },
         h('div', { class: 'panel' }, h('h3', null, 'Gói âm', h('span', { class: 'r note', text: S.packs().length + ' gói · tên âm là chung toàn thư viện' })), h('div', { class: 'scroll' }, tbl)),
-        h('div', { class: 'panel lc-import' }, h('h3', null, 'Nhập gói âm', h('span', { class: 'r note', text: 'đi qua cổng kiểm như MCP / AI: chỉ số + chuỗi trong danh sách cho phép, không mã' })),
+        h('div', { class: 'panel lc-import' }, h('h3', null, 'Nhập gói âm', h('span', { class: 'r note', text: 'qua cổng kiểm như MCP / AI — gói không chứa mã' })),
           h('div', { class: 'pad stack' }, note,
             h('div', { class: 'row' }, lcBtn('up', 'Chọn tệp .json', { label: 'Chọn tệp gói âm', fn: pickFile }), h('span', { class: 'note', text: 'hoặc dán JSON vào ô dưới' }), h('span', { class: 'sp', style: 'flex:1' }),
               net.server ? h('span', { class: 'note', text: 'Nhập vào dự án' }) : null, net.server ? projectSelect(impProj, function (v) { impProj = v; }) : null),
@@ -3716,8 +3716,7 @@
           { t: 'Giới', w: 54, v: function (x) { return x.gender; }, cell: function (x) { return x.gender === 'f' ? 'Nữ' : 'Nam'; } },
           { t: 'Văn / võ / …', w: 108, v: function (x) { return x.kindLabel; }, cell: function (x) { return x.kindLabel; } },
           { t: 'Thiết kế được?', w: 122, v: function (x) { return x.can ? 0 : 1; }, cell: function (x) {
-            var d = lvReady() && designedAt(x.id);
-            return x.can ? [lcState('ok', 'Được'), d ? h('span', { class: 'tag acc', style: 'margin-left:6px', text: 'đã thiết kế' }) : null] : lcState('bad', 'Google chặn', 'Google không cho thiết kế giọng trẻ em / vị thành niên (chính sách an toàn)');
+            return x.can ? lcState('ok', 'Được', 'Có thể thiết kế giọng riêng cho vai này (tốn 1 lượt Google)') : lcState('bad', 'Google chặn', 'Google không cho thiết kế giọng trẻ em / vị thành niên (chính sách an toàn)');
           } },
           { t: 'Phong cách nói', w: 220, cls: 'mono mut', v: function (x) { return x.style; }, cell: function (x) { return x.style; }, tip: function (x) { return x.style; } },
           { t: 'Giọng AI (cast)', w: 180, cell: function (x) { var s = h('span'); castEls[x.id] = s; fillCast(s, x.id); return s; } },
@@ -3801,15 +3800,15 @@
           onclick: function () { design(x, desB, desLabel, sample, mv); } }, desLabel);
         var chars = usersOf(x.id), pn = st.proj ? Projects.name(st.proj) : 'mọi dự án';
         var kv = h('dl', { class: 'lc-kv' },
-          h('dt', { text: 'Nhóm tuổi' }), h('dd', { text: x.ageLabel }), h('dt', { text: 'Giới' }), h('dd', { text: x.gender === 'f' ? 'Nữ' : 'Nam' }), h('dt', { text: 'Văn / võ / …' }), h('dd', { text: x.kindLabel }),
+          h('dt', { text: 'Vai' }), h('dd', { text: x.ageLabel + ' · ' + (x.gender === 'f' ? 'Nữ' : 'Nam') + ' · ' + x.kindLabel }),
           h('dt', { text: 'Phong cách nói' }), h('dd', { class: 'mono', text: R.style }),
           h('dt', { text: 'Chân dung' }), h('dd', { class: R.design ? 'mono' : null, style: R.design ? 'font-size:12px' : null, text: R.design || '— (vai trẻ em: không thiết kế được)' }),
           h('dt', { text: 'Tuổi hợp vai' }), h('dd', { text: R.ages ? R.ages[0] + '–' + R.ages[1] + ' tuổi · cao độ ưa ' + R.prefPitch : 'giọng trẻ trung có sẵn' }),
-          h('dt', { text: 'Giọng dựng sẵn' }), h('dd', { class: 'mono', style: 'font-size:12px', text: R.ai.join(' · ') }),
-          h('dt', { text: 'Giọng máy' }), h('dd', { text: 'cao độ ' + vn(R.pitch) + ' · tốc độ ' + vn(R.rate) }));
+          h('dt', { text: 'Giọng dựng sẵn' }), h('dd', { class: 'mono', style: 'font-size:12px', text: R.ai.join(' · ') }));
         insp.appendChild(h('div', { class: 'panel' }, h('h3', null, h('span', { text: x.label }), h('span', { class: 'r mono', text: x.id })),
-          h('div', { class: 'pad stack' }, kv,
+          h('div', { class: 'pad stack' },
             h('div', null, h('div', { class: 'lc-sec', text: 'Câu mẫu · ' + langInfo() }), h('p', { class: 'lv-line', lang: V.LANGS[st.lang].bcp, text: sample }), h('div', { class: 'row', style: 'margin-top:8px' }, mBtn, ictl.el), ictl.note),
+            kv,
             h('div', null, h('div', { class: 'lc-sec', text: 'Giọng AI sẽ dùng cho vai này' }), castEl),
             h('div', null, h('div', { class: 'lc-sec', text: 'Giọng đã thiết kế' }), desEl),
             h('div', null, desB, why ? h('p', { class: 'lc-hint', 'data-why': 'design', style: 'margin-top:4px', text: why }) : h('p', { class: 'lc-hint', style: 'margin-top:4px', text: 'Tốn 1 lượt Google, ~25 giây, chỉ chủ máy (bấm 2 lần để xác nhận).' }), h('p', { class: 'lc-hint warn', id: 'lvDesignNote', hidden: true })),
@@ -3848,7 +3847,7 @@
       workSel.appendChild(h('option', { value: '', text: '— Theo dự án (không chọn tác phẩm) —' }));
       var insp = h('aside', { class: 'lc-insp', 'aria-label': 'Chi tiết nhân vật' }), langNote = h('span', { class: 'note' }), castB = h('button', { class: 'btn', type: 'button', id: 'lvCastAll', onclick: castAll, disabled: true,
         title: 'Server chọn giọng cho cả dàn của tác phẩm và CHỐT vào tác phẩm (miễn phí — không đọc câu nào)' }, 'Chốt giọng cả dàn (miễn phí)');
-      var count = h('span', { class: 'note lc-count' });
+      var count = h('span', { class: 'note lc-count' }), projEl = projSelect(function () { if (!W) build(); });
       function sampleOf(x) { return lvLine(L.lang, x.role); }
       function machine(x) { return A.voiceOf(x.a, { lang: L.lang, accent: x.accent }); }
       function ctlOf(x, full) {
@@ -3869,24 +3868,24 @@
           return { id: a.id, a: a, role: AiVoice.roleOf(a), explicit: !!(a.voice && a.voice.role), accent: AiVoice.accentOf(a, L.lang, L.accent), chot: ch, own: own, voice: ch || own, src: ch ? 'chot' : own ? 'tay' : 'chua' };
         });
         langNote.textContent = (W ? 'Ngôn ngữ phim: ' : 'Ngôn ngữ đang chọn (đổi ở tab Bộ giọng vai): ') + V.LANGS[L.lang].label + ' · ' + accLabel(L.lang, L.accent);
-        castB.disabled = !(W && server && rows.length);
+        castB.disabled = !(W && server && rows.length); projEl.hidden = !!W;
         grid.set(rows, st.sel && rows.some(function (x) { return x.id === st.sel; }) ? st.sel : '');
         rows.forEach(function (x) { if (x.voice) ctlOf(x).check(); });
       }
-      var SRC = { chot: ['Chốt trong tác phẩm', 'chip ok'], tay: ['Chọn tay trên nhân vật', 'chip warn'], chua: ['Chưa chốt', 'chip'] };
+      var SRC = { chot: ['Đã chốt', 'chip ok', 'Giọng đã CHỐT trong tác phẩm (work.voices) — Studio, MCP và phim xuất cùng một giọng'], tay: ['Chọn tay', 'chip warn', 'Giọng chọn tay trên hồ sơ nhân vật (chưa chốt vào tác phẩm)'], chua: ['Chưa chốt', 'chip', 'Chưa có giọng AI — Lồng tiếng ở Tạo tác hoặc “Chốt giọng cả dàn” sẽ chọn và chốt'] };
       var grid = lcGrid({
         id: 'lw', label: 'Giọng của tác phẩm', empty: W ? 'Tác phẩm này chưa có nhân vật nào trong các phân cảnh.' : 'Dự án này chưa có nhân vật.',
         cols: [
-          { t: 'Nghe', w: 124, frozen: true, cell: function (x) {
+          { t: 'Nghe', w: 120, frozen: true, cell: function (x) {
             var m = lcPlay('Nghe giọng máy — ' + x.a.name, function () { speakMachine(x); }); m.setAttribute('data-machine', x.id);
             return h('span', { class: 'lv-pair' }, m, ctlOf(x).el);
           } },
-          { t: 'ID nhân vật', w: 150, frozen: true, cls: 'id', v: function (x) { return x.id; }, cell: function (x) { return x.id; } },
-          { t: 'Nhân vật', w: 170, v: function (x) { return x.a.name; }, cell: function (x) { return h('span', { class: 'lv-who', style: '--own:' + ownOf(x.a) }, h('span', { class: 'dot' }), x.a.name); } },
-          { t: 'Vai giọng', w: 170, v: function (x) { return V.ROLES[x.role].label; }, cell: function (x) { return [V.ROLES[x.role].label, ' ', h('span', { class: x.explicit ? 'chip ok' : 'chip', title: x.explicit ? 'Đã chọn vai trong hồ sơ nhân vật' : 'Chưa chọn vai — Studio đoán từ vai trò / tính cách / tên', text: x.explicit ? 'đã chọn' : 'đoán' })]; } },
-          { t: 'Giọng vùng', w: 130, v: function (x) { return x.accent; }, cell: function (x) { return accLabel(L.lang, x.accent); } },
-          { t: 'Giọng chốt (work.voices)', w: 190, cls: 'mono', v: function (x) { return x.voice; }, cell: function (x) { return x.voice || '—'; } },
-          { t: 'Nguồn', w: 190, v: function (x) { return x.src; }, cell: function (x) { return h('span', { class: SRC[x.src][1], text: SRC[x.src][0] }); } },
+          { t: 'ID nhân vật', w: 150, frozen: true, cls: 'id', v: function (x) { return x.id; }, cell: function (x) { return x.id; }, tip: function (x) { return x.id; } },
+          { t: 'Nhân vật', w: 128, v: function (x) { return x.a.name; }, cell: function (x) { return h('span', { class: 'lv-who', style: '--own:' + ownOf(x.a) }, h('span', { class: 'dot' }), x.a.name); } },
+          { t: 'Vai giọng', w: 156, v: function (x) { return V.ROLES[x.role].label; }, cell: function (x) { return [V.ROLES[x.role].label, x.explicit ? null : h('span', { class: 'chip', style: 'margin-left:6px', title: 'Chưa chọn vai trong hồ sơ nhân vật — Studio đoán từ vai trò / tính cách / tên', text: 'đoán' })]; } },
+          { t: 'Giọng chốt', w: 118, cls: 'mono', v: function (x) { return x.voice; }, cell: function (x) { return x.voice || '—'; } },
+          { t: 'Nguồn', w: 100, v: function (x) { return x.src; }, cell: function (x) { return h('span', { class: SRC[x.src][1], title: SRC[x.src][2], text: SRC[x.src][0] }); } },
+          { t: 'Giọng vùng', w: 120, v: function (x) { return x.accent; }, cell: function (x) { return accLabel(L.lang, x.accent); } },
           { t: 'Câu mẫu', w: 340, cls: 'mut', cell: sampleOf, tip: sampleOf }
         ],
         onSelect: function (x) { st.sel = x ? x.id : st.sel; inspect(x); },
@@ -3905,7 +3904,8 @@
           h('div', { class: 'pad stack' },
             h('dl', { class: 'lc-kv' }, h('dt', { text: 'Vai giọng' }), h('dd', null, R.label, ' ', h('span', { class: x.explicit ? 'chip ok' : 'chip', text: x.explicit ? 'đã chọn' : 'đoán' })),
               h('dt', { text: 'Phong cách' }), h('dd', { class: 'mono', text: R.style }), h('dt', { text: 'Giọng vùng' }), h('dd', { text: accLabel(L.lang, x.accent) }),
-              h('dt', { text: 'Giọng chốt' }), h('dd', null, x.voice ? h('b', { class: 'mono', text: x.voice }) : h('span', { class: 'muted', text: 'chưa chốt' }), ' ', h('span', { class: SRC[x.src][1], text: SRC[x.src][0] }))),
+              h('dt', { text: 'Giọng chốt' }), h('dd', null, x.voice ? h('b', { class: 'mono', text: x.voice }) : h('span', { class: 'muted', text: 'chưa chốt' }), ' ', h('span', { class: SRC[x.src][1], title: SRC[x.src][2], text: SRC[x.src][0] })),
+              h('dt', { text: 'work.voices' }), h('dd', { class: 'note', text: W ? 'khoá ' + L.lang + '|' + L.accent + ' của “' + W.title + '”' : 'chưa chọn tác phẩm' })),
             h('div', null, h('div', { class: 'lc-sec', text: 'Câu mẫu · ' + V.LANGS[L.lang].label }), h('p', { class: 'lv-line', lang: V.LANGS[L.lang].bcp, text: sample }), h('div', { class: 'row', style: 'margin-top:8px' }, mBtn, ictl.el), ictl.note),
             h('div', { class: 'usebar' }, h('b', { text: 'Hồ sơ' }), h('span', { class: 'note', text: x.a.faction || x.a.role || '' }),
               h('button', { class: 'btn sm', type: 'button', onclick: function () { go({ page: 'lib-characters', key: x.a.key }); } }, 'Mở hồ sơ nhân vật ›')))));
@@ -3921,7 +3921,7 @@
         return Store.api('GET', 'api/works/' + id).then(function (w) { if (!alive || tg !== gen) return; W = w; build(); }).catch(function (e) { toast(e.message); });
       }
       box.appendChild(h('div', { class: 'stack', style: 'gap:8px' },
-        h('div', { class: 'lc-bar' }, h('label', { class: 'note', for: 'lvWork', text: 'Tác phẩm' }), workSel, projSelect(function () { if (!W) build(); }), castB, h('span', { class: 'sp' }), count), h('div', { class: 'row' }, langNote),
+        h('div', { class: 'lc-bar' }, h('label', { class: 'note', for: 'lvWork', text: 'Tác phẩm' }), workSel, projEl, castB, h('span', { class: 'sp' }), count), h('div', { class: 'row' }, langNote),
         h('div', { class: 'lc-split' }, grid.el, insp)));
       build();
       if (server) {

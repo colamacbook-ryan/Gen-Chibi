@@ -1027,7 +1027,7 @@ if (!ONLY || ONLY === 'lib') {
     await q.goto(URL11 + 'thu-vien'); await q.waitForFunction(() => window.GenChibi && /^v\d/.test(document.getElementById('verChip').textContent), null, { timeout: 8000 });
     await q.evaluate(SPY); await q.evaluate(SPY_T); return q;
   };
-  const shot = async (name) => { if (!SHOTS) return; fs.mkdirSync(SHOTS, { recursive: true }); await q.waitForTimeout(250); await q.screenshot({ path: path.join(SHOTS, 'lib-' + name + (SCHEME === 'light' ? '-light' : '') + '.png') }); };
+  const shot = async (name, scroll) => { if (!SHOTS) return; fs.mkdirSync(SHOTS, { recursive: true }); await q.evaluate(sc => { const t = document.getElementById('toast'); if (t) t.hidden = true; const v = document.getElementById('view'); if (v) v.scrollTop = sc ? v.scrollHeight : 0; }, !!scroll); await q.waitForTimeout(300); await q.screenshot({ path: path.join(SHOTS, 'lib-' + name + (SCHEME === 'light' ? '-light' : '') + '.png') }); };
   const rowsOf = () => q.$$eval('.lc-t tbody tr[data-id]', es => es.map(e => e.getAttribute('data-id')));
   const selOf = () => q.$eval('.lc-t tbody tr[aria-selected="true"]', e => e.getAttribute('data-id')).catch(() => '');
   const spy = (k) => q.evaluate(k => window.GenChibi.audio.__spy[k].slice(), k);
@@ -1143,7 +1143,8 @@ if (!ONLY || ONLY === 'lib') {
     await q.click('#lsLintGo'); await q.waitForFunction(() => { const e = document.querySelector('[data-lint]'); return e && e.getAttribute('data-lint').split('/')[0] !== '0'; });
     const lintTxt = await q.textContent('.lc-issues'); must(/S1/.test(lintTxt) && /S6/.test(lintTxt) && /khong-co-am-nay/.test(lintTxt), 'kiểm luật phải báo S1 + S6: ' + lintTxt.slice(0, 200));
     await q.fill('#lsLintIn', '{ không phải json'); await q.click('#lsLintGo'); await q.waitForSelector('.lc-msg.bad:has-text("Không phải JSON")');
-    await shot('sounds-luat');
+    await q.fill('#lsLintIn', JSON.stringify([{ actor: 'a', state: 'normal', say: 'Xin chào các bạn', sfx: ['hit', 'bonk', 'pow', 'zip', 'khong-co-am-nay'] }])); await q.click('#lsLintGo'); await q.waitForSelector('.lc-issues');
+    await shot('sounds-luat'); await shot('sounds-luat-cong-thuc', true);
     console.log('  ✓ Thư viện › Âm thanh › Luật ghép: S1–S7 khớp GC.sounds.RULES (chữ + mức) · quy trình từ guide() · ' + recs.length + ' công thức, ▶ nghe chuỗi đúng delay, chép các bước · kiểm thử chuỗi báo S1 + S6');
 
     // A5) tab Gói âm: danh sách · tải gói JSON · nhập (cổng kiểm cục bộ + máy chủ, lỗi kèm path) · máy chủ không có endpoint thì chỉ còn gói trong engine
@@ -1252,7 +1253,7 @@ if (!ONLY || ONLY === 'lib') {
     await q.evaluate(SPY); await q.click('#lvDesign'); await pollq(async () => M.designCalls.length === 1, 'đã gọi thiết kế');
     must(M.designCalls[0].role === 'quan-su' && M.designCalls[0].lang === 'vi' && M.designCalls[0].accent === 'bac', 'thiết kế gửi sai: ' + JSON.stringify(M.designCalls[0]));
     await pollq(async () => /voice_gia_quan-su_bac/.test(await q.textContent('[data-cast="quan-su"]')), 'cast chuyển sang giọng thiết kế', 8000);
-    must(/đã thiết kế/.test(await q.textContent('tr[data-id="quan-su"]')) && /Thiết kế lại giọng cho vai này/.test(await q.textContent('#lvDesign')), 'thiết kế xong: hàng + nút phải đổi'); await pollq(async () => (await spy('say')).length >= 1, 'nghe thử mẫu thiết kế');
+    must(/voice_gia_quan-su_bac/.test(await q.textContent('tr[data-id="quan-su"]')) && /Thiết kế lại giọng cho vai này/.test(await q.textContent('#lvDesign')), 'thiết kế xong: hàng + nút phải đổi'); await pollq(async () => (await spy('say')).length >= 1, 'nghe thử mẫu thiết kế');
     // nhân vật dùng vai (trong dự án Tam Quốc): Quan Vũ + Trương Phi dùng võ tướng
     await q.click('tr[data-id="vo-tuong"] td.id'); await q.waitForSelector('.lc-insp h3 .mono:text-is("vo-tuong")');
     const users = await q.$$eval('.lv-chars button', es => es.map(e => e.getAttribute('data-char')));
@@ -1261,6 +1262,7 @@ if (!ONLY || ONLY === 'lib') {
     await q.fill('#lvQ', 'ong lao'); await waitRows(1); must((await rowsOf())[0] === 'ong-lao', 'tìm không dấu "ong lao"'); await q.fill('#lvQ', 'quan vu'); await waitRows(1); must((await rowsOf())[0] === 'vo-tuong', 'tìm theo tên nhân vật (Quan Vũ) phải ra vai võ tướng');
     await q.fill('#lvQ', ''); await waitRows(22); await q.click('.lc-cats button[data-age="cao-tuoi"]'); await waitRows(2); await q.click('.lc-cats button[data-age="cao-tuoi"]'); await waitRows(22);
     await q.click('tr[data-id="ong-lao"] td.id'); await q.waitForSelector('.lc-insp h3 .mono:text-is("ong-lao")'); await pollq(async () => (await q.$$('.lc-insp [data-ai="play"]')).length === 1, 'ong-lao: clip có sẵn trong inspector', 8000);
+    await q.click('tr[data-id="vo-tuong"] td.id'); await q.waitForSelector('.lc-insp h3 .mono:text-is("vo-tuong")'); await pollq(async () => (await q.$$('.lc-insp .lv-chars button')).length === 2, 'vo-tuong: 2 nhân vật Tam Quốc', 8000); await q.waitForTimeout(500);
     await shot('voices-bang');
     console.log('  ✓ Thư viện › Giọng › thiết kế: vai trẻ em mờ nút kèm lý do Google chặn · thiết kế bấm 2 lần, gửi đúng vai / ngôn ngữ / vùng, cast + hàng đổi sang giọng thiết kế · nhân vật Tam Quốc dùng vai (Quan Vũ, Trương Phi → võ tướng) · lọc tuổi + tìm không dấu'); await q.close();
 
@@ -1269,7 +1271,7 @@ if (!ONLY || ONLY === 'lib') {
     await q.waitForSelector('#lvWork option[value="' + WORK + '"]', { state: 'attached' }); await q.waitForFunction(w => document.querySelector('#lvWork').value === w, WORK);
     await pollq(async () => (await rowsOf()).length > 0 && /Alnilam/.test(await q.textContent('tr[data-id="tq-quan-vu"]')), 'bảng giọng chốt của tác phẩm', 8000);
     const wr = await rowsOf(); must(wr.includes('tq-quan-vu') && wr.includes('tq-luu-bi') && wr.includes('tq-tao-thao'), 'bảng tác phẩm thiếu nhân vật: ' + wr.join());
-    must(/Võ tướng/.test(await q.textContent('tr[data-id="tq-quan-vu"]')) && /Chốt trong tác phẩm/.test(await q.textContent('tr[data-id="tq-quan-vu"]')) && /Schedar/.test(await q.textContent('tr[data-id="tq-luu-bi"]')), 'cột vai / giọng chốt sai');
+    must(/Võ tướng/.test(await q.textContent('tr[data-id="tq-quan-vu"]')) && /Đã chốt/.test(await q.textContent('tr[data-id="tq-quan-vu"]')) && /Schedar/.test(await q.textContent('tr[data-id="tq-luu-bi"]')), 'cột vai / giọng chốt sai');
     must(/Chưa chốt/.test(await q.textContent('tr[data-id="tq-tao-thao"]')), 'nhân vật chưa chốt phải ghi "Chưa chốt"');
     must(/Ngôn ngữ phim: Tiếng Việt/.test(await q.textContent('.lc-body')), 'thiếu ngôn ngữ phim');
     await q.evaluate(SPY); await q.click('tr[data-id="tq-quan-vu"] [data-machine]'); const sw = (await spy('say'))[0]; must(sw && sw.role === 'vo-tuong' && /^Ta là đại tướng/.test(sw.text), '▶ giọng máy nhân vật tác phẩm: ' + JSON.stringify(sw));
