@@ -555,3 +555,5 @@ table.worklist .tag { max-width: 150px; overflow: hidden; text-overflow: ellipsi
   .detail, .detail.scenefab, .split.create, .split.lib.wide { grid-template-columns: minmax(0, 1fr); }
   .detail .sticky, .split.create .sticky, .split.lib.wide .sticky { position: static; }
 }
+body.dock-open:not(.dock-narrow) .toast { right: calc(var(--dock-w, 0px) + 20px); }   /* thông báo không che nút Gửi của dock */
+.dock [hidden], .room [hidden] { display: none !important; }
