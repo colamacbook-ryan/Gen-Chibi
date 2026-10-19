@@ -87,5 +87,44 @@ try {
     }
   }
 
+  /* ---------------------------------------------------------------- CNS-117: bản sao từ khung luôn là nháp */
+  {
+    const { m, store, GC } = fresh();
+    store.saveProject({ id: 'du-an-x', name: 'X' });
+    const frame = GC.ASSETS['gen.khung/ma-no-canh'];
+    ok(frame && frame.status === 'published', 'tiền đề: dữ liệu khung ma-no-canh mang status "published"');
+    for (const [name, ctx] of Object.entries(CH)) {
+      const g = await m.callTool('get_character', { key: 'gen.khung/ma-no-canh' }, ctx), a = J(g);
+      ok(a.status === 'draft' && GC.ASSETS['gen.khung/ma-no-canh'].status === 'published', name + ': get_character của khung trả status "draft" (khung gốc không đổi)');
+      const c = clone(a); c.id = 'nv-' + name.replace(/\W+/g, '').toLowerCase(); c.name = 'Bản sao ' + name; c.project = 'du-an-x'; delete c.key;
+      const sv = J(await m.callTool('save_character', { asset: c }, ctx));
+      ok(sv.saved && sv.status === 'draft' && store.getAsset(sv.key).status === 'draft', name + ': chép khung → đổi tên → save_character: bản sao là "draft"');
+      const c2 = clone(c); c2.id += '-pub'; c2.status = 'published';   // cố ý ghi "published" trên dữ liệu mang pack của khung
+      const sv2 = J(await m.callTool('save_character', { asset: c2 }, ctx));
+      ok(sv2.saved && sv2.status === 'draft', name + ': dữ liệu mang pack khung + "published" vẫn lưu thành "draft"');
+    }
+    const sale = m.exportProject('du-an-x', { sale: true });
+    ok(!(sale.characters || []).length && m.exportProject('du-an-x', {}).characters.length === 6, 'gói bán không có bản sao từ khung (bản đầy đủ có cả 6)');
+    // Studio (chủ máy) lưu từ trang bàn chỉnh của khung: cùng luật
+    const st = m.saveAssetChecked(Object.assign(clone(frame), { pack: 'gen.khung', id: 'studio-copy', project: 'du-an-x', status: 'published' }), 'Studio', { allowAnyPack: true });
+    ok(st.status === 'draft' && st.pack === 'local.my', 'Studio (allowAnyPack) lưu từ khung → bản sao "draft" ở local.my');
+    // một bản sao ĐÃ do chủ phát hành (pack local.my) thì giữ nguyên "published"
+    const own = clone(store.getAsset('local.my/studio-copy')); own.status = 'published'; own.identity = { p1: 'mũ', must: ['hat:khoi-mu'], source: 'x' }; own.look.parts.hat = 'gen.khung/khoi-mu';
+    let pub = null; try { pub = m.saveAssetChecked(own, 'chủ phát hành'); } catch (e) { pub = { err: e.message }; }
+    ok(pub && (pub.status === 'published' || /cổng/.test(pub.err || '')), 'asset ở local.my (không phải khung) giữ status chủ đặt — ' + (pub.status || pub.err));
+    // vật phẩm + bối cảnh chép từ khung
+    const fi = GC.items().find(x => GC.PACKS[x.pack].group === 'frame'), fs_ = GC.scenes().find(x => GC.PACKS[x.pack].group === 'frame');
+    const di = clone(fi); di.id = 'vat-pham-sao'; di.project = 'du-an-x'; di.status = 'published'; delete di.version; delete di.savedAt;
+    const ri = m.saveItemChecked(di, 'chép khung');
+    ok(ri.status === 'draft', 'vật phẩm chép từ khung (mang pack khung + published) → "draft"');
+    const ds = clone(fs_); ds.id = 'canh-sao'; ds.project = 'du-an-x'; ds.status = 'published'; delete ds.version; delete ds.savedAt;
+    const rs = m.saveSceneChecked(ds, 'chép khung');
+    ok(rs.status === 'draft', 'bối cảnh chép từ khung (mang pack khung + published) → "draft"');
+    // bản ghi cũ lưu thẳng vào pack khung (trước v0.11) nạp lại thành bản sao "draft"
+    const legacy = clone(frame); legacy.id = 'cu-trong-khung'; legacy.pack = 'gen.khung'; legacy.key = 'gen.khung/cu-trong-khung'; legacy.status = 'published';
+    store.saveAsset('gen.khung/cu-trong-khung', legacy, 'cũ'); m.sync();
+    ok(GC.ASSETS['local.my/cu-trong-khung'] && GC.ASSETS['local.my/cu-trong-khung'].status === 'draft', 'bản ghi cũ nằm trong pack khung: nạp thành bản sao "draft"');
+  }
+
 } catch (e) { fail = 1; console.log('   ✗', e.stack || e.message); }
 process.exit(fail);

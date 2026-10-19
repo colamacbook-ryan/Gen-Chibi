@@ -232,7 +232,7 @@ class MCP {
     this.store.listAssets().forEach(a => {
       // bản ghi cũ lưu thẳng vào pack khung (trước v0.11) không được đè khung: nạp thành bản sao "Của tôi" nếu chưa có
       const P = this.GC.PACKS[this.GC.canonPack(a.pack)];
-      if (P && P.group === 'frame') { if (!this.GC.ASSETS[MY_PACK + '/' + a.id]) this.GC.registerAsset(MY_PACK, Object.assign(clone(a), { pack: MY_PACK })); return; }
+      if (P && P.group === 'frame') { if (!this.GC.ASSETS[MY_PACK + '/' + a.id]) this.GC.registerAsset(MY_PACK, Object.assign(clone(a), { pack: MY_PACK, status: 'draft' })); return; }   // bản sao từ khung luôn là nháp (CNS-117)
       this.GC.registerAsset(a.pack, clone(a));
     });
   }   // nhập hàng loạt: asset đã đăng ký khi lưu, không đọc lại đĩa
@@ -313,7 +313,9 @@ class MCP {
     x.look = x.look || {};
     x.look.parts = x.look.parts || {};
     x.version = x.version || 0;
-    x.status = this.GC.statusOf(x.status);   // nháp / phát hành (giá trị cũ review → nháp, approved → phát hành)
+    // nháp / phát hành (giá trị cũ review → nháp, approved → phát hành). BẢN SAO TỪ KHUNG luôn bắt đầu là nháp (INT-11 Q3): dữ liệu khung mang "published"
+    // nhưng bản sao chưa ai duyệt — không được lọt vào gói bán; chủ phát hành sau (CNS-117)
+    x.status = P && P.group === 'frame' ? 'draft' : this.GC.statusOf(x.status);
     if (x.project === undefined) { const prev = this.store.getAsset(x.key); if (prev && prev.project) x.project = prev.project; }   // giữ dự án khi bản sửa không gửi kèm
     if (x.project != null && x.project !== '' && !this.GC.projectId(x.project)) throw new Error('project: slug dự án (chữ thường, số, gạch nối, ≤ 40 ký tự) — xem list_projects');
     x.project = this.GC.projectId(x.project);
@@ -332,6 +334,10 @@ class MCP {
     }
     return this.GC.migrate(x);
   }
+  // pack nhóm "frame" (khung chuẩn của Gen Labs — không ai sửa, chỉ làm bản sao)
+  isFrame(pack) { const P = pack ? this.GC.canonPack(String(pack)) : ''; return !!P && Object.prototype.hasOwnProperty.call(this.GC.PACKS, P) && this.GC.PACKS[P].group === 'frame'; }
+  // vật phẩm / bối cảnh chép từ khung (mang pack hoặc key của khung) → bản sao là nháp
+  draftIfFrame(def) { return def && typeof def === 'object' && this.isFrame(def.pack || String(def.key || '').split('/')[0]) ? Object.assign({}, def, { status: 'draft' }) : def; }
   // nhận key đầy đủ (pack/id) hoặc id ngắn (ưu tiên bản trong "Của tôi")
   findAsset(key) {
     this.sync();
@@ -352,7 +358,8 @@ class MCP {
       }
       case 'get_character': {
         const a = this.findAsset(String(args.key || ''));
-        return a ? json(a) : toolError('Không có nhân vật ' + args.key + '. Gọi list_characters để xem khoá.');
+        // khung là dữ liệu Gen Labs ("published"); agent hay chép khung → đổi tên → save: đưa status "draft" ra để bản chép không mang dấu phát hành của khung
+        return a ? json(this.isFrame(a.pack) ? Object.assign({}, a, { status: 'draft' }) : a) : toolError('Không có nhân vật ' + args.key + '. Gọi list_characters để xem khoá.');
       }
       case 'validate_character': {
         let a; try { a = this.prepare(args.asset); } catch (e) { return toolError(e); }
@@ -740,7 +747,7 @@ class MCP {
   // bản sửa không gửi "project" (bàn chỉnh cũ, agent quên) → GIỮ dự án đang có, không lặng lẽ đẩy asset ra khỏi dự án
   keepProject(def, prev) { return def && typeof def === 'object' && def.project === undefined && prev && prev.project ? Object.assign({}, def, { project: prev.project }) : def; }
   saveItemChecked(item, note) {
-    item = this.keepProject(item, item && this.GC.ITEMS[MY_PACK + '/' + item.id]);
+    item = this.draftIfFrame(this.keepProject(item, item && this.GC.ITEMS[MY_PACK + '/' + item.id]));
     const c = this.GC.checkItem(item);
     if (!c.errors.length) {
       if (this.GC.items().some(i => i.id === c.def.id && i.pack !== MY_PACK)) c.errors.push('id "' + c.def.id + '" trùng item của thư viện chính thức — chọn id khác');
@@ -755,7 +762,7 @@ class MCP {
     return r.def;
   }
   saveSceneChecked(scene, note) {
-    scene = this.keepProject(scene, scene && this.GC.SCENES[MY_PACK + '/' + scene.id]);
+    scene = this.draftIfFrame(this.keepProject(scene, scene && this.GC.SCENES[MY_PACK + '/' + scene.id]));
     const c = this.GC.checkScene(scene);
     if (!c.errors.length) {
       if (this.GC.scenes().some(x => x.id === c.def.id && x.pack !== MY_PACK)) c.errors.push('id "' + c.def.id + '" trùng cảnh của thư viện chính thức — chọn id khác');

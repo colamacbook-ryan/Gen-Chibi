@@ -48,7 +48,7 @@
   // nạp bản ghi đã lưu như sync() của server: bản ghi cũ nằm trong pack khung → bản sao "Của tôi", khung không bị đè
   function regStored(a) {
     var P = GC.PACKS[GC.canonPack(a.pack)];
-    if (P && P.group === 'frame') { if (!GC.ASSETS[MY_PACK + '/' + a.id]) GC.registerAsset(MY_PACK, Object.assign({}, a, { pack: MY_PACK })); return; }
+    if (P && P.group === 'frame') { if (!GC.ASSETS[MY_PACK + '/' + a.id]) GC.registerAsset(MY_PACK, Object.assign({}, a, { pack: MY_PACK, status: 'draft' })); return; }   // bản sao từ khung luôn là nháp (như server)
     GC.registerAsset(a.pack, a);
   }
   GC.pack({ id: MY_PACK, name: 'Của tôi', owner: 'Bạn', group: 'mine', visibility: 'private', license: 'Thuộc người tạo', description: 'Nhân vật bạn tạo hoặc chỉnh trên máy này.' }, function () {});

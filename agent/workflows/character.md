@@ -6,7 +6,8 @@
 1. `start_here` — note the project id you will use (create it with `save_project` if needed).
 2. `get_catalog` — read `slots.<slot>.parts` (allowed parts per slot, with their `params` min–max), `eyeStyles`, `browStyles`,
    `paletteKeys`, `states`, `activities`.
-3. Optional: `get_character` with `key: "gen.khung/ma-no-canh"` (the bald frame) or any existing character, to copy its shape.
+3. Optional: `get_character` with `key: "gen.khung/ma-no-canh"` (the bald frame) or any existing character, to copy its shape
+   (the frame is data of Gen Labs and never changes: a copy saved from it always starts as `draft`, whatever the frame says).
 4. Write the recipe (see example):
    - `id` slug, `name` (Vietnamese), `role`, `persona`, `"project": "<id>"`;
    - `look.eyes` / `look.brows` = an id from `eyeStyles` / `browStyles`;
