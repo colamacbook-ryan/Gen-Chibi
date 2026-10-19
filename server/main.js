@@ -209,15 +209,21 @@ async function route(req, res) {
   if (p === '/api/ai/bench' && m === 'GET') return send(res, 200, ai.bench());
   // ---- giọng AI (Google Gemini TTS): bật / key / model quét lúc chạy; đọc một câu → clip WAV lưu đệm theo nội dung
   if (p === '/api/voice' && m === 'GET') return send(res, 200, voice.publicConfig());
-  if (p === '/api/voice' && m === 'PUT') return send(res, 200, voice.setConfig(await body(req)));
+  if (p === '/api/voice' && m === 'PUT') {
+    const b = await body(req);
+    // dán key → kiểm ngay (lệnh liệt kê model, miễn phí) rồi tự bật; sai key thì giữ key cũ, báo rõ
+    if (typeof b.apiKey === 'string' && b.apiKey.trim()) { try { return send(res, 200, await voice.connect(b.apiKey)); } catch (e) { return fail(res, e.code >= 400 && e.code < 600 ? e.code : 502, e.message); } }
+    return send(res, 200, voice.setConfig(b));
+  }
   if (p === '/api/voice/models' && m === 'GET') { try { return send(res, 200, await voice.models()); } catch (e) { return fail(res, e.code || 502, e.message); } }
   if (p === '/api/voice/line' && m === 'POST') {
     const b = await body(req);
-    // character (key) → giọng AI đã chọn cho nhân vật, không có thì giọng mặc định theo vai; voice ghi rõ thì thắng
+    // character (key) → vai giọng + giọng AI của nhân vật (chưa chọn thì đoán theo vai); voice / role / lang / accent ghi rõ thì thắng.
+    // dry: chỉ lấy clip đã đọc (xuất phim) — chưa có thì 404, không bao giờ gọi Google
     const A = b.character ? mcp.findAsset(String(b.character)) : null;
     if (b.character && !A) return fail(res, 404, 'không có nhân vật ' + String(b.character).slice(0, 60));
-    const vname = b.voice && b.voice !== 'auto' ? b.voice : (A && A.voice && A.voice.ai) || (A ? voice.defaultVoice(A) : b.voice);
-    try { const r = await voice.line({ text: b.text, voice: vname, state: b.state, bubble: b.bubble }); return send(res, 200, Object.assign(r, { voice: vname, url: 'api/voice/clip/' + r.id + '.wav' })); }
+    const v = voice.resolve({ asset: A, voice: b.voice, role: b.role, lang: b.lang, accent: b.accent });
+    try { const r = await voice.line({ text: b.text, voice: v.voice, state: b.state, bubble: b.bubble, persona: v.persona, dry: b.dry === true }); return send(res, 200, Object.assign(r, { voice: v.voice, role: v.role, lang: v.lang, accent: v.accent, url: 'api/voice/clip/' + r.id + '.wav' })); }
     catch (e) { return send(res, e.code >= 400 && e.code < 600 ? e.code : 502, Object.assign({ error: e.message }, e.retryAt ? { retryAt: e.retryAt } : {})); }
   }
   if (p.startsWith('/api/voice/clip/') && m === 'GET') {

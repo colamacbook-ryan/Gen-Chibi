@@ -8,11 +8,13 @@
  *   GC.film.still(shot)          → chuỗi SVG ảnh tĩnh của phân cảnh (bối cảnh + diễn viên ở chỗ đứng)
  *   GC.film.direct(shot)         → KẾ HOẠCH DÀN DỰNG (thuần dữ liệu, chạy cả trong Node): ai ra sân từ đâu, ai đi tới đâu,
  *                                   ai nói với ai, quay mặt, cử chỉ, bong bóng, máy quay, hiệu ứng màn hình, âm thanh, khẩu hình
- *   GC.film.player(el, opts)     → { show(shot), play(shots, title), stop(), destroy() }
- *                                   opts.onProgress(text), opts.onEnd()
+ *   GC.film.player(el, opts)     → { show(shot), play(shots, title), stop(), destroy(), setDialog(mode), dialog(), plan() }
+ *                                   opts.onProgress(text), opts.onEnd(), opts.dialog = 'auto' | 'bubble' | 'caption'
+ *   GC.film.solveLayout(ctx)     → BỐ CỤC LỜI THOẠI (thuần số, chạy cả trong Node): chọn chỗ cho bong bóng / phụ đề sao cho không che đầu ai
  *
  * Ngân sách (L-42): diễn viên sống ≤ GC.render.budget mỗi phân cảnh, hết cảnh là huỷ; máy quay = một transform CSS;
  * nhép miệng chỉ thay LỚP MIỆNG của người đang nói (không dựng lại cả nhân vật); âm thanh tổng hợp, không tải tệp.
+ * Lời thoại (v0.17): bố cục tính MỘT lần mỗi câu (+ khi đổi cỡ khung / máy quay), không tính mỗi khung hình; phông Be Vietnam Pro nhúng ở engine/fonts.js.
  */
 (function (GC) {
   'use strict';
@@ -212,8 +214,95 @@
     return plan;
   }
 
+  /* ============================================================ BỐ CỤC LỜI THOẠI (không DOM) */
+  // Bộ giải thuần số — chạy được trong Node, kiểm thử bằng hình chữ nhật giả. Toạ độ: px của khung hình, gốc ở góc trên trái.
+  // Vào:  { kind: 'bubble' | 'caption', W, H, m (lề an toàn), who (id người nói), mouth {x,y},
+  //         heads [{id,x0,y0,x1,y1}] (ĐẦU mọi người còn trong khung — cấm che), bodies [...] (thân — hạn chế che), decor [...] (biểu tượng trên đầu: !! ? mồ hôi, vương miện — hạn chế che nhẹ),
+  //         sizes [{w,h}] (các cỡ thử: rộng nhất → hẹp dần), prev {id,cx,cy} | null (chỗ câu trước, để không nhảy) }
+  // Ra:   { x0,y0,x1,y1,w,h, si (cỡ nào), tail {px,py,tx,ty,len}, clean, hard, soft, tag }
+  // Luật cứng (hard): không đè đầu ai · đuôi không cắt ngang đầu người khác · không cách đầu người nói quá 18% chiều cao khung.
+  // Luật mềm (soft): ít đè thân · gần miệng · đuôi ngắn · ưu tiên trên đầu rồi tới cạnh đầu, nửa trên khung · ổn định theo câu trước.
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+  function overlap(a, b) { var w = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0), h = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0); return w > 0 && h > 0 ? w * h : 0; }
+  function distToRect(r, p) { var dx = Math.max(r.x0 - p.x, 0, p.x - r.x1), dy = Math.max(r.y0 - p.y, 0, p.y - r.y1); return Math.sqrt(dx * dx + dy * dy); }
+  // đoạn (a→b) có cắt hình chữ nhật r không (Liang–Barsky)
+  function segHits(ax, ay, bx, by, r) {
+    var t0 = 0, t1 = 1, dx = bx - ax, dy = by - ay, p = [-dx, dx, -dy, dy], q = [ax - r.x0, r.x1 - ax, ay - r.y0, r.y1 - ay];
+    for (var i = 0; i < 4; i++) {
+      if (p[i] === 0) { if (q[i] < 0) return false; continue; }
+      var t = q[i] / p[i];
+      if (p[i] < 0) { if (t > t1) return false; if (t > t0) t0 = t; } else { if (t < t0) return false; if (t < t1) t1 = t; }
+    }
+    return true;
+  }
+  // đuôi: từ điểm gần miệng nhất trên bong bóng đi về phía miệng, DỪNG cách mặt `gap` (elip nội tiếp khung đầu, nở thêm gap) — không đâm vào mặt
+  function tailOf(R, S, mouth, gap) {
+    var P = { x: clamp(mouth.x, R.x0, R.x1), y: clamp(mouth.y, R.y0, R.y1) }, dx = mouth.x - P.x, dy = mouth.y - P.y, L = Math.sqrt(dx * dx + dy * dy);
+    if (L < 1) return { px: P.x, py: P.y, tx: P.x, ty: P.y, len: 0 };
+    dx /= L; dy /= L;
+    var cx = (S.x0 + S.x1) / 2, cy = (S.y0 + S.y1) / 2, a = (S.x1 - S.x0) / 2 + gap, b = (S.y1 - S.y0) / 2 + gap, ox = P.x - cx, oy = P.y - cy;
+    var A = dx * dx / (a * a) + dy * dy / (b * b), B = 2 * (ox * dx / (a * a) + oy * dy / (b * b)), C = ox * ox / (a * a) + oy * oy / (b * b) - 1, disc = B * B - 4 * A * C, t = L * 0.6;
+    if (C <= 0) t = 0;   // gốc đuôi đã nằm trong elip (khung đầu méo): không vẽ đuôi dài
+    else if (disc >= 0) { var t1 = (-B - Math.sqrt(disc)) / (2 * A); if (t1 > 0) t = Math.min(t1, L); }
+    return { px: P.x, py: P.y, tx: P.x + dx * t, ty: P.y + dy * t, len: t };
+  }
+  function solveLayout(c) {
+    var W = c.W, H = c.H, m = c.m, cap = c.kind === 'caption', heads = c.heads || [], bodies = c.bodies || [], decor = c.decor || [], mouth = c.mouth, S = null, best = null;
+    heads.forEach(function (h) { if (h.id === c.who) S = h; });
+    if (!S) S = { x0: mouth.x - 0.12 * H, x1: mouth.x + 0.12 * H, y0: mouth.y - 0.2 * H, y1: mouth.y + 0.06 * H };
+    var gap = 0.04 * H, tg = 0.014 * H, far = 0.18 * H, scx = (S.x0 + S.x1) / 2;
+    (c.sizes || []).forEach(function (s, si) {
+      var w = s.w, h = s.h, area = Math.max(1, w * h), cs = [], y, i, j;
+      var add = function (x0, y0, pref, tag) { cs.push([clamp(x0, m, W - m - w), clamp(y0, m, H - m - h), pref, tag]); };
+      if (cap) {
+        // phụ đề: dải dưới khung (giữa → sát trái / phải), lùi lên từng nấc nếu đầu người chiếm dải; cuối cùng mới tới dải trên
+        var bot = H - 0.045 * H - h, step = 0.055 * H;
+        for (j = 0; j < 7; j++) { y = bot - j * step; add((W - w) / 2, y, j * 1.2, 'dưới'); add(m, y, j * 1.2 + 2, 'dưới-trái'); add(W - m - w, y, j * 1.2 + 2, 'dưới-phải'); }
+        add((W - w) / 2, m, 16, 'trên'); add(m, m, 17, 'trên-trái'); add(W - m - w, m, 17, 'trên-phải');
+      } else {
+        var ay = S.y0 - gap - h;   // trên đầu: giữa · lệch trái · lệch phải
+        add(scx - w / 2, ay, 0, 'trên-giữa'); add(scx - w * 0.78, ay, 1, 'trên-trái'); add(scx - w * 0.22, ay, 1, 'trên-phải');
+        [[S.x1 + gap, 'cạnh-phải'], [S.x0 - gap - w, 'cạnh-trái']].forEach(function (sd) {   // cạnh đầu: trên đỉnh · ngang miệng
+          add(sd[0], S.y0, 2.5, sd[1]); add(sd[0], mouth.y - h / 2, 3, sd[1]); add(sd[0], S.y0 - h * 0.35, 3, sd[1]);
+        });
+        add(scx - w / 2, m, 4, 'dải-trên'); add(m, m, 4.5, 'góc-trái'); add(W - m - w, m, 4.5, 'góc-phải');
+        for (i = 0; i <= 6; i++) for (j = 0; j <= 4; j++) add(m + (W - 2 * m - w) * i / 6, m + (H - 2 * m - h) * j / 4, 7, 'lưới');   // quét thưa cả khung: còn chỗ sạch là tìm ra
+        if (c.prev && c.prev.id === c.who) add(c.prev.cx - w / 2, c.prev.cy - h / 2, 0.5, 'giữ-chỗ');
+      }
+      cs.forEach(function (k) {
+        var R = { x0: k[0], y0: k[1], x1: k[0] + w, y1: k[1] + h }, hard = 0, soft = k[2], ho = 0, T = null;
+        heads.forEach(function (hd) { ho += overlap(R, hd); });
+        if (ho > 0) hard += 1 + Math.min(1, ho / area);   // đè đầu: cấm; nếu buộc phải đè thì chọn chỗ đè ít nhất
+        bodies.forEach(function (bd) { soft += (cap ? 6 : bd.id === c.who ? 22 : 34) * overlap(R, bd) / area; });
+        decor.forEach(function (dc) { soft += 16 * overlap(R, dc) / Math.max(1, (dc.x1 - dc.x0) * (dc.y1 - dc.y0)); });   // che hết một biểu tượng = phạt 16
+        if (!cap) {
+          T = tailOf(R, S, mouth, tg);
+          heads.forEach(function (hd) { if (hd.id !== c.who && segHits(T.px, T.py, T.tx, T.ty, hd)) hard += 1; });   // đuôi cắt ngang đầu người khác
+          if (distToRect(R, S) > far) hard += 0.5;   // quá xa đầu người nói (> 18% chiều cao): người xem không biết ai nói → nhường phụ đề
+          soft += T.len / H * 28 + Math.max(0, 0.03 * H - T.len) / H * 150 + distToRect(R, mouth) / H * 12 + (R.y0 > mouth.y ? 6 : 0) + (k[1] + h / 2) / H * 6;   // đuôi quá cụt (< 3% chiều cao) trông như vết lõm: phạt
+        }
+        soft += h / H * (cap ? 4 : 10);
+        if (c.prev && c.prev.id === c.who) soft += 8 * Math.sqrt(Math.pow((R.x0 + R.x1) / 2 - c.prev.cx, 2) + Math.pow((R.y0 + R.y1) / 2 - c.prev.cy, 2)) / W;   // cùng người nói liên tiếp: giữ chỗ cũ
+        if (!best || hard < best.hard - 1e-9 || (Math.abs(hard - best.hard) < 1e-9 && soft < best.soft)) best = { x0: R.x0, y0: R.y0, x1: R.x1, y1: R.y1, w: w, h: h, si: si, tail: T, hard: hard, soft: soft, tag: k[3], clean: hard === 0 };
+      });
+    });
+    return best;
+  }
+  // màu thẻ tên: giữ màu nhân vật, tối dần tới khi chữ trắng đạt tương phản ≥ 4,5:1 (WCAG AA)
+  function lin(v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }
+  function relLum(hex) { var n = parseInt(hex.slice(1), 16); return 0.2126 * lin(n >> 16) + 0.7152 * lin(n >> 8 & 255) + 0.0722 * lin(n & 255); }
+  function contrast(a, b) { var x = relLum(a), y = relLum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+  function chipColor(c) {
+    var hex = /^#[0-9a-f]{6}$/i.test(c || '') ? c : '#4a5563', n = parseInt(hex.slice(1), 16), r = n >> 16, g = n >> 8 & 255, b = n & 255;
+    var h2 = function (v) { return ('0' + Math.round(v).toString(16)).slice(-2); };
+    for (var k = 1; k > 0.2; k -= 0.04) { var cur = '#' + h2(r * k) + h2(g * k) + h2(b * k); if (contrast(cur, '#ffffff') >= 4.6) return cur; }
+    return '#26211e';
+  }
+
   /* ============================================================ DOM */
   var INK = '#1f1a17';
+  // MỘT phông cho mọi lời thoại: Be Vietnam Pro (nhúng sẵn ở engine/fonts.js, dấu tiếng Việt đúng ở mọi máy); chưa nạp thì dùng phông hệ thống
+  var FAM = '"Be Vietnam Pro","Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif';
   var CSS = [
     '.gcp{position:relative;aspect-ratio:16/9;overflow:hidden;border-radius:6px;background:#f4f1ea;container-type:inline-size;user-select:none;isolation:isolate}',
     '.gcp-shk,.gcp-cam,.gcp-ov,.gcp-flash{position:absolute;inset:0}',
@@ -230,23 +319,35 @@
     '@keyframes gcp-flash{0%{opacity:.85}100%{opacity:0}}',
     '.gcp-ov{z-index:50;pointer-events:none}',
     '.gcp-fx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:48;overflow:visible}.gcp-fxo{z-index:49}',
-    // bong bóng thoại: hình vẽ SVG (nói / hét / nghĩ / thì thầm) + chữ hiện theo giọng đọc
-    '.gcp-bub{position:absolute;max-width:46%;min-width:14%;padding:.7em 1.05em .75em;color:' + INK + ';font:700 max(12px,2.05cqw)/1.32 ui-rounded,"SF Pro Rounded","Nunito","Segoe UI",system-ui,sans-serif;text-align:center;letter-spacing:.005em;',
-    'opacity:0;transform:scale(.6);transform-origin:var(--ox,50%) var(--oy,100%);transition:opacity .16s ease-out,transform .32s cubic-bezier(.3,1.7,.5,1)}',
+    // LỜI THOẠI: bong bóng (một đường viền SVG liền: thân + đuôi) hoặc phụ đề dải dưới. Một phông, một cỡ chữ theo khung (cqw, sàn 13px ở khung 640),
+    // chữ đọc được NGAY (từ chưa đọc chỉ nhạt hơn một chút, cùng họ màu); từ đang đọc có vệt sáng nhẹ
+    '.gcp-bub,.gcp-cap{position:absolute;left:0;top:0;box-sizing:border-box;margin:0;font-family:' + FAM + ';font-size:max(13px,1.9cqw);line-height:1.34;font-weight:700;font-synthesis:none;font-kerning:normal;-webkit-font-smoothing:antialiased;text-wrap:balance;overflow-wrap:anywhere;pointer-events:none;',
+    'opacity:0;transition:opacity .16s ease-out,transform .3s cubic-bezier(.3,1.5,.5,1)}',
+    '.gcp-bub{padding:.6em 1.05em .68em;color:' + INK + ';text-align:center;isolation:isolate;transform:scale(.7);transform-origin:var(--ox,50%) var(--oy,100%)}',
     '.gcp-bub.on{opacity:1;transform:scale(1)}',
-    '.gcp-bub>svg{position:absolute;left:0;top:0;overflow:visible;z-index:-1}',
-    '.gcp-bub .nm{position:absolute;left:.9em;top:-1.05em;padding:.14em .75em .18em;border-radius:1em;color:#fff;font-size:.74em;font-weight:800;letter-spacing:.04em;text-transform:uppercase;border:2px solid ' + INK + ';white-space:nowrap}',
-    '.gcp-bub .w{opacity:.12;transition:opacity .12s}.gcp-bub .w.on{opacity:1}',
-    '.gcp-bub.shout{font-size:max(13px,2.35cqw);font-weight:900;letter-spacing:.01em}.gcp-bub.shout.on{animation:gcp-quake .12s linear 4}',
+    '.gcp-bub>svg{position:absolute;left:0;top:0;overflow:visible;z-index:-1;filter:drop-shadow(0 .14em .2em rgb(20 14 10/.3))}',
+    '.gcp-bub .nm,.gcp-cap .nm{display:block;width:fit-content;padding:.1em .68em .14em;border-radius:1em;color:#fff;font-size:max(10.5px,.68em);font-weight:800;letter-spacing:.05em;line-height:1.35;text-transform:uppercase;white-space:nowrap}',
+    '.gcp-bub .nm{margin:0 auto .3em}',
+    '.gcp-bub .w{color:#4a433c}.gcp-bub .w.on{color:' + INK + '}',
+    '.gcp-bub .w.cur,.gcp-cap .w.cur{background:rgb(255 196 70/.42);box-shadow:0 0 0 .12em rgb(255 196 70/.42);border-radius:.2em}',
+    '.gcp-bub.shout{font-weight:800;padding:.78em 1.35em .85em}.gcp-bub.shout.on{animation:gcp-quake .12s linear 4}',
     '@keyframes gcp-quake{25%{transform:translate(1px,-1px)}75%{transform:translate(-1px,1px)}}',
-    '.gcp-bub.think{font-style:italic;font-weight:600}.gcp-bub.whisper{font-weight:500;color:#5d5852;font-size:max(11px,1.8cqw)}',
+    '.gcp-bub.think{font-weight:500;padding:1em 1.8em 1.1em}.gcp-bub.whisper{font-weight:500}.gcp-bub.whisper .w{color:#5a534b}.gcp-bub.whisper .w.on{color:#2b2622}',
+    // phụ đề điện ảnh (khi không có chỗ sạch cho bong bóng, hoặc người xem chọn): dải tối mờ + thẻ tên màu nhân vật + chữ trắng — đọc được trên mọi nền
+    '.gcp-cap{display:flex;gap:.75em;align-items:flex-start;padding:.52em 1em .58em;border-radius:.7em;background:rgb(14 12 18/.9);color:#fff;text-align:left;transform:translateY(.5em);box-shadow:0 .25em .9em rgb(0 0 0/.35),0 0 0 1px rgb(255 255 255/.14)}',
+    '.gcp-cap.on{opacity:1;transform:none}',
+    '.gcp-cap>svg{display:none}',
+    '.gcp-cap .nm{flex:none;margin-top:.1em;box-shadow:0 0 0 1.5px rgb(255 255 255/.55)}',
+    '.gcp-cap .tx{flex:1 1 auto;min-width:0}',
+    '.gcp-cap .w{color:#e6e1d8}.gcp-cap .w.on{color:#fff}',
+    '.gcp-cap.shout{font-weight:800}.gcp-cap.think,.gcp-cap.whisper{font-weight:500}.gcp-cap.think .w{color:#cfdaf5}.gcp-cap.think .w.on{color:#e8eeff}.gcp-cap.whisper .w{color:#cdc7bd}.gcp-cap.whisper .w.on{color:#ece8e0}',
     '.gcp-title{position:absolute;inset:0;z-index:60;display:grid;place-content:center;text-align:center;gap:.5em;background:radial-gradient(ellipse at center,#26252b,#111);color:#f4f1ea;',
-    'font-family:ui-rounded,"SF Pro Rounded","Segoe UI",system-ui,sans-serif;animation:gcp-in .5s ease-out}',
+    'font-family:' + FAM + ';animation:gcp-in .5s ease-out}',
     '@keyframes gcp-in{from{opacity:0}}',
     '.gcp-title b{font-size:max(20px,4cqw);letter-spacing:-.01em}',
     '.gcp-title span{font-size:max(11px,1.3cqw);opacity:.65;letter-spacing:.18em;text-transform:uppercase}',
     '.gcp-empty{position:absolute;inset:0;display:grid;place-items:center;color:#8e897f;font:13px system-ui,sans-serif;padding:16px;text-align:center}',
-    '@media (prefers-reduced-motion:reduce){.gcp-cam{transition:none}.gcp-shk.shake,.gcp-bub.shout.on{animation:none}}'
+    '@media (prefers-reduced-motion:reduce){.gcp-cam{transition:none}.gcp-shk.shake,.gcp-bub.shout.on{animation:none}.gcp-bub,.gcp-cap,.gcp-bub.on,.gcp-cap.on{transform:none;transition:opacity .08s linear}}'
   ].join('\n');
   function injectCSS() {
     if (document.getElementById('gcp-css')) return;
@@ -256,70 +357,155 @@
   function img(cls, svg, alt) { var e = el('img', cls); e.alt = alt || ''; e.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); return e; }
   function svgEl(tag, attrs) { var e = document.createElementNS('http://www.w3.org/2000/svg', tag); for (var k in attrs) e.setAttribute(k, attrs[k]); return e; }
 
-  /* ---- hình bong bóng (toạ độ px của chính bong bóng; đuôi chỉ tới (tx, ty) ngoài khung) ---- */
-  function roundRect(w, h, r) { return 'M' + r + ',0 H' + (w - r) + ' Q' + w + ',0 ' + w + ',' + r + ' V' + (h - r) + ' Q' + w + ',' + h + ' ' + (w - r) + ',' + h + ' H' + r + ' Q0,' + h + ' 0,' + (h - r) + ' V' + r + ' Q0,0 ' + r + ',0 Z'; }
-  function tailBase(w, h, tx, ty) {
-    // gốc đuôi trên cạnh gần đích nhất (đáy / trên / trái / phải), rộng ~ 16% cạnh, lệch về phía đích
-    var cx = Math.max(w * 0.18, Math.min(w * 0.82, tx)), cy = Math.max(h * 0.25, Math.min(h * 0.75, ty)), half = Math.max(9, Math.min(w, h) * 0.13);
-    if (ty > h) return [[cx - half, h - 2], [cx + half, h - 2]];
-    if (ty < 0) return [[cx - half, 2], [cx + half, 2]];
-    if (tx < 0) return [[2, cy - half], [2, cy + half]];
-    return [[w - 2, cy - half], [w - 2, cy + half]];
+  /* ---- hình bong bóng: MỘT đường viền liền (thân + đuôi cùng một path, không chồng nét), toạ độ px của chính bong bóng ----
+   * tip = đầu đuôi {x,y} (ngoài thân; null hoặc nằm trong thân = không đuôi) · o = { em (cỡ chữ px), sw (bề dày nét — MỘT bề dày cho mọi loại) } */
+  function f1(v) { return Math.round(v * 10) / 10; }
+  function pt(p) { return f1(p[0]) + ',' + f1(p[1]); }
+  // đuôi mọc từ cạnh nào, gốc ở đâu: cạnh theo hướng đích, gốc kẹp trong đoạn thẳng của cạnh (không dính góc bo)
+  function tailGeom(w, h, r, tip, half, pad) {
+    var ox = Math.max(-tip.x, tip.x - w, 0), oy = Math.max(-tip.y, tip.y - h, 0), edge;
+    if (!ox && !oy) return null;
+    edge = oy >= ox ? (tip.y > h ? 'b' : 't') : (tip.x > w ? 'r' : 'l');
+    var horiz = edge === 'b' || edge === 't', len = horiz ? w : h, lo = r + half + pad, hi = len - r - half - pad;
+    if (hi < lo) lo = hi = len / 2;
+    return { edge: edge, c: clamp(horiz ? tip.x : tip.y, lo, hi), half: half };
   }
-  function drawBubble(svg, kind, w, h, tx, ty) {
+  // thân bo tròn + đuôi cong lõm, nhọn (đi theo chiều kim đồng hồ: trên → phải → dưới → trái)
+  function rrPath(w, h, r, tl, tip) {
+    var T = function (e, p0, p1) {
+      if (!tl || tl.edge !== e) return '';
+      var mx = (p0[0] + p1[0]) / 2, my = (p0[1] + p1[1]) / 2, k = 0.38;
+      var c0 = [(p0[0] + tip.x) / 2 + (mx - p0[0]) * k, (p0[1] + tip.y) / 2 + (my - p0[1]) * k], c1 = [(p1[0] + tip.x) / 2 + (mx - p1[0]) * k, (p1[1] + tip.y) / 2 + (my - p1[1]) * k];
+      return 'L' + pt(p0) + 'Q' + pt(c0) + ' ' + pt([tip.x, tip.y]) + 'Q' + pt(c1) + ' ' + pt(p1);
+    }, c = tl ? tl.c : 0, hf = tl ? tl.half : 0, A = 'A' + f1(r) + ' ' + f1(r) + ' 0 0 1 ';
+    return 'M' + f1(r) + ',0' + T('t', [c - hf, 0], [c + hf, 0]) + 'H' + f1(w - r) + A + f1(w) + ',' + f1(r) +
+      T('r', [w, c - hf], [w, c + hf]) + 'V' + f1(h - r) + A + f1(w - r) + ',' + f1(h) +
+      T('b', [c + hf, h], [c - hf, h]) + 'H' + f1(r) + A + '0,' + f1(h - r) +
+      T('l', [0, c + hf], [0, c - hf]) + 'V' + f1(r) + A + f1(r) + ',0Z';
+  }
+  // hét: viền răng cưa NHỎ bám theo khung chữ (răng thụt vào d, không phình ra ngoài) — nổ gọn, không phải ngôi sao khổng lồ
+  function burstPath(w, h, d, tooth, tl, tip) {
+    var pts = [], at = { t: function (u, o) { return [u, o]; }, r: function (u, o) { return [w - o, u]; }, b: function (u, o) { return [w - u, h - o]; }, l: function (u, o) { return [o, h - u]; } };
+    ['t', 'r', 'b', 'l'].forEach(function (e) {
+      var len = e === 't' || e === 'b' ? w : h, n = Math.max(2, Math.round(len / tooth)), list = [], i;
+      for (i = 0; i < n; i++) { list.push([len * i / n, 0]); list.push([len * (i + 0.5) / n, d]); }
+      if (tl && tl.edge === e) {
+        var uc = e === 't' || e === 'r' ? tl.c : len - tl.c, lo = uc - tl.half, hi = uc + tl.half;
+        list = list.filter(function (q) { return q[0] < lo - tooth * 0.3 || q[0] > hi + tooth * 0.3; });
+        list.push([lo, 0], [uc, 0, [tip.x, tip.y]], [hi, 0]);
+        list.sort(function (p, q) { return p[0] - q[0]; });
+      }
+      list.forEach(function (q) { pts.push(q[2] || at[e](q[0], q[1])); });
+    });
+    return 'M' + pts.map(pt).join('L') + 'Z';
+  }
+  // nghĩ: đám mây viền lượn sóng (các cung nhỏ nối nhau trên elip), một path liền
+  function cloudPath(w, h, em) {
+    var n = Math.max(9, Math.round(Math.PI * (w + h) / 2 / (em * 1.75))), seg = Math.PI * (w + h) / 2 / n, bulge = seg * 0.26, a = w / 2 - bulge, b = h / 2 - bulge, p = [], i;
+    for (i = 0; i < n; i++) { var th = i / n * Math.PI * 2 - Math.PI / 2; p.push([w / 2 + Math.cos(th) * a, h / 2 + Math.sin(th) * b]); }
+    return 'M' + pt(p[0]) + p.map(function (q, k) {
+      var z = p[(k + 1) % n], rr = Math.sqrt(Math.pow(z[0] - q[0], 2) + Math.pow(z[1] - q[1], 2)) * 0.62;
+      return 'A' + f1(rr) + ' ' + f1(rr) + ' 0 0 1 ' + pt(z);
+    }).join('') + 'Z';
+  }
+  function drawBubble(svg, kind, w, h, tip, o) {
     while (svg.firstChild) svg.removeChild(svg.firstChild);
     svg.setAttribute('width', w); svg.setAttribute('height', h);
-    var sw = 3, fill = '#fffdf8', b = tailBase(w, h, tx, ty), tail = [b[0], [tx, ty], b[1]].map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ');
-    var shadow = svgEl('g', { transform: 'translate(3 4)', opacity: '.16' });
+    var em = o.em, sw = o.sw, base = { fill: '#fffdf8', stroke: INK, 'stroke-width': sw, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' };
     if (kind === 'think') {
-      // đám mây: chuỗi vòng tròn quanh elip + ba bọt nhỏ bay về phía đầu
-      var cs = [], n = Math.max(9, Math.round((w + h) / 26));
-      for (var i = 0; i < n; i++) { var a = i / n * Math.PI * 2; cs.push([w / 2 + Math.cos(a) * w * 0.47, h / 2 + Math.sin(a) * h * 0.44, Math.max(10, Math.min(w, h) * (0.2 + 0.05 * (i % 2)))]); }
-      cs.forEach(function (c) { shadow.appendChild(svgEl('circle', { cx: c[0], cy: c[1], r: c[2], fill: '#000' })); });
-      svg.appendChild(shadow);
-      cs.forEach(function (c) { svg.appendChild(svgEl('circle', { cx: c[0], cy: c[1], r: c[2], fill: fill, stroke: INK, 'stroke-width': sw })); });
-      svg.appendChild(svgEl('ellipse', { cx: w / 2, cy: h / 2, rx: w * 0.47, ry: h * 0.44, fill: fill }));
-      [0.35, 0.62, 0.84].forEach(function (t, j) {
-        var px = w / 2 + (tx - w / 2) * t, py = h / 2 + (ty - h / 2) * t + (j ? 0 : h * 0.1);
-        svg.appendChild(svgEl('circle', { cx: px, cy: py, r: Math.max(3, 9 - j * 3), fill: fill, stroke: INK, 'stroke-width': 2.4 }));
-      });
+      svg.appendChild(svgEl('path', Object.assign({ d: cloudPath(w, h, em) }, base)));
+      // ba bọt nhỏ dần nối từ rìa đám mây tới đích (xếp lần lượt, không chồng nhau); chỗ chật thì thu nhỏ rồi bớt bọt
+      if (tip && (tip.x < 0 || tip.x > w || tip.y < 0 || tip.y > h)) {
+        var cx = w / 2, cy = h / 2, dx = tip.x - cx, dy = tip.y - cy, L = Math.sqrt(dx * dx + dy * dy) || 1, ux = dx / L, uy = dy / L;
+        var edge = 1 / Math.sqrt(Math.pow(ux / (w / 2), 2) + Math.pow(uy / (h / 2), 2)), D = Math.max(0, L - edge), R0 = [0.34, 0.25, 0.16], g0 = sw + 2, n = 3, fz = 1;
+        for (; n > 0; n--) {
+          var sum = 0; for (var q = 0; q < n; q++) sum += 2 * R0[q] * em;
+          fz = Math.min(1, (D - (n + 1) * g0) / sum);
+          if (fz >= 0.45) break;
+        }
+        for (var k = 0, s0 = edge + g0; k < n; k++) {
+          var rr = Math.max(2.2, R0[k] * em * fz);
+          svg.appendChild(svgEl('circle', Object.assign({ cx: f1(cx + ux * (s0 + rr)), cy: f1(cy + uy * (s0 + rr)), r: f1(rr) }, base)));
+          s0 += 2 * rr + g0;
+        }
+      }
       return;
     }
-    if (kind === 'shout') {
-      // nổ tung: răng cưa quanh elip, đuôi nhọn
-      var pts = [], m = Math.max(14, Math.round((w + h) / 18));
-      for (var q = 0; q < m * 2; q++) { var ang = q / (m * 2) * Math.PI * 2, rr = q % 2 ? 1.0 : 1.16 + (q % 4 === 0 ? 0.05 : 0); pts.push((w / 2 + Math.cos(ang) * w * 0.53 * rr).toFixed(1) + ',' + (h / 2 + Math.sin(ang) * h * 0.58 * rr).toFixed(1)); }
-      shadow.appendChild(svgEl('polygon', { points: pts.join(' '), fill: '#000' }));
-      svg.appendChild(shadow);
-      svg.appendChild(svgEl('polygon', { points: tail, fill: fill, stroke: INK, 'stroke-width': sw, 'stroke-linejoin': 'miter' }));
-      svg.appendChild(svgEl('polygon', { points: pts.join(' '), fill: fill, stroke: INK, 'stroke-width': sw + 0.5, 'stroke-linejoin': 'miter' }));
-      svg.appendChild(svgEl('polygon', { points: tail, fill: fill, stroke: 'none', transform: 'translate(0 0)' }));
-      return;
-    }
-    var r = Math.min(22, h / 2), body = roundRect(w, h, r);
-    shadow.appendChild(svgEl('path', { d: body, fill: '#000' }));
-    svg.appendChild(shadow);
-    var dash = kind === 'whisper' ? { 'stroke-dasharray': '7 6' } : {};
-    svg.appendChild(svgEl('polygon', Object.assign({ points: tail, fill: fill, stroke: INK, 'stroke-width': sw, 'stroke-linejoin': 'round' }, dash)));
-    svg.appendChild(svgEl('path', Object.assign({ d: body, fill: fill, stroke: INK, 'stroke-width': sw }, dash)));
-    // che đường viền thân ở gốc đuôi → đuôi liền với thân: tam giác tô nền từ gốc (lùi vào trong thân) tới 40% đường về đích
-    var horiz = b[0][1] === b[1][1], inX = horiz ? 2.5 : 0, inY = horiz ? 0 : 2.5;
-    var c0 = [b[0][0] + inX + (b[0][0] < 3 ? 3 : b[0][0] > w - 3 ? -3 : 0), b[0][1] + inY + (b[0][1] < 3 ? 3 : b[0][1] > h - 3 ? -3 : 0)];
-    var c1 = [b[1][0] - inX + (b[1][0] < 3 ? 3 : b[1][0] > w - 3 ? -3 : 0), b[1][1] - inY + (b[1][1] < 3 ? 3 : b[1][1] > h - 3 ? -3 : 0)];
-    var mid = [(c0[0] + c1[0]) / 2 * 0.6 + tx * 0.4, (c0[1] + c1[1]) / 2 * 0.6 + ty * 0.4];
-    svg.appendChild(svgEl('polygon', { points: [c0, mid, c1].map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' '), fill: fill }));
+    var r = Math.min(em * 1.0, h / 2), half = Math.max(7, Math.min(14, em * 0.52)), tl = tip ? tailGeom(w, h, r, tip, half, sw) : null;
+    if (tl && Math.max(-tip.x, tip.x - w, -tip.y, tip.y - h) < em * 0.5) tl = null;   // đuôi cụt hơn nửa chữ: bỏ hẳn (khỏi thành vết lõm trên viền)
+    var path = kind === 'shout' ? burstPath(w, h, em * 0.38, em * 1.15, tl, tip) : rrPath(w, h, r, tl, tip);
+    var extra = kind === 'whisper' ? { 'stroke-dasharray': f1(em * 0.46) + ' ' + f1(em * 0.34) } : kind === 'shout' ? { 'stroke-linejoin': 'miter', 'stroke-miterlimit': '2.6' } : {};
+    svg.appendChild(svgEl('path', Object.assign({ d: path }, base, extra)));
   }
+
+  // đo hình thật của nhân vật đang đứng trên sân khấu (một lần mỗi câu thoại, không đo mỗi khung hình)
+  var FACE = ['ears', 'head', 'mask', 'shade', 'cheeks', 'eyes', 'brows', 'mouth', 'mustache', 'hairFront', 'hat'];   // "đầu" = mặt + tai + tóc mái + mũ (không tính râu / tóc xoã xuống dưới cằm)
+  var TORSO = ['hairBack', 'backItem', 'legs', 'thighL', 'shinL', 'footL', 'thighR', 'shinR', 'footR', 'hem', 'body', 'beard', 'armLb', 'foreLb', 'handLb', 'armRb', 'foreRb', 'handRb', 'armL', 'foreL', 'handL', 'armR', 'foreR', 'handR'];
+  var RIG_DEF = { head: [40, 26, 157, 149], body: [58, 142, 142, 228], mouth: [100, 131] };   // hộp mặc định (toạ độ khung xương) khi nhân vật chỉ là ảnh tĩnh
+  // hộp bao (toạ độ khung xương) của một nhóm lớp THEO DÁNG ĐANG ĐỨNG (đã nội suy xong sau ~260 ms kể từ lúc đổi cảm xúc); getBBox không tính hoạt hình CSS và không phụ thuộc máy quay
+  function rigBox(groups, names) {
+    var u = null;
+    names.forEach(function (n) {
+      var g = groups[n]; if (!g || !g.firstChild) return;
+      var bb; try { bb = g.getBBox(); } catch (e) { return; }
+      if (!bb || (!bb.width && !bb.height)) return;
+      var tf = g.transform && g.transform.baseVal && g.transform.baseVal.numberOfItems ? g.transform.baseVal.consolidate() : null, M = tf && tf.matrix;
+      [bb.x, bb.x + bb.width].forEach(function (x) { [bb.y, bb.y + bb.height].forEach(function (y) {
+        var ps = [M ? [M.a * x + M.c * y + M.e, M.b * x + M.d * y + M.f] : [x, y]];
+        ps.forEach(function (p) { u = u ? [Math.min(u[0], p[0]), Math.min(u[1], p[1]), Math.max(u[2], p[0]), Math.max(u[3], p[1])] : [p[0], p[1], p[0], p[1]]; });
+      }); });
+    });
+    return u;
+  }
+  // ĐẦU quét theo thời gian: nhân vật ngủ gục / gật gù / khoa tay làm đầu đung đưa tới hàng trăm px — lấy hợp hộp đầu qua cả một chu kỳ động tác
+  // (dựng tư thế bằng GC.poseAt tại ~14 mốc thời gian, KHÔNG đọc DOM từng mốc) để bong bóng đứng yên mà vẫn không bị đầu quét trúng
+  function sweepHead(inst) {
+    var g = inst.groups, lb = null, st = inst.resolved;
+    FACE.forEach(function (n) {
+      var e = g[n], bb; if (!e || !e.firstChild) return;
+      try { bb = e.getBBox(); } catch (x) { return; }
+      if (!bb || (!bb.width && !bb.height)) return;
+      lb = lb ? [Math.min(lb[0], bb.x), Math.min(lb[1], bb.y), Math.max(lb[2], bb.x + bb.width), Math.max(lb[3], bb.y + bb.height)] : [bb.x, bb.y, bb.x + bb.width, bb.y + bb.height];
+    });
+    if (!lb) return null;
+    if (!st || !GC.poseAt || !GC.jointMatrices) return rigBox(g, FACE);
+    var mo = (GC.LIB.motions[st.motion] || {}).dur || 0, mv = (st.move && GC.LIB.moves[st.move] || {}).dur || 0, dur = Math.min(6, Math.max(mo, mv, 0)), n = inst.still || !dur ? 1 : 14;
+    var t0 = (performance.now() - inst.t0) / 1000, u = null;
+    for (var i = 0; i < n; i++) {
+      var M = GC.jointMatrices(GC.poseAt(inst.asset, st, t0 + dur * i / n, inst.still)).head;
+      [lb[0], lb[2]].forEach(function (x) { [lb[1], lb[3]].forEach(function (y) {
+        var px = M[0] * x + M[2] * y + M[4], py = M[1] * x + M[3] * y + M[5];
+        u = u ? [Math.min(u[0], px), Math.min(u[1], py), Math.max(u[2], px), Math.max(u[3], py)] : [px, py, px, py];
+      }); });
+    }
+    return u;
+  }
+  function rigOf(inst) {
+    var g = inst && inst.groups;
+    if (!g) return RIG_DEF;
+    // đầu = hợp (dáng ĐANG vẽ, các dáng đích trong cả chu kỳ động tác): máy chậm / khung hình thưa thì đầu còn đang trên đường từ dáng cũ tới dáng đích
+    var hd = sweepHead(inst), cur = rigBox(g, FACE), bd = rigBox(g, TORSO), mo = rigBox(g, ['mouth']);
+    if (hd && cur) hd = [Math.min(hd[0], cur[0]), Math.min(hd[1], cur[1]), Math.max(hd[2], cur[2]), Math.max(hd[3], cur[3])];
+    return { head: hd || RIG_DEF.head, body: bd || RIG_DEF.body, mouth: mo ? [(mo[0] + mo[2]) / 2, (mo[1] + mo[3]) / 2] : RIG_DEF.mouth, fx: rigBox(g, ['fxHead']) };
+  }
+  // nạp sẵn phông lời thoại (engine/fonts.js) để bong bóng đầu tiên không nhảy cỡ khi phông về muộn
+  function warmFonts() {
+    if (typeof document === 'undefined' || !document.fonts || !document.fonts.load) return Promise.resolve();
+    return Promise.all(['500', '700', '800'].map(function (w) { return document.fonts.load(w + ' 16px "Be Vietnam Pro"', 'Aăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ'); })).catch(function () {});
+  }
+  var DIALOGS = ['auto', 'bubble', 'caption'];   // lời thoại: tự động (bong bóng khi có chỗ sạch, không thì phụ đề) · luôn bong bóng · luôn phụ đề
 
   function player(box, opts) {
     opts = opts || {};
     GC.render.injectCSS(); injectCSS();
     var R = GC.render, A = GC.audio || null, insts = {}, els = {}, cast = {}, pos = {}, run = 0, timers = [], cam = null, ov = null, shk = null, flash = null, bub = null, plan = null, camState = null, acting = null;
+    var dialog = DIALOGS.indexOf(opts.dialog) >= 0 ? opts.dialog : 'auto', lastSpot = null, fontsOk = false, fontsReady = warmFonts().then(function () { fontsOk = true; });
     var progress = function (t) { if (opts.onProgress) opts.onProgress(t); };
-    var ro = typeof ResizeObserver === 'function' ? new ResizeObserver(function () { if (bub) bub.layout(); }) : null;
+    var ro = typeof ResizeObserver === 'function' ? new ResizeObserver(function () { if (bub) bub.layout(false); }) : null;
     if (ro) ro.observe(box);
     function clearBox() {
       Object.keys(insts).forEach(function (k) { insts[k].destroy(); });
-      insts = {}; els = {}; cast = {}; pos = {}; bub = null; camState = null;
+      insts = {}; els = {}; cast = {}; pos = {}; bub = null; camState = null; lastSpot = null;
       while (box.firstChild) box.removeChild(box.firstChild);
       box.className = 'gcp';
     }
@@ -355,6 +541,7 @@
       cam.classList.toggle('cut', !!cut);
       cam.style.transform = 'translate(' + (tx * 100).toFixed(3) + '%,' + (ty * 100).toFixed(3) + '%) scale(' + S.toFixed(4) + ')';
       if (cut) { void cam.offsetWidth; cam.classList.remove('cut'); }
+      if (bub) bub.layout(false);
     }
     // điểm cảnh (0–1) → điểm màn hình (0–1) theo máy quay hiện tại
     function toScreen(x, y) { var c = camState || { S: 1, tx: 0, ty: 0 }; return { x: x * c.S + c.tx, y: y * c.S + c.ty }; }
@@ -383,37 +570,82 @@
       };
     }
 
-    /* ---- bong bóng: đặt cạnh đầu người nói, đuôi chỉ tới miệng, chữ hiện từng từ theo giọng ---- */
+    /* ---- lời thoại: BỘ GIẢI chọn chỗ (không che đầu ai) → bong bóng, hoặc phụ đề dải dưới khi tìm không ra chỗ sạch; chữ hiện theo giọng ----
+     * Bố cục tính MỘT lần mỗi câu thoại (đo khung xương thật của mọi diễn viên, chiếu qua máy quay hiện tại), tính lại khi đổi cỡ khung / máy quay — không tính mỗi khung hình. */
+    // khung xương → px của khung hình, theo vị trí diễn viên + máy quay hiện tại (đầu mở rộng 5 đơn vị + 0,8% chiều ngang cho đỡ hụt khi diễn viên nhún / gật)
+    function project(rig, W, H, who, nudge) {
+      var heads = [], bodies = [], decor = [], mouth = null, SW = GC.SCENE.W, SH = GC.SCENE.H, pad = 0.008 * W;
+      var vis = function (q) { return q.x1 > 0 && q.x0 < W && q.y1 > 0 && q.y0 < H; };
+      Object.keys(rig).forEach(function (id) {
+        var p = pos[id], r = rig[id]; if (!p) return;
+        var px = function (x, y, dx) { var q = toScreen((p.x + (dx || 0) + (x - 100) * p.k) / SW, (p.y + (y - 228) * p.k) / SH); return [q.x * W, q.y * H]; };
+        var h0 = px(r.head[0] - 5, r.head[1] - 5), h1 = px(r.head[2] + 5, r.head[3] + 5), b0 = px(r.body[0], r.body[1]), b1 = px(r.body[2], r.body[3]);
+        var hd = { id: id, x0: h0[0] - pad, y0: h0[1] - pad, x1: h1[0] + pad, y1: h1[1] + pad }, bd = { id: id, x0: b0[0], y0: b0[1], x1: b1[0], y1: b1[1] };
+        // người nói đang bước tới / lùi (nudge, ~0,34 s): hộp đầu / thân phủ cả quãng đường — máy chậm thì lúc bong bóng hiện, họ còn đang trên đường từ chỗ cũ
+        if (id === who && nudge) {
+          var g0 = px(r.head[0] - 5, r.head[1] - 5, -nudge), g1 = px(r.head[2] + 5, r.head[3] + 5, -nudge), c0 = px(r.body[0], r.body[1], -nudge), c1 = px(r.body[2], r.body[3], -nudge);
+          hd.x0 = Math.min(hd.x0, g0[0] - pad); hd.y0 = Math.min(hd.y0, g0[1] - pad); hd.x1 = Math.max(hd.x1, g1[0] + pad); hd.y1 = Math.max(hd.y1, g1[1] + pad);
+          bd.x0 = Math.min(bd.x0, c0[0]); bd.x1 = Math.max(bd.x1, c1[0]);
+        }
+        if (vis(hd)) heads.push(hd);
+        if (vis(bd)) bodies.push(bd);
+        if (r.fx) { var f0 = px(r.fx[0], r.fx[1]), f2 = px(r.fx[2], r.fx[3]), fd = { x0: f0[0], y0: f0[1], x1: f2[0], y1: f2[1] }; if (vis(fd)) decor.push(fd); }
+        if (id === who) mouth = px(r.mouth[0], r.mouth[1]);
+      });
+      return { heads: heads, bodies: bodies, decor: decor, mouth: mouth ? { x: mouth[0], y: mouth[1] } : { x: W / 2, y: H * 0.4 } };
+    }
     function bubble(line) {
-      var b = el('div', 'gcp-bub ' + line.bubble), svg = svgEl('svg', {}), c = (plan.cast.filter(function (x) { return x.id === line.actor; })[0] || {});
-      var nm = el('span', 'nm', c.name || line.actor); nm.style.background = c.color || '#5b6b7b';
-      b.appendChild(svg); b.appendChild(nm);
-      var ws = String(line.say).split(/\s+/).filter(Boolean).map(function (w, i) { var s = el('span', 'w', w); return s; });
-      ws.forEach(function (s, i) { if (i) b.appendChild(document.createTextNode(' ')); b.appendChild(s); });
+      var c = plan.cast.filter(function (x) { return x.id === line.actor; })[0] || {}, mode = 'bubble', on = false, rig = null;
+      var b = el('div', 'gcp-bub ' + line.bubble), svg = svgEl('svg', { 'aria-hidden': 'true', focusable: 'false' }), nm = el('span', 'nm', c.name || line.actor), tx = el('span', 'tx');
+      nm.style.background = chipColor(c.color);
+      b.appendChild(svg); b.appendChild(nm); b.appendChild(tx);
+      var ws = String(line.say).split(/\s+/).filter(Boolean).map(function (w) { return el('span', 'w', w); });
+      ws.forEach(function (s, i) { if (i) tx.appendChild(document.createTextNode(' ')); tx.appendChild(s); });
+      b.setAttribute('data-mode', mode);
       ov.appendChild(b);
+      function setMode(m) { mode = m; b.className = (m === 'caption' ? 'gcp-cap ' : 'gcp-bub ') + line.bubble + (on ? ' on' : ''); b.setAttribute('data-mode', m); }
+      // các cỡ thử (rộng nhất ≤ 38% khung với bong bóng, 80% với phụ đề → hẹp dần): đo chiều cao thật của chữ đã xuống dòng
+      function sizes(W) {
+        var cap = mode === 'caption', maxW = (cap ? 0.8 : 0.38) * W, em = parseFloat(getComputedStyle(b).fontSize) || 16;
+        b.style.width = 'max-content';
+        var nw = b.offsetWidth, minW = Math.min(maxW, Math.max((cap ? 0.3 : 0.16) * W, nm.offsetWidth + em * 3.8)), w1 = Math.min(maxW, Math.max(nw, minW)), list = [w1];
+        if (nw > minW * 1.3) [0.78, 0.6].forEach(function (f) { var w = Math.max(minW, Math.round(w1 * f)); if (list.every(function (x) { return Math.abs(x - w) > W * 0.03; })) list.push(w); });
+        return { em: em, list: list.map(function (w) { b.style.width = w + 'px'; return { w: w, h: b.offsetHeight }; }) };
+      }
+      function layout(fresh) {
+        var W = box.clientWidth, H = box.clientHeight, p = pos[line.actor], t0 = performance.now();
+        if (!W || !H || !p) return;
+        if (fresh || !rig) { rig = {}; Object.keys(insts).forEach(function (id) { rig[id] = rigOf(insts[id]); }); }
+        var S = project(rig, W, H, line.actor, line.nudge), got = null;
+        function ask(kind) {
+          var z = sizes(W);
+          return { z: z, r: GC.film.solveLayout({ kind: kind, W: W, H: H, m: 0.025 * W, who: line.actor, mouth: S.mouth, heads: S.heads, bodies: S.bodies, decor: S.decor, sizes: z.list, prev: lastSpot }) };
+        }
+        if (dialog !== 'caption') { setMode('bubble'); got = ask('bubble'); if (dialog === 'auto' && !(got.r && got.r.clean)) got = null; }
+        if (!got) { setMode('caption'); got = ask('caption'); }
+        var res = got.r;
+        if (!res) return;
+        b.style.width = res.w + 'px'; b.style.left = f1(res.x0) + 'px'; b.style.top = f1(res.y0) + 'px';
+        b.setAttribute('data-clean', res.clean ? '1' : '0'); b.setAttribute('data-tag', res.tag || '');
+        if (mode === 'bubble') {
+          var T = res.tail;
+          b.style.setProperty('--ox', (clamp((T.px - res.x0) / res.w, 0, 1) * 100).toFixed(1) + '%'); b.style.setProperty('--oy', (clamp((T.py - res.y0) / res.h, 0, 1) * 100).toFixed(1) + '%');
+          drawBubble(svg, line.bubble, res.w, res.h, { x: T.tx - res.x0, y: T.ty - res.y0 }, { em: got.z.em, sw: Math.max(2, W * 0.0023) });
+        }
+        b.setAttribute('data-tail', res.tail && mode === 'bubble' ? [res.tail.px, res.tail.py, res.tail.tx, res.tail.ty].map(Math.round).join(',') : '');
+        lastSpot = { id: line.actor, cx: (res.x0 + res.x1) / 2, cy: (res.y0 + res.y1) / 2 };
+        b.setAttribute('data-ms', (performance.now() - t0).toFixed(1));   // chi phí bố cục của câu này (ms): đo MỘT lần mỗi câu / mỗi lần đổi khung
+      }
       var api = {
         el: b,
-        layout: function () {
-          var W = box.clientWidth, H = box.clientHeight, p = pos[line.actor];
-          if (!W || !p) return;
-          var mouth = toScreen(p.x / GC.SCENE.W, (p.y - (228 - 131) * p.k) / GC.SCENE.H), crown = toScreen(p.x / GC.SCENE.W, (p.y - 178 * p.k) / GC.SCENE.H);
-          var bw = b.offsetWidth, bh = b.offsetHeight, gap = 0.05 * H;
-          // trên đầu nếu đủ chỗ; không thì đặt cạnh đầu, về phía còn trống của khung
-          var left, top;
-          if (crown.y * H - bh - gap > 6) { left = mouth.x * W - bw * (mouth.x < 0.5 ? 0.3 : 0.7); top = crown.y * H - bh - gap; }
-          else { var right = mouth.x < 0.55; left = right ? mouth.x * W + 0.1 * W : mouth.x * W - 0.1 * W - bw; top = Math.max(0.05 * H, crown.y * H - bh * 0.35); }
-          left = Math.max(0.02 * W, Math.min(W * 0.98 - bw, left)); top = Math.max(0.04 * H, Math.min(H * 0.6, top));
-          b.style.left = left + 'px'; b.style.top = top + 'px';
-          var tx = mouth.x * W - left, ty = mouth.y * H - top - 0.02 * H;
-          // đuôi không đâm quá sâu vào mặt: dừng cách miệng một đoạn
-          var bx = Math.max(0, Math.min(bw, tx)), by = Math.max(0, Math.min(bh, ty)), dx = tx - bx, dy = ty - by, d = Math.sqrt(dx * dx + dy * dy) || 1, keep = Math.min(d, Math.max(18, d * 0.62));
-          tx = bx + dx / d * keep; ty = by + dy / d * keep;
-          b.style.setProperty('--ox', (Math.max(0, Math.min(bw, tx)) / bw * 100).toFixed(1) + '%'); b.style.setProperty('--oy', (ty > bh ? 100 : ty < 0 ? 0 : 50) + '%');
-          drawBubble(svg, line.bubble, bw, bh, tx, ty);
+        mode: function () { return mode; },
+        layout: layout,
+        word: function (i) { for (var j = 0; j < ws.length; j++) { ws[j].classList.toggle('on', j <= i); ws[j].classList.toggle('cur', j === i); } },
+        show: function () {
+          var go = function () { layout(true); requestAnimationFrame(function () { on = true; b.classList.add('on'); }); };
+          if (fontsOk) go(); else fontsReady.then(go);   // đo chữ khi phông đã về (chưa có thì đo bằng phông dự phòng, vẫn đúng)
         },
-        word: function (i) { for (var j = 0; j < ws.length; j++) ws[j].classList.toggle('on', j <= i); },
-        show: function () { api.layout(); requestAnimationFrame(function () { b.classList.add('on'); }); },
-        close: function () { b.classList.remove('on'); setTimeout(function () { b.remove(); }, 200); }
+        close: function () { on = false; b.classList.remove('on'); setTimeout(function () { b.remove(); }, 200); }
       };
       return api;
     }
@@ -423,7 +655,7 @@
       var sc = scene(shot);
       if (!sc) { box.appendChild(el('div', 'gcp-empty', shot ? 'Phân cảnh "' + shot.title + '" chưa có bối cảnh.' : 'Chưa có phân cảnh.')); return null; }
       plan = direct(shot) || { scene: sc, cast: actors(shot).slice(0, R.budget).map(function (a) { return { id: a.id, key: a.key, name: a.name, home: 'center', color: colorOf(a) }; }), beats: [] };
-      shk = el('div', 'gcp-shk'); cam = el('div', 'gcp-cam'); ov = el('div', 'gcp-ov'); flash = el('div', 'gcp-flash');
+      shk = el('div', 'gcp-shk'); cam = el('div', 'gcp-cam'); ov = el('div', 'gcp-ov'); ov.setAttribute('aria-live', 'polite'); flash = el('div', 'gcp-flash');
       shk.appendChild(cam); box.appendChild(shk); box.appendChild(flash); box.appendChild(ov);
       cam.appendChild(img('bg', GC.sceneSvg(sc, { part: 'back' }), sc.name));
       var list = actors(shot).slice(0, R.budget);
@@ -591,7 +823,7 @@
       sfx('gong', { gain: 0.6 });
       return wait(ms || 1700, r);
     }
-    function stop() { run++; timers.forEach(clearTimeout); timers = []; if (acting) acting(); if (A) A.stopAll(); bub = null; if (ov) Array.prototype.forEach.call(ov.querySelectorAll('.gcp-bub'), function (b) { b.remove(); }); }
+    function stop() { run++; timers.forEach(clearTimeout); timers = []; if (acting) acting(); if (A) A.stopAll(); bub = null; if (ov) Array.prototype.forEach.call(ov.querySelectorAll('.gcp-bub,.gcp-cap'), function (b) { b.remove(); }); }
     function playShot(shot, r) {
       if (r !== run) return Promise.reject('stop');   // đã stop / show trong cùng tick: không dựng lại sân khấu, không bật nhạc
       if (!build(shot, true)) return Promise.resolve();
@@ -604,6 +836,9 @@
       stop: function () { stop(); progress('Đã dừng'); },
       destroy: function () { stop(); if (ro) ro.disconnect(); clearBox(); },
       plan: function () { return plan; },
+      dialog: function () { return dialog; },
+      // đổi kiểu lời thoại giữa chừng (Studio, phim xuất ra): 'auto' | 'bubble' | 'caption'; câu đang hiện được bố trí lại ngay
+      setDialog: function (m) { if (DIALOGS.indexOf(m) < 0) return false; dialog = m; if (bub) bub.layout(true); return true; },
       // diễn chuỗi: thẻ tiêu đề phân cảnh → nhân vật ra sân → lời thoại có dàn dựng; bỏ qua phân cảnh chưa sẵn sàng
       play: function (list, title) {
         stop();
@@ -626,5 +861,5 @@
     };
   }
 
-  GC.film = { readiness: readiness, issues: issues, still: still, spots: spots, actors: actors, scene: scene, direct: direct, player: player, injectCSS: injectCSS };
+  GC.film = { readiness: readiness, issues: issues, still: still, spots: spots, actors: actors, scene: scene, direct: direct, player: player, injectCSS: injectCSS, solveLayout: solveLayout, chipColor: chipColor, contrast: contrast, dialogModes: DIALOGS.slice() };
 })(window.GenChibi);

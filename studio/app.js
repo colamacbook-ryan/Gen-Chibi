@@ -1168,6 +1168,23 @@
     VOICE_MODES.forEach(function (o) { var op = h('option', { value: o[0], text: o[1] }); if ((p.voice || 'auto') === o[0]) op.selected = true; vs.appendChild(op); });
     return [mute, vs];
   }
+  // kiểu lời thoại của sân khấu, nhớ theo máy như âm thanh (engine/player.js: opts.dialog / setDialog):
+  // tự động = bong bóng khi có chỗ sạch (không che đầu ai), không thì phụ đề dải dưới · bong bóng = luôn bong bóng · phụ đề = luôn phụ đề
+  var DIALOG_MODES = [['auto', 'Lời thoại: tự động'], ['bubble', 'Lời thoại: bong bóng'], ['caption', 'Lời thoại: phụ đề']];
+  var StagePref = {
+    get: function () {
+      var p; try { p = JSON.parse(localStorage.getItem('gc-stage') || '{}') || {}; } catch (e) { p = {}; }
+      return { dialog: DIALOG_MODES.some(function (m) { return m[0] === p.dialog; }) ? p.dialog : 'auto' };
+    },
+    set: function (k, v) { var p = StagePref.get(); p[k] = v; try { localStorage.setItem('gc-stage', JSON.stringify(p)); } catch (e) { /* bỏ qua */ } }
+  };
+  function dialogControl(player) {
+    var cur = StagePref.get().dialog;
+    var sel = h('select', { 'aria-label': 'Kiểu lời thoại', title: 'Tự động: bong bóng khi có chỗ không che mặt ai, không thì phụ đề dải dưới · Bong bóng: luôn bong bóng · Phụ đề: luôn phụ đề',
+      onchange: function () { StagePref.set('dialog', sel.value); player.setDialog(sel.value); } });
+    DIALOG_MODES.forEach(function (o) { var op = h('option', { value: o[0], text: o[1] }); if (cur === o[0]) op.selected = true; sel.appendChild(op); });
+    return sel;
+  }
   // giọng của nhân vật trong phim: cao độ + tốc độ, nghe thử ngay; asset của tôi thì lưu được
   function voiceRow(a, mine) {
     if (!GC.audio) return null;
@@ -1206,14 +1223,15 @@
           }),
           items: data.items.map(function (x) { return pick(x, ['id', 'name', 'type', 'rarity', 'equip']); }),
           scenes: data.scenes.map(function (x) { return pick(x, ['id', 'name', 'layers', 'deco', 'palette', 'time', 'weather', 'spots']); }) };
-        var film = { title: W.title, logline: W.logline || '', shots: W.shots.map(function (s) { return { id: s.id, title: s.title, description: s.description || '', scene: s.scene, cast: s.cast, event: s.event }; }) };
+        var film = { title: W.title, logline: W.logline || '', dialog: StagePref.get().dialog, shots: W.shots.map(function (s) { return { id: s.id, title: s.title, description: s.description || '', scene: s.scene, cast: s.cast, event: s.event }; }) };
         var safe = function (t) { return t.replace(/<\/script/gi, '<\\/script').replace(/<!--/g, '<\\!--'); };
-        var html = '<!doctype html>\n<!--\n  Phim "' + xml(W.title) + '" — làm bằng gen-chibi.\n  Bộ phát (engine/*, kinds/*) © 2026 Gen Labs — All rights reserved. Giấy phép: CHỈ ĐỂ XEM phim này.\n  Không trích xuất, sao chép, sửa đổi hay tái sử dụng mã bộ phát cho mục đích khác.\n-->\n<html lang="vi">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>' + xml(W.title) + ' — gen-chibi</title>\n' +
+        var html = '<!doctype html>\n<!--\n  Phim "' + xml(W.title) + '" — làm bằng gen-chibi.\n  Bộ phát (engine/*, kinds/*) © 2026 Gen Labs — All rights reserved. Giấy phép: CHỈ ĐỂ XEM phim này.\n  Không trích xuất, sao chép, sửa đổi hay tái sử dụng mã bộ phát cho mục đích khác.\n  Riêng phông chữ lời thoại Be Vietnam Pro (engine/fonts.js) © 2021 The Be Vietnam Pro Project Authors — SIL Open Font License 1.1 (toàn văn nằm trong chính tệp này).\n-->\n<html lang="vi">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>' + xml(W.title) + ' — gen-chibi</title>\n' +
           '<meta name="generator" content="gen-chibi ' + xml(String((Store.info || {}).version || '')) + ' · Gen Labs">\n<style>' + FILM_CSS + '</style>\n</head>\n<body>\n' +
           '<main class="film"><header><div><h1>' + xml(W.title) + '</h1><p>' + xml(W.logline || '') + '</p></div><span class="badge">' + W.shots.length + ' phân cảnh</span></header>\n' +
           '<div class="screen"><div id="stage"></div><button id="big" class="big" aria-label="Xem phim">▶</button></div>\n' +
           '<div class="bar"><button id="play">▶ Xem</button><button id="stop">■ Dừng</button><button id="full">⛶ Toàn màn hình</button><button id="mute" aria-label="Bật / tắt tiếng">🔊</button>' +
-          '<select id="voice" aria-label="Giọng nhân vật"><option value="auto">Giọng: tự động</option><option value="tts">Giọng: máy đọc</option><option value="blip">Giọng: blip</option><option value="off">Giọng: tắt</option></select><span id="prog"></span></div>\n' +
+          '<select id="voice" aria-label="Giọng nhân vật"><option value="auto">Giọng: tự động</option><option value="tts">Giọng: máy đọc</option><option value="blip">Giọng: blip</option><option value="off">Giọng: tắt</option></select>' +
+          '<select id="dialog" aria-label="Kiểu lời thoại">' + DIALOG_MODES.map(function (m) { return '<option value="' + m[0] + '">' + m[1] + '</option>'; }).join('') + '</select><span id="prog"></span></div>\n' +
           '<ol id="chapters"></ol>\n<footer>Làm bằng gen-chibi · Bộ phát © 2026 Gen Labs — chỉ để xem phim này</footer></main>\n' +
           texts.map(function (t, i) { return '<script>/* ' + srcs[i] + ' */\n' + safe(t) + '\n</script>'; }).join('\n') + '\n' +
           '<script>\nvar DATA = ' + jsonForScript(data) + ';\nvar FILM = ' + jsonForScript(film) + ';\n' + FILM_BOOT + '\n</script>\n</body>\n</html>\n';
@@ -1248,7 +1266,8 @@
     '  DATA.characters.forEach(function (a) { GC.registerAsset(a.pack, a); });',
     '  (DATA.motionPacks || []).forEach(function (m) { GC.choreo.registerPack("local.my", m); });',
     '  var rs = GC.film.readiness(FILM), ready = rs.filter(function (x) { return x.ok; }).map(function (x) { return x.shot; });',
-    '  var player = GC.film.player($("stage"), { onProgress: function (t) { $("prog").textContent = t; }, onEnd: function () { $("big").hidden = false; } });',
+    '  var player = GC.film.player($("stage"), { onProgress: function (t) { $("prog").textContent = t; }, onEnd: function () { $("big").hidden = false; }, dialog: FILM.dialog || "auto" });',
+    '  $("dialog").value = player.dialog(); $("dialog").onchange = function () { player.setDialog($("dialog").value); };',
     '  player.show(ready[0] || FILM.shots[0]);',
     '  function play(from) { $("big").hidden = true; player.play(ready.slice(from || 0), FILM.title); }',
     '  $("big").onclick = $("play").onclick = function () { play(0); };',
@@ -1591,7 +1610,7 @@
     var script = h('textarea', { rows: 6, maxlength: 8000, placeholder: 'Kịch bản tổng (văn xuôi). AI đạo diễn đọc mục này để chia phân cảnh.', oninput: function () { draftScript = { logline: logline.value, script: script.value }; } });
     var shotsBox = h('div', { class: 'stack' }), stills = h('div', { class: 'stillgrid' }), evPanel = h('div');
     var prog = h('span', { class: 'note mono', text: 'Chưa diễn' }), stage = h('div'), readyBox = h('div', { class: 'ready' });
-    var player = GC.film.player(stage, { onProgress: function (t) { prog.textContent = t; } });
+    var player = GC.film.player(stage, { onProgress: function (t) { prog.textContent = t; }, dialog: StagePref.get().dialog });
     onLeave(function () { alive = false; player.destroy(); });   // phản hồi đến sau khi rời trang thì bỏ qua (không dựng diễn viên mồ côi)
     var QUICK = [['Viết kịch bản', 'Từ ý tưởng trong kịch bản tổng, viết logline + kịch bản hoàn chỉnh rồi lưu (save_work).'],
       ['Chia phân cảnh', 'Chia kịch bản thành các phân cảnh (save_shot): mỗi cảnh một bối cảnh trong Thư viện + dàn diễn viên. Thiếu thì tạo ở Xưởng.'],
@@ -1607,8 +1626,8 @@
         h('div', { class: 'panel' }, h('h3', null, 'Phân cảnh', h('span', { class: 'r' }, h('button', { class: 'btn sm', onclick: function () { saveShot({ shot: { title: 'Phân cảnh mới', scene: (GC.scenes()[0] || {}).key || '' } }); } }, '+ Phân cảnh'))), h('div', { class: 'pad' }, shotsBox)),
         evPanel),
       h('div', { class: 'stack' },
-        h('div', { class: 'panel' }, h('h3', null, 'Sân khấu final', h('span', { class: 'r row', style: 'gap:6px' }, prog,
-          audioControls(), h('button', { class: 'btn sm primary', onclick: function () { if (W) player.play(W.shots, W.title); } }, '▶ Diễn toàn bộ'), h('button', { class: 'btn sm', onclick: function () { player.stop(); } }, 'Dừng'))),
+        h('div', { class: 'panel' }, h('h3', null, 'Sân khấu final', h('span', { class: 'r row', style: 'gap:6px;flex-wrap:wrap;justify-content:flex-end;min-width:0' }, prog,
+          audioControls(), dialogControl(player), h('button', { class: 'btn sm primary', onclick: function () { if (W) player.play(W.shots, W.title); } }, '▶ Diễn toàn bộ'), h('button', { class: 'btn sm', onclick: function () { player.stop(); } }, 'Dừng'))),
           h('div', { class: 'pad stack' }, stage, readyBox,
             h('div', { class: 'usebar' }, h('b', { text: 'Xuất' }),
               h('button', { class: 'btn sm primary', title: 'Một tệp .html chạy được ở mọi trình duyệt, không cần cài gì — gửi cho người xem', onclick: function () { if (W) exportFilm(W); } }, 'Phim (HTML)'),

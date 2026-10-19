@@ -599,6 +599,8 @@ echo "2j) gói động tác: cổng chặn từng kiểu tấn công · hình h�
 node tools/test-motion.js || exit 1
 echo "2k) giọng AI (Google Gemini TTS) với mạng giả: lưu đệm, đổi model khi hết hạn mức, thẻ cảm xúc, không lộ key"
 node tools/test-voice.js || exit 1
+echo "2l) âm thanh: từ vựng tiếng động · dựng offline 17 tiếng (không vỡ / NaN, độ to đồng đều, đúng thời lượng, ≤ 40 node) · limiter khi chồng · clip giọng trong say() (miệng theo biên độ thật, chữ theo tỉ lệ, hush, dự phòng, LRU) — cần Playwright, không có thì bỏ qua phần trình duyệt"
+node tools/test-audio.mjs || exit 1
 echo "3) MCP"
 H="$(mktemp -d)"; PORT=7495
 (echo > /dev/tcp/127.0.0.1/$PORT) 2>/dev/null && { echo "Cổng $PORT đang bị chiếm"; exit 1; }

@@ -11,28 +11,13 @@ const https = require('https');
 const { agentFor } = require('./net');
 
 const API = 'https://generativelanguage.googleapis.com/v1beta';
-// Tên giọng dựng sẵn của Gemini TTS (API không có lệnh liệt kê giọng) — nam / nữ là DỰ KIẾN, nghe thử ở Studio trước khi chọn.
-// Giọng bị API từ chối thì đánh dấu hỏng lúc chạy, không dùng nữa.
-const VOICES = [
-  ['Charon', 'nam', 'trầm, rõ'], ['Algenib', 'nam', 'khàn, dày'], ['Orus', 'nam', 'chắc, dứt khoát'], ['Alnilam', 'nam', 'chắc'], ['Rasalgethi', 'nam', 'rõ ý'],
-  ['Iapetus', 'nam', 'trong, rõ'], ['Schedar', 'nam', 'đều, điềm tĩnh'], ['Sadaltager', 'nam', 'từng trải'], ['Algieba', 'nam', 'mượt'], ['Enceladus', 'nam', 'nhiều hơi thở'],
-  ['Umbriel', 'nam', 'thoải mái'], ['Zubenelgenubi', 'nam', 'tự nhiên, đời thường'], ['Achird', 'nam', 'thân thiện'], ['Puck', 'nam', 'vui tươi'], ['Fenrir', 'nam', 'hào hứng'], ['Sadachbia', 'nam', 'sinh động'],
-  ['Kore', 'nữ', 'chắc, rõ'], ['Gacrux', 'nữ', 'trưởng thành'], ['Sulafat', 'nữ', 'ấm áp'], ['Vindemiatrix', 'nữ', 'dịu dàng'], ['Achernar', 'nữ', 'nhẹ nhàng'], ['Despina', 'nữ', 'mượt'],
-  ['Erinome', 'nữ', 'trong'], ['Callirrhoe', 'nữ', 'thoải mái'], ['Aoede', 'nữ', 'thoáng, nhẹ'], ['Pulcherrima', 'nữ', 'thẳng thắn'], ['Zephyr', 'nữ', 'sáng'], ['Autonoe', 'nữ', 'sáng'],
-  ['Laomedeia', 'nữ', 'vui tươi'], ['Leda', 'nữ', 'trẻ trung']
-].map(v => ({ name: v[0], gender: v[1], style: v[2] }));
+// Vai giọng, giọng vùng, 30 giọng dựng sẵn của Gemini, thẻ cảm xúc: MỘT nguồn ở engine/voices.js (dùng chung với Studio, bộ phát, MCP).
+// Giọng nam / nữ là DỰ KIẾN — nghe thử ở Studio; giọng bị API từ chối thì đánh dấu hỏng lúc chạy, không dùng nữa.
+const GV = require('../engine/voices.js');
+const VOICES = GV.AI_VOICES.map(v => ({ name: v.name, gender: v.gender === 'f' ? 'nữ' : 'nam', style: v.style }));
 const VOICE_SET = new Set(VOICES.map(v => v.name));
-
-// cảm xúc (18 trạng thái của khung) + kiểu bong bóng → thẻ giọng điệu đặt trong [ ] đầu câu (model không đọc to thẻ; đo 2026-10-19)
-const STATE_TAGS = {
-  normal: '', work: 'focused', think: 'thoughtful', unsure: 'hesitant', smug: 'smug', greedy: 'greedy, sly', proud: 'proud',
-  vow: 'determined, solemn', beg: 'pleading', shock: 'shocked', panic: 'panicked, fast', rage: 'angry', dizzy: 'dazed',
-  cry: 'crying, sobbing', injured: 'in pain', exhausted: 'exhausted, out of breath', lazy: 'lazy, yawning', sleep: 'sleepy, mumbling'
-};
-const BUBBLE_TAGS = { shout: 'shouting', whisper: 'whispering', think: 'inner thought, softly' };
-function tagsOf(state, bubble) {
-  return [STATE_TAGS[state] || '', BUBBLE_TAGS[bubble] || ''].filter(Boolean).join(', ');
-}
+const STATE_TAGS = GV.STATE_TAGS, BUBBLE_TAGS = GV.BUBBLE_TAGS;
+const tagsOf = (state, bubble) => GV.mood(state, bubble);
 // chữ người dùng không được tự chèn thẻ giọng điệu: [ ] → ( ); bỏ ký tự điều khiển
 function cleanText(t) { return String(t == null ? '' : t).replace(/[\u0000-\u001f]/g, ' ').replace(/\[/g, '(').replace(/\]/g, ')').replace(/\s+/g, ' ').trim(); }
 
@@ -111,15 +96,18 @@ class Voice {
   }
   read() { try { return JSON.parse(fs.readFileSync(this.file, 'utf8')); } catch { return {}; } }
   write(v) { fs.writeFileSync(this.file + '.tmp', JSON.stringify(v, null, 2)); fs.renameSync(this.file + '.tmp', this.file); }
-  config() { return Object.assign({ enabled: false, model: '', blocked: {}, badVoices: [], usage: {} }, this.read()); }
+  // enabled: null = tự bật khi có key (dán key là chạy) · false = chủ máy tắt hẳn · true = bật
+  config() { return Object.assign({ enabled: null, model: '', blocked: {}, badVoices: [], usage: {} }, this.read()); }
+  isOn() { const c = this.config(); return c.enabled !== false && !!this.key(); }
   // key riêng cho giọng; chưa có thì dùng key Gemini đã nhập ở AI đạo diễn (cùng một key Google AI Studio)
   key() { return this.secrets.get('voice.gemini') || this.secrets.get('llm.gemini') || ''; }
   keySource() { return this.secrets.get('voice.gemini') ? 'voice' : this.secrets.get('llm.gemini') ? 'llm' : ''; }
   publicConfig() {
     const c = this.config(), day = new Date().toISOString().slice(0, 10), now = Date.now();
-    return { enabled: c.enabled, model: c.model, hasKey: !!this.key(), keySource: this.keySource(),
+    return { enabled: c.enabled !== false && !!this.key(), off: c.enabled === false, model: c.model, hasKey: !!this.key(), keySource: this.keySource(),
       blocked: Object.keys(c.blocked).filter(m => c.blocked[m] > now).map(m => ({ model: m, until: new Date(c.blocked[m]).toISOString() })),
-      today: (c.usage[day] || 0), cached: this.cachedCount(), voices: VOICES.filter(v => c.badVoices.indexOf(v.name) < 0), keyUrl: 'https://aistudio.google.com/apikey' };
+      today: (c.usage[day] || 0), cached: this.cachedCount(), voices: VOICES.filter(v => c.badVoices.indexOf(v.name) < 0), keyUrl: 'https://aistudio.google.com/apikey',
+      roles: GV.roleList(), langs: GV.langList() };
   }
   setConfig(b) {
     const c = this.config();
@@ -130,20 +118,33 @@ class Voice {
     this.write(c);
     return this.publicConfig();
   }
+  // dán key → kiểm ngay bằng lệnh liệt kê model (MIỄN PHÍ, không tốn lượt đọc) → đúng thì lưu + bật, sai thì giữ key cũ và báo rõ
+  async connect(apiKey) {
+    const k = String(apiKey || '').trim();
+    if (!/^[\x21-\x7e]{20,200}$/.test(k)) throw fail(400, 'Key trông không đúng (key Google AI Studio dạng AIza…, lấy ở https://aistudio.google.com/apikey)');
+    const prev = this.secrets.get('voice.gemini'), c0 = this.config();
+    this.secrets.set('voice.gemini', k); this._models = null;
+    let ms;
+    try { ms = await this.models(); }
+    catch (e) { this.secrets.set('voice.gemini', prev || ''); this._models = null; throw e.code === 502 && /\((400|401|403)\)/.test(e.message) ? fail(400, 'Google từ chối key này — kiểm lại key (Google AI Studio › Get API key)') : e; }
+    if (!ms.length) { this.secrets.set('voice.gemini', prev || ''); this._models = null; throw fail(400, 'Key hợp lệ nhưng không gọi được model đọc giọng nào (*-tts) — project Google này chưa bật Gemini API?'); }
+    c0.enabled = null; c0.blocked = {}; this.write(c0);
+    return Object.assign(this.publicConfig(), { models: ms });
+  }
+  // nhân vật + tuỳ chọn → giọng AI + thẻ vai / giọng vùng (chỉ sinh từ id hợp lệ — không nhận chữ tự do, chặn chèn chỉ dẫn)
+  // o: { asset, voice ('auto' | tên giọng), role, lang, accent, cast (castAll của tác phẩm) }
+  resolve(o) {
+    const a = o.asset || null, v = Object.assign({}, a && a.voice);
+    if (o.role && GV.ROLES[o.role]) v.role = o.role;
+    const c = o.cast && o.cast.ai && VOICE_SET.has(o.cast.ai) ? o.cast : GV.cast(Object.assign({ id: 'x' }, a, { voice: v }), { lang: o.lang, accent: o.accent });
+    const name = o.voice && o.voice !== 'auto' ? String(o.voice) : c.ai;
+    return { voice: name, persona: c.tags, role: c.role, lang: c.lang, accent: c.accent };
+  }
   cachedCount() { try { return fs.readdirSync(this.dir).filter(f => f.endsWith('.wav')).length; } catch { return 0; } }
   idOf(text, voice, tags) { return crypto.createHash('sha256').update(JSON.stringify([voice, tags, text])).digest('hex').slice(0, 40); }
   clipPath(id) { return /^[a-f0-9]{40}$/.test(String(id)) ? path.join(this.dir, id + '.wav') : null; }
-  defaultVoice(asset) {
-    // giọng mặc định ổn định theo nhân vật: từ khoá vai / tên → nam trầm · nam trẻ · nữ; trong nhóm chọn theo băm id
-    const s = String([asset && asset.name, asset && asset.role, asset && asset.persona].join(' ')).toLowerCase();
-    const female = /(^|[\s,.;:()])(cô|chị|bà|nàng|công chúa|tiểu thư|bé gái|mẹ|nữ|phu nhân|hoàng hậu|tiên nữ)(?=$|[\s,.;:()])/.test(s);   // \b của JS không hiểu chữ có dấu
-    const low = /(tướng|vua|lão|ông|sếp|thừa tướng|đại ca|thầy|sư phụ|giám đốc|quan)/.test(s);
-    const pool = VOICES.filter(v => v.gender === (female ? 'nữ' : 'nam')).map(v => v.name);
-    const deep = ['Charon', 'Algenib', 'Orus', 'Alnilam', 'Gacrux', 'Kore', 'Sadaltager'], young = ['Puck', 'Fenrir', 'Sadachbia', 'Leda', 'Laomedeia', 'Zephyr', 'Achird'];
-    const pick = pool.filter(n => (low ? deep : young).indexOf(n) >= 0);
-    const list = pick.length ? pick : pool, h = crypto.createHash('md5').update(String(asset && asset.id || '')).digest().readUInt32LE(0);
-    return list[h % list.length];
-  }
+  // giọng mặc định theo vai (engine/voices.js): vai đoán từ vai trò / tính cách / tên, giọng xoay ổn định theo id
+  defaultVoice(asset) { return GV.cast(asset || {}).ai; }
 
   // model đọc giọng: quét lúc chạy, giữ 6 giờ; mới nhất trước, bản "lite" sau bản thường, preview sau cùng
   async models() {
@@ -160,15 +161,18 @@ class Voice {
     return this._models;
   }
   // đọc một câu → { id, cached, model, seconds }; cùng giọng + cảm xúc + chữ → cùng clip (không gọi lại API)
-  async line({ text, voice, state, bubble }) {
+  // persona: thẻ vai + giọng vùng do resolve() sinh (không nhận từ người dùng)
+  async line({ text, voice, state, bubble, persona, dry }) {
     const t = cleanText(text);
+    persona = String(persona || '').replace(/[\[\]\u0000-\u001f]/g, ' ').slice(0, 200).trim();
     if (!t) throw fail(400, 'Câu thoại trống');
     if (t.length > 240) throw fail(400, 'Câu thoại dài quá 240 ký tự');
     if (!VOICE_SET.has(voice)) throw fail(400, 'Không có giọng "' + String(voice).slice(0, 30) + '" (chọn trong danh sách giọng AI)');
-    const tags = tagsOf(state, bubble), id = this.idOf(t, voice, tags), file = this.clipPath(id);
+    const tags = [persona, tagsOf(state, bubble)].filter(Boolean).join(', '), id = this.idOf(t, voice, tags), file = this.clipPath(id);
     if (fs.existsSync(file)) return { id, cached: true, seconds: this.seconds(file) };
+    if (dry) throw fail(404, 'Câu này chưa đọc bằng giọng AI');
     const c = this.config();
-    if (!c.enabled) throw fail(409, 'Giọng AI đang tắt (Cài đặt AI › Giọng AI)');
+    if (c.enabled === false) throw fail(409, 'Giọng AI đang tắt (Cài đặt AI › Giọng AI)');
     if (c.badVoices.indexOf(voice) >= 0) throw fail(400, 'Giọng ' + voice + ' không dùng được với model hiện có');
     // một lời gọi Google mỗi lúc (gói miễn phí: 3 câu / phút / model)
     const job = this._busy.then(() => this.render(t, voice, tags, id, file));
@@ -220,4 +224,4 @@ class Voice {
   }
 }
 
-module.exports = { Voice, VOICES, STATE_TAGS, BUBBLE_TAGS, tagsOf, cleanText, wavInfo, wavOf, tidy };
+module.exports = { Voice, VOICES, STATE_TAGS, BUBBLE_TAGS, tagsOf, cleanText, wavInfo, wavOf, tidy, GV };

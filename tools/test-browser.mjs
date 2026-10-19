@@ -621,4 +621,304 @@ try {
   } catch (e) { fail = 1; console.log('  ✗ biên đạo trong phim:', e.message); }
   finally { await b7.close(); }
 }
+// Lời thoại chuyên nghiệp (v0.17, Track A). Ryan: "bong bóng chat che vào nhân vật và cách trình bày không chuyên nghiệp".
+// Diễn THẬT hai phim mẫu (Tam Quốc có các cảnh cận, Văn phòng vui) trong trình duyệt và ĐO từng câu thoại: hình chữ nhật của bong bóng
+// (không đuôi) so với hình chữ nhật của ĐẦU mọi diễn viên (hợp getBoundingClientRect các lớp mặt / tai / tóc mái / mũ ĐANG vẽ — không dùng số liệu
+// của chính bộ giải), đo hai lần cách nhau 1 s vì nhân vật vẫn cử động. Mỗi rào đã thử ngược: tắt bộ giải → test đỏ.
+{
+  const fs = require('fs');
+  const home9 = mkdtempSync(path.join(tmpdir(), 'gc-'));
+  const srv9 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home9, GC_PORT: '7495', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
+  await new Promise(r => setTimeout(r, 1200));
+  const b9 = await pw.chromium.launch();
+  const URL9 = 'http://localhost:7495/';
+  // ---- thư viện đo chạy TRONG trang (một bản duy nhất cho mọi lượt) ----
+  const LT = String.raw`(() => {
+    const FACE = ['ears', 'head', 'mask', 'shade', 'cheeks', 'eyes', 'brows', 'mouth', 'mustache', 'hairFront', 'hat'];
+    const ST = () => document.getElementById('__st');
+    const rgb = c => { const m = String(c).match(/rgba?\(([^)]+)\)/); const p = m[1].split(/[ ,\/]+/).filter(Boolean).map(Number); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; };
+    const Lm = c => { const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); };
+    const over = (c, bg) => ({ r: c.r * c.a + bg.r * (1 - c.a), g: c.g * c.a + bg.g * (1 - c.a), b: c.b * c.a + bg.b * (1 - c.a), a: 1 });
+    const cr = (a, b) => { const x = Lm(a), y = Lm(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+    const ov = (a, c) => Math.max(0, Math.min(a.x1, c.x1) - Math.max(a.x0, c.x0)) * Math.max(0, Math.min(a.y1, c.y1) - Math.max(a.y0, c.y0));
+    function segHit(ax, ay, bx, by, r) { let t0 = 0, t1 = 1; const d = [bx - ax, by - ay], p = [-d[0], d[0], -d[1], d[1]], q = [ax - r.x0, r.x1 - ax, ay - r.y0, r.y1 - ay];
+      for (let i = 0; i < 4; i++) { if (p[i] === 0) { if (q[i] < 0) return false; continue; } const t = q[i] / p[i]; if (p[i] < 0) { if (t > t1) return false; if (t > t0) t0 = t; } else { if (t < t0) return false; if (t < t1) t1 = t; } } return true; }
+    function measure(el) {
+      const st = ST(), fr = st.getBoundingClientRect();
+      if (!el || !el.isConnected || !el.classList.contains('on')) return null;
+      const rel = r => ({ x0: r.left - fr.left, y0: r.top - fr.top, x1: r.right - fr.left, y1: r.bottom - fr.top });
+      const heads = [...st.querySelectorAll('.gcp-actor')].map(a => {
+        let u = null;
+        FACE.forEach(n => { const g = a.querySelector('svg.gc-full g[data-l="' + n + '"]'); if (!g || !g.firstChild) return; const r = g.getBoundingClientRect(); if (!r.width && !r.height) return;
+          u = u ? { left: Math.min(u.left, r.left), top: Math.min(u.top, r.top), right: Math.max(u.right, r.right), bottom: Math.max(u.bottom, r.bottom) } : { left: r.left, top: r.top, right: r.right, bottom: r.bottom }; });
+        return { id: a.title, full: !!a.querySelector('svg.gc-full'), rect: u && rel(u) };
+      });
+      const W = fr.width, H = fr.height, b = rel(el.getBoundingClientRect()), vis = heads.filter(h => h.rect && h.rect.x1 > 0 && h.rect.x0 < W && h.rect.y1 > 0 && h.rect.y0 < H);
+      const cap = el.classList.contains('gcp-cap'), tx = el.querySelector('.tx'), cs = getComputedStyle(el), who = el.querySelector('.nm').textContent;
+      const bg = cap ? over(rgb(cs.backgroundColor), { r: 255, g: 255, b: 255, a: 1 }) : { r: 255, g: 253, b: 248, a: 1 };   // phụ đề: xét trường hợp xấu nhất (nền sáng dưới dải mờ)
+      // từ chưa đọc / đã đọc: dựng bản sao rồi bỏ / thêm lớp "on" → đo màu thật (không phụ thuộc giọng đọc đang tới đâu)
+      const probe = el.cloneNode(true); probe.style.visibility = 'hidden'; el.parentNode.appendChild(probe);
+      const pw_ = [...probe.querySelectorAll('.w')]; pw_.forEach(w => w.classList.remove('on', 'cur'));
+      const unread = pw_.map(w => ({ c: rgb(getComputedStyle(w).color), o: +getComputedStyle(w).opacity }));
+      pw_.forEach(w => w.classList.add('on'));
+      const read = pw_.map(w => ({ c: rgb(getComputedStyle(w).color), o: +getComputedStyle(w).opacity }));
+      probe.remove();
+      const nm = getComputedStyle(el.querySelector('.nm')), fam = getComputedStyle(tx), tail = (el.dataset.tail || '').split(',').map(Number);
+      const spk = heads.find(h => h.id === who), others = vis.filter(h => h.id !== who);
+      let tailCross = 0, tailInCore = 0;
+      if (!cap && tail.length === 4 && spk && spk.rect) {
+        others.forEach(h => { if (segHit(tail[0], tail[1], tail[2], tail[3], h.rect)) tailCross++; });
+        const r = spk.rect, cw = (r.x1 - r.x0) * 0.2, ch = (r.y1 - r.y0) * 0.2;   // lõi mặt = khung đầu thu 20% mỗi phía: đầu đuôi phải nằm NGOÀI
+        if (tail[2] > r.x0 + cw && tail[2] < r.x1 - cw && tail[3] > r.y0 + ch && tail[3] < r.y1 - ch) tailInCore++;
+      }
+      return {
+        mode: cap ? 'caption' : 'bubble', clean: el.dataset.clean, tag: el.dataset.tag, kind: [...el.classList].filter(c => !/^gcp|^on$/.test(c)).join(' '), text: tx.textContent.slice(0, 30),
+        W, H, rect: b, widthFrac: (b.x1 - b.x0) / W, ms: parseFloat(el.dataset.ms || '0'),
+        overlaps: vis.map(h => ({ id: h.id, px2: Math.round(ov(b, h.rect)) })).filter(o => o.px2 > 0), visibleHeads: vis.length, fullTier: heads.every(h => h.full),
+        margin: Math.min(b.x0 / W, (W - b.x1) / W, b.y0 / H, (H - b.y1) / H),
+        minOpacity: Math.min(...unread.map(w => w.o), ...read.map(w => w.o), +cs.opacity), opParts: [Math.min(...unread.map(w => w.o)), Math.min(...read.map(w => w.o)), +cs.opacity],
+        contrast: Math.min(...unread.map(w => cr(w.c, bg)), ...read.map(w => cr(w.c, bg))),
+        chipContrast: cr(rgb(nm.color), rgb(nm.backgroundColor)), chipPx: parseFloat(nm.fontSize),
+        font: fam.fontFamily, weight: fam.fontWeight, px: parseFloat(fam.fontSize), faces: [...document.fonts].filter(f => f.family.replace(/["']/g, '') === 'Be Vietnam Pro').map(f => f.weight + ':' + f.status),
+        tail: cap ? null : tail, tailCross, tailInCore, svgPath: !cap && !!el.querySelector('svg path')
+      };
+    }
+    window.__lt = {
+      async setup(work, W, dialog) {
+        const GC = window.GenChibi, w = await fetch('api/works/' + work).then(r => r.json());
+        if (GC.audio) GC.audio.setVoiceMode('blip');
+        let st = ST(); if (st) st.remove();
+        st = document.createElement('div'); st.id = '__st'; st.style.cssText = 'position:fixed;left:20px;top:20px;width:' + W + 'px;z-index:99999;background:#000';
+        document.body.appendChild(st);
+        window.__orig = GC.film.solveLayout; window.__calls = 0;
+        GC.film.solveLayout = function (c) { window.__calls++; return window.__orig(c); };
+        window.__W = w; window.__P = GC.film.player(st, dialog ? { dialog } : {});
+        return w.shots.map(s => s.id);
+      },
+      mutate(src) { window.__orig2 = GenChibi.film.solveLayout; const f = eval(src); GenChibi.film.solveLayout = function (c) { window.__calls++; return f(c); }; },
+      restore() { GenChibi.film.solveLayout = function (c) { window.__calls++; return window.__orig(c); }; },
+      start(sid) {
+        const st = ST(); window.__seq = 0; window.__res = {}; window.__pend = 0; window.__prog = ''; window.__calls = 0;
+        if (window.__mo) window.__mo.disconnect();
+        window.__mo = new MutationObserver(() => st.querySelectorAll('.gcp-bub.on,.gcp-cap.on').forEach(e => {
+          if (e.dataset.seq) return;
+          const n = e.dataset.seq = String(++window.__seq); window.__res[n] = [];
+          // đo sau 0,35 s và 0,95 s kể từ lúc bong bóng hiện. Máy tải nặng / chạy song song làm khung hình tới trễ, đọc style sớm sẽ khởi động chuyển tiếp CSS
+          // lúc đó (opacity 0, máy quay chưa tới nơi) → kết thúc ngay các chuyển tiếp của bong bóng + máy quay để đo trạng thái cuối, đúng thứ người xem thấy sau 0,8 s
+          [350, 950].forEach(ms => { window.__pend++; setTimeout(() => {
+            const cam = st.querySelector('.gcp-cam'); if (e.isConnected) { [e, cam].forEach(x => x && x.getAnimations().forEach(a => { try { a.finish(); } catch (_) { /* hoạt hình vô hạn: bỏ qua */ } })); }
+            const m = measure(e); if (m) window.__res[n].push(m); window.__pend--; }, ms); });
+        }));
+        window.__mo.observe(st, { attributes: true, subtree: true, attributeFilter: ['class'] });
+        window.__P.play([window.__W.shots.find(s => s.id === sid)], 'T');
+      },
+      progress() { return GenChibi && document.querySelector('#__st') ? { pend: window.__pend, seq: window.__seq, card: !!document.querySelector('#__st .gcp-title b') && /^T$/.test(document.querySelector('#__st .gcp-title b').textContent) } : null; },
+      result() { return { res: window.__res, calls: window.__calls }; }
+    };
+  })();`;
+  // chạy một phân cảnh tới hết, trả các lần đo của từng câu
+  const playShot = async (page, sid) => {
+    await page.evaluate(sid => window.__lt.start(sid), sid);
+    const t0 = Date.now(); let ended = 0;
+    while (Date.now() - t0 < 150000) {
+      await page.waitForTimeout(150);
+      const s = await page.evaluate(() => window.__lt.progress());
+      if (s && s.card && !s.pend && s.seq) { if (++ended > 2) break; } else ended = 0;
+    }
+    await page.evaluate(() => window.__P.stop());
+    const r = await page.evaluate(() => window.__lt.result());
+    return { lines: Object.keys(r.res).sort((a, c) => a - c).map(k => ({ shot: sid, idx: +k, ms: r.res[k] })), calls: r.calls };
+  };
+  const mkPage = async (opts, work, W, dialog) => {
+    const q = await b9.newPage(opts || { viewport: { width: 1320, height: 780 } }), errs = []; q.on('pageerror', e => errs.push(e.message));
+    await q.goto(URL9 + 'tao-tac'); await q.waitForFunction(() => window.GenChibi && window.GenChibi.film && /^v\d/.test(document.getElementById('verChip').textContent), null, { timeout: 8000 });
+    await q.waitForTimeout(500);
+    await q.evaluate(LT);
+    const shots = await q.evaluate(([w, W, d]) => window.__lt.setup(w, W, d), [work, W, dialog || null]);
+    q.errs = errs; q.shots = shots; return q;
+  };
+  // luật kiểm một câu thoại (dùng cho mọi lượt); trả danh sách lỗi
+  const judge = (L, o) => {
+    const bad = [];
+    L.ms.forEach((m, k) => {
+      const tag = L.shot + '#' + L.idx + (k ? 'b' : 'a') + ' "' + m.text + '"';
+      if (m.overlaps.length) bad.push(tag + ': ' + m.mode + ' ĐÈ ĐẦU ' + JSON.stringify(m.overlaps));
+      if (m.margin < 0.02) bad.push(tag + ': ra ngoài vùng an toàn (lề ' + (m.margin * 100).toFixed(1) + '%)');
+      if (m.minOpacity < 0.85) bad.push(tag + ': chữ mờ (opacity ' + m.minOpacity.toFixed(2) + ' ← chưa đọc / đã đọc / cả khối: ' + m.opParts.map(v => v.toFixed(2)).join(' / ') + ')');
+      if (m.contrast < 4.5) bad.push(tag + ': tương phản chữ ' + m.contrast.toFixed(2) + ' < 4,5');
+      if (m.chipContrast < 4.5 || m.chipPx < 10) bad.push(tag + ': thẻ tên tương phản ' + m.chipContrast.toFixed(2) + ' / chữ ' + m.chipPx + 'px');
+      if (!/^"?Be Vietnam Pro"?/.test(m.font)) bad.push(tag + ': phông không phải Be Vietnam Pro: ' + m.font);
+      if (!m.faces.includes(m.weight + ':loaded')) bad.push(tag + ': phông ' + m.weight + ' chưa nạp (' + m.faces.join(' ') + ')');
+      if (m.px < 13) bad.push(tag + ': cỡ chữ ' + m.px + 'px < 13');
+      if (m.mode === 'bubble' && m.widthFrac > 0.385) bad.push(tag + ': bong bóng rộng ' + (m.widthFrac * 100).toFixed(0) + '% > 38%');
+      if (m.mode === 'bubble' && !m.svgPath) bad.push(tag + ': bong bóng không có hình vẽ');
+      if (m.tailCross) bad.push(tag + ': đuôi cắt ngang đầu người khác');
+      if (m.tailInCore) bad.push(tag + ': đầu đuôi đâm vào lõi mặt người nói');
+      if (!m.fullTier) bad.push(tag + ': diễn viên không ở tầng diễn đủ (ngân sách) — số đo không đáng tin');
+      // (chi phí bố cục KHÔNG xét ở đây: bảy trang chạy song song nên giờ treo tường vô nghĩa — đo riêng ở lượt cô lập bên dưới)
+      if (o && o.mode && m.mode !== o.mode) bad.push(tag + ': chế độ ' + m.mode + ' ≠ ' + o.mode);
+    });
+    if (!L.ms.length) bad.push(L.shot + '#' + L.idx + ': không đo được (bong bóng biến mất sớm?)');
+    return bad;
+  };
+  const errsAll = [];
+  try {
+    // ---- 0) tệp phông + giấy phép + sổ tài sản ----
+    const fsz = fs.statSync(path.join(ROOT, 'engine/fonts.js')).size, ofl = fs.readFileSync(path.join(ROOT, 'engine/fonts/OFL-BeVietnamPro.txt'), 'utf8'), man = fs.readFileSync(path.join(ROOT, 'ASSET_MANIFEST.md'), 'utf8'), fj = fs.readFileSync(path.join(ROOT, 'engine/fonts.js'), 'utf8');
+    if (fsz > 120 * 1024) throw new Error('engine/fonts.js ' + Math.round(fsz / 1024) + ' KB > 120 KB');
+    if (!/SIL OPEN FONT LICENSE Version 1\.1/.test(ofl) || !/Be Vietnam Pro Project Authors/.test(ofl)) throw new Error('thiếu giấy phép OFL của Be Vietnam Pro');
+    if (!/SIL OPEN FONT LICENSE Version 1\.1/.test(fj) || (fj.match(/\[(500|700|800), "d09GMg/g) || []).length !== 3) throw new Error('engine/fonts.js thiếu toàn văn OFL hoặc không đủ 3 độ đậm');
+    if (!/Be Vietnam Pro/.test(man) || !/OFL/.test(man) || !/github\.com\/google\/fonts/.test(man)) throw new Error('ASSET_MANIFEST.md chưa ghi phông Be Vietnam Pro + OFL + nguồn');
+    // ---- nhập hai bộ mẫu ----
+    const boot = await b9.newPage(); await boot.goto(URL9 + 'tao-tac'); await boot.waitForFunction(() => window.GenChibi && /^v\d/.test(document.getElementById('verChip').textContent));
+    await boot.evaluate(async () => { for (const f of ['tam-quoc', 'van-phong-vui']) {
+      const bn = await fetch('studio/mau/' + f + '.json').then(r => r.json());
+      const r = await fetch('api/projects/import', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify({ bundle: bn, overwrite: true }) });
+      if (!r.ok) throw new Error('nhập ' + f + ' ' + r.status);
+    } });
+    await boot.close();
+    const TQ = 'tq-vuon-dao-xich-bich', VP = 'mau-ngay-dau-di-lam';
+    // ---- 1) bộ giải thuần số: chạy với hình chữ nhật giả (nhanh, xác định) ----
+    const up = await b9.newPage(); await up.goto(URL9 + 'tao-tac'); await up.waitForFunction(() => window.GenChibi && window.GenChibi.film && window.GenChibi.film.solveLayout);
+    const unit = await up.evaluate(() => {
+      const S = window.GenChibi.film.solveLayout, bad = [], H = (id, x0, y0, x1, y1) => ({ id, x0, y0, x1, y1 });
+      const base = { W: 1280, H: 720, m: 32, who: 'a', mouth: { x: 640, y: 330 }, bodies: [], sizes: [{ w: 480, h: 110 }, { w: 360, h: 140 }, { w: 260, h: 190 }], prev: null };
+      const inside = (r, c) => r.x0 >= c.m - 1e-6 && r.y0 >= c.m - 1e-6 && r.x1 <= c.W - c.m + 1e-6 && r.y1 <= c.H - c.m + 1e-6;
+      const hit = (r, h) => Math.min(r.x1, h.x1) > Math.max(r.x0, h.x0) && Math.min(r.y1, h.y1) > Math.max(r.y0, h.y0);
+      // a) khung trống: bong bóng trên đầu, đuôi dừng NGOÀI elip của đầu (cách mặt một đoạn)
+      const head = H('a', 560, 220, 720, 400), r1 = S({ ...base, kind: 'bubble', heads: [head] });
+      if (!r1 || !r1.clean || r1.y1 > head.y0) bad.push('khung trống: phải đặt trên đầu và sạch ' + JSON.stringify(r1 && [r1.tag, r1.clean, r1.y1]));
+      else { const cx = 640, cy = 310, a = 80, b = 90, T = r1.tail; if (T.len < 8 || Math.pow((T.tx - cx) / a, 2) + Math.pow((T.ty - cy) / b, 2) <= 1) bad.push('đuôi không dừng cách mặt: ' + JSON.stringify(T)); }
+      // b) chật: đầu người nói sát mép trên, hai người khác hai bên → phải tìm chỗ sạch, đuôi không cắt đầu họ
+      const crowd = [H('a', 540, 10, 740, 420), H('b', 0, 40, 380, 500), H('c', 900, 40, 1280, 500)], r2 = S({ ...base, kind: 'bubble', mouth: { x: 640, y: 330 }, heads: crowd });
+      if (!r2 || (r2.clean && crowd.some(h => hit(r2, h)))) bad.push('chật: bong bóng đè đầu ' + JSON.stringify(r2));
+      if (r2 && r2.clean && !inside(r2, base)) bad.push('chật: ra ngoài vùng an toàn');
+      // c) đuôi cắt ngang đầu người khác: người nói sát mép trái, một bức "tường đầu" cao kín khung ngay bên phải; chỗ duy nhất đủ rộng cho bong bóng là bên kia tường,
+      //    gần đủ để không bị loại vì quá xa → đuôi sẽ xuyên qua tường. Phải báo KHÔNG sạch (tắt luật này thì bộ giải sẽ báo sạch).
+      const r3 = S({ ...base, kind: 'bubble', mouth: { x: 75, y: 400 }, sizes: [{ w: 260, h: 110 }], heads: [H('a', 20, 300, 130, 500), H('b', 150, 0, 210, 720)] });
+      if (!r3 || r3.clean) bad.push('đuôi xuyên đầu người khác mà vẫn báo sạch ' + JSON.stringify(r3 && [r3.tag, r3.x0, r3.clean]));
+      // d) hết chỗ: bốn đầu phủ kín khung → báo KHÔNG sạch (bộ phát chuyển sang phụ đề)
+      const full = [H('a', 0, 0, 640, 360), H('b', 640, 0, 1280, 360), H('c', 0, 360, 640, 720), H('d', 640, 360, 1280, 720)], r4 = S({ ...base, kind: 'bubble', heads: full });
+      if (!r4 || r4.clean) bad.push('hết chỗ mà vẫn báo sạch');
+      // e) phụ đề: dải dưới, không đè đầu, trong vùng an toàn; đầu chiếm dải dưới thì lùi lên / né sang bên
+      const r5 = S({ ...base, kind: 'caption', sizes: [{ w: 900, h: 60 }, { w: 600, h: 90 }], heads: [H('a', 500, 150, 780, 450)] });
+      if (!r5 || !r5.clean || r5.y0 < 450 || !inside(r5, base)) bad.push('phụ đề: phải ở dải dưới, sạch, trong lề ' + JSON.stringify(r5 && [r5.tag, r5.y0]));
+      const r6 = S({ ...base, kind: 'caption', sizes: [{ w: 900, h: 60 }, { w: 520, h: 90 }], heads: [H('a', 300, 200, 700, 690)] });
+      if (!r6 || !r6.clean || hit(r6, H('a', 300, 200, 700, 690))) bad.push('phụ đề: đầu thấp phải né sang bên ' + JSON.stringify(r6 && [r6.tag, r6.x0, r6.y0]));
+      // f) ổn định: cùng người nói liên tiếp, chỗ cũ còn sạch → giữ chỗ cũ
+      const heads7 = [H('a', 560, 220, 720, 400)], first = S({ ...base, kind: 'bubble', heads: heads7 }), again = S({ ...base, kind: 'bubble', heads: heads7, prev: { id: 'a', cx: (first.x0 + first.x1) / 2 + 10, cy: (first.y0 + first.y1) / 2 } });
+      if (Math.abs(again.x0 - first.x0) > 40 || Math.abs(again.y0 - first.y0) > 40) bad.push('không ổn định: nhảy ' + JSON.stringify([first.x0, first.y0, again.x0, again.y0]));
+      // g) màu thẻ tên: mọi màu nhân vật đều ra tương phản ≥ 4,5 với chữ trắng
+      const F = window.GenChibi.film;
+      ['#f0f0f0', '#ffd700', '#c0392b', '#27ae60', '#4a5563', '#000000', '#ffffff', '#ff00ff'].forEach(c => { const k = F.chipColor(c); if (F.contrast(k, '#ffffff') < 4.5) bad.push('thẻ tên ' + c + ' → ' + k + ' tương phản ' + F.contrast(k, '#ffffff').toFixed(2)); });
+      return bad;
+    });
+    await up.close();
+    if (unit.length) throw new Error('bộ giải: ' + unit.join(' | '));
+    console.log('  ✓ Bộ giải bố cục lời thoại (hình chữ nhật giả): trên đầu khi trống · né mọi đầu khi chật · đuôi dừng ngoài elip đầu, không cắt đầu người khác · hết chỗ → báo không sạch · phụ đề dải dưới · giữ chỗ cũ · thẻ tên ≥ 4,5:1');
+    // ---- 2) diễn thật: hai phim mẫu (tự động), phụ đề ép buộc ở cảnh cận, khung 640, và THỬ NGƯỢC (bộ giải hỏng) — chạy song song ----
+    const MUTANT = `(c) => { const S = c.heads.find(h => h.id === c.who) || { x0: c.mouth.x - 50, x1: c.mouth.x + 50, y0: c.mouth.y - 100, y1: c.mouth.y }, s = c.sizes[0], cx = (S.x0 + S.x1) / 2,
+      x = Math.max(c.m, Math.min(c.W - c.m - s.w, cx - s.w / 2)), y = Math.max(0.04 * c.H, Math.min(0.6 * c.H, S.y0 - 0.05 * c.H - s.h));
+      return { x0: x, y0: y, x1: x + s.w, y1: y + s.h, w: s.w, h: s.h, si: 0, tail: { px: cx, py: y + s.h, tx: cx, ty: y + s.h + 0.05 * c.H, len: 0.05 * c.H }, hard: 0, soft: 0, tag: 'lỗi-cố-ý', clean: true }; }`;   // hành vi CŨ: đặt trên đỉnh đầu người nói, không biết ai khác
+    const job = async (fn) => { try { return await fn(); } catch (e) { return { err: e }; } };
+    const [rTQ, rVP, rCap, rBub, r640, r360, rMut] = await Promise.all([
+      job(async () => { const q = await mkPage(null, TQ, 1280); const out = []; let calls = 0; for (const s of q.shots) { const r = await playShot(q, s); out.push(...r.lines); calls += r.calls; } await q.close(); return { lines: out, calls, errs: q.errs }; }),
+      job(async () => { const q = await mkPage(null, VP, 1280); const out = []; let calls = 0; for (const s of q.shots) { const r = await playShot(q, s); out.push(...r.lines); calls += r.calls; } await q.close(); return { lines: out, calls, errs: q.errs }; }),
+      job(async () => { const q = await mkPage(null, TQ, 1280, 'caption'); const r = await playShot(q, 'canh-dau-tap'); await q.close(); return { lines: r.lines, errs: q.errs }; }),
+      job(async () => { const q = await mkPage(null, TQ, 1280, 'bubble'); const r = await playShot(q, 'canh-1'); await q.close(); return { lines: r.lines, errs: q.errs }; }),
+      job(async () => { const q = await mkPage({ viewport: { width: 700, height: 420 } }, TQ, 640); const r = await playShot(q, 'canh-dau-tap'); await q.close(); return { lines: r.lines, errs: q.errs }; }),
+      job(async () => { const q = await mkPage({ viewport: { width: 480, height: 300 } }, TQ, 420); const r = await playShot(q, 'canh-dau-tap'); await q.close(); return { lines: r.lines, errs: q.errs }; }),   // khung nhỏ: bong bóng 38% thành quá bé → tự động chuyển phụ đề
+      job(async () => {
+        const q = await mkPage(null, TQ, 1280); await q.evaluate(src => window.__lt.mutate(src), MUTANT);
+        const a = await playShot(q, 'canh-dau-tap'), c = await playShot(q, 'canh-1');   // cảnh cận: bong bóng "trên đầu" CHẮC CHẮN đè mặt
+        await q.evaluate(() => window.__lt.restore());
+        const back = await playShot(q, 'canh-dau-tap'); await q.close();
+        return { mut: a.lines.concat(c.lines), back: back.lines, errs: q.errs };
+      })
+    ]);
+    for (const r of [rTQ, rVP, rCap, rBub, r640, r360, rMut]) if (r.err) throw r.err;
+    [rTQ, rVP, rCap, rBub, r640, r360, rMut].forEach(r => errsAll.push(...r.errs));
+    // Tam Quốc + Văn phòng vui, chế độ tự động: mọi câu sạch
+    const film = [...rTQ.lines, ...rVP.lines];
+    if (film.length < 40) throw new Error('chỉ đo được ' + film.length + ' câu thoại (cần ≥ 40: Tam Quốc 31 + Văn phòng vui 15)');
+    const badFilm = film.flatMap(L => judge(L));
+    if (badFilm.length) throw new Error(badFilm.length + ' lỗi trình bày, ví dụ: ' + badFilm.slice(0, 4).join(' | '));
+    const nB = film.filter(L => L.ms[0].mode === 'bubble').length, nC = film.length - nB;
+    const calls = (rTQ.calls + rVP.calls) / film.length;
+    if (calls > 3) throw new Error('bố cục chạy ' + calls.toFixed(1) + ' lần mỗi câu (> 3) — nghi tính lại theo khung hình');
+    const tqClose = rTQ.lines.filter(L => L.shot === 'canh-dau-tap').length;
+    if (tqClose < 5) throw new Error('thiếu câu thoại ở cảnh cận "Đấu tập trước trận" (' + tqClose + ')');
+    console.log('  ✓ Lời thoại hai phim mẫu (' + film.length + ' câu, đo 2 lần mỗi câu): bong bóng ' + nB + ' · phụ đề ' + nC + ' · đè đầu 0 px² · trong lề an toàn ≥ 2% · chữ ≥ 85% đậm & tương phản ≥ 4,5:1 · bong bóng ≤ 38% khung · đuôi không cắt đầu / không đâm lõi mặt · Be Vietnam Pro đã nạp · bố cục ' + calls.toFixed(1) + ' lần/câu');
+    // phụ đề ép buộc: cũng không đè đầu, trong lề
+    const badCap = rCap.lines.flatMap(L => judge(L, { mode: 'caption' }));
+    if (badCap.length || rCap.lines.length < 5) throw new Error('phụ đề ép buộc: ' + (badCap.slice(0, 3).join(' | ') || 'chỉ ' + rCap.lines.length + ' câu'));
+    const low = rCap.lines.filter(L => (L.ms[0].rect.y0 + L.ms[0].rect.y1) / 2 > L.ms[0].H * 0.5).length;
+    if (low < rCap.lines.length - 1) throw new Error('phụ đề phải nằm dải dưới: chỉ ' + low + '/' + rCap.lines.length + ' câu');
+    const badBub = rBub.lines.flatMap(L => judge(L, { mode: 'bubble' }));
+    if (badBub.length || rBub.lines.length < 4) throw new Error('chế độ bong bóng: ' + (badBub.slice(0, 3).join(' | ') || 'chỉ ' + rBub.lines.length + ' câu'));
+    const bad640 = r640.lines.flatMap(L => judge(L));
+    if (bad640.length || r640.lines.length < 5) throw new Error('khung 640 px: ' + (bad640.slice(0, 3).join(' | ') || 'chỉ ' + r640.lines.length + ' câu'));
+    // khung 420 px (tự động; cỡ sân khấu nhỏ trong Studio): bong bóng 38% chỉ còn ~160 px → nhiều câu không còn chỗ sạch → PHẢI chuyển phụ đề, vẫn không đè đầu
+    const bad420 = r360.lines.flatMap(L => judge(L)), cap360 = r360.lines.filter(L => L.ms[0].mode === 'caption').length;
+    if (bad420.length || r360.lines.length < 5 || cap360 < 1) throw new Error('khung 420 px (tự động): ' + (bad420.slice(0, 3).join(' | ') || r360.lines.length + ' câu, phụ đề ' + cap360 + ' — mong đợi ≥ 1 câu chuyển phụ đề'));
+    console.log('  ✓ Chế độ lời thoại: phụ đề ép buộc ' + rCap.lines.length + ' câu (dải dưới, không đè đầu) · bong bóng ép buộc ' + rBub.lines.length + ' câu · khung 640 px: chữ ≥ 13 px, ' + r640.lines.length + ' câu sạch · khung 420 px tự động: ' + (r360.lines.length - cap360) + ' bong bóng + ' + cap360 + ' phụ đề (hết chỗ sạch thì chuyển phụ đề), 0 px² đè đầu');
+    // THỬ NGƯỢC: bộ giải hỏng (đặt trên đỉnh đầu, không biết ai khác) → phải đè đầu ở cảnh cận; khôi phục → hết đè
+    const mutHits = rMut.mut.filter(L => L.ms.some(m => m.overlaps.length)).length;
+    if (mutHits < 2) throw new Error('THỬ NGƯỢC: tắt bộ giải mà chỉ ' + mutHits + ' câu đè đầu — bài đo không bắt được lỗi');
+    const backBad = rMut.back.flatMap(L => judge(L));
+    if (backBad.length || rMut.back.length < 5) throw new Error('khôi phục bộ giải vẫn lỗi: ' + (backBad[0] || rMut.back.length + ' câu'));
+    console.log('  ✓ Thử ngược: bộ giải hỏng làm ' + mutHits + '/' + rMut.mut.length + ' câu đè đầu (test đỏ) → khôi phục lại sạch ' + rMut.back.length + '/' + rMut.back.length);
+    // ngân sách hiệu năng (L-42): bố cục tính MỘT lần mỗi câu — đo cô lập (không trang nào khác chạy) trên cảnh cận nhiều diễn viên nhất
+    {
+      const q = await mkPage(null, TQ, 1280), r = await playShot(q, 'canh-dau-tap'); await q.close();
+      const ms = r.lines.flatMap(L => L.ms.map(m => m.ms)).sort((a, c) => a - c);
+      if (ms.length < 6 || ms[ms.length - 1] > 30 || r.calls / r.lines.length > 3) throw new Error('chi phí bố cục (đo riêng): tối đa ' + ms[ms.length - 1] + ' ms (> 30 ms) hoặc ' + (r.calls / r.lines.length).toFixed(1) + ' lần/câu');
+      console.log('  ✓ Hiệu năng lời thoại (L-42, đo riêng ' + r.lines.length + ' câu): bố cục trung vị ' + ms[Math.floor(ms.length / 2)] + ' ms, tối đa ' + ms[ms.length - 1] + ' ms (≤ 30), ' + (r.calls / r.lines.length).toFixed(1) + ' lần giải mỗi câu — không tính theo khung hình');
+    }
+    // ---- 3) Studio: ô chọn kiểu lời thoại, nhớ theo máy, áp vào sân khấu; phim xuất ra mang kiểu đã chọn + phông nhúng (mở file://, không mạng) ----
+    const sq = await b9.newPage({ viewport: { width: 1440, height: 900 }, acceptDownloads: true }); sq.on('pageerror', e => errsAll.push(e.message));
+    await sq.goto(URL9 + 'tao-tac'); await sq.evaluate(() => localStorage.setItem('gc-route-tao-tac', JSON.stringify({ page: 'works', work: 'tq-vuon-dao-xich-bich' })));
+    await sq.goto(URL9 + 'tao-tac'); await sq.waitForSelector('select[aria-label="Kiểu lời thoại"]', { timeout: 8000 });
+    const opts = await sq.$$eval('select[aria-label="Kiểu lời thoại"] option', os => os.map(o => o.value + '|' + o.textContent));
+    if (opts.join(';') !== 'auto|Lời thoại: tự động;bubble|Lời thoại: bong bóng;caption|Lời thoại: phụ đề') throw new Error('ô kiểu lời thoại: ' + opts.join(';'));
+    if (await sq.$eval('select[aria-label="Kiểu lời thoại"]', e => e.value) !== 'auto') throw new Error('mặc định phải là tự động');
+    await sq.selectOption('select[aria-label="Kiểu lời thoại"]', 'caption');
+    if ((await sq.evaluate(() => localStorage.getItem('gc-stage'))) !== '{"dialog":"caption"}') throw new Error('chưa nhớ kiểu lời thoại: ' + await sq.evaluate(() => localStorage.getItem('gc-stage')));
+    await sq.goto(URL9 + 'tao-tac'); await sq.waitForSelector('select[aria-label="Kiểu lời thoại"]');
+    if (await sq.$eval('select[aria-label="Kiểu lời thoại"]', e => e.value) !== 'caption') throw new Error('tải lại trang mất kiểu lời thoại');
+    await sq.click('button:has-text("Diễn toàn bộ")'); await sq.waitForSelector('.gcp .gcp-cap.on', { timeout: 30000 });
+    if (await sq.$('.gcp .gcp-bub.on')) throw new Error('chọn "phụ đề" mà sân khấu vẫn hiện bong bóng');
+    await sq.click('button:text-is("Dừng")');
+    await sq.selectOption('select[aria-label="Kiểu lời thoại"]', 'bubble'); await sq.click('button:has-text("Diễn toàn bộ")'); await sq.waitForSelector('.gcp .gcp-bub.on', { timeout: 30000 });
+    if (await sq.$('.gcp .gcp-cap.on')) throw new Error('chọn "bong bóng" mà sân khấu hiện phụ đề');
+    await sq.click('button:text-is("Dừng")');
+    await sq.selectOption('select[aria-label="Kiểu lời thoại"]', 'caption');   // xuất phim với kiểu "phụ đề"
+    const [dl] = await Promise.all([sq.waitForEvent('download'), sq.click('button:text-is("Phim (HTML)")')]);
+    const fp = path.join(home9, 'phim-loi-thoai.html'); await dl.saveAs(fp);
+    const html = fs.readFileSync(fp, 'utf8');
+    if (!/var FILM = \{[^\n]*"dialog":"caption"/.test(html)) throw new Error('phim xuất ra không mang kiểu lời thoại đã chọn');
+    if (!/\/\* engine\/fonts\.js \*\//.test(html) || (html.match(/\[(500|700|800), "d09GMg/g) || []).length !== 3 || !/SIL OPEN FONT LICENSE Version 1\.1/.test(html)) throw new Error('phim xuất ra thiếu phông nhúng / giấy phép OFL');
+    if (/https?:\/\/[^"' )]*\.(woff2?|ttf|otf)|fonts\.googleapis|fonts\.gstatic/.test(html)) throw new Error('phim xuất ra tải phông từ mạng');
+    const ff = await b9.newPage({ viewport: { width: 1280, height: 900 } }), fe = []; ff.on('pageerror', e => fe.push(e.message)); ff.on('requestfailed', r => fe.push('mạng: ' + r.url()));
+    ff.on('request', r => { if (!/^file:|^data:|^blob:/.test(r.url())) fe.push('gọi ra ngoài: ' + r.url()); });
+    await ff.goto('file://' + fp); await ff.waitForSelector('#dialog');
+    if (await ff.$eval('#dialog', e => e.value) !== 'caption') throw new Error('phim xuất ra: ô lời thoại không mặc định theo kiểu đã chọn');
+    await ff.click('#big'); await ff.waitForSelector('.gcp-cap.on', { timeout: 30000 });
+    const fo = await ff.evaluate(() => { const t = document.querySelector('.gcp-cap.on .tx'); return { fam: getComputedStyle(t).fontFamily, w: getComputedStyle(t).fontWeight, faces: [...document.fonts].filter(f => /Be Vietnam Pro/.test(f.family)).map(f => f.weight + ':' + f.status), cap: !!document.querySelector('.gcp-bub.on') }; });
+    if (!/Be Vietnam Pro/.test(fo.fam) || !fo.faces.includes(fo.w + ':loaded') || fo.cap) throw new Error('phim xuất ra: phông / kiểu lời thoại sai ' + JSON.stringify(fo));
+    await ff.selectOption('#dialog', 'bubble'); await ff.waitForSelector('.gcp-bub.on', { timeout: 30000 });   // người xem đổi sang bong bóng giữa chừng
+    if (fe.length) throw new Error('phim xuất ra lỗi: ' + fe.slice(0, 3).join(' | '));
+    await ff.close(); await sq.close();
+    console.log('  ✓ Studio: ô "Lời thoại: tự động / bong bóng / phụ đề" cạnh âm thanh · nhớ theo máy (gc-stage) · áp vào sân khấu · phim xuất ra mang kiểu đã chọn + phông Be Vietnam Pro nhúng + OFL, mở file:// không gọi mạng, người xem đổi được');
+    // ---- 4) giảm chuyển động: không bật nảy / trượt ----
+    const rm = await (async () => { const q = await mkPage({ viewport: { width: 1320, height: 780 }, reducedMotion: 'reduce' }, TQ, 1280);
+      await q.evaluate(() => window.__lt.start('canh-3')); await q.waitForSelector('#__st .gcp-bub.on, #__st .gcp-cap.on', { timeout: 30000 });
+      const o = await q.evaluate(() => { const e = document.querySelector('#__st .gcp-bub.on, #__st .gcp-cap.on'), c = getComputedStyle(e); return { tr: c.transform, dur: parseFloat(c.transitionDuration), cam: parseFloat(getComputedStyle(document.querySelector('#__st .gcp-cam')).transitionDuration) }; });
+      await q.evaluate(() => window.__P.stop()); await q.close(); return o; })();
+    if (rm.tr !== 'none' || rm.dur > 0.1 || rm.cam > 0) throw new Error('giảm chuyển động chưa tắt hiệu ứng nảy: ' + JSON.stringify(rm));
+    console.log('  ✓ Giảm chuyển động (prefers-reduced-motion): bong bóng không nảy / trượt, máy quay không lướt');
+    if (errsAll.length) throw new Error('lỗi trang: ' + errsAll.slice(0, 3).join(' | '));
+  } catch (e) { fail = 1; console.log('  ✗ lời thoại chuyên nghiệp:', e.message); }
+  finally { await b9.close(); srv9.kill(); }
+}
 process.exit(fail);
