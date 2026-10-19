@@ -984,8 +984,10 @@ if (!ONLY || ONLY === 'bubble') {
     {
       const q = await mkPage(null, TQ, 1280), r = await playShot(q, 'canh-dau-tap', 4); await q.close();
       const ms = r.lines.flatMap(L => L.ms.filter(m => m.costs).map(m => Math.min(...m.costs))).sort((a, c) => a - c), one = r.lines.flatMap(L => L.ms.filter(m => m.costs).map(m => m.ms)).sort((a, c) => a - c);
-      if (ms.length < 6 || ms[ms.length - 1] > 30 || r.calls / r.lines.length > 3) throw new Error('chi phí bố cục (đo riêng, nhỏ nhất của 5 lần giải mỗi câu): ' + ms.length + ' câu, tối đa ' + ms[ms.length - 1] + ' ms (> 30 ms) hoặc ' + (r.calls / r.lines.length).toFixed(1) + ' lần/câu');
-      console.log('  ✓ Hiệu năng lời thoại (L-42, đo riêng ' + r.lines.length + ' câu, mỗi câu giải 5 lần lấy nhỏ nhất): bố cục trung vị ' + ms[Math.floor(ms.length / 2)] + ' ms, tối đa ' + ms[ms.length - 1] + ' ms (≤ 30; lần giải đầu tối đa ' + one[one.length - 1] + ' ms), ' + (r.calls / r.lines.length).toFixed(1) + ' lần giải mỗi câu — không tính theo khung hình');
+      // GC_THROTTLE=N (núm giả lập, CI không đặt): CPU của trang bị làm chậm N× THẬT → ngân sách quy về máy chuẩn = 30 ms × N
+      const thr = Math.max(1, +process.env.GC_THROTTLE || 1), bud = 30 * thr, budTxt = bud + ' ms' + (thr > 1 ? ' = 30 × GC_THROTTLE ' + thr : '');
+      if (ms.length < 6 || ms[ms.length - 1] > bud || r.calls / r.lines.length > 3) throw new Error('chi phí bố cục (đo riêng, nhỏ nhất của 5 lần giải mỗi câu): ' + ms.length + ' câu, tối đa ' + ms[ms.length - 1] + ' ms (> ' + budTxt + ') hoặc ' + (r.calls / r.lines.length).toFixed(1) + ' lần/câu');
+      console.log('  ✓ Hiệu năng lời thoại (L-42, đo riêng ' + r.lines.length + ' câu, mỗi câu giải 5 lần lấy nhỏ nhất): bố cục trung vị ' + ms[Math.floor(ms.length / 2)] + ' ms, tối đa ' + ms[ms.length - 1] + ' ms (≤ ' + budTxt + '; lần giải đầu tối đa ' + one[one.length - 1] + ' ms), ' + (r.calls / r.lines.length).toFixed(1) + ' lần giải mỗi câu — không tính theo khung hình');
     }
     // ---- 3) Studio: ô chọn kiểu lời thoại, nhớ theo máy, áp vào sân khấu; phim xuất ra mang kiểu đã chọn + phông nhúng (mở file://, không mạng) ----
     const sq = await b9.newPage({ viewport: { width: 1440, height: 900 }, acceptDownloads: true }); sq.on('pageerror', e => errsAll.push(e.message));
