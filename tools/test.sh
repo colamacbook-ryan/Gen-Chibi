@@ -595,6 +595,8 @@ no(!tl.keys.some(k => k.spin), "múa thương phải có then chốt spin");
 let e1 = null; try { C.build(GC.ASSETS[D.character], { steps: [{ clip: "khong-co" }] }); } catch (x) { e1 = x; } no(!e1 || !/khong-co/.test(e1.message), "clip lạ phải báo lỗi");
 console.log("   ✓ " + M.behaviors + " hành vi không lặp · " + M.real.toFixed(2) + " s thật (" + M.story.toFixed(2) + " s truyện, slow-mo " + M.time.slowmo + " s, " + M.time.hitstops + " lần khựng) · " + M.keys + " then chốt · dựng " + ms + " ms · dịch chuyển/khung p99 " + M.move.p99.toFixed(1) + " max " + M.move.max.toFixed(1) + " · đổi góc " + M.turns.n + " lần (max " + M.turns.max.toFixed(1) + ") · cặp dáng gần nhất " + M.variety.minPair.toFixed(1) + " · " + M.sfx + " tiếng · " + M.fx + " hiệu ứng");
 ' || exit 1
+echo "2j) gói động tác: cổng chặn từng kiểu tấn công · hình học đòn tay không (đo độc lập) · bộ mẫu chặn bán theo nội dung · sao lưu tự đủ · dữ liệu cũ · hoạt ảnh trọn đòn · hợp đồng lỗi mọi tool"
+node tools/test-motion.js || exit 1
 echo "3) MCP"
 H="$(mktemp -d)"; PORT=7495
 (echo > /dev/tcp/127.0.0.1/$PORT) 2>/dev/null && { echo "Cổng $PORT đang bị chiếm"; exit 1; }

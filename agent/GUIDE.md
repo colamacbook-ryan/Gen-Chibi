@@ -64,18 +64,22 @@ with a runnable JSON example.
    `"project": "<id>"` on every part, item, character, scene, motion pack and work you create.
 4. **Drafts by default.** New assets are `status: "draft"` (usable immediately). Set
    `"published"` only when the owner asks; publishing a character requires `identity.must`.
-5. **Ids**: assets, projects, works → lowercase slug `[a-z0-9-]`, 2–40 chars. Inside a motion pack,
+5. **Ids**: assets, projects, works, motion packs → lowercase slug `[a-z0-9-]`, 2–40 chars (valid for every type;
+   characters, items and scenes also accept up to 64). Inside a motion pack,
    pose / clip / action ids → camelCase `[a-z][A-Za-z0-9]` (e.g. `spinSlash`).
 6. **Viewer-facing text** (names, dialogue, labels) is **Vietnamese with full diacritics**
    unless the owner says otherwise. Keep comedy light: no gore, no blood.
-7. **Errors are data.** Every failed call starts with `[CODE]` and carries
-   `structuredContent.error = { code, message, details: [{ path, message }], hint }`.
+7. **Errors are data.** Every failed call — including a `validate_*` call whose data does not pass — starts
+   with `[CODE]` and carries `structuredContent.error = { code, message, details: [{ path, message }], hint }`
+   (script errors point at `steps[i].field`). A passing `validate_*` returns `{ "ok": true, … }`.
    Fix exactly the fields named in `details[].path`, then validate again. Stop after 3 failed
    attempts on the same item and report to the owner what still fails.
 8. **Samples are not yours.** Projects marked as a Gen Labs sample (e.g. Tam Quốc) are for viewing,
    trying and filming — never copy their parts / motion packs into something sold.
-9. **Nothing is deleted by agents.** There is no delete tool; `rollback_app` needs the owner's
-   explicit confirmation.
+9. **Nothing is deleted by agents.** There is no tool that deletes an asset. Saving over an existing id
+   (`overwrite: true`, or `save_*` on the same id) creates a NEW version — the old one stays in history.
+   `save_shot` with `remove` takes a shot out of a work — only when the owner asks. `rollback_app` needs the
+   owner's explicit confirmation.
 10. **Budgets**: ≤ 8 actors per shot, ≤ 12 steps per event, ≤ 3 sfx per step, ≤ 10 props per scene.
 
 ## 4. Topics (call `get_guide` with the topic id)

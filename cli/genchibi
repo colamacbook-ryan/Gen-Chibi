@@ -7,6 +7,7 @@ HOME_DIR="${GC_HOME:-__GC_HOME__}"
 # Lệnh đi theo bản cài: chuyển cho cli/genchibi của bản đang chạy, để bản cập nhật mang theo lệnh mới.
 INNER="$HOME_DIR/current/cli/genchibi"
 if [ -z "${GC_CLI_INNER:-}" ] && [ -f "$INNER" ]; then GC_CLI_INNER=1 GC_HOME="$HOME_DIR" exec bash "$INNER" "$@"; fi
+ORIG_PWD="$PWD"   # thư mục người gọi lệnh (agent skill cài vào dự án của họ, không phải thư mục cài)
 cd "$HOME_DIR"
 set -a; [ -f .env ] && . ./.env; set +a
 MODE="${GC_MODE:-docker}"; PORT="${GC_PORT:-7480}"
@@ -15,7 +16,9 @@ PIDF="$HOME_DIR/logs/launcher.pid"; LOG="$HOME_DIR/logs/gen-chibi.log"
 TDIR="$HOME_DIR/tunnel"; TPID="$HOME_DIR/logs/tunnel.pid"; TLOG="$HOME_DIR/logs/tunnel.log"
 CF_IMAGE="${GC_CF_IMAGE:-cloudflare/cloudflared:2026.9.3}"
 
-api() { curl -fsS -X "$1" -H 'X-GC-Request: 1' -H 'Content-Type: application/json' ${GC_API_TOKEN:+-H "Authorization: Bearer $GC_API_TOKEN"} ${3:+-d "$3"} "$URL$2"; }
+# token đi qua stdin (curl -K -), không nằm trong argv → không lộ trong `ps`
+auth_cfg() { if [ -n "${GC_API_TOKEN:-}" ]; then printf 'header = "Authorization: Bearer %s"\n' "$GC_API_TOKEN"; fi; }
+api() { auth_cfg | curl -fsS -K - -X "$1" -H 'X-GC-Request: 1' -H 'Content-Type: application/json' ${3:+-d "$3"} "$URL$2"; }
 running_native() { [ -f "$PIDF" ] && kill -0 "$(cat "$PIDF")" 2>/dev/null; }
 json() { node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const o=JSON.parse(s);const k=process.argv[1].split(".");let v=o;for(const x of k)v=v==null?v:v[x];console.log(v===undefined?"":typeof v==="object"?JSON.stringify(v):v)})' "$1" 2>/dev/null || sed -n "s/.*\"$1\": *\"\{0,1\}\([^\",}]*\).*/\1/p"; }
 
@@ -319,12 +322,13 @@ link_cmd() {
 
 # genchibi agent …: bootstrap cho agent BẤT KỲ hãng nào (INT-05) — cấu hình nối từng client, hướng dẫn, schema tool, cài skill.
 # Lấy mọi thứ qua HTTP của app (chế độ Docker có thể không có Node trên máy chủ); token không bao giờ in ra màn hình.
-agent_curl() { if [ -n "${GC_API_TOKEN:-}" ]; then curl -fsS -H "Authorization: Bearer $GC_API_TOKEN" "$@"; else curl -fsS "$@"; fi; }
+agent_curl() { auth_cfg | curl -fsS -K - "$@"; }
 agent_connect() {
   local u link hdr=""
   u="$URL/mcp"; link="$(link_url)"
-  [ -n "${GC_API_TOKEN:-}" ] && hdr="Authorization: Bearer <token — xem GC_API_TOKEN trong $HOME_DIR/.env>"
-  local jh="" target="${link:-$u}"; [ -n "$hdr" ] && jh=',"headers":{"Authorization":"Bearer <token>"}'
+  # link Internet tự mang khoá (không cần token — đừng dán token toàn quyền vào client bên thứ ba); địa chỉ máy này mới cần token nếu chủ đặt
+  [ -n "${GC_API_TOKEN:-}" ] && [ -z "$link" ] && hdr="Authorization: Bearer <token — xem GC_API_TOKEN trong $HOME_DIR/.env>"
+  local jh="" target="${link:-$u}" ch=""; [ -n "$hdr" ] && jh=',"headers":{"Authorization":"Bearer <token>"}' && ch=" -H 'Authorization: Bearer <token>'"
   local cur_json='{"mcpServers":{"gen-chibi":{"url":"'"$target"'"'"$jh"'}}}' gem_json='{"mcpServers":{"gen-chibi":{"httpUrl":"'"$target"'"'"$jh"'}}}'
   local cc_hdr=""; [ -n "$hdr" ] && cc_hdr=' --header "Authorization: Bearer <token>"'
   cat <<EOF
@@ -340,8 +344,11 @@ Claude Code      claude mcp add -s user --transport http gen-chibi $target$cc_hd
 Claude app/web   Settings › Connectors › Add custom connector › dán link Internet
 Cursor           ~/.cursor/mcp.json   $cur_json
 Gemini CLI       ~/.gemini/settings.json   $gem_json
-Codex CLI        ~/.codex/config.toml   [mcp_servers.gen-chibi]  command = "genchibi"  args = ["mcp"]
-Không có MCP     curl -s ${link:-$u} -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"start_here","arguments":{}}}'
+Codex CLI        ~/.codex/config.toml (mỗi dòng một khoá):
+                   [mcp_servers.gen-chibi]
+                   command = "genchibi"
+                   args = ["mcp"]
+Không có MCP     curl -s $target$ch -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"start_here","arguments":{}}}'
                  schema dạng function-calling: genchibi agent tools --format openai | gemini
 (Định dạng tệp cấu hình của từng client có thể đổi theo phiên bản client — đối chiếu tài liệu của client nếu không nhận.)
 
@@ -356,12 +363,19 @@ agent_cmd() {
     topics) agent_curl "$URL/api/agent/topics"; echo ;;
     tools) local f=openai; [ "${1:-}" = --format ] && f="${2:-openai}"; agent_curl "$URL/api/agent/tools?format=$f"; echo ;;
     skill)
-      local v="${1:-claude}" dir=""; shift || true; [ "${1:-}" = --dir ] && dir="${2:-}"
-      case "$v" in claude) dir="${dir:-$HOME/.claude/skills}" ;; cursor|gemini|codex|generic) dir="${dir:-$PWD}" ;; *) echo "skill: claude | cursor | gemini | codex | generic" >&2; return 1 ;; esac
-      mkdir -p "$dir"
-      agent_curl "$URL/api/agent/skill?vendor=$v" | tar -x -C "$dir"
+      local v="${1:-claude}" dir="" force=""; shift || true
+      while [ $# -gt 0 ]; do case "$1" in --dir) dir="${2:-}"; shift 2 || shift ;; --force) force=1; shift ;; *) shift ;; esac; done
+      case "$v" in claude) dir="${dir:-$HOME/.claude/skills}" ;; cursor|gemini|codex|generic) dir="${dir:-$ORIG_PWD}" ;; *) echo "skill: claude | cursor | gemini | codex | generic" >&2; return 1 ;; esac
+      # giải nén vào thư mục tạm, rồi chỉ ghi đè tệp DO CHÍNH LỆNH NÀY SINH (có dấu "generated by `genchibi agent skill`");
+      # AGENTS.md / GEMINI.md / rule có sẵn của người dùng thì dừng lại (trừ khi --force)
+      local tmp; tmp="$(mktemp -d)"
+      agent_curl "$URL/api/agent/skill?vendor=$v" | tar -x -C "$tmp" || { rm -rf "$tmp"; echo "Không tải được hướng dẫn (app có đang chạy?)" >&2; return 1; }
+      local f clash=""
+      while IFS= read -r f; do f="${f#./}"; if [ -e "$dir/$f" ] && ! head -c 2000 "$dir/$f" | grep -q 'generated by `genchibi agent skill`'; then clash="$clash $dir/$f"; fi; done < <(cd "$tmp" && find . -type f)
+      if [ -n "$clash" ] && [ -z "$force" ]; then rm -rf "$tmp"; echo "Đã có tệp của bạn, không ghi đè:$clash" >&2; echo "→ chọn thư mục khác (--dir), hoặc gộp tay, hoặc thêm --force để ghi đè." >&2; return 1; fi
+      mkdir -p "$dir" && cp -R "$tmp"/. "$dir"/ && rm -rf "$tmp"
       echo "Đã cài hướng dẫn gen-chibi cho $v vào $dir (sinh từ agent/ của bản đang chạy — cập nhật app thì chạy lại lệnh này)" ;;
-    *) echo "genchibi agent connect | guide [chủ đề] | topics | tools [--format openai|gemini|mcp] | skill <hãng> [--dir thư-mục]" >&2; return 1 ;;
+    *) echo "genchibi agent connect | guide [chủ đề] | topics | tools [--format openai|gemini|mcp] | skill <hãng> [--dir thư-mục] [--force]" >&2; return 1 ;;
   esac
 }
 

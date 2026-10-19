@@ -119,6 +119,14 @@ function toolError(x, opt) {
   const hint = opt.hint || ERR_HINT[code];
   return { content: [{ type: 'text', text: '[' + code + '] ' + msg + (hint ? '\n→ ' + hint : '') }], structuredContent: { error: Object.assign({ code, message: msg, details, hint }, opt.allowed ? { allowed: opt.allowed } : {}) }, isError: true };
 }
+// lỗi kiểu cũ (saved:false + errors / gates / conflicts): vẫn đúng hợp đồng — chữ mở đầu [CODE], structuredContent.error là object —
+// và giữ nguyên các trường cũ (client / Studio đời trước đọc saved, errors, gates, conflicts)
+function legacyError(body, x, opt) {
+  const r = toolError(x, opt);
+  r.content[0].text += '\n' + JSON.stringify(body);
+  r.structuredContent = Object.assign({}, body, r.structuredContent);
+  return r;
+}
 function clone(o) { return JSON.parse(JSON.stringify(o)); }
 // Dấu theo NỘI DUNG (review bảo mật): dấu ở siêu dữ liệu gói xoá được bằng tay trước khi nhập lại → so thêm bản vẽ của từng
 // linh kiện với các bộ mẫu app mang sẵn (studio/mau/*.json, kind "sample"). Trùng hình = mục mẫu, dù đã đổi id hay gỡ dấu.
@@ -126,8 +134,20 @@ function clone(o) { return JSON.parse(JSON.stringify(o)); }
 let SAMPLE_ART = null;
 // chuỗi hoá CHUẨN (khoá sắp xếp, đệ quy) — đảo thứ tự khoá layers / views không đổi được chữ ký
 function canonJSON(v) { return Array.isArray(v) ? '[' + v.map(canonJSON).join(',') + ']' : v && typeof v === 'object' ? '{' + Object.keys(v).sort().map(function (k) { return JSON.stringify(k) + ':' + canonJSON(v[k]); }).join(',') + '}' : JSON.stringify(v === undefined ? null : v); }
-// chữ ký NỘI DUNG của gói động tác (tư thế + clip, bỏ tên / nhãn): đổi id / tên gói mẫu rồi bán vẫn bị nhận ra
-function motionSig(GC, m) { const c = GC.choreo && GC.choreo.checkPack(m), d = c && !c.errors.length ? c.def : m; return d && d.clips ? crypto.createHash('sha256').update(canonJSON([d.poses || {}, Object.keys(d.clips).sort().map(k => Object.assign({}, d.clips[k], { label: '' }))])).digest('hex') : ''; }
+// chữ ký NỘI DUNG từng clip của gói động tác (dữ liệu đã qua cổng; tư thế giải ra số khớp làm tròn 0,1; bỏ nhãn / chữ): đổi id gói, id đòn,
+// tên clip, tên tư thế hay thêm tư thế thừa đều không đổi được chữ ký (review v0.16). Clip một then chốt quá đơn giản → không ký (tránh trùng oan)
+function motionClipSigs(GC, m) {
+  const C = GC.choreo, c = C && C.checkPack(m);
+  if (!c || c.errors.length) return [];
+  const d = c.def, r1 = v => Math.round(v * 10) / 10, drop = ['label', 'text', 'title', 'sub'];
+  return Object.keys(d.clips).map(k => {
+    const cl = d.clips[k];
+    if (!cl.keys || cl.keys.length < 2) return '';
+    let keys; try { keys = cl.keys.map(q => [q[0], Array.from(C.resolveIn(d.poses, q[1])).map(r1)].concat(q.slice(2))); } catch { return ''; }
+    const body = JSON.parse(JSON.stringify(Object.assign({}, cl, { keys }), (key, v) => drop.indexOf(key) >= 0 ? undefined : v));
+    return crypto.createHash('sha256').update(canonJSON(body)).digest('hex');
+  }).filter(Boolean);
+}
 function artSig(p) { return p && p.layers ? crypto.createHash('sha256').update(canonJSON([p.slot, p.layers, p.views || null])).digest('hex') : ''; }
 function sampleArt(GC) {   // ký theo dạng ĐÃ QUA CỔNG (cổng chuẩn hoá SVG) — cùng dạng với linh kiện đã lưu
   if (SAMPLE_ART) return SAMPLE_ART;
@@ -139,7 +159,7 @@ function sampleArt(GC) {   // ký theo dạng ĐÃ QUA CỔNG (cổng chuẩn ho
     if (!b || b.kind !== 'sample' || !Array.isArray(b.parts)) return;
     const owner = (b.sample && b.sample.owner) || 'Gen Labs';
     b.parts.forEach(p => { const c = GC.checkDataPart(p), h = artSig(c.errors.length ? p : c.def); if (h) SAMPLE_ART.set(h, { owner, id: p.id }); });
-    (Array.isArray(b.motionPacks) ? b.motionPacks : []).forEach(m => { const h = motionSig(GC, m); if (h) SAMPLE_ART.set('motion:' + h, { owner, id: m.id }); });
+    (Array.isArray(b.motionPacks) ? b.motionPacks : []).forEach(m => motionClipSigs(GC, m).forEach(h => SAMPLE_ART.set('motion:' + h, { owner, id: m.id })));
   });
   return SAMPLE_ART;
 }
@@ -166,7 +186,7 @@ class MCP {
     (this.store.listParts ? this.store.listParts() : []).forEach(d => this.GC.registerDataPart(MY_PACK, d));
     (this.store.listItems ? this.store.listItems() : []).forEach(d => { const r = this.GC.registerItem(MY_PACK, d); if (r.errors.length) console.warn('bỏ item', d.id, r.errors); });
     (this.store.listScenes ? this.store.listScenes() : []).forEach(d => { const r = this.GC.registerScene(MY_PACK, d); if (r.errors.length) console.warn('bỏ cảnh', d.id, r.errors); });
-    (this.store.listMotionPacks ? this.store.listMotionPacks() : []).forEach(d => { const r = this.GC.choreo.registerPack(MY_PACK, d); if (r.errors.length) console.warn('bỏ gói động tác', d.id, r.errors); });
+    (this.store.listMotionPacks ? this.store.listMotionPacks() : []).forEach(d => { try { const r = this.GC.choreo.registerPack(MY_PACK, d); if (r.errors.length) console.warn('bỏ gói động tác', d.id, r.errors); } catch (e) { console.warn('bỏ gói động tác hỏng', d && d.id, e.message); } });   // tệp sửa tay hỏng không được chặn server khởi động
   }
   sync() {
     if (this._bulk) return;
@@ -287,13 +307,15 @@ class MCP {
       }
       case 'validate_character': {
         let a; try { a = this.prepare(args.asset); } catch (e) { return toolError(e); }
-        const g = GC.gate(a, { poses: true });
-        return json({ ok: g.every(x => x.ok), gates: g });
+        // ok = qua được cổng CHẶN của trạng thái đang khai (nháp không cần dấu nhận diện) — mục chưa đạt nhưng không chặn → warnings
+        const g = GC.gate(a, { poses: true }), bl = GC.blockingGates(g, a.status), warn = g.filter(x => !x.ok && bl.indexOf(x) < 0).map(x => x.label);
+        if (bl.length) return legacyError({ ok: false, gates: g, blocking: bl.map(x => x.id), warnings: warn }, 'Nhân vật chưa qua cổng: ' + bl.map(x => x.label).join('; '), { code: 'VALIDATION_FAILED', errors: bl.map(x => 'gates.' + x.id + ': ' + x.label + (x.detail ? ' (' + x.detail + ')' : '')) });
+        return json({ ok: true, gates: g, warnings: warn });
       }
       case 'save_character': {
         let r;
         try { r = this.saveAssetChecked(args.asset, args.note || 'Lưu qua ' + (ctx && ctx.channel === 'ui' ? 'AI trong Studio' : 'MCP')); }
-        catch (e) { return e.gates ? Object.assign(json({ saved: false, blocking: e.blocking, gates: e.gates }), { isError: true }) : toolError(e); }
+        catch (e) { return e.gates ? legacyError({ saved: false, blocking: e.blocking, gates: e.gates }, e, { code: 'VALIDATION_FAILED', errors: e.gates.filter(g => (e.blocking || []).indexOf(g.id) >= 0).map(g => 'gates.' + g.id + ': ' + g.label + (g.detail ? ' (' + g.detail + ')' : '')) }) : toolError(e); }
         return json({ saved: true, key: r.key, version: r.version, status: r.status, studio: 'Studio › Thư viện › Nhân vật › ' + r.name });
       }
       case 'render_character': {
@@ -335,12 +357,12 @@ class MCP {
       case 'validate_event': {
         this.sync();
         const errs = GC.director.validate(args.event, this.castOf(args.cast));
-        return json({ ok: !errs.length, errors: errs });
+        return errs.length ? legacyError({ ok: false, errors: errs }, 'Kịch bản chưa đạt: ' + errs.slice(0, 6).join('; '), { code: 'VALIDATION_FAILED', errors: errs }) : json({ ok: true, errors: [] });
       }
       case 'save_event': {
         this.sync();
         const errs = GC.director.validate(args.event, GC.assets());
-        if (errs.length) return Object.assign(json({ saved: false, errors: errs }), { isError: true });
+        if (errs.length) return legacyError({ saved: false, errors: errs }, 'Kịch bản chưa đạt: ' + errs.slice(0, 6).join('; '), { code: 'VALIDATION_FAILED', errors: errs });
         const rec = this.store.saveEvent(args.event, args.author || 'agent qua MCP');
         return json({ saved: true, id: rec.id, studio: 'Studio › Tạo tác › Tác phẩm › Kịch bản lẻ › ' + args.event.title });
       }
@@ -368,7 +390,7 @@ class MCP {
       }
       case 'get_motion_spec': return json(this.motionSpec());
       case 'validate_motion_pack': {
-        const r = this.motionTry(args.pack);
+        let r; try { r = this.motionTry(args.pack); } catch (e) { return toolError(e, { code: 'VALIDATION_FAILED' }); }
         return r.errors.length ? toolError('Gói động tác chưa đạt: ' + r.errors.slice(0, 6).join('; '), { code: 'VALIDATION_FAILED', errors: r.errors }) : json({ ok: true, actions: r.actions, shows: r.shows, errors: [] });
       }
       case 'save_motion_pack': {
@@ -382,11 +404,13 @@ class MCP {
         if (!C.canDo(A, act)) return toolError((A.name || A.id) + ' không làm được "' + act.label + '" (cần cầm binh khí)', { code: 'VALIDATION_FAILED', allowed: C.actionsFor(A) });
         const B = args.partner ? this.findAsset(String(args.partner)) : null;
         if (args.partner && !B) return toolError('Không có nhân vật ' + args.partner, { code: 'NOT_FOUND' });
-        let an; try { an = C.animate(C.actionTimeline({ asset: A, action: args.action, partner: B, react: args.react }), { fps: args.fps || 12 }); } catch (e) { return toolError(e, { code: 'INTERNAL' }); }
-        const fmt = args.format || 'sheet', meta = Object.assign({ character: A.key }, an.meta), head = (A.name || A.id) + ' · ' + act.label + ' — ' + an.frames.length + ' khung, ' + an.fps + ' fps, ' + an.duration + ' s';
+        // số từ client không tin: kẹp fps / cell đúng inputSchema (cell đi thẳng vào thuộc tính SVG)
+        const fmt = ['sheet', 'frames', 'meta'].indexOf(args.format) >= 0 ? args.format : 'sheet', fps = Math.max(4, Math.min(30, Math.round(+args.fps) || 12)), cell = Math.max(48, Math.min(512, Math.round(+args.cell) || 160));
+        let an; try { an = C.animate(C.actionTimeline({ asset: A, action: args.action, partner: B, react: args.react }), { fps, maxFrames: fmt === 'frames' ? 60 : 120 }); } catch (e) { return toolError(e, { code: 'INTERNAL' }); }
+        const meta = Object.assign({ character: A.key }, an.meta), head = (A.name || A.id) + ' · ' + act.label + ' — ' + an.frames.length + ' khung, ' + an.fps + ' fps, ' + an.duration + ' s';
         if (fmt === 'meta') return json(meta);
-        if (fmt === 'frames') return { content: [{ type: 'text', text: head + '\n' + JSON.stringify(meta) }].concat(an.frames.slice(0, 60).map((f, i) => ({ type: 'resource', resource: { uri: 'genchibi://action/' + A.key + '/' + args.action + '/' + i + '.svg', mimeType: 'image/svg+xml', text: f.svg } }))), structuredContent: meta };
-        const sh = C.sheetSVG(an, { cell: args.cell || 160 });
+        if (fmt === 'frames') return { content: [{ type: 'text', text: head + '\n' + JSON.stringify(meta) }].concat(an.frames.map((f, i) => ({ type: 'resource', resource: { uri: 'genchibi://action/' + A.key + '/' + args.action + '/' + i + '.svg', mimeType: 'image/svg+xml', text: f.svg } }))), structuredContent: meta };
+        const sh = C.sheetSVG(an, { cell });
         return { content: [{ type: 'text', text: head + ' · sprite sheet ' + sh.cols + '×' + sh.rows + ', ô ' + sh.cell.w + '×' + sh.cell.h + ' px\n' + JSON.stringify(Object.assign({ sheet: { cols: sh.cols, rows: sh.rows, cell: sh.cell } }, meta)) },
           { type: 'resource', resource: { uri: 'genchibi://action/' + A.key + '/' + args.action + '-sheet.svg', mimeType: 'image/svg+xml', text: sh.svg } }], structuredContent: Object.assign({ sheet: { cols: sh.cols, rows: sh.rows, cell: sh.cell } }, meta) };
       }
@@ -415,16 +439,16 @@ class MCP {
       case 'export_project': { try { return json(this.exportProject(String(args.id || ''), { sale: args.sale === true })); } catch (e) { return toolError(e); } }
       case 'import_project': {
         try { return json(this.importProject(args.bundle, { overwrite: args.overwrite === true })); }
-        catch (e) { return Object.assign(json({ imported: false, error: e.message, conflicts: e.conflicts || null }), { isError: true }); }
+        catch (e) { return legacyError({ imported: false, conflicts: e.conflicts || null }, e, e.conflicts ? { code: 'CONFLICT', errors: e.conflicts.map(c => 'conflicts: ' + c), hint: 'Đã có các mục này — gọi lại với overwrite: true để lưu đè (tạo phiên bản mới), hoặc đổi id.' } : {}); }
       }
       case 'get_work': { const w = this.store.getWork(String(args.id || '')); return w ? json(this.workView(w)) : toolError('Không có tác phẩm ' + args.id + '. Gọi list_works.'); }
       case 'save_work': {
         try { const w = this.saveWorkChecked(args); return json({ saved: true, id: w.id, version: w.version, studio: 'Studio › Tạo tác › Tác phẩm › ' + w.title }); }
-        catch (e) { return Object.assign(json({ saved: false, errors: e.errors || [e.message] }), { isError: true }); }
+        catch (e) { return legacyError({ saved: false, errors: e.errors || [e.message] }, e); }
       }
       case 'save_shot': {
         try { const r = this.saveShotChecked(args); return json(r); }
-        catch (e) { return Object.assign(json({ saved: false, errors: e.errors || [e.message] }), { isError: true }); }
+        catch (e) { return legacyError({ saved: false, errors: e.errors || [e.message] }, e); }
       }
       case 'save_project': {
         try { return json(this.store.saveProject(args)); } catch (e) { return toolError(e); }
@@ -435,12 +459,12 @@ class MCP {
       }
       case 'validate_item': {
         const c = GC.checkItem(args.item);
-        return json({ ok: !c.errors.length, errors: c.errors, gates: c.errors.length ? [] : GC.itemGate(c.def) });
+        return c.errors.length ? legacyError({ ok: false, errors: c.errors, gates: [] }, 'Trang bị chưa đạt: ' + c.errors.slice(0, 6).join('; '), { code: 'VALIDATION_FAILED', errors: c.errors }) : json({ ok: true, errors: [], gates: GC.itemGate(c.def) });
       }
       case 'save_item': {
         let rec;
         try { rec = this.saveItemChecked(args.item, args.note || 'Lưu qua MCP'); }
-        catch (e) { return Object.assign(json({ saved: false, errors: e.errors || [e.message] }), { isError: true }); }
+        catch (e) { return legacyError({ saved: false, errors: e.errors || [e.message] }, e); }
         return json({ saved: true, key: rec.key, version: rec.version, use: 'Nhân vật mặc: look.equip.' + rec.equip.slot + ' = "' + rec.key + '"', studio: 'Studio › Thư viện › Vật phẩm › ' + rec.name });
       }
       case 'render_item': {
@@ -466,12 +490,12 @@ class MCP {
       }
       case 'validate_scene': {
         const c = GC.checkScene(args.scene);
-        return json({ ok: !c.errors.length, errors: c.errors, gates: c.errors.length ? [] : GC.sceneGate(c.def) });
+        return c.errors.length ? legacyError({ ok: false, errors: c.errors, gates: [] }, 'Cảnh chưa đạt: ' + c.errors.slice(0, 6).join('; '), { code: 'VALIDATION_FAILED', errors: c.errors }) : json({ ok: true, errors: [], gates: GC.sceneGate(c.def) });
       }
       case 'save_scene': {
         let rec;
         try { rec = this.saveSceneChecked(args.scene, args.note || 'Lưu qua MCP'); }
-        catch (e) { return Object.assign(json({ saved: false, errors: e.errors || [e.message] }), { isError: true }); }
+        catch (e) { return legacyError({ saved: false, errors: e.errors || [e.message] }, e); }
         return json({ saved: true, key: rec.key, version: rec.version, use: 'Kịch bản: event.scene = "' + rec.key + '"; dựng: render_scene key=' + rec.key, studio: 'Studio › Thư viện › Bối cảnh › ' + rec.name });
       }
       case 'render_scene': {
@@ -495,7 +519,7 @@ class MCP {
       }
       case 'preview_part': {
         const c = GC.checkDataPart(args.part);
-        if (c.errors.length) return Object.assign(json({ ok: false, errors: c.errors, hint: 'Sửa đúng các lỗi trên rồi gọi lại preview_part. Chuẩn: get_part_spec.' }), { isError: true });
+        if (c.errors.length) return legacyError({ ok: false, errors: c.errors }, 'Linh kiện chưa đạt: ' + c.errors.slice(0, 6).join('; '), { code: 'VALIDATION_FAILED', errors: c.errors, hint: 'Sửa đúng các lỗi trên rồi gọi lại preview_part. Chuẩn: get_part_spec.' });
         const r = GC.registerDataPart(TMP_PACK, c.def);
         if (c.def.kind === 'scenery') {
           try {
@@ -517,7 +541,7 @@ class MCP {
       case 'save_part': {
         let rec;
         try { rec = this.savePartChecked(args.part, args.note || 'Lưu qua MCP'); }
-        catch (e) { return Object.assign(json({ saved: false, errors: e.errors || [e.message] }), { isError: true }); }
+        catch (e) { return legacyError({ saved: false, errors: e.errors || [e.message] }, e); }
         if (rec.kind === 'scenery') return json({ saved: true, ref: MY_PACK + '/' + rec.id, slot: rec.slot, version: rec.version,
           use: rec.slot === 'deco' ? 'Trong cảnh: deco: [{ part: "' + MY_PACK + '/' + rec.id + '", x, y }]' : 'Trong cảnh: layers.' + rec.slot + ' = "' + MY_PACK + '/' + rec.id + '"', studio: 'Studio › Xưởng › Kho linh kiện › Phông cảnh' });
         return json({ saved: true, ref: MY_PACK + '/' + rec.id, slot: rec.slot, version: rec.version, advice: this.GC.partAdvice(rec),
@@ -641,9 +665,11 @@ class MCP {
     try {
       const r = C.registerPack(TMP_PACK, c.def);
       if (r.errors.length) return { errors: r.errors };
-      const errs = this.motionSmoke(r.def); C.unregisterPack(TMP_PACK + '/' + c.def.id);
-      return { errors: errs, actions: Object.keys(c.def.actions), shows: Object.keys(c.def.shows) };
-    } finally { if (live && !C.PACKS[live.key]) C.registerPack(MY_PACK, live); }
+      return { errors: this.motionSmoke(r.def), actions: Object.keys(c.def.actions), shows: Object.keys(c.def.shows) };
+    } finally {
+      C.unregisterPack(TMP_PACK + '/' + c.def.id);
+      if (live && !C.PACKS[live.key]) C.registerPack(MY_PACK, live);
+    }
   }
   // bộ mẫu đi kèm bản cài (studio/mau/*.json): đã cài chưa, có bản mới không (sample.version)
   samples() {
@@ -677,8 +703,11 @@ class MCP {
     return C.registerPack(MY_PACK, rec).def;
   }
   motionSmoke(d) {
-    const GC = this.GC, C = GC.choreo, M = GC.ASSETS['gen.khung/ma-no-canh'], errs = [];
+    const GC = this.GC, C = GC.choreo, M = GC.ASSETS['gen.khung/ma-no-canh'], errs = [], t0 = Date.now(), LIMIT = 4000;
+    const late = () => { if (Date.now() - t0 > LIMIT) { if (errs.indexOf(SLOW) < 0) errs.push(SLOW); return true; } return false; };
+    const SLOW = 'pack: dựng thử quá ' + LIMIT / 1000 + ' s — gói quá nặng (bớt hành động / clip / sự kiện)';
     Object.keys(d.actions).forEach(k => {
+      if (late()) return;
       try {
         const tl = C.ACTIONS[k].attack ? C.duel({ a: { asset: M, x: 210, y: 330, k: 0.8 }, b: { asset: M, x: 430, y: 330, k: 0.8 }, action: k, react: 'hit' }) : C.solo({ a: { asset: M, x: 320, y: 330, k: 0.8 }, action: k });
         if (!(tl.real > 0.2 && tl.real < 30)) errs.push('actions.' + k + ': thời lượng bất thường ' + tl.real.toFixed(2) + ' s');
@@ -686,6 +715,7 @@ class MCP {
       } catch (e) { errs.push('actions.' + k + ': ' + String(e.message).slice(0, 160)); }
     });
     Object.keys(d.shows).forEach(k => {
+      if (late()) return;
       const S = C.demos[k], A = S && (GC.getAsset(S.character || '', MY_PACK) || M);
       try { const tl = C.build(A, S); if (!(tl.real > 0.2 && tl.real < 120)) errs.push('shows.' + k + ': thời lượng bất thường'); } catch (e) { errs.push('shows.' + k + ': ' + String(e.message).slice(0, 160)); }
     });
@@ -710,6 +740,9 @@ class MCP {
     works.forEach(w => (w.shots || []).forEach(s => {
       (s.cast || []).forEach(k => { const a = GC.ASSETS[k] || GC.getAsset(k, MY_PACK); if (a && a.pack === MY_PACK) add(chars, allA.find(x => x.id === a.id)); });
       const sc = s.scene && GC.getScene(s.scene, MY_PACK); if (sc && sc.pack === MY_PACK) add(scenes, allS.find(x => x.id === sc.id));
+      // gói động tác chứa đòn mà phân cảnh dùng (kể cả gói của dự án khác) — khôi phục ở máy sạch không mất màn đấu (CNS-060)
+      ((s.event && s.event.steps) || []).forEach(st => { const ac = st && st.action && Object.prototype.hasOwnProperty.call(GC.choreo.ACTIONS, st.action) ? GC.choreo.ACTIONS[st.action] : null, P2 = ac && GC.choreo.PACKS[ac.pack];
+        if (P2 && P2.pack === MY_PACK) add(motionPacks, S.listMotionPacks().find(x => x.id === P2.id)); });
     }));
     // trang bị nhân vật đang mặc (kể cả ngoài dự án)
     chars.forEach(a => Object.values((a.look && a.look.equip) || {}).forEach(ref => { const it = GC.getItem(ref, MY_PACK); if (it && it.pack === MY_PACK) add(items, allI.find(x => x.id === it.id)); }));
@@ -728,7 +761,7 @@ class MCP {
     // mục của bộ mẫu dùng trong dự án KHÁC (linh kiện Tam Quốc gắn vào nhân vật của bạn…): gói bán chặn, gói sao lưu mang dấu theo
     const prov = S.provenance(), marked = provKeys(out).filter(k => prov[k]);
     if (sale) { const art = sampleArt(GC); out.parts.forEach(p => { const c = GC.checkDataPart(p), hit = art.get(artSig(c.errors.length ? p : c.def)), k = 'part:' + p.slot + ':' + p.id; if (hit && !prov[k]) { prov[k] = { owner: hit.owner }; marked.push(k); } }); }
-    if (sale) { const art = sampleArt(GC); out.motionPacks.forEach(m => { const hit = art.get('motion:' + motionSig(GC, m)), k = 'motion:' + m.id; if (hit && !prov[k]) { prov[k] = { owner: hit.owner }; marked.push(k); } }); }
+    if (sale) { const art = sampleArt(GC); out.motionPacks.forEach(m => { const hit = motionClipSigs(GC, m).map(h => art.get('motion:' + h)).find(Boolean), k = 'motion:' + m.id; if (hit && !prov[k]) { prov[k] = { owner: hit.owner }; marked.push(k); } }); }
     if (sale && marked.length) {
       const owner = prov[marked[0]].owner || 'Gen Labs', names = marked.slice(0, 6).map(k => k.split(':').pop()).join(', ') + (marked.length > 6 ? '…' : '');
       throw Object.assign(new Error('Gói bán đang dùng ' + marked.length + ' mục của bộ mẫu ' + owner + ' (' + names + ') — bộ mẫu chỉ để xem, sửa thử, làm phim. Thay bằng linh kiện / trang bị / cảnh của riêng bạn rồi xuất lại.'), { code: 403, sample: marked });
@@ -746,7 +779,7 @@ class MCP {
     if (!pid) throw Object.assign(new Error('project.id: slug dự án (chữ thường, số, gạch nối)'), { code: 400 });
     const bad = m => Object.assign(new Error(m), { code: 400 });
     const arr = (x, n, what) => { if (x === undefined) return []; if (!Array.isArray(x)) throw bad(what + ': cần mảng'); if (x.length > n) throw bad(what + ': tối đa ' + n); return x.filter(v => v && typeof v === 'object'); };
-    const parts = arr(b.parts, 300, 'parts'), items = arr(b.items, 500, 'items'), scenes = arr(b.scenes, 200, 'scenes'), chars = arr(b.characters, 500, 'characters'), works = arr(b.works, 50, 'works'), motions = arr(b.motionPacks, 50, 'motionPacks');
+    const parts = arr(b.parts, 300, 'parts'), items = arr(b.items, 500, 'items'), scenes = arr(b.scenes, 200, 'scenes'), chars = arr(b.characters, 500, 'characters'), works = arr(b.works, 50, 'works'), motions = arr(b.motionPacks, 8, 'motionPacks');   // mỗi gói động tác phải dựng thử (≤ 4 s) — giữ tổng thời gian chặn có trần
     // ngân sách: tổng phân cảnh ≤ 200 (mỗi phân cảnh chạy cổng đạo diễn) — chặn gói phình to làm treo server
     // gói làm bằng bản gen-chibi mới hơn bản đang chạy: báo cập nhật TRƯỚC khi ghi gì (CNS-023) — tránh nhập nửa vời
     const semver = v => { const m = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(String(v || '')); return m ? [+m[1], +m[2], +m[3]] : null; };
@@ -994,7 +1027,7 @@ class MCP {
   castOf(ids) {
     const all = this.GC.assets();
     if (!Array.isArray(ids) || !ids.length) return all;
-    return all.filter(a => ids.indexOf(a.id) >= 0);
+    return all.filter(a => ids.indexOf(a.id) >= 0 || ids.indexOf(a.key) >= 0);   // nhận cả id lẫn key (agent hay đưa key từ list_characters)
   }
 
   // Xử lý một thông điệp JSON-RPC. Trả về phản hồi, hoặc null với notification.

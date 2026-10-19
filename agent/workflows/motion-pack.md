@@ -47,7 +47,8 @@ A motion pack is pure JSON data (`gen-chibi.motion/1`); the gate rejects anythin
 
 ## Budgets (gate)
 ≤ 64 poses · ≤ 48 clips · ≤ 32 actions · ≤ 4 shows · ≤ 64 keys and ≤ 48 events per clip · total hitstop ≤ 1.2 s
-per clip · ≤ 4 ghosts / lines events per clip · show ≤ 90 s · pack ≤ 300 KB.
+per clip · ≤ 4 ghosts / lines / smear events per clip · one action (sum of its clips) ≤ 6 s — longer sequences
+belong in `shows` · show ≤ 90 s · pack ≤ 300 KB · the test build of all actions must finish within 4 s.
 
 ## Example
 <!-- example: motion-pack.json -->
