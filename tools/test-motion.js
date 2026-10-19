@@ -191,7 +191,7 @@ const clone = o => JSON.parse(JSON.stringify(o));
       ['validate_motion_pack', { pack: { id: 'x', clips: { cc: { keys: [null] } } } }], ['save_motion_pack', { pack: {} }], ['get_motion_pack', { key: 'khong-co' }],
       ['render_action', { character: 'khong-co', action: 'punch' }], ['render_action', { character: 'mau-be-na', action: 'thrust' }],
       ['render_character', { key: 'khong-co' }], ['get_character', { key: 'khong-co' }], ['preview_shot', { work: 'khong-co', shot: '0' }],
-      ['install_sample', { id: 'khong-co' }], ['get_guide', { topic: 'khong-co' }],
+      ['install_sample', { id: 'khong-co' }], ['get_guide', { topic: 'khong-co' }], ['render_voice', { text: 'Xin chào' }], ['render_voice', { text: 'x', character: 'khong-co' }],
     ];
     const codes = {};
     for (const [name, args] of calls) {

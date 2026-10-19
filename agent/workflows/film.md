@@ -19,6 +19,10 @@
    (`shot.id` to edit an existing shot; `remove: true` to drop one).
 7. `preview_shot` with `{ "work": "<work id>", "shot": "<shot id>" }` → `ready`, `missing`, `warnings`,
    and the planned beats (who moves, which actions, how long). Fix anything listed.
+8. Optional voices: `render_voice` with `{ "text", "character": "<key>", "state", "bubble" }` returns the line read by a
+   Google AI voice (WAV, `audio` content). Voice names: `get_catalog` › `aiVoices`. It only works when the owner turned
+   on Giọng AI with a Google AI Studio key; the free tier allows about 10 lines per day per model — on `UNAVAILABLE`
+   stop and tell the owner (`retryAt`), do not loop. Lines already read are cached (no quota used).
 
 ## Existing works and loose scripts
 - `list_works` / `get_work` with `{ "id" }` — read a work (all shots, events) before editing it; edit a shot with `save_shot` + `shot.id`.

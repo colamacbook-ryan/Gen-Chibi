@@ -5,7 +5,8 @@
 // Vận chuyển: HTTP (POST /mcp, JSON) và stdio (server/mcp-stdio.js chuyển tiếp vào /mcp).
 'use strict';
 const fs = require('fs'), path = require('path'), crypto = require('crypto');
-const Agent = require('./agent.js');   // hướng dẫn agent một nguồn (agent/*.md + ví dụ) — trung lập model
+const Agent = require('./agent.js');
+const AI_VOICES = new Set(require('./voice.js').VOICES.map(v => v.name));   // hướng dẫn agent một nguồn (agent/*.md + ví dụ) — trung lập model
 
 const PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const SERVER_INFO = { name: 'gen-chibi', title: 'gen-chibi — nhà máy asset chibi bằng code (nhân vật, vật phẩm, bối cảnh, gói động tác, phim)' };
@@ -79,6 +80,7 @@ const TOOLS = [
   { name: 'validate_motion_pack', title: 'Kiểm gói động tác', description: 'Kiểm gói chưa lưu: cổng dữ liệu + DỰNG THỬ mọi hành động trên ma-nơ-canh khung (đòn đánh: đấu với ma-nơ-canh thứ hai). Không lưu gì.', inputSchema: obj({ pack: { type: 'object', description: 'gói gen-chibi.motion/1 — xem get_motion_spec' } }, ['pack']), annotations: { readOnlyHint: true } },
   { name: 'save_motion_pack', title: 'Lưu gói động tác', description: 'Kiểm, dựng thử rồi lưu gói động tác vào Thư viện (có phiên bản). Hành động của gói dùng ngay trong kịch bản (step.action) và render_action. Đặt "project".', inputSchema: obj({ pack: { type: 'object' }, note: { type: 'string' } }, ['pack']) },
   { name: 'render_action', title: 'Xuất hoạt ảnh một hành động', description: 'Một nhân vật diễn một hành động → khung cố định, nền trong suốt. format: sheet (một SVG sprite sheet + timeline), frames (SVG từng khung, tối đa 60), meta (chỉ timeline: fps, số khung, thời lượng, khung va chạm, khung ôm). Đòn đánh: partner (mặc định ma-nơ-canh) + react.', inputSchema: obj({ character: { type: 'string' }, action: { type: 'string' }, partner: { type: 'string' }, react: { type: 'string', enum: ['hit', 'fall', 'ko', 'block', 'dodge'] }, fps: { type: 'integer', minimum: 4, maximum: 30 }, format: { type: 'string', enum: ['sheet', 'frames', 'meta'] }, cell: { type: 'integer', minimum: 48, maximum: 512 } }, ['character', 'action']), annotations: { readOnlyHint: true } },
+  { name: 'render_voice', title: 'Đọc thoại bằng giọng AI', description: 'Đọc một câu thoại bằng giọng AI của Google (Gemini TTS) → clip WAV (nội dung audio). Giọng: voice (tên giọng, xem get_catalog › aiVoices) hoặc character (giọng đã chọn / giọng mặc định theo vai); cảm xúc theo state + bubble. Câu đã đọc được lưu đệm (không tốn lượt). Cần chủ máy bật Giọng AI + nhập key Google AI Studio; gói miễn phí ~10 câu / ngày / model — hết lượt trả UNAVAILABLE kèm retryAt.', inputSchema: obj({ text: { type: 'string', maxLength: 240 }, character: { type: 'string' }, voice: { type: 'string' }, state: { type: 'string' }, bubble: { type: 'string', enum: ['say', 'shout', 'think', 'whisper'] } }, ['text']), annotations: { readOnlyHint: false, openWorldHint: true } },
   { name: 'preview_shot', title: 'Xem trước phân cảnh', description: 'Phân cảnh đã sẵn sàng diễn chưa (ready, missing) + kế hoạch dàn dựng của bộ phát: ai ra sân / đi đâu / nói gì / ra đòn gì, bao lâu, cảnh báo (đòn thiếu, không dựng được). Gọi sau save_shot.', inputSchema: obj({ work: { type: 'string' }, shot: { type: 'string', description: 'id phân cảnh (hoặc số thứ tự từ 0)' } }, ['work', 'shot']), annotations: { readOnlyHint: true } },
   { name: 'list_samples', title: 'Bộ mẫu đi kèm', description: 'Các dự án mẫu đi kèm bản cài (Văn phòng vui, bộ chủ đề Tam Quốc…): id, tên, phiên bản, đã cài chưa, có bản mới không.', inputSchema: obj({}), annotations: { readOnlyHint: true } },
   { name: 'install_sample', title: 'Cài / cập nhật bộ mẫu', description: 'Nhập một bộ mẫu đi kèm vào Thư viện qua đúng cổng nhập. overwrite = true để cập nhật bộ mẫu đã cài (chỗ đã sửa thành phiên bản cũ). Bộ mẫu chỉ để xem, thử, làm phim — không bán.', inputSchema: obj({ id: { type: 'string' }, overwrite: { type: 'boolean' } }, ['id']) },
@@ -175,7 +177,8 @@ function slugOf(s) {
 
 class MCP {
   // system (tuỳ chọn): { updater, restartSoon } — để agent tự kiểm và cập nhật phiên bản; smokeMs: hạn chót dựng thử gói động tác (test hạ xuống)
-  constructor({ engine, store, version, system, smokeMs }) {
+  constructor({ engine, store, version, system, smokeMs, voice }) {
+    this.voice = voice || null;   // server/voice.js (giọng AI) — chỉ có ở bản chạy server
     this.GC = engine;
     this.smokeMs = smokeMs || 4000;
     this.store = store;
@@ -224,6 +227,7 @@ class MCP {
     return {
       actions: Object.keys(GC.choreo.ACTIONS).map(k => { const a = GC.choreo.ACTIONS[k]; return { id: k, label: a.label, attack: !!a.attack, needs: a.needs || null, ranged: !!a.ranged, pack: a.pack }; }),
       reacts: Object.keys(GC.choreo.REACTS), motionPacks: GC.choreo.packs().map(p => p.key), motionSpec: 'get_motion_spec',
+      aiVoices: this.voice ? this.voice.publicConfig().voices.map(v => ({ name: v.name, gender: v.gender, style: v.style })) : [],
       engine: GC.version, app: this.version,
       packs: Object.keys(GC.PACKS).map(k => { const p = GC.PACKS[k]; return { id: p.id, name: p.name, group: p.group, owner: p.owner }; }),
       slots, eyeStyles: Object.keys(L.eyeStyles).map(k => ({ id: k, label: L.eyeStyles[k].label })),
@@ -274,12 +278,14 @@ class MCP {
     if (x.project === undefined) { const prev = this.store.getAsset(x.key); if (prev && prev.project) x.project = prev.project; }   // giữ dự án khi bản sửa không gửi kèm
     if (x.project != null && x.project !== '' && !this.GC.projectId(x.project)) throw new Error('project: slug dự án (chữ thường, số, gạch nối, ≤ 40 ký tự) — xem list_projects');
     x.project = this.GC.projectId(x.project);
-    // giọng riêng của nhân vật trong phim (engine/audio.js): cao độ + tốc độ, kẹp trong khoảng nghe được; sai kiểu thì bỏ
+    // giọng riêng của nhân vật trong phim (engine/audio.js): cao độ + tốc độ, kẹp trong khoảng nghe được; ai = tên giọng AI Google
+    // (server/voice.js VOICES) — sai kiểu / tên lạ thì bỏ
     if (x.voice !== undefined) {
       const v = x.voice && typeof x.voice === 'object' ? x.voice : {}, num = (n, lo, hi) => typeof n === 'number' && isFinite(n) ? Math.max(lo, Math.min(hi, n)) : undefined;
       const out = {}, pitch = num(v.pitch, 0.5, 2), rate = num(v.rate, 0.6, 1.6);
       if (pitch !== undefined) out.pitch = pitch;
       if (rate !== undefined) out.rate = rate;
+      if (typeof v.ai === 'string' && AI_VOICES.has(v.ai)) out.ai = v.ai;
       if (Object.keys(out).length) x.voice = out; else delete x.voice;
     }
     return this.GC.migrate(x);
@@ -397,6 +403,20 @@ class MCP {
       case 'save_motion_pack': {
         let d; try { d = this.saveMotionPackChecked(args.pack, args.note || 'Lưu qua MCP'); } catch (e) { return toolError(e); }
         return json({ saved: true, key: d.key, version: d.version, actions: Object.keys(d.actions), shows: Object.keys(d.shows), use: 'Kịch bản: step.action = "<id hành động>"; xem: render_action', studio: 'Studio › Thư viện › Động tác' });
+      }
+      case 'render_voice': {
+        if (!this.voice) return toolError('Giọng AI chỉ có ở bản cài chạy server', { code: 'UNAVAILABLE' });
+        const A = args.character ? this.findAsset(String(args.character)) : null;
+        if (args.character && !A) return toolError('Không có nhân vật ' + args.character + ' (list_characters)', { code: 'NOT_FOUND' });
+        const vname = args.voice || (A && A.voice && A.voice.ai) || (A ? this.voice.defaultVoice(A) : 'Charon');
+        try {
+          const r = await this.voice.line({ text: args.text, voice: vname, state: args.state || 'normal', bubble: args.bubble || 'say' });
+          const wav = fs.readFileSync(this.voice.clipPath(r.id)), meta = { voice: vname, seconds: r.seconds, cached: r.cached, clip: 'api/voice/clip/' + r.id + '.wav' };
+          return { content: [{ type: 'text', text: JSON.stringify(meta) }, { type: 'audio', data: wav.toString('base64'), mimeType: 'audio/wav' }], structuredContent: meta };
+        } catch (e) {
+          const code = e.code === 429 ? 'UNAVAILABLE' : e.code === 409 ? 'FORBIDDEN' : e.code === 400 ? 'BAD_REQUEST' : 'UNAVAILABLE';
+          return toolError(e, { code, hint: e.code === 409 ? 'Giọng AI chưa bật / chưa có key — nhờ chủ máy: Studio › Cài đặt AI › Giọng AI.' : e.code === 429 ? 'Hết hạn mức Google — thử lại sau ' + (e.retryAt || 'vài giờ') + ' hoặc dùng giọng trình duyệt.' : undefined });
+        }
       }
       case 'render_action': {
         const C = GC.choreo, A = this.findAsset(String(args.character || '')), act = Object.prototype.hasOwnProperty.call(C.ACTIONS, String(args.action)) ? C.ACTIONS[args.action] : null;

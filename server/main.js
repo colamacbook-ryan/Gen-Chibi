@@ -8,6 +8,7 @@ const path = require('path');
 const { Updater, RESTART_CODE } = require('./updater');
 const { Secrets } = require('./secrets');
 const { AI } = require('./ai');
+const { Voice } = require('./voice');
 const { MCP, INSTRUCTIONS: MCP_INSTRUCTIONS, TOOLS: MCP_TOOLS } = require('./mcp');
 const Agent = require('./agent.js');
 const { Store, KEY, readJSON, writeJSON } = require('./store');
@@ -47,8 +48,10 @@ function settings() { return Object.assign({ autoUpdate: process.env.GC_AUTO_UPD
 const store = new Store(DATA);
 const engine = loadEngine(APP);
 const updater = new Updater({ home: HOME, version: VERSION, repo: REPO, feedUrl: process.env.GC_FEED_URL, log, token: process.env.GC_GITHUB_TOKEN || '' });
-const ai = new AI({ dataDir: DATA, secrets: new Secrets(DATA), engine });
-const mcp = new MCP({ engine, store, version: VERSION, system: { updater, restartSoon } });
+const secrets = new Secrets(DATA);
+const ai = new AI({ dataDir: DATA, secrets, engine });
+const voice = new Voice({ dataDir: DATA, secrets });   // giọng AI (Google Gemini TTS) — dùng chung kho bí mật với AI đạo diễn
+const mcp = new MCP({ engine, store, version: VERSION, system: { updater, restartSoon }, voice });
 
 /* ---------------------------------------------------------------- tiện ích HTTP */
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.md': 'text/markdown; charset=utf-8' };
@@ -204,6 +207,26 @@ async function route(req, res) {
     try { return send(res, 200, await ai.models()); } catch (e) { return fail(res, e.code || 502, 'Không lấy được danh sách model: ' + e.message); }
   }
   if (p === '/api/ai/bench' && m === 'GET') return send(res, 200, ai.bench());
+  // ---- giọng AI (Google Gemini TTS): bật / key / model quét lúc chạy; đọc một câu → clip WAV lưu đệm theo nội dung
+  if (p === '/api/voice' && m === 'GET') return send(res, 200, voice.publicConfig());
+  if (p === '/api/voice' && m === 'PUT') return send(res, 200, voice.setConfig(await body(req)));
+  if (p === '/api/voice/models' && m === 'GET') { try { return send(res, 200, await voice.models()); } catch (e) { return fail(res, e.code || 502, e.message); } }
+  if (p === '/api/voice/line' && m === 'POST') {
+    const b = await body(req);
+    // character (key) → giọng AI đã chọn cho nhân vật, không có thì giọng mặc định theo vai; voice ghi rõ thì thắng
+    const A = b.character ? mcp.findAsset(String(b.character)) : null;
+    if (b.character && !A) return fail(res, 404, 'không có nhân vật ' + String(b.character).slice(0, 60));
+    const vname = b.voice && b.voice !== 'auto' ? b.voice : (A && A.voice && A.voice.ai) || (A ? voice.defaultVoice(A) : b.voice);
+    try { const r = await voice.line({ text: b.text, voice: vname, state: b.state, bubble: b.bubble }); return send(res, 200, Object.assign(r, { voice: vname, url: 'api/voice/clip/' + r.id + '.wav' })); }
+    catch (e) { return send(res, e.code >= 400 && e.code < 600 ? e.code : 502, Object.assign({ error: e.message }, e.retryAt ? { retryAt: e.retryAt } : {})); }
+  }
+  if (p.startsWith('/api/voice/clip/') && m === 'GET') {
+    const f = voice.clipPath(p.slice('/api/voice/clip/'.length).replace(/\.wav$/, ''));
+    if (!f || !fs.existsSync(f)) return fail(res, 404, 'chưa có clip');
+    const buf = fs.readFileSync(f);   // tên tệp = băm nội dung → không bao giờ đổi: cho trình duyệt giữ lâu
+    res.writeHead(200, { 'Content-Type': 'audio/wav', 'Content-Length': buf.length, 'Cache-Control': 'private, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff' });
+    return res.end(buf);
+  }
   if (p === '/api/ai/test' && m === 'POST') { const b = await body(req); return send(res, 200, await ai.test(typeof b.model === 'string' ? b.model : '')); }
   if (p === '/api/ai/agent' && m === 'POST') {
     const b = await body(req);

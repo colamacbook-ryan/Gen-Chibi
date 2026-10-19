@@ -69,7 +69,7 @@ Ba lối vào, **một** cổng: không có đường nào ghi thẳng vào kho.
 
 | Ai tạo | Đi qua | Cổng kiểm |
 |---|---|---|
-| Agent ngoài (Claude Code, Claude web/desktop, Cursor…) | MCP — 44 tool (`genchibi agent tools`) | `saveAssetChecked` / `savePartChecked` |
+| Agent ngoài (Claude Code, Claude web/desktop, Cursor…) | MCP — 45 tool (`genchibi agent tools`) | `saveAssetChecked` / `savePartChecked` |
 | AI trong chatroom Studio (LLM API: OpenRouter, DeepSeek, MiniMax…) | Vòng function-calling trên **đúng bộ tool MCP** (trừ tool hệ thống), cùng chỉ dẫn MCP | như trên |
 | Người dùng Studio / gọi API HTTP | `PUT /api/assets`, `POST /api/parts` → cùng hai hàm | như trên |
 

@@ -1,4 +1,4 @@
-// gen-chibi — core AI: gọi LLM qua API chuẩn OpenAI (OpenRouter, DeepSeek, MiniMax, hoặc tuỳ chỉnh).
+// gen-chibi — core AI: gọi LLM qua API chuẩn OpenAI (OpenRouter, DeepSeek, MiniMax, Google Gemini, hoặc tuỳ chỉnh).
 // © 2026 Gen Labs — All rights reserved.
 // Nguyên tắc: LLM chỉ VIẾT JSON trong vocabulary đóng của kho; server kiểm bằng validator của engine,
 // sai thì gửi lại danh sách lỗi cho model sửa (tối đa 2 lần). Model nào dùng được thì đo bằng "Kiểm tra model".
@@ -13,6 +13,9 @@ const PROVIDERS = {
   openrouter: { label: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', models: true, keyUrl: 'https://openrouter.ai/keys' },
   deepseek: { label: 'DeepSeek', baseUrl: 'https://api.deepseek.com', models: true, keyUrl: 'https://platform.deepseek.com/api_keys' },
   minimax: { label: 'MiniMax (quốc tế)', baseUrl: 'https://api.minimax.io/v1', models: false, keyUrl: 'https://platform.minimax.io' },
+  // Google AI Studio qua cổng chuẩn OpenAI của Gemini; cùng key dùng được cho giọng AI (server/voice.js). Gemini 3 trả thought_signature
+  // trong tool_calls[].extra_content — vòng tool gửi trả nguyên tool_calls nên giữ được chữ ký
+  gemini: { label: 'Google AI Studio (Gemini)', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', models: true, keyUrl: 'https://aistudio.google.com/apikey' },
   custom: { label: 'Tuỳ chỉnh (chuẩn OpenAI)', baseUrl: '', models: true, keyUrl: '' }
 };
 

@@ -153,5 +153,14 @@ const tp = cli(['agent', 'topics']); ok(tp.code === 0 && /"id":"film"/.test(tp.o
 const con = cli(['agent', 'connect']); ok(con.code === 0 && /start_here/.test(con.out) && con.out.indexOf(TOKEN) < 0, 'agent connect không được in token');
 ok(/\[mcp_servers\.gen-chibi\]\n\s+command = "genchibi"\n\s+args = \["mcp"\]/.test(con.out), 'cấu hình Codex phải là TOML nhiều dòng');
 const argv = fs.readFileSync(LOG, 'utf8'); ok(argv.length && argv.indexOf(TOKEN) < 0, 'token không được nằm trong argv của curl (lộ trong ps)');
-console.log('   ✓ lô JSON-RPC > 20 → 413 · CLI thật: agent skill không ghi đè GEMINI.md của bạn (--force mới thay), cài vào thư mục đang đứng, cài lại skill Claude được · topics qua token · connect không in token, TOML Codex nhiều dòng · token không nằm trong argv của curl (' + argv.trim().split('\n').length + ' lần gọi curl)');
+// giọng AI qua HTTP: cấu hình không lộ key, thiếu key → 409 rõ ràng, clip lạ / leo thư mục → 404
+const vc = await (await fetch(BASE + '/api/voice', { headers: H2 })).json();
+ok(vc.hasKey === false && vc.enabled === false && vc.voices.length >= 20 && JSON.stringify(vc).indexOf(TOKEN) < 0, 'GET /api/voice sai: ' + JSON.stringify(vc).slice(0, 120));
+const vp = { method: 'POST', headers: { ...H2, 'content-type': 'application/json', 'x-gc-request': '1' } };
+await fetch(BASE + '/api/voice', Object.assign({}, vp, { method: 'PUT', body: JSON.stringify({ enabled: true }) }));
+const vl = await fetch(BASE + '/api/voice/line', Object.assign({}, vp, { body: JSON.stringify({ text: 'Xin chào', voice: 'Charon', state: 'normal' }) }));
+ok(vl.status === 409 && /key/i.test((await vl.json()).error), 'đọc giọng khi chưa có key phải 409 nhắc key');
+for (const bad of ['../../secrets.enc.json', '..%2F..%2Fai.json', 'abc.wav', '0'.repeat(40) + '.wav']) ok((await fetch(BASE + '/api/voice/clip/' + bad, { headers: H2 })).status === 404, 'clip lạ phải 404: ' + bad);
+ok((await fetch(BASE + '/api/voice')).status === 401, '/api/voice không token phải 401');
+console.log('   ✓ lô JSON-RPC > 20 → 413 · CLI thật: agent skill không ghi đè GEMINI.md của bạn (--force mới thay), cài vào thư mục đang đứng, cài lại skill Claude được · topics qua token · connect không in token, TOML Codex nhiều dòng · token không nằm trong argv của curl (' + argv.trim().split('\n').length + ' lần gọi curl) · /api/voice: không lộ key, thiếu key → 409, clip lạ / leo thư mục → 404, thiếu token → 401');
 cleanup(); process.exit(0);
