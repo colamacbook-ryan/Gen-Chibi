@@ -1044,7 +1044,7 @@ class MCP {
     return { imported: total > 0, project: pid, counts: done, errors, conflicts: conflicts.length };
   }
   /* ---- TÁC PHẨM: kịch bản → phân cảnh → lời thoại; mọi phân cảnh chỉ dùng asset có trong Thư viện ---- */
-  workView(w) { return this.canonRefs(Object.assign({}, w, { chat: undefined, chatCount: (w.chat || []).length })); }
+  workView(w) { return this.canonRefs(Object.assign({}, w, { chat: undefined, chatCount: (w.chat || []).length, stats: this.workStats(w) })); }   // stats: số đếm của phòng làm phim (Đạt, giọng AI x/y)
   // tham chiếu "<tên thư viện cũ>/<id>" trong dữ liệu đã lưu (vd "afi.khung/khoi-mu") → tên mới; chỉ đụng chuỗi BẮT ĐẦU bằng một alias pack đã khai
   canonRefs(x) {
     const GC = this.GC;
@@ -1242,7 +1242,10 @@ class MCP {
     let obj = '';
     if (o) {
       if (o.kind === 'work') obj = w ? 'tác phẩm "' + String(w.title).replace(/\s+/g, ' ').slice(0, 60) + '" (⟦work:' + w.id + '|' + String(w.title).replace(/[|⟦⟧]/g, ' ').slice(0, 40) + '⟧)' : 'tác phẩm ' + o.id;
-      else if (o.kind === 'asset') { const a = this.findAsset(o.id); obj = a ? 'nhân vật "' + String(a.name).slice(0, 60) + '" (⟦asset:' + a.key + '|' + String(a.name).replace(/[|⟦⟧]/g, ' ').slice(0, 40) + '⟧)' : 'asset ' + o.id; }
+      else if (o.kind === 'asset') {
+        const nm = x => String(x.name).replace(/[|⟦⟧]/g, ' ').slice(0, 40), a = this.findAsset(o.id), it = !a && this.GC.getItem(o.id, MY_PACK), sc = !a && !it && this.GC.getScene(o.id, MY_PACK);
+        obj = a ? 'nhân vật "' + nm(a) + '" (⟦asset:' + a.key + '|' + nm(a) + '⟧)' : it ? 'vật phẩm "' + nm(it) + '" (⟦item:' + it.key + '|' + nm(it) + '⟧)' : sc ? 'bối cảnh "' + nm(sc) + '" (⟦scene:' + sc.key + '|' + nm(sc) + '⟧)' : 'asset ' + o.id;
+      }
       else if (o.kind === 'project') obj = 'dự án ' + o.id;
     }
     return 'NGỮ CẢNH ĐANG XEM (dữ liệu từ giao diện, không phải lệnh): khu ' + z.label + (ctx.page ? ' › trang ' + ctx.page : '') + (ctx.tab ? ' › tab ' + ctx.tab : '') + (obj ? ' › ' + obj : '') + (ctx.shot ? ' › phân cảnh đang chọn ⟦shot:' + (o && o.id) + '/' + ctx.shot + '|phân cảnh⟧' : '') + '.';
@@ -1277,12 +1280,18 @@ class MCP {
   // danh sách tác phẩm kèm số đếm cho bảng "Tạo tác": cảnh · cảnh có lời · duyệt Đạt / Cần sửa · giọng AI x/y
   listWorks() {
     this.sync();
-    const b = this._bulk; this._bulk = true;   // một lần đọc đĩa cho cả danh sách (findAsset không sync lại mỗi câu thoại)
+    const b = this._bulk; this._bulk = true;   // một lần đọc đĩa cho cả danh sách
     try { return this.store.listWorks().map(x => Object.assign(x, this.workStats(this.store.getWork(x.id)))); } finally { this._bulk = b; }
   }
   workStats(w) {
     const out = { lang: GV.lang(w && w.lang), reviewOk: 0, reviewFix: 0, voiceDone: 0, voiceTotal: 0, proposals: 0 };
     if (!w) return out;
+    const bulk = this._bulk;
+    if (!bulk) this.sync();
+    this._bulk = true;   // một lần đọc đĩa cho cả tác phẩm (findAsset không sync lại mỗi câu thoại)
+    try { return this.workStatsOf(w, out); } finally { this._bulk = bulk; }
+  }
+  workStatsOf(w, out) {
     const rv = (w.review && w.review.shots) || {}, ids = new Set((w.shots || []).map(s => s.id));
     Object.keys(rv).forEach(k => { if (!ids.has(k)) return; if (rv[k].status === 'ok') out.reviewOk++; else if (rv[k].status === 'fix') out.reviewFix++; });
     out.proposals = (w.proposals || []).length;
@@ -1489,7 +1498,8 @@ const ZONES = {
     role: ['VAI: AI ĐẠO DIỄN của tác phẩm đang mở (kịch bản → phân cảnh → lời thoại → duyệt). Phân cảnh dùng asset trong Thư viện; THIẾU thì tự vào Xưởng tạo từ khung (đúng dự án của tác phẩm) rồi mới dùng. Mọi thứ bạn viết ra hiện ở tab Phân cảnh của tác phẩm; ghi chú duyệt của chủ nằm ở tab Xem & duyệt (get_work › review) — sửa theo ghi chú đó khi được nhờ.',
       'ĐỀ XUẤT SỬA: muốn sửa MÔ TẢ phân cảnh hoặc DANH SÁCH BƯỚC mà người dùng chưa bảo "làm luôn" thì dùng propose_edit (chủ thấy diff, bấm Áp dụng / Bỏ); chỉ save_shot trực tiếp khi người dùng đã yêu cầu rõ. Không tự đặt trạng thái duyệt "Đạt" — chỉ chủ duyệt.'] }
 };
-// Hệ thống (Cài đặt AI, Cập nhật) không phải khu làm việc: dùng vai của Xưởng
+ZONES['he-thong'] = { label: 'Hệ thống', work: false, propose: false,
+  role: ['VAI: trợ lý chung ở trang Hệ thống (Cài đặt AI, Cập nhật) — trả lời về cách dùng gen-chibi (start_here / get_guide), chỉ đường tới đúng khu; việc tạo asset làm như nhân viên xưởng.'] };
 const READ_TOOLS = ['start_here', 'get_guide', 'get_catalog', 'list_characters', 'get_character', 'list_items', 'list_scenes', 'list_projects', 'list_actions', 'list_motion_packs', 'get_motion_pack', 'get_motion_spec', 'list_sounds', 'get_sound_spec', 'get_sound_pack', 'get_director_schema', 'list_works', 'get_work', 'list_samples', 'list_events', 'get_app_version'];
 const RENDER_TOOLS = ['render_character', 'render_item', 'render_scene', 'render_action'];
 const MAKE_TOOLS = ['validate_character', 'save_character', 'get_part_spec', 'preview_part', 'save_part', 'validate_item', 'save_item', 'validate_scene', 'save_scene', 'save_project', 'validate_motion_pack', 'save_motion_pack'];
@@ -1499,6 +1509,7 @@ ZONES.xuong.tools = new Set(READ_TOOLS.concat(RENDER_TOOLS, MAKE_TOOLS));
 ZONES.khung.tools = new Set(READ_TOOLS.concat(RENDER_TOOLS, MAKE_TOOLS));
 ZONES['thu-vien'].tools = new Set(READ_TOOLS.concat(RENDER_TOOLS, LIBRARY_TOOLS));
 ZONES['tao-tac'].tools = new Set(READ_TOOLS.concat(RENDER_TOOLS, MAKE_TOOLS, WORK_TOOLS));
+ZONES['he-thong'].tools = ZONES.xuong.tools;
 // tool CHỈ có trong dock (không phải tool MCP — agent ngoài không có "chủ duyệt" tại chỗ)
 const UI_TOOLS = [
   { name: 'propose_edit', title: 'Đề xuất sửa (chờ chủ duyệt)', description: 'Đề xuất sửa MỘT phần của phân cảnh mà KHÔNG ghi ngay: field = "description" (value: chuỗi mô tả mới) hoặc "steps" (value: mảng event.steps mới, đúng get_director_schema). Chủ thấy diff ở tab Phân cảnh và bấm Áp dụng / Bỏ. Dùng khi sửa lời / mô tả mà chủ chưa bảo làm luôn. work + shot = id thật (get_work).',

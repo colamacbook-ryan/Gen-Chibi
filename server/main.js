@@ -324,11 +324,11 @@ async function route(req, res) {
   }
   const wm = p.match(/^\/api\/works\/([a-z0-9][a-z0-9-]{0,63})(\/shots|\/chat|\/proposals)?$/);
   // tác phẩm trả về Studio luôn mang tên thư viện mới (phân cảnh lưu trước v0.12 có thể còn afi.*)
-  if (wm && !wm[2] && m === 'GET') { const w = store.getWork(wm[1]); return w ? send(res, 200, mcp.canonRefs(w)) : fail(res, 404, 'không có tác phẩm này'); }
+  if (wm && !wm[2] && m === 'GET') { const w = store.getWork(wm[1]); return w ? send(res, 200, mcp.workView(w)) : fail(res, 404, 'không có tác phẩm này'); }
   if (wm && wm[2] === '/shots' && m === 'POST') {
     const b = await body(req, 200 * 1024);
     // warnings (luật ghép âm S2–S5, S7 — v0.18) đi kèm tác phẩm trả về để Studio hiện cạnh phân cảnh; lỗi (S1, S6) là 422 có errors[] kèm path
-    try { const r = mcp.saveShotChecked(Object.assign({}, b, { work: wm[1] })), w = mcp.canonRefs(store.getWork(wm[1])); if (r.warnings) w.warnings = r.warnings; return send(res, 200, w); }
+    try { const r = mcp.saveShotChecked(Object.assign({}, b, { work: wm[1] })), w = mcp.workView(store.getWork(wm[1])); if (r.warnings) w.warnings = r.warnings; return send(res, 200, w); }
     catch (e) { return send(res, e.code || 400, { error: e.message, errors: e.errors || null }); }
   }
   // đề xuất sửa của AI chờ chủ duyệt (propose_edit): { id, action: 'apply' | 'dismiss' } — áp dụng đi qua cổng phân cảnh như mọi lần lưu
