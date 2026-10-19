@@ -122,6 +122,8 @@ class OAuth {
     }
   }
   get resource() { return this.publicUrl + '/mcp'; }
+  // RFC 8707: máy này chỉ có MỘT resource (H/mcp) — client gửi origin trần H cũng hiểu là H/mcp (token vẫn mang aud = H/mcp), mọi thứ khác là invalid_target
+  ownResource(u) { const c = canonResource(u); return c === this.resource || c === this.publicUrl; }
   get metaUrl() { return this.publicUrl + '/.well-known/oauth-protected-resource/mcp'; }   // RFC 9728 §3.1: hậu tố đường dẫn của resource chèn sau host
 
   /* ------------------------------------------------------------ lưu trữ */
@@ -255,7 +257,7 @@ class OAuth {
     if (!/^[A-Za-z0-9_-]{43}$/.test(ch) || ch.length > MAX.challenge) return back('invalid_request', 'cần code_challenge (PKCE S256, 43 ký tự base64url)');
     if (p('code_challenge_method') !== 'S256') return back('invalid_request', 'cần code_challenge_method=S256');
     const res = p('resource');
-    if (res && canonResource(res) !== this.resource) return back('invalid_target', 'resource phải là ' + this.resource);
+    if (res && !this.ownResource(res)) return back('invalid_target', 'resource phải là ' + this.resource);
     const req = p('scope').slice(0, MAX.scope).split(/\s+/).filter(x => SCOPES.indexOf(x) >= 0);
     // gợi ý mức quyền: mức cao nhất agent xin nhưng không quá mcp:write — mcp:owner chỉ khi chủ chủ động chọn
     const top = req.length ? SCOPES[Math.max.apply(null, req.map(x => SCOPES.indexOf(x)))] : '';
@@ -310,7 +312,7 @@ class OAuth {
     const c = a.client, gt = str(f.grant_type, 40);
     if (gt !== 'authorization_code' && gt !== 'refresh_token') return oerr(400, 'unsupported_grant_type', 'grant_type: authorization_code | refresh_token');
     if (c.grantTypes.indexOf(gt) < 0) return oerr(400, 'unauthorized_client', 'client này không đăng ký grant_type ' + gt);
-    if (f.resource !== undefined && f.resource !== '' && canonResource(str(f.resource, MAX.uri)) !== this.resource) return oerr(400, 'invalid_target', 'resource phải là ' + this.resource);
+    if (f.resource !== undefined && f.resource !== '' && !this.ownResource(str(f.resource, MAX.uri))) return oerr(400, 'invalid_target', 'resource phải là ' + this.resource);
     if (gt === 'authorization_code') {
       const rec = this.codes.get(sha(str(f.code, MAX.code)));
       if (!rec) return oerr(400, 'invalid_grant', 'code sai hoặc đã hết hạn');

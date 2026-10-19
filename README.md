@@ -85,6 +85,9 @@ Lỗi có mã ổn định: `[VALIDATION_FAILED]`, `NOT_FOUND`… kèm `structur
 
 Tạo linh kiện: `get_part_spec` → vẽ (SVG an toàn, token màu) → `preview_part` (bàn soát) → `save_part`. Trợ lý AI trong Studio (dock cột phải ở mọi khu; ở Tạo tác là AI đạo diễn) dùng đúng bộ tool này — mọi lối ghi đi qua một cổng kiểm (xem `docs/QUY-TRINH-LINH-KIEN.md` mục 6).
 
+### Nối claude.ai bằng `https://tên-miền/mcp` — OAuth, chỉ cần bấm Cấp phép (v0.19)
+App tự làm máy chủ cấp phép OAuth 2.1, gồm khám phá RFC 9728 / 8414, tự đăng ký client (DCR), PKCE S256 và token có hạn, lưu dạng băm. Cách nối: đặt `GC_PUBLIC_URL=https://tên-miền`, vào claude.ai *Customize › Connectors › Add custom connector*, dán `https://tên-miền/mcp` rồi bấm **Connect**. Trang **Cấp phép** của app hiện ra để chọn mức quyền (`mcp:read` · `mcp:write` · `mcp:owner`), xác nhận bằng token chủ máy. Quản lý và thu hồi ở **Studio › Hệ thống › Kết nối agent**. Nếu dùng proxy hoặc trang đăng nhập riêng thì phải cho các đường máy (`/mcp`, `/.well-known/oauth-*`, `/oauth/register|token|revoke`) đi thẳng tới app. Đoạn Caddy mẫu nằm ở `docs/Caddyfile.oauth.example`; cách xử lý Cloudflare và các lỗi thường gặp nằm trong `docs/HUONG-DAN.md` › mục 6. Bản cài đã `genchibi expose` trước v0.19 thì chạy lại lệnh đó một lần.
+
 ### Mở MCP ra Internet — một lệnh, một link
 Cần một tên miền do Cloudflare quản lý DNS (gói miễn phí là đủ).
 
@@ -92,7 +95,7 @@ Cần một tên miền do Cloudflare quản lý DNS (gói miễn phí là đủ
 genchibi expose chibi.example.com   # lần đầu mở trình duyệt đăng nhập Cloudflare một lần
 ```
 
-Lệnh tự làm hết: tạo Cloudflare Tunnel, trỏ DNS, **chỉ cho đường `/mcp` đi qua** (Studio ở lại máy), sinh khoá, bật token cho Studio, khởi động lại, thử gọi qua Internet, rồi in ra **link MCP**:
+Lệnh tự làm hết: tạo Cloudflare Tunnel, trỏ DNS, **chỉ cho đường `/mcp` và các đường OAuth đi qua** (Studio ở lại máy), sinh khoá, bật token cho Studio, khởi động lại, thử gọi qua Internet, rồi in ra **link MCP**:
 
 ```
 https://chibi.example.com/mcp/<khoá>
@@ -100,7 +103,7 @@ https://chibi.example.com/mcp/<khoá>
 
 Agent dán link là nối được — không cần header:
 - Claude Code: `claude mcp add -s user --transport http gen-chibi <link>`
-- Claude web/desktop: Settings › Connectors › Add custom connector › dán link
+- Claude web/desktop: Customize › Connectors › Add custom connector › dán link (hoặc dán `https://chibi.example.com/mcp` để nối bằng OAuth, xem mục trên)
 - Cursor và client khác: `{"mcpServers":{"gen-chibi":{"url":"<link>"}}}`
 
 Link chỉ cấp quyền MCP (không mở Studio hay cài đặt). Các lệnh khác: `genchibi link` (in lại link) · `genchibi link --check` · `genchibi expose --rotate` (đổi khoá, link cũ chết ngay) · `genchibi expose --off` · `genchibi expose --quick` (link tạm `*.trycloudflare.com`, không cần tài khoản, đổi mỗi lần khởi động lại). Docker: tunnel chạy thành container `gen-chibi-tunnel`, tự bật lại cùng app. Node: cần `cloudflared` trong PATH.

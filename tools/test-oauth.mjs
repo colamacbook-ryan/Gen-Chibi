@@ -163,6 +163,8 @@ try {
   await errRedirect({ resource: H + '/khac' }, 'invalid_target', 'resource đúng host sai đường dẫn');
   r = await A({ resource: 'HTTPS://Chibi.Example.Test:443/mcp/' }); ok(r.status === 200, 'resource chuẩn hoá (chữ hoa, port mặc định, "/" cuối) vẫn khớp H/mcp');
   r = await A({ resource: '' }); ok(r.status === 200, 'resource vắng → chấp nhận');
+  r = await A({ resource: H }); ok(r.status === 200, 'resource = origin trần H → hiểu là H/mcp (máy chỉ có một resource)');
+  await errRedirect({ resource: 'https://khac.example' }, 'invalid_target', 'origin trần của máy khác');
   r = await A({ scope: 'lạ khác' }); ok(r.status === 200, 'scope lạ không gây lỗi (chủ chọn mức)');
   r = await A({ state: 'x'.repeat(600) }); ok(r.status === 302 && /error=invalid_request/.test(r.headers.get('location')), 'state quá dài bị chặn');
   r = await A({ client_id: 'x'.repeat(5000) }); ok(r.status === 400 && !r.headers.get('location'), 'client_id dài bất thường → trang lỗi');
@@ -205,6 +207,8 @@ try {
   r = await exchange(M, { ...g, pk: { verifier: g.pk.verifier } }); ok((await r.json()).error === 'invalid_grant', '…và mã đã bị đốt, không thử lại được');
   g = await grantCode(M); r = await exchange(M, g, { redirect_uri: 'https://claude.com/api/mcp/auth_callback' }); ok((await r.json()).error === 'invalid_grant', 'redirect_uri lúc đổi khác lúc xin → invalid_grant');
   g = await grantCode(M); r = await exchange(M, g, { resource: 'https://khac.example/mcp' }); j = await r.json(); ok(r.status === 400 && j.error === 'invalid_target', 'resource sai lúc đổi → invalid_target');
+  g = await grantCode(M); r = await exchange(M, g, { resource: H }); j = await r.json(); ok(r.status === 200 && j.access_token, 'resource = origin trần lúc đổi → vẫn cấp token (aud = H/mcp)');
+  r = await initWith(M, j.access_token); ok(r.status === 200, '…và token đó gọi được /mcp');
   g = await grantCode(M); const other = await (await dcr(M, { client_name: 'khác', redirect_uris: [CB] })).json();
   r = await exchange(M, g, { client_id: other.client_id }); ok((await r.json()).error === 'invalid_grant', 'client khác đổi mã của client này → invalid_grant');
   r = await exchange(M, g, { client_id: 'gcc_khong_co' }); j = await r.json(); ok(r.status === 401 && j.error === 'invalid_client', 'client_id lạ → 401 invalid_client');

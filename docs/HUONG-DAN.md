@@ -177,9 +177,63 @@ Bảng kiểu Data Console (desktop): mỗi hàng một âm — **ID âm** (tên
 - 53 tool; agent đi qua **cùng cổng kiểm** với Studio. Lỗi trả về có mã (`[VALIDATION_FAILED]`, `NOT_FOUND`…) và chỉ đúng trường sai — agent tự sửa được.
 - Agent không có MCP client vẫn dùng được qua HTTP thuần (xem `agent/GUIDE.md` mục 1).
 
+### Nối claude.ai bằng một địa chỉ `https://tên-miền/mcp` (OAuth, từ v0.19)
+Agent tự tìm cách đăng nhập, tự đăng ký, còn bạn chỉ cần bấm **Cấp phép** một lần trên trang web của app. Không phải chép khoá hay dán token vào agent.
+
+1. **Đặt địa chỉ công khai.** Trong `.env` của bản cài, ghi `GC_PUBLIC_URL=https://tên-miền`: đúng địa chỉ mở được từ Internet, không có `/` ở cuối, không ghi cổng. Thêm `GC_API_TOKEN` (bắt buộc khi mở ra ngoài) và `GC_ALLOWED_HOSTS=tên-miền`, rồi chạy `genchibi restart`. Nếu dùng `genchibi expose tên-miền`, lệnh tự đặt cả ba và tự mở đúng các đường cần thiết qua Cloudflare Tunnel. Bản cài đã chạy `expose` trước v0.19 thì **chạy lại `genchibi expose tên-miền` một lần** để tunnel mở thêm các đường OAuth.
+2. **Tự đặt proxy (Caddy, nginx…) thì mở các đường cho máy**, xem *Đứng sau proxy và trang đăng nhập riêng* bên dưới.
+3. **Thêm connector trên claude.ai:** vào *Customize › Connectors › Add custom connector*, dán `https://tên-miền/mcp`, bấm **Add**, rồi bấm **Connect**. Để trống *Advanced settings*: không nhập Client ID / Secret, app tự đăng ký.
+4. **Cấp phép.** Trình duyệt mở trang **Cấp phép kết nối agent** của app. Xem tên agent và **địa chỉ nó sẽ quay về** (phải là `claude.ai` hoặc `claude.com`), chọn mức quyền, rồi bấm **Cấp phép**. Trình duyệt này đã đăng nhập Studio thì trang tự dùng token đó; nếu chưa, dán token chủ máy (`GC_API_TOKEN`) vào ô trên trang.
+5. **Mở một phiên mới** trên claude.ai hoặc Claude Code: tool gen-chibi sẽ xuất hiện. Phiên đang mở không tự nạp connector mới.
+
+| Mức quyền | Agent làm được |
+|---|---|
+| **Chỉ xem** (`mcp:read`) | Đọc thư viện, tác phẩm, kiểm công thức, dựng ảnh xem thử. Không lưu gì. |
+| **Tạo và sửa** (`mcp:write`, mặc định) | Giống link MCP có khoá: tạo và sửa nhân vật, vật phẩm, cảnh, tác phẩm trong dự án. Không tốn lượt giọng AI, không cập nhật app hay quay lại bản cũ. |
+| **Toàn quyền chủ máy** (`mcp:owner`) | Giống token chủ máy: thêm giọng AI (tốn lượt), gỡ gói âm, cập nhật hoặc quay lại bản cũ. Chỉ cấp cho agent bạn tin hoàn toàn. |
+
+- **Quản lý ở Studio › Hệ thống › Kết nối agent:** xem agent nào đang nối, mức quyền và lần dùng cuối. Bấm **Thu hồi** thì agent mất quyền ngay, kể cả token làm mới. Muốn đổi mức thì thu hồi rồi Connect lại.
+- **Token:** dùng được 1 giờ và tự làm mới. Không dùng 30 ngày thì hết hạn. App chỉ lưu bản băm trong `data/oauth.json`.
+- **Claude Code CLI:** chạy `claude mcp add --transport http gen-chibi https://tên-miền/mcp`, rồi gõ `/mcp` trong Claude Code và chọn **Authenticate**. Trang Cấp phép sẽ mở trong trình duyệt.
+- **Link có khoá cũ** (`/mcp/<khoá>`) vẫn chạy như trước, dành cho agent không hỗ trợ OAuth.
+
+#### Đứng sau proxy và trang đăng nhập riêng
+claude.ai gọi các đường dưới đây **từ máy chủ của Anthropic**, nên không có cookie đăng nhập của bạn. Các đường này phải đi **thẳng** tới app, và chúng vẫn được khoá bằng token OAuth của chính app:
+
+`/mcp` · `/.well-known/oauth-protected-resource…` · `/.well-known/oauth-authorization-server` · `/oauth/register` · `/oauth/token` · `/oauth/revoke`
+
+Nếu có trang đăng nhập riêng trước app (forward_auth, Authelia, basic auth…), đặt nó **bên trong một `handle`**. Đừng đặt ở cấp site: khi đó nó chạy cho cả `/mcp`, Claude nhận trang đăng nhập (302 / 401 của cổng) thay vì câu trả lời "chỉ đường" của app, và connector báo không kết nối được. Trang Cấp phép (`/oauth/authorize`, `/api/oauth/approve`) cứ để sau cổng đăng nhập: bạn đăng nhập trước rồi bấm Cấp phép, app vẫn hỏi token chủ máy.
+
+Mẫu đầy đủ có chú thích nằm ở `docs/Caddyfile.oauth.example`. Bản rút gọn:
+
+```caddy
+tên-miền {
+	@machine path /mcp /mcp/* /.well-known/oauth-protected-resource* /.well-known/oauth-authorization-server* /oauth/register /oauth/token /oauth/revoke
+	handle @machine {
+		reverse_proxy 127.0.0.1:7480
+	}
+	handle {
+		# cổng đăng nhập riêng của bạn (forward_auth …) đặt ở đây
+		reverse_proxy 127.0.0.1:7480
+	}
+}
+```
+
+- **Mạng:** dùng cổng 443. Tên miền phải có bản ghi A (IPv4 công khai). Không chuyển hướng `tên-miền` ↔ `www.tên-miền`, vì chuyển hướng làm rơi header `Authorization`.
+- **Cloudflare:** *Bot Fight Mode*, *Block AI bots* và *AI Crawl Control* trả 403 cho agent `Claude-User`. Tạo một luật WAF **Skip** cho dải IP của Anthropic `160.79.104.0/21`, hoặc tắt các tính năng đó cho các đường máy ở trên.
+- **Cloudflare + giới hạn tốc độ:** app giới hạn đăng ký / thử sai theo IP khách. Mặc định chỉ đọc mục cuối của `X-Forwarded-For` (và chỉ khi kết nối tới app đến từ loopback hoặc mạng riêng). Đứng sau Cloudflare thì thêm `GC_CLIENT_IP_HEADER=cf-connecting-ip` vào `.env` (hoặc `x-real-ip`) để app thấy IP thật của khách thay vì IP của proxy.
+- **Tự thêm service vào Docker** (Caddy, trang đăng nhập…): ghi vào `docker-compose.override.yml` cạnh `docker-compose.yml`. Docker Compose tự gộp hai file, còn `genchibi update` không bao giờ đụng tới file override.
+
 ## Câu hỏi thường gặp
 - **AI tự tạo asset có cần duyệt không?** Không — lưu dạng **nháp** trong dự án của tác phẩm và dùng ngay. Chỉ khi muốn đưa vào gói bán bạn mới bấm **Phát hành**.
 - **Phim HTML gửi đi có lộ engine không?** Bộ phát nằm trong tệp phim với giấy phép **chỉ để xem phim đó**. Bản SaaS sau này sẽ chuyển sang trình phát do Gen Labs lưu trữ hoặc xuất video.
 - **Lỡ sửa hỏng?** Mọi asset và tác phẩm có phiên bản; bản cũ nằm trong thư mục dữ liệu (`versions/`).
 - **Bấm Cập nhật báo "yêu cầu từ nguồn lạ bị chặn"?** Máy chủ chỉ nhận lệnh thay đổi từ chính trang Studio của nó. Câu báo (từ v0.18.1) ghi rõ *trang đang mở ở đâu* và *máy chủ nhận địa chỉ nào*: mở lại Studio bằng đúng địa chỉ máy chủ (thường là `http://127.0.0.1:7480`), hoặc cập nhật ngay trong terminal bằng `genchibi update` (không đi qua trình duyệt). `localhost` / `127.0.0.1` / `[::1]` cùng cổng được coi là một; proxy đứng trước thì cho proxy gửi `X-Forwarded-Host` hoặc đặt `GC_PUBLIC_URL`.
+- **Thêm connector trên claude.ai báo lỗi, hoặc không thấy trang Cấp phép?** Kiểm theo thứ tự:
+  1. `curl -i -X POST https://tên-miền/mcp -H 'Content-Type: application/json' -d '{}'` phải trả **401** kèm `WWW-Authenticate: Bearer resource_metadata="…"`. Nếu ra trang đăng nhập, 302 hay 403 thì proxy hoặc Cloudflare đang chặn (xem *Đứng sau proxy*).
+  2. `curl https://tên-miền/.well-known/oauth-authorization-server` phải trả JSON có `issuer` đúng `https://tên-miền`.
+  3. `GC_PUBLIC_URL` phải khớp **từng chữ** với địa chỉ đã dán vào claude.ai.
+
+  Nếu đổi địa chỉ, xoá connector rồi thêm lại, vì claude.ai nhớ kết quả dò khoảng 5 phút.
+- **Có trang đăng nhập riêng trước app (do agent khác dựng) thì cập nhật có mất không?** Không mất, miễn là trang đó nằm **ngoài** thư mục cài: Caddyfile, service riêng, hoặc `docker-compose.override.yml`. Sẽ mất nếu nó được ghi vào `docker-compose.yml` hay sửa file trong `current/`: mỗi lần cập nhật hoặc khởi động, genchibi chép lại `docker-compose.yml` gốc, còn bản mới được giải nén vào thư mục riêng.
 - **Hiệu năng?** Mỗi sân khấu tối đa 8 diễn viên sống; ảnh tĩnh được cache; hết phân cảnh là huỷ diễn viên.
