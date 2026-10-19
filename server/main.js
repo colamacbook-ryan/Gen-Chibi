@@ -11,7 +11,7 @@ const { AI } = require('./ai');
 const { Voice, VOICES, GV } = require('./voice');
 const { MCP, TOOLS: MCP_TOOLS, cleanContext, cleanAnchors, scopeCtx } = require('./mcp');   // chỉ dẫn + bộ tool theo khu của dock nằm trong mcp.js (một nguồn)
 const Agent = require('./agent.js');
-const { OAuth, SCOPES: OAUTH_SCOPES, SCOPE_INFO: OAUTH_SCOPE_INFO } = require('./oauth');
+const { OAuth, clientIp, SCOPES: OAUTH_SCOPES, SCOPE_INFO: OAUTH_SCOPE_INFO } = require('./oauth');
 const { consentPage, errorPage } = require('./oauth-page');
 const { Store, KEY, CHAT_KINDS, readJSON, writeJSON } = require('./store');
 const { loadEngine } = require('./engine-node');
@@ -98,11 +98,6 @@ function oauthBody(req) {
       reject(Object.assign(new Error('Content-Type phải là application/x-www-form-urlencoded hoặc application/json'), { code: 415 }));
     });
   });
-}
-// IP khách để giới hạn tốc độ: sau Cloudflare / Caddy thì địa chỉ socket luôn là proxy → ưu tiên header proxy đặt (cf-connecting-ip, x-real-ip, mục CUỐI của x-forwarded-for = do proxy gần nhất ghi)
-function clientIp(req) {
-  const h = req.headers;
-  return String(h['cf-connecting-ip'] || h['x-real-ip'] || String(h['x-forwarded-for'] || '').split(',').pop().trim() || req.socket.remoteAddress || '?').slice(0, 64);
 }
 function bearerOf(req) { return String(req.headers.authorization || '').replace(/^Bearer\s+/i, '') || String(req.headers['x-gc-token'] || ''); }
 
@@ -202,6 +197,10 @@ async function dockTurn(b) {
   return out;
 }
 /* ---------------------------------------------------------------- OAuth 2.1 (v0.19) */
+// Trần TOÀN CỤC cho cả máy (v0.19, không dựa vào IP). GC_OAUTH_RATE (1–100, mặc định 1) nhân các trần này — chỉ dùng để chạy test số lượng lớn
+const OAUTH_RATE = Math.max(1, Math.min(100, Math.round(+process.env.GC_OAUTH_RATE) || 1));
+const GLOBAL_CAP = { register: [30, 600], token: [300, 60], authorize: [120, 60], approve: [10, 60] };   // [số lần, giây]
+const oauthGlobalLimit = kind => oauth.limitGlobal(kind, GLOBAL_CAP[kind][0] * OAUTH_RATE, GLOBAL_CAP[kind][1]);
 // Cho agent tự đăng ký: công tắc của chủ (Cài đặt › Kết nối agent), mặc định BẬT
 const registerOn = () => settings().oauthRegister !== false;
 function oauthView() {
@@ -216,11 +215,12 @@ async function oauthRoute(req, res, url, p, m) {
     if (m !== 'GET' && m !== 'HEAD') { send(res, 405, { error: 'chỉ GET' }, null, { Allow: 'GET, HEAD' }); return true; }
     send(res, 200, wk[1] === 'oauth-protected-resource' ? oauth.protectedResource() : oauth.authServer(registerOn())); return true;
   }
-  const ip = clientIp(req), slow = (key, max, sec) => { const w = oauth.limit(key + ip, max, sec); if (w) send(res, 429, { error: 'temporarily_unavailable', error_description: 'quá nhiều yêu cầu — thử lại sau ' + w + ' giây' }, null, { 'Retry-After': String(w) }); return !!w; };
+  // trần TOÀN CỤC chặn trước (không dựa vào IP — header proxy có thể bị giả), rồi trần theo IP làm lớp phụ. Trả true nếu đã trả 429
+  const ip = clientIp(req.headers, req.socket.remoteAddress), slow = (kind, ipMax, ipSec) => { const w = oauthGlobalLimit(kind) || oauth.limit(kind + ':' + ip, ipMax, ipSec); if (w) send(res, 429, { error: 'temporarily_unavailable', error_description: 'quá nhiều yêu cầu — thử lại sau ' + w + ' giây' }, null, { 'Retry-After': String(w) }); return !!w; };
   const oerr = (e) => send(res, e.code >= 400 && e.code < 600 ? e.code : 400, { error: 'invalid_request', error_description: e.message });
   if (p === '/oauth/authorize') {
     if (m !== 'GET') { send(res, 405, { error: 'chỉ GET' }, null, { Allow: 'GET' }); return true; }
-    if (slow('auth:', 60, 60)) return true;
+    if (slow('authorize', 60, 60)) return true;
     const r = oauth.authorize(url.searchParams);
     if (r.page) { const e = errorPage(r.page); send(res, 400, e.html, 'text/html; charset=utf-8', { 'Content-Security-Policy': e.csp }); return true; }
     if (r.redirect) { res.writeHead(302, { Location: r.redirect, 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' }); res.end(); return true; }
@@ -229,7 +229,7 @@ async function oauthRoute(req, res, url, p, m) {
   }
   if (p === '/oauth/register' || p === '/oauth/token' || p === '/oauth/revoke') {
     if (m !== 'POST') { send(res, 405, { error: 'chỉ POST' }, null, { Allow: 'POST' }); return true; }
-    if (p === '/oauth/register' ? slow('reg:', 20, 600) : slow('tok:', 60, 60)) return true;
+    if (p === '/oauth/register' ? slow('register', 20, 600) : slow('token', 60, 60)) return true;
     if (p === '/oauth/register' && !registerOn()) { send(res, 403, { error: 'access_denied', error_description: 'chủ máy đã tắt "cho phép agent tự đăng ký" (Studio › Hệ thống › Kết nối agent)' }); return true; }
     let f; try { f = await oauthBody(req); } catch (e) { oerr(e); return true; }
     const r = p === '/oauth/register' ? oauth.register(f) : p === '/oauth/token' ? oauth.token(f) : oauth.revoke(f);
@@ -261,6 +261,11 @@ async function route(req, res) {
   const viaProxy = !!(req.headers['x-forwarded-for'] || req.headers.forwarded || req.headers['cf-connecting-ip'] || req.headers['x-real-ip']);
   if (!API_TOKEN && viaProxy && !viaLink) return fail(res, 403, 'đang đi qua tunnel/proxy: phải đặt GC_API_TOKEN trước khi mở ra ngoài');
 
+  // approve là đường /api duy nhất tunnel mở ra Internet → chỗ thử token chủ máy: trần toàn cục (10 lần / phút) chặn TRƯỚC khi kiểm token
+  if (p === '/api/oauth/approve' && m === 'POST' && oauth.enabled) {
+    const w = oauthGlobalLimit('approve');
+    if (w) return send(res, 429, { error: 'quá nhiều lần thử duyệt — thử lại sau ' + w + ' giây' }, null, { 'Retry-After': String(w) });
+  }
   // ---- OAuth (v0.19): khám phá + đăng ký + token + thu hồi là đường MÁY (công khai, bảo vệ bằng PKCE / token — không cần cookie hay phiên Studio); authorize là trang cho chủ
   if (p.startsWith('/oauth/') || p.startsWith('/.well-known/oauth-')) { const done = await oauthRoute(req, res, url, p, m); if (done) return; }
 

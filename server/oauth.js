@@ -32,6 +32,16 @@ const text = (v, n) => str(v, n * 2).replace(/[\u0000-\u001F\u007F-\u009F\u061C\
 const iso = ms => new Date(ms).toISOString();
 const oerr = (status, error, error_description, extra) => ({ status, body: Object.assign({ error, error_description }, extra || {}) });
 
+// IP khách để giới hạn tốc độ. Header proxy (cf-connecting-ip, x-real-ip, mục CUỐI của x-forwarded-for = do proxy gần nhất ghi) chỉ đáng tin khi kết nối TRỰC TIẾP tới app là của proxy
+// (loopback / mạng riêng: 127/8, ::1, 10/8, 172.16/12, 192.168/16, fc00::/7); ngược lại ai cũng tự đặt được header → dùng địa chỉ socket. Đây chỉ là lớp phụ: trần TOÀN CỤC (limitGlobal) không dựa vào IP.
+const PRIVATE_PEER = /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|::1$|f[cd][0-9a-f]{2}:)/i;
+function clientIp(headers, peer) {
+  peer = String(peer || '').replace(/^::ffff:/i, '');
+  if (!PRIVATE_PEER.test(peer)) return peer.slice(0, 64) || '?';
+  const h = headers || {};
+  return String(h['cf-connecting-ip'] || h['x-real-ip'] || String(h['x-forwarded-for'] || '').split(',').pop().trim() || peer).slice(0, 64);
+}
+
 // redirect_uri: https hoặc http loopback (CLI); không fragment, không user:pass, độ dài có trần. Trả '' nếu hợp lệ, ngược lại lý do
 function shapeRedirect(u) {
   if (typeof u !== 'string' || !u || u.length > MAX.uri || /[\s\u0000-\u001F\u007F]/.test(u)) return 'redirect_uri rỗng, có khoảng trắng hoặc dài quá ' + MAX.uri + ' ký tự';
@@ -60,15 +70,23 @@ class OAuth {
     this.enabled = !!raw;
     this.now = opts.now || Date.now;
     this.accessTtl = Math.max(1, Math.min(86400, Math.round(+opts.accessTtl) || TTL.access));
-    this.redirects = DEFAULT_REDIRECTS.concat((opts.redirects || []).filter(u => !shapeRedirect(u)));
+    const extra = (opts.redirects || []).filter(u => !shapeRedirect(u));
+    this.redirects = DEFAULT_REDIRECTS.concat(extra);
     this.redirectKeys = new Set(this.redirects.map(redirectKey));
+    this.defaultKeys = new Set(DEFAULT_REDIRECTS.map(redirectKey));
     this.file = path.join(opts.dir, 'oauth.json');
     let d = {}; try { d = JSON.parse(fs.readFileSync(this.file, 'utf8')); } catch (e) { d = {}; }
     this.s = { v: 1, clients: d.clients || {}, grants: d.grants || {}, tokens: d.tokens || {} };
     this.codes = new Map();      // băm mã → { client, redirectUri, challenge, scope, exp, used, grant } — chỉ trong bộ nhớ
     this.pending = new Map();    // id yêu cầu chờ chủ duyệt → { client, redirectUri, state, challenge, requested, resource, exp }
-    this.buckets = new Map();    // giới hạn tốc độ theo khoá (IP)
+    this.buckets = new Map();    // giới hạn tốc độ theo IP (lớp phụ; đầy thì bỏ khoá cũ nhất)
+    this.global = new Map();     // trần TOÀN CỤC theo loại việc (không phụ thuộc IP, không bị dồn ra khỏi bộ nhớ)
     this.useDirty = false;
+    // đổi GC_PUBLIC_URL sang miền khác: mọi token cấp cho miền cũ (aud ≠ H/mcp hiện tại) bị gỡ cùng cả chuỗi — kể cả refresh. Chỉ khi OAuth bật (tắt tạm thì giữ nguyên để bật lại còn dùng)
+    if (this.enabled) {
+      const stale = new Set(Object.keys(this.s.tokens).filter(h => this.s.tokens[h].aud !== this.resource).map(h => this.s.tokens[h].g));
+      if (stale.size) { stale.forEach(g => this.dropGrant(g)); this.sweep(); this.save(); }
+    }
   }
   get resource() { return this.publicUrl + '/mcp'; }
   get metaUrl() { return this.publicUrl + '/.well-known/oauth-protected-resource/mcp'; }   // RFC 9728 §3.1: hậu tố đường dẫn của resource chèn sau host
@@ -102,6 +120,7 @@ class OAuth {
     for (const [h, c] of this.codes) if (c.exp + 600000 <= t) this.codes.delete(h);   // giữ thêm 10 phút để mã dùng-lại còn bị nhận ra
     for (const [id, p] of this.pending) if (p.exp <= t) this.pending.delete(id);
     for (const [k, b] of this.buckets) if (b.reset <= t) this.buckets.delete(k);
+    for (const [k, b] of this.global) if (b.reset <= t) this.global.delete(k);
     if (ch) this.save();
   }
   live(clientId) { return Object.values(this.s.grants).some(g => g.client === clientId); }
@@ -116,14 +135,16 @@ class OAuth {
     for (const h of Object.keys(this.s.tokens)) if (this.s.tokens[h].g === gid) delete this.s.tokens[h];
   }
 
-  /* ------------------------------------------------------------ giới hạn tốc độ (trong bộ nhớ, theo khoá — IP) */
+  /* ------------------------------------------------------------ giới hạn tốc độ (trong bộ nhớ) */
   // trả 0 nếu cho qua, ngược lại số giây phải đợi
-  limit(key, max, windowSec) {
-    const t = this.now(), b = this.buckets.get(key);
-    if (!b || b.reset <= t) { if (this.buckets.size >= MAX.buckets) this.buckets.clear(); this.buckets.set(key, { n: 1, reset: t + windowSec * 1000 }); return 0; }
+  hit(map, key, max, windowSec) {
+    const t = this.now(), b = map.get(key);
+    if (!b || b.reset <= t) { if (map === this.buckets && map.size >= MAX.buckets) map.delete(map.keys().next().value); map.set(key, { n: 1, reset: t + windowSec * 1000 }); return 0; }
     if (++b.n > max) return Math.max(1, Math.ceil((b.reset - t) / 1000));
     return 0;
   }
+  limit(key, max, windowSec) { return this.hit(this.buckets, key, max, windowSec); }                 // theo IP
+  limitGlobal(kind, max, windowSec) { return this.hit(this.global, kind, max, windowSec); }          // cho cả máy — chặn trước khi tới lớp theo IP
 
   /* ------------------------------------------------------------ metadata (RFC 9728 / RFC 8414) */
   protectedResource() {
@@ -164,12 +185,12 @@ class OAuth {
     this.s.clients[id] = c; this.save();
     return { status: 201, body: { client_id: id, client_id_issued_at: Math.floor(t / 1000), client_name: c.name, redirect_uris: c.redirectUris, token_endpoint_auth_method: 'none', grant_types: grants, response_types: ['code'], scope: (requested.length ? requested : [DEFAULT_SCOPE]).join(' ') } };
   }
-  // đầy trần: xoá client cũ chưa từng cấp phép trước (ưu tiên cái không có yêu cầu đang chờ duyệt), rồi client đã chết (hết hạn / thu hồi). Còn lại toàn client đang sống → false
+  // đầy trần: chỉ xoá client CHƯA từng cấp phép và KHÔNG có yêu cầu đang chờ chủ duyệt (cũ nhất trước), rồi client đã chết (hết hạn / thu hồi, không còn token).
+  // Client đang chờ duyệt hoặc đang hoạt động không bao giờ bị đẩy ra — còn lại toàn client như vậy → false (register trả 429), để DCR flood không đuổi được client thật
   evict() {
     const all = Object.values(this.s.clients).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
     const busy = new Set([...this.pending.values()].map(p => p.client));
-    const pool = all.filter(c => !c.approvedAt).concat(all.filter(c => c.approvedAt && !this.live(c.id)));
-    const v = pool.find(c => !busy.has(c.id)) || pool[0];
+    const v = all.find(c => !c.approvedAt && !busy.has(c.id)) || all.find(c => c.approvedAt && !this.live(c.id) && !busy.has(c.id));
     if (!v) return false;
     this.dropClient(v.id); return true;
   }
@@ -184,6 +205,8 @@ class OAuth {
     if (!c) return { page: 'client_id không tồn tại hoặc đã hết hạn (client chưa được cấp phép tự xoá sau 24 giờ). Quay lại agent và thêm kết nối lại.' };
     // trùng tuyệt đối với bản đã đăng ký (riêng loopback bỏ qua port — CLI chọn port lúc chạy); lệch → trang lỗi, KHÔNG chuyển hướng (không open-redirect)
     if (!uri || uri.length > MAX.uri || shapeRedirect(uri) || !c.redirectUris.some(r => r === uri || redirectKey(r) === redirectKey(uri))) return { page: 'redirect_uri không trùng địa chỉ agent đã đăng ký — từ chối, không chuyển hướng.' };
+    // danh sách cho phép đổi sau lúc đăng ký (chủ bỏ một mục GC_OAUTH_REDIRECTS) → client cũ cũng mất quyền dùng callback đó
+    if (!this.redirectKeys.has(redirectKey(uri))) return { page: 'Địa chỉ quay về ' + new URL(uri).origin + ' không còn nằm trong danh sách cho phép của máy này (GC_OAUTH_REDIRECTS) — từ chối, không chuyển hướng.' };
     const back = (error, description) => ({ redirect: this.redirectTo(uri, { error, error_description: description, state }) });
     if (state.length > MAX.state) return back('invalid_request', 'state dài quá ' + MAX.state + ' ký tự');
     if (p('response_type') !== 'code') return back('unsupported_response_type', 'chỉ hỗ trợ response_type=code');
@@ -203,7 +226,7 @@ class OAuth {
   }
   callbackInfo(uri) {
     const x = new URL(uri), host = x.hostname.toLowerCase();
-    return { host, origin: x.origin, loopback: LOOP.has(host), known: this.redirectKeys.has(redirectKey(uri)) };
+    return { host, origin: x.origin, loopback: LOOP.has(host), known: this.defaultKeys.has(redirectKey(uri)), added: !this.defaultKeys.has(redirectKey(uri)) && this.redirectKeys.has(redirectKey(uri)) };   // known = claude.ai / claude.com · added = chủ thêm bằng GC_OAUTH_REDIRECTS · loopback = CLI trên máy chủ
   }
   redirectTo(uri, params) {
     const x = new URL(uri);
@@ -263,6 +286,7 @@ class OAuth {
     // refresh_token: xoay vòng — dùng lại refresh cũ = thu hồi cả chuỗi
     const h = sha(str(f.refresh_token, MAX.code)), t = this.s.tokens[h];
     if (!t || t.k !== 'r') return oerr(400, 'invalid_grant', 'refresh_token sai hoặc đã hết hạn');
+    if (t.aud !== this.resource) { this.dropGrant(t.g); this.save(); return oerr(400, 'invalid_grant', 'refresh_token cấp cho địa chỉ khác (đã đổi GC_PUBLIC_URL) — cần cấp phép lại'); }
     const g = this.s.grants[t.g];
     if (!g || g.client !== c.id) return oerr(400, 'invalid_grant', 'refresh_token không thuộc client này');
     if (t.used) { this.dropGrant(t.g); this.save(); return oerr(400, 'invalid_grant', 'refresh_token đã được dùng — cả chuỗi token đã bị thu hồi, cần cấp phép lại'); }
@@ -333,4 +357,4 @@ class OAuth {
   }
 }
 
-module.exports = { OAuth, SCOPES, SCOPE_INFO, DEFAULT_SCOPE, DEFAULT_REDIRECTS, TTL, shapeRedirect, canonResource };
+module.exports = { OAuth, clientIp, SCOPES, SCOPE_INFO, DEFAULT_SCOPE, DEFAULT_REDIRECTS, TTL, shapeRedirect, canonResource };

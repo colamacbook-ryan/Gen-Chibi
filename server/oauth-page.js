@@ -67,9 +67,10 @@ function consentPage(view, opts) {
   const js = `(function(){
 var D=JSON.parse(document.getElementById('gc-data').textContent),$=function(i){return document.getElementById(i)};
 $('ph').textContent=D.publicHost;$('cn').textContent=D.client;$('cb').textContent=D.callback.host;
-$('cc').textContent=D.callback.loopback?'máy của bạn (CLI)':D.callback.known?'tên miền quen':'tên miền lạ';$('cc').className='chip '+(D.callback.known||D.callback.loopback?'ok':'warn');
+var cbOk=D.callback.known||D.callback.loopback||D.callback.added;
+$('cc').textContent=D.callback.loopback?'máy của bạn (CLI)':D.callback.known?'tên miền quen':D.callback.added?'bạn đã thêm (GC_OAUTH_REDIRECTS)':'tên miền lạ';$('cc').className='chip '+(cbOk?'ok':'warn');
 $('rq').textContent=D.requested.length?D.requested.join(' '):'(không nói rõ — bạn chọn bên dưới)';
-if(!D.callback.known&&!D.callback.loopback){$('warn').hidden=false;$('warn').textContent='Tên miền '+D.callback.host+' không phải của claude.ai. Chỉ cấp nếu bạn tự thêm agent này.';}
+if(!cbOk){$('warn').hidden=false;$('warn').textContent='Tên miền '+D.callback.host+' không phải của claude.ai. Chỉ cấp nếu bạn tự thêm agent này.';}
 var sel=D.scope;
 D.scopes.forEach(function(s){var l=document.createElement('label');l.className='scope';var r=document.createElement('input');r.type='radio';r.name='scope';r.value=s.id;r.checked=s.id===sel;r.addEventListener('change',function(){sel=s.id});
 var b=document.createElement('b');b.textContent=s.label+' ('+s.id+')';var d=document.createElement('span');d.textContent=s.desc;l.appendChild(r);l.appendChild(b);l.appendChild(d);$('sc').appendChild(l);});
