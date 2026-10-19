@@ -279,6 +279,7 @@ class Voice {
     return job;
   }
   async designNow(R, L, ac, cs) {
+    this.capCheck(this.config());   // như render(): kiểm trần trong hàng đợi, ngay trước lời gọi Google
     const body = code => ({ store: true, voice: { type: 'prompted', display_name: ('gc-' + R.id + '-' + L + '-' + ac).slice(0, 60), gender: R.gender === 'f' ? 'female' : 'male', language_code: code, prompted: { input: cs.design } } });
     let r = await this.http.post(API + '/voices', body(cs.libLang));
     const msg = j => String((j && j.error && j.error.message) || '');
@@ -330,6 +331,8 @@ class Voice {
   seconds(file) { try { const w = wavInfo(fs.readFileSync(file)); return w ? +(w.data.length / (w.rate * 2)).toFixed(2) : null; } catch { return null; } }
   async render(t, voice, style, id, file) {
     if (fs.existsSync(file)) return { id, cached: true, seconds: this.seconds(file) };
+    // kiểm trần LẦN NỮA trong hàng đợi (tuần tự) ngay trước lời gọi Google — nhiều câu gửi cùng lúc đều qua kiểm sớm ở line() rồi vượt trần (TOCTOU)
+    this.capCheck(this.config());
     const key = this.key(); if (!key) throw fail(409, 'Chưa có API key Google AI Studio (Cài đặt AI › Giọng AI)');
     const c = this.config(), now = Date.now(), all = await this.models();
     if (!all.length) throw fail(502, 'Key này không gọi được model đọc giọng nào của Google');
