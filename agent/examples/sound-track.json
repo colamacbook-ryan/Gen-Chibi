@@ -1,0 +1,9 @@
+{
+  "project": "vi-du-agent",
+  "steps": [
+    { "actor": "thu-thu", "state": "proud", "say": "Xem chiêu mới của ta!" },
+    { "actor": "thu-thu", "state": "rage", "activity": "attack", "say": "", "sfx": ["wham"] },
+    { "actor": "ma-no-canh", "state": "dizzy", "say": "Ui da!" },
+    { "actor": "ma-no-canh", "state": "normal", "say": "", "sfx": ["ta-da"] }
+  ]
+}

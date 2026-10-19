@@ -757,7 +757,21 @@
   // từ vựng dàn dựng phim (engine/player.js dùng; âm thanh tổng hợp ở engine/audio.js)
   var FILM_CAMERAS = ['auto', 'wide', 'two', 'close'];
   var FILM_BUBBLES = ['say', 'shout', 'think', 'whisper'];
+  // 17 tên âm cũ (v0.17) — từ vựng công khai, luôn hợp lệ; từ v0.18 step.sfx nhận MỌI tên trong thư viện âm (engine/sounds.js: bộ chuẩn + gói của dự án)
   var FILM_SFX = ['pop', 'whoosh', 'step', 'sting', 'hit', 'boing', 'sparkle', 'rumble', 'drip', 'sad', 'snore', 'party', 'hmm', 'gong', 'chime', 'swish', 'tick'];
+  // âm đưa vào lược đồ / lời nhắc đạo diễn: bộ chuẩn + gói dùng chung + gói của dự án trong dàn diễn viên (lược đồ không phình theo gói dự án khác — như filmActions);
+  // chưa nạp sounds.js thì 17 tên cũ. Bộ kiểm (validateEvent) nhận mọi âm đã nạp; âm của dự án khác bị luật S6 của lintSoundTrack chặn lúc lưu tác phẩm.
+  function filmSounds() { return G.GenChibi && G.GenChibi.sounds || null; }
+  function filmSfx(cast) {
+    var S = filmSounds();
+    if (!S) return FILM_SFX.slice();
+    if (!cast) return S.names();
+    var pj = {}, seen = {}, out = [];
+    cast.forEach(function (a) { pj[a.project || ''] = 1; });
+    if (!Object.keys(pj).length) pj[''] = 1;
+    Object.keys(pj).forEach(function (p) { S.names({ project: p }).forEach(function (n) { if (!seen[n]) { seen[n] = 1; out.push(n); } }); });
+    return out;
+  }
   // từ vựng HÀNH ĐỘNG (biên đạo, v0.15) nằm ở engine/choreo.js + kinds/character/gen.choreo.js — chưa nạp thì kịch bản không có action
   // cast (tuỳ chọn): chỉ đòn của KHUNG + đòn của gói động tác thuộc dự án của dàn diễn viên (prompt / lược đồ không phình theo mọi gói — CNS-046);
   // bộ kiểm vẫn nhận mọi đòn đã nạp (gọi không kèm cast)
@@ -798,7 +812,7 @@
               to: { enum: castIds(cast) },
               camera: { enum: FILM_CAMERAS.slice() },
               bubble: { enum: FILM_BUBBLES.slice() },
-              sfx: { type: 'array', maxItems: 3, items: { enum: FILM_SFX.slice() } },
+              sfx: { type: 'array', maxItems: 3, items: { enum: filmSfx(cast) } },
               // hành động (biên đạo): đòn đánh cần target; người bị đánh phản ứng đúng khung va chạm (chưa nạp biên đạo → enum rỗng = không dùng được)
               action: { enum: Object.keys(FA.act) },
               target: { enum: castIds(cast) },
@@ -846,7 +860,15 @@
       if (s.to !== undefined && (S.to.enum.indexOf(s.to) < 0 || s.to === s.actor)) errs.push(pathOf('to') + '"to" phải là một diễn viên khác trong dàn diễn viên.');
       if (s.camera !== undefined && FILM_CAMERAS.indexOf(s.camera) < 0) errs.push(pathOf('camera') + 'camera chọn: ' + FILM_CAMERAS.join(', ') + '.');
       if (s.bubble !== undefined && FILM_BUBBLES.indexOf(s.bubble) < 0) errs.push(pathOf('bubble') + 'bubble chọn: ' + FILM_BUBBLES.join(', ') + '.');
-      if (s.sfx !== undefined && (!Array.isArray(s.sfx) || s.sfx.length > 3 || s.sfx.some(function (x) { return FILM_SFX.indexOf(x) < 0; }))) errs.push(pathOf('sfx') + 'sfx: mảng tối đa 3, chọn trong ' + FILM_SFX.join(', ') + '.');
+      if (s.sfx !== undefined) {
+        var SS = filmSounds();
+        if (!Array.isArray(s.sfx) || s.sfx.length > 3) errs.push(pathOf('sfx') + 'sfx: mảng tối đa 3 tên âm trong thư viện âm' + (SS ? ' (get_sound_spec · list_sounds).' : ': ' + FILM_SFX.join(', ') + '.'));
+        else s.sfx.forEach(function (x) {
+          if (typeof x === 'string' && (SS ? SS.has(x) : FILM_SFX.indexOf(x) >= 0)) return;
+          var sg = SS && typeof x === 'string' ? SS.suggest(x, '') : null;
+          errs.push(pathOf('sfx') + 'âm "' + String(x).slice(0, 32) + '" không có trong thư viện âm' + (sg ? ' — gần nhất: "' + sg + '"' : '') + ' (list_sounds).');
+        });
+      }
       var FA = filmActions(), ac = s.action !== undefined && own(FA.act, s.action) ? FA.act[s.action] : null;
       if (s.action !== undefined && !ac) errs.push(pathOf('action') + 'action "' + String(s.action).slice(0, 40) + '" không có (chọn: ' + Object.keys(FA.act).join(', ') + ').');
       if (ac && ac.attack && s.target === undefined) errs.push(pathOf('target') + 'đòn "' + s.action + '" cần "target" (người bị đánh).');
@@ -883,7 +905,14 @@
     }
     L.push('', 'Dàn dựng phim (tuỳ chọn — bộ phát tự dàn dựng nếu bỏ trống: nhân vật đi ra sân, đi tới chỗ mới khi spot đổi, quay về người nghe, khoa tay khi nói, máy quay cận người nói, nhép miệng, giọng riêng):');
     L.push('- to: id người nghe (mặc định: người vừa nói) · camera: ' + FILM_CAMERAS.join(' | ') + ' (close = cận người nói, two = hai người, wide = toàn cảnh)');
-    L.push('- bubble: ' + FILM_BUBBLES.join(' | ') + ' (mặc định: hét khi rage/shock/panic/vow có "!", nghĩ khi think/sleep) · sfx: ' + FILM_SFX.join(', '));
+    L.push('- bubble: ' + FILM_BUBBLES.join(' | ') + ' (mặc định: hét khi rage/shock/panic/vow có "!", nghĩ khi think/sleep)');
+    var SP = filmSounds();
+    if (SP) {
+      // âm thanh: để TRỐNG gần hết các bước (bộ phát tự gán âm theo cảm xúc / hiệu ứng / hoạt động); chỉ đặt sfx khi muốn NHẤN — luật ghép ở GC.sounds (một nguồn)
+      L.push('- sfx (tuỳ chọn, mảng ≤ ' + SP.RULES.maxPerStep + ' tên): bộ phát TỰ gán âm theo state / fx / activity — hãy để TRỐNG gần hết các bước, chỉ đặt sfx khi muốn NHẤN một khoảnh khắc (≤ ' + SP.RULES.maxAccent + ' âm nhấn mỗi bước, không đặt âm nhấn ở bước có lời); sfx: [] = bước im. Tên âm theo nhóm:');
+      var fs = filmSfx(cast);
+      SP.CATS.forEach(function (c) { var xs = fs.filter(function (n) { return SP.get(n).cat === c[0]; }); if (xs.length) L.push('  · ' + c[1] + (SP.ACCENT.indexOf(c[0]) >= 0 ? ' (âm NHẤN)' : '') + ': ' + xs.join(', ')); });
+    } else L.push('- sfx: ' + FILM_SFX.join(', '));
     L.push('- Đổi spot giữa các bước để nhân vật đi lại trên sân khấu (đừng để mọi người đứng yên cả cảnh); xen activity (bow, salute, point, wave, cheer, attack…) cho câu thoại có hành động.');
     var FA = filmActions(cast);
     if (Object.keys(FA.act).length) {
