@@ -6,13 +6,16 @@
  * Chạy trong Studio lẫn tệp phim HTML độc lập mở bằng file://. Thiếu AudioContext / speechSynthesis
  * thì mọi hàm thành no-op im lặng (say() vẫn trả Promise đúng nhịp phim). Cần engine/core.js nạp trước.
  *
- * Âm thanh v2 (0.2): mỗi hiệu ứng là 3 lớp — "tách" (transient) · thân (body) · đuôi (tail) — tổng hợp cộng + modal (chuông / chiêng
- * có hài không nguyên), méo mềm (WaveShaper) cho trọng lượng, mỗi lần phát lệch nhẹ cao độ ±3 % / bộ lọc ±10 % / độ to ±1 dB.
+ * Âm thanh v3 (0.18): hiệu ứng là DỮ LIỆU — gói âm gen-chibi.sound/1 trong engine/sounds.js (bộ chuẩn "gen.am" + gói dự án; nạp
+ * sounds.js TRƯỚC hoặc sau tệp này đều được, tra lúc phát). Tệp này là bộ THÔNG DỊCH công thức lớp: tone · noise · crackle · modes ·
+ * voice · fm (đàn môi / lò xo / kim loại) · mallet (mộc cầm, chuông, mõ, pizzicato, đàn hạc — nhiều nốt trên ít node) · drum (kick / tom /
+ * timpani / snare) + làn stereo; méo mềm (WaveShaper) cho trọng lượng, mỗi lần phát lệch nhẹ cao độ (vary) / bộ lọc ±10 % / độ to ±1 dB.
  * Chuỗi trộn: hiệu ứng → sfxBus → nén nhẹ → master; mỗi hiệu ứng gửi một phần vào phòng vang ngắn (ConvolverNode, đáp ứng xung sinh
  * bằng code lúc dựng bus — không có tệp mẫu); giọng / nền / nhạc → master → nén "keo", hiệu ứng đi riêng (không bị nén keo), rồi cùng
  * qua limiter → cắt mềm trần −0,3 dBFS → loa (nhiều âm chồng nhau không vỡ tiếng). Đo bằng tai máy: tools/audio-lab.mjs (WAV + chỉ số + giám khảo Gemini); kiểm thử: tools/test-audio.mjs.
  *
- * Ngân sách (L-42): không có vòng lặp mỗi khung hình. Hiệu ứng một-lần ≤ 12 cái sống cùng lúc (dư thì bỏ), mỗi cái ≤ ~40 node;
+ * Ngân sách (L-42): không có vòng lặp mỗi khung hình. Hiệu ứng một-lần ≤ 12 cái sống cùng lúc (dư thì bỏ), mỗi cái ≤ 60 node (cổng
+ * kiểm của sounds.js chặn gói vượt), sfx() ≤ ~2 ms CPU (chỉ dựng node + lập lịch tham số, không tính toán mẫu);
  * node nào xong là ngắt (onended → disconnect); ba bộ đệm nhiễu 2 s (trắng / hồng / nâu) + một đáp ứng xung 0,6 s dùng chung, dựng
  * một lần; nhạc nền lập lịch bằng setTimeout 100 ms + ctx.currentTime (lookahead 0.35 s); tiếng nền ≤ 8 nguồn thường trực;
  * giọng blip = 1 oscillator (PeriodicWave tam giác+vuông) mỗi âm tiết, phát đúng lúc qua một chuỗi setTimeout;
@@ -20,8 +23,9 @@
  *
  *   GC.audio.unlock()                  gọi TRONG thao tác của người dùng (click); tạo/đánh thức AudioContext; gọi lại không sao
  *   GC.audio.muted / setMuted(b) / setVolume(0..1)      âm lượng tổng (mặc định 0.8); tắt tiếng thì lời thoại vẫn đúng nhịp
- *   GC.audio.sfx(name, {gain, pan})    pop whoosh step sting hit boing sparkle rumble drip sad snore party hmm gong chime swish tick
- *   GC.audio.sfxNames / sfxInfo()      danh sách tên · { tên: { dur, level } } (cho công cụ kiểm thử; không đổi từ vựng)
+ *   GC.audio.sfx(name, {gain, pan, delay})   mọi âm đã nạp (GC.sounds) — 17 tên cũ (pop whoosh step sting hit boing sparkle rumble drip
+ *                                      sad snore party hmm gong chime swish tick) giữ nguyên; delay (s, 0…4) = phát trễ theo đồng hồ âm thanh
+ *   GC.audio.sfxNames / sfxInfo()      danh sách tên · { tên: { dur, level, cat, label, nodes } } (cho công cụ kiểm thử / Studio)
  *   GC.audio.ambient({time, weather, indoor} | null)    tiếng nền cảnh, chéo mờ 0.8 s; cùng spec thì không làm lại
  *   GC.audio.music('calm'|'tense'|'epic'|'comic'|'sad' | null)   nhạc nền rất nhỏ; null tắt dần 1 s; tên lạ → bỏ qua
  *   GC.audio.voiceOf(asset, {lang, accent}) → { pitch, rate, blip, lang, gender, role }  theo vai giọng (engine/voices.js); pitch/rate của nhân vật thắng
@@ -128,7 +132,9 @@
     sfxBus = mkGain(1);
     var sc = ctx.createDynamicsCompressor();
     sc.threshold.value = -16; sc.knee.value = 12; sc.ratio.value = 2; sc.attack.value = 0.008; sc.release.value = 0.14;
-    sfxBus.connect(sc); sc.connect(sfxMaster);
+    // chặn DC / hạ âm < 24 Hz (nhịp đầu của trống tụt cao độ + méo lệch "bias" sinh DC) — một node cho cả bus, không tốn gì mỗi âm
+    var dcb = ctx.createBiquadFilter(); dcb.type = 'highpass'; dcb.frequency.value = 24; dcb.Q.value = 0.6;
+    sfxBus.connect(dcb); dcb.connect(sc); sc.connect(sfxMaster);
     voiceBus = mkGain(1, master);
     // đường vang chung: revIn → highpass (bớt ù) → lowpass (bớt chói) → phòng → master. Mỗi hiệu ứng / nhạc gửi một phần vào revIn.
     revIn = mkGain(1);
@@ -250,12 +256,14 @@
     var w = ctx.createWaveShaper(); w.curve = satCurve(k, bias);
     head.connect(w); f.nodes.push(w); return w;
   }
-  // làn stereo chung cho nhiều nguồn: pan trượt p0 → p1 trong dur (p1 == null: đứng yên ở p0). Không có StereoPanner: trả về bus.
-  function lane(f, p0, p1, t, dur) {
+  // thời gian tấn công của bao: tới gần hết lớp được (tiếng "dâng" / riser), nhưng lớp rất ngắn thì tối đa nửa lớp
+  function atk(a, dur) { return Math.min(a, Math.max(dur * 0.5, dur - 0.01)); }
+  // làn stereo chung cho nhiều nguồn: đứng ở p0, từ t1 (mặc định t) trượt tới p1 trong dur (p1 == null: đứng yên). Không có StereoPanner: trả về bus.
+  function lane(f, p0, p1, t, dur, t1) {
     if (!ctx.createStereoPanner) return f.bus;
     var p = ctx.createStereoPanner();
     p.pan.setValueAtTime(p0, t);
-    if (p1 != null) p.pan.linearRampToValueAtTime(p1, t + dur);
+    if (p1 != null) { if (t1 > t) p.pan.setValueAtTime(p0, t1); p.pan.linearRampToValueAtTime(p1, (t1 > t ? t1 : t) + dur); }
     p.connect(f.bus); f.nodes.push(p); return p;
   }
   // đường gấp khúc [[dt, giá trị, 's'?]…] lên một AudioParam: mặc định mũ (tần số) hoặc tuyến tính (lin); 's' = nhảy tức thì
@@ -269,20 +277,43 @@
       else param.exponentialRampToValueAtTime(p[1] * mul, t + p[0]);
     }
   }
+  // đường cao độ lên một AudioParam tần số (× mul): curve (Float32Array phủ cả dur) · hoặc h0 → to (mũ, trong dur·glide) rồi path [[dt, hz]…]
+  function pitch(prm, h0, t, dur, o, mul) {
+    var i, c;
+    if (o.curve) {
+      if (mul === 1) c = o.curve; else { c = new Float32Array(o.curve.length); for (i = 0; i < c.length; i++) c[i] = o.curve[i] * mul; }
+      prm.setValueCurveAtTime(c, t, dur);
+      return;
+    }
+    prm.setValueAtTime(h0 * mul, t);
+    if (o.to) prm.exponentialRampToValueAtTime(o.to * mul, t + dur * (o.glide || 1));
+    if (o.path) for (i = 0; i < o.path.length; i++) prm.exponentialRampToValueAtTime(o.path[i][1] * mul, t + o.path[i][0]);
+  }
+  // rung cao độ (vibrato / lò xo lắc): LFO vib Hz (→ vib1 cuối lớp) · sâu vibc cent (→ vibc1) · bắt đầu sau vibd s, vào trong vibr s.
+  // MỘT LFO nối vào detune của mọi dao động cần rung (sóng mang + bộ điều chế FM, 2 osc của voice) — cùng pha. 2 node.
+  function vibrato(f, t, dur, o, params) {
+    var end = t + dur, d0 = t + (o.vibd || 0), c0 = o.vibc || 0, c1 = o.vibc1 == null ? c0 : o.vibc1;
+    if (d0 >= end - 0.005) return;
+    var l = ctx.createOscillator(), g = ctx.createGain(), i;
+    l.frequency.setValueAtTime(o.vib, t);
+    if (o.vib1) l.frequency.linearRampToValueAtTime(o.vib1, end);
+    g.gain.setValueAtTime(0, t);
+    if (d0 > t) g.gain.setValueAtTime(0, d0);
+    g.gain.linearRampToValueAtTime(c0, Math.min(end - 0.002, d0 + (o.vibr || 0.005)));
+    g.gain.linearRampToValueAtTime(c1, end);
+    l.connect(g); for (i = 0; i < params.length; i++) g.connect(params[i]);
+    f.nodes.push(g); go(f, l, t, end + 0.03);
+  }
   // o: to (tần số cuối) · glide (tỉ lệ thời lượng trượt) · path [[dt, hz]…] · curve (Float32Array hz phủ cả dur) · a (attack) · hold
-  //    lp (lowpass) · q · am (Hz, AM 100%) · sat (độ méo 1–4) · bias · cents (lệch cố định) · dest (nối vào chỗ khác f.bus)
+  //    lp (lowpass) · q · am (Hz, AM 100%) · sat (độ méo 1–4) · bias · cents (lệch cố định) · vib… (rung) · dest (nối vào chỗ khác f.bus)
   function tone(f, type, h0, t, dur, peak, o) {
     o = o || {};
     var s = ctx.createOscillator(), head;
     s.type = type;
     if (f.dc || o.cents) s.detune.value = f.dc + (o.cents || 0);
-    if (o.curve) s.frequency.setValueCurveAtTime(o.curve, t, dur);
-    else {
-      s.frequency.setValueAtTime(h0, t);
-      if (o.to) s.frequency.exponentialRampToValueAtTime(o.to, t + dur * (o.glide || 1));
-      if (o.path) for (var i = 0; i < o.path.length; i++) s.frequency.exponentialRampToValueAtTime(o.path[i][1], t + o.path[i][0]);
-    }
-    var g = env(f, t, Math.min(o.a || 0.006, dur * 0.5), peak, t + dur, o.hold);
+    pitch(s.frequency, h0, t, dur, o, 1);
+    if (o.vib) vibrato(f, t, dur, o, [s.detune]);
+    var g = env(f, t, atk(o.a || 0.006, dur), peak, t + dur, o.hold);
     head = s;
     if (o.sat) head = shape(f, head, o.sat, o.bias);
     if (o.lp) { var lp = filt(f, 'lowpass', o.lp, o.q); head.connect(lp); head = lp; }
@@ -312,7 +343,7 @@
       if (o.f2) fl.frequency.exponentialRampToValueAtTime(o.f2, t + dur);
     }
     if (o.q1) { fl.Q.setValueAtTime(fl.Q.value, t); fl.Q.linearRampToValueAtTime(o.q1, t + dur); }
-    var g = env(f, t, Math.min(o.a || 0.005, dur * 0.5), peak, t + dur, o.hold);
+    var g = env(f, t, atk(o.a || 0.005, dur), peak, t + dur, o.hold);
     s.connect(fl); head = fl;
     if (o.sat) head = shape(f, head, o.sat);
     head.connect(g);
@@ -349,215 +380,150 @@
       tone(f, 'sine', base * list[i][0], t, list[i][2], peak * list[i][1], { a: list[i][3] || 0.003, dest: dest });
     }
   }
-  // "giọng" liên tục (kèn, ngâm nga): 1–2 sawtooth → méo mềm → lowpass cộng hưởng ("wah") → bao biên độ; mọi thông số là đường gấp khúc.
-  // o: hz [[dt, hz, 's'?]…] (mũ) · cut [[dt, hz]…] (mũ) · amp [[dt, gain]…] (tuyến tính) · peak · q · det (cent giữa 2 osc) · sat
-  //    vib [Hz, cent, từ giây, ramp giây] · type
+  // "giọng" liên tục (kèn, ngâm nga, còi bóp, kẽo kẹt): 1–2 dao động → méo mềm → lọc cộng hưởng (lowpass "wah" / bandpass formant) → bao
+  // biên độ; mọi thông số là đường gấp khúc. o: hz [[dt, hz, 's'?]…] (mũ) · cut [[dt, hz, 's'?]…] (mũ) · amp [[dt, gain]…] (tuyến tính)
+  //    peak · q · det (cent giữa 2 osc) · sat · type · ftype ('lowpass' | 'bandpass') · vib… (rung, như tone) · dest
   function voice(f, t, o) {
-    var n = o.det ? 2 : 1, head = mkGain(1 / n), lp = filt(f, 'lowpass', o.cut[0][1], o.q), g = ctx.createGain(), end = o.amp[o.amp.length - 1][0] + t, i, s, oscs = [], vg = null;
+    var n = o.det ? 2 : 1, head = mkGain(1 / n), lp = filt(f, o.ftype || 'lowpass', o.cut[0][1], o.q), g = ctx.createGain(), end = o.amp[o.amp.length - 1][0] + t, i, s, oscs = [];
     f.nodes.push(head, g);
     route(lp.frequency, t, o.cut, false, 1);
     route(g.gain, t, o.amp, true, o.peak * f.av);
-    if (o.vib) {
-      var vo = ctx.createOscillator(); vg = ctx.createGain();
-      vo.frequency.value = o.vib[0];
-      vg.gain.setValueAtTime(0, t); vg.gain.setValueAtTime(0, t + o.vib[2]); vg.gain.linearRampToValueAtTime(o.vib[1], t + o.vib[2] + o.vib[3]);
-      vo.connect(vg); f.nodes.push(vg); go(f, vo, t, end + 0.03);
-    }
     for (i = 0; i < n; i++) {
       s = ctx.createOscillator(); s.type = o.type || 'sawtooth';
       s.detune.value = f.dc + (n === 2 ? (i ? o.det : -o.det) * 0.5 : 0);
       route(s.frequency, t, o.hz, false, 1);
-      if (vg) vg.connect(s.detune);
       s.connect(head); oscs.push(s);
     }
+    if (o.vib) vibrato(f, t, end - t, o, oscs.map(function (x) { return x.detune; }));
     var h = o.sat ? shape(f, head, o.sat) : head;
-    h.connect(lp); lp.connect(g); g.connect(f.bus);
+    h.connect(lp); lp.connect(g); g.connect(o.dest || f.bus);
     for (i = 0; i < n; i++) go(f, oscs[i], t, end + 0.03);
   }
+  // FM hai toán tử (lò xo "boing" đàn môi, "đoing" gõ đầu, kim loại ngân, tia phép): bộ điều chế chạy CÙNG đường cao độ với sóng mang
+  // (× ratio) nên âm sắc giữ nguyên khi trượt; độ sâu = index × tần số điều chế lúc đầu, đổi index → index1 trong dur (sáng → tối như
+  // vật thật). o: như tone + ratio · index · index1 · mtype. 4 node (+ sat, lp, rung).
+  function fm(f, t, dur, peak, o) {
+    var c = ctx.createOscillator(), m = ctx.createOscillator(), mg = ctx.createGain(), ratio = o.ratio || 1, h0 = o.curve ? o.curve[0] : o.hz, head;
+    c.type = o.type || 'sine'; m.type = o.mtype || 'sine';
+    if (f.dc || o.cents) { c.detune.value = f.dc + (o.cents || 0); m.detune.value = f.dc + (o.cents || 0); }
+    pitch(c.frequency, o.hz, t, dur, o, 1); pitch(m.frequency, o.hz, t, dur, o, ratio);
+    var dev = (o.index == null ? 2 : o.index) * h0 * ratio;
+    mg.gain.setValueAtTime(dev, t);
+    if (o.index1 != null) mg.gain.exponentialRampToValueAtTime(Math.max(0.01, o.index1 * h0 * ratio), t + dur);
+    m.connect(mg); mg.connect(c.frequency); f.nodes.push(mg);
+    if (o.vib) vibrato(f, t, dur, o, [c.detune, m.detune]);
+    var g = env(f, t, atk(o.a || 0.004, dur), peak, t + dur, o.hold);
+    head = c;
+    if (o.sat) head = shape(f, head, o.sat, o.bias);
+    if (o.lp) { var lp = filt(f, 'lowpass', o.lp, o.q); head.connect(lp); head = lp; }
+    head.connect(g); g.connect(o.dest || f.bus);
+    go(f, c, t, t + dur + 0.03); go(f, m, t, t + dur + 0.03);
+  }
+  // nhạc cụ gõ có nốt (mộc cầm, marimba, chuông thanh, mõ, pizzicato, đàn hạc): mỗi phần (hài) của nhạc cụ là MỘT dao động + MỘT gain
+  // cho cả chuỗi nốt, gõ lại bằng tự động hoá; "poly" giọng luân phiên để nốt trước còn ngân khi nốt sau vang (nốt ngân tới khi giọng đó
+  // gõ nốt mới). Chạy gam 16 nốt chỉ tốn 2·poly·số hài node. o: inst · notes [[dt, hz, độ to?]…] · decay · peak · a · poly · lp · dest
+  function mallet(f, t, o) {
+    var P = (GC.sounds && GC.sounds.INST[o.inst]) || [[1, 1, 1]], N = o.notes, poly = Math.min(o.poly || 2, N.length), dec = o.decay || 0.3, a = o.a || 0.0015, out = o.dest || f.bus, v, p, i, s, g, tn, nx, h, pk, e, end;
+    if (o.lp) { var lp = filt(f, 'lowpass', o.lp, 0.7); lp.connect(out); out = lp; }
+    for (v = 0; v < poly; v++) for (p = 0; p < P.length; p++) {
+      s = ctx.createOscillator(); g = ctx.createGain(); end = t;
+      if (f.dc) s.detune.value = f.dc;
+      g.gain.setValueAtTime(0.0001, t);
+      for (i = v; i < N.length; i += poly) {
+        tn = t + N[i][0]; nx = i + poly < N.length ? t + N[i + poly][0] - 0.002 : 1e9;
+        h = N[i][1] * P[p][0];
+        s.frequency.setValueAtTime(Math.min(h, 16000), tn);
+        pk = h > 12000 ? 0.0001 : Math.max(0.0001, o.peak * f.av * P[p][1] * (N[i][2] == null ? 1 : N[i][2]));
+        e = Math.max(tn + a + 0.004, Math.min(tn + a + dec * P[p][2], nx));
+        g.gain.setValueAtTime(0.0001, tn); g.gain.linearRampToValueAtTime(pk, tn + a); g.gain.exponentialRampToValueAtTime(0.0001, e);
+        if (e > end) end = e;
+      }
+      s.connect(g); g.connect(out); f.nodes.push(g); go(f, s, t, end + 0.03);
+    }
+  }
+  // trống tổng hợp: thân sin tụt cao độ hz → to (kick / tom / timpani / taiko) + "tách" dùi (click) + dây snare (nhiễu dải giữa, mặc định
+  // 2,6 kHz — không chói). o: to · glide · a · sat · bias · click · snare · nf · nq · ndur · dest
+  function drum(f, t, dur, peak, o) {
+    var d = o.dest || f.bus;
+    tone(f, 'sine', o.hz, t, dur, peak, { to: o.to, glide: o.glide || 0.35, a: o.a || 0.0015, sat: o.sat, bias: o.bias, dest: d });
+    if (o.click) noise(f, t, 0.012, peak * o.click, { col: 'pink', type: 'lowpass', f0: 3500, a: 0.0006, dest: d });
+    if (o.snare) noise(f, t, o.ndur || Math.min(dur, 0.2), peak * o.snare, { type: 'bandpass', f0: o.nf || 2600, q: o.nq || 0.7, a: 0.001, dest: d });
+  }
 
-  /* ------------------------------------------------------------ hiệu ứng */
-  // level: chuẩn hoá độ to (đo bằng tools/audio-lab.mjs: RMS có cổng + LUFS xấp xỉ, mọi tiếng cách nhau ≤ ~7 dB) · dur: thời lượng dự kiến (s)
-  // rev: mức gửi vào phòng vang (0..1) · vary: độ lệch cao độ ngẫu nhiên mỗi lần phát (mặc định ±3 %; tiếng có nốt nhạc nhỏ hơn)
-  // Tên (khoá) là từ vựng công khai (gói động tác, kịch bản, đạo diễn) — không đổi, không xoá.
-  var boingCurve = null;
-  function boingHz() {                   // đường cao độ lò xo 180 → 620 → 150 Hz: vọt lên rồi tụt, rung chậm tắt dần (0.75 s) — dựng một lần
-    if (boingCurve) return boingCurve;
-    var n = 128, c = new Float32Array(n), i, u, base, depth;
+  /* ---------------------------------------------- hiệu ứng: thông dịch gói âm (gen-chibi.sound/1) */
+  // Dữ liệu + cổng kiểm + sổ đăng ký ở engine/sounds.js (GC.sounds) — tệp này chỉ dịch từng lớp sang các nguyên hàm ở trên.
+  // Số trong công thức: hằng hoặc { v, r } = v + R·r (R rút một lần mỗi lần phát, chung mọi lớp — gót / mũi bước chân khớp nhau).
+  var hzCurves = typeof WeakMap === 'function' ? new WeakMap() : null;
+  function num(x, R, d) { return x == null ? d : typeof x === 'number' ? x : x.v + R * x.r; }
+  // [[u, hz]…] → Float32Array 64 điểm (nội suy theo log tần số), nhớ theo lớp (dữ liệu đã chuẩn hoá không đổi sau khi nạp)
+  function hzCurve(L) {
+    var c = hzCurves && hzCurves.get(L);
+    if (c) return c;
+    var P = L.curve, n = 64, i, j = 0, u, w;
+    c = new Float32Array(n);
     for (i = 0; i < n; i++) {
       u = i / (n - 1);
-      base = u < 0.1 ? 180 * Math.pow(620 / 180, u / 0.1) : 150 + 470 * Math.exp(-(u - 0.1) * 3.6);
-      depth = 0.27 * Math.exp(-u * 2.2) * Math.min(1, u * 10);
-      c[i] = base * (1 + depth * Math.sin(2 * Math.PI * 14 * 0.75 * u));
+      while (j < P.length - 2 && u > P[j + 1][0]) j++;
+      w = (u - P[j][0]) / Math.max(1e-6, P[j + 1][0] - P[j][0]);
+      c[i] = P[j][1] * Math.pow(P[j + 1][1] / P[j][1], Math.min(1, Math.max(0, w)));
     }
-    return (boingCurve = c);
+    if (hzCurves) hzCurves.set(L, c);
+    return c;
   }
-  var SFX = {
-    // bong bóng vỡ: một thân sin sạch trượt lên nhanh (cộng hưởng bong bóng) + "pụp" trầm ngắn + tách mềm — càng ít lớp càng tròn
-    pop: { dur: 0.2, level: 1.25, rev: 0.05, play: function (f, t) {
-      tone(f, 'sine', 380, t, 0.13, 1.2, { to: 900, glide: 0.35, a: 0.002 });
-      tone(f, 'sine', 190, t, 0.06, 0.35, { to: 110, a: 0.002 });
-      noise(f, t, 0.012, 0.45, { col: 'pink', type: 'lowpass', f0: 4000, a: 0.001 });
-    } },
-    // vút qua kiểu Doppler: dải nhiễu hồng quét lên rồi xuống, sáng nhất lúc đi ngang (pan qua giữa), thêm hơi cao + thân trầm "đẩy không khí"
-    whoosh: { dur: 0.6, level: 0.85, rev: 0.22, play: function (f, t) {
-      var L = lane(f, -0.75, 0.75, t, 0.5);
-      noise(f, t, 0.55, 0.5, { col: 'pink', type: 'bandpass', f0: 300, f1: 2600, mid: 0.24, f2: 520, q: 0.9, q1: 1.6, a: 0.22, dest: L });
-      noise(f, t + 0.03, 0.46, 0.12, { type: 'highpass', f0: 3000, f1: 5500, mid: 0.22, f2: 2600, q: 0.5, a: 0.2, dest: L });
-      noise(f, t, 0.5, 0.1, { col: 'brown', type: 'lowpass', f0: 160, f1: 260, mid: 0.2, f2: 120, a: 0.2, sat: 1.5 });
-    } },
-    // bước chân mềm: gót (thịch trầm + bụi vải) rồi mũi (tạch nhẹ, cao hơn) ~60 ms sau; mỗi lần một dáng khác
-    step: { dur: 0.2, level: 0.99, rev: 0.05, vary: 0.05, play: function (f, t) {
-      var r = Math.random(), t2 = t + 0.055 + r * 0.015;
-      tone(f, 'sine', 130 + r * 30, t, 0.07, 0.3, { to: 62, glide: 0.5, a: 0.002, sat: 1.4 });
-      noise(f, t, 0.04, 0.9, { type: 'lowpass', f0: 650 + r * 350, q: 0.7, a: 0.002 });
-      noise(f, t + 0.012, 0.025, 0.36, { type: 'bandpass', f0: 2200, q: 1, a: 0.002 });
-      noise(f, t2, 0.03, 0.55, { type: 'bandpass', f0: 1500 + r * 400, q: 0.9, a: 0.002 });
-      tone(f, 'sine', 160, t2, 0.03, 0.26, { to: 100, a: 0.002 });
-    } },
-    // "đùn-ĐÙNG!": hai cú dàn nhạc kiểu hài kịch — cú đầu ngắn, cú sau dày (trống bass + kèn tritone + chũm chọe)
-    sting: { dur: 1.0, level: 0.21, rev: 0.35, play: function (f, t) {
-      function stab(tt, pk, len, cymbal) {
-        tone(f, 'sine', 120, tt, len * 0.8, 0.2 * pk, { path: [[0.05, 70], [len * 0.7, 44]], a: 0.003, sat: 1.8 });
-        tone(f, 'sawtooth', 164.8, tt, len, 0.45 * pk, { a: 0.012, sat: 1.4, lp: 3200, q: 0.8 });
-        tone(f, 'sawtooth', 233.1, tt, len, 0.4 * pk, { a: 0.012, sat: 1.4, lp: 3200, q: 0.8, cents: 6 });
-        if (cymbal) noise(f, tt, 0.55, 0.3, { type: 'highpass', f0: 4200, a: 0.004 });
-      }
-      stab(t, 0.7, 0.14, false);
-      stab(t + 0.19, 1, 0.6, true);
-    } },
-    // cú đấm hài (không máu me): thud hạ tần GIỮ ĐƯỢC SỨC (≈150 ms; thiếu thân thì chỉ còn một cái "tách" nhọn, nghe mỏng / kim loại) + thân "bốp"
-    // có cao độ + "bạt" nhiễu hồng quét lowpass lấp khoảng giữa 300–1500 Hz + tách nhẹ; đuôi = phòng vang. Méo mềm có bias → hài chẵn nghe được trên loa nhỏ.
-    hit: { dur: 0.4, level: 1.62, rev: 0.18, play: function (f, t) {
-      tone(f, 'sine', 155, t, 0.24, 0.85, { path: [[0.035, 92], [0.2, 48]], a: 0.0015, sat: 2.1, bias: 0.12 });
-      tone(f, 'triangle', 240, t, 0.13, 0.6, { to: 110, glide: 0.7, a: 0.0015, sat: 1.3 });
-      noise(f, t, 0.12, 1, { col: 'pink', type: 'lowpass', f0: 2600, f1: 280, mid: 0.08, q: 0.7, a: 0.001 });
-      noise(f, t, 0.06, 0.6, { col: 'pink', type: 'bandpass', f0: 750, q: 0.6, a: 0.001 });
-      noise(f, t, 0.008, 0.2, { type: 'highpass', f0: 3500, a: 0.0006 });
-    } },
-    // lò xo "bòooing": cao độ vọt lên rồi tụt có rung chậm tắt dần (đường cong dựng sẵn); thân sin + tam giác thấp một quãng tám (đầy, "cao su")
-    boing: { dur: 0.85, level: 0.32, rev: 0.06, play: function (f, t) {
-      var c = boingHz();
-      tone(f, 'sine', 0, t, 0.75, 0.8, { curve: c, a: 0.004, sat: 1.2 });
-      tone(f, 'triangle', 0, t, 0.75, 0.7, { curve: c, a: 0.004, cents: -1200, lp: 1000 });
-      noise(f, t, 0.015, 0.2, { col: 'pink', type: 'lowpass', f0: 3000, a: 0.001 });
-    } },
-    // lấp lánh phép thuật: 6 tiếng chuông nhỏ đi lên (pentatonic) trải ba vị trí stereo, hài không nguyên ở các nốt chẵn, màn nhiễu cao mờ
-    sparkle: { dur: 0.95, level: 0.62, rev: 0.4, vary: 0.012, play: function (f, t) {
-      var N = [1319, 1568, 1976, 2349, 2637, 3136], L = [lane(f, -0.55, null, t), lane(f, 0, null, t), lane(f, 0.55, null, t)], i, tt;
-      for (i = 0; i < N.length; i++) {
-        tt = t + i * 0.068 + rnd(0, 0.014);
-        tone(f, 'sine', N[i], tt, 0.42, 0.24 - i * 0.012, { a: 0.002, dest: L[i % 3] });
-        if (i % 2 === 0) tone(f, 'sine', N[i] * 2.76, tt, 0.14, 0.08, { a: 0.002, dest: L[(i + 1) % 3] });
-      }
-      noise(f, t, 0.8, 0.08, { type: 'highpass', f0: 6500, a: 0.3, dest: L[1] });
-    } },
-    // rung chuyển đất: nhiễu nâu qua lowpass có méo (hài lên được loa nhỏ) + hai saw trầm AM "nghiến" + sin sub + vài hòn sỏi rơi
-    rumble: { dur: 0.9, level: 0.28, rev: 0.2, play: function (f, t) {
-      noise(f, t, 0.85, 0.35, { col: 'brown', type: 'lowpass', f0: 150, f1: 260, mid: 0.35, f2: 160, a: 0.3, sat: 2.5, mv: [-0.2, 0.25] });
-      noise(f, t, 0.85, 0.5, { col: 'pink', type: 'bandpass', f0: 250, f1: 480, mid: 0.4, f2: 300, q: 1, a: 0.3, sat: 2 });
-      tone(f, 'sawtooth', 47, t, 0.85, 0.3, { to: 39, a: 0.3, lp: 240, q: 1, am: 21, sat: 1.6 });
-      tone(f, 'sawtooth', 50.5, t, 0.85, 0.26, { to: 41, a: 0.3, lp: 240, q: 1, am: 29 });
-      tone(f, 'sine', 36, t, 0.85, 0.2, { to: 31, a: 0.35, sat: 2 });
-      crackle(f, t + 0.12, { n: 5, span: 0.55, len: 0.07, f0: 900, q: 0.7, peak: 0.5 });
-    } },
-    // giọt nước "tinh": hai giọt như bản cũ (700 → 1500 Hz, giọt sau 650 → 1050 Hz đến sau 0.14 s) nhưng ngân sạch hơn, thêm hài mỏng + tách mềm + vang nhẹ
-    drip: { dur: 0.55, level: 0.62, rev: 0.12, play: function (f, t) {
-      tone(f, 'sine', 700, t, 0.13, 0.9, { to: 1500, glide: 0.62, a: 0.003 });
-      tone(f, 'sine', 1400, t, 0.05, 0.1, { to: 3000, glide: 0.62, a: 0.002 });
-      noise(f, t, 0.006, 0.15, { col: 'pink', type: 'lowpass', f0: 3500, a: 0.0006 });
-      tone(f, 'sine', 650, t + 0.14, 0.13, 0.4, { to: 1050, glide: 0.62, a: 0.003 });
-      tone(f, 'sine', 1300, t + 0.14, 0.05, 0.05, { to: 2100, glide: 0.62, a: 0.002 });
-    } },
-    // kèn trombone buồn "wah-wah-wah-waaah": MỘT giọng liên tục (F4 E4 Eb4 D4, mỗi nốt tụt nửa cung), mỗi nốt một lượt mở / đóng bộ lọc, nốt cuối rung + tụt.
-    // Hai lớp: tam giác (thân tròn, như bản cũ) + saw lọc "wah" nhẹ (độ "đồng thau")
-    sad: { dur: 1.75, level: 0.18, rev: 0.2, vary: 0.01, play: function (f, t) {
-      var N = [349.2, 329.6, 311.1, 293.7], on = [0, 0.36, 0.72, 1.08], len = [0.34, 0.34, 0.34, 0.62], hz = [], cut = [], amp = [], i, a, v;
-      for (i = 0; i < 4; i++) {
-        a = on[i]; v = 1 - i * 0.05;
-        if (i) hz.push([a - 0.03, N[i - 1], 's']);
-        hz.push([a, N[i]]);
-        cut.push(i ? [a, 500, 's'] : [a, 500], [a + 0.1, 1600], [a + len[i], i === 3 ? 450 : 800]);
-        amp.push([a, 0], [a + 0.035, v], [a + len[i] - 0.05, v * 0.85], [a + len[i], 0]);
-      }
-      hz.push([on[3] + 0.2, N[3]], [on[3] + 0.52, N[3] * 0.88]);
-      var vib = [5.4, 22, on[3] + 0.18, 0.2];
-      voice(f, t, { type: 'triangle', q: 0.8, peak: 0.7, hz: hz, cut: [[0, 1800], [1.6, 1800]], amp: amp, vib: vib });
-      voice(f, t, { det: 4, q: 1.2, peak: 0.22, hz: hz, cut: cut, amp: amp, vib: vib });
-    } },
-    // ngáy hoạt hình: hít vào (hơi + rung vòm họng tăng dần) · nghỉ · thở ra (hơi tụt xuống + còi mũi nhỏ)
-    snore: { dur: 1.5, level: 0.47, rev: 0.15, play: function (f, t) {
-      noise(f, t, 0.62, 0.75, { col: 'pink', type: 'bandpass', f0: 300, f1: 800, mid: 0.55, q: 1.2, a: 0.5 });
-      tone(f, 'sawtooth', 68, t + 0.08, 0.52, 0.25, { to: 92, a: 0.4, lp: 700, q: 2, am: 19, sat: 1.8 });
-      noise(f, t + 0.75, 0.6, 0.7, { col: 'pink', type: 'bandpass', f0: 950, f1: 430, q: 1.1, a: 0.14 });
-      tone(f, 'sawtooth', 80, t + 0.75, 0.4, 0.25, { to: 58, a: 0.1, lp: 600, q: 2, am: 15, sat: 1.5 });
-      tone(f, 'sine', 560, t + 0.78, 0.5, 0.05, { to: 470, a: 0.12 });
-    } },
-    // pháo giấy: "bóc" (thump + tách) → kim tuyến rơi rải rác → arpeggio trưởng lấp lánh + còi "pwiu"
-    party: { dur: 1.2, level: 0.74, rev: 0.3, play: function (f, t) {
-      var n = [1047, 1319, 1568, 2093], i;
-      tone(f, 'sine', 210, t, 0.14, 0.7, { to: 60, glide: 0.5, a: 0.002, sat: 1.8 });
-      noise(f, t, 0.06, 0.55, { type: 'bandpass', f0: 2400, q: 0.7, a: 0.001, sat: 1.5 });
-      noise(f, t, 0.012, 0.4, { type: 'highpass', f0: 5000, a: 0.0008 });
-      crackle(f, t + 0.05, { n: 14, span: 0.7, len: 0.035, f0: 5200, q: 1.2, peak: 0.16, skew: 1.6 });
-      for (i = 0; i < n.length; i++) tone(f, 'triangle', n[i], t + 0.1 + i * 0.07, 0.34, 0.2, { a: 0.003 });
-      tone(f, 'sawtooth', 500, t + 0.03, 0.28, 0.07, { to: 1900, a: 0.02, lp: 3000 });
-    } },
-    // "mm-HM?": ngâm nga miệng ngậm — saw qua lowpass tối, nốt hai trượt lên như câu hỏi, rung nhẹ ở cuối
-    hmm: { dur: 0.6, level: 0.24, rev: 0.12, vary: 0.02, play: function (f, t) {
-      voice(f, t, { det: 6, sat: 1.3, q: 2.5, peak: 0.55,
-        hz: [[0, 262], [0.15, 262, 's'], [0.2, 294], [0.52, 349]],
-        cut: [[0, 520], [0.17, 520, 's'], [0.2, 650], [0.45, 1300], [0.55, 650]],
-        amp: [[0, 0], [0.025, 1], [0.13, 0.9], [0.16, 0], [0.2, 0], [0.24, 1], [0.48, 0.9], [0.56, 0]],
-        vib: [5.6, 16, 0.3, 0.1] });
-    } },
-    // chiêng lớn: 9 hài không nguyên (hài cao nở chậm sau cú đánh, tắt nhanh hơn) + hài lệch tạo phách + sub + "thịch" và "xoẹt" kim loại lúc đánh
-    gong: { dur: 3.4, level: 0.19, rev: 0.4, vary: 0.012, play: function (f, t) {
-      modes(f, t, 110, [[1, 0.45, 3.4, 0.01], [1.0075, 0.3, 3.3, 0.01], [2.02, 0.6, 3, 0.02], [2.76, 0.5, 2.6, 0.05], [3.52, 0.35, 2.1, 0.09],
-        [4.31, 0.28, 1.7, 0.14], [5.46, 0.2, 1.3, 0.2], [6.71, 0.13, 1, 0.25], [8.2, 0.08, 0.8, 0.3]], 1);
-      tone(f, 'sine', 55, t, 2.4, 0.08, { a: 0.02 });
-      noise(f, t, 0.05, 0.6, { type: 'lowpass', f0: 900, a: 0.002 });
-      noise(f, t, 0.35, 0.25, { type: 'bandpass', f0: 3200, q: 0.8, a: 0.03 });
-    } },
-    // chuông "ting-ting" như chuông cửa hàng: hai nhát E6 rồi A6 (đúng cao độ bản cũ); thân sin sạch, chỉ điểm thêm hài thanh kim loại 1 : 2.76 : 5.40
-    // thật nhẹ để có "men" kim loại mà không thành chuông lớn; ngân dài hơn bản cũ một chút, vang nhẹ
-    chime: { dur: 0.8, level: 0.47, rev: 0.1, vary: 0.012, play: function (f, t) {
-      var BAR = [[1, 1, 0.75, 0.002], [2.756, 0.14, 0.3, 0.002], [5.404, 0.05, 0.14, 0.002]];
-      modes(f, t, 1319, BAR, 0.3);
-      modes(f, t + 0.11, 1760, BAR, 0.28);
-      noise(f, t, 0.005, 0.12, { col: 'pink', type: 'lowpass', f0: 5000, a: 0.0004 });
-      noise(f, t + 0.11, 0.005, 0.1, { col: 'pink', type: 'lowpass', f0: 5000, a: 0.0004 });
-    } },
-    // lưỡi kiếm vung nhanh: dải nhiễu hồng hẹp quét lên rồi xuống + hơi cao + tiếng rít mảnh, pan lướt qua trong 0.24 s
-    swish: { dur: 0.3, level: 1.29, rev: 0.07, play: function (f, t) {
-      var L = lane(f, -0.65, 0.65, t, 0.24);
-      noise(f, t, 0.24, 0.5, { col: 'pink', type: 'bandpass', f0: 1500, f1: 5600, mid: 0.11, f2: 2800, q: 2, q1: 1.2, a: 0.08, dest: L });
-      noise(f, t + 0.02, 0.2, 0.1, { type: 'highpass', f0: 5200, a: 0.07, dest: L });
-      tone(f, 'sine', 2300, t + 0.01, 0.2, 0.05, { path: [[0.1, 5200], [0.2, 2900]], a: 0.07, dest: L });
-    } },
-    // tích tắc đồng hồ / mõ gỗ: hai mode gỗ ngân ngắn (sin, tỉ số không nguyên) + "cộp" nhiễu băng giữa + tách; mỗi lần cao độ hơi khác
-    tick: { dur: 0.1, level: 1.83, rev: 0.05, vary: 0.04, play: function (f, t) {
-      var r = Math.random();
-      tone(f, 'sine', 1750 + r * 300, t, 0.05, 1, { to: 1500 + r * 250, a: 0.0006, sat: 1.3 });
-      tone(f, 'sine', 3100 + r * 400, t, 0.025, 0.4, { a: 0.0006 });
-      tone(f, 'sine', 640, t, 0.035, 0.45, { to: 520, a: 0.001 });
-      noise(f, t, 0.014, 0.7, { type: 'bandpass', f0: 2800 + r * 500, q: 1.4, a: 0.0006 });
-      noise(f, t, 0.005, 0.25, { type: 'highpass', f0: 5500, a: 0.0004 });
-    } }
+  function pitchOpts(L, R, dest) {
+    return { to: num(L.to, R), glide: num(L.glide, R), path: L.path, curve: L.curve ? hzCurve(L) : null, a: num(L.a, R), hold: num(L.hold, R), lp: num(L.lp, R), q: num(L.q, R),
+      am: num(L.am, R), sat: num(L.sat, R), bias: num(L.bias, R), cents: num(L.cents, R), vib: num(L.vib, R), vibc: num(L.vibc, R), vibc1: num(L.vibc1, R), vib1: num(L.vib1, R),
+      vibd: num(L.vibd, R), vibr: num(L.vibr, R), ratio: num(L.ratio, R), index: num(L.index, R), index1: num(L.index1, R), type: L.type, mtype: L.mtype, hz: num(L.hz, R), dest: dest };
+  }
+  var RUN = {
+    tone: function (f, L, t, R, d) { var o = pitchOpts(L, R, d); tone(f, L.type || 'sine', o.hz || (o.curve ? o.curve[0] : 440), t, num(L.dur, R), num(L.peak, R), o); },
+    fm: function (f, L, t, R, d) { fm(f, t, num(L.dur, R), num(L.peak, R), pitchOpts(L, R, d)); },
+    noise: function (f, L, t, R, d) {
+      noise(f, t, num(L.dur, R), num(L.peak, R), { col: L.col, type: L.type, f0: num(L.f0, R), f1: num(L.f1, R), mid: num(L.mid, R), f2: num(L.f2, R), q: num(L.q, R), q1: num(L.q1, R),
+        a: num(L.a, R), hold: num(L.hold, R), sat: num(L.sat, R), mv: L.mv, dest: d });
+    },
+    crackle: function (f, L, t, R, d) { crackle(f, t, { n: L.n, span: num(L.span, R), len: num(L.len, R), type: L.type, f0: num(L.f0, R), q: num(L.q, R), peak: num(L.peak, R), skew: num(L.skew, R), dest: d }); },
+    modes: function (f, L, t, R, d) { modes(f, t, num(L.hz, R), L.list, num(L.peak, R), d); },
+    voice: function (f, L, t, R, d) {
+      voice(f, t, { type: L.type, ftype: L.ftype, hz: L.hz, cut: L.cut, amp: L.amp, peak: num(L.peak, R), q: num(L.q, R), det: num(L.det, R), sat: num(L.sat, R),
+        vib: num(L.vib, R), vibc: num(L.vibc, R), vibc1: num(L.vibc1, R), vib1: num(L.vib1, R), vibd: num(L.vibd, R), vibr: num(L.vibr, R), dest: d });
+    },
+    mallet: function (f, L, t, R, d) { mallet(f, t, { inst: L.inst, notes: L.notes, decay: num(L.decay, R), peak: num(L.peak, R), a: num(L.a, R), poly: L.poly, lp: num(L.lp, R), dest: d }); },
+    drum: function (f, L, t, R, d) {
+      drum(f, t, num(L.dur, R), num(L.peak, R), { hz: num(L.hz, R), to: num(L.to, R), glide: num(L.glide, R), a: num(L.a, R), sat: num(L.sat, R), bias: num(L.bias, R),
+        click: num(L.click, R), snare: num(L.snare, R), nf: num(L.nf, R), nq: num(L.nq, R), ndur: num(L.ndur, R), dest: d });
+    }
   };
+  // phát một âm đã chuẩn hoá: làn stereo chung → từng lớp ở t + at (+ lệch jit riêng của lớp)
+  function play(f, d, t) {
+    var R = Math.random(), lanes = null, i, L, ln;
+    if (d.lanes) { lanes = []; for (i = 0; i < d.lanes.length; i++) { ln = d.lanes[i]; lanes.push(lane(f, ln[0], ln[1], t, ln[2] || d.dur, ln[3] ? t + ln[3] : t)); } }
+    for (i = 0; i < d.layers.length; i++) {
+      L = d.layers[i];
+      RUN[L.k](f, L, t + num(L.at, R, 0) + (L.jit ? Math.random() * L.jit : 0), R, L.lane != null && lanes ? lanes[L.lane] : f.bus);
+    }
+  }
+  var warned = false;
   function sfx(name, opts) {
-    if (!ready() || muted || typeof name !== 'string' || !Object.prototype.hasOwnProperty.call(SFX, name)) return;
+    if (!ready() || muted || typeof name !== 'string') return;
+    var S = GC.sounds, d = S && S.get(name);
+    if (!d) {
+      if (!S && !warned && typeof console !== 'undefined') { warned = true; console.warn('[GC.audio] thiếu engine/sounds.js (thư viện âm) — hiệu ứng im lặng'); }
+      return;
+    }
     opts = opts || {};
-    var d = SFX[name], v = d.vary == null ? 0.03 : d.vary;
-    var f = mkFx(sfxBus, d.dur + 0.1, true, d.level * clamp(opts.gain, 0, 1, 1), opts.pan != null ? clamp(opts.pan, -1, 1, 0) : null, d.rev);
+    var v = d.vary == null ? 0.03 : d.vary, delay = clamp(opts.delay, 0, 4, 0);
+    var f = mkFx(sfxBus, d.dur + 0.1 + delay, true, d.level * clamp(opts.gain, 0, 1, 1), opts.pan != null ? clamp(opts.pan, -1, 1, 0) : null, d.rev);
     if (!f) return;
     f.dc = 1200 * Math.log(1 + rnd(-v, v)) / Math.LN2;       // lệch nhẹ mỗi lần phát để lặp lại không "máy"
     f.fc = 1200 * Math.log(1 + rnd(-0.1, 0.1)) / Math.LN2;
     f.av = Math.pow(10, rnd(-1, 1) / 20);
-    d.play(f, ctx.currentTime + 0.005);
+    play(f, d, ctx.currentTime + 0.005 + delay);
   }
+  function sfxNames() { return GC.sounds ? GC.sounds.names() : []; }
   function sfxInfo() {
-    var o = {}, k;
-    for (k in SFX) if (Object.prototype.hasOwnProperty.call(SFX, k)) o[k] = { dur: SFX[k].dur, level: SFX[k].level };
+    var o = {}, S = GC.sounds, N = sfxNames(), i, d;
+    for (i = 0; i < N.length; i++) { d = S.get(N[i]); o[N[i]] = { dur: d.dur, level: d.level, cat: d.cat, label: d.label, nodes: d.nodes }; }
     return o;
   }
 
@@ -1393,7 +1359,7 @@
     },
     setVolume: function (v) { volume = clamp(v, 0, 1, volume); applyMaster(); },
     sfx: sfx,
-    get sfxNames() { return Object.keys(SFX); },
+    get sfxNames() { return sfxNames(); },
     sfxInfo: sfxInfo,
     ambient: ambient,
     music: music,

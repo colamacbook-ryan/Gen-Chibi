@@ -6,6 +6,7 @@ Nguồn và license của mọi asset và phụ thuộc đi kèm sản phẩm.
 |---|---|---|
 | Toàn bộ hình vẽ nhân vật, linh kiện, hiệu ứng (`kinds/`) | Vẽ bằng code, Gen Labs | © 2026 Gen Labs — All rights reserved |
 | Engine, Studio, server, launcher, installer | Gen Labs | © 2026 Gen Labs — All rights reserved |
+| Âm thanh hiệu ứng: bộ chuẩn `gen.am` (`engine/sounds.js`) + gói âm chủ đề (`kinds/sound/*.json`) — công thức tổng hợp Web Audio dạng dữ liệu, không có tệp mẫu âm thanh nào | Gen Labs (tổng hợp bằng code) | © 2026 Gen Labs — All rights reserved |
 | Image Docker `node:22-alpine` (chỉ dùng lúc chạy, không phân phối lại) | Docker Official Images | MIT (Node.js) và license các gói Alpine |
 | `cloudflared` (image Docker `cloudflare/cloudflared:2026.9.3` hoặc bản cài của người dùng) — chỉ tải khi người dùng chạy `genchibi expose`, không phân phối lại | Cloudflare | Apache-2.0 |
 | Hồ sơ nhận diện tướng Tam Quốc | Tam Quốc diễn nghĩa (phạm vi công cộng), ghi mã nguồn trong `identity.source` | Phạm vi công cộng |
