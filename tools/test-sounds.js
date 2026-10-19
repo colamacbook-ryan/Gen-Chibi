@@ -9,7 +9,8 @@ const SRC = fs.readFileSync(path.join(ROOT, 'engine/sounds.js'), 'utf8');
 const TQ = JSON.parse(fs.readFileSync(path.join(ROOT, 'kinds/sound/tq-am.json'), 'utf8'));
 const { loadEngine } = require(ROOT + '/server/engine-node.js');
 let n = 0;
-const no = (c, msg) => { if (c) { console.log('   ✗', msg); process.exit(1); } n++; };
+const FAILS = [];   // GC_KEEP_GOING=1: không thoát ở lỗi đầu — in hết để thấy ca nào đỏ trên mã cũ (thử ngược)
+const no = (c, msg) => { if (c) { console.log('   ✗', msg); if (!process.env.GC_KEEP_GOING) process.exit(1); FAILS.push(msg); return; } n++; };
 const clone = o => JSON.parse(JSON.stringify(o));
 // sổ đăng ký mới tinh mỗi lần (mỗi vm một bản engine/sounds.js) — các ca không dính nhau
 const fresh = () => { const w = { GenChibi: {} }, errs = []; vm.runInNewContext(SRC, { window: w, console: { error: (...a) => errs.push(a.join(' ')), warn() {}, log() {} } }, { filename: 'engine/sounds.js' }); no(errs.length, 'bộ âm chuẩn không qua cổng: ' + errs.join(' | ')); return w.GenChibi.sounds; };
@@ -55,7 +56,7 @@ const LEGACY = ['pop', 'whoosh', 'step', 'sting', 'hit', 'boing', 'sparkle', 'ru
 // ---------- 2. cổng kiểm: mỗi luật một ca sai — bị chặn ĐÚNG chỗ, không ném lỗi, không treo
 {
   const S = fresh();
-  const base = () => ({ format: 'gen-chibi.sound/1', id: 'ci-am', name: 'CI', sounds: { 'ci-coc': { label: 'Cốc', cat: 'hai', use: 'thử', tags: ['thử'], dur: 0.6, level: 0.8, rev: 0.1, vary: 0.03,
+  const base = () => ({ format: 'gen-chibi.sound/1', id: 'ci-am', name: 'CI', project: 'ci-du-an', sounds: { 'ci-coc': { label: 'Cốc', cat: 'hai', use: 'thử', tags: ['thử'], dur: 0.6, level: 0.8, rev: 0.1, vary: 0.03,
     lanes: [[-0.5, 0.5]], cue: { event: ['impact'], mood: ['comic'] },
     layers: [
       { k: 'tone', type: 'sine', hz: 400, to: 200, dur: 0.3, peak: 0.5, vib: 8, vibc: 40, lane: 0 },
@@ -137,7 +138,33 @@ const LEGACY = ['pop', 'whoosh', 'step', 'sting', 'hit', 'boing', 'sparkle', 'ru
   bad('chuỗi mã trong ô số', p => { L(p, 0).hz = 'eval("1")'; }, /layers\[0\]\.hz/);
   bad('khoá __proto__', p => { SND(p).layers[0] = JSON.parse('{"k":"tone","__proto__":{"x":1},"hz":400,"dur":0.3,"peak":0.5}'); }, /__proto__/);
   bad('gói quá lớn', p => { p.description = 'x'.repeat(210000); }, /quá lớn/);
-  console.log('   ✓ cổng kiểm: ' + cases + ' ca sai đều bị chặn đúng chỗ (khung, khoảng số, khoá lạ, không mã, ngân sách node ≤ 60, cue chỉ khoá có thật), đếm node tĩnh đúng');
+  // CNS-100: gói dùng chung (không dự án) KHÔNG được có cue — nếu được thì một gói đổi âm tự gán của KHUNG ở mọi dự án
+  bad('cue của gói dùng chung (project rỗng)', p => { p.project = ''; }, /^sounds\.ci-coc\.cue: gói dùng chung không được đổi âm tự gán của khung/);
+  bad('cue của gói dùng chung (không có project)', p => { delete p.project; }, /^sounds\.ci-coc\.cue: gói dùng chung/);
+  // CNS-108: khoá lạ ở cấp gói là lỗi (project_id gõ nhầm từng lặng lẽ thành gói dùng chung); partial không bị bỏ im
+  bad('khoá lạ cấp gói (project_id)', p => { p.project_id = 'tam-quoc'; }, /^pack\.project_id: khoá lạ ở cấp gói/);
+  bad('khoá lạ cấp gói (bogus)', p => { p.bogus = 1; }, /^pack\.bogus: khoá lạ/);
+  bad('gói chỉ có một phần (partial)', p => { p.partial = true; }, /^pack\.partial: đây là gói CHỈ CÓ MỘT PHẦN/);
+  bad('license không phải chuỗi', p => { p.license = 5; }, /^pack\.license: cần chuỗi/);
+  // CNS-112: id gói trùng thuộc tính của Object không được vào sổ
+  ['constructor', 'prototype'].forEach(id => bad('id gói "' + id + '"', p => { p.id = id; }, /^id: "[a-z]+" là tên dành riêng của JavaScript/));
+  // lúc NẠP gói đã lưu từ trước (tolerant): gói không rơi khỏi sổ — cue của gói chung bị bỏ, khoá lạ bị bỏ, kèm ghi chú có path
+  const old1 = base(); old1.project = ''; old1.bogus = 1; old1.partial = true;
+  const t1 = S.validateSoundPack(old1, { tolerant: true });
+  no(t1.errors.length || !t1.def || t1.def.sounds['ci-coc'].cue !== undefined || t1.notes.length !== 3 || !t1.notes.some(x => /^sounds\.ci-coc\.cue: gói dùng chung/.test(x)) || !t1.notes.some(x => /^pack\.bogus/.test(x)) || !t1.notes.some(x => /^pack\.partial/.test(x)), 'nạp khoan dung: bỏ cue gói chung + khoá lạ, ghi chú có path: ' + JSON.stringify(t1));
+  no(!S.validateSoundPack(old1).errors.length, 'lưu (không tolerant) vẫn là lỗi');
+  no(!S.validateSoundPack(Object.assign(base(), { id: 'gen.am' }), { tolerant: true }).errors.length, 'tolerant không nới lỗi thật (id gen.)');
+  // license / owner / author đi theo gói: nạp → xuất; PACK_META dùng thật (bản ghi store savedAt / note / version vẫn được chấp nhận)
+  const lic = base(); lic.license = '© 2026 Gen Labs — All rights reserved'; lic.owner = 'Gen Labs'; lic.author = 'Ryan'; lic.savedAt = '2026-10-19T00:00:00Z'; lic.note = 'ghi chú'; lic.version = 3;
+  const Sl = fresh(), rl = Sl.registerPack(lic);
+  no(rl.errors.length || Sl.pack('ci-am').license !== lic.license || Sl.pack('ci-am').owner !== 'Gen Labs' || Sl.pack('ci-am').author !== 'Ryan' || 'savedAt' in Sl.pack('ci-am') || Sl.pack('ci-am').version !== 3, 'license / owner / author đi theo gói, bản ghi store thì bỏ: ' + JSON.stringify(rl.errors));
+  no(!Sl.validateSoundPack(Sl.pack('ci-am')).def.license, 'bản xuất nạp lại vẫn mang license');
+  // CNS-112: sổ đăng ký không prototype — tra theo id / tên lạ không ném, không trả thuộc tính của Object
+  const Sp = fresh();
+  no(Sp.pack('constructor') !== null || Sp.pack('__proto__') !== null || Sp.pack('toString') !== null || Sp.get('constructor') !== null || Sp.has('__proto__') || Sp.unregisterPack('constructor') !== false, 'sổ đăng ký tra id / tên "constructor", "__proto__" phải trả null / false, không ném');
+  const rc = Sp.registerPack(Object.assign(base(), { id: 'constructor' }));
+  no(!rc.errors.length || Sp.packs().some(x => x.id === 'constructor') || Sp.packs().length !== 1, 'id "constructor" bị cổng chặn, sổ không đổi: ' + JSON.stringify(rc.errors));
+  console.log('   ✓ cổng kiểm: ' + cases + ' ca sai đều bị chặn đúng chỗ (khung, khoảng số, khoá lạ cả cấp gói, không mã, ngân sách node ≤ 60, cue chỉ khoá có thật, cue của gói chung, id dành riêng) · nạp khoan dung · license / owner đi theo gói · đếm node tĩnh đúng');
 }
 
 // ---------- 3. sổ đăng ký: tên chung toàn thư viện, trùng tên báo lỗi chỉ ra gói giữ tên; nạp lại = cập nhật; khung không gỡ được
@@ -241,3 +268,4 @@ const LEGACY = ['pop', 'whoosh', 'step', 'sting', 'hit', 'boing', 'sparkle', 'ru
   console.log('   ✓ luật ghép S1–S7: mỗi luật một ca bắt + một ca không bắt, kịch bản sạch 0 cảnh báo, S6 gợi ý tên gần nhất / chặn âm dự án khác · guide + spec một nguồn (' + G.length + ' ký tự)');
 }
 console.log('   (' + n + ' kiểm tra)');
+if (FAILS.length) { console.log('   ✗ ' + FAILS.length + ' kiểm tra đỏ'); process.exit(1); }

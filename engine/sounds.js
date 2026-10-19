@@ -97,7 +97,11 @@
     drum: { keys: ['hz', 'to', 'glide', 'dur', 'peak', 'a', 'sat', 'bias', 'click', 'snare', 'nf', 'nq', 'ndur'], need: ['hz', 'dur', 'peak'], en: {} }
   };
   var SOUND_KEYS = ['label', 'cat', 'tags', 'use', 'cue', 'dur', 'level', 'rev', 'vary', 'lanes', 'layers', 'hitAt'];
-  var PACK_META = ['format', 'id', 'name', 'project', 'version', 'status', 'description', 'sounds', 'license', 'owner', 'author', 'kind', 'pack', 'key', 'savedAt', 'note', 'createdAt', 'updatedAt'];
+  // khoá cấp gói: NỘI DUNG (giữ lại, kể cả license / owner / author — INT-02) + bản ghi của store (kind / savedAt / note… — chấp nhận rồi bỏ).
+  // Khoá khác là LỖI có path chứ không lặng lẽ bỏ: "project_id" gõ nhầm sẽ thành gói dùng chung (CNS-100, CNS-108)
+  var PACK_KEYS = ['format', 'id', 'name', 'description', 'project', 'version', 'status', 'license', 'owner', 'author', 'sounds'];
+  var PACK_META = PACK_KEYS.concat(['kind', 'pack', 'key', 'savedAt', 'note', 'createdAt', 'updatedAt']);
+  var RESERVED_IDS = ['constructor', 'prototype', '__proto__'];   // id gói trùng thuộc tính của Object (sổ đăng ký tra theo id) — CNS-112
   var BUDGET = { sounds: 64, layers: 24, nodes: 60, bytes: 200000, dur: 4, lanes: 6, path: 16, curve: 48, list: 12, points: 48, notes: 32, tags: 8 };
   var NAME_RE = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/, PACK_RE = /^[a-z0-9][a-z0-9-]{1,39}$/, PROJ_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
   var BAD_KEYS = { __proto__: 1, constructor: 1, prototype: 1 };
@@ -158,16 +162,31 @@
     })(pack, 'pack', 0);
     if (errs.length) return { errors: errs, def: null };
 
+    // opts.tolerant (lúc NẠP gói đã lưu từ trước — khởi động, mở Studio): lỗi "khoá lạ / chỉ một phần / cue của gói chung" hạ thành ghi chú + bỏ phần sai,
+    // gói không rơi khỏi sổ; lúc LƯU (mặc định) vẫn là lỗi
+    var notes = [], EL = opts.tolerant ? function (m) { notes.push(m); } : E;
     var d = { format: FORMAT, kind: 'sound' };
+    Object.keys(pack).forEach(function (k) {
+      if (k === 'partial') EL('pack.partial: đây là gói CHỈ CÓ MỘT PHẦN (get_sound_pack › names) — lưu sẽ làm gói co lại; lấy gói đầy đủ (không truyền names), sửa rồi lưu');
+      else if (PACK_META.indexOf(k) < 0) EL('pack.' + k.slice(0, 20) + ': khoá lạ ở cấp gói (được dùng: ' + PACK_KEYS.join(', ') + ')');
+    });
     if (pack.format !== undefined && pack.format !== FORMAT) E('format: phải là "' + FORMAT + '"');
     var id = String(pack.id == null ? '' : pack.id);
     if (opts.frame) { if (id !== FRAME) E('id: gói khung phải là "' + FRAME + '"'); }
     else if (!PACK_RE.test(id)) E('id: chữ thường, số, gạch nối, 2–40 ký tự (vd. "tam-quoc-am")' + (/^gen\./.test(id) ? ' — tiền tố "gen." dành cho gói khung' : ''));
+    else if (RESERVED_IDS.indexOf(id) >= 0 || id in Object.prototype) E('id: "' + id + '" là tên dành riêng của JavaScript — đổi id');
     d.id = id; d.name = plainText(pack.name || id, 60); d.description = plainText(pack.description, 300);
     if (pack.project != null && pack.project !== '' && !PROJ_RE.test(String(pack.project))) E('project: slug dự án');
     d.project = pack.project ? String(pack.project) : '';
     d.version = Math.max(1, Math.floor(+pack.version) || 1);
     d.status = pack.status === 'published' ? 'published' : 'draft';
+    // giấy phép / chủ sở hữu / tác giả đi theo gói (nạp, lưu, xuất, bán) — INT-02
+    ['license', 'owner', 'author'].forEach(function (k) {
+      if (pack[k] === undefined) return;
+      if (typeof pack[k] !== 'string') { E('pack.' + k + ': cần chuỗi'); return; }
+      var t = plainText(pack[k], k === 'license' ? 200 : 60); if (t) d[k] = t;
+    });
+    var shared = !d.project && !opts.frame;   // gói dùng chung (không dự án) — không phải bộ khung
     var S = pack.sounds;
     if (!S || typeof S !== 'object' || Array.isArray(S)) { E('sounds: cần object { tên: âm }'); return { errors: errs, def: null }; }
     var names = Object.keys(S);
@@ -178,9 +197,11 @@
       if (!NAME_RE.test(nm) || nm.length < 2 || nm.length > 32) { E(p + ': tên âm chữ thường ASCII + gạch nối, 2–32 ký tự (vd. "kiem-cham")'); return; }
       if (nm in Object.prototype) { E(p + ': tên dành riêng của JavaScript — đổi tên'); return; }
       var s = checkSound(S[nm], p, E);
+      // cue của gói dùng chung đổi âm tự gán của KHUNG ở mọi dự án (ranh giới tin cậy, INT-10): chỉ gói thuộc một dự án mới có cue, và chỉ trong dự án đó
+      if (s && s.cue && shared) { EL(p + '.cue: gói dùng chung không được đổi âm tự gán của khung — đặt "project" của gói (cue chỉ có hiệu lực trong dự án đó)'); if (opts.tolerant) delete s.cue; }
       if (s) d.sounds[nm] = s;
     });
-    return { errors: errs, def: errs.length ? null : d };
+    return { errors: errs, def: errs.length ? null : d, notes: notes };
   }
 
   function checkSound(s0, p, E) {
@@ -358,7 +379,7 @@
   }
 
   /* --------------------------------------------------------------- sổ đăng ký */
-  var PACKS = {}, ORDER = [], OWNER = {}, CUE = null;
+  var PACKS = Object.create(null), ORDER = [], OWNER = Object.create(null), CUE = null;   // không prototype: id gói / tên âm tuỳ ý không đụng thuộc tính của Object (CNS-112)
   // ưu tiên tự gán: gói dự án (0) > gói dùng chung (1) > khung (2); cùng tầng thì gói nạp trước thắng
   function tier(d) { return d.id === FRAME ? 2 : d.project ? 0 : 1; }
   function registerPack(pack, opts) {
@@ -373,7 +394,7 @@
     if (PACKS[d.id]) unregisterPack(d.id, true);
     Object.keys(d.sounds).forEach(function (nm) { var s = d.sounds[nm]; s.name = nm; s.pack = d.id; OWNER[nm] = d.id; });
     PACKS[d.id] = d; ORDER.push(d.id); CUE = null;
-    return { errors: [], def: d };
+    return { errors: [], def: d, notes: c.notes || [] };
   }
   function unregisterPack(id, force) {
     var d = PACKS[id];

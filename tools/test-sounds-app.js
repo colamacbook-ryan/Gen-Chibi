@@ -9,7 +9,8 @@ const ROOT = path.join(__dirname, '..');
 const { MCP, TOOLS } = require(ROOT + '/server/mcp.js'), { Store } = require(ROOT + '/server/store.js'), { loadEngine } = require(ROOT + '/server/engine-node.js'), Agent = require(ROOT + '/server/agent.js');
 const SOUNDS_SRC = fs.readFileSync(path.join(ROOT, 'engine/sounds.js'), 'utf8');
 let n = 0;
-const no = (c, msg) => { if (c) { console.log('   ✗', msg); process.exit(1); } n++; };
+const FAILS = [];   // GC_KEEP_GOING=1: không thoát ở lỗi đầu — in hết để thấy ca nào đỏ trên mã cũ (thử ngược)
+const no = (c, msg) => { if (c) { console.log('   ✗', msg); if (!process.env.GC_KEEP_GOING) process.exit(1); FAILS.push(msg); return; } n++; };
 const clone = o => JSON.parse(JSON.stringify(o));
 const read = f => JSON.parse(fs.readFileSync(path.join(ROOT, f), 'utf8'));
 const TQ = read('kinds/sound/tq-am.json'), TQB = read('studio/mau/tam-quoc.json');
@@ -130,7 +131,7 @@ const FRAME_STEPS = [{ actor: 'ma-no-canh', state: 'normal', say: 'Chào bạn.'
     v = await call('validate_sound_pack', { pack: Object.assign(base(), { id: 'gen.am' }) });
     no(!v.isError || !/gen\./.test(v.content[0].text), 'không đặt id gen.am (tiền tố dành cho khung)');
     v = await call('validate_sound_pack', { pack: pk('ci-chung', '', { 'ci-x': snd('X', 'hai', { cue: { state: ['shock'] } }) }) });
-    no(v.isError || !(J(v).notes || []).some(x => /MỌI dự án/.test(x)), 'gói dùng chung có cue được nhắc (thay âm tự gán của khung ở mọi dự án)');
+    no(!v.isError || !errOf(v).details.some(d => d.path === 'sounds.ci-x.cue' && /gói dùng chung không được đổi âm tự gán của khung/.test(d.message)), 'gói dùng chung có cue là LỖI có path (CNS-100: không đổi âm tự gán của khung ở mọi dự án): ' + v.content[0].text.slice(0, 200));
     no(S.has('ci-bop') || store.listSoundPacks().length, 'validate_sound_pack không được lưu / nạp gì');
     // save_sound_pack → phiên bản, tệp trên đĩa qua cổng, nạp lại ở máy khác
     await call('save_project', { id: 'p1', name: 'P1' }); await call('save_project', { id: 'p2', name: 'P2' });
@@ -213,7 +214,7 @@ const FRAME_STEPS = [{ actor: 'ma-no-canh', state: 'normal', say: 'Chào bạn.'
       no(r.status !== 200 || !Array.isArray(r.j) || r.j.length, 'GET /api/sound-packs: danh sách rỗng lúc đầu');
       const P = pk('ci-http', '', { 'ci-http-bop': snd('Bốp HTTP', 'hai') });
       r = await api('/api/sound-packs', { body: { pack: P, note: 'từ Studio' } });
-      no(r.status !== 200 || r.j.id !== 'ci-http' || r.j.version !== 1 || !Array.isArray(r.j.warnings) || S.registerPack(r.j).errors.length, 'POST /api/sound-packs: lưu qua cổng, trả bản xuất sạch nạp lại được qua GC.sounds.registerPack: ' + r.t.slice(0, 200));
+      no(r.status !== 200 || r.j.id !== 'ci-http' || r.j.version !== 1 || !Array.isArray(r.j.warnings) || S.registerPack(((({ warnings, ...rest }) => rest))(r.j)).errors.length, 'POST /api/sound-packs: lưu qua cổng, trả bản xuất sạch nạp lại được qua GC.sounds.registerPack: ' + r.t.slice(0, 200));
       r = await api('/api/sound-packs', { body: { pack: pk('ci-xau', '', { 'ci-xau-1': snd('Xấu', 'khong-co') }) } });
       no(r.status !== 422 || !Array.isArray(r.j.errors) || !r.j.errors.some(e => /^sounds\.ci-xau-1\.cat/.test(e)), 'POST gói sai → 422 + errors có path: ' + r.t.slice(0, 200));
       r = await api('/api/sound-packs', { body: { pack: pk('ci-trung-http', '', { hit: snd('Hit', 'hai') }) } });
@@ -324,4 +325,5 @@ const FRAME_STEPS = [{ actor: 'ma-no-canh', state: 'normal', say: 'Chào bạn.'
     console.log('   ✓ hướng dẫn agent: luật S1–S7 / nhóm / công thức sinh từ engine (một nguồn) · chủ đề sound · docs / manifest khớp');
   }
   console.log('   (' + n + ' kiểm tra)');
+  if (FAILS.length) { console.log('   ✗ ' + FAILS.length + ' kiểm tra đỏ'); process.exit(1); }
 })().catch(e => { console.log('   ✗ ngoại lệ:', e.stack); process.exit(1); });
