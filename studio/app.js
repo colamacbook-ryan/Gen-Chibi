@@ -104,7 +104,12 @@
             (scenes || []).forEach(function (d) { var r2 = GC.registerScene(MY_PACK, d); if (r2.errors.length) console.warn('bỏ cảnh', d.id, r2.errors); });
             return self.api('GET', 'api/assets');
           })
-          .then(function (list) { (list || []).forEach(regStored); return self.api('GET', 'api/motion-packs').catch(function () { return []; }); })
+          .then(function (list) { (list || []).forEach(regStored); return self.api('GET', 'api/sound-packs').catch(function () { return []; }); })
+          .then(function (snd) {
+            // gói âm (v0.18): nạp trước gói động tác — sự kiện của gói động tác có thể gọi tên âm của gói; engine kiểm lại qua cổng như mọi gói
+            (snd || []).forEach(function (d) { var r4 = GC.sounds && GC.sounds.registerPack(d); if (r4 && r4.errors.length) console.warn('bỏ gói âm', d.id, r4.errors); });
+            return self.api('GET', 'api/motion-packs').catch(function () { return []; });
+          })
           .then(function (packs) {
             // gói động tác (v0.16): sau nhân vật — màn diễn trong gói trỏ tới nhân vật của bộ
             (packs || []).forEach(function (d) { var r3 = GC.choreo && GC.choreo.registerPack(MY_PACK, d); if (r3 && r3.errors.length) console.warn('bỏ gói động tác', d.id, r3.errors); });
@@ -1529,6 +1534,15 @@
   function workLang(W) { var l = GC.voices.lang(W && W.lang); return { lang: l, accent: GC.voices.accent(l, W && W.accent) }; }
   // thẻ <html lang> của phim xuất theo ngôn ngữ phim (trình đọc màn hình + phông chữ + gợi ý dịch của trình duyệt): vi · en · zh-CN (phổ thông) · zh-TW (Đài Loan) · zh-HK (Quảng Đông)
   function htmlLang(L) { return L.lang === 'en' ? 'en' : L.lang === 'zh' ? (L.accent === 'tw' ? 'zh-TW' : 'zh-CN') : L.lang === 'yue' ? 'zh-HK' : 'vi'; }
+  // gói âm (không phải khung) mà tác phẩm cần: thuộc dự án của tác phẩm, hoặc có âm được gọi tên trong lời thoại / gói động tác đi kèm
+  function filmSoundPacks(W, motionPacks) {
+    var S = GC.sounds; if (!S) return [];
+    var names = {}, want = {};
+    W.shots.forEach(function (s) { ((s.event && s.event.steps) || []).forEach(function (st) { (st.sfx || []).forEach(function (n) { names[n] = 1; }); }); });
+    (motionPacks || []).forEach(function (m) { Object.keys(m.clips || {}).forEach(function (k) { (m.clips[k].events || []).forEach(function (q) { [].concat(q[1].sfx || []).forEach(function (n) { names[n] = 1; }); }); }); });
+    Object.keys(names).forEach(function (n) { var d = S.get(n); if (d && d.pack !== S.FRAME) want[d.pack] = 1; });
+    return S.packs().filter(function (p) { return !p.frame && (want[p.id] || (W.project && p.project === W.project)); }).map(function (p) { return S.pack(p.id); });
+  }
   function exportFilm(W) {
     var L = workLang(W), chars = [], scenes = [];
     W.shots.forEach(function (s) { chars = chars.concat(GC.film.actors(s)); var sc = GC.film.scene(s); if (sc) scenes.push(sc); });
@@ -1537,6 +1551,8 @@
     var used = {}; W.shots.forEach(function (s) { ((s.event && s.event.steps) || []).forEach(function (st) { if (st.action) used[st.action] = 1; }); });
     data.motionPacks = GC.choreo ? GC.choreo.packs().filter(function (p) { return Object.keys(p.actions).some(function (k) { return used[k]; }); })
       .map(function (p) { var o = clone(p); ['pack', 'key', 'version', 'savedAt', 'note'].forEach(function (k) { delete o[k]; }); return o; }) : [];
+    // gói âm phim dùng (v0.18): gói của dự án tác phẩm + gói gọi tên trong step.sfx / sự kiện của gói động tác đi theo — mở file:// vẫn nghe đúng; bộ chuẩn gen.am nằm sẵn trong engine/sounds.js
+    data.soundPacks = filmSoundPacks(W, data.motionPacks); data.project = W.project || '';
     var srcs = Array.prototype.map.call(document.scripts, function (x) { return x.getAttribute('src') || ''; }).filter(function (x) { return /^(engine|kinds)\//.test(x); });
     if (srcs.indexOf('engine/player.js') < 0) { toast('Thiếu engine/player.js'); return; }
     toast('Đang đóng gói phim…');
@@ -1546,7 +1562,7 @@
         var texts = res[0], vo = res[1];
         var pick = function (o, keys) { var r = {}; keys.forEach(function (k) { if (o[k] !== undefined) r[k] = o[k]; }); return r; };
         // motionPacks phải giữ lại ở đây: dựng lại `data` mà bỏ nó thì bộ phát không nạp gói nào và phim mất các chương dùng đòn của gói
-        data = { parts: data.parts, motionPacks: data.motionPacks, characters: data.characters.map(function (a) {
+        data = { parts: data.parts, motionPacks: data.motionPacks, soundPacks: data.soundPacks, project: data.project, characters: data.characters.map(function (a) {
             // giọng chốt sẵn lúc xuất (nhân vật chưa lưu giọng thì lấy giọng Studio đang dùng — không xuất persona; vai giọng luôn chốt, vì phim không có persona để đoán lại)
             var o = pick(a, ['id', 'pack', 'name', 'version', 'look', 'expressions', 'kind', 'voice', 'role']);
             if (GC.audio) { var vv = GC.audio.voiceOf(a, L); o.voice = Object.assign({}, o.voice || vv); if (!o.voice.role && vv.role) o.voice.role = vv.role; }
@@ -1597,6 +1613,7 @@
     '  DATA.items.forEach(function (x) { GC.registerItem("local.my", x); });',
     '  DATA.scenes.forEach(function (x) { GC.registerScene("local.my", x); });',
     '  DATA.characters.forEach(function (a) { GC.registerAsset(a.pack, a); });',
+    '  (DATA.soundPacks || []).forEach(function (p) { if (GC.sounds) GC.sounds.registerPack(p); });',   // gói âm TRƯỚC gói động tác (sự kiện gọi tên âm)
     '  (DATA.motionPacks || []).forEach(function (m) { GC.choreo.registerPack("local.my", m); });',
     '  var rs = GC.film.readiness(FILM), ready = rs.filter(function (x) { return x.ok; }).map(function (x) { return x.shot; });',
     // giọng AI nhúng sẵn (DATA.voices: khoá câu → data: URI) chỉ dùng khi chọn "tự động"; chọn máy đọc / blip / tắt thì bỏ qua. Không gọi mạng.
@@ -1604,6 +1621,7 @@
     '  if (aiN) $("voice").options[0].text = "Giọng: tự động (có giọng AI)";',
     '  var player = GC.film.player($("stage"), { onProgress: function (t) { $("prog").textContent = t; }, onEnd: function () { $("big").hidden = false; }, dialog: FILM.dialog || "auto", lang: DATA.lang, accent: DATA.accent,',
     '    voiceClip: function (line) { return $("voice").value === "auto" && aiN ? VO[GC.film.clipKey(line)] || null : null; } });',
+    '  if (DATA.project) player.setProject(DATA.project);',   // dự án của tác phẩm → chọn gói âm (assets xuất ra không mang project)
     '  $("dialog").value = player.dialog(); $("dialog").onchange = function () { player.setDialog($("dialog").value); };',
     '  player.show(ready[0] || FILM.shots[0]);',
     '  function play(from) { $("big").hidden = true; player.play(ready.slice(from || 0), FILM.title); }',
@@ -1636,6 +1654,7 @@
     var M = { view: VIEW_LABEL, camera: CAMERA_LABEL, bubble: BUBBLE_LABEL, facing: FACING_LABEL }[k];
     if (M && M[v]) return M[v];
     if (k === 'react' && GC.choreo && GC.choreo.REACTS[v]) return GC.choreo.REACTS[v].label;
+    if (k === 'sfx' && GC.sounds && GC.sounds.has(v)) return GC.sounds.get(v).label;   // âm thanh: nhãn của thư viện âm
     return v;
   }
   // huy hiệu của một đòn: đòn đánh / ném / cần binh khí / nhắm đầu (dùng ở bảng bước và Thư viện › Động tác)
@@ -1954,6 +1973,7 @@
       return AiVoice.clipForLine(W, workLang(W), asset, line, pref === 'ai');
     }
     var player = GC.film.player(stage, { onProgress: function (t) { prog.textContent = t; }, dialog: StagePref.get().dialog, voiceClip: voiceClip, clipWait: function () { return AudioPref.get().voice === 'ai' ? 10000 : 2500; } });
+    player.setProject(function () { return W && W.project || ''; });   // gói âm theo dự án của tác phẩm đang mở (v0.18)
     var onCast = function () { if (alive) paintDub(); };   // kết quả cast mới (dàn vượt 48 người → dòng báo ở Lồng tiếng)
     AiVoice.onCast = onCast;
     onLeave(function () { alive = false; player.destroy(); if (AiVoice.onCast === onCast) AiVoice.onCast = null; });   // phản hồi đến sau khi rời trang thì bỏ qua (không dựng diễn viên mồ côi)
@@ -2999,7 +3019,7 @@
   // dự án mẫu đi kèm bản cài: nhập qua đúng cổng như mọi gói (studio/mau/<file>.json)
   var SAMPLES = [
     { id: 'mau-van-phong-vui', file: 'van-phong-vui', short: '✨ Văn phòng vui (mẫu)', button: '✨ Mở dự án mẫu "Văn phòng vui"', note: '3 nhân vật · 2 bối cảnh · phim 4 phân cảnh — xem trọn luồng trong 10 giây, sửa và xuất thử thoải mái.' },
-    { id: 'mau-tam-quoc', file: 'tam-quoc', version: '2026.10.19-giong', short: '🏯 Tam Quốc (bộ chủ đề)', button: '🏯 Mở bộ chủ đề mẫu "Tam Quốc"', note: '7 tướng · 13 trang bị · 8 bối cảnh · phim 6 phân cảnh (có màn đấu) — một bộ thư viện trọn vẹn dựng từ khung, đã Phát hành: xem Gói bán trông thế nào.' }
+    { id: 'mau-tam-quoc', file: 'tam-quoc', version: '2026.10.19-am', short: '🏯 Tam Quốc (bộ chủ đề)', button: '🏯 Mở bộ chủ đề mẫu "Tam Quốc"', note: '7 tướng · 13 trang bị · 8 bối cảnh · phim 6 phân cảnh (có màn đấu) · gói âm Tam Quốc (trống trận, tù và…) — một bộ thư viện trọn vẹn dựng từ khung, đã Phát hành: xem Gói bán trông thế nào.' }
   ];
   function samplesLeft() { return SAMPLES.filter(function (S) { return !Projects.all().some(function (p) { return p.id === S.id; }); }); }
   // bộ mẫu đã nhập từ bản cũ (thiếu phân cảnh / asset mới) — bản cài tự cập nhật mã nhưng không tự đụng dữ liệu của người dùng
@@ -3030,7 +3050,7 @@
         }
         if (x.status >= 400) throw new Error(x.j.error || ('Lỗi ' + x.status));
         var r = x.j, c = r.counts;
-        var msg = 'Đã nhập ' + c.characters + ' nhân vật · ' + c.items + ' vật phẩm · ' + c.scenes + ' bối cảnh' + (c.motionPacks ? ' · ' + c.motionPacks + ' gói động tác' : '') + ' · ' + c.works + ' tác phẩm (' + c.shots + ' phân cảnh)';
+        var msg = 'Đã nhập ' + c.characters + ' nhân vật · ' + c.items + ' vật phẩm · ' + c.scenes + ' bối cảnh' + (c.soundPacks ? ' · ' + c.soundPacks + ' gói âm' : '') + (c.motionPacks ? ' · ' + c.motionPacks + ' gói động tác' : '') + ' · ' + c.works + ' tác phẩm (' + c.shots + ' phân cảnh)';
         if (r.errors.length) window.alert(msg + '\n\n' + r.errors.length + ' mục không qua cổng kiểm:\n' + r.errors.slice(0, 10).map(function (e) { return '• ' + e.kind + ' ' + e.id + ': ' + e.error; }).join('\n'));
         try { localStorage.setItem('gc-route-thu-vien', JSON.stringify({ page: 'projects', project: r.project })); localStorage.setItem('gc-last-project', r.project); localStorage.setItem('gc-toast', msg); } catch (e) { /* bỏ qua */ }
         if (APP && APP.id === 'thu-vien') location.reload(); else location.href = appURL('thu-vien');
@@ -3055,6 +3075,7 @@
     var pick = function (list) { return inProject(list, P.id).filter(function (x) { return !sale || GC.statusOf(x.status) === 'published'; }); };
     var b = bundleOf(pick(GC.assets()), pick(GC.items()), pick(GC.scenes()));
     b.motionPacks = GC.choreo ? pick(GC.choreo.packs()).map(function (p) { var o = clone(p); ['pack', 'key', 'version', 'savedAt', 'note'].forEach(function (k) { delete o[k]; }); return o; }) : [];
+    b.soundPacks = GC.sounds ? GC.sounds.packs().filter(function (p) { return !p.frame && p.project === P.id && (!sale || p.status === 'published'); }).map(function (p) { return GC.sounds.pack(p.id); }) : [];
     var warnings = sale ? b.items.filter(function (x) { return GC.statusOf(x.status) !== 'published'; }).map(function (x) { return 'vật phẩm ' + x.id + ' còn nháp nhưng asset phát hành cần nó — phát hành nó trước khi bán'; }) : [];
     return Object.assign({ format: 'gen-chibi.project/1', kind: sale ? 'sale' : 'backup', license: '© 2026 Gen Labs — engine; asset thuộc người tạo', project: { id: P.id, name: P.name, description: P.description || '' }, warnings: warnings },
       b, { exportedAt: new Date().toISOString() });
