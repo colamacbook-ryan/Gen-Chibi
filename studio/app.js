@@ -5290,7 +5290,7 @@
     var box = h('div', { class: 'stack', id: 'connectBox' });
     $('view').appendChild(box);
     function load() { Store.api('GET', 'api/oauth').then(render).catch(function (e) { clear(box); box.appendChild(h('div', { class: 'panel empty', text: e.message })); }); }
-    var STATUS = { active: ['ok', 'Đang kết nối'], pending: ['warn', 'Chờ cấp phép'], expired: ['', 'Hết hạn'], revoked: ['bad', 'Đã thu hồi'] };
+    var STATUS = { active: ['ok', 'Đang kết nối'], pending: ['warn', 'Chờ cấp phép (trên trang Cấp phép)'], expired: ['', 'Hết hạn'], revoked: ['bad', 'Đã thu hồi'] };
     var RANK = { active: 0, expired: 1, revoked: 2, pending: 3 };
     function scopeLabel(v, id) { var m = v.scopes.filter(function (x) { return x.id === id; })[0]; return m ? m.label + ' (' + id + ')' : id; }
     function render(v) {
@@ -5301,18 +5301,18 @@
       if (!v.enabled) {
         head.appendChild(h('div', { class: 'pad stack' },
           h('div', { class: 'row' }, h('span', { class: 'chip warn', text: 'Chưa bật' })),
-          h('div', { text: v.configured ? 'GC_PUBLIC_URL không hợp lệ: phải là gốc của địa chỉ công khai, vd. https://chibi.example.com (không có đường dẫn).' : 'Cần đặt GC_PUBLIC_URL (địa chỉ công khai của máy này) để bật. Trong terminal: genchibi expose <tên-miền> — lệnh tự đặt GC_PUBLIC_URL và mở tunnel; hoặc tự đặt GC_PUBLIC_URL=https://<tên-miền> trong .env rồi cho proxy của bạn chuyển /mcp, /.well-known/oauth-*, /oauth/* về app (xem docs/HUONG-DAN.md).' }),
+          h('div', { text: v.configured ? 'GC_PUBLIC_URL không hợp lệ: phải là gốc của địa chỉ công khai, vd. https://chibi.example.com (không có đường dẫn).' : 'Cần đặt GC_PUBLIC_URL (địa chỉ công khai của máy này) để bật. Tên miền CHƯA trỏ đi đâu: genchibi expose <tên-miền> — lệnh tự đặt GC_PUBLIC_URL và mở tunnel (đừng chạy với tên miền đã đứng sau proxy riêng như Caddy: DNS sẽ chuyển sang tunnel). Đã có proxy riêng: tự đặt GC_PUBLIC_URL=https://<tên-miền> trong .env rồi cho proxy của bạn chuyển /mcp, /.well-known/oauth-*, /oauth/* về app (xem docs/HUONG-DAN.md).' }),
           h('div', { class: 'note', text: 'Khi chưa bật, /mcp vẫn dùng như cũ: token chủ máy hoặc link có khoá (mục dưới).' })));
       } else {
         var url = v.mcpUrl;
         head.appendChild(h('div', { class: 'pad stack' },
-          h('div', { class: 'row' }, h('span', { class: 'chip ok', text: 'Đã bật' }), v.tokenSet ? null : h('span', { class: 'chip warn', text: 'Chưa đặt GC_API_TOKEN: chỉ chủ ở chính máy này cấp phép được' })),
+          h('div', { class: 'row' }, h('span', { class: v.tokenSet ? 'chip ok' : 'chip warn', text: v.tokenSet ? 'Đã cấu hình' : 'Đã cấu hình — nhưng chưa đặt GC_API_TOKEN' }), v.tokenSet ? null : h('span', { class: 'note', text: 'Thiếu GC_API_TOKEN thì mọi request đi qua proxy / tunnel (kể cả từ claude.ai) bị chặn: đặt GC_API_TOKEN trong .env rồi genchibi restart.' })),
           h('div', { class: 'kv' },
             h('label', { text: 'Địa chỉ MCP' }), h('div', { class: 'stack' }, h('pre', { class: 'code', id: 'connectUrl', text: url }), h('div', null, h('button', { class: 'btn sm', id: 'connectCopy', type: 'button', onclick: function () { copyText(url, 'địa chỉ MCP'); } }, 'Sao chép địa chỉ'), ' ',
               h('button', { class: 'btn sm', type: 'button', onclick: function () { copyText('claude mcp add --transport http gen-chibi ' + url, 'lệnh Claude Code'); } }, 'Sao chép lệnh Claude Code'))),
             h('label', { text: '3 bước' }), h('ol', { style: 'margin:0;padding-left:18px' },
               h('li', { text: 'Mở claude.ai › Customize › Connectors › Add custom connector, dán địa chỉ trên (để trống Client ID / Secret).' }),
-              h('li', { text: 'Bấm Connect — trang "Cấp phép kết nối agent" của máy này hiện ra; nhập GC_API_TOKEN, chọn mức quyền, bấm Cấp phép.' }),
+              h('li', { text: 'Bấm Connect — trang "Cấp phép kết nối agent" của máy này hiện ra; chọn mức quyền, bấm Cấp phép (trình duyệt đã đăng nhập Studio ở cùng địa chỉ thì không phải nhập GC_API_TOKEN).' }),
               h('li', { text: 'Mở phiên chat mới: agent thấy các tool của gen-chibi. Thu hồi bất cứ lúc nào ở bảng dưới.' })),
             h('label', { text: 'Tự đăng ký' }), h('label', { class: 'row' },
               h('input', { type: 'checkbox', id: 'connectReg', checked: v.register, onchange: function (ev) {
@@ -5356,7 +5356,7 @@
         h('div', { class: 'pad stack' },
           link ? h('div', { class: 'stack' }, h('pre', { class: 'code', text: link }), h('div', null, h('button', { class: 'btn sm', type: 'button', onclick: function () { copyText(link, 'link MCP'); } }, 'Sao chép link')))
             : h('div', { class: 'note', text: 'Chưa có. Trong terminal: genchibi expose <tên-miền>.' }),
-          h('div', { class: 'note', text: 'Ai có link là dùng được MCP ở mức "Tạo và sửa" (không mở Studio). Lộ link: genchibi expose --rotate. Link không đổi gì khi bạn dùng OAuth.' }))));
+          h('div', { class: 'note', text: 'Ai có link là dùng được MCP: tạo / sửa như mức "Tạo và sửa", và còn cập nhật được app (không mở Studio). Lộ link: genchibi expose --rotate. Link không đổi gì khi bạn dùng OAuth.' }))));
     }
     load();
   };

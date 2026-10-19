@@ -12,7 +12,7 @@ const path = require('path');
 const SCOPES = ['mcp:read', 'mcp:write', 'mcp:owner'];            // thứ tự = mức quyền tăng dần
 const SCOPE_INFO = {
   'mcp:read': { label: 'Chỉ xem', desc: 'Đọc thư viện, tác phẩm, kiểm công thức, dựng ảnh xem thử. Không lưu gì.' },
-  'mcp:write': { label: 'Tạo và sửa', desc: 'Như link MCP có khoá: tạo / sửa nhân vật, vật phẩm, cảnh, tác phẩm trong dự án. Không tốn lượt giọng AI, không cập nhật hay quay lại bản cũ của app.' },
+  'mcp:write': { label: 'Tạo và sửa', desc: 'Tạo / sửa nhân vật, vật phẩm, cảnh, tác phẩm trong dự án. Không tốn lượt giọng AI, không gỡ gói âm, không cập nhật hay quay lại bản cũ của app.' },
   'mcp:owner': { label: 'Toàn quyền chủ máy', desc: 'Như token chủ máy: thêm cả giọng AI (tốn lượt), gỡ gói âm, cập nhật / quay lại bản cũ. Chỉ cấp cho agent bạn tin hoàn toàn.' }
 };
 const DEFAULT_SCOPE = 'mcp:write';
@@ -245,9 +245,12 @@ class OAuth {
     const p = k => str(q.get ? q.get(k) : q[k], MAX.state + 1);
     const cid = p('client_id'), uri = p('redirect_uri'), state = p('state');
     const c = this.getClient(cid);
+    // cổng đăng nhập riêng trước app (/login?redirect=…) hay làm rơi / cắt phần sau dấu ? khi chuyển hướng về → báo đúng nguyên nhân (CNS-130)
+    const GATE = ' Nếu trước app có trang đăng nhập riêng: trang đó có thể đã làm rơi hoặc cắt phần sau dấu ? của địa chỉ khi chuyển hướng về đây — quay lại agent bấm Connect lần nữa (đã đăng nhập thì không bị chuyển hướng), hoặc sửa cổng để giữ nguyên địa chỉ đầy đủ.';
+    if (!cid) return { page: 'Thiếu client_id trong địa chỉ.' + GATE };
     if (!c) return { page: 'client_id không tồn tại hoặc đã hết hạn (client chưa được cấp phép tự xoá sau 24 giờ). Quay lại agent và thêm kết nối lại.' };
     // trùng tuyệt đối với bản đã đăng ký (riêng loopback bỏ qua port — CLI chọn port lúc chạy); lệch → trang lỗi, KHÔNG chuyển hướng (không open-redirect)
-    if (!uri || uri.length > MAX.uri || shapeRedirect(uri) || !c.redirectUris.some(r => r === uri || redirectKey(r) === redirectKey(uri))) return { page: 'redirect_uri không trùng địa chỉ agent đã đăng ký — từ chối, không chuyển hướng.' };
+    if (!uri || uri.length > MAX.uri || shapeRedirect(uri) || !c.redirectUris.some(r => r === uri || redirectKey(r) === redirectKey(uri))) return { page: 'redirect_uri ' + (uri ? 'không trùng địa chỉ agent đã đăng ký' : 'bị thiếu') + ' — từ chối, không chuyển hướng.' + (uri ? '' : GATE) };
     // danh sách cho phép đổi sau lúc đăng ký (chủ bỏ một mục GC_OAUTH_REDIRECTS) → client cũ cũng mất quyền dùng callback đó
     if (!this.redirectKeys.has(redirectKey(uri))) return { page: 'Địa chỉ quay về ' + new URL(uri).origin + ' không còn nằm trong danh sách cho phép của máy này (GC_OAUTH_REDIRECTS) — từ chối, không chuyển hướng.' };
     const back = (error, description) => ({ redirect: this.redirectTo(uri, { error, error_description: description, state }) });

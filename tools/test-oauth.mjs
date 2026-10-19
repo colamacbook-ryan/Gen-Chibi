@@ -150,6 +150,13 @@ try {
     ok(r.status === 400 && !r.headers.get('location') && t.includes('không chuyển hướng'), 'authorize redirect_uri lệch (' + why + ') → trang lỗi 400, KHÔNG Location');
   }
   r = await A({}, { client_id: 'gcc_khong_co' }); ok(r.status === 400 && !r.headers.get('location'), 'authorize client_id lạ → trang lỗi, không redirect');
+  // cổng đăng nhập riêng làm rơi / cắt query khi chuyển hướng về (CNS-130) → trang lỗi nói đúng nguyên nhân
+  r = await fetch(M + '/oauth/authorize'); let gt = await r.text();
+  ok(r.status === 400 && !r.headers.get('location') && /trang đăng nhập riêng/.test(gt) && /Connect lần nữa/.test(gt), 'authorize mất hết query (cổng login làm rơi) → gợi ý đúng nguyên nhân');
+  r = await A({ redirect_uri: '' }); gt = await r.text();
+  ok(r.status === 400 && /bị thiếu/.test(gt) && /trang đăng nhập riêng/.test(gt), 'authorize bị cắt sau client_id (thiếu redirect_uri) → gợi ý cổng login');
+  r = await A({ redirect_uri: 'https://evil.example/cb' }); gt = await r.text();
+  ok(r.status === 400 && !/trang đăng nhập riêng/.test(gt), 'redirect_uri lệch thật → không đổ lỗi cho cổng login');
   const lb = await (await dcr(M, { client_name: 'CLI', redirect_uris: ['http://127.0.0.1:40001/callback'] })).json();
   r = await A({ redirect_uri: 'http://127.0.0.1:40002/callback' }, lb); ok(r.status === 200, 'loopback: authorize bỏ qua port (CLI chọn port lúc chạy)');
   r = await A({ redirect_uri: 'http://127.0.0.1:40002/khac' }, lb); ok(r.status === 400, 'loopback: khác đường dẫn vẫn lệch');

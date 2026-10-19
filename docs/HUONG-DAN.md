@@ -189,10 +189,10 @@ Agent tự tìm cách đăng nhập, tự đăng ký, còn bạn chỉ cần b�
 | Mức quyền | Agent làm được |
 |---|---|
 | **Chỉ xem** (`mcp:read`) | Đọc thư viện, tác phẩm, kiểm công thức, dựng ảnh xem thử. Không lưu gì. |
-| **Tạo và sửa** (`mcp:write`, mặc định) | Giống link MCP có khoá: tạo và sửa nhân vật, vật phẩm, cảnh, tác phẩm trong dự án. Không tốn lượt giọng AI, không cập nhật app hay quay lại bản cũ. |
+| **Tạo và sửa** (`mcp:write`, mặc định) | Tạo và sửa nhân vật, vật phẩm, cảnh, tác phẩm trong dự án. Không tốn lượt giọng AI, không gỡ gói âm, không cập nhật app hay quay lại bản cũ (chặt hơn link có khoá cũ một bậc: link cũ vẫn cập nhật được app). |
 | **Toàn quyền chủ máy** (`mcp:owner`) | Giống token chủ máy: thêm giọng AI (tốn lượt), gỡ gói âm, cập nhật hoặc quay lại bản cũ. Chỉ cấp cho agent bạn tin hoàn toàn. |
 
-- **Quản lý ở Studio › Hệ thống › Kết nối agent:** xem agent nào đang nối, mức quyền và lần dùng cuối. Bấm **Thu hồi** thì agent mất quyền ngay, kể cả token làm mới. Muốn đổi mức thì thu hồi rồi Connect lại.
+- **Quản lý ở Studio › Hệ thống › Kết nối agent:** xem agent nào đang nối, mức quyền và lần dùng cuối. Bấm **Thu hồi** thì agent mất quyền ngay, kể cả token làm mới. Muốn đổi mức thì bấm **Đổi phạm vi** trên hàng của agent (có hiệu lực ngay).
 - **Token:** dùng được 1 giờ và tự làm mới. Không dùng 30 ngày thì hết hạn. App chỉ lưu bản băm trong `data/oauth.json`.
 - **Claude Code CLI:** chạy `claude mcp add --transport http gen-chibi https://tên-miền/mcp`, rồi gõ `/mcp` trong Claude Code và chọn **Authenticate**. Trang Cấp phép sẽ mở trong trình duyệt.
 - **Link có khoá cũ** (`/mcp/<khoá>`) vẫn chạy như trước, dành cho agent không hỗ trợ OAuth.

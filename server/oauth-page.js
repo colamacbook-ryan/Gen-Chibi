@@ -60,7 +60,7 @@ function consentPage(view, opts) {
     '<label>Quay về</label><div><span class="mono" id="cb"></span><span class="chip" id="cc"></span></div>' +
     '<label>Agent xin</label><div class="mono" id="rq"></div></div>' +
     '<div class="alert" id="warn" hidden></div>' +
-    '<div><div class="lbl">Phạm vi cấp (đổi lại được ở Cài đặt › Kết nối agent)</div><div class="scopes" id="sc" role="radiogroup" aria-label="Phạm vi cấp"></div></div>' +
+    '<div><div class="lbl">Phạm vi cấp (đổi lại được ở Studio › Hệ thống › Kết nối agent)</div><div class="scopes" id="sc" role="radiogroup" aria-label="Phạm vi cấp"></div></div>' +
     '<div id="tk" hidden><label for="tki" class="note">Token chủ máy (GC_API_TOKEN) — để chứng minh bạn là chủ máy</label><input id="tki" type="password" autocomplete="current-password" placeholder="GC_API_TOKEN"></div>' +
     '<div class="alert bad" id="er" hidden></div>' +
     '<div class="row"><button class="btn" id="no" type="button">Từ chối</button><button class="btn primary" id="ok" type="button">Cấp phép</button></div></div>';
