@@ -192,7 +192,7 @@ Link MCP — giữ kín, ai có link là dùng được MCP của bạn (không 
 
 Nối agent:
   Claude Code      claude mcp add -s user --transport http gen-chibi $u
-  Claude web/app   Settings › Connectors › Add custom connector › dán link
+  Claude web/app   Customize › Connectors › Add custom connector › dán link
   Cursor/khác      {"mcpServers":{"gen-chibi":{"url":"$u"}}}
 Lộ link: genchibi expose --rotate (link cũ chết ngay).
 EOF
@@ -200,7 +200,7 @@ EOF
   if [ "${GC_TUNNEL:-}" = named ] && [ -n "${GC_PUBLIC_URL:-}" ]; then cat <<EOF
 
 Kết nối OAuth (khuyên dùng — không phải chép khoá):
-  Claude web/app   Settings › Connectors › Add custom connector › dán ${GC_PUBLIC_URL}/mcp › Connect › "Cấp phép" (nhập GC_API_TOKEN, chọn mức quyền)
+  Claude web/app   Customize › Connectors › Add custom connector › dán ${GC_PUBLIC_URL}/mcp › Connect › "Cấp phép" (nhập GC_API_TOKEN, chọn mức quyền)
   Claude Code      claude mcp add --transport http gen-chibi ${GC_PUBLIC_URL}/mcp
   Quản lý / thu hồi: Studio › Hệ thống › Kết nối agent.  (Cập nhật từ bản trước v0.19: chạy lại genchibi expose ${GC_PUBLIC_URL#https://} để mở thêm đường OAuth)
 EOF
@@ -363,7 +363,7 @@ Nối agent vào gen-chibi (MCP, giao thức 2025-06-18). Sau khi nối, dặn a
 
 Claude Code      claude mcp add -s user --transport http gen-chibi $target$cc_hdr
                  (hoặc stdio)  claude mcp add -s user gen-chibi -- genchibi mcp
-Claude app/web   Settings › Connectors › Add custom connector › dán link Internet
+Claude app/web   Customize › Connectors › Add custom connector › dán link Internet
 Cursor           ~/.cursor/mcp.json   $cur_json
 Gemini CLI       ~/.gemini/settings.json   $gem_json
 Codex CLI        ~/.codex/config.toml (mỗi dòng một khoá):

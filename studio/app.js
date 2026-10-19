@@ -5226,7 +5226,7 @@
             link ? h('div', { class: 'stack' },
               h('pre', { class: 'code', text: link }),
               h('div', null, copyBtn('Sao chép link', link), ' ', copyBtn('Sao chép lệnh Claude Code', 'claude mcp add -s user --transport http gen-chibi ' + link)),
-              h('div', { class: 'note', text: 'Claude web/desktop: Settings › Connectors › Add custom connector › dán link. Giữ kín link; lộ thì chạy genchibi expose --rotate.' }))
+              h('div', { class: 'note', text: 'Claude web/desktop: Customize › Connectors › Add custom connector › dán link. Giữ kín link; lộ thì chạy genchibi expose --rotate.' }))
               : h('div', { class: 'note', text: 'Chưa mở. Trong terminal: genchibi expose <tên-miền> (tên miền do Cloudflare quản lý) hoặc genchibi expose --quick để thử nhanh. Lệnh in ra một link — agent dán link là nối được.' }),
             h('label', { text: 'Claude Code (stdio)' }), h('pre', { class: 'code', text: 'claude mcp add gen-chibi -- genchibi mcp' }),
             h('label', { text: 'Claude Code (HTTP)' }), h('pre', { class: 'code', text: 'claude mcp add --transport http gen-chibi http://localhost:' + port + '/mcp' }),
@@ -5311,7 +5311,7 @@
             h('label', { text: 'Địa chỉ MCP' }), h('div', { class: 'stack' }, h('pre', { class: 'code', id: 'connectUrl', text: url }), h('div', null, h('button', { class: 'btn sm', id: 'connectCopy', type: 'button', onclick: function () { copyText(url, 'địa chỉ MCP'); } }, 'Sao chép địa chỉ'), ' ',
               h('button', { class: 'btn sm', type: 'button', onclick: function () { copyText('claude mcp add --transport http gen-chibi ' + url, 'lệnh Claude Code'); } }, 'Sao chép lệnh Claude Code'))),
             h('label', { text: '3 bước' }), h('ol', { style: 'margin:0;padding-left:18px' },
-              h('li', { text: 'Mở claude.ai › Settings › Connectors › Add custom connector, dán địa chỉ trên (để trống Client ID / Secret).' }),
+              h('li', { text: 'Mở claude.ai › Customize › Connectors › Add custom connector, dán địa chỉ trên (để trống Client ID / Secret).' }),
               h('li', { text: 'Bấm Connect — trang "Cấp phép kết nối agent" của máy này hiện ra; nhập GC_API_TOKEN, chọn mức quyền, bấm Cấp phép.' }),
               h('li', { text: 'Mở phiên chat mới: agent thấy các tool của gen-chibi. Thu hồi bất cứ lúc nào ở bảng dưới.' })),
             h('label', { text: 'Tự đăng ký' }), h('label', { class: 'row' },

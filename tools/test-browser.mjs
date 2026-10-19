@@ -2635,7 +2635,7 @@ if (!ONLY || ONLY === 'oauth') {
     await q.click('.nav-item:has-text("Kết nối agent")'); await q.waitForSelector('#connectUrl');
     if ((await q.textContent('#connectUrl')) !== H + '/mcp') throw new Error('địa chỉ MCP sai: ' + await q.textContent('#connectUrl'));
     const pageTxt = await q.textContent('#connectBox');
-    if (!/Settings › Connectors › Add custom connector/.test(pageTxt) || !/3 bước/.test(pageTxt) || !/Ba mức quyền/.test(pageTxt) || !/Link có khoá \(cách cũ/.test(pageTxt)) throw new Error('thiếu hướng dẫn 3 bước / mức quyền / mục link cũ');
+    if (!/Customize › Connectors › Add custom connector/.test(pageTxt) || !/3 bước/.test(pageTxt) || !/Ba mức quyền/.test(pageTxt) || !/Link có khoá \(cách cũ/.test(pageTxt)) throw new Error('thiếu hướng dẫn 3 bước / mức quyền / mục link cũ');
     if (!(await q.isChecked('#connectReg'))) throw new Error('công tắc tự đăng ký mặc định phải BẬT khi có GC_PUBLIC_URL');
     const rows = await q.$$('#connectTable tr[data-client]');
     if (rows.length !== 3) throw new Error('bảng client: muốn 3 dòng, có ' + rows.length);
