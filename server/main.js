@@ -386,7 +386,13 @@ async function route(req, res) {
   if (p === '/api/sound-packs' && m === 'GET') return send(res, 200, store.listSoundPacks());
   if (p === '/api/sound-packs' && m === 'POST') {
     const b = await body(req, 400 * 1024);
-    try { return send(res, 200, mcp.saveSoundPackChecked(b.pack, b.note || 'Lưu trong Studio')); } catch (e) { return send(res, e.code || 400, { error: e.message, errors: e.errors || null }); }
+    // 409 = còn chỗ gọi âm bị bỏ / dự án đổi (conflicts[] liệt kê từng chỗ); body.force = true để chủ máy làm (Studio hỏi lại trước)
+    try { return send(res, 200, mcp.saveSoundPackChecked(b.pack, b.note || 'Lưu trong Studio', { force: b.force === true })); } catch (e) { return send(res, e.code || 400, { error: e.message, errors: e.errors || null, conflicts: e.conflicts || null }); }
+  }
+  // gỡ gói âm (chỉ chủ máy — đường /api/ là Studio; link MCP / AI chatroom không có): còn chỗ gọi thì 409 + conflicts[]; ?force=1 để gỡ. Tệp vào thùng rác
+  const spm = p.match(/^\/api\/sound-packs\/([a-z0-9][a-z0-9-]{1,39})$/);
+  if (spm && m === 'DELETE') {
+    try { return send(res, 200, mcp.deleteSoundPackChecked(spm[1], { force: url.searchParams.get('force') === '1' })); } catch (e) { return send(res, e.code || 400, { error: e.message, errors: e.errors || null, conflicts: e.conflicts || null }); }
   }
   if (p === '/api/parts' && m === 'POST') {
     const b = await body(req, 400 * 1024);

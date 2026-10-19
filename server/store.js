@@ -103,6 +103,14 @@ class Store {
   // gói âm (v0.18, gen-chibi.sound/1): công thức tổng hợp + siêu dữ liệu, đã qua cổng GC.sounds.validateSoundPack; có phiên bản như gói động tác
   listSoundPacks() { return this.listKind(this.soundDir); }
   saveSoundPack(def, note) { return this.saveKind(this.soundDir, 'soundpacks', def, note); }
+  // gỡ gói âm: tệp sang thùng rác (không xoá hẳn), lịch sử phiên bản (versions/soundpacks~<id>) giữ nguyên
+  trashSoundPack(id) {
+    if (!/^[a-z0-9][a-z0-9-]{1,39}$/.test(String(id))) throw Object.assign(new Error('id gói âm không hợp lệ'), { code: 400 });
+    const file = path.join(this.soundDir, id + '.json');
+    if (!fs.existsSync(file)) return false;
+    fs.renameSync(file, path.join(this.trashDir, 'soundpack-' + id + '-' + Date.now() + '.json'));
+    return true;
+  }
   // dự án chủ đề: một tệp projects.json (ít, đọc cả cụm) — asset trỏ tới bằng trường project
   listProjects() { return readJSON(this.projectFile, []); }
   // opts.sample: { owner, license } — chỉ cổng nhập gói mẫu đặt; sửa tên / mô tả về sau giữ nguyên dấu "bộ mẫu" (không gỡ được qua save_project)

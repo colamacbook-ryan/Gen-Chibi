@@ -105,8 +105,10 @@
   var hasOwn = function (o, k) { return o != null && Object.prototype.hasOwnProperty.call(o, k); };
   function plainText(s, n) { return String(s == null ? '' : s).replace(/[<>&"`]/g, '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, n); }
   // kiểm một gói (dữ liệu người dùng / agent / gói nhập) → { errors, def } — def là bản CHUẨN HOÁ dựng lại từ đầu (không giữ khoá lạ)
-  function checkPack(def) {
-    var errs = [], d = {}, B = MOTION.budget, E = function (m) { if (errs.length < 30) errs.push(m); };
+  // opts.tolerant (lúc NẠP gói đã lưu — khởi động, mở Studio): âm của sự kiện không còn trong thư viện âm thì bỏ riêng sfx đó + ghi chú (notes), KHÔNG loại cả gói —
+  // gói âm đổi sau khi gói động tác được lưu không được làm màn đấu biến mất (CNS-102); lúc LƯU (mặc định) vẫn là lỗi
+  function checkPack(def, opts) {
+    var errs = [], d = {}, B = MOTION.budget, E = function (m) { if (errs.length < 30) errs.push(m); }, tolerant = !!(opts && opts.tolerant), notes = [];
     if (!def || typeof def !== 'object' || Array.isArray(def)) return { errors: ['gói động tác phải là object'], def: null };
     try { if (JSON.stringify(def).length > B.bytes) return { errors: ['gói quá lớn (tối đa ' + B.bytes / 1000 + ' KB)'], def: null }; }
     catch (x) { return { errors: ['gói không phải JSON thuần'], def: null }; }
@@ -195,7 +197,15 @@
       Object.keys(e).forEach(function (k) {
         var v = e[k], p = path + '.' + String(k).slice(0, 16);
         if (hasOwn(EVN, k)) o[k] = num(v, EVN[k][0], EVN[k][1], p);
-        else if (k === 'sfx') { var s = Array.isArray(v) ? v : [v], bad = s.filter(function (x) { return !soundOk(x); }); if (!s.length || s.length > 3) E(p + ': chọn 1–3 tên âm trong thư viện âm (get_sound_spec · list_sounds)'); else if (bad.length) E(p + ': âm ' + bad.slice(0, 3).map(function (x) { return '"' + String(x).slice(0, 32) + '"'; }).join(', ') + ' không có trong thư viện âm của ' + (evProject ? 'dự án "' + evProject + '"' : 'gói dùng chung') + ' (list_sounds)'); else o.sfx = Array.isArray(v) ? s.slice() : v; }
+        else if (k === 'sfx') {
+          var s = Array.isArray(v) ? v : [v], bad = s.filter(function (x) { return !soundOk(x); });
+          if (!s.length || s.length > 3) E(p + ': chọn 1–3 tên âm trong thư viện âm (get_sound_spec · list_sounds)');
+          else if (bad.length) {
+            var why = p + ': âm ' + bad.slice(0, 3).map(function (x) { return '"' + String(x).slice(0, 32) + '"'; }).join(', ') + ' không có trong thư viện âm của ' + (evProject ? 'dự án "' + evProject + '"' : 'gói dùng chung') + ' (list_sounds)';
+            if (!tolerant) E(why);
+            else { notes.push(why + ' — đã bỏ khỏi sự kiện'); var good = s.filter(soundOk); if (good.length) o.sfx = Array.isArray(v) ? good : good[0]; }
+          } else o.sfx = Array.isArray(v) ? s.slice() : v;
+        }
         else if (k === 'at') o.at = oneOf(v, MOTION.points, p);
         else if (k === 'fx') o.fx = oneOf(v, MOTION.fx, p);
         else if (k === 'from') { if (typeof v === 'number') o.from = num(v, -600, 600, p); else o.from = oneOf(v, MOTION.points, p); }
@@ -354,7 +364,7 @@
     d.project = def.project ? String(def.project) : '';
     d.status = def.status === 'published' ? 'published' : 'draft';
     d.kind = 'motion'; d.format = MOTION.format;
-    return { errors: errs, def: errs.length ? null : d };
+    return { errors: errs, def: errs.length ? null : d, notes: notes };
   }
   // gỡ mọi thứ một gói đã nạp (nạp lại bản mới / xoá gói)
   function unregisterPack(key) {
@@ -368,8 +378,8 @@
     delete PACKS[key]; PACK_ORDER.splice(PACK_ORDER.indexOf(key), 1);
   }
   // nạp gói đã qua cổng vào bộ biên đạo: đặt tiền tố tên, chặn trùng id hành động / màn diễn với khung và gói khác
-  function registerPack(packNs, def) {
-    var c = checkPack(def);
+  function registerPack(packNs, def, opts) {
+    var c = checkPack(def, opts);
     if (c.errors.length) return c;
     var d = c.def, key = packNs + '/' + d.id, pre = d.id + ':', C = GC.choreo, errs = [];
     Object.keys(d.actions).forEach(function (k) { var x = hasOwn(C.ACTIONS, k) ? C.ACTIONS[k] : null; if (x && x.pack !== key) errs.push('actions.' + k + ': trùng id hành động của ' + (x.pack === FRAME_PACK ? 'bộ khung' : 'gói ' + x.pack) + ' — đổi tên'); });
@@ -392,7 +402,7 @@
     Object.keys(d.shows).forEach(function (k) { var s = JSON.parse(JSON.stringify(d.shows[k])); s.steps.forEach(function (x) { x.clip = Cl(x.clip); if (x.pose) x.pose = P(x.pose); }); s.pack = key; C.demos[k] = s; });
     d.pack = packNs; d.key = key; d.version = Math.max(1, Math.floor(+def.version) || 1);
     PACKS[key] = d; PACK_ORDER.push(key);
-    return { errors: [], def: d };
+    return { errors: [], def: d, notes: c.notes || [] };
   }
   // cầm binh khí ở tay phải? (đòn needs: 'weapon')
   // có binh khí? (đòn needs: 'weapon') — tay phải cầm TRANG BỊ loại "Vũ khí", hoặc linh kiện khai grip: 'weapon' (CNS-044).

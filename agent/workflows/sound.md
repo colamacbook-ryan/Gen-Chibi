@@ -49,14 +49,25 @@ a clash is rejected and names the pack that owns the name.
    `layers`; optional `cue` (`state` / `fx` / `activity` / `event` lists + `mood` condition) to be auto-assigned, `lanes` (stereo),
    `hitAt` (where the hit lands, for sounds with a wind-up).
 4. `validate_sound_pack` with `{ "pack": <pack> }` → fix every `details[].path`.
-5. `save_sound_pack` with `{ "pack": <pack>, "note": "…" }` (same `id` again = a new version; `warnings` lists steps / motion packs
-   that still call a sound the new version dropped).
+5. `save_sound_pack` with `{ "pack": <pack>, "note": "…" }` (same `id` again = a new version; `warnings` reminds the pack's scope).
+   Guards, each with a clear error:
+   - A pack **without** `project` is a *shared* pack: its sounds can be called by name in every project, but it may **not** carry `cue`
+     (a shared pack must not change the frame's auto-assign in every project). Want auto-assign? Give the pack a `project`.
+   - Through an MCP **link** or the AI chatroom `project` is **required**, and you may not overwrite another project's pack or a shared pack
+     (`FORBIDDEN` — use another `id`).
+   - Dropping a sound that a work step or a motion pack event still calls, or moving the pack to another project while something calls it,
+     answers `[CONFLICT]` listing every call site. Fix those first; only the owner may repeat with `force: true`.
+   - ≤ 32 packs per project (the same cap as `import_project`); an unknown pack-level key (`project_id`…) or `partial: true`
+     (what `get_sound_pack` returns with `names`) is an error — send a complete pack.
+   Removing a pack is `delete_sound_pack` (owner only; same `[CONFLICT]` list while it is still called).
 6. Use it: `step.sfx = ["<sound name>"]`, `events: [[t, { "sfx": "<name>" }]]` inside a motion pack, or a `cue`.
    Ask the owner to listen (Studio › Thư viện › Âm thanh › ▶).
 
 ## Order matters when packs depend on each other
 Save the **sound pack before** the motion pack that calls its sounds, and before the work whose steps name them. `export_project` /
-`import_project` already do this (`soundPacks` before `motionPacks` before `works`).
+`import_project` already do this (`soundPacks` before `motionPacks` before `works`), and `export_project` pulls every sound pack the
+bundle calls — by a work step **or** by a motion pack event, including shared packs and packs of other projects (a sale bundle warns when
+such a pack is still a draft).
 
 ## Example (a sound pack that passes the gate)
 <!-- example: sound-pack.json -->

@@ -658,10 +658,10 @@ const L = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n")
 const by = id => L.find(r => r.id === id);
 const ok = (c, m) => { if (!c) { console.log("   ✗", m); process.exit(1); } };
 ok(by(1).result.protocolVersion === "2025-06-18", "bắt tay");
-ok(by(2).result.tools.length === 52, "52 tool");
+ok(by(2).result.tools.length === 53, "53 tool");
 ok(!by(3).result.isError && JSON.parse(by(3).result.content[0].text).saved, "lưu nhân vật hợp lệ");
 ok(by(4).result.isError, "chặn linh kiện lạ");
-console.log("   ✓ MCP: bắt tay, 52 tool, lưu hợp lệ, chặn linh kiện lạ");
+console.log("   ✓ MCP: bắt tay, 53 tool, lưu hợp lệ, chặn linh kiện lạ");
 const spec = JSON.parse(by(5).result.content[0].text);
 ok(spec.slots[0].slot === "hat" && spec.example && spec.views.q45, "get_part_spec có khung + ví dụ");
 ok(!by(6).result.isError && /<svg/.test(by(6).result.content[1].resource.text), "preview_part trả bàn soát SVG");

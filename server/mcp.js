@@ -12,6 +12,9 @@ const PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const SERVER_INFO = { name: 'gen-chibi', title: 'gen-chibi — nhà máy asset chibi bằng code (nhân vật, vật phẩm, bối cảnh, gói động tác, phim)' };
 const MY_PACK = 'local.my';
 const TMP_PACK = 'local.preview';
+// TRẦN số gói âm / gói động tác của MỘT dự án: kiểm khi LƯU và là trần khi NHẬP gói dự án — hai trần luôn bằng nhau, sao lưu nào lưu được thì nhập lại được (L-61, CNS-101).
+// Gói động tác bị giữ ở 8 vì mỗi gói phải dựng thử ≤ 4 s lúc nhập; gói âm không dựng thử nên rộng hơn
+const CAP = { soundPacks: 32, motionPacks: 8 };
 // lớp nên dùng cho từng bộ phận (theo thư viện chính thức)
 const SLOT_LAYERS = {
   head: ['head', 'ears', 'shade'], mask: ['mask'], hair: ['hairFront', 'hairBack'], beard: ['beard', 'mustache'], hat: ['hat', 'hairBack'],
@@ -96,7 +99,8 @@ const TOOLS = [
   { name: 'get_sound_spec', title: 'Chuẩn gói âm + luật ghép', description: 'Định dạng gen-chibi.sound/1: 8 loại lớp tổng hợp (tone, noise, crackle, modes, voice, fm, mallet, drum) + khoảng số + ngân sách (≤ 60 node Web Audio mỗi âm, ≤ 24 lớp, ≤ 4 s), nhóm âm, từ vựng cue (cảnh tự gán), 7 LUẬT GHÉP S1–S7 (lint_sound_track chạy đúng các luật này), công thức ghép mẫu "đà → va → hậu quả", 17 tên âm cũ và một gói ví dụ chạy được qua cổng. Gọi trước khi viết gói âm hoặc ghép âm vào kịch bản (cũng: get_guide topic sound).', inputSchema: obj({}), annotations: { readOnlyHint: true } },
   { name: 'get_sound_pack', title: 'Xem gói âm', description: 'JSON đầy đủ một gói âm (gen-chibi.sound/1): id "gen.am" = bộ chuẩn (62 âm — mẫu công thức), hoặc id gói của người dùng / bộ mẫu (list_sounds › pack, vd. tq-am). names = chỉ lấy công thức vài âm (làm mẫu hoặc sửa rồi save_sound_pack).', inputSchema: obj({ id: { type: 'string', description: 'id gói âm (list_sounds › pack)' }, names: { type: 'array', items: { type: 'string' }, description: 'chỉ lấy các âm này (tuỳ chọn)' } }, ['id']), annotations: { readOnlyHint: true } },
   { name: 'validate_sound_pack', title: 'Kiểm gói âm', description: 'Kiểm gói âm chưa lưu: cổng dữ liệu (chỉ số + chuỗi trong danh sách cho phép, không mã), ngân sách node, tên âm không trùng gói khác (tên âm là CHUNG toàn thư viện). Không lưu gì. Lỗi có đường dẫn sounds.<tên>.layers[i].<trường>. Agent không NGHE được — nhờ chủ máy bấm ▶ ở Studio › Thư viện › Âm thanh để thẩm âm.', inputSchema: obj({ pack: { type: 'object', description: 'gói gen-chibi.sound/1 — xem get_sound_spec' } }, ['pack']), annotations: { readOnlyHint: true } },
-  { name: 'save_sound_pack', title: 'Lưu gói âm', description: 'Kiểm rồi lưu gói âm vào Thư viện (có phiên bản; cùng id = phiên bản mới, bản cũ giữ trong lịch sử). Âm của gói dùng ngay trong step.sfx, gói động tác (events[].sfx) và tự gán theo cue. Đặt "project": gói của dự án chỉ dùng được trong dự án đó (luật S6) và đi theo gói dự án (export_project). Trả warnings nếu bản mới bỏ âm mà tác phẩm / gói động tác còn gọi.', inputSchema: obj({ pack: { type: 'object' }, note: { type: 'string', description: 'ghi chú phiên bản' } }, ['pack']) },
+  { name: 'save_sound_pack', title: 'Lưu gói âm', description: 'Kiểm rồi lưu gói âm vào Thư viện (có phiên bản; cùng id = phiên bản mới, bản cũ giữ trong lịch sử). Âm của gói dùng ngay trong step.sfx, gói động tác (events[].sfx) và tự gán theo cue. Đặt "project": gói của dự án chỉ dùng được trong dự án đó (luật S6) và đi theo gói dự án (export_project). Gói KHÔNG có project (dùng chung) chỉ thêm âm để gọi bằng tên — không được có cue (không đổi âm tự gán của khung); muốn có cue thì đặt project. Bản mới bỏ âm mà tác phẩm / gói động tác còn gọi, hoặc đổi project khi còn phụ thuộc → [CONFLICT] kèm danh sách; force: true (chỉ chủ máy) mới lưu và trả danh sách trong warnings. Mỗi dự án ≤ 32 gói âm. Kênh: qua link MCP hay AI chatroom BẮT BUỘC có project và không được ghi đè gói của dự án khác / gói dùng chung (FORBIDDEN); khoá lạ ở cấp gói và partial là lỗi. Trả warnings (nhắc phạm vi gói + chỗ bị hỏng).', inputSchema: obj({ pack: { type: 'object' }, note: { type: 'string', description: 'ghi chú phiên bản' }, force: { type: 'boolean', description: 'chỉ chủ máy: lưu dù còn chỗ gọi âm bị bỏ / dự án đổi (kết quả nằm trong warnings)' } }, ['pack']) },
+  { name: 'delete_sound_pack', title: 'Gỡ gói âm', description: 'Gỡ một gói âm khỏi thư viện (tệp chuyển vào thùng rác của dữ liệu, lịch sử phiên bản giữ nguyên). Còn tác phẩm / gói động tác gọi âm của gói → [CONFLICT] kèm danh sách từng chỗ; force: true mới gỡ (các chỗ đó thành S6 / bị bỏ sfx lúc nạp). Không gỡ được bộ khung gen.am. Kênh: CHỈ chủ máy (Studio / stdio / MCP có token) — qua link MCP hay AI chatroom bị từ chối (FORBIDDEN).', inputSchema: obj({ id: { type: 'string', description: 'id gói âm (list_sounds › packs)' }, force: { type: 'boolean' } }, ['id']), annotations: { destructiveHint: true } },
   { name: 'lint_sound_track', title: 'Chấm luật ghép âm S1–S7', description: 'Chấm cách ghép âm của kịch bản theo 7 luật (get_sound_spec › rules): S1 ≤ 3 âm / ≤ 1 âm nhấn mỗi bước · S2 mật độ ≤ 4 âm / 2 s · S3 âm nhấn không đè lời thoại · S4 âm va chạm để đòn đánh tự phát · S5 một âm ≤ 3 bước liền · S6 âm phải có trong thư viện của dự án · S7 âm dài chỉ ở đầu / cuối cảnh. Đầu vào MỘT trong: steps (mảng bước), event, shot ({ event }) hoặc work (id tác phẩm → mọi phân cảnh, dự án của tác phẩm). Lỗi (S1, S6) → [VALIDATION_FAILED] kèm details[].path; chỉ có cảnh báo (S2–S5, S7) → ok: true + warnings. save_shot / save_work tự chạy cùng bộ luật này.', inputSchema: obj({ steps: { type: 'array', items: { type: 'object' } }, event: { type: 'object' }, shot: { type: 'object' }, work: { type: 'string', description: 'id tác phẩm' }, project: { type: 'string', description: 'dự án để tra gói âm (mặc định: dự án của tác phẩm; steps / event / shot không kèm thì chỉ khung + gói dùng chung)' }, auto: { type: 'boolean', description: 'false = không tính âm tự gán (mặc định true)' } }), annotations: { readOnlyHint: true } },
   { name: 'render_voice', title: 'Đọc thoại bằng giọng AI', description: 'Đọc một câu thoại bằng giọng AI (Google Gemini TTS) → clip WAV (nội dung audio). Giọng theo VAI: character (vai + giọng đã chọn của nhân vật; chưa chọn thì đoán từ vai trò / tính cách / tên) hoặc role (get_catalog › voiceRoles: bé trai, bà lão, võ tướng, quân sư…); voice = tên giọng ghi đè (get_catalog › aiVoices). Ngôn ngữ lang = vi | en | zh | yue (Quảng Đông — viết chữ Quảng Đông) — chữ phải đúng ngôn ngữ đó; accent = giọng vùng (get_catalog › voiceLangs: bac / nam / trung · us / uk · pt / tw · hk). Cảm xúc theo state + bubble. work = id tác phẩm → dùng giọng đã CHỐT của dàn (cùng giọng Studio / phim xuất — nên luôn gửi khi lồng tiếng cho phim). Câu đã đọc được lưu đệm (không tốn lượt). Trả JSON (clip, seconds); include_audio: true thì kèm WAV (cần client hiểu nội dung audio của MCP 2025-03-26). Kênh: chủ máy (Studio / stdio / token) đọc mới được; qua link MCP chỉ lấy câu đã lồng sẵn; AI chatroom không có tool này. Cần chủ máy dán key Google AI Studio ở Studio › Cài đặt AI › Giọng AI (tự bật); gói miễn phí ~10 câu / ngày / model — hết lượt trả UNAVAILABLE kèm retryAt.', inputSchema: obj({ text: { type: 'string', maxLength: 240 }, character: { type: 'string' }, role: { type: 'string', enum: Object.keys(GV.ROLES) }, lang: { type: 'string', enum: Object.keys(GV.LANGS) }, accent: { type: 'string' }, work: { type: 'string', description: 'id tác phẩm (giọng đã chốt của dàn)' }, include_audio: { type: 'boolean' }, voice: { type: 'string' }, state: { type: 'string' }, bubble: { type: 'string', enum: ['say', 'shout', 'think', 'whisper'] } }, ['text']), annotations: { readOnlyHint: false, openWorldHint: true } },
   { name: 'design_voice', title: 'Thiết kế giọng vai', description: 'THIẾT KẾ một giọng AI mới cho một vai (get_catalog › voiceRoles: ông lão, bà lão, võ tướng, quân sư…) + ngôn ngữ (vi | en | zh | yue) + giọng vùng (accent: bac / nam / trung · us / uk · pt / tw · hk) trên project Google của chủ máy; từ đó render_voice của mọi nhân vật vai đó tự dùng giọng này. Tốn một lượt Google (~25 giây); Google chặn thiết kế giọng trẻ em / vị thành niên (vai bé, thiếu niên → BAD_REQUEST, dùng giọng trẻ trung có sẵn). Trả JSON + đường clip nghe thử (include_audio: true thì kèm WAV). Kênh: CHỈ chủ máy (Studio / stdio / MCP có token) — qua link MCP hay AI chatroom bị từ chối (FORBIDDEN).', inputSchema: obj({ role: { type: 'string', enum: Object.keys(GV.ROLES) }, lang: { type: 'string', enum: Object.keys(GV.LANGS) }, accent: { type: 'string' }, include_audio: { type: 'boolean' } }, ['role']), annotations: { readOnlyHint: false, openWorldHint: true } },
@@ -222,8 +226,12 @@ class MCP {
     (this.store.listItems ? this.store.listItems() : []).forEach(d => { const r = this.GC.registerItem(MY_PACK, d); if (r.errors.length) console.warn('bỏ item', d.id, r.errors); });
     (this.store.listScenes ? this.store.listScenes() : []).forEach(d => { const r = this.GC.registerScene(MY_PACK, d); if (r.errors.length) console.warn('bỏ cảnh', d.id, r.errors); });
     // gói âm (v0.18) nạp TRƯỚC gói động tác: sự kiện của gói động tác có thể gọi tên âm của gói âm cùng dự án
-    (this.store.listSoundPacks ? this.store.listSoundPacks() : []).forEach(d => { try { const r = this.GC.sounds.registerPack(d); if (r.errors.length) console.warn('bỏ gói âm', d.id, r.errors); } catch (e) { console.warn('bỏ gói âm hỏng', d && d.id, e.message); } });
-    (this.store.listMotionPacks ? this.store.listMotionPacks() : []).forEach(d => { try { const r = this.GC.choreo.registerPack(MY_PACK, d); if (r.errors.length) console.warn('bỏ gói động tác', d.id, r.errors); } catch (e) { console.warn('bỏ gói động tác hỏng', d && d.id, e.message); } });   // tệp sửa tay hỏng không được chặn server khởi động
+    // NẠP KHOAN DUNG (CNS-102): gói đã lưu từ trước mà nay có chỗ không còn hợp lệ (âm bị bỏ khỏi gói âm, cue của gói chung…) → bỏ RIÊNG chỗ sai + cảnh báo
+    // (log + start_here.warnings), KHÔNG loại cả gói — cổng nghiêm vẫn ở lúc LƯU
+    this.bootWarnings = [];
+    const bw = (what, id, list) => { if (list && list.length) { console.warn(what, id, list); list.slice(0, 3).forEach(m => { if (this.bootWarnings.length < 20) this.bootWarnings.push(what + ' ' + id + ': ' + String(m).slice(0, 240)); }); } };
+    (this.store.listSoundPacks ? this.store.listSoundPacks() : []).forEach(d => { try { const r = this.GC.sounds.registerPack(d, { tolerant: true }); if (r.errors.length) bw('bỏ gói âm', d.id, r.errors); else bw('gói âm', d.id, r.notes); } catch (e) { console.warn('bỏ gói âm hỏng', d && d.id, e.message); } });
+    (this.store.listMotionPacks ? this.store.listMotionPacks() : []).forEach(d => { try { const r = this.GC.choreo.registerPack(MY_PACK, d, { tolerant: true }); if (r.errors.length) bw('bỏ gói động tác', d.id, r.errors); else bw('gói động tác', d.id, r.notes); } catch (e) { console.warn('bỏ gói động tác hỏng', d && d.id, e.message); } });   // tệp sửa tay hỏng không được chặn server khởi động
   }
   sync() {
     if (this._bulk) return;
@@ -469,9 +477,16 @@ class MCP {
         return r.errors.length ? toolError('Gói âm chưa đạt: ' + r.errors.slice(0, 6).join('; '), { code: 'VALIDATION_FAILED', errors: r.errors }) : json(Object.assign({ ok: true, errors: [] }, r.info));
       }
       case 'save_sound_pack': {
-        let d; try { d = this.saveSoundPackChecked(args.pack, args.note || 'Lưu qua MCP'); } catch (e) { return toolError(e); }
+        // link MCP / AI chatroom: gói PHẢI thuộc một dự án và không đè gói của dự án khác; không có force (CNS-100, L-45)
+        const restricted = !!(ctx && (ctx.viaLink || ctx.channel === 'ui'));
+        let d; try { d = this.saveSoundPackChecked(args.pack, args.note || 'Lưu qua ' + (ctx && ctx.channel === 'ui' ? 'AI trong Studio' : ctx && ctx.viaLink ? 'link MCP' : 'MCP'), { restricted, force: args.force === true }); } catch (e) { return toolError(e, e.hint ? { hint: e.hint } : undefined); }
         const w = d.warnings; delete d.warnings;
         return json(Object.assign({ saved: true, id: d.id, version: d.version, sounds: Object.keys(d.sounds), use: 'Kịch bản: step.sfx = ["<tên âm>"]; chấm: lint_sound_track; nghe thử (chủ máy): Studio › Thư viện › Âm thanh', studio: 'Studio › Thư viện › Âm thanh' }, w && w.length ? { warnings: w } : {}));
+      }
+      case 'delete_sound_pack': {
+        if (ctx && (ctx.viaLink || ctx.channel === 'ui')) return toolError('Gỡ gói âm chỉ chủ máy làm được (Studio › Thư viện › Âm thanh › Gói âm, hoặc MCP có token chủ máy)', { code: 'FORBIDDEN' });
+        let r; try { r = this.deleteSoundPackChecked(String(args.id || ''), { force: args.force === true }); } catch (e) { return toolError(e, e.hint ? { hint: e.hint } : undefined); }
+        return json(r);
       }
       case 'lint_sound_track': {
         let r; try { r = this.soundLint(args); } catch (e) { return toolError(e); }
@@ -771,6 +786,7 @@ class MCP {
     const st = { projects: pj.map(p => ({ id: p.id, name: p.name, sample: !!p.sample, characters: p.characters, items: p.items, scenes: p.scenes })),
       characters: mine(GC.assets()).length, items: mine(GC.items()).length, scenes: mine(GC.scenes()).length, motionPacks: GC.choreo.packs().length, soundPacks: GC.sounds.packs().length, sounds: GC.sounds.names().length,
       works: works.length, samples: this.samples().map(x => ({ id: x.id, installed: x.installed, update: x.update })) };
+    if (this.bootWarnings.length) st.warnings = this.bootWarnings.slice();   // gói đã lưu nạp khoan dung lúc khởi động (bỏ riêng chỗ sai) — chủ máy nên xem
     const next = [];
     if (!pj.some(p => !p.sample)) next.push('save_project — create the project you will work in (every asset you make belongs to it)');
     if (!pj.length) next.push('install_sample with id "' + (this.samples()[0] || { id: 'mau-van-phong-vui' }).id + '" — optional: a ready-made project to learn from');
@@ -825,6 +841,7 @@ class MCP {
     pack = this.keepProject(pack, C.PACKS[key]);
     const c = C.checkPack(pack);
     if (c.errors.length) throw Object.assign(new Error('Gói động tác chưa đạt: ' + c.errors.slice(0, 6).join('; ')), { code: 422, errors: c.errors });
+    this.capCheck('motionPacks', c.def.project, c.def.id);   // trần khi LƯU = trần khi NHẬP (CNS-061, CNS-101)
     const prev = this.store.listMotionPacks().find(x => x.id === c.def.id) || null;
     const r = C.registerPack(MY_PACK, Object.assign({}, c.def, { version: prev ? (prev.version || 1) + 1 : 1 }));
     if (r.errors.length) throw Object.assign(new Error('Gói động tác chưa đạt: ' + r.errors.slice(0, 6).join('; ')), { code: 422, errors: r.errors });
@@ -862,24 +879,74 @@ class MCP {
     return Object.assign(S.spec(), { packs: S.packs(), workflow: 'get_guide topic sound: get_sound_spec → list_sounds → get_sound_pack (names) làm mẫu → validate_sound_pack → save_sound_pack → ghép vào step.sfx → lint_sound_track',
       hearing: 'Agent không nghe được (server không có Web Audio): kiểm bằng cổng + lint; nhờ chủ máy bấm ▶ ở Studio › Thư viện › Âm thanh để thẩm âm, tải WAV.' });
   }
+  // nhắc phạm vi của gói (validate_sound_pack → notes; save_sound_pack → warnings) — cổng đã chặn cue của gói dùng chung, nên chỉ còn nhắc đúng phạm vi
+  soundNotes(def) {
+    if (!def.project) return ['Gói dùng chung (không có "project"): MỌI dự án gọi được các âm này bằng tên; gói chung không đổi được âm tự gán của khung — muốn có cue thì đặt "project".'];
+    return Object.keys(def.sounds).some(n => def.sounds[n].cue) ? ['Gói của dự án "' + def.project + '" có "cue": bộ phát tự gán các âm này thay âm của khung — chỉ trong dự án "' + def.project + '".'] : [];
+  }
   // kiểm gói âm KHÔNG lưu: cổng dữ liệu + tên âm không trùng gói khác (tên âm là chung toàn thư viện)
   soundTry(pack) {
     const S = this.GC.sounds, c = S.validateSoundPack(pack);
     if (c.errors.length) return { errors: c.errors };
-    const errs = [], ds = c.def.sounds, names = Object.keys(ds), notes = [];
+    const errs = [], ds = c.def.sounds, names = Object.keys(ds);
     names.forEach(nm => { const o = S.get(nm); if (o && o.pack !== c.def.id) errs.push('sounds.' + nm + ': trùng tên âm của gói "' + o.pack + '" — tên âm là chung toàn thư viện, đổi tên (vd. "' + nm + '-' + c.def.id.split('-')[0] + '")'); });
     if (errs.length) return { errors: errs };
-    if (!c.def.project && names.some(n => ds[n].cue)) notes.push('Gói không thuộc dự án nào mà có "cue": âm của nó thay âm tự gán của KHUNG trong MỌI dự án — đặt "project" nếu chỉ dành cho một dự án.');
     return { errors: [], info: { id: c.def.id, project: c.def.project, sounds: names.length, nodesMax: Math.max.apply(null, names.map(n => ds[n].nodes)),
-      list: names.map(n => ({ name: n, cat: ds[n].cat, dur: ds[n].dur, nodes: ds[n].nodes, accent: S.ACCENT.indexOf(ds[n].cat) >= 0, cue: ds[n].cue || null })), notes } };
+      list: names.map(n => ({ name: n, cat: ds[n].cat, dur: ds[n].dur, nodes: ds[n].nodes, accent: S.ACCENT.indexOf(ds[n].cat) >= 0, cue: ds[n].cue || null })), notes: this.soundNotes(c.def) } };
   }
-  // gói âm: cổng dữ liệu → tên âm không trùng → nạp → lưu (phiên bản mới nếu cùng id). Trả bản XUẤT sạch (nạp lại được qua registerPack) + warnings
-  saveSoundPackChecked(pack, note) {
+  // MỌI chỗ đang gọi tên âm trong dữ liệu đã lưu: step.sfx của tác phẩm + events[].sfx của gói động tác (âm có ba nơi gọi — CNS-102). skip: { works, motion } = tập id sẽ bị thay (nhập gói)
+  soundRefs(skip) {
+    skip = skip || {};
+    const S = this.GC.sounds, out = [];
+    this.store.listWorks().forEach(x => { const W = skip.works && skip.works.has(x.id) ? null : this.store.getWork(x.id); if (!W) return; S.refsOf({ shots: W.shots || [] }).forEach(r => out.push({ name: r.name, project: W.project || '', where: 'tác phẩm ' + W.id + ' › phân cảnh ' + r.shot + ' › bước ' + (r.step + 1) })); });
+    this.GC.choreo.packs().forEach(p => { if (skip.motion && skip.motion.has(p.id)) return; S.refsOf({ motionPacks: [p] }).forEach(r => out.push({ name: r.name, project: p.project || '', where: 'gói động tác ' + p.id + ' › clip ' + r.clip })); });
+    return out;
+  }
+  // chỗ gọi âm đang HỢP LỆ mà thay gói `old` bằng `def` (null = gỡ gói) làm HỎNG: âm bị bỏ khỏi gói, hoặc gói đổi dự án nên dự án của chỗ gọi không còn thấy (CNS-102)
+  soundBreaks(old, def, skip) {
+    if (!old) return [];
+    const had = new Set(Object.keys(old.sounds)), keep = new Set(def ? Object.keys(def.sounds) : []);
+    const seeBefore = pj => !old.project || old.project === pj, seeAfter = pj => !!def && (!def.project || def.project === pj);
+    const out = [], seen = new Set();
+    this.soundRefs(skip).forEach(r => {
+      if (!had.has(r.name) || !seeBefore(r.project)) return;
+      const gone = !keep.has(r.name);
+      if (!gone && seeAfter(r.project)) return;
+      const m = r.where + ': còn gọi âm "' + r.name + '"' + (!def ? ' — gỡ gói thì âm này mất' : gone ? ' đã bỏ khỏi gói' : ' — gói chuyển sang dự án "' + def.project + '" nên dự án "' + r.project + '" không còn thấy âm này');
+      if (!seen.has(m)) { seen.add(m); out.push(m); }
+    });
+    return out;
+  }
+  // trần số gói của một dự án khi LƯU = trần khi NHẬP gói dự án (CAP) — gói thứ N + 1 bị từ chối kèm cách xử lý
+  capCheck(kind, project, id) {
+    if (!project) return;
+    const what = kind === 'soundPacks' ? 'gói âm' : 'gói động tác', list = kind === 'soundPacks' ? this.store.listSoundPacks() : this.store.listMotionPacks();
+    const n = list.filter(x => x.project === project && x.id !== id).length;
+    if (n >= CAP[kind]) throw Object.assign(new Error(what + ': dự án "' + project + '" đã có ' + n + ' ' + what + ' (tối đa ' + CAP[kind] + ' — bằng trần khi nhập gói dự án, để sao lưu nào cũng nhập lại được)'),
+      { code: 422, errors: ['project: tối đa ' + CAP[kind] + ' ' + what + ' mỗi dự án (đang có ' + n + ')'], hint: 'Gộp bớt âm / đòn vào một ' + what + ' đã có (get_' + (kind === 'soundPacks' ? 'sound_pack' : 'motion_pack') + ' → sửa → lưu lại cùng id) hoặc gỡ ' + what + ' không dùng.' });
+  }
+  // link MCP / AI chatroom (restricted): gói âm PHẢI thuộc một dự án và không được ghi đè gói của dự án khác / gói dùng chung (CNS-100 — gói chung từng đổi âm của khung ở mọi dự án)
+  soundChannelGate(pack, old) {
+    const pj = pack && typeof pack === 'object' && typeof pack.project === 'string' ? pack.project : '';
+    const forbid = (m, h) => Object.assign(new Error(m), { code: 403, errors: ['project: ' + m], hint: h });
+    if (!pj) throw forbid('qua link MCP / AI chatroom gói âm phải thuộc một dự án — đặt "project" là dự án của bạn (gói dùng chung chỉ chủ máy lưu được)', 'Đặt project của dự án bạn đang làm (list_projects) rồi lưu lại; không thử đường khác.');
+    if (old && (old.project || '') !== pj) throw forbid('gói "' + old.id + '" đang ' + (old.project ? 'thuộc dự án "' + old.project + '"' : 'là gói dùng chung') + ' — qua link MCP / AI chatroom không được ghi đè gói của dự án khác', 'Dùng id gói khác cho gói của dự án "' + pj + '".');
+  }
+  // gói âm: cổng dữ liệu → rào theo phụ thuộc → nạp → lưu (phiên bản mới nếu cùng id). Trả bản XUẤT sạch (nạp lại được qua registerPack) + warnings.
+  // opts: { restricted: kênh link / chatroom — bắt buộc project, không force · force: chủ máy chấp nhận làm hỏng chỗ còn gọi · skip: tập tác phẩm / gói đang bị thay (nhập gói) }
+  saveSoundPackChecked(pack, note, opts) {
+    opts = opts || {};
     const S = this.GC.sounds, id = pack && typeof pack === 'object' && typeof pack.id === 'string' ? pack.id : '';
     const old = id ? S.pack(id) : null;   // bản đang nạp — trả lại nếu lưu hỏng
     pack = this.keepProject(pack, old);
+    if (opts.restricted) this.soundChannelGate(pack, old);
     const c = S.validateSoundPack(pack);
     if (c.errors.length) throw Object.assign(new Error('Gói âm chưa đạt: ' + c.errors.slice(0, 6).join('; ')), { code: 422, errors: c.errors });
+    this.capCheck('soundPacks', c.def.project, c.def.id);
+    // rào theo phụ thuộc: bỏ một âm đang được gọi, hoặc đổi dự án khi còn chỗ gọi → 409 kèm danh sách; force (chủ máy) mới làm
+    const breaks = this.soundBreaks(old, c.def, opts.skip), forced = breaks.length && opts.force === true && !opts.restricted;
+    if (breaks.length && !forced) throw Object.assign(new Error('Đổi gói âm "' + c.def.id + '" làm hỏng ' + breaks.length + ' chỗ đang gọi âm của nó: ' + breaks.slice(0, 3).join('; ') + (breaks.length > 3 ? '…' : '')),
+      { code: 409, errors: breaks.slice(0, 30), conflicts: breaks, hint: opts.restricted ? 'Giữ nguyên các âm đang được gọi và dự án của gói; việc đổi lớn do chủ máy làm (force).' : 'Sửa các chỗ gọi trước, hoặc lưu lại với force: true nếu chủ máy đồng ý (các chỗ đó sẽ thành S6 / bị bỏ sfx lúc nạp).' });
     const prev = this.store.listSoundPacks().find(x => x.id === c.def.id) || null;
     const r = S.registerPack(Object.assign({}, pack, { version: prev ? (prev.version || 1) + 1 : 1 }));
     if (r.errors.length) throw Object.assign(new Error('Gói âm chưa đạt: ' + r.errors.slice(0, 6).join('; ')), { code: 422, errors: r.errors });
@@ -887,17 +954,20 @@ class MCP {
     try { rec = this.store.saveSoundPack(S.pack(c.def.id), note); }
     catch (e) { if (old) S.registerPack(old); else S.unregisterPack(c.def.id); throw e; }
     S.registerPack(rec);   // số phiên bản trong sổ = số đã lưu
-    return Object.assign(S.pack(c.def.id), { warnings: this.soundDangling(old, rec) });
+    return Object.assign(S.pack(c.def.id), { warnings: this.soundNotes(c.def).concat(forced ? breaks.slice(0, 20).map(m => 'đã làm hỏng — ' + m) : []) });
   }
-  // âm bản cũ có mà bản mới bỏ: tác phẩm / gói động tác còn gọi tên đó sẽ IM (lần lưu sau luật S6 báo lỗi) → cảnh báo, không chặn
-  soundDangling(old, now) {
-    if (!old) return [];
-    const gone = new Set(Object.keys(old.sounds).filter(n => !Object.prototype.hasOwnProperty.call(now.sounds, n)));
-    if (!gone.size) return [];
-    const out = [], add = m => { if (out.length < 10) out.push(m); };
-    this.store.listWorks().forEach(x => { const W = this.store.getWork(x.id); (W && W.shots || []).forEach(sh => ((sh.event && sh.event.steps) || []).forEach((st, i) => (Array.isArray(st.sfx) ? st.sfx : []).forEach(n => { if (gone.has(n)) add('tác phẩm ' + W.id + ' › phân cảnh ' + sh.id + ' › bước ' + (i + 1) + ': còn gọi âm "' + n + '" đã bỏ khỏi gói'); }))); });
-    this.GC.choreo.packs().forEach(p => Object.keys(p.clips).forEach(k => (p.clips[k].events || []).forEach(q => [].concat(q[1].sfx || []).forEach(n => { if (gone.has(n)) add('gói động tác ' + p.id + ' › clip ' + k + ': còn gọi âm "' + n + '"'); }))));
-    return out;
+  // gỡ một gói âm (chủ máy): còn chỗ gọi âm của nó → 409 kèm danh sách; force mới gỡ. Tệp vào thùng rác, lịch sử phiên bản giữ nguyên
+  deleteSoundPackChecked(id, opts) {
+    opts = opts || {};
+    const S = this.GC.sounds, old = S.pack(id);
+    if (id === S.FRAME) throw Object.assign(new Error('Không gỡ được bộ khung gen.am (id dành cho khung) — khung là của Gen Labs'), { code: 403 });
+    if (!old || !this.store.listSoundPacks().some(x => x.id === id)) throw Object.assign(new Error('Không có gói âm ' + String(id).slice(0, 40) + ' (list_sounds › packs)'), { code: 404 });
+    const breaks = this.soundBreaks(old, null);
+    if (breaks.length && opts.force !== true) throw Object.assign(new Error('Gói âm "' + id + '" còn được gọi ở ' + breaks.length + ' chỗ: ' + breaks.slice(0, 3).join('; ') + (breaks.length > 3 ? '…' : '')),
+      { code: 409, errors: breaks.slice(0, 30), conflicts: breaks, hint: 'Sửa các chỗ gọi trước, hoặc gỡ với force: true nếu chủ máy đồng ý.' });
+    S.unregisterPack(id);
+    try { this.store.trashSoundPack(id); } catch (e) { S.registerPack(old); throw e; }
+    return { deleted: true, id, sounds: Object.keys(old.sounds).length, warnings: breaks.slice(0, 20).map(m => 'đã làm hỏng — ' + m), note: 'Tệp vào thùng rác của dữ liệu; lịch sử phiên bản còn nguyên (data/versions/soundpacks~' + id + ').' };
   }
   // luật ghép âm cho MỘT đầu vào (steps | { event } | { shots }): issues đầy đủ + errors / warnings dạng "path: câu"
   soundCheck(input, project) {
@@ -940,10 +1010,11 @@ class MCP {
       const sc = s.scene && GC.getScene(s.scene, MY_PACK); if (sc && sc.pack === MY_PACK) add(scenes, allS.find(x => x.id === sc.id));
       // gói động tác chứa đòn mà phân cảnh dùng (kể cả gói của dự án khác) — khôi phục ở máy sạch không mất màn đấu (CNS-060)
       ((s.event && s.event.steps) || []).forEach(st => { const ac = st && st.action && Object.prototype.hasOwnProperty.call(GC.choreo.ACTIONS, st.action) ? GC.choreo.ACTIONS[st.action] : null, P2 = ac && GC.choreo.PACKS[ac.pack];
-        if (P2 && P2.pack === MY_PACK) add(motionPacks, S.listMotionPacks().find(x => x.id === P2.id));
-        // gói âm chứa âm mà phân cảnh gọi tên (kể cả gói dùng chung / dự án khác) — khôi phục ở máy sạch vẫn nghe đủ (v0.18)
-        (Array.isArray(st && st.sfx) ? st.sfx : []).forEach(n => { const o = GC.sounds.get(n); if (o && o.pack !== GC.sounds.FRAME) add(soundPacks, S.listSoundPacks().find(x => x.id === o.pack)); }); });
+        if (P2 && P2.pack === MY_PACK) add(motionPacks, S.listMotionPacks().find(x => x.id === P2.id)); });
     }));
+    // gói âm mà dữ liệu trong gói GỌI TÊN — step.sfx của tác phẩm VÀ events[].sfx của MỌI gói động tác đi kèm (kể cả gói dùng chung / dự án khác, kể cả gói động tác kéo từ dự án khác):
+    // MỘT hàm bundleDeps (engine) cho cả sao lưu, gói bán và phim xuất — khôi phục ở máy sạch vẫn đủ âm (CNS-101, L-61)
+    GC.sounds.bundleDeps({ shots: [].concat(...works.map(w => w.shots || [])), motionPacks }).packs.forEach(pid => add(soundPacks, S.listSoundPacks().find(x => x.id === pid)));
     // trang bị nhân vật đang mặc (kể cả ngoài dự án)
     chars.forEach(a => Object.values((a.look && a.look.equip) || {}).forEach(ref => { const it = GC.getItem(ref, MY_PACK); if (it && it.pack === MY_PACK) add(items, allI.find(x => x.id === it.id)); }));
     const usePart = p => { if (p && p.pack === MY_PACK) { const d = dataParts.find(x => x.slot === p.slot && x.id === p.id); if (d) used[d.slot + '~' + d.id] = clean(d); } };
@@ -954,7 +1025,11 @@ class MCP {
     }));
     // gói bán vẫn kéo theo phụ thuộc còn nháp (để gói tự đủ) nhưng báo rõ để người bán phát hành nó trước
     const drafts = (list, what) => list.filter(r => GC.statusOf(r.status) !== 'published').map(r => what + ' ' + r.id + ' còn nháp nhưng asset phát hành cần nó — phát hành nó trước khi bán');
-    const warnings = sale ? drafts(items, 'vật phẩm').concat(drafts(scenes, 'bối cảnh')) : [];
+    const warnings = sale ? drafts(items, 'vật phẩm').concat(drafts(scenes, 'bối cảnh'), drafts(soundPacks, 'gói âm')) : [];
+    // trần xuất = trần nhập (CAP): bản xuất nào ra được thì nhập lại được — vượt thì báo NGAY, không để người dùng phát hiện lúc khôi phục (L-61, CNS-101)
+    [['gói âm', soundPacks, CAP.soundPacks], ['gói động tác', motionPacks, CAP.motionPacks]].forEach(([what, list, max]) => {
+      if (list.length > max) throw Object.assign(new Error('Gói dự án có ' + list.length + ' ' + what + ' (' + list.map(r => r.id).slice(0, 8).join(', ') + (list.length > 8 ? '…' : '') + ') > ' + max + ' — trần khi nhập lại; gộp bớt ' + what + ' (kể cả ' + what + ' kéo từ dự án khác / dùng chung) rồi xuất lại'), { code: 400 });
+    });
     const out = { format: 'gen-chibi.project/1', kind: sale ? 'sale' : 'backup', license: '© 2026 Gen Labs — All rights reserved', project: { id: P.id, name: P.name, description: P.description || '' }, warnings,
       sample: P.sample || undefined,   // sao lưu bộ mẫu vẫn mang dấu mẫu → nhập lại ở máy khác vẫn không xuất bán được
       characters: chars.map(clean), items: items.map(clean), scenes: scenes.map(clean), parts: Object.values(used), soundPacks: soundPacks.map(clean), motionPacks: motionPacks.map(clean), works, exportedAt: new Date().toISOString() };
@@ -980,7 +1055,7 @@ class MCP {
     if (!pid) throw Object.assign(new Error('project.id: slug dự án (chữ thường, số, gạch nối)'), { code: 400 });
     const bad = m => Object.assign(new Error(m), { code: 400 });
     const arr = (x, n, what) => { if (x === undefined) return []; if (!Array.isArray(x)) throw bad(what + ': cần mảng'); if (x.length > n) throw bad(what + ': tối đa ' + n); return x.filter(v => v && typeof v === 'object'); };
-    const parts = arr(b.parts, 300, 'parts'), items = arr(b.items, 500, 'items'), scenes = arr(b.scenes, 200, 'scenes'), chars = arr(b.characters, 500, 'characters'), works = arr(b.works, 50, 'works'), motions = arr(b.motionPacks, 8, 'motionPacks'), sounds = arr(b.soundPacks, 8, 'soundPacks');   // mỗi gói động tác phải dựng thử (≤ 4 s) — giữ tổng thời gian chặn có trần
+    const parts = arr(b.parts, 300, 'parts'), items = arr(b.items, 500, 'items'), scenes = arr(b.scenes, 200, 'scenes'), chars = arr(b.characters, 500, 'characters'), works = arr(b.works, 50, 'works'), motions = arr(b.motionPacks, CAP.motionPacks, 'motionPacks'), sounds = arr(b.soundPacks, CAP.soundPacks, 'soundPacks');   // mỗi gói động tác phải dựng thử (≤ 4 s) — giữ tổng thời gian chặn có trần; CAP = trần LƯU (L-61)
     // ngân sách: tổng phân cảnh ≤ 200 (mỗi phân cảnh chạy cổng đạo diễn) — chặn gói phình to làm treo server
     // gói làm bằng bản gen-chibi mới hơn bản đang chạy: báo cập nhật TRƯỚC khi ghi gì (CNS-023) — tránh nhập nửa vời
     const semver = v => { const m = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(String(v || '')); return m ? [+m[1], +m[2], +m[3]] : null; };
@@ -1018,7 +1093,14 @@ class MCP {
       scenes.forEach(x => step('scenes', x.id, () => this.saveSceneChecked(Object.assign(strip(x), { project: pid }), note)));
       chars.forEach(a => step('characters', a.id, () => this.saveAssetChecked(Object.assign(strip(a), { pack: MY_PACK, project: pid }), note)));
       // gói âm trước gói động tác (sự kiện của gói động tác gọi tên âm) và trước tác phẩm (step.sfx gọi tên âm; luật S6 tra gói của dự án)
-      sounds.forEach(m => step('soundPacks', m.id, () => this.saveSoundPackChecked(Object.assign(strip(m), { project: pid }), note)));
+      // gói âm đang có trên máy (nhập đè): của dự án khác → từ chối (không chuyển gói giữa dự án); gói dùng chung → giữ là gói chung (CNS-102); rào phụ thuộc vẫn chạy,
+      // chỉ bỏ qua những tác phẩm / gói động tác CHÍNH gói nhập sẽ thay
+      const skip = { works: new Set(works.map(w => String(w.id || ''))), motion: new Set(motions.map(m => String(m.id || ''))) };
+      sounds.forEach(m => step('soundPacks', m.id, () => {
+        const ex = GC.sounds.pack(String(m.id));
+        if (ex && ex.project && ex.project !== pid) throw new Error('gói âm ' + m.id + ' đang thuộc dự án "' + ex.project + '" — nhập đè không chuyển gói giữa các dự án; đổi id gói trong gói nhập');
+        this.saveSoundPackChecked(Object.assign(strip(m), { project: ex && !ex.project ? '' : pid }), note, { skip });
+      }));
       // gói động tác trước tác phẩm: phân cảnh gọi hành động của gói bằng tên
       motions.forEach(m => step('motionPacks', m.id, () => this.saveMotionPackChecked(Object.assign(strip(m), { project: pid }), note)));
       works.forEach(w => step('works', w.id, () => {
@@ -1074,6 +1156,7 @@ class MCP {
     const GC = this.GC, errs = [];
     const plain = (t, n) => String(t == null ? '' : t).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '').slice(0, n);
     let w = args.id ? this.store.getWork(String(args.id)) : null;
+    const prevProject = w ? w.project || '' : null;   // dự án trước lần lưu này — đổi dự án mới là việc làm đổi âm nhìn thấy được của mọi phân cảnh
     if (args.id && !w && !/^[a-z0-9][a-z0-9-]{0,63}$/.test(String(args.id))) errs.push('id: chữ thường, số, gạch nối');
     if (!w) {
       const title = plain(args.title, 80).trim();
@@ -1099,11 +1182,12 @@ class MCP {
     // duyệt từng cảnh (v0.18): trạng thái + ghi chú — cổng riêng (cleanReview): chặn khoá lạ, kẹp độ dài, id + giờ do server đặt
     if (args.review !== undefined) { const rv = cleanReview(args.review, w, errs, opts); if (rv === undefined) delete w.review; else if (!errs.length || errs.every(x => !/^review/.test(x))) w.review = rv; }
     // luật ghép âm S1–S7 trên MỌI phân cảnh theo dự án (mới) của tác phẩm — đổi dự án thì âm của gói dự án cũ thành S6; lỗi → từ chối, cảnh báo → trả kèm
-    const L = this.soundCheck({ shots: w.shots || [] }, w.project);
-    L.errors.slice(0, 10).forEach(x => errs.push(x));
+    // CHỈ chặn lỗi do chính lần lưu này gây ra (đổi dự án). Lỗi cũ của phân cảnh (âm bị bỏ khỏi gói từ trước…) không được khoá đổi tên / ngôn ngữ / giọng — thành cảnh báo (CNS-102)
+    const L = this.soundCheck({ shots: w.shots || [] }, w.project), changedProject = prevProject === null || (w.project || '') !== prevProject, old = [];
+    if (changedProject) L.errors.slice(0, 10).forEach(x => errs.push(x)); else L.errors.slice(0, 10).forEach(x => old.push('lỗi có từ trước (sửa ở phân cảnh đó) — ' + x));
     if (errs.length) throw Object.assign(new Error(errs.join('; ')), { code: 422, errors: errs });
-    const rec = this.store.saveWork(w);
-    return L.warnings.length ? Object.assign(rec, { warnings: L.warnings.slice(0, 20) }) : rec;
+    const rec = this.store.saveWork(w), wn = old.concat(L.warnings);
+    return wn.length ? Object.assign(rec, { warnings: wn.slice(0, 20) }) : rec;
   }
   shotCast(list, errs) {
     const out = [];

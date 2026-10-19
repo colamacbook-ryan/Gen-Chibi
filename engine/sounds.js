@@ -17,6 +17,7 @@
  *   validateSoundPack(pack, {frame}) → { errors, def }      cổng kiểm; def = bản CHUẨN HOÁ dựng lại từ đầu (không giữ khoá lạ)
  *   registerPack(pack) → { errors, def } · unregisterPack(id) · packs() · pack(id)    tên âm là không gian tên CHUNG (trùng → lỗi chỉ ra gói)
  *   get(name) → âm (chỉ đọc) · has(name) · names({project}) · list({cat, tag, q, project}) · info(name)
+ *   refsOf({shots, motionPacks}) → mọi chỗ gọi tên âm · bundleDeps({shots, motionPacks}) → { names, packs, missing }: gói âm cần đi theo khi đóng gói (sao lưu / gói bán / phim xuất)
  *   allowedSounds({work, cast, project, shot, scene}) → [tên…] âm dùng được: MỘT hàm cho lược đồ / lời nhắc đạo diễn, Bảng bước, S6 và bộ phát · projectFor(…) → dự án quyết
  *   cueFor({state, fx, activity, event, mood, project, max}) → [tên…] ≤ 2: tự gán âm cho một bước (gói dự án > gói chung > khung)
  *   cueTable({project, mood}) → { state: {…}, fx: {…}, activity: {…}, event: {…} } — bảng tương thích để bộ phát thay bảng cứng
@@ -674,6 +675,42 @@
     });
   }
 
+  /* ------------------------------------------------------- phụ thuộc khi đóng gói / đổi gói */
+  // MỌI chỗ gọi tên âm trong dữ liệu: step.sfx của phân cảnh (shots[].event.steps[].sfx) + events[].sfx của clip trong gói động tác (clips[k].events = [[giây, { sfx }]…]).
+  // Âm có BA nơi gọi (bước, sự kiện gói động tác, cue) nên sao lưu / gói bán / phim xuất / rào đổi gói phải theo dõi đủ — một hàm cho tất cả (CNS-101, CNS-102)
+  function refsOf(o) {
+    o = o || {};
+    var out = [];
+    (Array.isArray(o.shots) ? o.shots : []).forEach(function (sh, j) {
+      var steps = sh && sh.event && Array.isArray(sh.event.steps) ? sh.event.steps : [];
+      steps.forEach(function (st, i) {
+        (st && Array.isArray(st.sfx) ? st.sfx : []).forEach(function (n) { if (typeof n === 'string') out.push({ name: n, kind: 'step', shot: sh.id != null ? String(sh.id) : String(j), step: i }); });
+      });
+    });
+    (Array.isArray(o.motionPacks) ? o.motionPacks : []).forEach(function (p) {
+      var clips = p && p.clips && typeof p.clips === 'object' ? p.clips : {};
+      Object.keys(clips).forEach(function (k) {
+        var evs = clips[k] && Array.isArray(clips[k].events) ? clips[k].events : [];
+        evs.forEach(function (q, e) {
+          var sfx = q && q[1] && q[1].sfx;
+          (sfx === undefined || sfx === null ? [] : Array.isArray(sfx) ? sfx : [sfx]).forEach(function (n) { if (typeof n === 'string') out.push({ name: n, kind: 'event', pack: p.id, clip: k, event: e }); });
+        });
+      });
+    });
+    return out;
+  }
+  // gói âm (không phải khung) mà dữ liệu cần để chạy ở máy sạch: { names: tên được gọi, packs: id gói giữ các tên đó (thứ tự nạp), missing: tên không có trong sổ }.
+  // o = { shots, motionPacks } — dùng cho CẢ BA bộ đóng gói: sao lưu / gói bán (server exportProject, Studio projectBundle) và phim xuất (Studio filmSoundPacks)
+  function bundleDeps(o) {
+    var names = [], seen = Object.create(null), want = Object.create(null), missing = [];
+    refsOf(o).forEach(function (r) {
+      if (seen[r.name]) return; seen[r.name] = 1; names.push(r.name);
+      var d = get(r.name);
+      if (!d) missing.push(r.name); else if (d.pack !== FRAME) want[d.pack] = 1;
+    });
+    return { names: names, packs: ORDER.filter(function (id) { return want[id]; }), missing: missing };
+  }
+
   /* ------------------------------------------------- công thức ghép mẫu */
   // chuỗi âm theo giây — "đà → va → hậu quả" — dùng cho trang nghe, guide và làm mẫu cho người viết kịch bản (mỗi âm một bước)
   var RECIPES = [
@@ -1319,7 +1356,7 @@
 
   var API = {
     FORMAT: FORMAT, FRAME: FRAME, LINT_MAX: LINT_MAX, CATS: CATS, ACCENT: ACCENT, VOCAB: VOCAB, LEGACY: LEGACY, INST: INST, BUDGET: BUDGET, RULES: RULES, RECIPES: RECIPES, EXAMPLE: EXAMPLE,
-    validateSoundPack: validateSoundPack, projectFor: projectFor, allowedSounds: allowedSounds, registerPack: registerPack, unregisterPack: unregisterPack, get: get, has: has, names: names, packs: packs, pack: pack,
+    validateSoundPack: validateSoundPack, refsOf: refsOf, bundleDeps: bundleDeps, projectFor: projectFor, allowedSounds: allowedSounds, registerPack: registerPack, unregisterPack: unregisterPack, get: get, has: has, names: names, packs: packs, pack: pack,
     info: info, list: list, cueFor: cueFor, cueTable: cueTable, lintSoundTrack: lintSoundTrack, suggest: suggest, nodesOf: nodesOf, layerDur: layerDur, spec: spec, guide: guide,
     catLabel: function (c) { return CAT_LABEL[c] || ''; }
   };

@@ -173,7 +173,7 @@ Bảng kiểu Data Console (desktop): mỗi hàng một âm — **ID âm** (tên
 - Chạy **`genchibi agent connect`**: in sẵn cấu hình nối cho Claude Code, Claude app, Cursor, Gemini CLI, Codex CLI và lệnh `curl` (không in token ra màn hình).
 - Muốn agent "thuộc bài" từ đầu: **`genchibi agent skill claude`** (hoặc `cursor`, `gemini`, `codex`, `generic`) — cài hướng dẫn thành skill / `AGENTS.md` / `GEMINI.md` vào thư mục bạn đang đứng (hoặc `--dir`). Đã có `AGENTS.md` / `GEMINI.md` của riêng bạn thì lệnh dừng lại, không ghi đè (thêm `--force` nếu muốn thay).
 - Dặn agent: **"gọi `start_here` trước"**. Agent sẽ nhận trạng thái Thư viện, 11 luật vàng, 10 chủ đề hướng dẫn (nhân vật, linh kiện, trang bị, cảnh, gói động tác, âm thanh, hoạt ảnh, phim, gói dự án, hệ thống), rồi làm theo từng bước có ví dụ chạy được.
-- 52 tool; agent đi qua **cùng cổng kiểm** với Studio. Lỗi trả về có mã (`[VALIDATION_FAILED]`, `NOT_FOUND`…) và chỉ đúng trường sai — agent tự sửa được.
+- 53 tool; agent đi qua **cùng cổng kiểm** với Studio. Lỗi trả về có mã (`[VALIDATION_FAILED]`, `NOT_FOUND`…) và chỉ đúng trường sai — agent tự sửa được.
 - Agent không có MCP client vẫn dùng được qua HTTP thuần (xem `agent/GUIDE.md` mục 1).
 
 ## Câu hỏi thường gặp

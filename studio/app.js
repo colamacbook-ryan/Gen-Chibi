@@ -108,12 +108,12 @@
           .then(function (list) { (list || []).forEach(regStored); return self.api('GET', 'api/sound-packs').catch(function () { return []; }); })
           .then(function (snd) {
             // gói âm (v0.18): nạp trước gói động tác — sự kiện của gói động tác có thể gọi tên âm của gói; engine kiểm lại qua cổng như mọi gói
-            (snd || []).forEach(function (d) { var r4 = GC.sounds && GC.sounds.registerPack(d); if (r4 && r4.errors.length) console.warn('bỏ gói âm', d.id, r4.errors); });
+            (snd || []).forEach(function (d) { var r4 = GC.sounds && GC.sounds.registerPack(d, { tolerant: true }); if (r4 && r4.errors.length) console.warn('bỏ gói âm', d.id, r4.errors); });
             return self.api('GET', 'api/motion-packs').catch(function () { return []; });
           })
           .then(function (packs) {
             // gói động tác (v0.16): sau nhân vật — màn diễn trong gói trỏ tới nhân vật của bộ
-            (packs || []).forEach(function (d) { var r3 = GC.choreo && GC.choreo.registerPack(MY_PACK, d); if (r3 && r3.errors.length) console.warn('bỏ gói động tác', d.id, r3.errors); });
+            (packs || []).forEach(function (d) { var r3 = GC.choreo && GC.choreo.registerPack(MY_PACK, d, { tolerant: true }); if (r3 && r3.errors.length) console.warn('bỏ gói động tác', d.id, r3.errors); });
           });
       }).catch(function () {
           self.mode = 'browser';
@@ -280,7 +280,7 @@
   function onData(fn) { dataSubs.push(fn); onLeave(function () { dataSubs = dataSubs.filter(function (f) { return f !== fn; }); }); }
   function reloadData() {
     var jobs = [['api/parts', function (d) { GC.registerDataPart(MY_PACK, d); }], ['api/items', function (d) { GC.registerItem(MY_PACK, d); }], ['api/scenes', function (d) { GC.registerScene(MY_PACK, d); }],
-      ['api/assets', regStored], ['api/sound-packs', function (d) { if (GC.sounds) GC.sounds.registerPack(d); }], ['api/motion-packs', function (d) { if (GC.choreo) GC.choreo.registerPack(MY_PACK, d); }]];
+      ['api/assets', regStored], ['api/sound-packs', function (d) { if (GC.sounds) GC.sounds.registerPack(d, { tolerant: true }); }], ['api/motion-packs', function (d) { if (GC.choreo) GC.choreo.registerPack(MY_PACK, d, { tolerant: true }); }]];
     return jobs.reduce(function (p, j) { return p.then(function () { return Store.api('GET', j[0]).catch(function () { return []; }).then(function (l) { (l || []).forEach(function (d) { try { j[1](d); } catch (e) { /* bỏ mục hỏng */ } }); }); }); }, Promise.resolve()).then(function () { return Projects.load(); });
   }
   function refreshData(r) {
@@ -1573,13 +1573,11 @@
   function workLang(W) { var l = GC.voices.lang(W && W.lang); return { lang: l, accent: GC.voices.accent(l, W && W.accent) }; }
   // thẻ <html lang> của phim xuất theo ngôn ngữ phim (trình đọc màn hình + phông chữ + gợi ý dịch của trình duyệt): vi · en · zh-CN (phổ thông) · zh-TW (Đài Loan) · zh-HK (Quảng Đông)
   function htmlLang(L) { return L.lang === 'en' ? 'en' : L.lang === 'zh' ? (L.accent === 'tw' ? 'zh-TW' : 'zh-CN') : L.lang === 'yue' ? 'zh-HK' : 'vi'; }
-  // gói âm (không phải khung) mà tác phẩm cần: thuộc dự án của tác phẩm, hoặc có âm được gọi tên trong lời thoại / gói động tác đi kèm
+  // gói âm (không phải khung) mà tác phẩm cần: thuộc dự án của tác phẩm, hoặc có âm được gọi tên trong lời thoại / gói động tác đi kèm — GC.sounds.bundleDeps, MỘT hàm
+  // cho cả ba bộ đóng gói (phim xuất, sao lưu, gói bán — CNS-101)
   function filmSoundPacks(W, motionPacks) {
     var S = GC.sounds; if (!S) return [];
-    var names = {}, want = {};
-    W.shots.forEach(function (s) { ((s.event && s.event.steps) || []).forEach(function (st) { (st.sfx || []).forEach(function (n) { names[n] = 1; }); }); });
-    (motionPacks || []).forEach(function (m) { Object.keys(m.clips || {}).forEach(function (k) { (m.clips[k].events || []).forEach(function (q) { [].concat(q[1].sfx || []).forEach(function (n) { names[n] = 1; }); }); }); });
-    Object.keys(names).forEach(function (n) { var d = S.get(n); if (d && d.pack !== S.FRAME) want[d.pack] = 1; });
+    var want = {}; S.bundleDeps({ shots: W.shots, motionPacks: motionPacks || [] }).packs.forEach(function (id) { want[id] = 1; });
     return S.packs().filter(function (p) { return !p.frame && (want[p.id] || (W.project && p.project === W.project)); }).map(function (p) { return S.pack(p.id); });
   }
   // pre (tuỳ chọn) = kết quả filmVoices đã hỏi (hộp "thiếu giọng AI" ở Sân khấu final) — khỏi hỏi lại
@@ -4506,6 +4504,15 @@
     b.motionPacks = GC.choreo ? pick(GC.choreo.packs()).map(function (p) { var o = clone(p); ['pack', 'key', 'version', 'savedAt', 'note'].forEach(function (k) { delete o[k]; }); return o; }) : [];
     b.soundPacks = GC.sounds ? GC.sounds.packs().filter(function (p) { return !p.frame && p.project === P.id && (!sale || p.status === 'published'); }).map(function (p) { return GC.sounds.pack(p.id); }) : [];
     var warnings = sale ? b.items.filter(function (x) { return GC.statusOf(x.status) !== 'published'; }).map(function (x) { return 'vật phẩm ' + x.id + ' còn nháp nhưng asset phát hành cần nó — phát hành nó trước khi bán'; }) : [];
+    // gói âm mà gói động tác trong gói gọi tên (events[].sfx) đi theo — cùng GC.sounds.bundleDeps với máy chủ; gói bán báo nếu gói âm đó còn nháp (CNS-101)
+    if (GC.sounds) {
+      var have = {}; b.soundPacks.forEach(function (x) { have[x.id] = 1; });
+      GC.sounds.bundleDeps({ motionPacks: b.motionPacks }).packs.forEach(function (id) {
+        var x = have[id] ? null : GC.sounds.pack(id); if (!x) return;
+        b.soundPacks.push(x);
+        if (sale && x.status !== 'published') warnings.push('gói âm ' + id + ' còn nháp nhưng gói động tác phát hành cần nó — phát hành nó trước khi bán');
+      });
+    }
     return Object.assign({ format: 'gen-chibi.project/1', kind: sale ? 'sale' : 'backup', license: '© 2026 Gen Labs — engine; asset thuộc người tạo', project: { id: P.id, name: P.name, description: P.description || '' }, warnings: warnings },
       b, { exportedAt: new Date().toISOString() });
   }

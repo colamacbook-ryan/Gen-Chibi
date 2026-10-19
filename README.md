@@ -71,14 +71,14 @@ Mọi ví dụ được CI chạy thật qua cổng: test "agent từ số 0" đ
 Không có MCP client: `POST /mcp` JSON-RPC bằng curl, `GET /mcp?guide=<chủ đề>`, `GET /mcp?tools=openai|gemini`.
 Lỗi có mã ổn định: `[VALIDATION_FAILED]`, `NOT_FOUND`… kèm `structuredContent.error.details[].path`.
 
-52 tool, theo nhóm:
+53 tool, theo nhóm:
 - **Mở đầu:** `start_here`, `get_guide`
 - **Nhân vật:** `get_catalog` · `list/get/validate/save/render_character`
 - **Linh kiện:** `get_part_spec` · `preview_part` · `save_part`
 - **Trang bị:** `list/validate/save/render_item`
 - **Cảnh:** `list/validate/save/render_scene`
 - **Gói động tác:** `list_actions` · `list_motion_packs` · `get_motion_pack` · `get_motion_spec` · `validate/save_motion_pack` · `render_action` (sprite sheet / khung / timeline)
-- **Thư viện âm thanh:** `list_sounds` · `get_sound_spec` · `get_sound_pack` · `validate_sound_pack` · `save_sound_pack` · `lint_sound_track` (7 luật ghép âm S1–S7)
+- **Thư viện âm thanh:** `list_sounds` · `get_sound_spec` · `get_sound_pack` · `validate_sound_pack` · `save_sound_pack` · `delete_sound_pack` (chỉ chủ máy) · `lint_sound_track` (7 luật ghép âm S1–S7)
 - **Phim:** `get_director_schema` · `validate_event` · `save_event` · `list_events` · `list/get/save_work` · `save_shot` · `preview_shot` · `render_voice` (đọc thoại bằng giọng AI Google theo vai + ngôn ngữ + giọng vùng — chủ máy dán key là chạy) · `design_voice` (thiết kế giọng cho một vai: ông lão, bà lão, võ tướng…)
 - **Dự án & bộ mẫu:** `list/save_project` · `export/import_project` · `list_samples` · `install_sample`
 - **Hệ thống:** `get_app_version` · `update_app` · `rollback_app`
