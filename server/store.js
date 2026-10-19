@@ -6,6 +6,9 @@ const path = require('path');
 
 const KEY = /^[a-z0-9]+(\.[a-z0-9-]+)+\/[a-z0-9-]{1,64}$/;
 const EVENT_ID = /^[a-z0-9-]{1,80}$/;
+const CHAT_KINDS = ['work', 'asset', 'project', 'khu'];   // luồng chat của trợ lý AI theo đối tượng
+const CHAT_ID = /^[a-z0-9][a-z0-9._~-]{0,80}$/;
+const CHAT_MAX = 60, CHAT_MSG_MAX = 6000, CHAT_BYTES = 200 * 1024;   // trần: số tin · ký tự một tin · kích thước tệp
 
 function readJSON(f, def) { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return def; } }
 function writeJSON(f, v) { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f + '.tmp', JSON.stringify(v, null, 2)); fs.renameSync(f + '.tmp', f); }
@@ -28,8 +31,9 @@ class Store {
     this.projectFile = path.join(dataDir, 'projects.json');
     this.provFile = path.join(dataDir, 'provenance.json');
     this.workDir = path.join(dataDir, 'works');
+    this.chatDir = path.join(dataDir, 'chats');
     fs.mkdirSync(this.workDir, { recursive: true });
-    [this.assetDir, this.verDir, this.trashDir, this.eventDir, this.partDir, this.itemDir, this.sceneDir, this.motionDir, this.soundDir].forEach(d => fs.mkdirSync(d, { recursive: true }));
+    [this.assetDir, this.verDir, this.trashDir, this.eventDir, this.partDir, this.itemDir, this.sceneDir, this.motionDir, this.soundDir, this.chatDir].forEach(d => fs.mkdirSync(d, { recursive: true }));
   }
   fileOf(key) { return key.replace('/', '~'); }
   listAssets() {
@@ -141,6 +145,40 @@ class Store {
     writeJSON(file, rec);
     return rec;
   }
+  // luồng hội thoại của trợ lý AI (dock cột phải) theo ĐỐI TƯỢNG: tác phẩm / asset / dự án / khu — data/chats/<loại>-<id>.json.
+  // Có trần số tin + kích thước: luồng dài mãi không phình đĩa và không phình lời gọi LLM. id asset "pack/id" đổi "/" thành "~" (như tên tệp asset).
+  chatFile(kind, id) {
+    if (CHAT_KINDS.indexOf(kind) < 0 || !CHAT_ID.test(String(id))) return null;
+    return path.join(this.chatDir, kind + '-' + id + '.json');
+  }
+  getChat(kind, id) {
+    const f = this.chatFile(kind, id);
+    if (!f) return null;
+    const c = readJSON(f, null);
+    return c && Array.isArray(c.messages) ? c : { kind, id, messages: [], updatedAt: null };
+  }
+  saveChat(kind, id, messages) {
+    const f = this.chatFile(kind, id);
+    if (!f) throw Object.assign(new Error('đối tượng hội thoại không hợp lệ'), { code: 400 });
+    const clean = m => {
+      const o = { role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content == null ? '' : m.content).slice(0, CHAT_MSG_MAX), at: typeof m.at === 'string' ? m.at.slice(0, 40) : new Date().toISOString() };
+      if (Array.isArray(m.log)) o.log = m.log.slice(0, 30).map(l => ({ tool: String(l.tool || '').slice(0, 60), ok: !!l.ok, summary: String(l.summary || '').slice(0, 200), anchors: Array.isArray(l.anchors) ? l.anchors.slice(0, 6).map(a => ({ anchor: String(a.anchor).slice(0, 200), label: String(a.label || '').slice(0, 80) })) : undefined }));
+      if (Array.isArray(m.anchors)) o.anchors = m.anchors.slice(0, 8).map(a => ({ anchor: String(a.anchor).slice(0, 200), label: String(a.label || '').slice(0, 80) }));
+      if (Array.isArray(m.pins)) o.pins = m.pins.slice(0, 8).map(a => ({ anchor: String(a.anchor).slice(0, 200), label: String(a.label || '').slice(0, 80) }));
+      return o;
+    };
+    let list = (Array.isArray(messages) ? messages : []).filter(m => m && typeof m === 'object').map(clean).slice(-CHAT_MAX);
+    while (list.length > 2 && Buffer.byteLength(JSON.stringify(list)) > CHAT_BYTES) list = list.slice(1);   // quá lớn: bỏ tin cũ nhất trước
+    const rec = { kind, id, messages: list, updatedAt: new Date().toISOString() };
+    writeJSON(f, rec);
+    return rec;
+  }
+  clearChat(kind, id) {
+    const f = this.chatFile(kind, id);
+    if (!f || !fs.existsSync(f)) return false;
+    fs.unlinkSync(f);
+    return true;
+  }
   listEvents() {
     return fs.readdirSync(this.eventDir).filter(f => f.endsWith('.json')).map(f => {
       const e = readJSON(path.join(this.eventDir, f), null);
@@ -156,4 +194,4 @@ class Store {
   }
 }
 
-module.exports = { Store, KEY, EVENT_ID, readJSON, writeJSON };
+module.exports = { Store, KEY, EVENT_ID, CHAT_KINDS, CHAT_ID, readJSON, writeJSON };

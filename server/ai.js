@@ -55,6 +55,13 @@ function extractJSON(text) {
   throw new Error('câu trả lời không chứa JSON');
 }
 
+// anchor (không lặp) của mọi tool đã chạy ok trong một lượt — dock hiện thành chip dưới tin trả lời
+function anchorsOfLog(log) {
+  const seen = new Set(), out = [];
+  log.forEach(l => (l.anchors || []).forEach(a => { if (!seen.has(a.anchor)) { seen.add(a.anchor); out.push(a); } }));
+  return out.slice(0, 12);
+}
+
 class AI {
   constructor({ dataDir, secrets, engine }) {
     this.file = path.join(dataDir, 'ai.json');
@@ -133,25 +140,21 @@ class AI {
     return request('POST', c.baseUrl + '/chat/completions', { headers: this.headers(c), body, timeout: 120000 });
   }
 
-  // AI trong chatroom: vòng lặp function-calling trên ĐÚNG bộ tool MCP (mcp.toolsFor('ui')) và đúng chỉ dẫn MCP.
+  // AI trong dock cột phải: vòng lặp function-calling trên bộ tool MCP THEO KHU (mcp.toolsFor('ui', zone)) và chỉ dẫn do mcp.uiSystem dựng (một nguồn).
   // Model không bao giờ ghi thẳng vào kho: mọi tạo/sửa đi qua tool → cổng kiểm của engine → lưu. Tool lỗi → model đọc lỗi và sửa.
-  async agent({ messages, model }, mcp, instructions) {
+  // system: chỉ dẫn đã dựng (có ngữ cảnh + phần tử ghim); không truyền thì dùng vai của khu
+  async agent({ messages, model, zone, system }, mcp) {
     const c = this.config();
     if (model) c.model = model;
     if (!c.model) throw Object.assign(new Error('Chưa chọn model'), { code: 400 });
-    const tools = mcp.toolsFor('ui');
+    const tools = mcp.toolsFor('ui', zone);
     const allowed = new Set(tools.map(t => t.name));
     const fns = tools.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.inputSchema } }));
     const hist = (Array.isArray(messages) ? messages : []).slice(-20)
       .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
       .map(m => ({ role: m.role, content: m.content.slice(0, 4000) }));
     if (!hist.length || hist[hist.length - 1].role !== 'user') throw Object.assign(new Error('cần tin nhắn của người dùng'), { code: 400 });
-    const msgs = [{ role: 'system', content: [
-      'Bạn là trợ lý sản xuất của nhà xưởng gen-chibi, trả lời tiếng Việt, ngắn gọn.',
-      'LUẬT: chỉ tạo/sửa nhân vật, linh kiện, kịch bản bằng tool của nhà xưởng (save_character, save_part, save_event). Không bao giờ coi một JSON viết ra trong tin nhắn là đã lưu.',
-      'Trước khi viết: get_catalog / get_part_spec / get_director_schema. Sau khi viết: validate_* hoặc preview_part. Tool trả lỗi → đọc lỗi, sửa, gọi lại. Dùng đúng id có trong kho.',
-      instructions
-    ].join('\n') }].concat(hist);
+    const msgs = [{ role: 'system', content: system || mcp.uiSystem({ zone: zone || 'xuong' }, []) }].concat(hist);
     const log = [], renders = [], usage = { prompt: 0, completion: 0 };
     for (let round = 1; round <= 10; round++) {
       const r = await this.chatTools(c, msgs, fns);
@@ -160,10 +163,10 @@ class AI {
       if (!msg) throw Object.assign(new Error('model không trả lời'), { code: 502 });
       const calls = Array.isArray(msg.tool_calls) ? msg.tool_calls.slice(0, 6) : [];
       msgs.push({ role: 'assistant', content: msg.content || '', tool_calls: calls.length ? calls : undefined });
-      if (!calls.length) return { reply: msg.content || '', log, renders, rounds: round, usage, model: c.model };
+      if (!calls.length) return { reply: msg.content || '', log, renders, rounds: round, usage, model: c.model, anchors: anchorsOfLog(log) };
       for (const call of calls) {
         const name = call.function && call.function.name;
-        let args = {}, text, ok = false;
+        let args = {}, text, ok = false, anchors = [];
         try { args = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (e) { args = null; }
         if (!allowed.has(name)) text = 'Tool "' + name + '" không có trong nhà xưởng.';
         else if (!args) text = 'arguments không phải JSON hợp lệ.';
@@ -172,6 +175,7 @@ class AI {
           try { res = await mcp.callTool(name, args, { channel: 'ui' }); }
           catch (e) { res = { isError: true, content: [{ type: 'text', text: 'Tool lỗi: ' + String(e.message).slice(0, 300) }] }; }
           ok = !!res && !res.isError;
+          if (ok) { try { anchors = mcp.anchorsOf(name, args, res.structuredContent); } catch (e) { anchors = []; } }   // thứ vừa tạo / sửa → chip Soi trong dock
           const parts = (res && res.content) || [];
           text = parts.map(p => {
             if (p.type === 'text') return p.text;
@@ -182,11 +186,11 @@ class AI {
             return '';
           }).join('\n') || (ok ? 'ok' : 'lỗi');
         }
-        log.push({ tool: name, ok, summary: String(text).replace(/\s+/g, ' ').slice(0, 160) });
+        log.push({ tool: name, ok, summary: String(text).replace(/\s+/g, ' ').slice(0, 160), anchors });
         msgs.push({ role: 'tool', tool_call_id: call.id, content: String(text).slice(0, 12000) });
       }
     }
-    return { reply: 'Dừng sau 10 lượt gọi tool — hãy chia nhỏ yêu cầu.', log, renders, rounds: 10, usage, model: c.model };
+    return { reply: 'Dừng sau 10 lượt gọi tool — hãy chia nhỏ yêu cầu.', log, renders, rounds: 10, usage, model: c.model, anchors: anchorsOfLog(log) };
   }
 
   castFrom(ids, extraAssets) {

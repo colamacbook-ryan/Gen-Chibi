@@ -39,6 +39,13 @@
 - `save_event` with `{ "event", "author" }` stores a loose script (no work) for the owner to turn into a shot in the Studio;
   `list_events` lists them. Prefer `save_shot` when you know the work.
 
+## Owner's review notes (read them before fixing a film)
+- `get_work` returns `review`: `{ "shots": { "<shot id>": { "status": "draft" | "fix" | "ok", "notes": [{ "id", "text", "step"?, "at" }] } }, "note" }`.
+  The owner marks each shot in Studio › Tạo tác › Xem & duyệt: `fix` = needs changes, `ok` = approved ("Đạt"). `step` (1-based) points at one step of the shot.
+- When asked to fix a film "according to the notes": read `review`, edit only the shots with status `fix` (or the noted steps) with `save_shot`,
+  then tell the owner what changed. Do not set `ok` yourself — only the owner approves. A shot edited after `ok` returns to `draft` automatically.
+- `save_work` accepts `review` (same shape, merged per shot; unknown keys are rejected; notes are clamped to 400 characters).
+
 ## Staging tips
 - Fighters stand in the front row (`left`, `midLeft`, `center`, `midRight`, `right`), at least one spot apart.
 - Change `spot` between steps so people move; mix dialogue with short actions (≤ 3 attacks per shot).
