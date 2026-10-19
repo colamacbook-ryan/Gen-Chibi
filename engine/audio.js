@@ -838,18 +838,19 @@
   /* ---------------------------------------------------------- giọng đọc TTS */
   // nạp bất đồng bộ (Chrome trả [] lần đầu rồi bắn voiceschanged). Chỉ nhận giọng ĐÚNG ngôn ngữ (vi / en / zh…) — không bao giờ đọc
   // tiếng Việt bằng giọng Anh; ưu tiên giọng thần kinh (Edge "Online (Natural)", Google), rồi đúng giới của vai (theo tên giọng phổ biến).
-  var F_NAMES = /HoaiMy|\bLinh\b|Xiaoxiao|Xiaoyi|Xiaohan|Xiaomo|Xiaoxuan|Xiaochen|Huihui|Yaoyao|Tingting|Meijia|Sinji|HsiaoChen|HsiaoYu|Aria|Jenny|Michelle|Sonia|Libby|Zira|Samantha|Karen|Moira|Tessa|Victoria|Susan|Hazel|Emma|Ava|Female|女/i;
-  var M_NAMES = /NamMinh|\bAn\b|Yunxi|Yunjian|Yunyang|Yunze|Yunhao|Kangkang|YunJhe|\bGuy\b|Davis|Tony|\bRyan\b|Thomas|David|\bMark\b|\bAlex\b|Daniel|\bFred\b|George|Andrew|Brian|Christopher|\bMale\b|男/i;
-  var vcache = {};
+  var F_NAMES = /HiuMaan|HiuGaai|Sin-?Ji|HoaiMy|\bLinh\b|Xiaoxiao|Xiaoyi|Xiaohan|Xiaomo|Xiaoxuan|Xiaochen|Huihui|Yaoyao|Tingting|Meijia|Sinji|HsiaoChen|HsiaoYu|Aria|Jenny|Michelle|Sonia|Libby|Zira|Samantha|Karen|Moira|Tessa|Victoria|Susan|Hazel|Emma|Ava|Female|女/i;
+  var M_NAMES = /WanLung|NamMinh|\bAn\b|Yunxi|Yunjian|Yunyang|Yunze|Yunhao|Kangkang|YunJhe|\bGuy\b|Davis|Tony|\bRyan\b|Thomas|David|\bMark\b|\bAlex\b|Daniel|\bFred\b|George|Andrew|Brian|Christopher|\bMale\b|男/i;
+  var vcache = {}, YUE = /^(yue|zh-hk|zh-mo)/;
   function findVoice(lang, gender) {
     if (!synth) return null;
     lang = String(lang || 'vi-VN'); gender = gender || '';
-    var pre = lang.slice(0, 2).toLowerCase(), key = lang + '|' + gender;
+    var pre = lang.slice(0, 2).toLowerCase(), key = lang + '|' + gender, wantYue = YUE.test(lang.toLowerCase());
     if (vcache[key] !== undefined) return vcache[key];
     var list = synth.getVoices ? synth.getVoices() : [], best = null, bs = -1e9;
     for (var i = 0; i < list.length; i++) {
       var v = list[i], vl = String(v.lang || '').toLowerCase().replace('_', '-');
-      if (vl !== pre && vl.indexOf(pre + '-') !== 0) continue;
+      // Quảng Đông (zh-HK / yue) và phổ thông (zh-CN / zh-TW) là hai thứ tiếng: không bao giờ đọc chéo
+      if (wantYue ? !YUE.test(vl) : (vl !== pre && vl.indexOf(pre + '-') !== 0) || YUE.test(vl)) continue;
       var s = 1, fem = F_NAMES.test(v.name), mal = M_NAMES.test(v.name);
       if (/google|microsoft/i.test(v.name)) s += 3;
       if (/\b(Linh|An|HoaiMy|NamMinh)\b/.test(v.name)) s += 2;

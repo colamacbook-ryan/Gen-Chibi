@@ -66,6 +66,7 @@
 
   // ngôn ngữ phim + giọng vùng; mặc định của mỗi ngôn ngữ đứng đầu. Thẻ giọng vùng đi cùng thẻ vai trong [ ] đầu câu.
   // [id, nhãn, thẻ giọng vùng (giọng cũ: model đời trước), cụm mô tả khi THIẾT KẾ giọng, mã ngôn ngữ thư viện giọng Google]
+  // vi / en / zh / yue — thứ tự hiện trong ô chọn
   // Thư viện giọng Google (quét 2026-10-19): vi-VN 40 giọng người lớn 22–62 tuổi, KHÔNG phân Bắc / Nam; en-US 215, en-GB 117; tiếng Trung 0
   // → giọng vùng tiếng Việt và mọi giọng tiếng Trung đúng chất chỉ có qua Thiết kế giọng.
   var LANGS = {
@@ -78,7 +79,11 @@
       ['uk', 'Anh Anh', 'British English accent', 'British, speaking English with a Southern British accent', 'en-GB']] },
     zh: { label: 'Tiếng Trung', bcp: 'zh-CN', accents: [
       ['pt', 'Phổ thông', 'standard Mandarin Chinese', 'Chinese, speaking standard Mandarin Chinese (Putonghua) with clear pronunciation', 'cmn-CN'],
-      ['tw', 'Đài Loan', 'Taiwanese Mandarin accent', 'Taiwanese, speaking Mandarin Chinese with a Taiwanese accent', 'cmn-TW']] }
+      ['tw', 'Đài Loan', 'Taiwanese Mandarin accent', 'Taiwanese, speaking Mandarin Chinese with a Taiwanese accent', 'cmn-TW']] },
+    // tiếng Quảng Đông là NGÔN NGỮ riêng (không phải giọng vùng của tiếng Trung phổ thông): model đọc theo chữ — viết lời thoại bằng
+    // tiếng Quảng Đông (phồn thể + khẩu ngữ 喺 / 咩 / 我哋…) thì giọng nào cũng đọc ra Quảng Đông (đo 2026-10-19: nhận diện 0,99);
+    // thiết kế giọng với mã yue-HK chạy được; thư viện Google chưa có giọng Quảng Đông
+    yue: { label: 'Tiếng Quảng Đông', bcp: 'zh-HK', accents: [['hk', 'Hồng Kông', 'Hong Kong Cantonese', 'Hong Konger, speaking Cantonese with a natural Hong Kong accent', 'yue-HK']] }
   };
   function lang(id) { return hasOwn(LANGS, id) ? id : 'vi'; }
   function accent(l, a) {

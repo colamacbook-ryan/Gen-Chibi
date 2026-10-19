@@ -19,8 +19,9 @@
    (`shot.id` to edit an existing shot; `remove: true` to drop one).
 7. `preview_shot` with `{ "work": "<work id>", "shot": "<shot id>" }` → `ready`, `missing`, `warnings`,
    and the planned beats (who moves, which actions, how long). Fix anything listed.
-8. Optional voices (voice by ROLE): set the film language once — `save_work` with `{ "id", "lang": "vi" | "en" | "zh",
-   "accent": "bac" | "nam" | "trung" (vi) · "us" | "uk" (en) · "pt" | "tw" (zh) }`; write every line in that language.
+8. Optional voices (voice by ROLE): set the film language once — `save_work` with `{ "id", "lang": "vi" | "en" | "zh" | "yue",
+   "accent": "bac" | "nam" | "trung" (vi) · "us" | "uk" (en) · "pt" | "tw" (zh) · "hk" (yue = Cantonese) }`; write every line in that
+   language (the voice reads the language of the text — for Cantonese write colloquial Cantonese in Traditional characters: 喺, 咩, 我哋).
    Give each character a voice role when saving it: `voice: { "role": "<id>" }` from `get_catalog` › `voiceRoles`
    (be-trai, be-gai, ong-lao, ba-lao, vo-tuong, quan-su, vua-chua, phan-dien…; without it the role is guessed from role / persona / name).
    `render_voice` with `{ "text", "character": "<key>", "lang", "accent", "state", "bubble" }` returns the line read by a

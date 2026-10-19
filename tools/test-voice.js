@@ -65,7 +65,7 @@ const rejectAll = (fn, msg) => fn().then(() => no(true, msg + ': phải lỗi'),
   models = MODELS;
   const cn = await v.connect('fake-good-key-11111111111111111111');
   no(!cn.enabled || cn.keySource !== 'voice' || cn.models.length !== 3 || JSON.stringify(cn).indexOf('fake-good') >= 0, 'key tốt phải lưu + bật + báo số model, không trả key ra');
-  no(cn.roles.length !== 22 || cn.roles.find(r => r.id === 'be-trai').design || !cn.roles.find(r => r.id === 'ong-lao').design || cn.langs.length !== 3, 'publicConfig phải có 22 vai (vai trẻ em không thiết kế được) + 3 ngôn ngữ');
+  no(cn.roles.length !== 22 || cn.roles.find(r => r.id === 'be-trai').design || !cn.roles.find(r => r.id === 'ong-lao').design || cn.langs.map(l => l.id).join() !== 'vi,en,zh,yue', 'publicConfig phải có 22 vai (vai trẻ em không thiết kế được) + 4 ngôn ngữ (vi, en, zh, yue)');
   // model quét lúc chạy: chỉ *-tts có generateContent, mới nhất trước, lite sau, preview sau cùng
   const ms = await v.models();
   no(JSON.stringify(ms) !== JSON.stringify(['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts', 'gemini-2.5-flash-preview-tts']), 'thứ tự model đọc giọng sai: ' + ms.join(', '));
@@ -129,6 +129,8 @@ const rejectAll = (fn, msg) => fn().then(() => no(true, msg + ': phải lỗi'),
   no(g3.filter(u => /\/voices\?/.test(u)).length !== ng || !/language_code=vi-VN/.test(g3.find(u => /\/voices\?/.test(u))), 'thư viện giọng phải lưu đệm (24 giờ) + lọc đúng mã ngôn ngữ');
   const zh = await w.cast({ lang: 'zh', accent: 'pt', actors: [{ id: 'gc', role: 'quan-su' }] });
   no(zh.lang !== 'zh' || zh.cast.gc.source !== 'prebuilt' || !/language_code=cmn-CN/.test(g3[g3.length - 1]), 'tiếng Trung (thư viện chưa có): giọng dựng sẵn hợp vai: ' + JSON.stringify(zh));
+  const yu = await w.cast({ lang: 'yue', accent: 'hk', actors: [{ id: 'zf', role: 'vo-tuong' }] });
+  no(yu.lang !== 'yue' || yu.accent !== 'hk' || yu.cast.zf.source !== 'prebuilt' || !/language_code=yue-HK/.test(g3[g3.length - 1]), 'tiếng Quảng Đông: thư viện yue-HK (chưa có giọng) → giọng dựng sẵn hợp vai: ' + JSON.stringify(yu));
   no(c3.length !== 0, 'cast không được tốn lượt đọc nào');
 
   // ---- THIẾT KẾ giọng vai: vai trẻ em bị chặn (không gọi); vai người lớn → POST /voices đúng mô tả; lưu → cast dùng ngay ----
@@ -152,6 +154,8 @@ const rejectAll = (fn, msg) => fn().then(() => no(true, msg + ': phải lỗi'),
   p3 = [{ status: 400, json: { error: { code: 400, message: 'Unsupported language_code cmn-CN' } } }, designed('voice_zh0000001')];
   const dzh = await w.design({ role: 'quan-su', lang: 'zh', accent: 'pt' });
   no(dzh.voice !== 'voice_zh0000001' || c3[c3.length - 1].b.voice.language_code !== 'zh-CN' || !/Mandarin/.test(c3[c3.length - 1].b.voice.prompted.input), 'mã ngôn ngữ lạ → thử lại bằng mã BCP: ' + JSON.stringify(c3[c3.length - 1].b.voice));
+  const dyu = await w.design({ role: 'vo-tuong', lang: 'yue', accent: 'hk' }), byu = c3[c3.length - 1].b.voice;
+  no(byu.language_code !== 'yue-HK' || !/Cantonese with a natural Hong Kong accent/.test(byu.prompted.input) || w.publicConfig().designs['vo-tuong|yue|hk'].voice !== dyu.voice, 'thiết kế giọng Quảng Đông: mã yue-HK + mô tả giọng Hồng Kông: ' + JSON.stringify(byu));
   // chọn giọng cho một câu (MCP / API): nhân vật + vai + ngôn ngữ → giọng cast
   const pk1 = await w.pick({ asset: { id: 'tq-truong-phi', name: 'Trương Phi', role: 'Võ tướng' }, lang: 'vi', accent: 'bac' });
   no(pk1.role !== 'vo-tuong' || !/^vi-vn-/.test(pk1.voice), 'pick: võ tướng tiếng Việt → giọng thư viện: ' + JSON.stringify(pk1));
@@ -173,5 +177,5 @@ const rejectAll = (fn, msg) => fn().then(() => no(true, msg + ': phải lỗi'),
     no(!we || we.code !== 422 || !/accent/.test(we.message), 'giọng vùng không thuộc ngôn ngữ phim phải 422');
     we = null; try { m.saveWorkChecked({ id: wk.id, lang: 'fr' }); } catch (x) { we = x; } no(!we || we.code !== 422, 'ngôn ngữ lạ phải 422'); }
   [dir, d3].forEach(d => fs.rmSync(d, { recursive: true, force: true }));
-  console.log('   ✓ giọng AI (mạng giả, 0 lời gọi Google): dán key là chạy (kiểm miễn phí, sai → 400 giữ key cũ, không lộ key) · model 3.8 qua Interactions (chữ nguyên văn + style) · đời trước qua [thẻ] + giọng dựng sẵn · lưu đệm theo nội dung · hết hạn mức → khoá theo retryDelay, đổi model, nhớ qua khởi động · hết hẳn → 429 + giờ thử lại · dry chỉ lấy clip có sẵn · giọng THEO VAI: thư viện Google theo giới + tuổi + cao độ, giọng thiết kế thắng, vai bé giọng trẻ trung, mỗi người một giọng, tiếng Trung về giọng dựng sẵn · thiết kế giọng (vai trẻ em bị chặn, chính sách / hết lượt / mã ngôn ngữ lạ) · nhân vật lưu voice.role / accent / ai · tác phẩm lưu lang / accent');
+  console.log('   ✓ giọng AI (mạng giả, 0 lời gọi Google): dán key là chạy (kiểm miễn phí, sai → 400 giữ key cũ, không lộ key) · model 3.8 qua Interactions (chữ nguyên văn + style) · đời trước qua [thẻ] + giọng dựng sẵn · lưu đệm theo nội dung · hết hạn mức → khoá theo retryDelay, đổi model, nhớ qua khởi động · hết hẳn → 429 + giờ thử lại · dry chỉ lấy clip có sẵn · giọng THEO VAI: thư viện Google theo giới + tuổi + cao độ, giọng thiết kế thắng, vai bé giọng trẻ trung, mỗi người một giọng, tiếng Trung về giọng dựng sẵn · thiết kế giọng (vai trẻ em bị chặn, chính sách / hết lượt / mã ngôn ngữ lạ) · nhân vật lưu voice.role / accent / ai · tác phẩm lưu lang / accent · tiếng Quảng Đông (yue-HK) cast + thiết kế');
 })().catch(e => { console.log('   ✗', e.stack || e.message); process.exit(1); });
