@@ -5,7 +5,7 @@
  "sample": {
   "owner": "Gen Labs",
   "license": "© 2026 Gen Labs — bộ mẫu trưng bày: xem, sửa thử, làm phim; không bán lại, không phân phối",
-  "version": "2026.10.19-am"
+  "version": "2026.10.19-am2"
  },
  "project": {
   "id": "mau-tam-quoc",
@@ -2280,7 +2280,16 @@
         "state": "vow",
         "spot": "center",
         "activity": "salute",
+        "hold": 1.8,
+        "say": ""
+       },
+       {
+        "actor": "tq-luu-bi",
+        "state": "vow",
+        "spot": "center",
+        "activity": "salute",
         "to": "tq-quan-vu",
+        "sfx": [],
         "say": "Không cầu sinh cùng ngày cùng tháng cùng năm…"
        },
        {
@@ -2516,6 +2525,7 @@
          "sweat"
         ],
         "to": "tq-trieu-van",
+        "sfx": [],
         "say": "Oa… nhanh quá, nhìn không kịp!"
        },
        {
@@ -2583,6 +2593,7 @@
          "sweat"
         ],
         "to": "tq-gia-cat-luong",
+        "sfx": [],
         "say": "Gió… gió đông?!"
        },
        {

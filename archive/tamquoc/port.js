@@ -195,8 +195,9 @@ const works = [{
     shot('canh-1', 'Kết nghĩa vườn đào', 'Ba anh em thề dưới hoa đào.', 'vuon-dao', ['luu-bi', 'quan-vu', 'truong-phi'], [
       { actor: 'truong-phi', state: 'proud', spot: 'right', activity: 'drink', say: 'Rượu ngon đã bày, hoa đào đang nở rộ!' },
       { actor: 'luu-bi', state: 'normal', spot: 'left', to: 'truong-phi', say: 'Tam đệ chớ vội uống — việc lớn trước đã.' },
-      { actor: 'luu-bi', state: 'vow', spot: 'center', activity: 'salute', to: 'quan-vu', say: 'Không cầu sinh cùng ngày cùng tháng cùng năm…' },
-      { actor: 'quan-vu', state: 'vow', spot: 'midLeft', to: 'luu-bi', sfx: [], say: '…chỉ nguyện chết cùng ngày cùng tháng cùng năm!' },   // sfx: [] — tù và đã vang ở lời thề của Lưu Bị (tự gán), không lặp
+      { actor: 'luu-bi', state: 'vow', spot: 'center', activity: 'salute', hold: 1.8, say: '' },   // bước im: tù và (tự gán, 2 s) vang một mình — S3: âm nhấn không đè câu thoại (CNS-103)
+      { actor: 'luu-bi', state: 'vow', spot: 'center', activity: 'salute', to: 'quan-vu', sfx: [], say: 'Không cầu sinh cùng ngày cùng tháng cùng năm…' },   // sfx: [] — tù và đã vang ở bước trước, không đè lời thề
+      { actor: 'quan-vu', state: 'vow', spot: 'midLeft', to: 'luu-bi', sfx: [], say: '…chỉ nguyện chết cùng ngày cùng tháng cùng năm!' },   // sfx: [] — tù và đã vang ở bước im trước lời thề (tự gán), không lặp
       { actor: 'truong-phi', state: 'proud', spot: 'midRight', activity: 'cheer', fx: ['confetti'], to: 'luu-bi', say: 'Uống! Hôm nay phải say mới về!' }]),
     shot('canh-2', 'Lần thứ ba tới Long Trung', 'Trời tuyết, Trương Phi hết kiên nhẫn.', 'tuyet-son', ['truong-phi', 'quan-vu', 'luu-bi'], [
       { actor: 'truong-phi', state: 'rage', spot: 'midRight', fx: ['steam'], to: 'luu-bi', say: 'Để đệ đốt cái lều cỏ này cho hắn dậy!' },
@@ -220,7 +221,7 @@ const works = [{
       { actor: 'trieu-van', state: 'vow', spot: 'midLeft', to: 'truong-phi', say: 'Tử Long xin lĩnh giáo!' },
       { actor: 'trieu-van', state: 'rage', action: 'thrust', target: 'truong-phi', react: 'block', say: 'Xem thương!' },
       { actor: 'truong-phi', state: 'rage', action: 'combo', target: 'trieu-van', react: 'dodge', sfx: ['trong-tran'], say: '' },   // bước ra đòn không lời: trống trận làm nền cho hiệp đấu (S3 — âm nhấn không đè thoại)
-      { actor: 'linh-que', state: 'shock', spot: 'left', fx: ['sweat'], to: 'trieu-van', say: 'Oa… nhanh quá, nhìn không kịp!' },
+      { actor: 'linh-que', state: 'shock', spot: 'left', fx: ['sweat'], to: 'trieu-van', sfx: [], say: 'Oa… nhanh quá, nhìn không kịp!' },   // sfx: [] — sting tự gán của shock (âm nhấn) sẽ đè lời (S3)
       { actor: 'trieu-van', state: 'vow', action: 'leap', target: 'truong-phi', react: 'fall', say: '' },
       { actor: 'truong-phi', state: 'proud', to: 'trieu-van', say: 'Hay! Hôm nay ta nhường đệ một hiệp!' },
       { actor: 'trieu-van', state: 'smug', action: 'salute', to: 'truong-phi', say: 'Đa tạ Dực Đức nương tay.' }]),
@@ -228,7 +229,7 @@ const works = [{
       { actor: 'tao-thao', state: 'smug', spot: 'left', activity: 'point', to: 'gia-cat-luong', say: 'Tám mươi vạn quân, thuyền nối thành đất bằng!' },
       { actor: 'tao-thao', state: 'proud', spot: 'midLeft', to: 'gia-cat-luong', say: 'Gió tây bắc thổi — lửa sao tới được ta? Ha ha!' },
       { actor: 'gia-cat-luong', state: 'normal', spot: 'midRight', to: 'tao-thao', say: 'Thừa tướng… nhìn lá cờ kìa.' },
-      { actor: 'tao-thao', state: 'shock', fx: ['sweat'], to: 'gia-cat-luong', say: 'Gió… gió đông?!' },
+      { actor: 'tao-thao', state: 'shock', fx: ['sweat'], to: 'gia-cat-luong', sfx: [], say: 'Gió… gió đông?!' },   // sfx: [] — như trên: sting tự gán không đè lời
       { actor: 'tao-thao', state: 'panic', spot: 'left', sfx: ['ngua-hi'], say: 'Rút! Rút mau!!!' },   // chiến mã hí vang, quân Tào tháo chạy
       { actor: 'gia-cat-luong', state: 'proud', to: 'tao-thao', say: 'Vạn sự đã nằm trong tính toán.', hold: 2.8 }])
   ]
@@ -238,7 +239,7 @@ const works = [{
 const bundle = {
   format: 'gen-chibi.project/1', kind: 'sample', license: LICENSE,
   // version: đổi mỗi khi nội dung bộ mẫu đổi — Studio thấy máy đang giữ bản cũ thì mời "Cập nhật bộ mẫu" (khớp SAMPLES trong studio/app.js)
-  sample: { owner: 'Gen Labs', license: '© 2026 Gen Labs — bộ mẫu trưng bày: xem, sửa thử, làm phim; không bán lại, không phân phối', version: '2026.10.19-am' },
+  sample: { owner: 'Gen Labs', license: '© 2026 Gen Labs — bộ mẫu trưng bày: xem, sửa thử, làm phim; không bán lại, không phân phối', version: '2026.10.19-am2' },
   project: { id: 'mau-tam-quoc', name: 'Tam Quốc (bộ chủ đề mẫu)', description: 'Bộ chủ đề trọn vẹn dựng từ khung: 7 tướng, 13 trang bị, 8 bối cảnh, 28 linh kiện nhân vật, 27 phông — và phim 6 phân cảnh có dàn dựng, giọng nói, âm thanh (gói âm Tam Quốc: trống trận, tù và, vó ngựa…), một màn đấu võ. Bộ mẫu của Gen Labs: xem gói bán trông thế nào (xem trước), không xuất bán.' },
   requires: { packs: [] }, parts: parts.concat(sceneryParts), items, scenes, characters, works,
   // gói động tác của bộ (v0.16, Q10): đòn thương / kiếm kiểu Tử Long + màn "Tử Long 30 giây" — dữ liệu, qua cổng như mọi asset

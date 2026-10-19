@@ -79,7 +79,7 @@ const FRAME_STEPS = [{ actor: 'ma-no-canh', state: 'normal', say: 'Chào bạn.'
     const p1 = GC.film.direct(shot('canh-1'));
     no(p1.project !== 'mau-tam-quoc' || p1.mood !== 'epic', 'direct(): dự án suy ra từ bối cảnh / diễn viên + không khí: ' + p1.project + ' / ' + p1.mood);
     const l1 = lines(p1);
-    no(!l1[2].sfx.includes('tu-va') || l1[3].sfx.length !== 0, 'Vườn đào: lời thề (vow + hùng tráng) tự gán tù và của gói Tam Quốc; bước sfx: [] im: ' + JSON.stringify(l1.map(l => l.sfx)));
+    no(!l1[2].sfx.includes('tu-va') || l1[2].say !== '' || l1[3].sfx.length !== 0 || l1[4].sfx.length !== 0, 'Vườn đào: tù và (vow + hùng tráng, tự gán) vang ở BƯỚC IM trước lời thề — không đè lời (S3, CNS-103); lời thề và câu đáp sfx: [] im: ' + JSON.stringify(l1.map(l => [l.say.slice(0, 8), l.sfx])));
     const pd = GC.film.direct(shot('canh-dau-tap')), act = pd.beats.filter(b => b.type === 'act');
     no(act.length !== 4 || JSON.stringify(act.map(b => b.sfx)) !== '[[],["trong-tran"],[],[]]' || lines(pd).some(l => l.sfx.includes('trong-tran')), 'Đấu tập: trống trận gắn vào bước ra đòn KHÔNG lời (beat act.sfx), không lặp ở dòng thoại: ' + JSON.stringify(act.map(b => b.sfx)));
     no(JSON.stringify(lines(GC.film.direct(shot('canh-4')))[0].sfx) !== '["vo-ngua"]' || JSON.stringify(lines(GC.film.direct(shot('canh-5')))[4].sfx) !== '["ngua-hi"]', 'sfx ghi tay bằng tên âm của gói dự án vào kế hoạch dàn dựng');

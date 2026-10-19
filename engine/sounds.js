@@ -393,14 +393,14 @@
     if (errs.length) return { errors: errs, def: null };
     if (PACKS[d.id]) unregisterPack(d.id, true);
     Object.keys(d.sounds).forEach(function (nm) { var s = d.sounds[nm]; s.name = nm; s.pack = d.id; OWNER[nm] = d.id; });
-    PACKS[d.id] = d; ORDER.push(d.id); CUE = null;
+    PACKS[d.id] = d; ORDER.push(d.id); CUE = null; SUGIDX = null;
     return { errors: [], def: d, notes: c.notes || [] };
   }
   function unregisterPack(id, force) {
     var d = PACKS[id];
     if (!d || (id === FRAME && !force)) return false;
     Object.keys(d.sounds).forEach(function (nm) { if (OWNER[nm] === id) delete OWNER[nm]; });
-    delete PACKS[id]; ORDER.splice(ORDER.indexOf(id), 1); CUE = null;
+    delete PACKS[id]; ORDER.splice(ORDER.indexOf(id), 1); CUE = null; SUGIDX = null;
     return true;
   }
   function get(name) { var o = typeof name === 'string' && hasOwn(OWNER, name) ? OWNER[name] : null; return o ? PACKS[o].sounds[name] : null; }
@@ -446,9 +446,9 @@
         out.push(x);
       });
     });
-    var ci = function (c) { for (var i = 0; i < CATS.length; i++) if (CATS[i][0] === c) return i; return 99; };
-    return out.map(function (x, i) { x.i = i; return x; }).sort(function (a, b) { return a.r - b.r || ci(a.cat) - ci(b.cat) || a.i - b.i; }).map(function (x) { delete x.i; delete x.r; return x; });
+    return out.map(function (x, i) { x.i = i; return x; }).sort(function (a, b) { return a.r - b.r || catIdx(a.cat) - catIdx(b.cat) || a.i - b.i; }).map(function (x) { delete x.i; delete x.r; return x; });
   }
+  function catIdx(c) { for (var i = 0; i < CATS.length; i++) if (CATS[i][0] === c) return i; return 99; }
 
   /* ----------------------------------------------------------------- tự gán */
   // chỉ mục cue: CUE[khoá][giá trị] = [{ name, tier, ord, mood }] xếp theo ưu tiên; dựng lại khi sổ đổi
@@ -480,10 +480,17 @@
     }
     return best ? best.name : null;
   }
-  // tự gán âm cho một bước — thứ tự & cắt giống hệt bảng cứng cũ của engine/player.js: [cảm xúc] + [hiệu ứng…] + [hoạt động] (+ [sự kiện]), bỏ trùng, ≤ 2
+  // tự gán âm cho một bước — thứ tự & cắt giống hệt bảng cứng cũ của engine/player.js: [cảm xúc] + [hiệu ứng…] + [hoạt động] (+ [sự kiện]), bỏ trùng, ≤ 2.
+  // Luật S1 áp cả cho âm tự gán (CNS-103): ≤ RULES.maxAccent âm NHẤN mỗi bước — âm nhấn thứ hai bị bỏ, nhường chỗ cho âm thường kế tiếp.
+  // Khung chỉ có một âm nhấn (sting) nên bảng cũ không đổi
   function cueFor(c) {
     c = c || {};
-    var out = [], add = function (n) { if (n && out.indexOf(n) < 0) out.push(n); };
+    var out = [], acc = 0, add = function (n) {
+      if (!n || out.indexOf(n) >= 0) return;
+      var d = get(n);
+      if (d && ACCENT.indexOf(d.cat) >= 0) { if (acc >= RULES.maxAccent) return; acc++; }
+      out.push(n);
+    };
     add(pick('state', c.state, c.mood, c.project));
     (Array.isArray(c.fx) ? c.fx : []).forEach(function (f) { add(pick('fx', f, c.mood, c.project)); });
     add(pick('activity', c.activity, c.mood, c.project));
@@ -532,17 +539,36 @@
     for (i = 1; i <= a.length; i++) { var p = d[0]; d[0] = i; for (j = 1; j <= b.length; j++) { var t = d[j]; d[j] = Math.min(d[j] + 1, d[j - 1] + 1, p + (a[i - 1] === b[j - 1] ? 0 : 1)); p = t; } }
     return d[b.length];
   }
-  // gợi ý tên gần nhất trong thư viện nhìn thấy được: trùng nhãn / thẻ (bỏ dấu) trước, rồi khoảng cách sửa chữ ≤ 3
+  // gợi ý tên gần nhất trong thư viện nhìn thấy được: trùng nhãn / thẻ (bỏ dấu) trước, rồi khoảng cách sửa chữ ≤ 3.
+  // Chỉ mục (tên + khoá bỏ dấu của từng âm nhìn thấy được, cùng thứ tự với list()) dựng MỘT lần mỗi dự án, bỏ khi sổ đổi (CNS-105: trước đây dựng lại list() cho mỗi tên lạ)
+  var SUGIDX = null;
+  function sugIndex(project) {
+    var k = project || '';
+    if (k && !ORDER.some(function (id) { return PACKS[id].project === k; })) k = '';    // dự án không có gói riêng nhìn thấy giống '' — không để chuỗi tuỳ ý phình bộ nhớ đệm
+    SUGIDX = SUGIDX || Object.create(null);
+    if (SUGIDX[k]) return SUGIDX[k];
+    var xs = [];
+    ORDER.forEach(function (id) {
+      var d = PACKS[id]; if (!visible(d, k)) return;
+      Object.keys(d.sounds).forEach(function (nm) {
+        var x = d.sounds[nm];
+        xs.push({ name: nm, cat: catIdx(x.cat), i: xs.length, keys: [fold(x.label).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')].concat(x.tags.map(function (t) { return fold(t).replace(/\s+/g, '-'); })) });
+      });
+    });
+    return (SUGIDX[k] = xs.sort(function (a, b) { return a.cat - b.cat || a.i - b.i; }));
+  }
   function suggest(name, project) {
     var f = fold(name).replace(/[\s_]+/g, '-'), best = null, bd = 4;
-    list({ project: project || '' }).forEach(function (x) {
+    sugIndex(project).forEach(function (x) {
       if (best && bd === 0) return;
-      var keys = [fold(x.label).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')].concat(x.tags.map(function (t) { return fold(t).replace(/\s+/g, '-'); }));
-      if (keys.indexOf(f) >= 0) { best = x.name; bd = 0; return; }
+      if (x.keys.indexOf(f) >= 0) { best = x.name; bd = 0; return; }
       var dd = lev(f, x.name); if (dd < bd) { bd = dd; best = x.name; }
     });
     return best;
   }
+  // trần đầu vào của lint (CNS-105): lint_sound_track mở cho link MCP + AI chatroom, mà Node chạy một luồng — một request 0,44 MB từng giữ server 29 s.
+  // 12 bước / phân cảnh = trần của lược đồ đạo diễn; 200 phân cảnh = trần tổng của cổng nhập gói dự án; bytes = cỡ JSON của đầu vào
+  var LINT_MAX = { steps: 12, shots: 200, bytes: 1000000, sfx: 12, suggest: 20 };
   function lintSoundTrack(input, opts) {
     opts = opts || {};
     var out = [], project = opts.project || '', shots;
@@ -551,35 +577,51 @@
     else if (input && input.event && Array.isArray(input.event.steps)) shots = [{ steps: input.event.steps, path: 'event.steps' }];
     else if (input && Array.isArray(input.steps)) shots = [{ steps: input.steps, path: 'steps' }];
     else return [{ code: 'S0', level: 'error', path: '', step: -1, msg: 'cần mảng bước (steps), một phân cảnh ({ event: { steps } }) hoặc tác phẩm ({ shots })' }];
-    shots.forEach(function (sh) { lintShot(sh, opts, project, out); });
+    var big = function (path, msg) { return [{ code: 'S0', level: 'error', path: path, step: -1, msg: 'S0: ' + msg }]; }, tooMany = null;
+    if (shots.length > LINT_MAX.shots) return big('shots', 'tối đa ' + LINT_MAX.shots + ' phân cảnh một lần chấm (đang có ' + shots.length + ') — chấm từng tác phẩm / từng phân cảnh');
+    shots.forEach(function (sh) { if (!tooMany && sh.steps.length > LINT_MAX.steps) tooMany = sh; });
+    if (tooMany) return big(tooMany.path, 'tối đa ' + LINT_MAX.steps + ' bước một phân cảnh (đang có ' + tooMany.steps.length + ') — đúng trần của lược đồ đạo diễn');
+    var size; try { size = JSON.stringify(input).length; } catch (x) { return big('', 'đầu vào không phải JSON thuần'); }
+    if (size > LINT_MAX.bytes) return big('', 'đầu vào quá lớn (' + Math.round(size / 1000) + ' KB > ' + LINT_MAX.bytes / 1000 + ' KB)');
+    var ctx = { sug: Object.create(null), nSug: 0 };    // nhớ gợi ý theo tên lạ; chỉ gợi ý LINT_MAX.suggest tên lạ đầu (mỗi lần gợi ý là một lượt quét ~70 âm)
+    shots.forEach(function (sh) { lintShot(sh, opts, project, out, ctx); });
     return out;
   }
-  function lintShot(sh, opts, project, out) {
+  function lintShot(sh, opts, project, out, ctx) {
     var steps = sh.steps, t = 0, ev = [], run = {}, R = RULES;
     var mood = typeof opts.mood === 'function' ? opts.mood(steps) : opts.mood;     // không khí của cảnh (âm tự gán có điều kiện mood): chuỗi, hoặc hàm (các bước) → chuỗi — GC.film.moodOf
-    var W = function (code, i, name, msg, sub) {
+    var W = function (code, i, name, msg, sub, level) {
       var rl = R.list.filter(function (r) { return r.code === code; })[0];
-      var o = { code: code, level: rl.level, path: sh.path + '[' + i + ']' + (sub || ''), step: i, name: name || null, msg: code + ': ' + msg };
+      var o = { code: code, level: level || rl.level, path: sh.path + '[' + i + ']' + (sub || ''), step: i, name: name || null, msg: code + ': ' + msg };
       if (sh.shot != null) o.shot = sh.shot;
       out.push(o);
     };
+    var hint = function (nm) {
+      if (!(nm in ctx.sug)) { ctx.sug[nm] = ctx.nSug++ < LINT_MAX.suggest ? suggest(nm, project) : null; }
+      return ctx.sug[nm];
+    };
     steps.forEach(function (s, i) {
       s = s && typeof s === 'object' ? s : {};
-      var dur = stepDur(s), ex = Array.isArray(s.sfx) ? s.sfx : null, eff = [], acc = 0;
+      var dur = stepDur(s), ex = Array.isArray(s.sfx) ? s.sfx : null, eff = [], acc = 0, auto = false;
+      // S1 (âm nhấn) + S3 (nhấn đè lời) cho MỘT âm — dùng chung cho sfx ghi tay và âm tự gán (CNS-103): tự gán thì chỉ là cảnh báo + cách tắt
+      var accent = function (nm, snd, k, sub) {
+        if (ACCENT.indexOf(snd.cat) < 0) return;
+        if (++acc === R.maxAccent + 1) W('S1', i, nm, 'hai âm nhấn' + (auto ? ' TỰ GÁN' : '') + ' trong một bước ("' + nm + '" và âm nhấn trước nó) — giữ một', sub, auto ? 'warn' : undefined);
+        if (hasSay(s) && (R.speech.sfxAt[Math.min(k, 2)] + snd.dur > R.speech.speechAt - R.speech.gap))
+          W('S3', i, nm, auto ? 'âm nhấn TỰ GÁN "' + nm + '" (' + snd.dur + ' s) đè lên câu thoại của bước — đặt sfx: [] để tắt âm tự gán, hoặc bỏ cue của âm đó'
+            : 'âm nhấn "' + nm + '" (' + snd.dur + ' s) đè lên câu thoại của bước — chuyển sang bước không có lời / bước trước, hoặc chọn âm ngắn hơn', sub, auto ? 'warn' : undefined);
+      };
       if (ex) {
         if (ex.length > R.maxPerStep) W('S1', i, null, 'bước có ' + ex.length + ' âm (tối đa ' + R.maxPerStep + ') — giữ âm quan trọng nhất', '.sfx');
-        ex.forEach(function (nm, k) {
+        ex.slice(0, LINT_MAX.sfx).forEach(function (nm, k) {    // quá LINT_MAX.sfx tên thì S1 đã báo; không duyệt tiếp
           var snd = typeof nm === 'string' ? get(nm) : null, sub = '.sfx[' + k + ']';
           if (!snd || !visible(PACKS[snd.pack], project)) {
-            var sg = suggest(nm, project);
-            W('S6', i, String(nm), (snd ? 'âm "' + nm + '" thuộc gói "' + snd.pack + '" của dự án khác' : 'không có âm "' + String(nm).slice(0, 32) + '" trong thư viện') + (sg ? ' — gần nhất: "' + sg + '"' : ''), sub);
+            var sg = typeof nm === 'string' ? hint(nm) : null;
+            W('S6', i, String(nm).slice(0, 32), (snd ? 'âm "' + nm + '" thuộc gói "' + snd.pack + '" của dự án khác' : 'không có âm "' + String(nm).slice(0, 32) + '" trong thư viện') + (sg ? ' — gần nhất: "' + sg + '"' : ''), sub);
             return;
           }
           eff.push(nm);
-          if (ACCENT.indexOf(snd.cat) >= 0) {
-            if (++acc === R.maxAccent + 1) W('S1', i, nm, 'hai âm nhấn trong một bước ("' + nm + '" và âm nhấn trước nó) — giữ một', sub);
-            if (hasSay(s) && (R.speech.sfxAt[Math.min(k, 2)] + snd.dur > R.speech.speechAt - R.speech.gap)) W('S3', i, nm, 'âm nhấn "' + nm + '" (' + snd.dur + ' s) đè lên câu thoại của bước — chuyển sang bước không có lời / bước trước, hoặc chọn âm ngắn hơn', sub);
-          }
+          accent(nm, snd, k, sub);
           if (snd.cat === R.impact.cat) {
             if (s.action) W('S4', i, nm, 'bước có động tác "' + s.action + '" — âm va chạm đã tự phát ở điểm đánh; bỏ "' + nm + '" khỏi sfx (hoặc sửa âm trong gói động tác)', sub);
             else if (R.impact.activities.indexOf(s.activity) < 0 && R.impact.states.indexOf(s.state) < 0) W('S4', i, nm, 'âm va chạm "' + nm + '" rải giữa bước không có cú va thấy được — dùng action (đòn đánh) hoặc activity attack / defend / faint…', sub);
@@ -587,13 +629,14 @@
           if (snd.dur > R.long.dur && i !== 0 && i !== steps.length - 1) W('S7', i, nm, 'âm dài "' + nm + '" (' + snd.dur + ' s) giữa cảnh — để ở bước đầu / cuối cảnh', sub);
         });
       } else if (opts.auto !== false) {
+        auto = true;
         eff = cueFor({ state: s.state, fx: s.fx, activity: s.activity, mood: mood, project: project });
+        eff.forEach(function (nm, k) { accent(nm, get(nm), k, ''); });
       }
       eff.forEach(function (nm, k) {
         if (R.density.skip.indexOf(nm) < 0) ev.push({ t: t + R.speech.sfxAt[Math.min(k, 2)], i: i, name: nm });
       });
       if (hasSay(s) && !s.action) ev.push({ t: t + R.speech.speechAt, i: i, name: R.speech.bubble });   // bong bóng thoại bật "pop"
-      ev.sort(function (a, b) { return a.t - b.t; });
       // S5: cùng âm nhiều bước liền
       var next = {};
       eff.forEach(function (nm) {
@@ -604,7 +647,8 @@
       run = next;
       t += dur;
     });
-    // S2: mật độ trong cửa sổ trượt
+    // S2: mật độ trong cửa sổ trượt — sắp MỘT lần sau vòng lặp (trước đây sắp lại mỗi bước: O(n² log n))
+    ev.sort(function (a, b) { return a.t - b.t; });
     var warned = {};
     ev.forEach(function (e, a) {
       var n = 0; for (var b = a; b < ev.length && ev[b].t < e.t + R.density.window; b++) n++;
@@ -1259,7 +1303,7 @@
   };
 
   var API = {
-    FORMAT: FORMAT, FRAME: FRAME, CATS: CATS, ACCENT: ACCENT, VOCAB: VOCAB, LEGACY: LEGACY, INST: INST, BUDGET: BUDGET, RULES: RULES, RECIPES: RECIPES, EXAMPLE: EXAMPLE,
+    FORMAT: FORMAT, FRAME: FRAME, LINT_MAX: LINT_MAX, CATS: CATS, ACCENT: ACCENT, VOCAB: VOCAB, LEGACY: LEGACY, INST: INST, BUDGET: BUDGET, RULES: RULES, RECIPES: RECIPES, EXAMPLE: EXAMPLE,
     validateSoundPack: validateSoundPack, registerPack: registerPack, unregisterPack: unregisterPack, get: get, has: has, names: names, packs: packs, pack: pack,
     info: info, list: list, cueFor: cueFor, cueTable: cueTable, lintSoundTrack: lintSoundTrack, suggest: suggest, nodesOf: nodesOf, layerDur: layerDur, spec: spec, guide: guide,
     catLabel: function (c) { return CAT_LABEL[c] || ''; }

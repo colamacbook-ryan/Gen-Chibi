@@ -161,9 +161,11 @@ const LEGACY = ['pop', 'whoosh', 'step', 'sting', 'hit', 'boing', 'sparkle', 'ru
   no(!Sl.validateSoundPack(Sl.pack('ci-am')).def.license, 'bản xuất nạp lại vẫn mang license');
   // CNS-112: sổ đăng ký không prototype — tra theo id / tên lạ không ném, không trả thuộc tính của Object
   const Sp = fresh();
-  no(Sp.pack('constructor') !== null || Sp.pack('__proto__') !== null || Sp.pack('toString') !== null || Sp.get('constructor') !== null || Sp.has('__proto__') || Sp.unregisterPack('constructor') !== false, 'sổ đăng ký tra id / tên "constructor", "__proto__" phải trả null / false, không ném');
-  const rc = Sp.registerPack(Object.assign(base(), { id: 'constructor' }));
-  no(!rc.errors.length || Sp.packs().some(x => x.id === 'constructor') || Sp.packs().length !== 1, 'id "constructor" bị cổng chặn, sổ không đổi: ' + JSON.stringify(rc.errors));
+  try {
+    no(Sp.pack('constructor') !== null || Sp.pack('__proto__') !== null || Sp.pack('toString') !== null || Sp.get('constructor') !== null || Sp.has('__proto__') || Sp.unregisterPack('constructor') !== false, 'sổ đăng ký tra id / tên "constructor", "__proto__" phải trả null / false, không ném');
+    const rc = Sp.registerPack(Object.assign(base(), { id: 'constructor' }));
+    no(!rc.errors.length || Sp.packs().some(x => x.id === 'constructor') || Sp.packs().length !== 1, 'id "constructor" bị cổng chặn, sổ không đổi: ' + JSON.stringify(rc.errors));
+  } catch (e) { no(true, 'sổ đăng ký ném lỗi với id "constructor": ' + e.message); }
   console.log('   ✓ cổng kiểm: ' + cases + ' ca sai đều bị chặn đúng chỗ (khung, khoảng số, khoá lạ cả cấp gói, không mã, ngân sách node ≤ 60, cue chỉ khoá có thật, cue của gói chung, id dành riêng) · nạp khoan dung · license / owner đi theo gói · đếm node tĩnh đúng');
 }
 
@@ -219,7 +221,18 @@ const LEGACY = ['pop', 'whoosh', 'step', 'sting', 'hit', 'boing', 'sparkle', 'ru
   no(JSON.stringify(S.cueFor({ state: 'vow', mood: 'epic', project: P })) !== '["tu-va"]' || JSON.stringify(S.cueFor({ event: 'block', mood: 'epic', project: P })) !== '["kiem-co"]', 'tù và / kiếm cổ theo dự án');
   no(S.cueTable({ project: P, mood: 'epic' }).activity.charge !== 'trong-tran', 'cueTable theo dự án + mood');
   no(S.cueFor({ state: 'shock', fx: ['exclaim', 'confetti', 'coins'], activity: 'run', max: 3 }).length !== 3, 'max = 3');
-  console.log('   ✓ tự gán: cueFor = bảng cứng cũ của player.js ở ' + cases + ' tổ hợp (state × fx × activity × mood, kể cả khi gói Tam Quốc đã nạp) · gói dự án thắng khung chỉ trong dự án đó + đúng mood');
+  // CNS-103: ≤ RULES.maxAccent âm NHẤN mỗi bước — âm nhấn thứ hai bị bỏ, nhường chỗ âm thường (p5: vow + charge ở Tam Quốc từng ra tu-va + trong-tran)
+  const acc = n => S.ACCENT.includes(S.get(n).cat);
+  no(JSON.stringify(S.cueFor({ state: 'vow', activity: 'charge', mood: 'epic', project: P })) !== '["tu-va"]', 'vow + charge hùng tráng: một âm nhấn (tu-va), trong-tran bị bỏ: ' + JSON.stringify(S.cueFor({ state: 'vow', activity: 'charge', mood: 'epic', project: P })));
+  no(JSON.stringify(S.cueFor({ state: 'vow', activity: 'charge', event: 'cut', mood: 'epic', project: P })) !== '["tu-va","whoosh"]', 'âm nhấn thứ hai bỏ thì nhường chỗ âm thường kế tiếp');
+  no(JSON.stringify(S.cueFor({ state: 'shock', activity: 'charge', mood: 'epic', project: P })) !== '["sting"]', 'sting (khung) + trống trận (gói dự án) = hai âm nhấn → giữ cái đến trước');
+  let accMax = 0, nAcc = 0, accBad = '';
+  for (const mood of ['calm', 'tense', 'epic', 'comic', 'sad']) for (const st of ST) for (const ac of AC) for (const f of [[], ['exclaim'], ['sparkles', 'exclaim']]) for (const ev of [undefined, 'block', 'impact']) {
+    const r = S.cueFor({ state: st, fx: f, activity: ac, event: ev, mood, project: P }), k = r.filter(acc).length; accMax = Math.max(accMax, k); nAcc++;
+    if (k > S.RULES.maxAccent && !accBad) accBad = 'cueFor ' + JSON.stringify({ st, f, ac, ev, mood }) + ' ra ' + k + ' âm nhấn: ' + r;
+  }
+  no(accBad || accMax !== 1, 'cueFor không bao giờ quá ' + S.RULES.maxAccent + ' âm nhấn mỗi bước (' + nAcc + ' tổ hợp, nhiều nhất ' + accMax + '): ' + accBad);
+  console.log('   ✓ tự gán: cueFor = bảng cứng cũ của player.js ở ' + cases + ' tổ hợp (state × fx × activity × mood, kể cả khi gói Tam Quốc đã nạp) · gói dự án thắng khung chỉ trong dự án đó + đúng mood · ≤ 1 âm nhấn mỗi bước');
 }
 
 // ---------- 5. luật ghép S1–S7: mỗi luật một ca bắt, một ca không bắt; kịch bản sạch không cảnh báo
@@ -230,7 +243,7 @@ const LEGACY = ['pop', 'whoosh', 'step', 'sting', 'hit', 'boing', 'sparkle', 'ru
   const clean = [
     { actor: 'a', state: 'normal', say: 'Chào buổi sáng cả nhà.' },
     { actor: 'b', state: 'shock', say: '', sfx: ['sting'] },
-    { actor: 'b', state: 'panic', say: 'Trễ giờ rồi!' },
+    { actor: 'b', state: 'panic', say: 'Trễ giờ rồi!', sfx: [] },       // panic tự gán sting (âm NHẤN 1 s) sẽ đè lời → S3 tự gán; sfx: [] tắt
     { actor: 'a', state: 'normal', say: 'Bình tĩnh nào.', activity: 'attack', sfx: ['swish'] },
     { actor: 'b', state: 'dizzy', say: 'Ôi đầu tôi.', sfx: ['tweet'] },
     { actor: 'a', state: 'proud', say: '', sfx: ['ta-da'] }
@@ -252,6 +265,34 @@ const LEGACY = ['pop', 'whoosh', 'step', 'sting', 'hit', 'boing', 'sparkle', 'ru
   no(!s6b.length || !/gói "tq-am" của dự án khác/.test(s6b[0].msg) || S.lintSoundTrack([{ say: '', sfx: ['trong-tran'] }], { project: 'mau-tam-quoc' }).length, 'S6: âm của dự án khác là lỗi, trong đúng dự án thì không');
   no(S.suggest('trong tran', 'mau-tam-quoc') !== 'trong-tran' || S.suggest('sấm', '') !== 'sam', 'gợi ý theo nhãn / thẻ bỏ dấu');
   no(!has([{ say: '' }, { say: '', sfx: ['gong'] }, { say: '' }], 'S7') || has([{ say: '', sfx: ['gong'] }, { say: '' }], 'S7'), 'S7: âm dài giữa cảnh (đầu cảnh thì được)');
+  // CNS-103: S1 / S3 tính cả âm TỰ GÁN (mức cảnh báo, ghi "tự gán", chỉ cách tắt); đặt tay đúng hai âm đó thì S1 là lỗi
+  const P = 'mau-tam-quoc', vow = { actor: 'a', state: 'vow', activity: 'charge', say: 'Xông lên! Theo ta!' };
+  const la = S.lintSoundTrack([vow], { project: P, mood: 'epic' });
+  no(la.length !== 1 || la[0].code !== 'S3' || la[0].level !== 'warn' || la[0].name !== 'tu-va' || !/TỰ GÁN/.test(la[0].msg) || !/sfx: \[\]/.test(la[0].msg) || la[0].path !== 'steps[0]', 'bước có lời + âm nhấn tự gán (tu-va 2 s) → S3 cảnh báo "TỰ GÁN" nói cách tắt: ' + JSON.stringify(la));
+  no(S.lintSoundTrack([Object.assign({}, vow, { say: '' })], { project: P, mood: 'epic' }).length || S.lintSoundTrack([vow], { project: P, mood: 'epic', auto: false }).length || S.lintSoundTrack([Object.assign({}, vow, { sfx: [] })], { project: P, mood: 'epic' }).length, 'bước không lời / auto: false / sfx: [] thì không có S3 tự gán');
+  const hand = S.lintSoundTrack([Object.assign({}, vow, { sfx: ['tu-va', 'trong-tran'] })], { project: P, mood: 'epic' });
+  no(!hand.some(x => x.code === 'S1' && x.level === 'error') || hand.filter(x => x.code === 'S3').length !== 2, 'đặt tay hai âm nhấn đó: S1 lỗi + S3 ×2 (tự gán không còn được dễ hơn đặt tay)');
+  const sh = S.lintSoundTrack([{ actor: 'a', state: 'shock', say: 'Hả?! Cái gì cơ?!' }], {});
+  no(sh.length !== 1 || sh[0].code !== 'S3' || !/sting/.test(sh[0].msg), 'sting của khung tự gán trên bước shock có lời cũng là S3 tự gán — cùng luật với đặt tay: ' + JSON.stringify(sh));
+  // CNS-105: trần đầu vào + thời gian (lint_sound_track mở cho link MCP / AI chatroom; 15 000 bước từng giữ server 29 s)
+  {
+    const mk = (n, f) => Array.from({ length: n }, (x, i) => f(i)), L = S.LINT_MAX;
+    no(L.steps !== 12 || L.shots !== 200 || !(L.bytes > 0), 'LINT_MAX: 12 bước × 200 phân cảnh + trần byte');
+    const worst = { shots: mk(L.shots, j => ({ event: { steps: mk(L.steps, i => ({ actor: 'a', state: 'normal', say: 'Xin chào các bạn nhé.', sfx: ['zz-a' + (j * 12 + i), 'zz-b' + (j * 12 + i), 'zz-c' + (j * 12 + i)] })) } })) };   // tên lạ khác nhau mỗi lần = đường chậm nhất (S6 + gợi ý)
+    const t0 = Date.now(), r = S.lintSoundTrack(worst, { project: 'x' }), ms = Date.now() - t0;
+    no(ms >= 1000 || r.filter(x => x.code === 'S6').length !== L.shots * L.steps * 3, 'request lớn nhất hợp lệ (200 × 12 bước, toàn tên lạ) xong < 1 s (đo ' + ms + ' ms)');
+    no(r.filter(x => / — gần nhất: /.test(x.msg)).length > L.suggest, 'chỉ gợi ý tên gần nhất cho ' + L.suggest + ' tên lạ đầu');
+    const dense = { shots: mk(L.shots, j => ({ event: { steps: mk(L.steps, i => ({ actor: 'a', state: 'shock', say: 'Ồ!', sfx: ['pop', 'boing', 'hit'] })) } })) }, t1 = Date.now();
+    S.lintSoundTrack(dense, { project: 'x', mood: 'comic' }); no(Date.now() - t1 >= 1000, 'đường mật độ S2 / S5 của 200 × 12 bước < 1 s (đo ' + (Date.now() - t1) + ' ms)');
+    const cut = (what, input, re) => { const t = Date.now(), r = S.lintSoundTrack(input, { project: 'x' }); no(r.length !== 1 || r[0].code !== 'S0' || r[0].level !== 'error' || !re.test(r[0].msg) || Date.now() - t > 50, what + ': bị từ chối (S0) < 50 ms — ' + JSON.stringify(r).slice(0, 160)); };
+    cut('15 000 bước (p2)', mk(15000, i => ({ sfx: ['zzaa', 'zzbb', 'zzcc'] })), /tối đa 12 bước/);
+    cut('13 bước', mk(13, i => ({ say: '' })), /tối đa 12 bước/);
+    cut('201 phân cảnh', { shots: mk(201, i => ({ event: { steps: [{ say: '' }] } })) }, /tối đa 200 phân cảnh/);
+    cut('đầu vào > trần byte', mk(12, i => ({ say: 'x'.repeat(100000) })), /quá lớn/);
+    no(S.lintSoundTrack(mk(12, i => ({ say: '' }))).length !== 0 || S.lintSoundTrack({ shots: mk(200, i => ({ event: { steps: [{ say: '' }] } })) }).length !== 0, 'đúng trần (12 bước, 200 phân cảnh) vẫn chấm được');
+    const huge = [{ say: '', sfx: mk(5000, i => 'zz-' + i) }], th = Date.now(), rh = S.lintSoundTrack(huge, { project: 'x' });
+    no(Date.now() - th > 200 || rh.filter(x => x.code === 'S6').length !== L.sfx || rh.filter(x => x.code === 'S1').length !== 1, 'một bước có 5 000 tên âm: S1 báo, chỉ duyệt ' + L.sfx + ' tên đầu (' + (Date.now() - th) + ' ms, ' + rh.length + ' vấn đề)');
+  }
   // dạng đầu vào: tác phẩm / phân cảnh / mảng; sai dạng → S0
   const work = { shots: [{ event: { steps: [{ say: '', sfx: ['bonkk'] }] } }, { event: { steps: [{ say: '', sfx: ['pop', 'drip', 'tick', 'chime'] }] } }] }, W = S.lintSoundTrack(work);
   no(W.length !== 2 || W[0].path !== 'shots[0].event.steps[0].sfx[0]' || W[1].shot !== 1, 'lint tác phẩm: đường dẫn + chỉ số phân cảnh: ' + JSON.stringify(W));
