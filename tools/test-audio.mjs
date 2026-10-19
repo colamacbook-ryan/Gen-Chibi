@@ -251,9 +251,9 @@ try {
     // không cần unlock / AudioContext thật: trang chưa bấm gì vẫn dựng được WAV (nút tải ở Thư viện bấm lần đầu cũng chạy)
     const p2 = await bg.newPage(); await p2.setContent('<!doctype html><meta charset="utf-8"><body></body>');
     for (const f of ['engine/core.js', 'engine/sounds.js', 'engine/audio.js']) await p2.addScriptTag({ content: fs.readFileSync(path.join(ROOT, f), 'utf8') });
-    const pre = await p2.evaluate(async () => ({ ctx: window.GenChibi.audio.info().ctx, bytes: (await window.GenChibi.audio.renderWav('pop', { sampleRate: 22050 })).byteLength }));
+    const pre = await p2.evaluate(async () => ({ ctx: window.GenChibi.audio.info().ctx, bytes: (await window.GenChibi.audio.renderWav('pop', { sampleRate: 22050 })).byteLength, full: (await window.GenChibi.audio.renderWav('pop')).byteLength }));
     await p2.close();
-    ok(pre.ctx === false && pre.bytes > 2000 && pre.bytes < 40000, 'renderWav chạy khi chưa unlock() (chưa có AudioContext), sampleRate 22050 → tệp nhỏ hơn: ' + pre.bytes + ' byte', pre);
+    ok(pre.ctx === false && pre.full > 2000 && Math.abs(pre.bytes / pre.full - 0.5) < 0.02, 'renderWav chạy khi chưa unlock() (chưa có AudioContext); sampleRate 22050 → tệp nhỏ đúng một nửa: ' + pre.bytes + ' / ' + pre.full + ' byte', pre);
   }
   const SAY = `async (o) => {
     const A = window.GenChibi.audio, log = { mouth: [], word: [], tm: [], tw: [], t0: performance.now() };
