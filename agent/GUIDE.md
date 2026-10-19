@@ -76,7 +76,7 @@ with a runnable JSON example.
    Fix exactly the fields named in `details[].path`, then validate again. Stop after 3 failed
    attempts on the same item and report to the owner what still fails.
 8. **Samples are not yours.** Projects marked as a Gen Labs sample (e.g. Tam Quốc) are for viewing,
-   trying and filming — never copy their parts / motion packs into something sold.
+   trying and filming — never copy their parts / motion packs / sound packs into something sold.
 9. **Nothing is deleted by agents.** There is no tool that deletes an asset. Saving over an existing id
    (`overwrite: true`, or `save_*` on the same id) creates a NEW version — the old one stays in history.
    `save_shot` with `remove` takes a shot out of a work — only when the owner asks. `rollback_app` needs the

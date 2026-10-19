@@ -19,7 +19,7 @@
 6. `save_shot` with `{ "work": "<work id>", "shot": { "title", "description", "scene", "cast": [keys], "event" } }`
    (`shot.id` to edit an existing shot; `remove: true` to drop one).
 7. `preview_shot` with `{ "work": "<work id>", "shot": "<shot id>" }` → `ready`, `missing`, `warnings`,
-   and the planned beats (who moves, which actions, how long). Fix anything listed.
+   and the planned beats (who moves, which actions, how long, and the sounds that will play — `sfx`, auto-assigned or yours). Fix anything listed.
 8. Optional voices (voice by ROLE): set the film language once — `save_work` with `{ "id", "lang": "vi" | "en" | "zh" | "yue",
    "accent": "bac" | "nam" | "trung" (vi) · "us" | "uk" (en) · "pt" | "tw" (zh) · "hk" (yue = Cantonese) }`; write every line in that
    language (the voice reads the language of the text — for Cantonese write colloquial Cantonese in Traditional characters: 喺, 咩, 我哋).

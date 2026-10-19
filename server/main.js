@@ -272,7 +272,8 @@ async function route(req, res) {
   if (wm && !wm[2] && m === 'GET') { const w = store.getWork(wm[1]); return w ? send(res, 200, mcp.canonRefs(w)) : fail(res, 404, 'không có tác phẩm này'); }
   if (wm && wm[2] === '/shots' && m === 'POST') {
     const b = await body(req, 200 * 1024);
-    try { mcp.saveShotChecked(Object.assign({}, b, { work: wm[1] })); return send(res, 200, mcp.canonRefs(store.getWork(wm[1]))); }
+    // warnings (luật ghép âm S2–S5, S7 — v0.18) đi kèm tác phẩm trả về để Studio hiện cạnh phân cảnh; lỗi (S1, S6) là 422 có errors[] kèm path
+    try { const r = mcp.saveShotChecked(Object.assign({}, b, { work: wm[1] })), w = mcp.canonRefs(store.getWork(wm[1])); if (r.warnings) w.warnings = r.warnings; return send(res, 200, w); }
     catch (e) { return send(res, e.code || 400, { error: e.message, errors: e.errors || null }); }
   }
   if (wm && wm[2] === '/chat' && m === 'POST') {

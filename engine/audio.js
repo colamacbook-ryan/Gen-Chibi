@@ -563,7 +563,7 @@
     var sr = Math.round(clamp(o.sampleRate, 8000, 96000, 44100)), len = Math.ceil(Math.min(14, end + clamp(o.tail, 0, 3, 0.6)) * sr);
     var keep = getState(), realRandom = Math.random, off;
     try {
-      if (typeof o.seed === 'number') Math.random = mulberry(o.seed);      // cùng seed → cùng tệp (kiểm thử, so sánh)
+      if (typeof o.seed === 'number') Math.random = mulberry(o.seed);      // cùng seed → gần như cùng tệp (kiểm thử; Chromium dựng offline lệch tối đa vài LSB giữa hai lần)
       off = new OC(2, len, sr);
       setState([off, null, null, null, null, null, null, null, null, null, null, null, null, [], clamp(o.volume, 0, 1, 1), false, false]);
       build();
