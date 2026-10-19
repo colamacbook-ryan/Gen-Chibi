@@ -368,6 +368,11 @@ class MCP {
   async callTool(name, args, ctx) {
     const GC = this.GC;
     args = args || {};
+    // kết nối OAuth mcp:read (v0.19): chỉ tool tự khai readOnlyHint — danh sách đã lọc ở tools/list, đây là cổng thật (gọi thẳng tên tool cũng bị chặn)
+    if (ctx && ctx.readOnly) {
+      const t = TOOLS.find(x => x.name === name);
+      if (t && !(t.annotations && t.annotations.readOnlyHint === true)) return toolError('Kết nối này chỉ có quyền xem (mcp:read) — tool ' + name + ' ghi / tốn tài nguyên. Nhờ chủ máy đổi phạm vi ở Studio › Hệ thống › Kết nối agent.', { code: 'FORBIDDEN' });
+    }
     switch (name) {
       case 'get_catalog': return json(this.catalog());
       case 'list_characters': {
@@ -725,6 +730,8 @@ class MCP {
     }
   }
   async appTool(name, args, ctx) {
+    // kết nối OAuth mcp:read / mcp:write (v0.19) dùng kênh link (viaLink) nhưng chặt hơn một bậc: link vẫn cập nhật bình thường được, OAuth thì không — đổi bản chạy là việc của chủ máy (mcp:owner / Studio / genchibi)
+    if (ctx.viaOAuth && name !== 'get_app_version') return toolError('Kết nối OAuth phạm vi mcp:read / mcp:write không cập nhật hay quay lại bản cũ được — dùng phạm vi mcp:owner, Studio, hoặc genchibi.', { code: 'FORBIDDEN' });
     const sys = this.system;
     if (!sys || !sys.updater) return toolError('Bản chạy này không tự cập nhật được (đang chạy từ mã nguồn, không qua bản cài).');
     const up = sys.updater;
@@ -1594,7 +1601,7 @@ class MCP {
         }
         case 'notifications/initialized': case 'notifications/cancelled': return null;
         case 'ping': return ok({});
-        case 'tools/list': return ok({ tools: TOOLS });
+        case 'tools/list': return ok({ tools: ctx && ctx.readOnly ? TOOLS.filter(t => t.annotations && t.annotations.readOnlyHint === true) : TOOLS });
         case 'tools/call': {
           const p = msg.params || {};
           const r = await this.callTool(p.name, p.arguments, ctx || {});
@@ -1810,4 +1817,14 @@ function reviewTouched(w, before, after) {
   if (rv.notes.length < 12) rv.notes.push({ id: 'n' + (rv.notes.reduce((m, n) => Math.max(m, +String(n.id).slice(1) || 0), 0) + 1), text: 'Cảnh đã đổi sau khi duyệt — cần xem lại.', at: rv.at, by: 'system' });
 }
 
-module.exports = { MCP, TOOLS, INSTRUCTIONS, workInstructions, ZONES, UI_TOOLS, LIMITS, cleanContext, cleanAnchors };
+// Phạm vi OAuth (v0.19) → kênh SẴN CÓ của handle(ctx) — không có hệ quyền thứ hai:
+//   mcp:read  = kênh link (viaLink) + chỉ tool readOnlyHint (readOnly) + không cập nhật (viaOAuth)
+//   mcp:write = kênh link (viaLink) + không cập nhật (viaOAuth): tạo / sửa trong dự án; không chi tiêu giọng AI, không gỡ gói âm, không rollback / update
+//   mcp:owner = như token chủ máy (ctx rỗng)
+function scopeCtx(scope) {
+  if (scope === 'mcp:owner') return { viaLink: false };
+  if (scope === 'mcp:write') return { viaLink: true, viaOAuth: true };
+  return { viaLink: true, viaOAuth: true, readOnly: true };   // mcp:read và mọi giá trị lạ → hẹp nhất (đóng khi nghi ngờ)
+}
+
+module.exports = { scopeCtx, MCP, TOOLS, INSTRUCTIONS, workInstructions, ZONES, UI_TOOLS, LIMITS, cleanContext, cleanAnchors };
