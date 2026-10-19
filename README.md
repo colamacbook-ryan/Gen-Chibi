@@ -6,7 +6,7 @@
 
 - **Studio** — **3 ứng dụng độc lập** `/xuong` · `/thu-vien` · `/tao-tac` (desktop, kiểu Data Console), theo dòng chảy: **Xưởng** — bộ khung chuẩn + **Tạo asset mới** (chọn khung → tham số → soát → cổng kiểm → lưu), bàn chỉnh, linh kiện, khung tư thế & biểu cảm, cổng kiểm; **Thư viện** — asset đã qua cổng xếp theo **dự án chủ đề**, tải ảnh / sprite 8 hướng, chép mã, **Nháp / Phát hành**, **Gói sao lưu** (cả tác phẩm) và **Gói bán** (chỉ asset phát hành), nhập gói qua cổng kiểm; **Tạo tác** — **Tác phẩm**: chat với AI đạo diễn, kịch bản, phân cảnh, bảng tình trạng, cảnh thành phẩm, sân khấu final diễn cả chuỗi, **xuất phim HTML độc lập + storyboard**; AI thiếu nhân vật / bối cảnh thì tự vào Xưởng tạo (đúng dự án).
 - **AI đạo diễn**: LLM viết kịch bản / lời thoại trong từ vựng đóng của kho; server kiểm và bắt model sửa nếu sai.
-- **MCP server**: agent (Claude Code, Claude Desktop…) nối thẳng vào để tự tạo nhân vật và kịch bản, không tốn LLM API lõi.
+- **MCP server**: agent mọi hãng nối thẳng vào để tạo nhân vật, trang bị, cảnh, gói động tác, làm phim, xuất hoạt ảnh — không tốn LLM API lõi; hướng dẫn agent một nguồn (`agent/`), bootstrap `genchibi agent`.
 - **Tự cập nhật** từ GitHub Releases: kiểm SHA-256, sao lưu dữ liệu trước khi đổi, tự chạy lại bản cũ nếu bản mới lỗi.
 
 ## Cài đặt (một lệnh)
@@ -55,16 +55,30 @@ Cảnh = phối phông có sẵn (trời, cảnh xa, công trình, mặt đất,
 ## Quy trình tạo lập linh kiện
 Nhà xưởng giữ giá trị ở **khung sườn + quy trình**; nhân vật chỉ là phối linh kiện. Chuẩn tạo một linh kiện (toạ độ, lớp, góc nhìn chính diện + 45° (+ 90° / 135° / sau lưng), công cụ `face45`/`body45`, soát trên ma-nơ-canh, cổng kiểm, phát hành): [`docs/QUY-TRINH-LINH-KIEN.md`](docs/QUY-TRINH-LINH-KIEN.md).
 
-## Nối agent qua MCP
+## Nối agent qua MCP (mọi hãng — Claude, GPT, Gemini, model mở, agent tự viết)
 
 ```bash
-claude mcp add gen-chibi -- genchibi mcp                                  # stdio
-claude mcp add --transport http gen-chibi http://localhost:7480/mcp       # HTTP
+genchibi agent connect                 # in cấu hình nối cho Claude Code, Cursor, Gemini CLI, Codex CLI, curl (không in token)
+genchibi agent skill claude            # cài hướng dẫn thành skill (cursor | gemini | codex | generic: AGENTS.md / GEMINI.md / rule)
+genchibi agent guide film              # đọc hướng dẫn một chủ đề · genchibi agent tools --format openai  (schema function-calling)
 ```
 
-31 tool: `get_catalog`, `list_characters`, `get_character`, `validate_character`, `save_character`, `render_character`, `get_director_schema`, `validate_event`, `save_event`, `get_part_spec`, `preview_part`, `save_part`, `list_items`, `validate_item`, `save_item`, `render_item`, `list_scenes`, `validate_scene`, `save_scene`, `render_scene`, `list_projects`, `save_project`, `export_project`, `import_project`, `list_works`, `get_work`, `save_work`, `save_shot`, `get_app_version`, `update_app`, `rollback_app`.
+Agent nối vào thì **gọi `start_here` trước**, rồi `get_guide` theo việc cần làm. Hướng dẫn nằm ở **một nguồn**:
+[`agent/GUIDE.md`](agent/GUIDE.md) + `agent/workflows/*.md` + `agent/examples/*.json`. Viết bằng tiếng Anh, trung lập model.
+Mọi ví dụ được CI chạy thật qua cổng: test "agent từ số 0" đi trọn luồng chỉ bằng hướng dẫn, qua JSON-RPC thuần.
+Không có MCP client: `POST /mcp` JSON-RPC bằng curl, `GET /mcp?guide=<chủ đề>`, `GET /mcp?tools=openai|gemini`.
+Lỗi có mã ổn định: `[VALIDATION_FAILED]`, `NOT_FOUND`… kèm `structuredContent.error.details[].path`.
 
-Làm phim: `save_work` → `save_shot` (bối cảnh + dàn diễn viên + lời thoại qua cổng đạo diễn) → owner xem / xuất ở Studio › Tạo tác › Tác phẩm. Gói chủ đề: `export_project` / `import_project` (gen-chibi.project/1, có `requires`).
+44 tool, theo nhóm:
+- **Mở đầu:** `start_here`, `get_guide`
+- **Nhân vật:** `get_catalog` · `list/get/validate/save/render_character`
+- **Linh kiện:** `get_part_spec` · `preview_part` · `save_part`
+- **Trang bị:** `list/validate/save/render_item`
+- **Cảnh:** `list/validate/save/render_scene`
+- **Gói động tác:** `list_actions` · `list_motion_packs` · `get_motion_pack` · `get_motion_spec` · `validate/save_motion_pack` · `render_action` (sprite sheet / khung / timeline)
+- **Phim:** `get_director_schema` · `validate_event` · `save_event` · `list_events` · `list/get/save_work` · `save_shot` · `preview_shot`
+- **Dự án & bộ mẫu:** `list/save_project` · `export/import_project` · `list_samples` · `install_sample`
+- **Hệ thống:** `get_app_version` · `update_app` · `rollback_app`
 
 Tạo linh kiện: `get_part_spec` → vẽ (SVG an toàn, token màu) → `preview_part` (bàn soát) → `save_part`. AI trong Studio (Xưởng › Trợ lý AI tạo asset, Tạo tác › AI đạo diễn) dùng đúng bộ tool này — mọi lối ghi đi qua một cổng kiểm (xem `docs/QUY-TRINH-LINH-KIEN.md` mục 6).
 

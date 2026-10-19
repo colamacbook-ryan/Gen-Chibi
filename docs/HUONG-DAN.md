@@ -49,10 +49,13 @@ Khung không bao giờ bị sửa — asset của bạn là bản sao của khun
   - **âm thanh**: hiệu ứng theo cảm xúc / hành động, nền theo bối cảnh (chim, dế, mưa, gió), nhạc nhẹ theo không khí, **giọng riêng từng nhân vật**.
   - Nút 🔊 bật / tắt tiếng; chọn giọng: *tự động* (máy đọc tiếng Việt nếu trình duyệt có, không thì giọng blip), *máy đọc*, *blip kiểu game*, *tắt*.
   - Muốn chỉ đạo kỹ hơn: mỗi câu thoại có thể đặt `to` (nói với ai), `camera` (close / two / wide), `bubble` (say / shout / think / whisper), `sfx`; AI đạo diễn biết các trường này. Đổi `spot` giữa các câu để nhân vật đi lại.
-  - **Hành động & đấu võ** (v0.15): một bước kịch bản có thể là một màn biên đạo — `action` (đòn đánh: `thrust` đâm, `sweep` quét, `combo` liên hoàn, `spin` xoay chém, `leap` tung người bổ xuống; một mình: `twirl` múa binh khí, `rage`, `hero`, `victory`, `dance`, `salute`, `stretch`, `scratch`, `startle`, `flip`), `target` (người bị đánh) và `react` (`hit` trúng, `fall` ngã lộn rồi bật dậy, `ko` ngã choáng, `block` gạt đỡ, `dodge` lộn ra sau né). Người ra đòn **tự áp sát hoặc lùi** cho mũi binh khí chạm đúng đối thủ; đối thủ phản ứng **đúng khung va chạm**; có khựng hình, slow-mo, vệt chém, chữ tượng thanh (VÚT! XOẸT! RẦM!), người đứng xem giật mình. `say` để `""` nếu chỉ ra đòn. Xem phân cảnh *Đấu tập trước trận* trong phim Tam Quốc.
-    - Hiện **chưa có ô chọn đòn trong Studio**: viết `action` / `target` / `react` bằng cách nhờ **AI đạo diễn** ("cho Triệu Vân đâm Trương Phi, Trương Phi gạt đỡ") hoặc gửi kịch bản JSON qua MCP (`save_event`, `save_shot`).
-    - Hai đấu thủ **không chồng đầu** (người ra đòn tự lùi lại nếu đổ người tới quá sát), **không lộn / văng đè lên người đứng xem**; đòn *tung người bổ xuống* bổ xuống đất ngay trước mặt đối thủ — trúng bằng chấn động.
-    - Máy đang giữ bộ Tam Quốc cũ (chưa có màn đấu)? Ở **Thư viện › Dự án chủ đề**, bấm **⟳ Cập nhật Tam Quốc** để nhập đè bản mới.
+  - **Hành động & đấu võ**: một bước kịch bản có thể là một màn biên đạo — `action` + `target` (người bị đánh) + `react` (`hit` trúng, `fall` ngã lộn rồi bật dậy, `ko` ngã choáng, `block` gạt đỡ, `dodge` lộn ra sau né).
+    - **Đòn của khung** (ai cũng dùng được): `punch` đấm (vào mặt), `kick` đá, `push` đẩy mặt, `throw` ném cà chua từ xa; cần cầm binh khí: `thrust` đâm, `sweep` quét; một mình: `rage`, `hero`, `victory`, `dance`, `salute`, `wave`, `stretch`, `scratch`, `startle`, `flip`.
+    - **Đòn của gói động tác** trong dự án (vd. bộ Tam Quốc: `combo` liên hoàn, `spin` xoay chém, `leap` tung người bổ, `twirl` múa thương).
+    - Nhân vật **có binh khí** khi tay phải cầm trang bị loại *Vũ khí* (hoặc linh kiện khai `grip: weapon`). Ai không có thì đòn binh khí bị chặn kèm gợi ý đòn làm được; quạt, sách… là đạo cụ.
+    - Người ra đòn tự áp sát / lùi cho đòn chạm đúng; hai đầu không chồng nhau; không lộn / văng đè lên người đứng xem; đối thủ phản ứng đúng khung va chạm. `say` để `""` nếu chỉ ra đòn.
+    - Viết bằng **AI đạo diễn**, qua MCP, hoặc ngay trong Studio (xem bảng bước bên dưới). Thanh **Sẵn sàng** báo nếu một đòn không có (thiếu gói động tác) hoặc diễn viên không làm được.
+    - Máy đang giữ bộ Tam Quốc cũ? Ở **Thư viện › Dự án chủ đề**, bấm **⟳ Cập nhật Tam Quốc** để nhập bản mới (có gói động tác).
 
 ### Xuất thành phẩm
 | Nút | Ra gì |
@@ -81,8 +84,12 @@ Thư viện › Nhân vật › khu **Dùng** › **Giọng**: kéo cao độ (t
 Ở Thư viện, mỗi asset có khu **Dùng**: tải SVG / PNG / avatar / sprite biểu cảm / **sprite 8 hướng**, chép mã tham chiếu, mã gọi MCP, mã nhúng web, JSON công thức.
 Mã tham chiếu có dạng `<thư viện>/<id>`: khung chuẩn là `gen.khung/…` và `gen.core/…`, asset của bạn là `local.my/…`. Tên cũ `afi.khung/…`, `afi.core/…` (trước v0.12) vẫn đọc được và được tự đổi sang tên mới khi lưu.
 
-## 6. Cho agent AI (MCP)
-gen-chibi có MCP server (`/mcp` hoặc lệnh `genchibi mcp`) với 31 tool: tạo / kiểm / dựng nhân vật, linh kiện, item, cảnh; dự án chủ đề; tác phẩm (`save_work`, `save_shot`); gói dự án (`export_project`, `import_project`). Agent đi qua **cùng cổng kiểm** với Studio.
+## 6. Cho agent AI (MCP) — agent của hãng nào cũng dùng được
+- Chạy **`genchibi agent connect`**: in sẵn cấu hình nối cho Claude Code, Claude app, Cursor, Gemini CLI, Codex CLI và lệnh `curl` (không in token ra màn hình).
+- Muốn agent "thuộc bài" từ đầu: **`genchibi agent skill claude`** (hoặc `cursor`, `gemini`, `codex`, `generic`) — cài hướng dẫn thành skill / `AGENTS.md` / `GEMINI.md`.
+- Dặn agent: **"gọi `start_here` trước"**. Agent sẽ nhận trạng thái Thư viện, 10 luật vàng, 9 chủ đề hướng dẫn (nhân vật, linh kiện, trang bị, cảnh, gói động tác, hoạt ảnh, phim, gói dự án, hệ thống), rồi làm theo từng bước có ví dụ chạy được.
+- 44 tool; agent đi qua **cùng cổng kiểm** với Studio. Lỗi trả về có mã (`[VALIDATION_FAILED]`, `NOT_FOUND`…) và chỉ đúng trường sai — agent tự sửa được.
+- Agent không có MCP client vẫn dùng được qua HTTP thuần (xem `agent/GUIDE.md` mục 1).
 
 ## Câu hỏi thường gặp
 - **AI tự tạo asset có cần duyệt không?** Không — lưu dạng **nháp** trong dự án của tác phẩm và dùng ngay. Chỉ khi muốn đưa vào gói bán bạn mới bấm **Phát hành**.

@@ -15,10 +15,13 @@
 | Bộ phận (11) | dáng đầu · mặt nạ · tóc · râu · mũ · trang phục · sau lưng · quần · giày · tay trái cầm · tay phải cầm |
 | Góc nhìn (8 hướng + 3/4 nhẹ) | chính diện · 45° · 90° (nhìn ngang) · 135° (quay lưng chéo) · sau lưng — mỗi góc nghiêng có trái/phải (bản chuẩn quay sang trái; bên phải = lật gương) + 3/4 nhẹ trái/phải (engine trượt). Sprite 8 hướng xếp vòng theo chiều kim đồng hồ: front · left45 · left90 · left135 · back · right135 · right90 · right45 |
 | Biểu cảm | 18 (mắt + mày + miệng + hiệu ứng + động tác) |
-| Chuyển động | 12 tư thế × 10 di chuyển × 58 động tác; 32 hoạt động đặt sẵn; biên đạo hành động (v0.15): 15 đòn / hành động một mình × 5 phản ứng |
+| Chuyển động | 12 tư thế × 10 di chuyển × 58 động tác lặp; 32 hoạt động đặt sẵn |
+| Bộ động tác khung (v0.16, `gen.dong-tac`) | trung lập chủ đề: **tay không + hài** — đấm (vào mặt, tay cao su), đá, đẩy mặt, ném cà chua; **đòn binh khí chung** — đâm, quét (`needs: weapon`); một mình — dậm chân giận, tạo dáng, nhảy mừng, thi lễ, vẫy chào, vươn vai, gãi đầu, giật mình, lộn ngược; × 5 phản ứng (trúng, ngã lộn, choáng, gạt đỡ, né). Đòn riêng một chủ đề nằm trong **gói động tác** của bộ đó (vd. Tam Quốc: liên hoàn, xoay chém, tung người bổ, múa thương) |
 | Bắt buộc với linh kiện | có bản 45° (trừ vật cầm tay), license, nguồn; qua cổng ở mọi biểu cảm × hoạt động × góc. Linh kiện **khung** vẽ đủ 4 dáng góc (q45 · q90 · q135 · q180); asset chủ đề thiếu góc nào thì engine mượn góc gần nhất |
 
 ## 2. Vật phẩm — 10 khối đại diện theo dáng
+
+> Khối chỉ là **dáng**. Một vật cầm tay là **binh khí** (mở các đòn "cần binh khí") khi nhân vật cầm nó qua **trang bị loại Vũ khí**, hoặc linh kiện khai `grip: "weapon"`; quạt, sách, chén… là `grip: "prop"`, dụng cụ là `"tool"` (v0.16).
 
 | Khối | Bộ phận | Điểm gắn | Tham số | Dùng làm gốc cho |
 |---|---|---|---|---|

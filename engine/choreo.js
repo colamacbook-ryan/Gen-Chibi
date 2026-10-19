@@ -349,6 +349,9 @@
     if (c.errors.length) return c;
     var d = c.def, key = packNs + '/' + d.id, pre = d.id + ':', C = GC.choreo, errs = [];
     Object.keys(d.actions).forEach(function (k) { var x = C.ACTIONS[k]; if (x && x.pack !== key) errs.push('actions.' + k + ': trùng id hành động của ' + (x.pack === FRAME_PACK ? 'bộ khung' : 'gói ' + x.pack) + ' — đổi tên'); });
+    // id hành động không trùng tên hoạt động / trạng thái của kịch bản (CNS-051): "salute" là activity hay action? — chặn nhập nhằng
+    var LB = GC.LIB || {};
+    Object.keys(d.actions).forEach(function (k) { if (hasOwn(LB.activities, k) || hasOwn(LB.states, k)) errs.push('actions.' + k + ': trùng tên ' + (hasOwn(LB.states, k) ? 'trạng thái (state)' : 'hoạt động (activity)') + ' của kịch bản — đổi tên'); });
     Object.keys(d.shows).forEach(function (k) { var x = C.demos[k]; if (x && x.pack !== key) errs.push('shows.' + k + ': trùng id màn diễn — đổi tên'); });
     if (errs.length) return { errors: errs, def: null };
     unregisterPack(key);
