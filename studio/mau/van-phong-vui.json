@@ -145,6 +145,7 @@
    },
    "status": "draft",
    "voice": {
+    "role": "nu-tre",
     "pitch": 1.55,
     "rate": 1.12
    }
@@ -181,6 +182,7 @@
    },
    "status": "draft",
    "voice": {
+    "role": "nam-trung-nien",
     "pitch": 0.68,
     "rate": 0.86
    }
@@ -218,6 +220,7 @@
    },
    "status": "draft",
    "voice": {
+    "role": "hai-huoc",
     "pitch": 1.05,
     "rate": 1.15
    }

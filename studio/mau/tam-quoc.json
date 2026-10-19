@@ -5,7 +5,7 @@
  "sample": {
   "owner": "Gen Labs",
   "license": "© 2026 Gen Labs — bộ mẫu trưng bày: xem, sửa thử, làm phim; không bán lại, không phân phối",
-  "version": "2026.10.19-dong-tac"
+  "version": "2026.10.19-giong"
  },
  "project": {
   "id": "mau-tam-quoc",
@@ -1832,6 +1832,7 @@
    "role": "Mưu sĩ",
    "persona": "quân sư bình thản bí hiểm, cười mỉm sau quạt, gặp nguy vẫn làm như không",
    "voice": {
+    "role": "quan-su",
     "pitch": 1,
     "rate": 0.86
    },
@@ -1903,6 +1904,7 @@
    "role": "Võ tướng",
    "persona": "kiêu hãnh, trọng nghĩa, hay vuốt râu tự đắc, bị chê râu là phồng mặt",
    "voice": {
+    "role": "vo-tuong",
     "pitch": 0.72,
     "rate": 0.9
    },
@@ -1960,6 +1962,7 @@
    "role": "Võ tướng",
    "persona": "nóng nảy, hét to như sấm, mê rượu, thẳng như ruột ngựa",
    "voice": {
+    "role": "vo-tuong",
     "pitch": 0.55,
     "rate": 1.15
    },
@@ -2017,6 +2020,7 @@
    "role": "Chủ công",
    "persona": "đa nghi, gian hùng, cười nham hiểm, ngủ cũng ôm kiếm",
    "voice": {
+    "role": "phan-dien",
     "pitch": 0.86,
     "rate": 1
    },
@@ -2076,6 +2080,7 @@
    "role": "Lính",
    "persona": "nhát gan, tham ăn, luôn bị sai vặt, mơ được thưởng",
    "voice": {
+    "role": "hai-huoc",
     "pitch": 1.42,
     "rate": 1.22
    },
@@ -2125,6 +2130,7 @@
    "role": "Chủ công",
    "persona": "nhân hậu, nhẫn nại, khóc đúng lúc, giữ chữ tín với anh em",
    "voice": {
+    "role": "vua-chua",
     "pitch": 0.96,
     "rate": 0.95
    },
@@ -2185,6 +2191,7 @@
    "role": "Võ tướng",
    "persona": "điềm tĩnh, gan dạ, một mình một ngựa xông trận, ít nói làm nhiều",
    "voice": {
+    "role": "hiep-khach",
     "pitch": 1.12,
     "rate": 1.05
    },

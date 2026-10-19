@@ -159,8 +159,10 @@ const look = (o, extra) => {
 };
 const must = arr => (arr || []).map(m => { const [sl, id] = m.split(':'); return /^(eyes|brows)$/.test(sl) || id === 'none' ? m : sl + ':' + ref(sl, id).replace('local.my/', ''); });
 // giọng trong phim: cao độ + tốc độ (engine/audio.js) — Trương Phi trầm và nhanh, Lính quèn cao và líu ríu, Khổng Minh chậm rãi
-const VOICE = { 'gia-cat-luong': { pitch: 1.0, rate: 0.86 }, 'quan-vu': { pitch: 0.72, rate: 0.9 }, 'truong-phi': { pitch: 0.55, rate: 1.15 },
-  'tao-thao': { pitch: 0.86, rate: 1.0 }, 'linh-que': { pitch: 1.42, rate: 1.22 }, 'luu-bi': { pitch: 0.96, rate: 0.95 }, 'trieu-van': { pitch: 1.12, rate: 1.05 } };
+// giọng: vai giọng (engine/voices.js — chọn tay, máy đoán "Lính quèn" thành võ tướng) + cao độ / tốc độ cho giọng trình duyệt
+const VOICE = { 'gia-cat-luong': { role: 'quan-su', pitch: 1.0, rate: 0.86 }, 'quan-vu': { role: 'vo-tuong', pitch: 0.72, rate: 0.9 }, 'truong-phi': { role: 'vo-tuong', pitch: 0.55, rate: 1.15 },
+  'tao-thao': { role: 'phan-dien', pitch: 0.86, rate: 1.0 }, 'linh-que': { role: 'hai-huoc', pitch: 1.42, rate: 1.22 }, 'luu-bi': { role: 'vua-chua', pitch: 0.96, rate: 0.95 },
+  'trieu-van': { role: 'hiep-khach', pitch: 1.12, rate: 1.05 } };
 const characters = Object.values(OLD.ASSETS).map(a => ({
   id: 'tq-' + a.id, name: a.name, han: a.han || '', faction: a.faction || '', role: a.role || '', persona: a.persona || '', voice: VOICE[a.id],
   look: look(a.look), expressions: JSON.parse(JSON.stringify(a.expressions || {})),
@@ -236,7 +238,7 @@ const works = [{
 const bundle = {
   format: 'gen-chibi.project/1', kind: 'sample', license: LICENSE,
   // version: đổi mỗi khi nội dung bộ mẫu đổi — Studio thấy máy đang giữ bản cũ thì mời "Cập nhật bộ mẫu" (khớp SAMPLES trong studio/app.js)
-  sample: { owner: 'Gen Labs', license: '© 2026 Gen Labs — bộ mẫu trưng bày: xem, sửa thử, làm phim; không bán lại, không phân phối', version: '2026.10.19-dong-tac' },
+  sample: { owner: 'Gen Labs', license: '© 2026 Gen Labs — bộ mẫu trưng bày: xem, sửa thử, làm phim; không bán lại, không phân phối', version: '2026.10.19-giong' },
   project: { id: 'mau-tam-quoc', name: 'Tam Quốc (bộ chủ đề mẫu)', description: 'Bộ chủ đề trọn vẹn dựng từ khung: 7 tướng, 13 trang bị, 8 bối cảnh, 28 linh kiện nhân vật, 27 phông — và phim 6 phân cảnh có dàn dựng, giọng nói, âm thanh, một màn đấu võ. Bộ mẫu của Gen Labs: xem gói bán trông thế nào (xem trước), không xuất bán.' },
   requires: { packs: [] }, parts: parts.concat(sceneryParts), items, scenes, characters, works,
   // gói động tác của bộ (v0.16, Q10): đòn thương / kiếm kiểu Tử Long + màn "Tử Long 30 giây" — dữ liệu, qua cổng như mọi asset
