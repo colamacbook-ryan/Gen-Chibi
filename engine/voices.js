@@ -1,14 +1,14 @@
-/* gen-chibi engine — voices 0.1: GIỌNG THEO VAI (tuổi × giới × văn / võ × tính cách) cho tiếng Việt, tiếng Anh, tiếng Trung
+/* gen-chibi engine — voices 0.2: GIỌNG THEO VAI (tuổi × giới × văn / võ × tính cách) cho tiếng Việt, tiếng Anh, tiếng Trung, tiếng Quảng Đông
  * © 2026 Gen Labs — All rights reserved.
  *
  * Một nguồn cho mọi nơi cần "nhân vật này nói giọng gì": giọng AI (server/voice.js — Gemini TTS), giọng trình duyệt dự phòng
- * (engine/audio.js — speechSynthesis đúng ngôn ngữ + cao độ / tốc độ theo vai), Studio (ô chọn vai), MCP (get_catalog, render_voice).
- *   vai (ROLES): mô tả giọng bằng thẻ tiếng Anh đặt trong [ ] đầu câu (model không đọc to thẻ), danh sách giọng Gemini hợp vai
- *     (nhiều nhân vật cùng vai → mỗi người một giọng, ổn định theo id), cao độ / tốc độ cho giọng trình duyệt.
- *   ngôn ngữ (LANGS): mã BCP-47 cho trình duyệt + giọng vùng (thẻ accent) — tiếng Việt Bắc / Trung / Nam, Anh Mỹ / Anh, Trung phổ thông / Đài.
- *   cast(asset, opts) → hồ sơ giọng đầy đủ của một nhân vật; tags(cast, state, bubble) → thẻ đặt đầu câu.
+ * (engine/audio.js — speechSynthesis đúng ngôn ngữ + giọng vùng + giới, cao độ / tốc độ theo vai), Studio (ô chọn vai), MCP (get_catalog).
+ *   vai (ROLES): cách nói (style — gửi trong speech_metadata.style, KHÔNG chứa tuổi / giới / giọng vùng: những thứ đó thuộc về GIỌNG),
+ *     chân dung để THIẾT KẾ giọng, tuổi + cao độ để chọn giọng thư viện Google, giọng dựng sẵn hợp vai, cao độ / tốc độ cho giọng trình duyệt.
+ *   ngôn ngữ (LANGS): giọng vùng + mã BCP-47 của từng vùng (giọng trình duyệt) + câu mô tả khi thiết kế + mã ngôn ngữ thư viện Google.
+ *     Giọng vùng THẬT chỉ có ở giọng đã thiết kế (thư viện tiếng Việt không phân Bắc / Trung / Nam) — và giọng trình duyệt theo mã vùng nếu máy có.
+ *   cast(asset, opts) → hồ sơ giọng của một nhân vật (vai, ngôn ngữ, giọng vùng, cao độ / tốc độ) — chọn giọng AI cụ thể là việc của server.
  * Thuần dữ liệu, không đụng DOM: chạy trong trình duyệt, trong vm của server (loadEngine) và require() thẳng từ Node.
- * Thẻ vai / giọng vùng chỉnh được bằng tai: trang thử giọng ở Studio (Cài đặt AI › Giọng) — giọng Gemini nam / nữ là DỰ KIẾN.
  */
 (function (GC) {
   'use strict';
@@ -65,25 +65,25 @@
   function canDesign(id) { return hasOwn(ROLES, id) && !!ROLES[id].design; }
 
   // ngôn ngữ phim + giọng vùng; mặc định của mỗi ngôn ngữ đứng đầu. Thẻ giọng vùng đi cùng thẻ vai trong [ ] đầu câu.
-  // [id, nhãn, thẻ giọng vùng (giọng cũ: model đời trước), cụm mô tả khi THIẾT KẾ giọng, mã ngôn ngữ thư viện giọng Google]
+  // [id, nhãn, tên giọng vùng (tiếng Anh), cụm mô tả khi THIẾT KẾ giọng, mã ngôn ngữ thư viện / thiết kế giọng Google, mã BCP-47 cho giọng trình duyệt]
   // vi / en / zh / yue — thứ tự hiện trong ô chọn
   // Thư viện giọng Google (quét 2026-10-19): vi-VN 40 giọng người lớn 22–62 tuổi, KHÔNG phân Bắc / Nam; en-US 215, en-GB 117; tiếng Trung 0
   // → giọng vùng tiếng Việt và mọi giọng tiếng Trung đúng chất chỉ có qua Thiết kế giọng.
   var LANGS = {
     vi: { label: 'Tiếng Việt', bcp: 'vi-VN', accents: [
-      ['bac', 'Giọng Bắc', 'Northern Vietnamese (Hanoi) accent', 'Vietnamese, from Hanoi, speaking Vietnamese with a natural Northern (Hanoi) accent', 'vi-VN'],
-      ['nam', 'Giọng Nam', 'Southern Vietnamese (Saigon) accent', 'Vietnamese, from Saigon, speaking Vietnamese with a natural Southern (Saigon) accent', 'vi-VN'],
-      ['trung', 'Giọng Trung (Huế)', 'Central Vietnamese (Hue) accent', 'Vietnamese, from Hue, speaking Vietnamese with a natural Central (Hue) accent', 'vi-VN']] },
+      ['bac', 'Giọng Bắc', 'Northern Vietnamese (Hanoi) accent', 'Vietnamese, from Hanoi, speaking Vietnamese with a natural Northern (Hanoi) accent', 'vi-VN', 'vi-VN'],
+      ['nam', 'Giọng Nam', 'Southern Vietnamese (Saigon) accent', 'Vietnamese, from Saigon, speaking Vietnamese with a natural Southern (Saigon) accent', 'vi-VN', 'vi-VN'],
+      ['trung', 'Giọng Trung (Huế)', 'Central Vietnamese (Hue) accent', 'Vietnamese, from Hue, speaking Vietnamese with a natural Central (Hue) accent', 'vi-VN', 'vi-VN']] },
     en: { label: 'Tiếng Anh', bcp: 'en-US', accents: [
-      ['us', 'Anh Mỹ', 'American English accent', 'American, speaking English with a General American accent', 'en-US'],
-      ['uk', 'Anh Anh', 'British English accent', 'British, speaking English with a Southern British accent', 'en-GB']] },
+      ['us', 'Anh Mỹ', 'American English accent', 'American, speaking English with a General American accent', 'en-US', 'en-US'],
+      ['uk', 'Anh Anh', 'British English accent', 'British, speaking English with a Southern British accent', 'en-GB', 'en-GB']] },
     zh: { label: 'Tiếng Trung', bcp: 'zh-CN', accents: [
-      ['pt', 'Phổ thông', 'standard Mandarin Chinese', 'Chinese, speaking standard Mandarin Chinese (Putonghua) with clear pronunciation', 'cmn-CN'],
-      ['tw', 'Đài Loan', 'Taiwanese Mandarin accent', 'Taiwanese, speaking Mandarin Chinese with a Taiwanese accent', 'cmn-TW']] },
+      ['pt', 'Phổ thông', 'standard Mandarin Chinese', 'Chinese, speaking standard Mandarin Chinese (Putonghua) with clear pronunciation', 'cmn-CN', 'zh-CN'],
+      ['tw', 'Đài Loan', 'Taiwanese Mandarin accent', 'Taiwanese, speaking Mandarin Chinese with a Taiwanese accent', 'cmn-TW', 'zh-TW']] },
     // tiếng Quảng Đông là NGÔN NGỮ riêng (không phải giọng vùng của tiếng Trung phổ thông): model đọc theo chữ — viết lời thoại bằng
     // tiếng Quảng Đông (phồn thể + khẩu ngữ 喺 / 咩 / 我哋…) thì giọng nào cũng đọc ra Quảng Đông (đo 2026-10-19: nhận diện 0,99);
     // thiết kế giọng với mã yue-HK chạy được; thư viện Google chưa có giọng Quảng Đông
-    yue: { label: 'Tiếng Quảng Đông', bcp: 'zh-HK', accents: [['hk', 'Hồng Kông', 'Hong Kong Cantonese', 'Hong Konger, speaking Cantonese with a natural Hong Kong accent', 'yue-HK']] }
+    yue: { label: 'Tiếng Quảng Đông', bcp: 'zh-HK', accents: [['hk', 'Hồng Kông', 'Hong Kong Cantonese', 'Hong Konger, speaking Cantonese with a natural Hong Kong accent', 'yue-HK', 'zh-HK']] }
   };
   function lang(id) { return hasOwn(LANGS, id) ? id : 'vi'; }
   function accent(l, a) {
@@ -121,6 +121,8 @@
   }
   // băm chuỗi ổn định (FNV-1a) — cùng nhân vật luôn ra cùng giọng trong nhóm hợp vai
   function hash(s) { var h = 2166136261, i; s = String(s || ''); for (i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+  // khoảng cao độ / tốc độ giọng nhân vật — MỘT nguồn cho engine, server (mcp.prepare), Studio
+  var CLAMP = { pitch: [0.5, 2], rate: [0.6, 1.6] };
   var num = function (n, lo, hi, d) { return typeof n === 'number' && isFinite(n) ? Math.max(lo, Math.min(hi, n)) : d; };
 
   // giọng Gemini cho vai: xoay danh sách hợp vai theo băm id (ổn định), bỏ giọng đã có người dùng trong cùng tác phẩm (taken);
@@ -138,31 +140,19 @@
     var rid = hasOwn(ROLES, v.role) ? v.role : guessRole(asset), R = ROLES[rid];
     var l = lang(o.lang), ac = accent(l, v.accent && accent(l, v.accent)[0] === v.accent ? v.accent : o.accent);
     var ai = typeof v.ai === 'string' && hasOwn(AI_SET, v.ai) ? v.ai : pickAi(R, asset, o.taken);
-    return { role: rid, label: R.label, gender: R.gender, lang: l, bcp: LANGS[l].bcp, accent: ac[0], ai: ai,
-      style: R.style, tags: R.style, legacy: R.style + ', ' + ac[2], libLang: ac[4], ages: R.ages, prefPitch: R.prefPitch,
+    return { role: rid, label: R.label, gender: R.gender, lang: l, bcp: ac[5] || LANGS[l].bcp, accent: ac[0], ai: ai,
+      style: R.style, libLang: ac[4], ages: R.ages, prefPitch: R.prefPitch,
       design: R.design ? 'A ' + R.design.replace(/^an? /, '') + '. ' + ac[3] + '.' : '',
-      pitch: num(v.pitch, 0, 2, R.pitch), rate: num(v.rate, 0.5, 1.8, R.rate) };
+      pitch: num(v.pitch, CLAMP.pitch[0], CLAMP.pitch[1], R.pitch), rate: num(v.rate, CLAMP.rate[0], CLAMP.rate[1], R.rate) };
   }
-  // cả dàn diễn viên của một tác phẩm: mỗi người một giọng AI khác nhau khi còn giọng (người tự chọn giọng giữ trước) → { id: cast }
-  function castAll(list, opts) {
-    var taken = {}, out = {}, o = opts || {};
-    (list || []).forEach(function (a) { var v = a && a.voice; if (v && hasOwn(AI_SET, v.ai)) taken[v.ai] = 1; });
-    (list || []).forEach(function (a) {
-      if (!a) return;
-      var c = cast(a, { lang: o.lang, accent: o.accent, taken: taken });
-      taken[c.ai] = 1; out[a.id || a.key || a.name] = c;
-    });
-    return out;
-  }
-  // thẻ cảm xúc (18 trạng thái của khung) + kiểu bong bóng — model đọc thẻ trong [ ] như chỉ dẫn diễn, không đọc to (đo 2026-10-19)
+  // cảm xúc (18 trạng thái của khung) + kiểu bong bóng → cách nói (speech_metadata.style của Interactions API; model đời trước: [ ] đầu câu)
   var STATE_TAGS = {
     normal: '', work: 'focused', think: 'thoughtful', unsure: 'hesitant', smug: 'smug', greedy: 'greedy, sly', proud: 'proud',
     vow: 'determined, solemn', beg: 'pleading', shock: 'shocked', panic: 'panicked, fast', rage: 'angry', dizzy: 'dazed',
     cry: 'crying, sobbing', injured: 'in pain', exhausted: 'exhausted, out of breath', lazy: 'lazy, yawning', sleep: 'sleepy, mumbling'
   };
   var BUBBLE_TAGS = { shout: 'shouting', whisper: 'whispering', think: 'inner thought, softly' };
-  function mood(state, bubble) { return [STATE_TAGS[state] || '', BUBBLE_TAGS[bubble] || ''].filter(Boolean).join(', '); }
-  function tags(c, state, bubble) { return [c && c.tags, mood(state, bubble)].filter(Boolean).join(', '); }
+  function mood(state, bubble) { return [hasOwn(STATE_TAGS, state) ? STATE_TAGS[state] : '', hasOwn(BUBBLE_TAGS, bubble) ? BUBBLE_TAGS[bubble] : ''].filter(Boolean).join(', '); }
   // danh sách cho ô chọn / catalog: [{ id, label, age, ageLabel, gender, kind, kindLabel }] theo nhóm tuổi
   function roleList() {
     var out = [];
@@ -173,12 +163,8 @@
     return Object.keys(LANGS).map(function (k) { return { id: k, label: LANGS[k].label, bcp: LANGS[k].bcp, accents: LANGS[k].accents.map(function (a) { return { id: a[0], label: a[1] }; }) }; });
   }
 
-  // khoá clip của một câu (Studio lưu đệm, phim xuất tra DATA.voices): cùng giọng + vai + ngôn ngữ + cảm xúc + chữ → cùng clip
-  function lineKey(line, voice, c) {
-    return [voice || '', c ? c.role : '', c ? c.lang : '', c ? c.accent : '', line.state || '', line.bubble || '', String(line.say == null ? '' : line.say)].join('|');
-  }
-  var V = { AI_VOICES: AI_VOICES, canDesign: canDesign, lineKey: lineKey, isAiVoice: function (n) { return hasOwn(AI_SET, n); }, castAll: castAll, ROLES: ROLES, LANGS: LANGS, AGES: AGES, KINDS: KINDS, STATE_TAGS: STATE_TAGS, BUBBLE_TAGS: BUBBLE_TAGS,
-    cast: cast, guessRole: guessRole, tags: tags, mood: mood, lang: lang, accent: function (l, a) { return accent(l, a)[0]; }, roleList: roleList, langList: langList };
+  var V = { AI_VOICES: AI_VOICES, canDesign: canDesign, CLAMP: CLAMP, isAiVoice: function (n) { return hasOwn(AI_SET, n); }, ROLES: ROLES, LANGS: LANGS, AGES: AGES, KINDS: KINDS, STATE_TAGS: STATE_TAGS, BUBBLE_TAGS: BUBBLE_TAGS,
+    cast: cast, guessRole: guessRole, mood: mood, lang: lang, accent: function (l, a) { return accent(l, a)[0]; }, roleList: roleList, langList: langList };
   if (GC) GC.voices = V;
   if (typeof module === 'object' && module && module.exports) module.exports = V;
 })(typeof window !== 'undefined' ? window.GenChibi : (typeof globalThis !== 'undefined' ? globalThis.GenChibi : undefined));

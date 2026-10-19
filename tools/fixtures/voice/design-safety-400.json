@@ -1,0 +1,15 @@
+{
+ "_meta": {
+  "scanned_at": "2026-10-19",
+  "source": "POST /v1beta/voices (mô tả giọng trẻ em 8 tuổi)",
+  "note": "HTTP 400 — Google chặn thiết kế giọng trẻ em — base64 âm thanh thay bằng \"<WAV>\" (test tự chèn WAV giả)"
+ },
+ "status": 400,
+ "json": {
+  "error": {
+   "code": 400,
+   "message": "Voice prompt was blocked by safety policies.",
+   "status": "INVALID_ARGUMENT"
+  }
+ }
+}

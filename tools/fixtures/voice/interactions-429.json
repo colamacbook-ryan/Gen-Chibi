@@ -1,0 +1,14 @@
+{
+ "_meta": {
+  "scanned_at": "2026-10-19",
+  "source": "POST /v1beta/interactions (gemini-3.8-flash-lite-tts), gói miễn phí hết lượt ngày",
+  "note": "HTTP 429 — base64 âm thanh thay bằng \"<WAV>\" (test tự chèn WAV giả)"
+ },
+ "status": 429,
+ "json": {
+  "error": {
+   "message": "Rate limit exceeded for model gemini-3.8-flash-lite-tts (limit: 10 requests per day on Free Tier). Please retry in 18h57m29s or upgrade your tier at https://ai.dev/rate-limit.",
+   "code": "too_many_requests"
+  }
+ }
+}

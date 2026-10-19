@@ -67,7 +67,7 @@ with a runnable JSON example.
 5. **Ids**: assets, projects, works, motion packs → lowercase slug `[a-z0-9-]`, 2–40 chars (valid for every type;
    characters, items and scenes also accept up to 64). Inside a motion pack,
    pose / clip / action ids → camelCase `[a-z][A-Za-z0-9]` (e.g. `spinSlash`).
-6. **Viewer-facing text** (names, dialogue, labels) is **Vietnamese with full diacritics**
+6. **Viewer-facing text**: names and labels are **Vietnamese with full diacritics**; **dialogue (`say`) is written in the work's language** — `get_work` › `lang` (`vi` default, `en`, `zh`, `yue` = Cantonese in Traditional characters with colloquial words 喺 / 咩 / 我哋)
    unless the owner says otherwise. Keep comedy light: no gore, no blood.
 7. **Errors are data.** Every failed call — including a `validate_*` call whose data does not pass — starts
    with `[CODE]` and carries `structuredContent.error = { code, message, details: [{ path, message }], hint }`

@@ -1,0 +1,44 @@
+{
+ "_meta": {
+  "scanned_at": "2026-10-19",
+  "source": "POST /v1beta/voices (type prompted, vi-VN, bà lão giọng Bắc)",
+  "note": "HTTP 200 — base64 âm thanh thay bằng \"<WAV>\" (test tự chèn WAV giả)"
+ },
+ "status": 200,
+ "json": {
+  "id": "voice_fixture0001",
+  "model": "models/gemini-3.8-flash-tts",
+  "type": "prompted",
+  "expire_time": "2027-10-19T04:32:15.725770202Z",
+  "display_name": "gc-ba-lao-vi-bac",
+  "prompted": {
+   "input": "A kind Vietnamese grandmother in her late 70s from Hanoi with a Northern Vietnamese accent; soft, slightly shaky, slow and warm voice."
+  },
+  "language_code": "vi-VN",
+  "gender": "female",
+  "usage": {
+   "total_tokens": 1595,
+   "total_input_tokens": 199,
+   "input_tokens_by_modality": [
+    {
+     "modality": "text",
+     "tokens": 49
+    }
+   ],
+   "total_cached_tokens": 0,
+   "total_output_tokens": 1396,
+   "output_tokens_by_modality": [
+    {
+     "modality": "audio",
+     "tokens": 1396
+    }
+   ],
+   "total_tool_use_tokens": 0,
+   "total_thought_tokens": 136
+  },
+  "sample_audio": {
+   "mime_type": "audio/wav",
+   "data": "<WAV>"
+  }
+ }
+}

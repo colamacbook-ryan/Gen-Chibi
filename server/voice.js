@@ -94,12 +94,22 @@ function get(url, key, timeout) {
     req.on('error', reject); req.end();
   });
 }
-// "76022s" / "21.2s" → mili giây
+// thời gian chờ của một lỗi hết lượt → mili giây. API đời cũ: RetryInfo.retryDelay "76022s"; Interactions API (đo thật 2026-10-19):
+// không có details, chỉ message "… Please retry in 18h57m29s …" + code "too_many_requests". Không đọc được → 1 giờ, KHÔNG phải 1 phút (CNS-084)
 function retryMs(err) {
   const d = ((err && err.details) || []).find(x => x && x.retryDelay);
   const m = d && /^([\d.]+)s$/.exec(String(d.retryDelay));
-  return m ? Math.ceil(+m[1] * 1000) : 60000;
+  if (m) return Math.ceil(+m[1] * 1000);
+  const t = /retry in\s+(?:(\d+)\s*h)?\s*(?:(\d+)\s*m(?!s))?\s*(?:([\d.]+)\s*s)?/i.exec(String((err && err.message) || ''));
+  if (t && (t[1] || t[2] || t[3])) return Math.ceil(((+t[1] || 0) * 3600 + (+t[2] || 0) * 60 + (+t[3] || 0)) * 1000) + 1000;
+  return 3600e3;
 }
+const isQuota = (r, err) => r.status === 429 || (err && (err.code === 429 || err.code === 'too_many_requests' || err.status === 'RESOURCE_EXHAUSTED'));
+// chỉ đánh dấu "giọng hỏng" khi Google chỉ đích danh giọng (không phải lỗi lược đồ chung có chữ "voice") — CNS-087
+const voiceGone = (r, err) => { const t = String((err && err.message) || ''); return /voice/i.test(t) && !/unknown name|invalid json payload|cannot find field/i.test(t) &&
+  (r.status === 404 || /not found|not exist|unsupported|not supported|invalid voice|unknown voice/i.test(t)); };
+const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+const nextDay = () => { const d = new Date(); d.setUTCHours(24, 0, 0, 0); return d.getTime(); };   // trần ngày tính theo ngày UTC (cùng sổ usage)
 const fail = (code, msg, extra) => Object.assign(new Error(msg), { code }, extra || {});
 
 class Voice {
@@ -118,7 +128,10 @@ class Voice {
   write(v) { fs.writeFileSync(this.file + '.tmp', JSON.stringify(v, null, 2)); fs.renameSync(this.file + '.tmp', this.file); }
   // enabled: null = tự bật khi có key (dán key là chạy) · false = chủ máy tắt hẳn · true = bật
   // designs: { "<vai>|<ngôn ngữ>|<giọng vùng>": { voice: "voice_…", at, preview } } — giọng vai đã thiết kế trong project Google của chủ máy
-  config() { return Object.assign({ enabled: null, model: '', blocked: {}, badVoices: [], usage: {}, designs: {} }, this.read()); }
+  // bad: { giọng: hết hạn (ms) } — giọng Google báo không còn; tự gỡ sau 24 giờ (dữ liệu cũ badVoices: [] bỏ qua — CNS-087)
+  // dailyCap: trần câu đọc / thiết kế mỗi ngày (mặc định 200, 0 = không giới hạn) — chặn chi tiền ngoài ý muốn (CNS-090, Q13)
+  config() { const c = Object.assign({ enabled: null, model: '', blocked: {}, bad: {}, usage: {}, designs: {}, dailyCap: 200 }, this.read()); delete c.badVoices; return c; }
+  isBad(v, c) { const u = (c || this.config()).bad[v]; return !!u && u > Date.now(); }
   isOn() { const c = this.config(); return c.enabled !== false && !!this.key(); }
   // key riêng cho giọng; chưa có thì dùng key Gemini đã nhập ở AI đạo diễn (cùng một key Google AI Studio)
   key() { return this.secrets.get('voice.gemini') || this.secrets.get('llm.gemini') || ''; }
@@ -128,7 +141,8 @@ class Voice {
     Object.keys(c.designs).forEach(k => { const d = c.designs[k]; designs[k] = { voice: d.voice, at: d.at, preview: d.preview ? 'api/voice/clip/' + d.preview + '.wav' : null }; });
     return { enabled: c.enabled !== false && !!this.key(), off: c.enabled === false, model: c.model, hasKey: !!this.key(), keySource: this.keySource(),
       blocked: Object.keys(c.blocked).filter(m => c.blocked[m] > now).map(m => ({ model: m, until: new Date(c.blocked[m]).toISOString() })),
-      today: (c.usage[day] || 0), cached: this.cachedCount(), voices: VOICES.filter(v => c.badVoices.indexOf(v.name) < 0), keyUrl: 'https://aistudio.google.com/apikey',
+      today: (c.usage[day] || 0), dailyCap: c.dailyCap, bad: Object.keys(c.bad).filter(v => c.bad[v] > now).map(v => ({ voice: v, until: new Date(c.bad[v]).toISOString() })),
+      cached: this.cachedCount(), voices: VOICES.filter(v => !this.isBad(v.name, c)), keyUrl: 'https://aistudio.google.com/apikey',
       roles: GV.roleList().map(r => Object.assign(r, { design: GV.canDesign(r.id) })), langs: GV.langList(), designs };
   }
   setConfig(b) {
@@ -136,6 +150,8 @@ class Voice {
     if (typeof b.enabled === 'boolean') c.enabled = b.enabled;
     if (typeof b.model === 'string') c.model = /^[a-z0-9.-]{0,80}$/.test(b.model) ? b.model : c.model;
     if (b.clearKey === true) this.secrets.set('voice.gemini', '');
+    if (b.dailyCap !== undefined && Number.isFinite(+b.dailyCap)) c.dailyCap = Math.max(0, Math.min(5000, Math.round(+b.dailyCap)));
+    if (b.clearBad === true) c.bad = {};
     this.write(c);
     return this.publicConfig();
   }
@@ -149,21 +165,18 @@ class Voice {
     try { ms = await this.models(); }
     catch (e) { this.secrets.set('voice.gemini', prev || ''); this._models = null; throw e.code === 502 && /\((400|401|403)\)/.test(e.message) ? fail(400, 'Google từ chối key này — kiểm lại key (Google AI Studio › Get API key)') : e; }
     if (!ms.length) { this.secrets.set('voice.gemini', prev || ''); this._models = null; throw fail(400, 'Key hợp lệ nhưng không gọi được model đọc giọng nào (*-tts) — project Google này chưa bật Gemini API?'); }
-    c0.enabled = null; c0.blocked = {}; this.write(c0);
+    c0.enabled = null; c0.blocked = {}; c0.bad = {}; this.write(c0);
     try { fs.unlinkSync(this.libFile); } catch { /* chưa có */ }   // key khác = project khác: giọng thiết kế / thư viện quét lại
     return Object.assign(this.publicConfig(), { models: ms });
   }
   cachedCount() { try { return fs.readdirSync(this.dir).filter(f => f.endsWith('.wav')).length; } catch { return 0; } }
   idOf(text, voice, tags) { return crypto.createHash('sha256').update(JSON.stringify([voice, tags, text])).digest('hex').slice(0, 40); }
   clipPath(id) { return /^[a-f0-9]{40}$/.test(String(id)) ? path.join(this.dir, id + '.wav') : null; }
-  // giọng dựng sẵn mặc định theo vai (engine/voices.js) — dùng khi không có thư viện / chưa cast cả tác phẩm
-  defaultVoice(asset) { return GV.cast(asset || {}).ai; }
   // id giọng hợp lệ → dạng chuẩn; lạ / đã hỏng → '' (không nhận chữ tự do làm giọng)
   validVoice(v, c) {
     if (typeof v !== 'string' || !v || v === 'auto') return '';
-    const bad = (c || this.config()).badVoices, p = PREBUILT.get(v.toLowerCase());
-    const id = p || (LIB_ID.test(v) || DESIGN_ID.test(v) ? v : '');
-    return id && bad.indexOf(id) < 0 ? id : '';
+    const p = PREBUILT.get(v.toLowerCase()), id = p || (LIB_ID.test(v) || DESIGN_ID.test(v) ? v : '');
+    return id && !(c && c.skipBad) && this.isBad(id, c) ? '' : id;
   }
 
   // model đọc giọng: quét lúc chạy, giữ 6 giờ; mới nhất trước, bản "lite" sau bản thường, preview sau cùng
@@ -185,8 +198,10 @@ class Voice {
     const all = this.readLib(), hit = all[code];
     if (hit && Date.now() - hit.at < 24 * 3600e3) return hit.voices;
     if (!this.key()) return hit ? hit.voices : [];
+    this._libErr = this._libErr || {};
+    if (this._libErr[code] > Date.now()) { if (hit) return hit.voices; throw fail(502, 'Thư viện giọng của Google vừa lỗi — thử lại sau ít phút'); }   // không gọi lại mỗi lần cast (CNS-094)
     const r = await this.http.get(API + '/voices?language_code=' + encodeURIComponent(code) + '&page_size=1000');
-    if (r.status >= 400 || !r.json) { if (hit) return hit.voices; throw fail(502, 'Không lấy được thư viện giọng của Google (' + r.status + ')'); }
+    if (r.status >= 400 || !r.json) { this._libErr[code] = Date.now() + 600e3; if (hit) return hit.voices; throw fail(502, 'Không lấy được thư viện giọng của Google (' + r.status + ')'); }
     // lọc lại theo mã ngôn ngữ (không tin hẳn bộ lọc phía Google) + chỉ nhận id đúng dạng
     const voices = (r.json.voices || []).filter(v => v && typeof v.id === 'string' && String(v.language_code || '').toLowerCase() === code.toLowerCase() &&
       (PREBUILT.has(v.id.toLowerCase()) || LIB_ID.test(v.id) || DESIGN_ID.test(v.id))).slice(0, 1000)
@@ -200,40 +215,47 @@ class Voice {
   // chọn giọng AI cho cả dàn diễn viên một tác phẩm, mỗi người một giọng khi còn giọng. Thứ tự: người dùng chọn → giọng đã THIẾT KẾ cho vai
   // (+ ngôn ngữ + giọng vùng) → giọng THƯ VIỆN hợp vai (đúng ngôn ngữ, giới, tuổi, cao độ) → giọng DỰNG SẴN hợp vai. Không tốn lượt đọc.
   // actors: [{ id, role, voice?, accent? (giọng vùng riêng của nhân vật) }] → { lang, accent, cast: { id: { voice, source, label } } }
-  async cast({ lang, accent, actors }) {
-    const L = GV.lang(lang), ac = GV.accent(L, accent), c = this.config(), out = {}, taken = new Set();
-    const code = GV.cast({ id: 'x' }, { lang: L, accent: ac }).libLang;
-    const list = (Array.isArray(actors) ? actors : []).slice(0, 24).filter(a => a && typeof a.id === 'string' && a.id)
-      .map(a => ({ id: a.id.slice(0, 80), role: GV.ROLES[a.role] ? a.role : 'nam-tre', voice: this.validVoice(a.voice, c), accent: GV.accent(L, a.accent) === a.accent ? a.accent : ac }));
+  // keep: { id: giọng } đã CHỐT trước đó (tác phẩm) — giữ nguyên cho người cũ, người mới tránh giọng đã chốt (CNS-085)
+  async cast({ lang, accent, actors, keep }) {
+    const L = GV.lang(lang), ac = GV.accent(L, accent), c = this.config(), out = {}, taken = new Set(), MAX = 48;
+    const code = GV.cast({ id: 'x' }, { lang: L, accent: ac }).libLang, kept = keep && typeof keep === 'object' ? keep : {};
+    const all = (Array.isArray(actors) ? actors : []).filter(a => a && typeof a.id === 'string' && a.id), missing = all.slice(MAX).map(a => a.id.slice(0, 80));
+    const list = all.slice(0, MAX)
+      .map(a => ({ id: a.id.slice(0, 80), role: hasOwn(GV.ROLES, a.role) ? a.role : 'nam-tre', voice: this.validVoice(a.voice, c), accent: GV.accent(L, a.accent) === a.accent ? a.accent : ac }));
     let lib = [];
     try { lib = await this.library(code); } catch { lib = []; }   // mất mạng: vẫn cast được bằng giọng dựng sẵn
     const libById = new Map(lib.map(v => [v.id, v]));
+    const srcOf = v => DESIGN_ID.test(v) ? 'design' : VOICE_SET.has(v) ? 'prebuilt' : 'library';
     list.forEach(a => { if (a.voice) { out[a.id] = { voice: a.voice, source: 'chosen', label: (libById.get(a.voice) || {}).name || a.voice }; taken.add(a.voice); } });
+    Object.keys(kept).forEach(id => { const v = this.validVoice(kept[id], c); if (v && !list.some(a => a.id === id && a.voice)) taken.add(v); });   // giọng đã chốt (kể cả người vắng mặt lần này) không cấp cho ai khác
     list.forEach(a => {
       if (out[a.id]) return;
       const R = GV.ROLES[a.role], d = c.designs[a.role + '|' + L + '|' + a.accent], h = hashN(a.id);   // nhân vật có giọng vùng riêng → giọng thiết kế của vùng đó
-      if (d && DESIGN_ID.test(d.voice) && !taken.has(d.voice) && c.badVoices.indexOf(d.voice) < 0) { out[a.id] = { voice: d.voice, source: 'design', label: R.label + ' (thiết kế)' }; taken.add(d.voice); return; }
+      const kv = this.validVoice(kept[a.id], c);
+      // giọng THIẾT KẾ cho vai (chủ máy chủ động làm) thắng giọng đã chốt; còn lại giữ giọng đã chốt — thêm người / Google thêm giọng không đổi ai
+      if (d && DESIGN_ID.test(d.voice) && (!taken.has(d.voice) || kv === d.voice) && !this.isBad(d.voice, c)) { out[a.id] = { voice: d.voice, source: 'design', label: R.label + ' (thiết kế)' }; taken.add(d.voice); return; }
+      if (kv) { out[a.id] = { voice: kv, source: srcOf(kv), label: (libById.get(kv) || {}).name || kv, kept: true }; return; }
       if (R.ages) {   // vai người lớn: giọng bản ngữ của thư viện, chấm theo giới + tuổi + cao độ + chất giọng (mô tả của Google)
         const kw = KIND_KW[R.kind] || KIND_KW.thuong;
         const sc = v => { const lo = R.ages[0], hi = R.ages[1], dist = v.age == null ? 15 : v.age < lo ? lo - v.age : v.age > hi ? v.age - hi : 0;
           return dist + (v.pitch && v.pitch !== R.prefPitch ? 6 : 0) + (kw[0].test(v.description) ? -3 : 0) + (kw[1] && kw[1].test(v.description) ? 5 : 0); };
-        const pool = lib.filter(v => v.type === 'library' && v.gender === R.gender && !taken.has(v.id) && c.badVoices.indexOf(v.id) < 0)
+        const pool = lib.filter(v => v.type === 'library' && v.gender === R.gender && !taken.has(v.id) && !this.isBad(v.id, c))
           .map(v => ({ v, s: sc(v) })).filter(x => x.s <= 12).sort((x, y) => x.s - y.s || (x.v.id < y.v.id ? -1 : 1));
         // đa dạng nhưng không đánh đổi độ hợp vai: chỉ xoay giữa các giọng sát điểm giọng tốt nhất (≤ 2 điểm), tối đa 3
         if (pool.length) pool.splice(Math.min(3, pool.filter(x => x.s <= pool[0].s + 2).length));
         if (pool.length) { const v = pool[h % pool.length].v; out[a.id] = { voice: v.id, source: 'library', label: v.name + (v.age ? ' · ' + v.age + ' tuổi' : '') }; taken.add(v.id); return; }
       }
       const n = R.ai.length; let pick = '';
-      for (let i = 0; i < n && !pick; i++) { const k = R.ai[(h + i) % n]; if (!taken.has(k) && c.badVoices.indexOf(k) < 0) pick = k; }
-      if (!pick) { const same = VOICES.filter(v => v.gender === (R.gender === 'f' ? 'nữ' : 'nam') && !taken.has(v.name) && c.badVoices.indexOf(v.name) < 0); pick = same.length ? same[h % same.length].name : R.ai[h % n]; }
+      for (let i = 0; i < n && !pick; i++) { const k = R.ai[(h + i) % n]; if (!taken.has(k) && !this.isBad(k, c)) pick = k; }
+      if (!pick) { const same = VOICES.filter(v => v.gender === (R.gender === 'f' ? 'nữ' : 'nam') && !taken.has(v.name) && !this.isBad(v.name, c)); pick = same.length ? same[h % same.length].name : R.ai[h % n]; }
       out[a.id] = { voice: pick, source: 'prebuilt', label: pick }; taken.add(pick);
     });
-    return { lang: L, accent: ac, cast: out };
+    return Object.assign({ lang: L, accent: ac, cast: out }, missing.length ? { missing } : {});
   }
   // nhân vật + tuỳ chọn → { voice, role, lang, accent } cho MỘT câu (MCP / API khi không gửi cast của cả tác phẩm)
   async pick({ asset, voice, role, lang, accent }) {
     const a = asset || {}, v = Object.assign({}, a.voice);
-    if (role && GV.ROLES[role]) v.role = role;
+    if (role && hasOwn(GV.ROLES, role)) v.role = role;
     const cs = GV.cast(Object.assign({ id: a.id || a.key || 'x' }, a, { voice: v }), { lang, accent });
     const chosen = this.validVoice(voice, null) || this.validVoice(v.ai, null);
     const r = await this.cast({ lang: cs.lang, accent: cs.accent, actors: [{ id: a.id || a.key || 'x', role: cs.role, voice: chosen }] });
@@ -244,12 +266,13 @@ class Voice {
   // giọng voice_… dùng mãi (Google giữ 1 năm kể từ lần dùng cuối, tối đa 200 giọng / project). Tốn một lượt (~1.400 token âm thanh mẫu).
   // Vai trẻ em / vị thành niên: Google chặn (chính sách an toàn) → báo rõ, không gọi.
   async design({ role, lang, accent }) {
-    const R = GV.ROLES[role];
+    const R = hasOwn(GV.ROLES, role) ? GV.ROLES[role] : null;
     if (!R) throw fail(400, 'Không có vai "' + String(role).slice(0, 30) + '" (xem danh sách vai giọng)');
     if (!GV.canDesign(role)) throw fail(400, 'Google không cho thiết kế giọng trẻ em / vị thành niên (chính sách an toàn) — vai "' + R.label + '" dùng giọng trẻ trung có sẵn');
     const c = this.config();
     if (c.enabled === false) throw fail(409, 'Giọng AI đang tắt (Cài đặt AI › Giọng AI)');
     if (!this.key()) throw fail(409, 'Chưa có API key Google AI Studio (Cài đặt AI › Giọng AI)');
+    this.capCheck(c);
     const L = GV.lang(lang), ac = GV.accent(L, accent), cs = GV.cast({ id: 'x', voice: { role } }, { lang: L, accent: ac });
     const job = this._busy.then(() => this.designNow(R, L, ac, cs));
     this._busy = job.catch(() => {});
@@ -259,8 +282,8 @@ class Voice {
     const body = code => ({ store: true, voice: { type: 'prompted', display_name: ('gc-' + R.id + '-' + L + '-' + ac).slice(0, 60), gender: R.gender === 'f' ? 'female' : 'male', language_code: code, prompted: { input: cs.design } } });
     let r = await this.http.post(API + '/voices', body(cs.libLang));
     const msg = j => String((j && j.error && j.error.message) || '');
-    if (r.status === 400 && /language/i.test(msg(r.json)) && cs.libLang !== GV.LANGS[L].bcp) r = await this.http.post(API + '/voices', body(GV.LANGS[L].bcp));   // mã ngôn ngữ lạ (cmn-CN) → thử mã BCP thường
-    if (r.status === 429) { const at = Date.now() + retryMs(r.json && r.json.error); throw fail(429, 'Hết lượt thiết kế giọng lúc này — thử lại sau ' + new Date(at).toLocaleString('vi-VN'), { retryAt: new Date(at).toISOString() }); }
+    if (r.status === 400 && /language/i.test(msg(r.json)) && cs.libLang !== cs.bcp) r = await this.http.post(API + '/voices', body(cs.bcp));   // mã ngôn ngữ lạ (cmn-TW) → thử mã BCP của giọng vùng (zh-TW)
+    if (isQuota(r, r.json && r.json.error)) { const at = Date.now() + retryMs(r.json && r.json.error); throw fail(429, 'Hết lượt thiết kế giọng lúc này — thử lại sau ' + new Date(at).toLocaleString('vi-VN'), { retryAt: new Date(at).toISOString() }); }
     if (r.status === 400 && /safety|blocked/i.test(msg(r.json))) throw fail(400, 'Google chặn mô tả giọng này (chính sách an toàn)');
     if (r.status >= 400 || !r.json || !DESIGN_ID.test(String(r.json.id || ''))) throw fail(502, 'Google không thiết kế được giọng (' + r.status + (msg(r.json) ? ': ' + msg(r.json).slice(0, 160) : '') + ')');
     const v = r.json, sa = v.sample_audio || v.sampleAudio;
@@ -279,20 +302,26 @@ class Voice {
     return { voice: v.id, role: R.id, lang: L, accent: ac, preview: pid ? 'api/voice/clip/' + pid + '.wav' : null };
   }
 
+  // trần câu / ngày của chủ máy (0 = không giới hạn) — hết trần thì 429 kèm giờ đặt lại, khác "Google hết lượt" (cap: true)
+  capCheck(c) {
+    const day = new Date().toISOString().slice(0, 10), used = c.usage[day] || 0;
+    if (c.dailyCap > 0 && used >= c.dailyCap) throw fail(429, 'Đã chạm trần ' + c.dailyCap + ' câu giọng AI hôm nay (Cài đặt AI › Giọng AI › Trần câu / ngày)', { retryAt: new Date(nextDay()).toISOString(), cap: true });
+  }
   // đọc một câu → { id, cached, model, seconds }; cùng giọng + cách nói + chữ → cùng clip (không gọi lại API)
   // role → cách nói của vai (style); state + bubble → cảm xúc; dry: chỉ lấy clip đã có (xuất phim), không bao giờ gọi Google
   async line({ text, voice, role, state, bubble, dry }) {
     const t = cleanText(text);
     if (!t) throw fail(400, 'Câu thoại trống');
     if (t.length > 240) throw fail(400, 'Câu thoại dài quá 240 ký tự');
-    const c0 = this.config(), vid = this.validVoice(voice, { badVoices: [] });
+    const c0 = this.config(), vid = this.validVoice(voice, Object.assign({}, c0, { skipBad: true }));
     if (!vid) throw fail(400, 'Không có giọng "' + String(voice).slice(0, 40) + '" (chọn trong danh sách giọng AI)');
-    const R = GV.ROLES[role], style = [R ? R.style : '', tagsOf(state, bubble)].filter(Boolean).join(', ');
+    const R = hasOwn(GV.ROLES, role) ? GV.ROLES[role] : null, style = [R ? R.style : '', tagsOf(state, bubble)].filter(Boolean).join(', ');
     const id = this.idOf(t, vid, style), file = this.clipPath(id);
     if (fs.existsSync(file)) return { id, cached: true, seconds: this.seconds(file) };
     if (dry) throw fail(404, 'Câu này chưa đọc bằng giọng AI');
     if (c0.enabled === false) throw fail(409, 'Giọng AI đang tắt (Cài đặt AI › Giọng AI)');
-    if (c0.badVoices.indexOf(vid) >= 0) throw fail(400, 'Giọng ' + vid + ' không dùng được với model hiện có');
+    if (this.isBad(vid, c0)) throw fail(400, 'Giọng ' + vid + ' tạm không dùng được (Google báo không còn) — tự thử lại sau 24 giờ hoặc Cài đặt AI › Thử lại giọng hỏng');
+    this.capCheck(c0);
     // một lời gọi Google mỗi lúc (gói miễn phí giới hạn số câu / phút / model)
     const job = this._busy.then(() => this.render(t, vid, style, id, file));
     this._busy = job.catch(() => {});
@@ -322,11 +351,14 @@ class Voice {
             generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } } };
       const r = await this.http.post(url, body);
       const err = r.json && r.json.error;
-      if (r.status === 429 || r.status === 503) {   // hết hạn mức / quá tải: khoá model này tới giờ Google báo, thử model kế
+      if (isQuota(r, err) || r.status === 503) {   // hết hạn mức / quá tải: khoá model này tới giờ Google báo, thử model kế
         const cc = this.config(); cc.blocked[model] = Date.now() + (r.status === 503 ? 60000 : retryMs(err)); this.write(cc);
-        last = fail(r.status === 429 ? 429 : 503, 'Google: ' + (r.status === 429 ? 'hết hạn mức' : 'đang quá tải') + ' (' + model + ')'); continue;
+        last = fail(r.status === 503 ? 503 : 429, 'Google: ' + (r.status === 429 ? 'hết hạn mức' : 'đang quá tải') + ' (' + model + ')'); continue;
       }
-      if ((r.status === 400 || r.status === 404) && err && /voice/i.test(err.message || '')) { const cc = this.config(); if (cc.badVoices.indexOf(voice) < 0) cc.badVoices.push(voice); this.write(cc); throw fail(400, 'Giọng ' + voice + ' không dùng được'); }
+      if ((r.status === 400 || r.status === 404) && voiceGone(r, err)) {   // giọng không còn (Google chỉ đích danh) → tạm bỏ 24 giờ; giọng dựng sẵn thì không
+        if (!VOICE_SET.has(voice)) { const cc = this.config(); cc.bad[voice] = Date.now() + 24 * 3600e3; this.write(cc); }
+        throw fail(400, 'Giọng ' + voice + ' không dùng được (' + String(err.message || '').slice(0, 120) + ')');
+      }
       if (r.status >= 400 || !r.json) { last = fail(502, 'Google trả lỗi ' + r.status + (err && err.message ? ': ' + String(err.message).slice(0, 160) : '')); continue; }
       let inl = null;
       if (inter) {   // Interactions: steps[].type = model_output → content[].type = audio (lấy đoạn cuối)

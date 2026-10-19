@@ -14,6 +14,9 @@
    - `look.equip.<slot>` = item keys (`local.my/<item-id>`), e.g. a weapon in `heldR`;
    - `look.palette` = hex colours for keys in `paletteKeys`; `look.params` = numbers inside each part's min–max;
    - `identity.must` = the distinctive parts (`"<slot>:<part-id>"`) — required to publish.
+   - Voice (optional, for films): `voice: { "role": "<id>" }` from `get_catalog` › `voiceRoles` (be-gai, ong-lao, vo-tuong,
+     quan-su…); without it the role is guessed from `role` / `persona` / `name`. Optional `accent` (`get_catalog` › `voiceLangs`),
+     `ai` (a voice the owner picked), `pitch` 0.5–2 / `rate` 0.6–1.6 (browser voice only).
 5. `validate_character` with `{ "asset": <recipe> }` → `ok: true` when no gate BLOCKS the asset's status (a draft
    does not need `identity.must`; unmet non-blocking gates come back as `warnings`). On failure it is a
    `[VALIDATION_FAILED]` error whose `details[].path` names the gate (`gates.<id>`).

@@ -70,7 +70,7 @@ Ba lối vào, **một** cổng: không có đường nào ghi thẳng vào kho.
 | Ai tạo | Đi qua | Cổng kiểm |
 |---|---|---|
 | Agent ngoài (Claude Code, Claude web/desktop, Cursor…) | MCP — 46 tool (`genchibi agent tools`) | `saveAssetChecked` / `savePartChecked` |
-| AI trong chatroom Studio (LLM API: OpenRouter, DeepSeek, MiniMax…) | Vòng function-calling trên **đúng bộ tool MCP** (trừ tool hệ thống), cùng chỉ dẫn MCP | như trên |
+| AI trong chatroom Studio (LLM API: OpenRouter, DeepSeek, MiniMax…) | Vòng function-calling trên **đúng bộ tool MCP** (trừ tool hệ thống và tool giọng AI tốn lượt — `render_voice`, `design_voice`: chỉ chủ máy), cùng chỉ dẫn MCP | như trên |
 | Người dùng Studio / gọi API HTTP | `PUT /api/assets`, `POST /api/parts` → cùng hai hàm | như trên |
 
 - Luật chặn duy nhất `GC.blockingGates`: lỗi cấu trúc/an toàn (linh kiện lạ, license, tham số, không dựng được biểu cảm/hoạt động) chặn ở mọi trạng thái; dấu nhận diện bắt buộc khi **Phát hành** (nháp dùng ngay trong dự án, không cần dấu nhận diện — quyết định Q3 ngày 2026-10-18).
