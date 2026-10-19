@@ -1056,7 +1056,7 @@ if (!ONLY || ONLY === 'lib') {
   const open = async route => {   // mở Thư viện ở một trang con (đặt tuyến vào localStorage rồi nạp lại)
     q = await ctx11.newPage(); q.on('pageerror', e => errs11.push(e.message)); q.on('dialog', d => d.accept());
     await q.goto(URL11 + 'VERSION');   // cùng nguồn gốc, chưa chạy Studio: đặt tuyến vào localStorage rồi mới mở (một lần nạp duy nhất)
-    await q.evaluate(([r, pj]) => { localStorage.setItem('gc-route-thu-vien', JSON.stringify(r)); localStorage.setItem('gc-last-project', pj); }, [route, PROJ]);
+    await q.evaluate(([r, pj]) => { localStorage.setItem('gc-route-thu-vien', JSON.stringify(r)); localStorage.setItem('gc-last-project', pj); localStorage.setItem('gc-dock', JSON.stringify({ open: false })); }, [route, PROJ]);   // dock đóng: đo bố cục bảng + inspector đủ rộng (dock mở kiểm riêng ở A1)
     await q.goto(URL11 + 'thu-vien'); await q.waitForFunction(() => window.GenChibi && /^v\d/.test(document.getElementById('verChip').textContent), null, { timeout: 8000 });
     await q.evaluate(SPY); await q.evaluate(SPY_T); return q;
   };
@@ -1081,7 +1081,6 @@ if (!ONLY || ONLY === 'lib') {
 
     /* ================= A. THƯ VIỆN › ÂM THANH ================= */
     // khung 1440: dock Trợ lý AI (380 px) mở thì vùng làm việc < 880 px → inspector xếp dưới bảng (STD-07: chật thì inspector thu lại). Kiểm cạnh nhau khi dock đóng, xếp dưới khi dock mở
-    await q.evaluate(() => { try { localStorage.setItem('gc-dock', JSON.stringify({ open: false })); } catch (e) { /* bỏ qua */ } });
     await open({ page: 'lib-sounds' });
     await q.waitForSelector('.lc-t tbody tr[data-id]');
     // A1) bảng đủ 62 âm khung + 7 âm của mẫu Tam Quốc; 8 nhóm có số đếm; ID = tên âm; nav có số đếm; chữ cột A B C…
@@ -1096,7 +1095,7 @@ if (!ONLY || ONLY === 'lib') {
     must(/69 âm · 8 nhóm/.test(await q.textContent('.lc-foot')), 'footer: ' + await q.textContent('.lc-foot'));
     must(await q.$eval('.lc-insp', e => Math.round(e.getBoundingClientRect().width)) === 400, 'inspector phải rộng 400 px');
     await q.keyboard.press('Alt+j'); await q.waitForTimeout(300);
-    const stack = await q.evaluate(() => { const i = document.querySelector('.lc-insp').getBoundingClientRect(), t = document.querySelector('.lc-t').getBoundingClientRect(), d = document.querySelector('.dock'); return { dock: !!d && d.getBoundingClientRect().width > 300, below: i.top >= t.bottom - 1, w: Math.round(i.width) }; });
+    const stack = await q.evaluate(() => { const i = document.querySelector('.lc-insp').getBoundingClientRect(), t = document.querySelector('.lc-t').getBoundingClientRect(), d = document.querySelector('.dock'); return { dock: !!d && d.getBoundingClientRect().width > 300, below: i.top > t.top + 40 && Math.abs(i.left - t.left) < 40, w: Math.round(i.width) }; });   // xếp một cột: inspector cùng mép trái với bảng, nằm dưới
     must(stack.dock && stack.below && stack.w >= 380, 'dock mở: inspector phải xếp dưới bảng, đủ rộng: ' + JSON.stringify(stack));
     await q.keyboard.press('Alt+j'); await q.waitForTimeout(300);
     // A2) lọc theo nhóm · tìm không dấu · thẻ · gói · dự án
