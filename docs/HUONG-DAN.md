@@ -136,19 +136,19 @@ Mã tham chiếu có dạng `<thư viện>/<id>`: khung chuẩn là `gen.khung/�
 ### Âm thanh — thư viện hiệu ứng kiểu hoạt hình, dùng lại được
 Âm thanh trong phim là một **thư viện** (không phải tệp âm thanh): mỗi âm là một **công thức tổng hợp** bằng code — khoa trương như phim hoạt hình (BONK, BOING, ZIP, WHAM, SPLAT, TA-DA…): nhảy cao độ lớn, có nốt nhạc, đuôi rung, hơi "đồ chơi". Nhẹ, không bản quyền bên thứ ba, chạy cả khi mở phim HTML bằng `file://`.
 - **Bộ chuẩn** (62 âm, 8 nhóm: *Va chạm & đánh · Di chuyển · Hài hước · Cảm xúc & nhấn · Phép & năng lượng · Thiên nhiên · Đồ vật & chuông · Nhạc cụ hiệu ứng*) có sẵn ở mọi dự án. 17 tên âm cũ (pop, whoosh, step, sting, hit, boing…) vẫn dùng được, chỉ là nghe khác — kịch bản cũ không phải sửa gì.
-- **Gói âm của dự án**: mỗi dự án chủ đề thêm âm riêng (bộ mẫu Tam Quốc: *trống trận, tù và, vó ngựa, kiếm cổ, mưa tên, ngựa hí, bắn tên*). Âm của dự án nào chỉ dùng trong dự án đó. Gói âm **đi theo gói dự án** (sao lưu, nhập, gói bán) và **theo phim HTML xuất ra**.
+- **Gói âm của dự án**: mỗi dự án chủ đề thêm âm riêng (bộ mẫu Tam Quốc: *trống trận, tù và, vó ngựa, kiếm cổ, mưa tên, ngựa hí, bắn tên*). Âm của dự án nào chỉ dùng trong dự án đó. Gói âm **đi theo gói dự án** (sao lưu, nhập, gói bán — kèm cả gói âm mà tác phẩm hoặc gói động tác gọi tên, kể cả gói dùng chung / của dự án khác; gói bán báo nếu gói âm đó còn nháp) và **theo phim HTML xuất ra**. Quy tắc: mỗi dự án ≤ 32 gói âm (bằng trần khi nhập, nên sao lưu nào cũng nhập lại được) · gói **không có dự án** là gói *dùng chung* — thêm âm gọi được ở mọi dự án nhưng **không có cue** (không đổi được âm tự gán của khung) · bỏ một âm đang được gọi, hoặc đổi dự án của gói khi còn chỗ gọi, sẽ báo xung đột kèm danh sách từng chỗ (chủ máy mới ép được) · qua link MCP / AI chatroom gói phải thuộc một dự án và không ghi đè gói của dự án khác · **gỡ gói**: `DELETE /api/sound-packs/<id>` hoặc MCP `delete_sound_pack` (chỉ chủ máy; còn chỗ gọi thì báo xung đột, tệp vào thùng rác).
 - Mỗi âm có nhãn, thẻ, thời lượng và câu **"dùng khi"**. **Thư viện › Âm thanh** (mô tả ngay dưới): lọc theo nhóm / thẻ / chữ / dự án, **▶ nghe thử**, **tải WAV** (cả một âm lẫn một "công thức ghép" nhiều âm) để dùng ở nơi khác.
 - **Gán âm vào phim**: hầu hết bước **không cần chọn gì** — bộ phát tự gán tối đa 2 âm theo biểu cảm / hiệu ứng / hoạt động (gói của dự án thắng bộ chuẩn; cảnh hùng tráng hay hài có thể đổi lựa chọn). Chỉ chọn tay ở Bảng bước (**thêm… › Âm thanh**, tối đa 3 âm) khi muốn **nhấn** một khoảnh khắc; chọn `[]` (không âm nào) để bước im. **Đòn đánh** cứ để nguyên — âm va chạm tự phát đúng điểm đánh.
 - **Luật ghép** (Studio và agent đều kiểm bằng cùng một bộ luật, ở `engine/sounds.js`): **lỗi** thì không lưu được, **cảnh báo** thì vẫn lưu và được báo lại.
-  | Luật | Mức | Nội dung |
+  | Luật | Mức | Nội dung (nguyên văn `GC.sounds.RULES` — test 2n chặn lệch) |
   |---|---|---|
-  | **S1** | lỗi | Mỗi bước tối đa 3 âm, trong đó tối đa 1 âm **nhấn** (nhóm *Cảm xúc & nhấn*, *Nhạc cụ hiệu ứng*) — hai cú nhấn cùng lúc triệt tiêu nhau |
-  | **S2** | cảnh báo | Không quá 4 âm trong 2 giây phim (kể cả âm tự gán và tiếng bật bong bóng) — dày hơn là "ồn" |
-  | **S3** | cảnh báo | Âm nhấn không đè câu thoại: đặt ở bước không lời, hoặc chọn âm ngắn |
-  | **S4** | cảnh báo | Âm va chạm (nhóm *Va chạm & đánh*) để đòn đánh tự phát; đặt tay chỉ khi bước có cú va thấy được |
-  | **S5** | cảnh báo | Cùng một âm không quá 3 bước liền |
-  | **S6** | lỗi | Âm phải có trong thư viện của dự án — tên lạ hoặc âm của dự án khác là lỗi, kèm gợi ý tên gần nhất |
-  | **S7** | cảnh báo | Âm dài hơn 2 giây (gong, trống trận…) chỉ ở bước đầu / cuối cảnh |
+  | **S1** | lỗi | ≤ 3 âm mỗi bước; ≤ 1 âm NHẤN (nhóm cam-xuc / nhac-cu) mỗi bước — hai cú nhấn cùng lúc triệt tiêu nhau. |
+  | **S2** | cảnh báo | Mật độ ≤ 4 âm trong 2 giây phim (kể cả âm tự gán và tiếng bật bong bóng thoại, không tính step / tick) — dày hơn là "ồn", khán giả mất điểm nhấn. |
+  | **S3** | cảnh báo | Âm nhấn không đè câu thoại: đặt ở bước không có lời, hoặc chọn âm ngắn xong trước câu ≥ 0,3 s. |
+  | **S4** | cảnh báo | Âm va chạm (nhóm danh) để động tác tự phát ở điểm đánh; đặt tay chỉ khi bước có cú va thấy được (attack, thrust, defend, kowtow, faint, jump, injured, dizzy). |
+  | **S5** | cảnh báo | Cùng một âm không quá 3 bước liền (trừ step / tick) — đổi âm cùng nhóm hoặc bỏ. |
+  | **S6** | lỗi | Âm phải có trong thư viện của dự án (khung + gói dùng chung + gói của dự án) — tên lạ / âm của dự án khác là lỗi, có gợi ý tên gần nhất. |
+  | **S7** | cảnh báo | Âm dài > 2 s (gong, dun-dun, trống trận…) chỉ ở bước đầu / cuối cảnh (mở màn, chuyển cảnh). |
 - **Công thức ghép mẫu** (đà → va → hậu quả, mỗi bước một âm): *rón rén → giẫm vỏ chuối → trượt ngã → bẹp → thất bại* (`tiptoe → slip → slide-down → splat → sad`) · *lấy đà → WHAM → ngã → chim bay vòng* · *loé ý tưởng → chạy biến* · *tích lực → biến hình → ta-da* · *bóp còi → ba-dum-tss*. Danh sách đầy đủ trong Thư viện › Âm thanh.
 - **Thêm âm của riêng bạn**: nhờ agent (MCP `get_sound_spec` → `validate_sound_pack` → `save_sound_pack`, xem `agent/workflows/sound.md`) hoặc nhập gói `gen-chibi.sound/1` (.json). Gói đi qua cổng kiểm: chỉ nhận số + chuỗi trong danh sách cho phép (không mã), tối đa 60 node Web Audio mỗi âm. Tên âm là **chung toàn thư viện** — trùng tên thì báo rõ gói nào đang giữ tên. Bạn nghe thử rồi mới giữ: agent không nghe được, chỉ kiểm bằng cổng.
 

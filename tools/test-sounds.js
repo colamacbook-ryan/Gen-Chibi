@@ -308,5 +308,16 @@ const LEGACY = ['pop', 'whoosh', 'step', 'sting', 'hit', 'boing', 'sparkle', 'ru
   no(sp.format !== 'gen-chibi.sound/1' || Object.keys(sp.kinds).length !== 8 || !sp.ranges.hz || sp.rules.length !== 7 || sp.budget.nodes !== 60, 'spec() đủ khuôn');
   console.log('   ✓ luật ghép S1–S7: mỗi luật một ca bắt + một ca không bắt, kịch bản sạch 0 cảnh báo, S6 gợi ý tên gần nhất / chặn âm dự án khác · guide + spec một nguồn (' + G.length + ' ký tự)');
 }
+// ---------- 6. CNS-107: câu luật SINH từ con số của RULES (đổi số là câu đổi theo — hướng dẫn agent, mô tả tool, Studio, docs lấy từ đây)
+{
+  const src = SRC.replace('maxPerStep: 3, maxAccent: 1,', 'maxPerStep: 5, maxAccent: 2,').replace('density: { window: 2, max: 4,', 'density: { window: 3, max: 6,');
+  no(src === SRC, 'test thay số RULES: không tìm thấy chỗ cần thay (engine/sounds.js đổi dạng?)');
+  const w = { GenChibi: {} }; vm.runInNewContext(src, { window: w, console: { error() {}, warn() {}, log() {} } }, { filename: 'engine/sounds.js' });
+  const R = w.GenChibi.sounds.RULES, G = w.GenChibi.sounds.guide();
+  no(!R.list[0].rule.startsWith('≤ 5 âm mỗi bước; ≤ 2 âm NHẤN') || R.list[0].short !== '≤ 5 âm / ≤ 2 âm nhấn mỗi bước' || !/Mật độ ≤ 6 âm trong 3 giây/.test(R.list[1].rule) || R.list[1].short !== 'mật độ ≤ 6 âm / 3 s', 'đổi RULES.maxPerStep / maxAccent / density → câu luật + vế ngắn đổi theo: ' + R.list[0].rule.slice(0, 60));
+  no(!G.includes(R.list[0].rule) || !G.includes('tối đa 5 âm, trong đó ≤ 2 âm nhấn'), 'guide() (hướng dẫn agent) đổi theo RULES');
+  no(R.levels.error !== 'S1, S6' || R.levels.warn !== 'S2–S5, S7', 'RULES.levels: ' + JSON.stringify(R.levels));
+}
+console.log('   ✓ câu luật S1–S7 sinh từ con số của RULES (đổi số → câu / guide đổi theo)');
 console.log('   (' + n + ' kiểm tra)');
 if (FAILS.length) { console.log('   ✗ ' + FAILS.length + ' kiểm tra đỏ'); process.exit(1); }

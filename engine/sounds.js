@@ -531,17 +531,36 @@
     speech: { sfxAt: [0.12, 0.38, 0.64], speechAt: 0.68, gap: 0.3, perWord: 0.3, min: 0.6, tail: 0.38, bubble: 'pop' },
     impact: { cat: 'danh', activities: ['attack', 'thrust', 'defend', 'kowtow', 'faint', 'jump'], states: ['injured', 'dizzy'] },
     repeat: { max: 3, skip: ['step', 'tick'] },
-    long: { dur: 2 },
-    list: [
-      { code: 'S1', level: 'error', rule: '≤ 3 âm mỗi bước; ≤ 1 âm NHẤN (nhóm cam-xuc / nhac-cu) mỗi bước — hai cú nhấn cùng lúc triệt tiêu nhau.' },
-      { code: 'S2', level: 'warn', rule: 'Mật độ ≤ 4 âm trong 2 giây phim (kể cả âm tự gán và tiếng bật bong bóng thoại, không tính step / tick) — dày hơn là "ồn", khán giả mất điểm nhấn.' },
-      { code: 'S3', level: 'warn', rule: 'Âm nhấn không đè câu thoại: đặt ở bước không có lời, hoặc chọn âm ngắn xong trước câu ≥ 0,3 s.' },
-      { code: 'S4', level: 'warn', rule: 'Âm va chạm (nhóm danh) để động tác tự phát ở điểm đánh; đặt tay chỉ khi bước có cú va thấy được (attack, thrust, defend, kowtow, faint, injured…).' },
-      { code: 'S5', level: 'warn', rule: 'Cùng một âm không quá 3 bước liền (trừ step / tick) — đổi âm cùng nhóm hoặc bỏ.' },
-      { code: 'S6', level: 'error', rule: 'Âm phải có trong thư viện của dự án (khung + gói dùng chung + gói của dự án) — tên lạ / âm của dự án khác là lỗi, có gợi ý tên gần nhất.' },
-      { code: 'S7', level: 'warn', rule: 'Âm dài > 2 s (gong, dun-dun, trống trận…) chỉ ở bước đầu / cuối cảnh (mở màn, chuyển cảnh).' }
-    ]
+    long: { dur: 2 }
   };
+  // CÂU LUẬT sinh từ chính các con số ở trên — hướng dẫn agent, mô tả tool MCP, tab Luật ghép của Studio, docs/HUONG-DAN.md đều lấy từ đây (một nguồn, CNS-107):
+  // đổi RULES.maxPerStep là mọi chỗ đổi theo, test so khớp từng câu. rule = câu đầy đủ · short = vế ngắn cho mô tả tool
+  (function (R) {
+    var vi = function (n) { return String(n).replace('.', ','); }, sk = function (xs) { return xs.join(' / '); };
+    R.list = [
+      { code: 'S1', level: 'error', short: '≤ ' + R.maxPerStep + ' âm / ≤ ' + R.maxAccent + ' âm nhấn mỗi bước',
+        rule: '≤ ' + R.maxPerStep + ' âm mỗi bước; ≤ ' + R.maxAccent + ' âm NHẤN (nhóm ' + sk(R.accent) + ') mỗi bước — hai cú nhấn cùng lúc triệt tiêu nhau.' },
+      { code: 'S2', level: 'warn', short: 'mật độ ≤ ' + R.density.max + ' âm / ' + R.density.window + ' s',
+        rule: 'Mật độ ≤ ' + R.density.max + ' âm trong ' + R.density.window + ' giây phim (kể cả âm tự gán và tiếng bật bong bóng thoại, không tính ' + sk(R.density.skip) + ') — dày hơn là "ồn", khán giả mất điểm nhấn.' },
+      { code: 'S3', level: 'warn', short: 'âm nhấn không đè lời thoại',
+        rule: 'Âm nhấn không đè câu thoại: đặt ở bước không có lời, hoặc chọn âm ngắn xong trước câu ≥ ' + vi(R.speech.gap) + ' s.' },
+      { code: 'S4', level: 'warn', short: 'âm va chạm để đòn đánh tự phát',
+        rule: 'Âm va chạm (nhóm ' + R.impact.cat + ') để động tác tự phát ở điểm đánh; đặt tay chỉ khi bước có cú va thấy được (' + R.impact.activities.concat(R.impact.states).join(', ') + ').' },
+      { code: 'S5', level: 'warn', short: 'một âm ≤ ' + R.repeat.max + ' bước liền',
+        rule: 'Cùng một âm không quá ' + R.repeat.max + ' bước liền (trừ ' + sk(R.repeat.skip) + ') — đổi âm cùng nhóm hoặc bỏ.' },
+      { code: 'S6', level: 'error', short: 'âm phải có trong thư viện của dự án',
+        rule: 'Âm phải có trong thư viện của dự án (khung + gói dùng chung + gói của dự án) — tên lạ / âm của dự án khác là lỗi, có gợi ý tên gần nhất.' },
+      { code: 'S7', level: 'warn', short: 'âm dài > ' + R.long.dur + ' s chỉ ở đầu / cuối cảnh',
+        rule: 'Âm dài > ' + R.long.dur + ' s (gong, dun-dun, trống trận…) chỉ ở bước đầu / cuối cảnh (mở màn, chuyển cảnh).' }
+    ];
+    // mã luật theo mức, gộp dãy liền: error → "S1, S6" · warn → "S2–S5, S7"
+    var span = function (codes) {
+      var n = codes.map(function (c) { return +c.slice(1); }), out = [], i = 0, j;
+      while (i < n.length) { j = i; while (j + 1 < n.length && n[j + 1] === n[j] + 1) j++; out.push(j > i + 1 ? 'S' + n[i] + '–S' + n[j] : n.slice(i, j + 1).map(function (x) { return 'S' + x; }).join(', ')); i = j + 1; }
+      return out.join(', ');
+    };
+    R.levels = { error: span(R.list.filter(function (r) { return r.level === 'error'; }).map(function (r) { return r.code; })), warn: span(R.list.filter(function (r) { return r.level !== 'error'; }).map(function (r) { return r.code; })) };
+  })(RULES);
   function words(t) { return String(t || '').trim().split(/\s+/).filter(Boolean).length; }
   function hasSay(s) { return /[0-9A-Za-zÀ-ɏḀ-ỿ]/.test(String(s.say || '')); }
   function stepDur(s) {
@@ -763,7 +782,7 @@
     L.push('Phong cách: KHOA TRƯƠNG kiểu phim hoạt hình — cao độ trượt lớn, có nốt nhạc, đuôi rung, hai nhịp đà → va. Mọi âm tổng hợp bằng code (không tệp mẫu).', '');
     L.push('## Quy trình ghép (làm theo thứ tự)');
     L.push('1. Để TRỐNG `sfx` ở phần lớn các bước — bộ phát tự gán ≤ ' + RULES.autoMax + ' âm theo cảm xúc (state) / hiệu ứng (fx) / hoạt động (activity) qua cue của âm (gói dự án thắng khung).');
-    L.push('2. Chỉ đặt `sfx` khi muốn NHẤN một khoảnh khắc: tối đa ' + RULES.maxPerStep + ' âm, trong đó ≤ 1 âm nhấn (nhóm ' + ACCENT.join(' / ') + '); âm nhấn để ở bước KHÔNG có lời hoặc bước trước câu.');
+    L.push('2. Chỉ đặt `sfx` khi muốn NHẤN một khoảnh khắc: tối đa ' + RULES.maxPerStep + ' âm, trong đó ≤ ' + RULES.maxAccent + ' âm nhấn (nhóm ' + ACCENT.join(' / ') + '); âm nhấn để ở bước KHÔNG có lời hoặc bước trước câu.');
     L.push('3. Va chạm (nhóm danh): dùng `action` (đòn đánh) — âm tự phát đúng điểm đánh. Đặt tay chỉ khi bước có cú va thấy được.');
     L.push('4. Hài: ghép "đà → va → hậu quả" trải trên 2–3 bước, mỗi bước MỘT âm (xem công thức mẫu). Âm có lấy đà (hitAt) đặt ở bước trước khung va.');
     L.push('5. `sfx: []` = bước im (tắt âm tự gán). Chạy lint (S1–S7) trước khi xuất: lỗi (error) phải sửa, cảnh báo (warn) nên sửa.', '');

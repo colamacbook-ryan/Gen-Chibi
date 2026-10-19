@@ -3696,8 +3696,8 @@
       var flow = h('div', { class: 'panel' }, h('h3', null, 'Quy trình ghép', h('span', { class: 'r note', text: 'cùng văn bản agent đọc (get_sound_spec / guide)' })),
         h('div', { class: 'pad stack' }, h('ol', { class: 'lc-steps' }, steps.map(function (s) { return h('li', null, lcMd(s)); })),
           h('div', { class: 'row', style: 'gap:4px' }, h('span', { class: 'note', text: 'Ngưỡng:' }), lim.map(function (t) { return h('span', { class: 'tag', text: t }); }))));
-      var rules = h('div', { class: 'panel' }, h('h3', null, 'Bảy luật S1–S7', h('span', { class: 'r note mono', text: 'GC.sounds.RULES · lintSoundTrack · save_shot / save_work chạy cùng bộ luật' })),
-        h('table', { class: 'lc-rules', 'aria-label': 'Bảy luật ghép âm' }, h('thead', null, h('tr', null, h('th', { text: 'Mã' }), h('th', { text: 'Mức' }), h('th', { text: 'Luật' }))),
+      var rules = h('div', { class: 'panel' }, h('h3', null, R.list.length + ' luật ' + R.list[0].code + '–' + R.list[R.list.length - 1].code, h('span', { class: 'r note mono', text: 'GC.sounds.RULES · lintSoundTrack · save_shot / save_work chạy cùng bộ luật' })),
+        h('table', { class: 'lc-rules', 'aria-label': 'Các luật ghép âm' }, h('thead', null, h('tr', null, h('th', { text: 'Mã' }), h('th', { text: 'Mức' }), h('th', { text: 'Luật' }))),
           h('tbody', null, R.list.map(function (x) {
             return h('tr', { 'data-rule': x.code }, h('td', { class: 'code', text: x.code }), h('td', { class: 'lv' }, x.level === 'error' ? lcState('bad', 'Lỗi — chặn lưu') : lcState('warn', 'Cảnh báo')), h('td', { text: x.rule }));
           }))));
@@ -3740,7 +3740,7 @@
       }
       var lintP = h('div', { class: 'panel lc-lint' }, h('h3', null, 'Thử kiểm luật', h('span', { class: 'r note', text: 'dán các bước (steps) — kết quả như lint_sound_track' })),
         h('div', { class: 'pad stack' }, ta, h('div', { class: 'row' }, lp, h('button', { class: 'btn primary', type: 'button', id: 'lsLintGo', onclick: lint }, 'Kiểm S1–S7'),
-          h('span', { class: 'note', text: 'Lỗi (S1, S6) chặn lưu phân cảnh; cảnh báo (S2–S5, S7) chỉ nhắc.' })), out));
+          h('span', { class: 'note', text: 'Lỗi (' + R.levels.error + ') chặn lưu phân cảnh; cảnh báo (' + R.levels.warn + ') chỉ nhắc.' })), out));
       box.appendChild(h('div', { class: 'stack' }, flow, rules, recs, lintP));
     }
 

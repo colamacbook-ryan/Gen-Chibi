@@ -276,6 +276,29 @@ const sect = async f => { try { await f(); } catch (e) { if (!process.env.GC_KEE
     }
     const keep = await call('save_sound_pack', { pack: Object.assign(pk('am-link', 'pa', { 'link-bop': snd('Bốp link v2', 'hai') })) }, { viaLink: true });
     no(keep.isError || S.pack('am-link').version !== 2, 'link MCP sửa gói CỦA CHÍNH dự án mình thì được (phiên bản 2)');
+    // (b2) ĐƯỜNG NHẬP cũng qua cổng kênh (review bảo mật: import_project qua link từng ghi đè gói dùng chung / gói dự án khác, lách save_sound_pack):
+    // link / chatroom nhập gói mới vào dự án của gói thì được; ghi đè gói dùng chung hoặc gói / gói động tác của dự án khác thì bị từ chối ở TỪNG MỤC (kind soundPacks / motionPacks)
+    {
+      await call('save_motion_pack', { pack: mpk('dt-chung', '', null, 'ciImpChung') }); await call('save_motion_pack', { pack: mpk('dt-pb', 'pb', null, 'ciImpPb') });
+      const bundle = (soundPacks, motionPacks, pid) => ({ format: 'gen-chibi.project/1', project: { id: pid || 'pa', name: (pid || 'pa').toUpperCase() }, soundPacks, motionPacks });
+      const sharedAfter = () => JSON.stringify([S.pack('chung-am').project, Object.keys(S.pack('chung-am').sounds), S.pack('am-pb').project, Object.keys(S.pack('am-pb').sounds), GC.choreo.PACKS['local.my/dt-chung'].project, GC.choreo.PACKS['local.my/dt-pb'].project]);
+      const before = sharedAfter(), cueBefore = probe();
+      const overwrite = [pk('chung-am', '', { 'chung-bop': snd('Chung', 'hai'), 'chung-moi': snd('Chung mới', 'hai') }), pk('am-pb', 'pb', { 'pb-bop': snd('Bốp pb', 'hai'), 'pb-moi': snd('PB mới', 'hai') })];
+      for (const [name, ctx] of [['link MCP', { viaLink: true }], ['AI chatroom', { channel: 'ui' }]]) {
+        const r = J(await call('import_project', { bundle: bundle(clone(overwrite), [clone(mpk('dt-chung', '', null, 'ciImpChung')), clone(mpk('dt-pb', 'pb', null, 'ciImpPb'))]), overwrite: true }, ctx));
+        const bad = k => r.errors.filter(e => e.kind === k);
+        no(bad('soundPacks').length !== 2 || !bad('soundPacks').every(e => /link MCP \/ AI chatroom.*không được ghi đè gói của dự án khác/.test(e.error)) || bad('motionPacks').length !== 2 || !bad('motionPacks').every(e => /link MCP \/ AI chatroom|đang thuộc dự án "pb"/.test(e.error)) || sharedAfter() !== before || probe() !== cueBefore,
+          name + ': import_project (overwrite) KHÔNG ghi đè được gói âm dùng chung / gói âm + gói động tác của dự án khác — mỗi mục báo lỗi, dữ liệu y nguyên: ' + JSON.stringify(r.errors.map(e => e.kind + ' ' + e.id + ': ' + e.error.slice(0, 70))));
+      }
+      // gói MỚI mang cue vào dự án của nó qua link: được (chỉ đổi âm tự gán trong dự án đó); cue không bao giờ thành gói dùng chung
+      const viaLinkNew = J(await call('import_project', { bundle: bundle([pk('am-nhap-moi', 'pn', { 'nhap-moi-1': snd('Nhập mới', 'hai', { cue: { event: ['exit'] } }) })], [], 'pn') }, { viaLink: true }));
+      no(!viaLinkNew.errors || viaLinkNew.errors.length || S.pack('am-nhap-moi').project !== 'pn' || S.cueFor({ event: 'exit', project: 'pn' })[0] !== 'nhap-moi-1' || S.cueFor({ event: 'exit', project: 'pb' })[0] !== 'zip', 'link MCP nhập gói MỚI có cue: thuộc dự án nhập (không thành gói chung), cue chỉ trong dự án đó');
+      const evilShared = J(await call('import_project', { bundle: bundle([pk('chung-am', '', { 'chung-bop': snd('Chung', 'hai', { cue: { state: ['shock'] } }) })], []), overwrite: true }));
+      no(!evilShared.errors.some(e => e.kind === 'soundPacks' && /gói dùng chung không được đổi âm tự gán của khung/.test(e.error)) || sharedAfter() !== before || probe() !== cueBefore, 'chủ máy: nhập đè gói dùng chung kèm cue → lỗi cổng (gói chung không có cue), không đổi gì: ' + JSON.stringify(evilShared.errors.map(e => e.error.slice(0, 80))));
+      // chủ máy (token / stdio) theo luật thường: nhập đè gói dùng chung → vẫn là gói dùng chung; gói của dự án khác thì vẫn không chuyển dự án
+      const owner = J(await call('import_project', { bundle: bundle(clone(overwrite), [clone(mpk('dt-chung', '', null, 'ciImpChung')), clone(mpk('dt-pb', 'pb', null, 'ciImpPb'))]), overwrite: true }));
+      no(owner.errors.filter(e => e.kind === 'soundPacks' || e.kind === 'motionPacks').length !== 2 || !owner.errors.some(e => e.kind === 'soundPacks' && e.id === 'am-pb') || !owner.errors.some(e => e.kind === 'motionPacks' && e.id === 'dt-pb') || S.pack('chung-am').project !== '' || !S.has('chung-moi') || GC.choreo.PACKS['local.my/dt-chung'].project !== '' || S.pack('am-pb').project !== 'pb' || GC.choreo.PACKS['local.my/dt-pb'].project !== 'pb', 'chủ máy: nhập đè giữ gói chung (âm + động tác) là gói chung; gói của dự án khác bị từ chối: ' + JSON.stringify(owner.errors.map(e => e.kind + ' ' + e.id)));
+    }
     // (c) mô tả tool ghi kênh (L-45); save trả nhắc phạm vi trong warnings; validate nhắc trong notes
     const tl = n => TOOLS.find(t => t.name === n).description;
     no(!/link MCP hay AI chatroom/.test(tl('save_sound_pack')) || !/CHỈ chủ máy/.test(tl('delete_sound_pack')) || !/FORBIDDEN/.test(tl('delete_sound_pack')), 'mô tả tool ghi rõ kênh được gọi (L-45)');
@@ -588,6 +611,21 @@ const sect = async f => { try { await f(); } catch (e) { if (!process.env.GC_KEE
     no(!Agent.topics().some(t => t.id === 'sound' && /sound library/.test(t.title)) || !/\| `sound` \|/.test(Agent.guide('guide')), 'chủ đề sound có trong danh sách + bảng GUIDE.md');
     const doc = fs.readFileSync(path.join(ROOT, 'docs/HUONG-DAN.md'), 'utf8');
     no(S.RULES.list.some(r => doc.indexOf('**' + r.code + '**') < 0) || S.CATS.some(c => doc.indexOf(c[1]) < 0) || S.RECIPES.some(r => r.seq.some(x => doc.indexOf(x[1]) < 0 && r.id === 'vo-chuoi')), 'docs/HUONG-DAN.md nhắc đủ 7 luật S1–S7 + 8 nhóm âm (lệch engine là đỏ)');
+    // CNS-107: MỘT nguồn — mọi chỗ nói luật S1–S7 / ngưỡng khớp RULES TỪNG CÂU (đổi RULES mà quên chỗ chép tay = đỏ)
+    const rowOf = r => '  | **' + r.code + '** | ' + (r.level === 'error' ? 'lỗi' : 'cảnh báo') + ' | ' + r.rule + ' |', tl = n => TOOLS.find(t => t.name === n).description, R = S.RULES, B = S.BUDGET, LM = S.LINT_MAX;
+    const lv = lvl => R.list.filter(r => (lvl === 'error') === (r.level === 'error')).map(r => r.code).join();
+    no(R.list.some(r => doc.indexOf(rowOf(r)) < 0), 'docs/HUONG-DAN.md: bảng S1–S7 khớp NGUYÊN VĂN từng câu của RULES + mức lỗi / cảnh báo (mất khớp: ' + R.list.filter(r => doc.indexOf(rowOf(r)) < 0).map(r => r.code) + ')');
+    no(lv('error').replace(/,/g, ', ') !== R.levels.error || R.levels.warn !== 'S2–S5, S7', 'RULES.levels sinh từ mức của từng luật (gộp dãy liền): ' + JSON.stringify(R.levels));
+    no(R.list.some(r => tl('lint_sound_track').indexOf(r.code + ' ' + r.short) < 0) || tl('lint_sound_track').indexOf('Lỗi (' + R.levels.error + ')') < 0 || tl('lint_sound_track').indexOf('cảnh báo (' + R.levels.warn + ')') < 0
+      || tl('lint_sound_track').indexOf('≤ ' + LM.steps + ' bước mỗi phân cảnh, ≤ ' + LM.shots + ' phân cảnh') < 0 || tl('save_shot').indexOf('lỗi (' + R.levels.error + ')') < 0 || tl('save_shot').indexOf('cảnh báo (' + R.levels.warn + ')') < 0, 'mô tả tool lint_sound_track / save_shot sinh từ RULES: từng luật + mức + trần đầu vào');
+    no(tl('get_sound_spec').indexOf('≤ ' + B.nodes + ' node Web Audio mỗi âm, ≤ ' + B.layers + ' lớp, ≤ ' + B.dur + ' s') < 0 || tl('get_sound_spec').indexOf(R.list.length + ' LUẬT GHÉP S1–S' + R.list.length) < 0, 'mô tả get_sound_spec: ngân sách + số luật lấy từ engine');
+    const appSrc = fs.readFileSync(path.join(ROOT, 'studio/app.js'), 'utf8');
+    no(/\(S1, S6\)|\(S2–S5, S7\)|'Bảy luật/.test(appSrc.replace(/\/\/[^\n]*/g, '')), 'studio/app.js không chép tay mức lỗi / cảnh báo (S1, S6) · (S2–S5, S7) — lấy từ GC.sounds.RULES.levels');
+    const gm = fs.readFileSync(path.join(ROOT, 'agent/GUIDE.md'), 'utf8'), swf = fs.readFileSync(path.join(ROOT, 'agent/workflows/sound.md'), 'utf8');
+    no(+(/≤ (\d+) sfx per step/.exec(gm) || [])[1] !== R.maxPerStep || +(/≤ (\d+) Web Audio nodes/.exec(gm) || [])[1] !== B.nodes, 'agent/GUIDE.md luật vàng: số sfx / bước + node khớp RULES / BUDGET');
+    no(+(/≤ (\d+) names per step/.exec(swf) || [])[1] !== R.maxPerStep || [B.nodes + ' Web Audio nodes per sound', '≤ ' + B.layers + ' layers', '≤ ' + B.dur + ' s', '≤ ' + B.sounds + ' sounds per pack', '≤ ' + B.bytes / 1000 + ' KB'].some(t => swf.indexOf(t) < 0), 'agent/workflows/sound.md: ngưỡng khớp RULES / BUDGET');
+    const dq = /chỉ đặt `sfx` khi muốn \*\*nhấn\*\* \(≤ (\d+) âm, ≤ (\d+) âm nhấn/.exec(doc) || [];
+    no(+dq[1] !== R.maxPerStep || +dq[2] !== R.maxAccent, 'docs/HUONG-DAN.md quy trình ghép: ngưỡng khớp RULES');
     const man = fs.readFileSync(path.join(ROOT, 'ASSET_MANIFEST.md'), 'utf8');
     no(!/gen\.am/.test(man) || !/kinds\/sound/.test(man) || !/không có tệp mẫu âm thanh/.test(man), 'ASSET_MANIFEST.md ghi nguồn + license âm thanh (tổng hợp bằng code, không tệp mẫu)');
     console.log('   ✓ hướng dẫn agent: luật S1–S7 / nhóm / công thức sinh từ engine (một nguồn) · chủ đề sound · docs / manifest khớp');
