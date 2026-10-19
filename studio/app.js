@@ -66,7 +66,8 @@
       return fetch(url, { method: method, headers: this.headers(), body: body ? JSON.stringify(body) : undefined })
         .then(function (r) {
           if (r.status === 401) { self.login(); throw new Error('Cần đăng nhập bằng token'); }
-          return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.error || ('Lỗi ' + r.status)); return j; });
+          // lỗi cổng kiểm (422) mang theo danh sách lỗi chi tiết để trang hiện đủ, không chỉ câu tóm tắt
+          return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw Object.assign(new Error(j.error || ('Lỗi ' + r.status)), { status: r.status, errors: j.errors || null }); return j; });
         });
     },
     login: function (wrong) {
@@ -152,7 +153,7 @@
   var NAV = [
     ['fab', 'Xưởng', 'tạo asset từ khung', [['create', 'Tạo asset mới'], ['characters', 'Bàn chỉnh nhân vật'], ['items', 'Bàn chỉnh vật phẩm'], ['scenes', 'Bàn chỉnh bối cảnh'], ['workshop', 'Trợ lý AI tạo asset']]],
     ['fab', 'Khung chuẩn', 'quy cách · kiểm (Gen Labs giữ)', [['khung', 'Bộ khung chuẩn'], ['library', 'Kho linh kiện & phông'], ['poses', 'Khung tư thế & hoạt động'], ['states', 'Khung biểu cảm & động tác'], ['gates', 'Cổng kiểm & hiệu năng']]],
-    ['lib', 'Thư viện', 'theo dự án chủ đề · lấy về dùng', [['projects', 'Dự án chủ đề'], ['lib-characters', 'Nhân vật'], ['lib-items', 'Vật phẩm'], ['lib-scenes', 'Bối cảnh']]],
+    ['lib', 'Thư viện', 'theo dự án chủ đề · lấy về dùng', [['projects', 'Dự án chủ đề'], ['lib-characters', 'Nhân vật'], ['lib-items', 'Vật phẩm'], ['lib-scenes', 'Bối cảnh'], ['lib-motions', 'Động tác']]],
     ['make', 'Tạo tác', 'làm phim / truyện với AI', [['works', 'Tác phẩm']]],
     ['sys', 'Hệ thống', '', [['ai', 'Cài đặt AI'], ['update', 'Cập nhật']]]
   ];
@@ -189,7 +190,8 @@
     var nav = clear($('nav'));
     // số đếm Thư viện không tính đồ của khung (khung thuộc Xưởng)
     var lib = function (arr) { return arr.filter(function (x) { return groupOf(x) !== 'frame'; }).length; };
-    var COUNT = { 'lib-characters': function () { return lib(GC.assets()); }, 'lib-items': function () { return lib(GC.items()); }, 'lib-scenes': function () { return lib(GC.scenes()); }, projects: function () { return Projects.all().length; } };
+    var COUNT = { 'lib-characters': function () { return lib(GC.assets()); }, 'lib-items': function () { return lib(GC.items()); }, 'lib-scenes': function () { return lib(GC.scenes()); }, projects: function () { return Projects.all().length; },
+      'lib-motions': function () { return GC.choreo ? Object.keys(GC.choreo.ACTIONS).length : 0; } };
     // chuyển ứng dụng: 3 lớp, lớp đang mở nổi bật; các lớp khác là liên kết sang ứng dụng riêng
     var sw = h('div', { class: 'appswitch' });
     APPS.forEach(function (a) {
@@ -1263,6 +1265,265 @@
     '})();'
   ].join('\n');
 
+  /* ---- Bảng bước (v0.16, Q9 — ADR 0006): soạn kịch bản phân cảnh KHÔNG cần AI ----
+   * Mỗi hàng là một bước event.steps[i]. Mọi ô chọn sinh từ lược đồ đạo diễn GC.director.schema(dàn diễn viên) — không chép tay danh sách;
+   * ô Hành động chỉ có đòn diễn viên của hàng làm được (GC.choreo.actionsFor ∩ lược đồ). Kiểm sống bằng GC.director.validate (cùng bộ kiểm
+   * server dùng khi lưu); lưu qua đúng đường lưu phân cảnh (POST api/works/<id>/shots) — không có lối tắt bỏ cổng. */
+  var CAMERA_LABEL = { auto: 'Tự động', wide: 'Toàn cảnh', two: 'Hai người', close: 'Cận người nói' };
+  var BUBBLE_LABEL = { say: 'Nói', shout: 'Hét', think: 'Nghĩ', whisper: 'Thì thầm' };
+  var FACING_LABEL = { left: 'Quay trái', right: 'Quay phải' };
+  // nhãn tiếng Việt của một giá trị trong lược đồ (giá trị lấy từ lược đồ; thiếu nhãn thì hiện id)
+  function enumLabel(k, v) {
+    var L = { state: LIB.states, activity: LIB.activities, posture: LIB.postures, move: LIB.moves, motion: LIB.motions, fx: LIB.fx, spot: GC.SCENE.spots }[k];
+    if (L && L[v] && L[v].label) return L[v].label;
+    var M = { view: VIEW_LABEL, camera: CAMERA_LABEL, bubble: BUBBLE_LABEL, facing: FACING_LABEL }[k];
+    if (M && M[v]) return M[v];
+    if (k === 'react' && GC.choreo && GC.choreo.REACTS[v]) return GC.choreo.REACTS[v].label;
+    return v;
+  }
+  // huy hiệu của một đòn: đòn đánh / ném / cần binh khí / nhắm đầu (dùng ở bảng bước và Thư viện › Động tác)
+  function actionBadges(A) {
+    if (!A) return [];
+    var out = [];
+    if (A.attack) out.push(['đòn đánh', 'atk']);
+    if (A.ranged) out.push(['ném', 'rng']);
+    if (A.needs) out.push(['cần binh khí', 'need']);
+    if (A.aim === 'head') out.push(['nhắm đầu', '']);
+    return out;
+  }
+  function badgeEls(A) { return actionBadges(A).map(function (b) { return h('span', { class: 'tag badge ' + b[1], text: b[0] }); }); }
+  // cfg: { base: { title, description, scene, cast }, event, chars (diễn viên chọn được, đã xếp), save(shot) → Promise, close() }
+  function stepSheet(cfg) {
+    var C = GC.choreo, base = cfg.base, cast = base.cast.slice(), dirty = false, alive = true, warnTimer = 0, serverErrs = [];
+    var evTitle = (cfg.event && cfg.event.title) || base.title || 'Phân cảnh';
+    var rows = cfg.event && Array.isArray(cfg.event.steps) ? clone(cfg.event.steps) : [];
+    var scene = base.scene ? GC.getScene(base.scene, MY_PACK) : null;
+    var MAX = 12, MORE = ['camera', 'bubble', 'activity', 'view', 'facing', 'posture', 'move', 'motion'], MORE_ARR = ['fx', 'sfx'];
+    var COLS = [['actor', 'Diễn viên'], ['state', 'Biểu cảm'], ['say', 'Lời thoại'], ['to', 'Nói với'], ['spot', 'Chỗ đứng'],
+      ['action', 'Hành động'], ['target', 'Đối thủ'], ['react', 'Phản ứng'], ['hold', 'Giữ (s)'], ['more', 'Thêm…']];
+    var SPAN = COLS.length + 2, opened = {}, idCells = [], errRows = [];
+    function castAssets() { return cast.map(function (k) { return GC.ASSETS[k] || GC.getAsset(k, MY_PACK); }).filter(Boolean); }
+    function assetOf(id) { return castAssets().filter(function (a) { return a.id === id; })[0] || null; }
+    var SCH = null;   // thuộc tính của một bước trong lược đồ — tính lại khi đổi dàn diễn viên
+    function schema() { SCH = GC.director.schema(castAssets()).properties.steps.items.properties; }
+    schema();
+    if (!rows.length) { var a0 = castAssets()[0]; rows.push({ actor: a0 ? a0.id : '', state: 'normal', say: '' }); }
+    // bước sạch: bỏ ô trống (lược đồ không nhận chuỗi rỗng ở ô tuỳ chọn), giữ nguyên mọi khoá khác do AI / JSON viết
+    function cleanSteps() {
+      return rows.map(function (r) {
+        var o = {};
+        Object.keys(r).forEach(function (k) { var v = r[k]; if (k !== 'say' && (v === '' || v == null || (Array.isArray(v) && !v.length))) return; o[k] = v; });
+        if (typeof o.say !== 'string') o.say = '';
+        return o;
+      });
+    }
+    function eventNow() { var ev = { title: evTitle, steps: cleanSteps() }; if (scene) ev.scene = scene.key; return ev; }
+    function errorsNow() {
+      var cs = castAssets(), all = cs.length ? GC.director.validate(eventNow(), cs) : ['Chọn ít nhất một diễn viên cho phân cảnh.'];
+      if (scene && cs.length > scene.spots.length) all.push('Bối cảnh "' + scene.name + '" chỉ mở ' + scene.spots.length + ' chỗ đứng — bớt diễn viên.');
+      var byRow = rows.map(function () { return []; }), glob = [];
+      all.forEach(function (m) { var x = /^Cảnh (\d+): (.*)$/.exec(m); if (x && byRow[+x[1] - 1]) byRow[+x[1] - 1].push(x[2]); else glob.push(m); });
+      return { total: all.length, rows: byRow, global: glob };
+    }
+    // ---- khung
+    var castBox = h('div', { class: 'fxchips' }), globBox = h('div'), warnBox = h('div', { class: 'stack', style: 'gap:4px' });
+    var table = h('table', { class: 'grid stepgrid' }), foot = h('div', { class: 'row note' });
+    var addB = h('button', { class: 'btn sm', onclick: function () { addRow(); } }, '+ Thêm bước');
+    var saveB = h('button', { class: 'btn sm primary', onclick: save }, 'Lưu bước');
+    var el = h('div', { class: 'sheet-back', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Bảng bước · ' + base.title, onclick: function (ev) { if (ev.target === el) close(); } },
+      h('div', { class: 'panel sheet' },
+        h('h3', null, 'Bảng bước', h('span', { class: 'note', style: 'text-transform:none;letter-spacing:0', text: base.title }),
+          h('span', { class: 'r row', style: 'gap:6px' }, addB, saveB, h('button', { class: 'btn sm', onclick: function () { close(); } }, 'Đóng'))),
+        h('div', { class: 'pad stack', style: 'gap:10px' },
+          h('div', { class: 'row', style: 'gap:6px' }, h('b', { class: 'note', text: 'Dàn diễn viên' }), castBox,
+            h('span', { class: 'note', style: 'margin-left:auto', text: scene ? 'Bối cảnh: ' + scene.name + ' · ' + scene.spots.length + ' chỗ đứng' : 'Chưa chọn bối cảnh — chọn ở phân cảnh để dùng "Chỗ đứng".' })),
+          h('div', { class: 'note', text: 'Soạn không cần AI: mỗi hàng một bước. Ô chọn lấy từ lược đồ đạo diễn; "Hành động" chỉ có đòn diễn viên của hàng làm được. Đòn đánh cần đối thủ; phản ứng là của đối thủ.' }),
+          globBox, h('div', { class: 'scroll stepwrap' }, table), foot, warnBox)));
+    function onKey(ev) { if (ev.key === 'Escape' && alive) { ev.preventDefault(); close(); } }
+    document.addEventListener('keydown', onKey);
+    function touch() { dirty = true; serverErrs = []; }
+    function set(i, k, v) {
+      var r = rows[i];
+      if (v === '' || v == null || (Array.isArray(v) && !v.length)) delete r[k]; else r[k] = v;
+      if (k === 'actor') { if (r.to === v) delete r.to; if (r.target === v) { delete r.target; delete r.react; } }
+      if (k === 'action') {
+        var A = v && C ? C.ACTIONS[v] : null;
+        if (!(A && A.attack)) { delete r.target; delete r.react; }
+        else if (!r.target) { var t = r.to && r.to !== r.actor ? r.to : others(r.actor)[0]; if (t) r.target = t; }   // gợi ý đối thủ: người đang nói cùng, không thì người đầu dàn
+      }
+      if (k === 'target' && !v) delete r.react;
+      touch(); paint();
+    }
+    function others(id) { return (SCH.target.enum || []).filter(function (x) { return x !== id; }); }
+    function nameOf(id) { var a = assetOf(id); return a ? a.name : id; }
+    // ô chọn: opts = [[giá trị, nhãn, nhóm?]]; giá trị hiện tại không còn hợp lệ vẫn hiện (đánh dấu) để người soạn thấy và đổi
+    function pick(i, k, label, opts, cur, onPick, off, title, bad) {
+      var s = h('select', { 'data-cell': i + ':' + k, 'aria-label': label + ' · bước ' + (i + 1), disabled: off ? true : null, title: title || null, onchange: function () { onPick(s.value); } });
+      var groups = {};
+      opts.forEach(function (o) {
+        var op = h('option', { value: o[0], text: o[1] });
+        if (!o[2]) { s.appendChild(op); return; }
+        if (!groups[o[2]]) { groups[o[2]] = h('optgroup', { label: o[2] }); s.appendChild(groups[o[2]]); }
+        groups[o[2]].appendChild(op);
+      });
+      if (cur && !opts.some(function (o) { return o[0] === cur; })) s.appendChild(h('option', { value: cur, text: '⚠ ' + (bad ? bad(cur) : cur + ' (không hợp lệ)') }));
+      s.value = cur == null ? '' : cur;
+      return s;
+    }
+    function enumOpts(k, list) { return (list || SCH[k].enum || []).map(function (v) { return [v, enumLabel(k, v)]; }); }
+    function moreCount(r) { return MORE.concat(MORE_ARR).filter(function (k) { return r[k] !== undefined && !(Array.isArray(r[k]) && !r[k].length); }).length; }
+    function moreTitle(r) { return MORE.concat(MORE_ARR).filter(function (k) { return r[k] !== undefined; }).map(function (k) { return k + ': ' + [].concat(r[k]).map(function (v) { return enumLabel(k, v); }).join(', '); }).join(' · '); }
+    function cellsOf(r, i) {
+      var who = assetOf(r.actor), A = r.action && C ? C.ACTIONS[r.action] : null;
+      var canList = who && C ? C.actionsFor(who) : [];
+      var acts = (SCH.action.enum || []).filter(function (k) { return canList.indexOf(k) >= 0; }).map(function (k) {
+        var X = C.ACTIONS[k];
+        return [k, X.label + (X.ranged ? ' · ném' : '') + (X.needs ? ' · cần binh khí' : ''), X.attack ? 'Đòn đánh' : 'Động tác'];
+      });
+      var say = h('input', { type: 'text', 'data-cell': i + ':say', value: r.say || '', maxlength: 120, placeholder: A ? '(ra đòn không hô)' : 'Lời thoại…', 'aria-label': 'Lời thoại · bước ' + (i + 1),
+        oninput: function () { r.say = say.value; touch(); check(); } });
+      var hold = h('input', { type: 'number', 'data-cell': i + ':hold', min: 0.8, max: 6, step: 0.1, value: r.hold != null ? r.hold : '', placeholder: '—', title: 'Giữ khung 0,8–6 giây; bỏ trống = tự động theo độ dài câu', 'aria-label': 'Giữ khung (giây) · bước ' + (i + 1),
+        oninput: function () { var v = parseFloat(hold.value); if (hold.value === '' || !isFinite(v)) delete r.hold; else r.hold = Math.round(v * 10) / 10; touch(); check(); } });
+      var atk = !!(A && A.attack), spots = scene ? (SCH.spot.enum || []).filter(function (k) { return scene.spots.indexOf(k) >= 0; }) : [];
+      var nMore = moreCount(r);
+      return {
+        actor: pick(i, 'actor', 'Diễn viên', (SCH.actor.enum || []).map(function (id) { return [id, nameOf(id)]; }), r.actor, function (v) { set(i, 'actor', v); }, false, null, function (v) { return v + ' (không có trong dàn)'; }),
+        state: pick(i, 'state', 'Biểu cảm', enumOpts('state'), r.state, function (v) { set(i, 'state', v); }),
+        say: say,
+        to: pick(i, 'to', 'Nói với', [['', '— tự động —']].concat(others(r.actor).map(function (id) { return [id, nameOf(id)]; })), r.to || '', function (v) { set(i, 'to', v); }),
+        spot: pick(i, 'spot', 'Chỗ đứng', [['', scene ? '— giữ chỗ —' : '— cần bối cảnh —']].concat(enumOpts('spot', spots)), r.spot || '', function (v) { set(i, 'spot', v); }, !scene && !r.spot, scene ? null : 'Chọn bối cảnh cho phân cảnh trước'),
+        action: h('div', { class: 'actcell' },
+          pick(i, 'action', 'Hành động', [['', '— không —']].concat(acts), r.action || '', function (v) { set(i, 'action', v); }, false,
+            who ? who.name + ' làm được ' + acts.length + ' đòn' + (C && !C.hasWeapon(who) ? ' (tay không — đòn binh khí bị ẩn)' : '') : null,
+            function (v) { var X = C && C.ACTIONS[v]; return X ? X.label + ' — ' + (who ? who.name : 'người này') + ' không làm được' : v + ' — chưa có đòn này'; }),
+          A ? h('span', { class: 'badges' }, badgeEls(A)) : null),
+        target: pick(i, 'target', 'Đối thủ', [['', atk ? '— chọn đối thủ —' : '— chỉ cho đòn đánh —']].concat(atk ? others(r.actor).map(function (id) { return [id, nameOf(id)]; }) : []), r.target || '', function (v) { set(i, 'target', v); }, !atk && !r.target),
+        react: pick(i, 'react', 'Phản ứng', [['', r.target ? '— mặc định: ' + enumLabel('react', 'hit') + ' —' : '— cần đối thủ —']].concat(r.target ? enumOpts('react') : []), r.react || '', function (v) { set(i, 'react', v); }, !r.target && !r.react),
+        hold: hold,
+        more: h('button', { class: 'btn sm more' + (nMore ? ' on' : ''), 'data-cell': i + ':more', 'aria-expanded': String(!!opened[i]), title: moreTitle(r) || 'Máy quay, bong bóng, hoạt động, góc nhìn, hiệu ứng, âm thanh…', onclick: function () { opened[i] = !opened[i]; paint(); } }, nMore ? 'thêm · ' + nMore : 'thêm…')
+      };
+    }
+    // hàng "thêm…": các ô ít dùng — vẫn sinh từ lược đồ
+    function moreRow(r, i) {
+      var box = h('div', { class: 'moregrid' });
+      MORE.forEach(function (k) {
+        if (!SCH[k]) return;
+        box.appendChild(h('label', { class: 'fld' }, h('span', { class: 'note', text: { camera: 'Máy quay', bubble: 'Bong bóng', activity: 'Hoạt động', view: 'Góc nhìn', facing: 'Hướng', posture: 'Tư thế', move: 'Di chuyển', motion: 'Động tác tay' }[k] || k }),
+          pick(i, k, k, [['', '— tự động —']].concat(enumOpts(k)), r[k] || '', function (v) { set(i, k, v); })));
+      });
+      MORE_ARR.forEach(function (k) {
+        if (!SCH[k]) return;
+        var cur = (r[k] || []).slice(), chips = h('div', { class: 'fxchips' }), max = SCH[k].maxItems || 3;
+        (SCH[k].items.enum || []).forEach(function (v) {
+          chips.appendChild(h('button', { 'aria-pressed': String(cur.indexOf(v) >= 0), onclick: function () {
+            var j = cur.indexOf(v); if (j >= 0) cur.splice(j, 1); else if (cur.length < max) cur.push(v); else { toast('Tối đa ' + max + ' mục.'); return; }
+            set(i, k, cur);
+          } }, enumLabel(k, v)));
+        });
+        box.appendChild(h('div', { class: 'fld wide' }, h('span', { class: 'note', text: (k === 'fx' ? 'Hiệu ứng' : 'Âm thanh') + ' (tối đa ' + max + ')' }), chips));
+      });
+      return h('tr', { class: 'morerow' }, h('td', { class: 'id' }), h('td', { colspan: SPAN - 1 }, box));
+    }
+    function paintCast() {
+      clear(castBox);
+      cfg.chars.forEach(function (a) {
+        var on = cast.indexOf(a.key) >= 0;
+        castBox.appendChild(h('button', { 'aria-pressed': String(on), title: a.key + (C && C.hasWeapon(a) ? ' · có binh khí' : ''), onclick: function () {
+          var j = cast.indexOf(a.key);
+          if (j >= 0) cast.splice(j, 1); else if (cast.length < 8) cast.push(a.key); else { toast('Tối đa 8 diễn viên một cảnh.'); return; }
+          touch(); schema(); paintCast(); paint();
+        } }, a.name));
+      });
+    }
+    function paint() {
+      var focus = document.activeElement && document.activeElement.getAttribute && document.activeElement.getAttribute('data-cell');
+      clear(table); idCells = []; errRows = [];
+      var lt = h('tr', { class: 'letters' }, h('td'));
+      COLS.forEach(function (c, j) { lt.appendChild(h('td', { text: String.fromCharCode(65 + j) })); });
+      lt.appendChild(h('td'));
+      var hd = h('tr', null, h('th', { text: 'Bước' }));
+      COLS.forEach(function (c) { hd.appendChild(h('th', { class: 'c-' + c[0], text: c[1] })); });
+      hd.appendChild(h('th', { text: '' }));
+      table.appendChild(lt); table.appendChild(hd);
+      rows.forEach(function (r, i) {
+        var cells = cellsOf(r, i), idc = h('td', { class: 'id', text: 'B' + String(i + 1).padStart(2, '0') });
+        var tr = h('tr', { 'data-step': String(i) }, idc);
+        COLS.forEach(function (c) { tr.appendChild(h('td', { class: 'c-' + c[0] }, cells[c[0]])); });
+        tr.appendChild(h('td', { class: 'ops' },
+          h('button', { class: 'btn sm ic', disabled: i ? null : true, title: 'Lên', 'aria-label': 'Đưa bước ' + (i + 1) + ' lên', onclick: function () { move(i, -1); } }, '↑'),
+          h('button', { class: 'btn sm ic', disabled: i < rows.length - 1 ? null : true, title: 'Xuống', 'aria-label': 'Đưa bước ' + (i + 1) + ' xuống', onclick: function () { move(i, 1); } }, '↓'),
+          h('button', { class: 'btn sm ic danger', disabled: rows.length > 1 ? null : true, title: 'Xoá bước', 'aria-label': 'Xoá bước ' + (i + 1), onclick: function () { rows.splice(i, 1); opened = {}; touch(); paint(); } }, '✕')));
+        table.appendChild(tr);
+        if (opened[i]) table.appendChild(moreRow(r, i));
+        var er = h('tr', { class: 'errrow', hidden: true }, h('td', { class: 'id' }), h('td', { colspan: SPAN - 1 }));
+        table.appendChild(er);
+        idCells.push(idc); errRows.push(er);
+      });
+      addB.disabled = rows.length >= MAX;
+      if (focus) { var f = table.querySelector('[data-cell="' + focus + '"]'); if (f) f.focus(); }
+      check();
+    }
+    function move(i, d) { var x = rows.splice(i, 1)[0]; rows.splice(i + d, 0, x); opened = {}; touch(); paint(); }
+    function addRow() {
+      if (rows.length >= MAX) return;
+      var last = rows[rows.length - 1], ids = SCH.actor.enum || [];
+      var nextId = last && ids.length > 1 ? ids[(ids.indexOf(last.actor) + 1) % ids.length] : ids[0] || '';   // người nói kế tiếp: lần lượt theo dàn
+      rows.push({ actor: nextId, state: 'normal', say: '' });
+      touch(); paint();
+      var f = table.querySelector('[data-cell="' + (rows.length - 1) + ':say"]'); if (f) f.focus();
+    }
+    function check() {
+      var E = errorsNow();
+      E.rows.forEach(function (list, i) {
+        var er = errRows[i], idc = idCells[i];
+        if (!er) return;
+        idc.classList.toggle('bad', !!list.length);
+        idc.title = list.length ? list.length + ' lỗi' : '';
+        clear(er.lastChild);
+        if (list.length) er.lastChild.appendChild(h('ul', { class: 'errs' }, list.map(function (m) { return h('li', { text: '✗ ' + m }); })));
+        er.hidden = !list.length;
+      });
+      clear(globBox);
+      var g = E.global.concat(serverErrs);
+      if (g.length) globBox.appendChild(h('div', { class: 'banner bad' }, h('ul', { class: 'errs', style: 'margin:0' }, g.slice(0, 12).map(function (m) { return h('li', { text: '✗ ' + m }); }))));
+      clear(foot);
+      foot.appendChild(h('span', { class: 'mono', text: rows.length + ' / ' + MAX + ' bước' }));
+      foot.appendChild(E.total ? h('span', { class: 'chip bad', text: '✗ ' + E.total + ' lỗi' }) : h('span', { class: 'chip ok', text: '✓ Hợp lệ theo lược đồ đạo diễn' }));
+      foot.appendChild(h('span', { class: dirty ? 'chip warn' : 'chip', text: dirty ? 'Chưa lưu' : 'Đã lưu' }));
+      saveB.disabled = !!E.total;
+      saveB.title = E.total ? 'Sửa ' + E.total + ' lỗi trước khi lưu' : 'Lưu phân cảnh (server kiểm lại bằng cùng cổng)';
+      clearTimeout(warnTimer);
+      clear(warnBox);
+      if (!E.total) warnTimer = setTimeout(warnings, 450);
+    }
+    // cảnh báo của đạo diễn tự động (plan.warnings): đòn không dựng được… — dựng thử như lúc diễn, chỉ khi kịch bản đã hợp lệ
+    function warnings() {
+      if (!alive || !scene) return;
+      var plan = null, ws = [];
+      try { plan = GC.film.direct({ scene: scene.key, cast: cast, event: eventNow() }); ws = (plan && plan.warnings) || []; }
+      catch (e) { ws = ['dựng thử lỗi: ' + e.message]; }
+      clear(warnBox);
+      ws.forEach(function (w) { warnBox.appendChild(h('div', { class: 'note warn', text: '⚠ ' + w })); });
+    }
+    function save() {
+      if (errorsNow().total) { check(); return; }
+      saveB.disabled = true; saveB.textContent = 'Đang lưu…';
+      cfg.save({ title: base.title, description: base.description, scene: base.scene, cast: cast.slice(), event: { title: evTitle, steps: cleanSteps() } })
+        .then(function () { if (!alive) return; dirty = false; serverErrs = []; toast('Đã lưu ' + rows.length + ' bước của "' + base.title + '".'); })
+        .catch(function (e) { if (!alive) return; serverErrs = (e && e.errors) || (e ? [e.message] : []); })
+        .then(function () { if (!alive) return; saveB.textContent = 'Lưu bước'; check(); });
+    }
+    function close() {
+      if (!alive) return;
+      if (dirty && !window.confirm('Bảng bước còn thay đổi chưa lưu. Đóng và bỏ thay đổi?')) return;
+      destroy();
+      cfg.close();
+    }
+    function destroy() { alive = false; clearTimeout(warnTimer); document.removeEventListener('keydown', onKey); el.remove(); }
+    paintCast(); paint();
+    return { el: el, destroy: destroy };
+  }
+
   PAGES.works = function (r) {
     crumbs([{ t: 'Tác phẩm' }]);
     if (Store.mode !== 'server') { $('view').appendChild(h('div', { class: 'panel pad note lib-empty', text: 'Khu Tạo tác (tác phẩm, chat với AI đạo diễn) chạy ở bản cài trên máy.' })); return; }
@@ -1415,12 +1676,21 @@
             .then(function () { toast('Đã viết lời thoại cho ' + s.title); })
             .catch(function (e) { if (e) toast(e.message); aiB.disabled = false; aiB.textContent = 'AI viết lời thoại'; });
         } }, 'AI viết lời thoại');
+        // soạn tay từng bước (không cần AI) — dùng bản nháp đang gõ dở của phân cảnh (tên, mô tả, bối cảnh, dàn diễn viên)
+        var stepB = h('button', { class: 'btn sm', title: 'Soạn từng bước bằng ô chọn: ai nói gì, biểu cảm, chỗ đứng, đòn đánh… — không cần AI', onclick: function () {
+          var base = { title: t.value, description: d.value, scene: sc.value, cast: cast.slice() };
+          var sh = stepSheet({ base: base, event: s.event, chars: chars,
+            save: function (shot) { return saveShot({ shot: Object.assign({ id: s.id }, shot) }); },
+            close: function () {} });   // đã lưu thì saveShot vẽ lại trang; đóng không lưu = bỏ thay đổi
+          $('view').appendChild(sh.el); onLeave(sh.destroy);
+          var f = sh.el.querySelector('select, input'); if (f) f.focus();
+        } }, 'Bảng bước');
         shotsBox.appendChild(h('div', { class: 'shot', id: 'shot-' + s.id },
           h('div', { class: 'shot-head' }, h('b', { class: 'stepn', text: String(i + 1) }), t, st),
           d, h('div', { class: 'row' }, sc), cb,
           h('div', { class: 'shot-acts' },
             h('button', { class: 'btn sm primary', onclick: function () { saveShot({ shot: { id: s.id, title: t.value, description: d.value, scene: sc.value, cast: cast } }).then(function () { toast('Đã lưu ' + t.value); }); } }, 'Lưu'),
-            aiB,
+            stepB, aiB,
             h('button', { class: 'btn sm', disabled: GC.film.issues(s).length ? '' : null, title: GC.film.issues(s).length ? 'Thiếu: ' + GC.film.issues(s).join(', ') : null, onclick: function () { player.play([s], s.title); } }, 'Diễn thử'),
             h('span', { class: 'sp' }), h('button', { class: 'btn sm ic', disabled: i ? null : '', title: 'Lên', onclick: function () { saveShot({ shot: { id: s.id }, position: i - 1 }); } }, '↑'),
             h('button', { class: 'btn sm ic', disabled: i < W.shots.length - 1 ? null : '', title: 'Xuống', onclick: function () { saveShot({ shot: { id: s.id }, position: i + 1 }); } }, '↓'),
@@ -1761,6 +2031,231 @@
     }, r);
   };
 
+
+  /* ============================================================ THƯ VIỆN › Động tác (v0.16, Q9 — ADR 0006) */
+  // Đòn của bộ khung (gen.dong-tac) + gói động tác theo chủ đề (asset dữ liệu, qua cổng như mọi asset). Mỗi đòn: xem trước trên nhân vật
+  // bất kỳ, tải hoạt ảnh PNG sprite sheet · GIF · SVG sheet · JSON timeline. Xem trước và tệp tải về dùng CÙNG một GC.choreo.animate
+  // (khung cố định, nền trong suốt) nên tải về đúng như đang thấy. Ngân sách (L-42): một khung hình dựng sẵn, chỉ đổi DOM khi sang khung mới,
+  // dừng khi rời trang / tab ẩn.
+  var MANNEQUIN = 'gen.khung/ma-no-canh';
+  function motionPackOut(P) { var o = clone(P); ['pack', 'key', 'version', 'savedAt', 'note'].forEach(function (k) { delete o[k]; }); return o; }
+  PAGES['lib-motions'] = function (r) {
+    crumbs([{ t: 'Động tác' }]);
+    var C = GC.choreo;
+    if (!C) { $('view').appendChild(h('div', { class: 'panel pad note lib-empty', text: 'Bản này chưa nạp bộ biên đạo (engine/choreo.js).' })); return; }
+    var server = Store.mode === 'server';
+    actions(h('span', { class: 'note', text: 'Đòn của bộ khung + gói động tác theo chủ đề — xem trước, tải hoạt ảnh.' }),
+      server ? h('button', { class: 'btn', title: 'Tệp gói động tác (.json, ' + C.MOTION.format + ') — đi qua cổng kiểm như mọi asset', onclick: pickPack }, 'Nhập gói động tác (.json)') : null);
+    var ids = Object.keys(C.ACTIONS);
+    var u = { action: r.action && C.ACTIONS[r.action] ? r.action : ids[0], who: GC.ASSETS[r.who] ? r.who : MANNEQUIN, partner: MANNEQUIN, react: 'hit', fps: 12, cell: 256 };
+    if (!GC.ASSETS[u.partner]) u.partner = (GC.assets()[0] || {}).key;
+    if (!GC.ASSETS[u.who]) u.who = u.partner;
+    var q = '', errBox = h('div'), body = h('div', { class: 'stack' }), insp = h('div', { class: 'stack' });
+    var search = h('input', { type: 'search', placeholder: 'Tìm: tên đòn, id, gói…', style: 'width:260px', oninput: function () { q = search.value.trim().toLowerCase(); paintList(); } });
+    $('view').appendChild(h('div', { class: 'split lib wide motions' },
+      h('div', { class: 'stack' }, errBox, h('div', { class: 'row' }, search, h('span', { class: 'note', text: ids.length + ' đòn · ' + C.packs().length + ' gói động tác' })), body),
+      h('div', { class: 'sticky' }, insp)));
+
+    // ---- danh sách: Bộ khung trước, rồi từng gói động tác
+    function groups() {
+      var out = [{ key: C.FRAME_PACK, name: 'Bộ khung', P: null }];
+      C.packs().forEach(function (P) { out.push({ key: P.key, name: P.name || P.id, P: P }); });
+      return out;
+    }
+    function sampleOf(P) { var pj = P && P.project ? Projects.all().filter(function (x) { return x.id === P.project; })[0] : null; return pj && pj.sample ? pj.sample : null; }
+    function paintList() {
+      clear(body);
+      groups().forEach(function (g) {
+        var list = ids.filter(function (k) { return C.ACTIONS[k].pack === g.key; });
+        var shown = list.filter(function (k) { var A = C.ACTIONS[k]; return !q || [k, A.label, A.hint, g.name, g.key].join(' ').toLowerCase().indexOf(q) >= 0; });
+        if (!shown.length && (q || !g.P)) return;
+        var grid = h('div', { class: 'libgrid acts' });
+        shown.forEach(function (k) {
+          var A = C.ACTIONS[k];
+          grid.appendChild(h('button', { class: 'libcard act', 'aria-pressed': String(u.action === k), title: k, 'data-action': k, onclick: function () { u.action = k; route.action = k; remember(); paintList(); paintInsp(); } },
+            h('div', { class: 'lb' }, h('b', { text: A.label }), h('span', { class: 'mono note', text: k }),
+              h('span', { class: 'badges' }, badgeEls(A).length ? badgeEls(A) : h('span', { class: 'tag badge', text: 'diễn' })),
+              A.hint ? h('span', { class: 'note hint', text: A.hint }) : null)));
+        });
+        var P = g.P, smp = sampleOf(P), pub = P && P.status === 'published';
+        var head = h('h3', null, g.name, h('span', { class: 'r note mono', text: shown.length + ' / ' + list.length + ' đòn' }));
+        var meta = h('div', { class: 'packmeta row' },
+          P ? h('span', { class: 'note', text: P.project ? 'Dự án · ' + Projects.name(P.project) : 'Chưa xếp dự án' }) : h('span', { class: 'note', text: 'Đòn trung lập của bộ khung — có sẵn trong mọi bản cài và mọi phim xuất ra.' }),
+          h('span', { class: 'tag', text: g.key }),
+          P ? (smp ? h('span', { class: 'chip', title: smp.license || '', text: 'Bộ mẫu ' + (smp.owner || 'Gen Labs') }) : h('span', { class: pub ? 'chip ok' : 'chip', text: pub ? 'Phát hành' : 'Nháp' })) : null,
+          P && P.description ? h('span', { class: 'note', style: 'flex-basis:100%', text: P.description }) : null,
+          P ? h('button', { class: 'btn sm', style: 'margin-left:auto', title: smp ? 'Bản sao lưu của gói bộ mẫu — xem, sửa thử, làm phim; không bán lại' : 'Tải gói động tác (.json) — nhập lại được ở bản cài khác', onclick: function () { download(P.id + '.json', JSON.stringify(motionPackOut(P), null, 2), 'application/json'); } }, 'Tải gói (.json)') : null);
+        body.appendChild(h('div', { class: 'panel', 'data-pack': g.key }, head, meta, h('div', { class: 'pad' }, shown.length ? grid : h('div', { class: 'note', text: 'Gói chưa có đòn nào (chỉ có tư thế / màn diễn).' }))));
+      });
+      if (!body.children.length) body.appendChild(h('div', { class: 'panel pad note lib-empty', text: 'Không có đòn nào khớp "' + q + '".' }));
+    }
+    function remember() { try { localStorage.setItem(routeKey(APP), JSON.stringify(route)); } catch (e) { /* bỏ qua */ } }
+
+    // ---- xem trước + tải hoạt ảnh
+    // khung hình hiện bằng <img> + Blob URL dựng sẵn: SVG trong <img> không chạy script / không đụng id của trang, và đúng như lúc raster ra PNG / GIF
+    var anim = null, urls = [], raf = 0, playing = true, t0 = 0, fi = -1, stg = null, img = null, clock = null, playB = null, code = null;
+    function stop() { cancelAnimationFrame(raf); raf = 0; }
+    function drop() { urls.forEach(function (x) { URL.revokeObjectURL(x); }); urls = []; }
+    function frame(i) {
+      fi = i; img.src = urls[i]; stg.setAttribute('data-frame', String(i));
+      clock.textContent = (anim.frames[i].t.toFixed(2) + ' / ' + anim.duration.toFixed(2) + ' s · khung ' + (i + 1) + '/' + anim.frames.length).replace(/\./g, ',');
+    }
+    function loop(now) {
+      raf = 0;
+      if (!playing || !anim || !stg.isConnected || document.hidden) return;
+      if (!t0) t0 = now;
+      var n = anim.frames.length, period = n / anim.fps + 0.6;   // nghỉ 0,6 s giữa hai lượt
+      var k = Math.min(n - 1, Math.floor(((now - t0) / 1000 % period) * anim.fps));
+      if (k !== fi) frame(k);
+      raf = requestAnimationFrame(loop);
+    }
+    function play() { stop(); if (playing && anim && !document.hidden) { t0 = 0; raf = requestAnimationFrame(loop); } }
+    function onVis() { if (document.hidden) stop(); else play(); }
+    document.addEventListener('visibilitychange', onVis);
+    onLeave(function () { playing = false; stop(); drop(); document.removeEventListener('visibilitychange', onVis); });
+    function charSelect(cur, label, onPick) {
+      var s = h('select', { 'aria-label': label, onchange: function () { onPick(s.value); } }), groupsOf = {};
+      GC.assets().forEach(function (a) {
+        var g = groupOf(a) === 'frame' ? 'Bộ khung' : a.pack === MY_PACK ? 'Dự án · ' + Projects.name(a.project || '') : ((GC.PACKS[a.pack] || {}).name || a.pack);
+        if (!groupsOf[g]) { groupsOf[g] = h('optgroup', { label: g }); s.appendChild(groupsOf[g]); }
+        groupsOf[g].appendChild(h('option', { value: a.key, text: a.name + (C.hasWeapon(a) ? ' · có binh khí' : '') }));
+      });
+      s.value = cur;
+      return s;
+    }
+    function baseName() { return (GC.ASSETS[u.who] || {}).id + '-' + u.action + '-' + (anim ? anim.fps : u.fps) + 'fps'; }
+    // ô của sprite sheet: cạnh dài = u.cell px, cạnh kia theo khung ôm (giống GC.choreo.sheetSVG để PNG, SVG, JSON khớp toạ độ)
+    function layout() {
+      var b = anim.box, n = anim.frames.length, cols = Math.max(1, Math.ceil(Math.sqrt(n)));
+      var cw = b.w >= b.h ? u.cell : Math.max(1, Math.round(u.cell * b.w / b.h)), ch = Math.round(cw * b.h / b.w);
+      return { cols: cols, rows: Math.ceil(n / cols), cw: cw, ch: ch };
+    }
+    function sized(svg, w, hh) { return svg.replace('<svg xmlns="http://www.w3.org/2000/svg" ', '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + hh + '" '); }
+    function rasterFrames(L) {
+      return Promise.all(anim.frames.map(function (f) {
+        return new Promise(function (res, rej) { var img = new Image(); img.onload = function () { res(img); }; img.onerror = function () { rej(new Error('không dựng được khung hình')); }; img.src = svgURL(sized(f.svg, L.cw, L.ch)); });
+      }));
+    }
+    function busy(btn, p) { var t = btn.textContent; btn.disabled = true; btn.textContent = 'Đang dựng…'; return p.catch(function (e) { toast('Không xuất được: ' + e.message); }).then(function () { btn.disabled = false; btn.textContent = t; }); }
+    function savePNG(btn) {
+      if (!anim) return;
+      var L = layout(), name = baseName();
+      busy(btn, rasterFrames(L).then(function (imgs) {
+        var c = document.createElement('canvas'); c.width = L.cols * L.cw; c.height = L.rows * L.ch;
+        var ctx = c.getContext('2d');   // canvas mới = nền trong suốt
+        imgs.forEach(function (img, i) { ctx.drawImage(img, (i % L.cols) * L.cw, Math.floor(i / L.cols) * L.ch, L.cw, L.ch); });
+        return new Promise(function (res) { c.toBlob(res, 'image/png'); });
+      }).then(function (b) { downloadBlob(name + '.png', b); toast('Sprite sheet ' + L.cols + '×' + L.rows + ' ô ' + L.cw + '×' + L.ch + ' px · ' + anim.frames.length + ' khung — toạ độ từng khung trong tệp JSON.'); }));
+    }
+    function saveGIF(btn) {
+      if (!anim) return;
+      if (!window.GenGif) { toast('Thiếu bộ mã hoá GIF (studio/gif.js).'); return; }
+      var L = layout(), name = baseName();
+      busy(btn, rasterFrames(L).then(function (imgs) {
+        var c = document.createElement('canvas'); c.width = L.cw; c.height = L.ch;
+        var ctx = c.getContext('2d', { willReadFrequently: true });
+        var frames = imgs.map(function (img) { ctx.clearRect(0, 0, L.cw, L.ch); ctx.drawImage(img, 0, 0, L.cw, L.ch); return ctx.getImageData(0, 0, L.cw, L.ch).data; });
+        var bytes = window.GenGif.encode({ width: L.cw, height: L.ch, frames: frames, fps: anim.fps, loop: 0 });
+        downloadBlob(name + '.gif', new Blob([bytes], { type: 'image/gif' }));
+        toast('GIF ' + L.cw + '×' + L.ch + ' px · ' + frames.length + ' khung · ' + anim.fps + ' fps · lặp vô hạn, nền trong suốt (' + Math.round(bytes.length / 1024) + ' KB).');
+      }));
+    }
+    function saveSheetSVG() { if (!anim) return; var L = layout(); download(baseName() + '.svg', C.sheetSVG(anim, { cols: L.cols, cell: L.cw }).svg, 'image/svg+xml'); }
+    function timeline() {
+      var L = layout(), name = baseName(), A = C.ACTIONS[u.action];
+      return Object.assign({}, anim.meta, {
+        character: u.who, partner: A && A.attack ? u.partner : null, pack: A ? A.pack : null,
+        generator: 'gen-chibi ' + String((Store.info || {}).version || ''), license: '© 2026 Gen Labs — engine; nhân vật thuộc người tạo',
+        sheet: { png: name + '.png', svg: name + '.svg', gif: name + '.gif', cols: L.cols, rows: L.rows, cell: { w: L.cw, h: L.ch }, width: L.cols * L.cw, height: L.rows * L.ch },
+        frames: anim.frames.map(function (f, i) { return { i: i, t: f.t, name: name + '-' + String(i).padStart(3, '0'), x: (i % L.cols) * L.cw, y: Math.floor(i / L.cols) * L.ch, w: L.cw, h: L.ch }; })
+      });
+    }
+    function saveJSON() { if (!anim) return; download(baseName() + '.json', JSON.stringify(timeline(), null, 2), 'application/json'); }
+    function paintInsp() {
+      stop(); drop(); anim = null; fi = -1; clear(insp);
+      var A = C.ACTIONS[u.action];
+      if (!A) { insp.appendChild(h('div', { class: 'panel pad note', text: 'Chọn một đòn.' })); return; }
+      var who = GC.ASSETS[u.who], partner = GC.ASSETS[u.partner], P = C.PACKS[A.pack] || null;
+      img = h('img', { alt: 'Xem trước ' + A.label, draggable: 'false' });
+      stg = h('div', { class: 'mstage' }, img);
+      clock = h('span', { class: 'note mono' });
+      playB = h('button', { class: 'btn sm', 'aria-label': 'Phát / dừng', onclick: function () { playing = !playing; playB.textContent = playing ? '❚❚ Dừng' : '▶ Phát'; play(); } }, playing ? '❚❚ Dừng' : '▶ Phát');
+      var ctl = h('div', { class: 'row' },
+        h('label', { class: 'fld' }, h('span', { class: 'note', text: A.attack ? 'Người ra đòn' : 'Nhân vật' }), charSelect(u.who, 'Nhân vật', function (v) { u.who = v; route.who = v; remember(); paintInsp(); })),
+        A.attack ? h('label', { class: 'fld' }, h('span', { class: 'note', text: 'Đối thủ' }), charSelect(u.partner, 'Đối thủ', function (v) { u.partner = v; paintInsp(); })) : null,
+        A.attack ? h('label', { class: 'fld' }, h('span', { class: 'note', text: 'Phản ứng của đối thủ' }), (function () {
+          var s = h('select', { 'aria-label': 'Phản ứng', onchange: function () { u.react = s.value; paintInsp(); } });
+          Object.keys(C.REACTS).forEach(function (k) { s.appendChild(h('option', { value: k, text: C.REACTS[k].label })); });
+          s.value = u.react; return s;
+        })()) : null);
+      var fseg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Số khung / giây' });
+      [8, 12, 24].forEach(function (f) { fseg.appendChild(h('button', { 'aria-pressed': String(u.fps === f), onclick: function () { u.fps = f; paintInsp(); } }, f + ' fps')); });
+      var csel = h('select', { 'aria-label': 'Cỡ khung', title: 'Cạnh dài mỗi khung (px) của PNG / GIF / SVG sheet', onchange: function () { u.cell = +csel.value; if (code) code.refresh(); } });
+      [160, 256, 384, 512].forEach(function (n) { csel.appendChild(h('option', { value: n, text: n + ' px' })); });
+      csel.value = String(u.cell);
+      var info = h('div', { class: 'note mono' }), bar = null, can = !!(who && C.canDo(who, A)), err = '';
+      if (!who) err = 'Không có nhân vật này trong Thư viện.';
+      else if (!can) err = who.name + ' không làm được "' + A.label + '": đòn này cần ' + (C.MOTION.needs[A.needs] || A.needs) + '. Chọn nhân vật có binh khí (nhãn "có binh khí"), hoặc trang bị vũ khí cho ' + who.name + ' ở Xưởng.';
+      else {
+        try { anim = C.animate(C.actionTimeline({ asset: who, action: u.action, partner: A.attack ? partner : undefined, react: A.attack ? u.react : undefined }), { fps: u.fps }); }
+        catch (e) { err = 'Không dựng được đòn: ' + e.message; anim = null; }
+      }
+      if (anim) info.textContent = (anim.frames.length + ' khung · ' + anim.duration.toFixed(2) + ' s' + (anim.meta.impactFrame != null ? ' · va chạm ở khung ' + (anim.meta.impactFrame + 1) : '') + ' · khung ôm ' + anim.box.w + '×' + anim.box.h).replace(/(\d)\.(\d)/g, '$1,$2');
+      var dl = function (label, title, fn) { var b = h('button', { class: 'btn sm', title: title, disabled: anim ? null : true, onclick: function () { fn(b); } }, label); return b; };
+      code = codeBox([
+        ['Mã tham chiếu', function () {
+          var st = { actor: (who || {}).id || 'ma-no-canh', state: A.attack ? 'rage' : 'normal', action: u.action };
+          if (A.attack) { st.target = (partner || {}).id || 'ma-no-canh'; st.react = u.react; }
+          st.say = '…';
+          return '// một bước trong kịch bản (Bảng bước / AI đạo diễn):\n' + JSON.stringify(st) + '\n\n// đòn thuộc: ' + (P ? P.key + ' (gói "' + P.name + '")' : C.FRAME_PACK + ' (bộ khung)') + '\n// nhân vật: ' + u.who + (A.attack ? '\n// đối thủ:  ' + u.partner : '');
+        }],
+        ['JSON timeline', function () { return anim ? JSON.stringify(Object.assign({}, timeline(), { frames: '(' + anim.frames.length + ' khung — xem tệp JSON)' }), null, 2) : '// chưa dựng được hoạt ảnh'; }]
+      ]);
+      bar = h('div', { class: 'usebar' }, h('b', { text: 'Tải hoạt ảnh' }),
+        dl('PNG sprite sheet', 'Mọi khung xếp lưới, nền trong suốt', savePNG),
+        dl('GIF', 'GIF89a lặp vô hạn, nền trong suốt, nhịp theo fps', saveGIF),
+        dl('SVG sheet', 'Sprite sheet vectơ (một tệp SVG)', saveSheetSVG),
+        dl('JSON', 'Metadata timeline (' + 'gen-chibi.anim/1' + ') + toạ độ từng khung trong sprite sheet', saveJSON));
+      var packBar = h('div', { class: 'usebar' }, h('b', { text: 'Gói' }),
+        P ? h('span', { class: 'note', text: P.name + ' · ' + (P.project ? Projects.name(P.project) : 'chưa xếp dự án') }) : h('span', { class: 'note', text: 'Đòn của bộ khung — có sẵn trong mọi bản cài và mọi phim xuất ra.' }),
+        P ? h('button', { class: 'btn sm', onclick: function () { download(P.id + '.json', JSON.stringify(motionPackOut(P), null, 2), 'application/json'); } }, 'Tải gói (.json)') : null);
+      insp.appendChild(h('div', { class: 'panel' }, h('h3', null, A.label, h('span', { class: 'r mono', text: u.action })),
+        h('div', { class: 'pad stack' },
+          h('div', { class: 'row' }, badgeEls(A), A.hint ? h('span', { class: 'note', text: A.hint }) : null),
+          ctl, err ? h('div', { class: 'banner bad', role: 'alert' }, h('span', { text: err })) : stg,
+          anim ? h('div', { class: 'row' }, playB, clock, h('span', { class: 'sp', style: 'flex:1' }), fseg) : h('div', { class: 'row' }, fseg),
+          info, h('div', { class: 'row' }, h('span', { class: 'note', text: 'Cỡ khung khi tải' }), csel), bar, packBar, code)));
+      if (anim) { urls = anim.frames.map(function (f) { return URL.createObjectURL(new Blob([f.svg], { type: 'image/svg+xml' })); }); frame(0); play(); }
+    }
+    // ---- nhập gói động tác: server kiểm (cùng cổng với MCP / AI), 422 thì hiện đủ danh sách lỗi
+    function showErr(msg, list) {
+      clear(errBox);
+      if (!msg) return;
+      errBox.appendChild(h('div', { class: 'banner bad', role: 'alert', style: 'display:grid;gap:6px' },
+        h('div', { class: 'row' }, h('b', { text: msg }), h('button', { class: 'btn sm', style: 'margin-left:auto', onclick: function () { showErr(''); } }, 'Đóng')),
+        list && list.length ? h('ul', { class: 'errs', style: 'margin:0' }, list.slice(0, 30).map(function (m) { return h('li', { text: '✗ ' + m }); })) : null));
+    }
+    function pickPack() {
+      var inp = h('input', { type: 'file', accept: '.json,application/json', style: 'display:none', onchange: function () {
+        var f = inp.files && inp.files[0]; inp.remove();
+        if (!f) return;
+        if (f.size > 400 * 1024) { showErr('Tệp quá lớn (gói động tác tối đa 300 KB).'); return; }
+        f.text().then(function (t) { var d; try { d = JSON.parse(t); } catch (e) { showErr('Tệp không phải JSON.'); return; } importPack(d); });
+      } });
+      document.body.appendChild(inp); inp.click();
+    }
+    function importPack(def) {
+      if (!def || typeof def !== 'object' || Array.isArray(def)) { showErr('Gói động tác phải là một object JSON (' + C.MOTION.format + ').'); return; }
+      Store.api('POST', 'api/motion-packs', { pack: def, note: 'Nhập trong Studio' }).then(function (rec) {
+        var r0 = C.registerPack(MY_PACK, rec);
+        if (r0.errors.length) throw Object.assign(new Error('Server đã lưu nhưng Studio không nạp được gói'), { errors: r0.errors });
+        var first = Object.keys(r0.def.actions)[0];
+        toast('Đã nhập gói "' + r0.def.name + '": ' + Object.keys(r0.def.actions).length + ' đòn · ' + Object.keys(r0.def.clips).length + ' clip.');
+        go(Object.assign({}, route, first ? { action: first } : {}));
+      }).catch(function (e) { showErr(e.status === 422 ? 'Gói động tác chưa qua cổng kiểm' : e.message, e.errors || (e.status === 422 ? [e.message] : null)); });
+    }
+    paintList(); paintInsp();
+  };
 
   /* ============================================================ DỰ ÁN CHỦ ĐỀ (giai đoạn ②) */
   // Mỗi asset của người dùng gắn một dự án (trường project = slug). Bản server: api/projects; bản trình duyệt: localStorage.

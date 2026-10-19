@@ -327,3 +327,44 @@ ul.gates li.warn b { color: var(--warn); }
 .works .panel > h3 .r.row { flex-wrap: nowrap; } .works .panel > h3 .r .mono { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (prefers-color-scheme: dark) { body[data-zone] { --on-accent: #141316; } .brand .mark { background: radial-gradient(circle at 35% 50%, #141316 0 2.6px, transparent 3px), radial-gradient(circle at 65% 50%, #141316 0 2.6px, transparent 3px), var(--accent); } }
 .readyrow .go[title] { border: 1px solid var(--accent); border-radius: 10px; padding: 0 7px; font-size: 11.5px; cursor: pointer; }
+/* v0.16 (Q9) — Bảng bước: soạn kịch bản phân cảnh không cần AI (lưới kiểu bảng tính trong một tấm phủ rộng) */
+.sheet-back { position: fixed; inset: 0; z-index: 40; background: rgb(20 18 16 / .38); display: grid; place-items: start center; padding: 24px 16px; overflow: auto; }
+.sheet { width: min(1600px, 100%); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / .35); }
+.sheet > h3 { position: sticky; top: 0; z-index: 2; background: var(--surface); border-radius: 10px 10px 0 0; }
+.stepwrap { border: 1px solid var(--line); border-radius: 6px; }
+table.stepgrid { min-width: 1240px; font-size: 12.5px; }
+table.stepgrid th, table.stepgrid td { padding: 3px 4px; }
+table.stepgrid th { position: static; }
+table.stepgrid td.id { width: 46px; text-align: center; }
+table.stepgrid td.id.bad { color: var(--danger); font-weight: 600; box-shadow: inset 3px 0 0 var(--danger); }
+table.stepgrid td.id.bad::after { content: ' ⚠'; }
+table.stepgrid select, table.stepgrid input { width: 100%; padding: 2px 4px; font-size: 12.5px; border-radius: 4px; }
+table.stepgrid select:disabled { opacity: .45; }
+table.stepgrid .c-actor { width: 124px; } table.stepgrid .c-state { width: 136px; } table.stepgrid .c-say { min-width: 200px; }
+table.stepgrid .c-to, table.stepgrid .c-target { width: 116px; } table.stepgrid .c-spot { width: 112px; } table.stepgrid .c-react { width: 132px; }
+table.stepgrid .c-action { width: 216px; } table.stepgrid .c-hold { width: 58px; } table.stepgrid .c-more { width: 72px; }
+table.stepgrid td.ops { width: 92px; white-space: nowrap; }
+table.stepgrid td.ops .btn { margin-right: 2px; }
+table.stepgrid tr.errrow td { padding: 0 6px 4px; border-top: 0; background: color-mix(in srgb, var(--danger) 5%, transparent); }
+table.stepgrid tr.errrow .errs { margin: 2px 0 0; }
+table.stepgrid tr.morerow td { background: var(--raised); }
+.actcell { display: grid; gap: 2px; }
+.badges { display: flex; flex-wrap: wrap; gap: 2px; align-items: flex-start; }
+.tag.badge { font: 10.5px var(--font-ui); padding: 0 5px; margin: 0; }
+.tag.badge.atk { color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); }
+.tag.badge.rng { color: var(--info); background: color-mix(in srgb, var(--info) 12%, transparent); }
+.tag.badge.need { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
+.btn.more { width: 100%; padding: 1px 4px; } .btn.more.on { border-color: var(--accent); background: var(--accent-soft); }
+.moregrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 10px; padding: 6px 0; }
+.moregrid .fld.wide { grid-column: 1 / -1; }
+.banner.bad { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); background: color-mix(in srgb, var(--danger) 6%, var(--surface)); }
+.note.warn { color: var(--warn); }
+/* v0.16 (Q9) — Thư viện › Động tác: thẻ đòn + xem trước hoạt ảnh (nền ô cờ = trong suốt) */
+.libgrid.acts { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+.libcard.act .lb { border-top: 0; gap: 3px; padding: 8px 10px; align-content: start; }
+.libcard.act .hint { font-size: 11.5px; line-height: 1.3; }
+.mstage { height: 280px; border-radius: 6px; display: grid; place-items: center; overflow: hidden; box-shadow: inset 0 0 0 1px var(--line);
+  background-color: var(--stage); background-image: linear-gradient(45deg, var(--stage-grid) 25%, transparent 25%, transparent 75%, var(--stage-grid) 75%), linear-gradient(45deg, var(--stage-grid) 25%, transparent 25%, transparent 75%, var(--stage-grid) 75%);
+  background-size: 16px 16px; background-position: 0 0, 8px 8px; }
+.mstage img { max-width: 100%; max-height: 100%; width: 100%; height: 100%; object-fit: contain; display: block; }
+.packmeta { padding: 8px 14px; border-bottom: 1px solid var(--line); gap: 6px; }

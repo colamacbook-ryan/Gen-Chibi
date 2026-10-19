@@ -40,6 +40,10 @@ Khung không bao giờ bị sửa — asset của bạn là bản sao của khun
 - **Kịch bản lẻ**: agent ngoài gửi kịch bản qua MCP (`save_event`) → hiện ở khung *Kịch bản lẻ* → **+ Thành phân cảnh**.
 - **AI đạo diễn** (cần API key ở *Cài đặt AI*): kể ý tưởng hoặc bấm nút nhanh *Viết kịch bản · Chia phân cảnh · Viết lời thoại · Kiểm thiếu*. AI chỉ dùng asset trong Thư viện; **thiếu nhân vật / bối cảnh thì AI tự vào Xưởng tạo** (đúng dự án, qua cổng kiểm) rồi mới dùng. Mỗi câu trả lời kèm nhật ký việc AI đã làm (✓ / ✗).
 - **Không có AI vẫn làm được**: tự thêm phân cảnh, chọn bối cảnh, bấm chọn diễn viên (≤ 8), rồi *AI viết lời thoại* cho từng cảnh hoặc chỉnh JSON qua MCP.
+- **Bảng bước** (không cần AI): ở mỗi phân cảnh bấm **Bảng bước** → một bảng kiểu bảng tính, mỗi hàng một bước (`B01`…, tối đa 12): diễn viên, biểu cảm, lời thoại, nói với ai, chỗ đứng, **hành động**, đối thủ, phản ứng, thời gian giữ.
+  - Mọi ô chọn lấy từ lược đồ đạo diễn — không gõ tay được tên sai. Ô **Hành động** chỉ liệt kê đòn diễn viên của hàng đó làm được (người tay không không thấy "Đâm thẳng"), có nhãn *đòn đánh* / *ném* / *cần binh khí*.
+  - Chọn đòn đánh thì ô **Đối thủ** mới mở (tự gợi ý một người); có đối thủ thì mới chọn **Phản ứng**. Ô **thêm…** mở các trường phụ: máy quay, bong bóng, hoạt động, góc nhìn, hướng, tư thế, di chuyển, động tác tay, hiệu ứng (≤ 3), âm thanh (≤ 3).
+  - Lỗi hiện ngay cạnh hàng; **Lưu bước** khoá khi còn lỗi và đi qua đúng cổng kiểm như AI / MCP. Đóng bảng khi chưa lưu là bỏ thay đổi (có hỏi lại).
 - **Tình trạng**: thanh "Sẵn sàng x/y phân cảnh" + danh sách cảnh còn thiếu gì — bấm để tới đúng phân cảnh.
 - **Sân khấu final**: ▶ Diễn toàn bộ — phim có **dàn dựng tự động**:
   - nhân vật **đi ra sân**, **đi tới chỗ mới** khi kịch bản đổi chỗ đứng, **bước tới** khi giận / thề / van xin và **lùi lại** khi sốc / hoảng;
@@ -54,7 +58,7 @@ Khung không bao giờ bị sửa — asset của bạn là bản sao của khun
     - **Đòn của gói động tác** trong dự án (vd. bộ Tam Quốc: `combo` liên hoàn, `spin` xoay chém, `leap` tung người bổ, `twirl` múa thương).
     - Nhân vật **có binh khí** khi tay phải cầm trang bị loại *Vũ khí* (hoặc linh kiện khai `grip: weapon`). Ai không có thì đòn binh khí bị chặn kèm gợi ý đòn làm được; quạt, sách… là đạo cụ.
     - Người ra đòn tự áp sát / lùi cho đòn chạm đúng; hai đầu không chồng nhau; không lộn / văng đè lên người đứng xem; đối thủ phản ứng đúng khung va chạm. `say` để `""` nếu chỉ ra đòn.
-    - Viết bằng **AI đạo diễn**, qua MCP, hoặc ngay trong Studio (xem bảng bước bên dưới). Thanh **Sẵn sàng** báo nếu một đòn không có (thiếu gói động tác) hoặc diễn viên không làm được.
+    - Viết bằng **AI đạo diễn**, qua MCP, hoặc ngay trong Studio bằng **Bảng bước** (ở trên). Thanh **Sẵn sàng** báo nếu một đòn không có (thiếu gói động tác) hoặc diễn viên không làm được.
     - Máy đang giữ bộ Tam Quốc cũ? Ở **Thư viện › Dự án chủ đề**, bấm **⟳ Cập nhật Tam Quốc** để nhập bản mới (có gói động tác).
 
 ### Xuất thành phẩm
@@ -83,6 +87,13 @@ Thư viện › Nhân vật › khu **Dùng** › **Giọng**: kéo cao độ (t
 ## 5. Dùng asset ở nơi khác
 Ở Thư viện, mỗi asset có khu **Dùng**: tải SVG / PNG / avatar / sprite biểu cảm / **sprite 8 hướng**, chép mã tham chiếu, mã gọi MCP, mã nhúng web, JSON công thức.
 Mã tham chiếu có dạng `<thư viện>/<id>`: khung chuẩn là `gen.khung/…` và `gen.core/…`, asset của bạn là `local.my/…`. Tên cũ `afi.khung/…`, `afi.core/…` (trước v0.12) vẫn đọc được và được tự đổi sang tên mới khi lưu.
+
+### Động tác — xem trước và tải hoạt ảnh một đòn
+**Thư viện › Động tác** liệt kê đòn của bộ khung và của từng **gói động tác** (theo dự án, có nhãn Nháp / Phát hành / Bộ mẫu).
+- Chọn một đòn → chọn **người ra đòn** (chỉ hiện nhân vật làm được; không làm được thì báo vì sao), **đối thủ** và **phản ứng** → xem trước ngay, dừng / chạy, 8 · 12 · 24 khung/giây.
+- **Tải hoạt ảnh**: **PNG sprite sheet**, **GIF** (lặp mãi, nền trong suốt), **SVG sheet** (vectơ), **JSON timeline** (`gen-chibi.anim/1`: fps, số khung, khung va chạm, toạ độ từng khung trong sheet). Chọn **Cỡ khung khi tải**. Khung cố định ôm trọn cả đòn nên các khung không giật cỡ — dùng thẳng cho game, web, sticker chat.
+- **Tải gói (.json)** / **Nhập gói động tác (.json)**: gói đi qua cổng kiểm (lỗi hiện đủ danh sách). Gói động tác cũng nằm trong gói sao lưu / gói bán của dự án; gói của bộ mẫu Gen Labs không xuất bán.
+- Agent: cùng việc đó qua MCP `render_action` (xem `agent/workflows/animation.md`).
 
 ## 6. Cho agent AI (MCP) — agent của hãng nào cũng dùng được
 - Chạy **`genchibi agent connect`**: in sẵn cấu hình nối cho Claude Code, Claude app, Cursor, Gemini CLI, Codex CLI và lệnh `curl` (không in token ra màn hình).

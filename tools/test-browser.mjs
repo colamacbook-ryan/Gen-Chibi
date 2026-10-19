@@ -300,7 +300,84 @@ try {
     console.log('  ✓ Bộ mẫu cũ trên máy → nút "Cập nhật Tam Quốc" → nhập đè → đủ 6 phân cảnh (có màn đấu)');
     console.log('  ✓ Bộ chủ đề mẫu Tam Quốc một chạm: 7 tướng · 13 trang bị · 8 bối cảnh · dấu bộ mẫu Gen Labs (không xuất bán) → phim 6/6 phân cảnh sẵn sàng (có màn đấu)');
   } catch (e) { fail = 1; console.log('  ✗ dự án mẫu một chạm:', e.message); }
-  finally { await b5.close(); srv5.kill(); }
+  try {
+    // v0.16 (Q9, ADR 0006): BẢNG BƯỚC — soạn kịch bản không cần AI. Ô chọn sinh từ lược đồ đạo diễn; ô Hành động chỉ có đòn người của hàng
+    // làm được (needs); lỗi hiện cạnh hàng; lưu qua đúng đường lưu phân cảnh (server kiểm lại) → tải lại trang vẫn còn
+    try {
+      errs.length = 0;
+      await q.evaluate(() => localStorage.setItem('gc-route-tao-tac', JSON.stringify({ page: 'works', work: 'tq-vuon-dao-xich-bich' })));
+      await q.goto('http://localhost:7494/tao-tac'); await q.waitForSelector('#shot-canh-dau-tap');
+      await q.click('#shot-canh-dau-tap button:text-is("Bảng bước")'); await q.waitForSelector('.sheet table.stepgrid');
+      const nStep = await q.$$eval('.sheet tr[data-step]', e => e.length), nAct = await q.$$eval('.sheet select[data-cell$=":action"]', e => e.length);
+      if (nStep !== 8 || nAct !== 8) throw new Error('"Đấu tập trước trận": ' + nStep + ' hàng, ' + nAct + ' ô action (cần 8)');
+      // Gia Cát Lượng (quạt lông — tay không): thêm vào dàn + một bước của ông → ô action không có đòn binh khí
+      await q.click('.sheet .fxchips button:text-is("Gia Cát Lượng")'); await q.click('.sheet button:text-is("+ Thêm bước")');
+      await q.selectOption('.sheet select[data-cell="8:actor"]', 'tq-gia-cat-luong');
+      const gcl = await q.$$eval('.sheet select[data-cell="8:action"] option', o => o.map(x => x.value));
+      if (gcl.includes('thrust') || gcl.includes('combo') || !gcl.includes('punch')) throw new Error('ô action của Gia Cát Lượng: ' + gcl.join(','));
+      // lỗi sống ngay cạnh hàng: đổi người ra đòn binh khí sang người tay không → báo lỗi needs, khoá nút lưu
+      await q.selectOption('.sheet select[data-cell="2:actor"]', 'tq-gia-cat-luong');
+      const rowErr = await q.$$eval('.sheet tr.errrow:not([hidden])', e => e.map(x => x.textContent).join(' | '));
+      if (!/không làm được "thrust"/.test(rowErr) || !(await q.$eval('.sheet button:text-is("Lưu bước")', x => x.disabled))) throw new Error('không báo lỗi needs cạnh hàng / không khoá nút lưu: ' + rowErr);
+      await q.selectOption('.sheet select[data-cell="2:actor"]', 'tq-trieu-van');
+      await q.click('.sheet button[aria-label="Xoá bước 9"]'); await q.click('.sheet .fxchips button:text-is("Gia Cát Lượng")');
+      // đổi đòn bước 3 (Triệu Vân cầm thương): thrust → sweep → lưu → tải lại trang → vẫn là sweep
+      await q.selectOption('.sheet select[data-cell="2:action"]', 'sweep');
+      await q.click('.sheet button:text-is("Lưu bước")');
+      await q.waitForFunction(() => /Đã lưu/.test(document.querySelector('.sheet .pad > .row.note').textContent), null, { timeout: 5000 });
+      await q.reload(); await q.waitForSelector('#shot-canh-dau-tap');
+      await q.click('#shot-canh-dau-tap button:text-is("Bảng bước")'); await q.waitForSelector('.sheet table.stepgrid');
+      const a3 = await q.$eval('.sheet select[data-cell="2:action"]', s => s.value), n2 = await q.$$eval('.sheet tr[data-step]', e => e.length);
+      if (a3 !== 'sweep' || n2 !== 8) throw new Error('sau khi lưu + tải lại: bước 3 = "' + a3 + '", ' + n2 + ' bước');
+      await q.keyboard.press('Escape');
+      if (await q.$('.sheet')) throw new Error('Esc không đóng bảng bước');
+      if (!/Sẵn sàng diễn cả 6 phân cảnh/.test(await q.textContent('.readybar'))) throw new Error('sau khi sửa đòn: ' + await q.textContent('.readybar'));
+      if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
+      console.log('  ✓ Bảng bước (không cần AI): 8 bước "Đấu tập"; ô action lọc theo người làm được (Gia Cát Lượng tay không: không có thrust); lỗi needs cạnh hàng; đổi đòn → lưu qua cổng → tải lại còn');
+    } catch (e) { fail = 1; console.log('  ✗ bảng bước:', e.message); }
+    // v0.16 (Q9): THƯ VIỆN › ĐỘNG TÁC — đòn khung + gói động tác; xem trước chạy thật; tải PNG sprite sheet / GIF / JSON timeline;
+    // nhân vật không làm được đòn (needs) thì báo vì sao, không dựng; nhập gói hỏng → hiện lỗi 422, gói đúng → có nhóm mới
+    try {
+      errs.length = 0;
+      await q.evaluate(() => localStorage.setItem('gc-route-thu-vien', JSON.stringify({ page: 'lib-motions' })));
+      await q.goto('http://localhost:7494/thu-vien'); await q.waitForSelector('.libcard.act');
+      const nFrame = await q.$$eval('[data-pack="gen.dong-tac"] .libcard.act', e => e.length), nTq = await q.$$eval('[data-pack="local.my/tq-dong-tac"] .libcard.act', e => e.length);
+      if (nFrame < 16 || nTq < 1) throw new Error('danh sách: ' + nFrame + ' đòn khung, ' + nTq + ' đòn của gói tq-dong-tac');
+      await q.click('.libcard.act[data-action="thrust"]');
+      await q.selectOption('.sticky select[aria-label="Nhân vật"]', 'local.my/tq-gia-cat-luong');
+      if (!/không làm được/.test(await q.textContent('.sticky .banner.bad')) || await q.$('.mstage')) throw new Error('người tay không chọn đòn binh khí: phải báo vì sao và không dựng');
+      await q.selectOption('.sticky select[aria-label="Nhân vật"]', 'local.my/tq-trieu-van');
+      const fr = new Set(); for (let k = 0; k < 10; k++) { await q.waitForTimeout(120); fr.add(await q.getAttribute('.mstage', 'data-frame')); }
+      if (fr.size < 3) throw new Error('xem trước không chạy (khung: ' + [...fr].join(',') + ')');
+      const grab = async label => { const [d] = await Promise.all([q.waitForEvent('download'), q.click('.sticky .usebar button:text-is("' + label + '")')]); return { name: d.suggestedFilename(), buf: require('fs').readFileSync(await d.path()) }; };
+      const png = await grab('PNG sprite sheet'), gif = await grab('GIF'), js = await grab('JSON');
+      if (png.name !== 'tq-trieu-van-thrust-12fps.png' || png.buf.length < 1024 || png.buf.readUInt32BE(0) !== 0x89504e47) throw new Error('PNG sprite sheet: ' + png.name + ' ' + png.buf.length + ' B');
+      if (gif.buf.slice(0, 6).toString() !== 'GIF89a' || gif.buf.length < 1024) throw new Error('GIF: ' + gif.name + ' ' + gif.buf.length + ' B');
+      const meta = JSON.parse(js.buf.toString());
+      if (meta.format !== 'gen-chibi.anim/1' || meta.frames.length !== meta.frameCount) throw new Error('JSON timeline: ' + JSON.stringify(meta).slice(0, 160));
+      // GIF giải mã được thật bằng bộ giải mã của trình duyệt: đủ khung, lặp vô hạn
+      const dec = await q.evaluate(async b64 => {
+        if (!('ImageDecoder' in window)) return null;
+        const d = new ImageDecoder({ data: Uint8Array.from(atob(b64), c => c.charCodeAt(0)), type: 'image/gif' }); await d.tracks.ready; await d.completed;
+        return { n: d.tracks.selectedTrack.frameCount, rep: d.tracks.selectedTrack.repetitionCount };
+      }, gif.buf.toString('base64'));
+      const gce = gif.buf.toString('latin1').split('\x21\xF9\x04').length - 1;
+      if (dec ? (dec.n !== meta.frameCount || dec.rep !== Infinity) : gce !== meta.frameCount) throw new Error('GIF ' + (dec ? dec.n + ' khung, lặp ' + dec.rep : gce + ' khối khung') + ' ≠ ' + meta.frameCount + ' khung');
+      // nhập gói động tác: hỏng → lỗi 422 hiện rõ; đúng → thêm nhóm, tải lại được
+      const pf = (n, o) => { const f = path.join(home5, n); require('fs').writeFileSync(f, JSON.stringify(o)); return f; };
+      const imp = async f => { const [fc] = await Promise.all([q.waitForEvent('filechooser'), q.click('button:text-is("Nhập gói động tác (.json)")')]); await fc.setFiles(f); };
+      await imp(pf('hong.json', { id: 'ci-hong', name: 'Hỏng', actions: { zap: { label: 'Zap', clips: ['khongCo'] } } }));
+      await q.waitForSelector('.motions .banner.bad');
+      if (!/khongCo/.test(await q.textContent('.motions .banner.bad'))) throw new Error('gói hỏng: không hiện lỗi 422 chi tiết');
+      await imp(pf('dung.json', { id: 'ci-chao', name: 'Chào CI', actions: { ciBow: { label: 'Chào rồi vẫy', clips: ['salute', 'wave'] } } }));
+      await q.waitForSelector('[data-pack="local.my/ci-chao"] .libcard.act[data-action="ciBow"]', { timeout: 5000 });
+      const [pk] = await Promise.all([q.waitForEvent('download'), q.click('[data-pack="local.my/ci-chao"] button:text-is("Tải gói (.json)")')]);
+      const pkj = JSON.parse(require('fs').readFileSync(await pk.path(), 'utf8'));
+      if (pkj.id !== 'ci-chao' || !pkj.actions.ciBow || pkj.key) throw new Error('tải gói: ' + JSON.stringify(pkj).slice(0, 120));
+      if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
+      console.log('  ✓ Thư viện › Động tác: ' + nFrame + ' đòn khung + gói tq-dong-tac · báo rõ người tay không · xem trước chạy · tải PNG sprite sheet, GIF ' + meta.frameCount + ' khung (giải mã được, lặp vô hạn), JSON gen-chibi.anim/1 · nhập gói: 422 hiện lỗi, gói đúng thêm nhóm');
+    } catch (e) { fail = 1; console.log('  ✗ Thư viện › Động tác:', e.message); }
+  } finally { await b5.close(); srv5.kill(); }
 }
 // Biên đạo liên hoàn: trang "Tử Long 30 giây" xuất bằng tools/choreo-demo.js chạy độc lập (file://), không lỗi, phát thật,
 // khung vẽ rẻ (≤ 8 ms), nhân vật đổi góc nhìn + nét mặt khi diễn, tua được, âm thanh bật khi bấm xem
@@ -341,9 +418,11 @@ try {
   const page = path.join(home, 'duel.html');
   require('fs').writeFileSync(page, '<!doctype html><meta charset=utf-8><body style="margin:0"><div id=st style="width:960px"></div><div id=pg></div>' +
     ['engine/core.js', 'engine/render.js', 'engine/audio.js', 'engine/player.js', 'engine/choreo.js', 'kinds/character/gen.core.js', 'kinds/khung/gen.khung.js', 'kinds/character/gen.choreo.js'].map(f => '<script src="' + R(f) + '"></script>').join('') +
-    '<script>var B=' + JSON.stringify({ parts: B.parts, items: B.items, scenes: B.scenes, characters: B.characters }) + ',SHOT=' + JSON.stringify(shot) + ';var GC=window.GenChibi;' +
+    '<script>var B=' + JSON.stringify({ parts: B.parts, items: B.items, scenes: B.scenes, characters: B.characters, motionPacks: B.motionPacks || [] }) + ',SHOT=' + JSON.stringify(shot) + ';var GC=window.GenChibi;' +
     'GC.pack({id:"local.my",name:"x",owner:"x",group:"mine",license:"x"},function(){});B.parts.forEach(function(p){GC.registerDataPart("local.my",p)});B.items.forEach(function(x){GC.registerItem("local.my",x)});' +
     'B.scenes.forEach(function(x){GC.registerScene("local.my",x)});B.characters.forEach(function(a){GC.registerAsset("local.my",a)});' +
+    // gói động tác của bộ (combo, leap…) — như phim xuất ra; thiếu gói thì Sẵn sàng (v0.16) báo đòn thiếu và không diễn
+    'B.motionPacks.forEach(function(m){var r=GC.choreo.registerPack("local.my",m);if(r.errors.length)throw new Error(r.errors.join("; "))});' +
     'window.P=GC.film.player(document.getElementById("st"),{onProgress:function(t){document.getElementById("pg").textContent=t}});P.show(SHOT);</script>');
   const b7 = await pw.chromium.launch({ args: ['--allow-file-access-from-files'] }), q = await b7.newPage({ viewport: { width: 1000, height: 700 } }), errs = [];
   q.on('pageerror', e => errs.push(e.message)); q.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
