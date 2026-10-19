@@ -202,7 +202,7 @@ async function route(req, res) {
   }
   if (p === '/api/voice/models' && m === 'GET') { try { return send(res, 200, await voice.models()); } catch (e) { return fail(res, e.code || 502, e.message); } }
   // lỗi giọng AI → mã HTTP + retryAt (hết lượt) cho Studio
-  const vfail = (e) => send(res, e.code >= 400 && e.code < 600 ? e.code : 502, Object.assign({ error: e.message }, e.retryAt ? { retryAt: e.retryAt } : {}));
+  const vfail = (e) => send(res, e.code >= 400 && e.code < 600 ? e.code : 502, Object.assign({ error: e.message }, e.retryAt ? { retryAt: e.retryAt } : {}, e.cap ? { cap: true } : {}));   // cap: chạm trần ngày của chủ máy (khác Google hết lượt)
   if (p === '/api/voice/line' && m === 'POST') {
     const b = await body(req);
     // voice = giọng đã cast cho cả tác phẩm (api/voice/cast); không gửi thì chọn theo nhân vật (character) / vai (role) + ngôn ngữ.

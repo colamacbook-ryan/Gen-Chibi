@@ -941,9 +941,12 @@ if (!ONLY || ONLY === 'voice') {
   const wav = (sec, hz) => { const rate = 24000, n = Math.round(rate * sec), b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(rate, 24); b.writeUInt32LE(rate * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
     for (let i = 0; i < n; i++) b.writeInt16LE(Math.round(9000 * Math.sin(2 * Math.PI * hz * i / rate) * Math.min(1, i / 600, (n - i) / 600)), 44 + i * 2); return b; };
   const WAV = wav(0.6, 220);
-  const M = { good: 'AIzaSy-key-gia-0123456789abcdef', hasKey: false, off: false, keySource: '', today: 0, designs: {}, ids: new Set(), budget: Infinity, fresh: 0, calls: [], casts: [], puts: [], designCalls: [], failFn: null, clipFail: false, delay: 0, retryAt: new Date(Date.now() + 3600e3).toISOString(), leaks: [], workPosts: [] };
+  const M = { good: 'AIzaSy-key-gia-0123456789abcdef', hasKey: false, off: false, keySource: '', today: 0, designs: {}, ids: new Set(), budget: Infinity, fresh: 0, calls: [], casts: [], puts: [], designCalls: [], failFn: null, clipFail: false, delay: 0, retryAt: new Date(Date.now() + 3600e3).toISOString(), leaks: [], workPosts: [],
+    // hợp đồng server v0.17 (CNS-085 / 087 / 090): trần câu / ngày, giọng tạm hỏng, dàn vượt 48, thiết kế tuần tự có thể dừng ở 429
+    dailyCap: 200, bad: [], missing: [], capHit: false, designBudget: Infinity, designCap: false, designDelay: 0, designLive: 0, designPeak: 0 };
+  const tomorrow = () => { const d = new Date(); d.setHours(24, 0, 0, 0); return d.toISOString(); };   // 00:00 ngày mai giờ máy (retryAt của 429 do trần ngày)
   const cfgOf = () => ({ enabled: M.hasKey && !M.off, off: M.off, model: 'gemini-3.8-flash-tts', hasKey: M.hasKey, keySource: M.hasKey ? M.keySource : '', blocked: M.fresh >= M.budget ? [{ model: 'gemini-3.8-flash-tts', until: M.retryAt }] : [],
-    today: M.today, cached: M.ids.size, keyUrl: 'https://aistudio.google.com/apikey', roles: GV.roleList(), langs: GV.langList(), designs: M.designs });
+    today: M.today, cached: M.ids.size, keyUrl: 'https://aistudio.google.com/apikey', roles: GV.roleList(), langs: GV.langList(), designs: M.designs, dailyCap: M.dailyCap, bad: M.bad });
   const castOf = (lang, accent, actors) => {
     const taken = {}, out = {};
     actors.forEach(a => {
@@ -969,9 +972,11 @@ if (!ONLY || ONLY === 'voice') {
       }
       if (typeof body.enabled === 'boolean') M.off = !body.enabled;
       if (body.clearKey) { M.hasKey = false; M.keySource = ''; }
+      if (typeof body.dailyCap === 'number') M.dailyCap = body.dailyCap;
+      if (body.clearBad === true) M.bad = [];
       return json(200, cfgOf());
     }
-    if (p === '/cast' && m === 'POST') { M.casts.push(body); return json(200, { cast: castOf(body.lang, body.accent, body.actors || []) }); }
+    if (p === '/cast' && m === 'POST') { M.casts.push(body); return json(200, Object.assign({ cast: castOf(body.lang, body.accent, body.actors || []) }, body.work && M.missing.length ? { missing: M.missing } : {})); }
     if (p === '/library' && m === 'GET') {
       const l = u.searchParams.get('lang');
       return json(200, { voices: [{ id: 'lib-' + l + '-minh', name: 'Minh', gender: 'm', age: 35, pitch: 0.9, description: 'trầm, ấm', source: 'library' }, { id: 'lib-' + l + '-lan', name: 'Lan', gender: 'f', age: null, pitch: 1.1, description: 'trong, nhẹ', source: 'library' },
@@ -980,6 +985,10 @@ if (!ONLY || ONLY === 'voice') {
     if (p === '/design' && m === 'POST') {
       M.designCalls.push(body);
       if (['be-trai', 'be-gai', 'thieu-nien', 'thieu-nu'].includes(body.role)) return json(400, { error: 'Google chặn thiết kế giọng trẻ em (chính sách an toàn)' });
+      if (M.designBudget < 1) return M.designCap ? json(429, { error: 'Đã chạm trần câu / ngày', retryAt: tomorrow(), cap: true }) : json(429, { error: 'Hết lượt thiết kế giọng hôm nay', retryAt: M.retryAt });
+      M.designBudget--; M.designLive++; M.designPeak = Math.max(M.designPeak, M.designLive);
+      if (M.designDelay) await new Promise(r => setTimeout(r, M.designDelay));
+      M.designLive--;
       const voice = 'design-' + body.role, id = crypto.createHash('sha1').update('design' + voice).digest('hex');
       M.designs[body.role + '|' + body.lang + '|' + body.accent] = { voice, at: new Date().toISOString() }; M.ids.add(id);
       return json(200, { voice, preview: 'api/voice/clip/' + id + '.wav', role: body.role, lang: body.lang, accent: body.accent });
@@ -991,6 +1000,7 @@ if (!ONLY || ONLY === 'voice') {
       if (M.ids.has(id)) return json(200, { id, cached: true, seconds: 0.6, voice: body.voice, url: 'api/voice/clip/' + id + '.wav' });
       if (body.dry) return json(404, { error: 'Câu này chưa đọc bằng giọng AI' });
       if (!M.hasKey || M.off) return json(409, { error: 'Giọng AI đang tắt (Cài đặt AI › Giọng AI)' });
+      if (M.capHit) return json(429, { error: 'Đã chạm trần ' + M.dailyCap + ' câu hôm nay', retryAt: tomorrow(), cap: true });
       if (M.fresh >= M.budget) return json(429, { error: 'Hết lượt đọc giọng hôm nay', retryAt: M.retryAt });
       if (M.delay) await new Promise(r => setTimeout(r, M.delay));
       M.fresh++; M.today++; M.ids.add(id);
@@ -1061,7 +1071,7 @@ if (!ONLY || ONLY === 'voice') {
     await q.waitForFunction(() => /Đã kết nối — 2 model đọc giọng/.test(document.querySelector('#voice-panel').textContent), null, { timeout: 5000 });
     if (!/Đã bật/.test(await chip())) throw new Error('đúng key mà chưa Đã bật: ' + await chip());
     const stText = await q.textContent('#voice-panel .kv');
-    if (!/key: riêng/.test(stText) || !/hôm nay 0 câu/.test(stText) || !/0 câu đã lưu/.test(stText)) throw new Error('dòng trạng thái thiếu: ' + stText.slice(0, 200));
+    if (!/key: riêng/.test(stText) || !/hôm nay 0 \/ 200 câu/.test(stText) || !/0 câu đã lưu/.test(stText)) throw new Error('dòng trạng thái thiếu: ' + stText.slice(0, 200));
     if (await q.$eval('#voice-panel input[type="password"]', e => e.value) !== '') throw new Error('ô key không được xoá sau khi kết nối');
     if ((await q.content()).indexOf(M.good) >= 0) throw new Error('key lộ ra DOM');
 
@@ -1116,8 +1126,56 @@ if (!ONLY || ONLY === 'voice') {
     M.keySource = 'llm'; await q.reload(); await q.waitForSelector('#voice-panel .banner.acc', { timeout: 8000 });
     if (!/Đã dùng được key Gemini của AI đạo diễn — không cần dán thêm/.test(await q.textContent('#voice-panel .banner.acc')) || !/dùng chung key AI đạo diễn/.test(await q.textContent('#voice-panel .kv'))) throw new Error('key dùng chung không được nói rõ');
     M.keySource = 'voice';
+
+    // ---- 2b) trần câu / ngày (Q13, CNS-090) · giọng tạm hỏng (CNS-087) ----
+    M.today = 0; await q.reload(); await q.waitForSelector('#voice-panel table.roles td.id'); await spyOn(q);   // (▶ AI ở trên đã đọc 1 câu mới: đếm lại từ 0 cho dòng "hôm nay N / trần")
+    const capSel = '#voice-panel input[aria-label="Trần câu / ngày"]', capNum = () => q.$eval(capSel, e => e.value), capGo = () => q.click('#voice-panel button:text-is("Lưu trần")');
+    const lastPut = () => JSON.stringify(M.puts[M.puts.length - 1]), statusTxt = () => q.textContent('#voice-panel .kv');
+    if (await capNum() !== '200' || !/hôm nay 0 \/ 200 câu/.test(await statusTxt())) throw new Error('ô trần mặc định 200 + "hôm nay 0 / 200 câu": ' + await capNum() + ' · ' + (await statusTxt()).slice(0, 120));
+    if (/giọng tạm hỏng/.test(await q.textContent('#voice-panel')) || await q.$('#voice-panel button:text-is("Thử lại giọng hỏng")')) throw new Error('không có giọng hỏng mà vẫn hiện dòng / nút');
+    const nPut0 = M.puts.length;
+    for (const v of ['-1', '5001', '1.5', '']) {   // sai: không gửi lên server, báo rõ khoảng hợp lệ
+      await q.fill(capSel, v); await capGo();
+      await q.waitForFunction(() => /Nhập số nguyên từ 0 đến 5000/.test(document.querySelector('#voice-panel').textContent), null, { timeout: 3000 });
+    }
+    if (M.puts.length !== nPut0) throw new Error('trần sai (-1 / 5001 / 1,5 / trống) mà vẫn gửi PUT: ' + lastPut());
+    await q.fill(capSel, '120'); await q.press(capSel, 'Enter');   // Enter cũng lưu
+    await q.waitForFunction(() => /hôm nay 0 \/ 120 câu/.test(document.querySelector('#voice-panel .kv').textContent), null, { timeout: 5000 });
+    if (lastPut() !== '{"dailyCap":120}' || await capNum() !== '120') throw new Error('lưu trần 120: ' + lastPut() + ' · ô = ' + await capNum());
+    await q.fill(capSel, '0'); await capGo();
+    await q.waitForFunction(() => /hôm nay 0 câu \(không giới hạn\)/.test(document.querySelector('#voice-panel .kv').textContent), null, { timeout: 5000 });
+    if (lastPut() !== '{"dailyCap":0}') throw new Error('trần 0 = không giới hạn: ' + lastPut());
+    await q.fill(capSel, '200'); await capGo();
+    await q.waitForFunction(() => /hôm nay 0 \/ 200 câu/.test(document.querySelector('#voice-panel .kv').textContent), null, { timeout: 5000 });
+    // chạm trần: 429 { cap: true } → "Đã chạm trần 200 câu hôm nay (Cài đặt AI)" + giờ đọc tiếp (00:00 ngày mai); KHÁC thông điệp hết lượt của Google
+    M.today = 200; M.capHit = true; await q.reload(); await q.waitForSelector('#voice-panel table.roles td.id'); await spyOn(q);
+    if (!/hôm nay 200 \/ 200 câu \(đã chạm trần\)/.test(await statusTxt())) throw new Error('đủ trần mà dòng trạng thái không nói: ' + (await statusTxt()).slice(0, 140));
+    await q.click(row('ong-lao') + ' button[aria-label^="Nghe giọng AI"]');
+    await poll(async () => (await toasts(q)).some(t => /Đã chạm trần 200 câu hôm nay \(Cài đặt AI\)/.test(t)), 'toast chạm trần');
+    let capT = (await toasts(q)).filter(t => /chạm trần/.test(t));
+    if (!/đọc tiếp lúc \d{2}:\d{2} \d{2}[\/-]\d{2}/.test(capT[0]) || (await toasts(q)).some(t => /Hết lượt giọng AI/.test(t))) throw new Error('trần ngày phải có giờ đọc tiếp và KHÔNG được báo như hết lượt Google: ' + JSON.stringify(await toasts(q)));
+    M.capHit = false; M.today = 0; M.budget = 0; await q.reload(); await q.waitForSelector('#voice-panel table.roles td.id'); await spyOn(q);   // hết lượt của Google (không cap)
+    await q.click(row('ba-lao') + ' button[aria-label^="Nghe giọng AI"]');
+    await poll(async () => (await toasts(q)).some(t => /Hết lượt giọng AI — thử lại lúc \d{2}:\d{2}/.test(t)), 'toast hết lượt Google');
+    if ((await toasts(q)).some(t => /chạm trần/.test(t))) throw new Error('hết lượt Google không được báo là chạm trần: ' + JSON.stringify(await toasts(q)));
+    M.budget = Infinity;
+    // giọng tạm hỏng: "M giọng tạm hỏng (tự thử lại sau 24 h)" + nút gỡ → PUT { clearBad: true }
+    const until = new Date(Date.now() + 24 * 3600e3).toISOString();
+    M.bad = [{ voice: 'Charon', until }, { voice: 'design-vo-tuong', until }];
+    await q.reload(); await q.waitForSelector('#voice-panel table.roles td.id'); await spyOn(q);
+    if (!/2 giọng tạm hỏng \(tự thử lại sau 24 h\)/.test(await q.textContent('#voice-panel .kv')) || !await q.$('#voice-panel button:text-is("Thử lại giọng hỏng")')) throw new Error('thiếu dòng / nút giọng hỏng: ' + (await q.textContent('#voice-panel .kv')).slice(0, 200));
+    const nCast2b = M.casts.length;
+    await shot(q, 'panel-giong-ai-tran-va-hong', '#voice-panel .panel:first-child');
+    await q.click('#voice-panel button:text-is("Thử lại giọng hỏng")');
+    await q.waitForFunction(() => !/giọng tạm hỏng/.test(document.querySelector('#voice-panel').textContent), null, { timeout: 5000 });
+    if (lastPut() !== '{"clearBad":true}' || M.bad.length) throw new Error('Thử lại giọng hỏng phải gửi PUT { clearBad: true }: ' + lastPut());
+    await poll(async () => M.casts.length > nCast2b, 'cast tính lại sau khi gỡ giọng hỏng');
+    if (!(await toasts(q)).some(t => /Đã gỡ dấu giọng hỏng/.test(t))) throw new Error('thiếu toast gỡ giọng hỏng');
+    M.today = 0;
+    // ghi chú giọng vùng trung thực ở bảng Bộ giọng vai
+    if (!/Giọng vùng chỉ có hiệu lực ở vai đã Thiết kế giọng; chưa thiết kế = giọng chung của ngôn ngữ\./.test(await q.textContent('#voice-panel'))) throw new Error('bảng Bộ giọng vai thiếu ghi chú giọng vùng chỉ có ở vai đã thiết kế');
     await q.close();
-    console.log('  ✓ Cài đặt AI › Giọng AI: dán key sai → lỗi rõ, đúng → "Đã kết nối — 2 model" + Đã bật (key không lộ ra trang) · dòng trạng thái · key dùng chung nói rõ không cần dán · bảng 22 vai có ID, giọng đang dùng + nguồn, ▶ không tốn lượt, ▶ AI ghi rõ tốn 1 lượt, thiết kế → "Thiết kế lại", vai trẻ em mờ + tooltip · đổi ngôn ngữ hỏi lại cast · tắt / bật');
+    console.log('  ✓ Cài đặt AI › Giọng AI: dán key sai → lỗi rõ, đúng → "Đã kết nối — 2 model" + Đã bật (key không lộ ra trang) · dòng trạng thái · key dùng chung nói rõ không cần dán · bảng 22 vai có ID, giọng đang dùng + nguồn, ▶ không tốn lượt, ▶ AI ghi rõ tốn 1 lượt, thiết kế → "Thiết kế lại", vai trẻ em mờ + tooltip · đổi ngôn ngữ hỏi lại cast · tắt / bật · ô "Trần câu / ngày" (200 mặc định; -1 / 5001 / 1,5 / trống không gửi; Enter lưu; 0 = không giới hạn) + "hôm nay N / trần" · 429 cap → "Đã chạm trần 200 câu hôm nay (Cài đặt AI)" + giờ 00:00, khác "Hết lượt giọng AI" của Google · "2 giọng tạm hỏng (tự thử lại sau 24 h)" + nút "Thử lại giọng hỏng" gửi { clearBad: true } · ghi chú giọng vùng chỉ có ở vai đã thiết kế');
 
     // ---- 3) Sân khấu final: ô ngôn ngữ phim lưu vào tác phẩm, áp ngay cho bộ phát ----
     M.hasKey = true; M.keySource = 'voice'; M.off = false; M.ids.clear(); M.fresh = 0; M.budget = Infinity; M.calls.length = 0; M.casts.length = 0;
@@ -1129,6 +1187,8 @@ if (!ONLY || ONLY === 'voice') {
     const want = GV.langList().flatMap(l => l.accents.map(a => l.id + '|' + a.id + '|Ngôn ngữ: ' + l.label + ' · ' + a.label));
     if (want.length < 8 || langOpts.join(';') !== want.join(';')) throw new Error('ô ngôn ngữ phim: ' + langOpts.join(';') + ' ≠ ' + want.join(';'));
     if (await q.$eval('select[aria-label="Ngôn ngữ phim"]', e => e.value) !== 'vi|bac') throw new Error('mặc định phải là tiếng Việt · giọng Bắc');
+    const regionLine = () => q.textContent('.usebar:has(button:text-is("Thiết kế giọng vùng cho các vai")) .note');   // Q14: giọng vùng thật chỉ có ở vai đã thiết kế
+    await poll(async () => /^giọng vùng có ở \d+\/\d+ vai \(đã thiết kế\)/.test(await regionLine()), 'dòng "giọng vùng có ở N/M vai" của phim mẫu');
     const voiceModes = await q.$$eval('select[aria-label="Giọng nhân vật"] option', os => os.map(o => o.value + '|' + o.textContent));
     if (voiceModes.join(';') !== 'auto|Giọng: tự động;ai|Giọng: AI Google;tts|Giọng: máy đọc;blip|Giọng: blip kiểu game;off|Giọng: tắt') throw new Error('kiểu giọng: ' + voiceModes.join(';'));
     await q.selectOption('select[aria-label="Ngôn ngữ phim"]', 'en|uk'); await q.waitForTimeout(400);
@@ -1137,17 +1197,19 @@ if (!ONLY || ONLY === 'voice') {
     await q.selectOption('select[aria-label="Giọng nhân vật"]', 'ai'); await q.waitForTimeout(300);
     if ((await toasts(q)).some(t => /Chưa có key giọng AI/.test(t))) throw new Error('có key mà báo thiếu key');
     if ((await q.evaluate(() => [localStorage.getItem('gc-audio'), GenChibi.audio.voiceMode]))[1] !== 'auto' || JSON.parse(await q.evaluate(() => localStorage.getItem('gc-audio'))).voice !== 'ai') throw new Error('kiểu "AI Google" phải nhớ là ai và ánh xạ sang auto của engine');
-    // diễn phân cảnh 1 bằng tiếng Anh: giọng trình duyệt dự phòng đúng en-US, clip AI gửi kèm, cast theo tiếng Anh
+    // diễn phân cảnh 1 bằng tiếng Anh (Anh Anh): giọng trình duyệt dự phòng đúng en-GB (theo giọng vùng), clip AI gửi kèm, cast theo tiếng Anh
     await q.click('button:text-is("Diễn thử") >> nth=0');
     await q.waitForFunction(() => window.GenChibi.audio.__spy.length >= 4, null, { timeout: 60000 });
     await q.click('button:text-is("Dừng")');
     let spy = await q.evaluate(() => window.GenChibi.audio.__spy.slice());
-    if (!spy.slice(0, 4).every(s => s.lang === 'en-US')) throw new Error('giọng trình duyệt phải theo ngôn ngữ phim (en-US): ' + JSON.stringify(spy.map(s => s.lang)));
+    if (!spy.slice(0, 4).every(s => s.lang === 'en-GB')) throw new Error('giọng trình duyệt phải theo ngôn ngữ + giọng vùng của phim (en|uk → en-GB): ' + JSON.stringify(spy.map(s => s.lang)));
     if (!spy.slice(0, 4).every(s => s.clip && /^buf:\d{3,}/.test(s.clip))) throw new Error('kiểu AI Google mà bộ phát không dùng clip: ' + JSON.stringify(spy.map(s => s.clip)));
     const aiCalls = M.calls.filter(c => !c.dry);
     if (aiCalls.length < 4 || !aiCalls.every(c => c.lang === 'en' && c.accent === 'uk' && c.voice && c.role && c.text)) throw new Error('lời gọi api/voice/line sai: ' + JSON.stringify(aiCalls.slice(0, 2)));
     const cast0 = M.casts.find(c => c.actors.length > 1);   // (bỏ các cast một-diễn-viên còn sót của trang Cài đặt AI)
     if (!cast0 || cast0.lang !== 'en' || cast0.accent !== 'uk' || cast0.actors.length < 3 || !cast0.actors.every(a => GV.ROLES[a.role] && a.gender === GV.ROLES[a.role].gender)) throw new Error('cast cả dàn diễn viên sai: ' + JSON.stringify(cast0));
+    // CNS-085: cast cả dàn LUÔN gửi `work` (server chốt giọng vào tác phẩm → Studio, MCP, phim xuất cùng một giọng); cast lẻ (bảng bộ giọng, hồ sơ nhân vật) không thuộc tác phẩm nào thì không gửi
+    if (cast0.work !== WORK || M.casts.some(c => c.actors.length > 1 && c.work !== WORK) || M.casts.some(c => c.actors.length === 1 && 'work' in c)) throw new Error('cast phải gửi work = id tác phẩm: ' + JSON.stringify(M.casts.map(c => [c.actors.length, c.work])));
     const castVoices = Object.values(castOf('en', 'uk', cast0.actors)).map(c => c.voice);
     if (new Set(castVoices).size !== castVoices.length) throw new Error('mỗi diễn viên phải một giọng khác nhau: ' + castVoices.join());
     // mọi câu của cảnh đã hỏi MỘT lần, kể cả câu chưa tới lượt (hỏi trước đầu phân cảnh)
@@ -1163,7 +1225,7 @@ if (!ONLY || ONLY === 'voice') {
     if (!/Quảng Đông/.test(await noteOf()) || !/喺/.test(await noteOf()) || !/咩/.test(await noteOf()) || !/我哋/.test(await noteOf())) throw new Error('thiếu gợi ý tiếng Quảng Đông: ' + await noteOf());
     await q.selectOption('select[aria-label="Ngôn ngữ phim"]', 'vi|bac'); await q.waitForTimeout(300);
     if (await noteOf() !== noteVi) throw new Error('rời tiếng Quảng Đông mà gợi ý vẫn còn');
-    console.log('  ✓ Sân khấu final: ô "Ngôn ngữ" lấy từ langList() (Việt Bắc / Nam / Trung · Anh Mỹ / Anh · Trung phổ thông / Đài Loan · Quảng Đông) lưu vào tác phẩm, Quảng Đông có dòng gợi ý chữ phồn thể + khẩu ngữ' + (serverKeepsLang ? ' (server lưu lang + accent)' : ' — GHI CHÚ: server hiện CHƯA lưu lang / accent của tác phẩm, test dùng lớp phủ') + ' · áp ngay cho bộ phát (giọng trình duyệt en-US, cast + clip AI theo en/uk) · kiểu "Giọng: AI Google" ánh xạ sang auto của engine · cast cả dàn một lần, mỗi người một giọng · mỗi câu hỏi server một lần');
+    console.log('  ✓ Sân khấu final: ô "Ngôn ngữ" lấy từ langList() (Việt Bắc / Nam / Trung · Anh Mỹ / Anh · Trung phổ thông / Đài Loan · Quảng Đông) lưu vào tác phẩm, Quảng Đông có dòng gợi ý chữ phồn thể + khẩu ngữ' + (serverKeepsLang ? ' (server lưu lang + accent)' : ' — GHI CHÚ: server hiện CHƯA lưu lang / accent của tác phẩm, test dùng lớp phủ') + ' · áp ngay cho bộ phát (giọng trình duyệt en-GB theo giọng vùng, cast + clip AI theo en/uk) · kiểu "Giọng: AI Google" ánh xạ sang auto của engine · cast cả dàn một lần, mỗi người một giọng · mỗi câu hỏi server một lần');
 
     // ---- 4) bộ phát: clip lỗi / hết lượt → rơi về giọng máy, MỘT thông báo; kiểu tự động chỉ lấy clip ĐÃ đọc (dry, không tốn lượt) ----
     const playN = async (n, ms) => { await q.evaluate(() => { window.GenChibi.audio.__spy.length = 0; window.__toasts.length = 0; }); await q.click('button:text-is("Diễn thử") >> nth=0'); await q.waitForFunction(k => window.GenChibi.audio.__spy.length >= k, n, { timeout: ms || 60000 }); await q.click('button:text-is("Dừng")'); return q.evaluate(() => window.GenChibi.audio.__spy.slice()); };
@@ -1347,6 +1409,14 @@ if (!ONLY || ONLY === 'voice') {
     [...M.ids].slice(0, 6).forEach(i => M.ids.delete(i));
     const fp2 = await exportFilm('phim-mot-phan.html'), D2 = JSON.parse(fs.readFileSync(fp2, 'utf8').match(/var DATA = (\{.*?\});\nvar FILM/s)[1]);
     if (Object.keys(D2.voices).length !== 9 || !(await toasts(q)).some(t => /9\/15 câu có giọng AI \(câu còn lại dùng giọng máy đọc/.test(t))) throw new Error('xuất một phần: ' + Object.keys(D2.voices).length + ' clip');
+    // <html lang> theo ngôn ngữ phim (không cố định "vi"): vi · en · zh-CN (phổ thông) · zh-TW (Đài Loan) · zh-HK (Quảng Đông)
+    const langOfHtml = t => (t.match(/<html lang="([^"]+)">/) || [])[1];
+    if (langOfHtml(html) !== 'en') throw new Error('phim tiếng Anh phải <html lang="en">, thấy ' + langOfHtml(html));
+    for (const [v, want] of [['vi|bac', 'vi'], ['zh|pt', 'zh-CN'], ['zh|tw', 'zh-TW'], ['yue|hk', 'zh-HK'], ['en|uk', 'en']]) {
+      await q.selectOption('select[aria-label="Ngôn ngữ phim"]', v); await q.waitForTimeout(250);
+      const ft = fs.readFileSync(await exportFilm('phim-' + v.replace('|', '-') + '.html'), 'utf8'), dl = JSON.parse(ft.match(/var DATA = (\{.*?\});\nvar FILM/s)[1]);
+      if (langOfHtml(ft) !== want || dl.lang + '|' + dl.accent !== v) throw new Error('phim ' + v + ' phải <html lang="' + want + '">, thấy ' + langOfHtml(ft) + ' (DATA ' + dl.lang + '|' + dl.accent + ')');
+    }
     await q.close();
     // mở file:// — không một yêu cầu mạng; "tự động" dùng clip nhúng (data:), "máy đọc" bỏ qua clip; lời thoại chạy
     const ff = await ctx10.newPage(), fe = []; ff.on('pageerror', e => fe.push(e.message)); ff.on('request', r => { if (!/^file:|^data:|^blob:/.test(r.url())) fe.push('gọi ra ngoài: ' + r.url()); });
@@ -1362,7 +1432,7 @@ if (!ONLY || ONLY === 'voice') {
     if ((await ff.evaluate(() => window.GenChibi.audio.__spy.slice())).some(s => s.clip)) throw new Error('chọn máy đọc mà phim vẫn dùng clip AI');
     if (fe.length) throw new Error('phim file:// lỗi: ' + fe.slice(0, 3).join(' | '));
     await ff.close();
-    console.log('  ✓ Phim xuất ra: DATA.voices = 15 clip AI đã có (dry — không đọc mới, không tốn lượt) + DATA.lang / accent · engine/voices.js nhúng trước audio.js · chưa lồng tiếng → 0/15 vẫn xuất · server giữ một phần → 9/15, câu thiếu bị bỏ qua · toast "15/15 câu có giọng AI" + cỡ tệp · mở file://: không yêu cầu mạng, kiểu tự động phát clip nhúng (en-US), máy đọc bỏ qua clip');
+    console.log('  ✓ Phim xuất ra: DATA.voices = 15 clip AI đã có (dry — không đọc mới, không tốn lượt) + DATA.lang / accent · engine/voices.js nhúng trước audio.js · chưa lồng tiếng → 0/15 vẫn xuất · server giữ một phần → 9/15, câu thiếu bị bỏ qua · toast "15/15 câu có giọng AI" + cỡ tệp · <html lang> theo ngôn ngữ phim (vi · en · zh-CN phổ thông · zh-TW Đài Loan · zh-HK Quảng Đông) · mở file://: không yêu cầu mạng, kiểu tự động phát clip nhúng (en-US), máy đọc bỏ qua clip');
 
     // ---- 8) bộ phát thuần (không qua Studio): hỏi clip một lần mỗi câu từ đầu phân cảnh (≤ 2 song song), chờ ≤ 2,5 s, lỗi / quá hạn → giọng trình duyệt ----
     q = await pg(await ctx10.newPage(), { page: 'works', work: WORK }); await q.waitForSelector('.shot'); await spyOn(q);
@@ -1397,16 +1467,122 @@ if (!ONLY || ONLY === 'voice') {
       out.key = GC.film.clipKey({ actor: 'x', state: 'rage', bubble: 'shout', say: ' Xin chào ' });
       box.remove(); return out;
     }, [WORK]);
-    if (unit.a.clip !== 'buf:4' || unit.a.lang !== 'zh-TW' && unit.a.lang !== 'zh-CN') throw new Error('(a) clip / ngôn ngữ: ' + JSON.stringify(unit.a));
+    // (a) kiểm ĐÚNG một giá trị: tiếng Trung · Đài Loan → giọng trình duyệt zh-TW (CNS-088; trước đây chấp nhận cả zh-CN nhưng in "zh-TW")
+    if (unit.a.clip !== 'buf:4' || unit.a.lang !== 'zh-TW') throw new Error('(a) clip / ngôn ngữ (zh|tw phải ra zh-TW): ' + JSON.stringify(unit.a));
     if (unit.a.calls !== unit.a.nLines || unit.a.uniq !== unit.a.nLines || unit.a.peak > 2 || unit.a.peak < 2) throw new Error('(a) hỏi trước mọi câu một lần, ≤ 2 song song: ' + JSON.stringify(unit.a));
     if (unit.b.clip || unit.b2.clip || unit.b.lang !== 'vi-VN') throw new Error('(b) lỗi phải rơi về giọng máy: ' + JSON.stringify([unit.b, unit.b2]));
     if (unit.c.clip || unit.c.wait < 2000 || unit.c.wait > 3400) throw new Error('(c) chờ tối đa ~2,5 s rồi rơi về: ' + JSON.stringify(unit.c));
     if (unit.d.clip || unit.d.wait > 1000 || unit.e.clip !== 'buf:4' || unit.e.wait < 1200) throw new Error('(d/e) clipWait theo opts (300 ms → rơi về ngay; hàm 9 s → chờ clip về): ' + JSON.stringify([unit.d, unit.e]));
     if (!/^str:data:audio\/wav/.test(unit.f.clip)) throw new Error('(f) clip chuỗi: ' + JSON.stringify(unit.f));
-    if (unit.g.clip || unit.g.lang !== 'en-US') throw new Error('(g) không voiceClip: ' + JSON.stringify(unit.g));
+    if (unit.g.clip || unit.g.lang !== 'en-GB') throw new Error('(g) không voiceClip (en|uk phải ra en-GB): ' + JSON.stringify(unit.g));
     if (unit.key !== 'x|rage|shout|Xin chào') throw new Error('khoá câu: ' + unit.key);
     await q.close();
-    console.log('  ✓ Bộ phát (hợp đồng voiceClip): có clip → hooks.clip · mỗi câu hỏi đúng 1 lần, hỏi trước từ đầu phân cảnh, ≤ 2 song song · lỗi / ném lỗi / quá 2,5 s → giọng trình duyệt (clipWait chỉnh được) · lang / accent của tác phẩm vào giọng trình duyệt (zh-TW, en-US)');
+    console.log('  ✓ Bộ phát (hợp đồng voiceClip): có clip → hooks.clip · mỗi câu hỏi đúng 1 lần, hỏi trước từ đầu phân cảnh, ≤ 2 song song · lỗi / ném lỗi / quá 2,5 s → giọng trình duyệt (clipWait chỉnh được) · lang / accent của tác phẩm vào giọng trình duyệt (zh|tw → zh-TW, en|uk → en-GB)');
+
+    // ---- 9) giọng vùng THẬT (Q14, CNS-088) · dàn vượt 48 (CNS-094) ----
+    // Google chỉ cho giọng Bắc / Trung / Nam, Đài Loan đúng chất qua Thiết kế giọng: Sân khấu final đếm "giọng vùng có ở N/M vai (đã thiết kế)" và có nút thiết kế hàng loạt
+    // (bấm tay, hộp xác nhận TRONG TRANG ghi số lượt, tuần tự từng vai, bỏ vai trẻ em, dừng ngay ở 429, xong thì cast lại).
+    M.hasKey = true; M.off = false; M.keySource = 'voice'; M.ids.clear(); M.fresh = 0; M.budget = Infinity; M.capHit = false; M.today = 0; M.dailyCap = 200;
+    M.designs = {}; M.designBudget = Infinity; M.designCap = false; M.designDelay = 0; M.designPeak = 0; M.missing = []; M.calls.length = 0; M.casts.length = 0; M.designCalls.length = 0;
+    // một tác phẩm riêng: 3 vai thiết kế được (bà lão × 2 — trùng vai chỉ đếm một, võ tướng, quân sư) + 2 vai trẻ em (bé gái, cô thiếu nữ — không tính vào M)
+    const RGR = ['ba-lao', 'ba-lao', 'vo-tuong', 'quan-su', 'be-gai', 'thieu-nu'];
+    q = await pg(await ctx10.newPage(), null);
+    const RG = await q.evaluate(async ([H, roles]) => {
+      const GC = window.GenChibi, keys = [];
+      for (let i = 0; i < roles.length; i++) {
+        const a = JSON.parse(JSON.stringify(GC.ASSETS['gen.khung/ma-no-canh'])), id = 'ci-rg-' + i;
+        Object.assign(a, { id, pack: 'local.my', name: 'Vai ' + i, role: 'Thử giọng', status: 'draft', voice: { role: roles[i] } }); delete a.key;
+        const r = await fetch('api/assets/local.my/' + id, { method: 'PUT', headers: H, body: JSON.stringify(a) }); if (!r.ok) throw new Error('lưu nhân vật thử ' + id + ' ' + r.status);
+        keys.push('local.my/' + id);
+      }
+      let r = await fetch('api/works', { method: 'POST', headers: H, body: JSON.stringify({ title: 'Thử giọng vùng' }) }); if (!r.ok) throw new Error('tạo tác phẩm thử ' + r.status);
+      const w = await r.json();
+      r = await fetch('api/works/' + w.id + '/shots', { method: 'POST', headers: H, body: JSON.stringify({ shot: { title: 'Dàn thử', cast: keys } }) }); if (!r.ok) throw new Error('lưu phân cảnh thử ' + r.status + ' ' + await r.text());
+      return w.id;
+    }, [HDR, RGR]);
+    await q.close();
+    const kidLabels = /Bé gái|thiếu nữ/i, regB = 'button:text-is("Thiết kế giọng vùng cho các vai")', cf = '[aria-label="Xác nhận thiết kế giọng vùng"]';
+    let dialogs = 0;
+    const openRg = async lang => {   // mở tác phẩm thử, chọn ngôn ngữ (lưu vào tác phẩm), chờ dòng đếm
+      q = await pg(await ctx10.newPage(), { page: 'works', work: RG }); q.on('dialog', d => { dialogs++; d.dismiss(); });
+      await q.waitForSelector('.shot'); await spyOn(q);
+      if (lang && await q.$eval('select[aria-label="Ngôn ngữ phim"]', e => e.value) !== lang) { await q.selectOption('select[aria-label="Ngôn ngữ phim"]', lang); await q.waitForTimeout(300); }
+      await poll(async () => /^giọng vùng có ở \d+\/\d+ vai/.test(await regionLine()), 'dòng đếm giọng vùng');
+    };
+    const startRg = async n => { await q.click(regB); await q.waitForSelector(cf); await q.click(cf + ' button:text-is("Bắt đầu thiết kế ' + n + ' vai")'); };
+    await openRg('vi|nam');
+    if (!/^giọng vùng có ở 0\/3 vai \(đã thiết kế\)/.test(await regionLine())) throw new Error('đếm ban đầu phải 0/3 (6 diễn viên, 3 vai khác nhau thiết kế được, 2 vai trẻ em không tính): ' + await regionLine());
+    if (!/đọc giọng chung của ngôn ngữ/.test(await regionLine())) throw new Error('dòng giọng vùng phải nói vai chưa thiết kế đọc giọng chung: ' + await regionLine());
+    // đã có một vai thiết kế (bên server) → 1/3, chỉ còn 2 vai phải thiết kế
+    M.designs['vo-tuong|vi|nam'] = { voice: 'design-vo-tuong', at: new Date().toISOString() };
+    await q.reload(); await q.waitForSelector('.shot'); await spyOn(q); await poll(async () => /^giọng vùng có ở 1\/3 vai \(đã thiết kế\)/.test(await regionLine()), 'đếm 1/3');
+    // bấm nút → hộp xác nhận TRONG TRANG (không window.confirm): ghi số vai ≈ số lượt Google + ~25 s mỗi vai; chưa tốn gì
+    await q.click(regB); await q.waitForSelector(cf);
+    let cfT = await q.textContent(cf);
+    if (!/cho 2 vai/.test(cfT) || !/≈ 2 lượt Google/.test(cfT) || !/~25 s mỗi vai/.test(cfT) || !/Bắt đầu thiết kế 2 vai/.test(cfT) || /Võ tướng/.test(cfT) || /Trần câu \/ ngày còn/.test(cfT) || kidLabels.test(cfT.replace(/Vai trẻ em không thiết kế được nên không tính\./, ''))) throw new Error('hộp xác nhận: ' + cfT);
+    if (M.designCalls.length || dialogs) throw new Error('chưa bấm "Bắt đầu" mà đã tốn lượt / hiện hộp thoại hệ thống: ' + M.designCalls.length + ' lượt, ' + dialogs + ' hộp');
+    await shot(q, 'san-khau-giong-vung-xac-nhan', '.works > .stack:last-child > .panel:first-child');
+    await q.click(cf + ' button:text-is("Huỷ")'); if (await q.$(cf) || M.designCalls.length) throw new Error('Huỷ phải đóng hộp, không tốn lượt');
+    // chạy: tuần tự (không bao giờ 2 lời gọi cùng lúc), đúng 2 vai chưa thiết kế, KHÔNG có vai trẻ em, tiến độ, xong thì cast lại cả dàn
+    M.designDelay = 150; const nCast9 = M.casts.length;
+    await startRg(2);
+    await q.waitForFunction(() => /Thiết kế giọng vùng [01]\/2/.test(document.body.textContent) && !!document.querySelector('[aria-label="Tiến độ thiết kế giọng vùng"]'), null, { timeout: 8000 });
+    if (!await q.$eval(regB, b => b.disabled) || await q.$eval('button:text-is("Lồng tiếng AI")', b => !b.disabled)) throw new Error('đang thiết kế mà nút thiết kế / Lồng tiếng AI chưa khoá');
+    await q.waitForFunction(() => /Xong · đã thiết kế 2\/2 vai/.test(document.body.textContent), null, { timeout: 20000 });
+    if (JSON.stringify(M.designCalls) !== JSON.stringify([{ role: 'ba-lao', lang: 'vi', accent: 'nam' }, { role: 'quan-su', lang: 'vi', accent: 'nam' }]) || M.designPeak !== 1) throw new Error('thiết kế phải tuần tự đúng 2 vai (bà lão, quân sư), bỏ vai trẻ em + vai đã có: ' + JSON.stringify(M.designCalls) + ' · cao nhất ' + M.designPeak + ' lời gọi cùng lúc');
+    await poll(async () => /^giọng vùng có ở 3\/3 vai \(đã thiết kế\)/.test(await regionLine()), 'đếm 3/3 sau khi thiết kế');
+    await poll(async () => M.casts.length > nCast9, 'cast lại sau khi thiết kế xong');
+    const lastCast = M.casts[M.casts.length - 1];
+    if (lastCast.work !== RG || lastCast.actors.length !== 6 || lastCast.lang !== 'vi' || lastCast.accent !== 'nam') throw new Error('xong phải cast lại cả dàn của tác phẩm (6 diễn viên): ' + JSON.stringify([lastCast.work, lastCast.actors.length, lastCast.lang, lastCast.accent]));
+    if (!await q.$eval(regB, b => b.disabled) || !/Mọi vai trong phim đã có giọng thiết kế/.test(await q.$eval(regB, b => b.title))) throw new Error('đủ 3/3 thì nút phải mờ kèm lý do');
+    await shot(q, 'san-khau-giong-vung-xong', '.works > .stack:last-child > .panel:first-child');
+    if (!(await toasts(q)).some(t => /Đã thiết kế giọng vùng cho 2\/2 vai/.test(t)) || dialogs) throw new Error('thiếu toast xong / có hộp thoại hệ thống: ' + JSON.stringify(await toasts(q)));
+    // đổi giọng vùng của phim → đếm lại theo (vai, ngôn ngữ, giọng vùng): tiếng Trung Đài Loan chưa thiết kế vai nào
+    await q.selectOption('select[aria-label="Ngôn ngữ phim"]', 'zh|tw'); await q.waitForTimeout(300);
+    if (!/^giọng vùng có ở 0\/3 vai/.test(await regionLine())) throw new Error('zh|tw phải đếm lại 0/3: ' + await regionLine());
+    await q.selectOption('select[aria-label="Ngôn ngữ phim"]', 'vi|nam'); await q.waitForTimeout(300);
+    if (!/^giọng vùng có ở 3\/3 vai/.test(await regionLine())) throw new Error('quay về vi|nam phải 3/3: ' + await regionLine());
+    await q.close();
+    // dừng đúng ở 429 của Google: 1 vai xong, vai thứ hai gặp 429 → DỪNG (không gọi vai thứ ba), báo giờ thử lại + số vai đã xong
+    M.designs = {}; M.designCalls.length = 0; M.designDelay = 0; M.designBudget = 1;
+    await openRg('vi|nam'); await poll(async () => /^giọng vùng có ở 0\/3/.test(await regionLine()), 'đếm 0/3 trước khi thử 429');
+    await startRg(3);
+    await q.waitForFunction(() => /Dừng vì hết lượt — thử lại lúc \d{2}:\d{2}(?: \d{2}\/\d{2})? · đã thiết kế 1\/3 vai/.test(document.body.textContent), null, { timeout: 15000 });
+    await q.waitForTimeout(500);
+    if (M.designCalls.length !== 2) throw new Error('phải dừng ngay sau 429 (2 lời gọi: 1 xong + 1 bị 429), thấy ' + M.designCalls.length + ': ' + JSON.stringify(M.designCalls.map(c => c.role)));
+    if (!/^giọng vùng có ở 1\/3/.test(await regionLine()) || !(await toasts(q)).some(t => /Hết lượt giọng AI — thử lại lúc/.test(t) && /Đã thiết kế 1\/3 vai/.test(t))) throw new Error('sau 429: đếm 1/3 + toast hết lượt: ' + await regionLine() + ' · ' + JSON.stringify(await toasts(q)));
+    if (await q.$eval(regB, b => b.disabled)) throw new Error('hết lượt xong nút phải bấm lại được (lần sau thiết kế tiếp 2 vai còn lại)');
+    await q.close();
+    // chạm trần câu / ngày giữa lúc thiết kế: thông điệp "chạm trần" (không phải hết lượt Google)
+    M.designs = {}; M.designCalls.length = 0; M.designBudget = 0; M.designCap = true; M.today = 199;   // còn 1 lượt trong trần: hộp xác nhận phải nói (thiết kế cũng tính vào trần)
+    await openRg('vi|nam'); await q.click(regB); await q.waitForSelector(cf);
+    if (!/Trần câu \/ ngày còn 1 lượt \(Cài đặt AI\) — chạy tới đó sẽ dừng/.test(await q.textContent(cf))) throw new Error('hộp xác nhận phải báo trần ngày còn 1 lượt: ' + await q.textContent(cf));
+    await q.click(cf + ' button:text-is("Bắt đầu thiết kế 3 vai")');
+    await q.waitForFunction(() => /Dừng vì chạm trần câu \/ ngày \(Cài đặt AI\) — đọc tiếp lúc \d{2}:\d{2} \d{2}[\/-]\d{2} · đã thiết kế 0\/3 vai/.test(document.body.textContent), null, { timeout: 15000 });
+    if (M.designCalls.length !== 1 || !(await toasts(q)).some(t => /Đã chạm trần 200 câu hôm nay \(Cài đặt AI\)/.test(t)) || (await toasts(q)).some(t => /Hết lượt giọng AI/.test(t))) throw new Error('chạm trần khi thiết kế: ' + M.designCalls.length + ' lời gọi · ' + JSON.stringify(await toasts(q)));
+    M.designCap = false; M.designBudget = Infinity; M.today = 0;
+    await q.close();
+    // bấm "Dừng thiết kế" giữa chừng: vai đang chạy làm nốt, các vai sau không chạy
+    M.designs = {}; M.designCalls.length = 0; M.designDelay = 400;
+    await openRg('vi|nam'); await startRg(3);
+    await q.click('button:text-is("Dừng thiết kế")');
+    await q.waitForFunction(() => /Đã dừng · đã thiết kế 1\/3 vai/.test(document.body.textContent), null, { timeout: 15000 });
+    await q.waitForTimeout(700);
+    if (M.designCalls.length !== 1) throw new Error('Dừng thiết kế mà vẫn chạy tiếp: ' + M.designCalls.length + ' lời gọi');
+    M.designDelay = 0;
+    await q.close();
+    // dàn vượt 48: server trả `missing` → MỘT dòng báo ở khối Lồng tiếng (và chỉ khi có)
+    M.designs = {}; M.missing = ['a1', 'a2', 'a3'];
+    await openRg('vi|nam');
+    if (/vượt 48/.test(await q.textContent('.works'))) throw new Error('chưa cast mà đã báo vượt 48');
+    await q.click(dubB);
+    await poll(async () => /3 diễn viên vượt 48 chưa có giọng AI/.test(await q.textContent('.works')), 'dòng "3 diễn viên vượt 48 chưa có giọng AI"');
+    if ((await q.$$eval('.works .note.warn', es => es.filter(e => /vượt 48/.test(e.textContent)).length)) !== 1) throw new Error('dòng báo vượt 48 phải đúng MỘT dòng');
+    await q.close();
+    M.missing = []; await openRg('vi|nam'); await q.click(dubB); await poll(async () => /Chưa có câu thoại nào sẵn sàng/.test(await q.textContent('.works')), 'lồng tiếng xong (tác phẩm thử không có lời thoại)');
+    if (/vượt 48/.test(await q.textContent('.works'))) throw new Error('server không báo missing mà vẫn hiện dòng vượt 48');
+    await q.close();
+    console.log('  ✓ Giọng vùng thật + dàn vượt 48: cast cả dàn gửi work (server chốt giọng) · Sân khấu final "giọng vùng có ở N/M vai (đã thiết kế)" (trùng vai đếm một, vai trẻ em không tính, đếm theo ngôn ngữ + giọng vùng) · nút "Thiết kế giọng vùng cho các vai": hộp xác nhận TRONG TRANG (≈ N lượt Google, ~25 s mỗi vai, không hộp thoại hệ thống, Huỷ không tốn), tuần tự đúng các vai còn thiếu, tiến độ + khoá nút, xong cast lại cả dàn · dừng ngay ở 429 (báo giờ thử lại, không gọi vai kế) · chạm trần ngày báo riêng · nút Dừng giữa chừng · dàn vượt 48 → đúng một dòng "N diễn viên vượt 48 chưa có giọng AI"');
 
     if (M.leaks.length) throw new Error('có yêu cầu ra ngoài máy: ' + M.leaks.slice(0, 3).join(' | '));
     if (errs10.length) throw new Error('lỗi trang: ' + errs10.slice(0, 3).join(' | '));
