@@ -94,7 +94,7 @@ logs() { if [ "$MODE" = docker ]; then docker compose logs -f --tail 200; else t
 open_ui() { local u="http://localhost:$PORT"; [ -n "${GC_API_TOKEN:-}" ] && echo "Bản cài có khoá: đăng nhập Studio bằng GC_API_TOKEN trong $HOME_DIR/.env"; (command -v open >/dev/null && open "$u") || (command -v xdg-open >/dev/null && xdg-open "$u") || echo "$u"; }
 
 # ---------------------------------------------------------------- MCP ra ngoài (Cloudflare Tunnel)
-# genchibi expose <tên-miền>: tạo tunnel có tên, trỏ DNS, chỉ cho đường /mcp đi qua, sinh khoá, in link nối.
+# genchibi expose <tên-miền>: tạo tunnel có tên, trỏ DNS, chỉ cho đường /mcp + OAuth (xem config.yml bên dưới) đi qua, sinh khoá, in link nối.
 sync_compose() {
   [ "$MODE" = docker ] && [ -f current/docker-compose.yml ] && ! cmp -s current/docker-compose.yml docker-compose.yml && cp current/docker-compose.yml docker-compose.yml
   return 0
@@ -196,6 +196,15 @@ Nối agent:
   Cursor/khác      {"mcpServers":{"gen-chibi":{"url":"$u"}}}
 Lộ link: genchibi expose --rotate (link cũ chết ngay).
 EOF
+  # OAuth (v0.19): không cần chép khoá — dán địa chỉ gốc vào Claude, bấm Cấp phép trên web. Cần GC_PUBLIC_URL (named tunnel); tunnel cũ phải chạy lại expose để mở thêm đường OAuth.
+  if [ "${GC_TUNNEL:-}" = named ] && [ -n "${GC_PUBLIC_URL:-}" ]; then cat <<EOF
+
+Kết nối OAuth (khuyên dùng — không phải chép khoá):
+  Claude web/app   Settings › Connectors › Add custom connector › dán ${GC_PUBLIC_URL}/mcp › Connect › "Cấp phép" (nhập GC_API_TOKEN, chọn mức quyền)
+  Claude Code      claude mcp add --transport http gen-chibi ${GC_PUBLIC_URL}/mcp
+  Quản lý / thu hồi: Studio › Hệ thống › Kết nối agent.  (Cập nhật từ bản trước v0.19: chạy lại genchibi expose ${GC_PUBLIC_URL#https://} để mở thêm đường OAuth)
+EOF
+  fi
 }
 cf_login() { # lấy cert.pem (chứng chỉ tài khoản Cloudflare) vào $TDIR/.cloudflared — chỉ dùng lúc thiết lập
   local host="$1" dest="$TDIR/.cloudflared/cert.pem" dl f i
@@ -254,12 +263,25 @@ expose_named() { # expose_named <tên-miền> [--overwrite-dns]
   id="$(json TunnelID < "$TDIR/.cloudflared/creds.json")"
   allow_host "$host"
   cat > "$TDIR/config.yml" <<EOF
-# sinh bởi genchibi expose — chỉ cho đường /mcp ra Internet; Studio ở lại máy này
+# sinh bởi genchibi expose — chỉ cho các đường của MCP + OAuth ra Internet (Studio và /api khác ở lại máy này):
+#   /mcp*                                    MCP (link có khoá + Bearer)
+#   /.well-known/oauth-*                     agent tự khám phá (RFC 9728 / 8414)
+#   /oauth/register|token|revoke|authorize   đăng ký, đổi token, thu hồi; authorize = trang Cấp phép tự chứa (chủ nhập GC_API_TOKEN)
+#   /api/oauth/approve                       nút Cấp phép của trang đó (đòi token chủ máy)
 tunnel: $id
 credentials-file: $(CFH)/.cloudflared/creds.json
 ingress:
   - hostname: $host
     path: ^/mcp(/.*)?$
+    service: $(origin_url)
+  - hostname: $host
+    path: ^/\.well-known/oauth-(protected-resource|authorization-server)(/.*)?$
+    service: $(origin_url)
+  - hostname: $host
+    path: ^/oauth/(register|token|revoke|authorize)$
+    service: $(origin_url)
+  - hostname: $host
+    path: ^/api/oauth/approve$
     service: $(origin_url)
   - service: http_status:404
 EOF
