@@ -5,6 +5,7 @@
 #   2c/2d) item trang bị, cảnh (loại asset thứ hai, thứ ba)
 #   3) MCP: bắt tay, danh sách tool, tạo nhân vật / linh kiện / item / cảnh, chặn dữ liệu xấu
 #   4) tự cập nhật end-to-end (tools/test-update.sh)
+#   4c) OAuth cho MCP từ xa (tools/test-oauth.mjs)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -722,6 +723,9 @@ node tools/test-dock-core.mjs || exit 1
 
 echo "4) khoá truy cập"
 bash tools/test-auth.sh || exit 1
+
+echo "4c) OAuth 2.1 cho MCP từ xa (v0.19): 401 khám phá · metadata · DCR (allowlist callback, không secret, trần, tốc độ) · authorize chỉ chủ duyệt · PKCE / resource / iss · code một lần · refresh xoay vòng · hết hạn · thu hồi · phạm vi → kênh sẵn có · oauth.json chỉ băm · đường máy qua cổng đăng nhập ngoài giả"
+node tools/test-oauth.mjs || exit 1
 
 echo "5) tự cập nhật"
 bash tools/test-update.sh
