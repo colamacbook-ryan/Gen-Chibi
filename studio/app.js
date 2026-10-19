@@ -227,7 +227,7 @@
     cleanup.forEach(function (f) { try { f(); } catch (e) { /* bỏ qua */ } });
     cleanup = [];
     route = r;
-    if (r.page !== 'works') setHash('');   // địa chỉ #/tac-pham/<id>/<tab> chỉ có ở Tạo tác › Tác phẩm
+    if (r.page !== 'works') setHash('', !!location.hash);   // địa chỉ #/tac-pham/<id>/<tab> chỉ có ở Tạo tác › Tác phẩm
     try { localStorage.setItem(routeKey(APP), JSON.stringify(r)); } catch (e) { /* bỏ qua */ }
     renderNav();
     document.body.setAttribute('data-zone', APP ? APP.zone : 'home');
@@ -2058,7 +2058,7 @@
   /* ---- Danh sách tác phẩm ---- */
   function worksList(r) {
     crumbs([{ t: 'Tác phẩm' }]);
-    setHash('');
+    setHash('', !!location.hash);   // từ một phòng ra danh sách: thêm một mục lịch sử để Back quay lại đúng phòng
     if (Store.mode !== 'server') { $('view').appendChild(h('div', { class: 'panel pad note lib-empty', text: 'Khu Tạo tác (tác phẩm, AI đạo diễn) chạy ở bản cài trên máy.' })); return; }
     dockObj('project', null);
     // r.project chỉ dùng một lần (vào từ một dự án) — không lưu vào route để lần mở sau không hỏi lại

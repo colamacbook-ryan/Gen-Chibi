@@ -489,7 +489,7 @@
         if (S.key === key) S.msgs.push({ role: 'assistant', content: r.reply || '', log: r.log, anchors: r.anchors, renders: r.renders });
         if (r.work) Works.put(r.work);
         if (S.key !== key) toast('AI đã trả lời ở luồng khác — mở lại đối tượng đó để xem.');
-        B.refreshData(r);
+        return Promise.resolve(B.refreshData(r)).catch(function () { /* nạp lại kho lỗi: chip kiểm lại ở lần vẽ sau */ });   // nạp kho TRƯỚC khi vẽ chip → chip của asset vừa tạo không bị báo "không còn"
       })
       .catch(function (e) { if (S.key === key) S.msgs.push({ role: 'assistant', content: 'Lỗi: ' + e.message, err: true }); })
       .then(function () { S.busy = false; paintLog(); paintGate(); });
