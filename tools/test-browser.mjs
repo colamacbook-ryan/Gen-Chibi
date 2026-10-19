@@ -100,13 +100,14 @@ if (!ONLY) {
       await btn.click(); await q.waitForTimeout(350);
       const zone = await q.evaluate(() => document.body.getAttribute('data-zone')), tag = await q.textContent('.zone-tag');
       if (!zone || !tag) throw new Error('trang "' + label + '" thiếu nhãn khu');
-      if (zone === 'lib' && /zone-lib/.test(cls)) {
+      if (zone === 'lib' && /zone-lib/.test(cls) && !/^(Âm thanh|Giọng)\d*$/.test(label)) {   // Âm thanh / Giọng là bảng Data Console (không phải lưới thẻ), có test riêng ở nhóm lib
         // Thư viện không bày đồ của khung: bản cài mới thì trống (có lời dẫn); có asset đã tạo thì có thẻ + khu Dùng
         const cards = await q.$$('.libcard'), use = await q.$$('.usebar'), code = await q.$('textarea.code'), empty = await q.$('.lib-empty');
-        if (!empty && !/^(Âm thanh|Giọng)$/.test(label) && (!cards.length || use.length < 2 || !code)) throw new Error('thư viện "' + label + '" thiếu thẻ hoặc khu Dùng');   // Âm thanh / Giọng là bảng Data Console, có test riêng (nhóm lib)
+        if (!empty && (!cards.length || use.length < 2 || !code)) throw new Error('thư viện "' + label + '" thiếu thẻ hoặc khu Dùng');
         if (cards.length && await q.$('.libcard img[alt="Ma-nơ-canh"]')) throw new Error('thư viện "' + label + '" bày đồ của khung');
         if (code) { const txt = await code.inputValue(); if (!/\//.test(txt)) throw new Error('thư viện "' + label + '": mã tham chiếu rỗng'); }
       }
+      if (zone === 'lib' && /^(Âm thanh|Giọng)\d*$/.test(label) && (await q.$$('.lc-t tbody tr[data-id]')).length < 22) throw new Error('trang "' + label + '" không có bảng');
       if (label === 'Bộ khung chuẩn' && (await q.$$('.libcard')).length < 10) throw new Error('trang Bộ khung chuẩn thiếu khối vật phẩm');
       if (!new RegExp('/' + app + '$').test(new URL(q.url()).pathname)) throw new Error('trang "' + label + '" rời khỏi ứng dụng ' + app);
     }
@@ -1281,7 +1282,7 @@ if (!ONLY || ONLY === 'lib') {
     must(!(await q.$eval('#lvCastAll', e => e.disabled)), 'có tác phẩm + có máy chủ: nút "Chốt giọng cả dàn" phải bấm được');
     await q.selectOption('#lvWork', ''); await pollq(async () => (await rowsOf()).length === 7, 'không chọn tác phẩm: 7 nhân vật của dự án', 6000);
     must(await q.$eval('#lvCastAll', e => e.disabled), 'không chọn tác phẩm thì không chốt giọng cả dàn được');
-    console.log('  ✓ Thư viện › Giọng › Giọng của tác phẩm: nhân vật → vai → giọng chốt (work.voices) · nguồn (chốt / chưa chốt) · ▶ máy + ▶ AI dùng đúng giọng chốt (dry) · chưa chốt thì nút AI mờ · không chọn tác phẩm = nhân vật theo dự án'); await q.close();
+    console.log('  ✓ Thư viện › Giọng › Giọng của dự án / tác phẩm: nhân vật → vai → giọng chốt (work.voices) · nguồn (chốt / chưa chốt) · ▶ máy + ▶ AI dùng đúng giọng chốt (dry) · chưa chốt thì nút AI mờ · không chọn tác phẩm = nhân vật theo dự án'); await q.close();
 
     must(M.leaks.length === 0, 'có yêu cầu ra ngoài máy: ' + M.leaks.slice(0, 3).join(' | '));
     must(errs11.length === 0, 'lỗi trang: ' + errs11.slice(0, 3).join(' | '));

@@ -3642,7 +3642,7 @@
         server ? h('button', { class: 'btn sm', type: 'button', id: 'lvKey', onclick: function () { go({ page: 'ai', focus: 'voice' }); } }, c && c.hasKey ? 'Bật ở Cài đặt AI › Giọng AI' : 'Dán key ở Cài đặt AI › Giọng AI') : null));
     }
     function paintTabs() {
-      clear(tabsEl).appendChild(lcTabs([['roles', 'Bộ giọng vai', V.roleList().length], ['works', 'Giọng của tác phẩm', '']], st.tab, function (t) { st.tab = t; remember(); paintTabs(); paintTab(); }));
+      clear(tabsEl).appendChild(lcTabs([['roles', 'Bộ giọng vai', V.roleList().length], ['works', 'Giọng của dự án / tác phẩm', '']], st.tab, function (t) { st.tab = t; remember(); paintTabs(); paintTab(); }));
     }
     function paintTab() { gen++; A.hush(); clear(body); (st.tab === 'works' ? paintWorks : paintRoles)(body); }
     function usersOf(role) {   // nhân vật (trong dự án đang chọn) đang dùng vai này
