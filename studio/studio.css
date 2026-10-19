@@ -476,10 +476,11 @@ table.worklist th:nth-child(n+4):nth-child(-n+6) { text-align: right; }
 table.worklist a.rowlink { color: var(--fg); text-decoration: none; }
 table.worklist a.rowlink:hover b { color: var(--accent); text-decoration: underline; }
 table.worklist td.empty { padding: 28px; text-align: center; color: var(--fg2); }
-table.worklist td.id { max-width: 128px; overflow: hidden; text-overflow: ellipsis; }
-table.worklist td, table.worklist th { padding: 6px 8px; }
-table.worklist td:nth-child(2) { min-width: 200px; }
-table.worklist .tag { max-width: 150px; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+table.worklist td.id { max-width: 104px; overflow: hidden; text-overflow: ellipsis; }
+table.worklist td, table.worklist th { padding: 6px 6px; }
+table.worklist .chip { padding: 0 6px; }
+table.worklist td:nth-child(2) { min-width: 150px; }
+table.worklist .tag { max-width: 112px; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
 .toolbar.newwork { padding: 6px 8px; border: 1px dashed var(--line-strong); border-radius: 6px; background: var(--raised); }
 .toolbar { gap: 8px; } .toolbar .sp { flex: 1; }
 .room { display: grid; gap: 12px; align-content: start; min-width: 0; }
@@ -557,3 +558,8 @@ table.worklist .tag { max-width: 150px; overflow: hidden; text-overflow: ellipsi
 }
 body.dock-open:not(.dock-narrow) .toast { right: calc(var(--dock-w, 0px) + 20px); }   /* thông báo không che nút Gửi của dock */
 .dock [hidden], .room [hidden] { display: none !important; }
+/* đầu trang: tên trang không bị bóp khi dock đang mở — dòng ghi chú ở vùng hành động co lại + dấu … */
+.pagehead .crumbs { flex: none; white-space: nowrap; }
+.pagehead .actions { min-width: 0; flex: 0 1 auto; }
+.pagehead .actions > .note { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@container pane (max-width: 1000px) { .detail .panel, .split.create .panel { overflow-x: auto; } }

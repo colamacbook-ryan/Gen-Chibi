@@ -2467,7 +2467,8 @@
       headBox.appendChild(h('span', { class: 'chip ' + (W.shots.length && ok === W.shots.length ? 'ok' : ''), title: 'Số cảnh đã duyệt "Đạt" / tổng số cảnh', text: 'Đạt ' + ok + '/' + W.shots.length }));
       if (st.voiceTotal) headBox.appendChild(h('span', { class: 'chip ' + (st.voiceDone === st.voiceTotal ? 'ok' : ''), title: 'Câu thoại đã lồng tiếng AI / tổng số câu', text: 'Giọng AI ' + st.voiceDone + '/' + st.voiceTotal }));
     }
-    function stillOf(s) { var u = stillURL(s); return u ? h('img', { class: 'still', src: u, alt: 'Khung đầu của ' + s.title, loading: 'lazy' }) : h('div', { class: 'still none note', text: 'chưa có bối cảnh' }); }
+    var stillCache = {};   // ảnh khung đầu dựng MỘT lần mỗi lần vẽ phòng (thẻ phân cảnh + hàng duyệt dùng chung) — L-42
+    function stillOf(s) { var u = stillCache[s.id]; if (u === undefined) u = stillCache[s.id] = stillURL(s); return u ? h('img', { class: 'still', src: u, alt: 'Khung đầu của ' + s.title, loading: 'lazy' }) : h('div', { class: 'still none note', text: 'chưa có bối cảnh' }); }
     function paintCast() {
       clear(castBox);
       var acts = AiVoice.actorsOf(W), chosen = (W.voices || {})[workLang(W).lang + '|' + workLang(W).accent] || {};
@@ -2705,6 +2706,7 @@
     WORK_TABS.forEach(function (t) { panels[t[0]].id = 'wpanel-' + t[0]; panels[t[0]].setAttribute('role', 'tabpanel'); panels[t[0]].setAttribute('aria-labelledby', 'wtab-' + t[0]); panels[t[0]].hidden = t[0] !== tab; body.appendChild(panels[t[0]]); });
     $('view').appendChild(h('div', anc({ class: 'works room-wrap' }, 'work:' + r.work, r.work), body));
     function paint() {
+      stillCache = {};
       syncLang(); paintDub(); paintHead(); paintTabs();
       logline.value = draftScript ? draftScript.logline : W.logline || ''; script.value = draftScript ? draftScript.script : W.script || '';
       langSel2.value = langSel.value; langNote2.textContent = langNote.textContent; langNote2.className = langNote.className;

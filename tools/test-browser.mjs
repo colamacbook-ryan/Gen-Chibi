@@ -1817,6 +1817,9 @@ if (!ONLY || ONLY === 'dock') {
     await q.evaluate(() => { localStorage.setItem('gc-route-xuong', JSON.stringify({ page: 'workshop' })); localStorage.setItem('gc-dock', JSON.stringify({ open: false, w: 380 })); });
     await q.goto(U11 + 'xuong'); await q.waitForSelector('#dock .dock-head'); await q.waitForTimeout(500);
     if (!(await q.evaluate(() => document.body.classList.contains('dock-open') && window.GCDock.state().open))) throw new Error('route workshop cũ không mở dock');
+    // màn chọn khu ("/") và trang Hệ thống cũng có dock (vai chung)
+    await q.goto(U11); await q.waitForSelector('.appcard'); await q.waitForSelector('#dock .dock-ctx .path');
+    if (!(await q.isVisible('#dock .dock-head')) || !/Hệ thống|Chọn khu/.test(await q.textContent('#dock .dock-ctx .path'))) throw new Error('màn chọn khu: dock / context: ' + await q.textContent('#dock .dock-ctx'));
     await q.close();
     console.log('  ✓ Dock Trợ lý AI có ở cả 4 khu (Xưởng · Bộ khung · Thư viện · Tạo tác), không còn trang chat riêng; context bar + payload + bộ tool + chỉ dẫn đổi theo khu; route cũ "workshop" mở dock');
 
