@@ -582,9 +582,9 @@ no(M.turns.max > 48, "đổi góc nhìn giật " + M.turns.max.toFixed(1) + " (�
 no(M.variety.minPair < 7.5, "hai hành vi cùng dáng: " + M.variety.minPairAt + " " + M.variety.minPair.toFixed(1));
 no(M.time.slowmo < 0.8 || M.time.hitstops < 3, "thiếu slow-mo / hit-stop");
 no(M.views < 4 || M.faces < 20 || M.sfx < 30 || M.fx < 25, "thiếu góc nhìn / nét mặt / âm thanh / hiệu ứng: " + JSON.stringify({ views: M.views, faces: M.faces, sfx: M.sfx, fx: M.fx }));
-// mọi tiếng động đều có trong bộ âm thanh tổng hợp; mọi nét mặt / hiệu ứng nhân vật đều có trong thư viện
-const SFX = fs.readFileSync("engine/audio.js", "utf8");
-tl.events.forEach(e => [].concat(e.sfx || []).forEach(n => no(!new RegExp("\\b" + n + ":").test(SFX), "tiếng " + n + " không có trong engine/audio.js")));
+// mọi tiếng động đều có trong thư viện âm (engine/sounds.js); mọi nét mặt / hiệu ứng nhân vật đều có trong thư viện
+const SND = require("./engine/sounds.js");
+tl.events.forEach(e => [].concat(e.sfx || []).forEach(n => no(!SND.has(n), "tiếng " + n + " không có trong thư viện âm (engine/sounds.js)")));
 tl.faces.forEach(f => { const F = f.full; no(F.eyes && !GC.LIB.eyePoses[F.eyes] || F.brows && !GC.LIB.browPoses[F.brows] || F.mouth && !GC.LIB.mouths[F.mouth] || (F.fx || []).some(x => !GC.LIB.fx[x]), "nét mặt lạ: " + JSON.stringify(F)); });
 // khung hình Node: SVG đủ lớp, không NaN; tua đúng giờ (giờ thật ↔ giờ truyện đơn điệu)
 for (const r of [0, 7.3, 14.9, 22.1, M.real]) { const s = C.frameSVG(tl, r); no(/NaN|undefined/.test(s) || s.length < 20000, "khung " + r + " s hỏng"); }
@@ -599,7 +599,9 @@ echo "2j) gói động tác: cổng chặn từng kiểu tấn công · hình h�
 node tools/test-motion.js || exit 1
 echo "2k) giọng AI (Google Gemini TTS) với mạng giả: lưu đệm, đổi model khi hết hạn mức, thẻ cảm xúc, không lộ key"
 node tools/test-voice.js || exit 1
-echo "2l) âm thanh: từ vựng tiếng động · dựng offline 17 tiếng (không vỡ / NaN, độ to đồng đều, đúng thời lượng, ≤ 40 node) · limiter khi chồng · clip giọng trong say() (miệng theo biên độ thật, chữ theo tỉ lệ, hush, dự phòng, LRU) — cần Playwright, không có thì bỏ qua phần trình duyệt"
+echo "2m) thư viện âm thanh: cổng kiểm gói âm (từng luật một ca sai, không mã, ≤ 60 node) · trùng tên chỉ ra gói giữ tên · 17 tên cũ · tự gán = bảng cũ · luật ghép S1–S7 · gói Tam Quốc"
+node tools/test-sounds.js || exit 1
+echo "2l) âm thanh: dựng offline MỌI âm của thư viện (không vỡ / NaN, không câm, không gắt kéo dài, độ to ±7 dB, đúng thời lượng, node ≤ ngân sách) · limiter khi chồng · ghép mẫu · rò node · CPU sfx() · nạp gói / trùng tên trên trang · clip giọng trong say() — cần Playwright, không có thì bỏ qua phần trình duyệt"
 node tools/test-audio.mjs || exit 1
 echo "3) MCP"
 H="$(mktemp -d)"; PORT=7495
