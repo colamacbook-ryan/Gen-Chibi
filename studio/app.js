@@ -292,7 +292,9 @@
     h: h, add: add, clear: clear, toast: toast, Store: Store, get Projects() { return Projects; }, MY_PACK: MY_PACK,
     go: function (r) { go(r); }, route: function () { return route; }, APP: function () { return APP; },
     zoneNow: function () { return APP ? APP.zone : 'home'; }, zoneOfPage: zoneOf, inProject: function (arr, pid) { return inProject(arr, pid); },
-    quick: dockQuick, refreshData: refreshData
+    quick: dockQuick, refreshData: refreshData,
+    // trang chủ của một khu cho chip "Mở <khu>" của AI (anchor zone:<id>): Bộ khung = trang khung; ba ứng dụng = home của ứng dụng
+    zoneHome: function (zone) { if (zone === 'khung') return { page: 'khung' }; var a = appById(zone); return a ? { page: a.home } : null; }
   };
   var ZONE_LABEL = { lib: 'Thư viện', make: 'Tạo tác', fab: 'Xưởng', sys: 'Hệ thống', home: 'gen-chibi' };
   // Màn chọn lớp ("/"): ba ứng dụng độc lập theo dòng chảy Xưởng → Thư viện → Tạo tác

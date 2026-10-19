@@ -334,6 +334,14 @@ class MCP {
     }
     return this.GC.migrate(x);
   }
+  // khu Thư viện = thủ thư: tìm / xem / GHÉP asset ĐÃ CÓ — không tạo từ đầu (CNS-125); tạo mới là việc của Xưởng (bộ khung + cổng kiểm). ctx.zone do ai.js truyền
+  libraryGuard(ctx, kind, def) {
+    if (!ctx || ctx.channel !== 'ui' || ctx.zone !== 'thu-vien') return null;
+    this.sync();
+    const key = MY_PACK + '/' + String((def && def.id) || '').toLowerCase(), GC = this.GC;
+    if (kind === 'character' ? GC.ASSETS[key] : kind === 'item' ? GC.ITEMS[key] : GC.SCENES[key]) return null;
+    return toolError('Khu Thư viện chỉ ghép / sửa asset ĐÃ CÓ, không tạo mới từ đầu. Mời người dùng sang Xưởng bằng chip ⟦zone:xuong|Mở Xưởng⟧ (Xưởng có bộ khung + cổng kiểm để tạo).', { code: 'FORBIDDEN' });
+  }
   // pack nhóm "frame" (khung chuẩn của Gen Labs — không ai sửa, chỉ làm bản sao)
   isFrame(pack) { const P = pack ? this.GC.canonPack(String(pack)) : ''; return !!P && Object.prototype.hasOwnProperty.call(this.GC.PACKS, P) && this.GC.PACKS[P].group === 'frame'; }
   // vật phẩm / bối cảnh chép từ khung (mang pack hoặc key của khung) → bản sao là nháp
@@ -369,6 +377,7 @@ class MCP {
         return json({ ok: true, gates: g, warnings: warn });
       }
       case 'save_character': {
+        const lg = this.libraryGuard(ctx, 'character', args.asset); if (lg) return lg;
         let r;
         try { r = this.saveAssetChecked(args.asset, args.note || 'Lưu qua ' + (ctx && ctx.channel === 'ui' ? 'AI trong Studio' : 'MCP')); }
         catch (e) { return e.gates ? legacyError({ saved: false, blocking: e.blocking, gates: e.gates }, e, { code: 'VALIDATION_FAILED', errors: e.gates.filter(g => (e.blocking || []).indexOf(g.id) >= 0).map(g => 'gates.' + g.id + ': ' + g.label + (g.detail ? ' (' + g.detail + ')' : '')) }) : toolError(e); }
@@ -606,6 +615,7 @@ class MCP {
         return c.errors.length ? legacyError({ ok: false, errors: c.errors, gates: [] }, 'Trang bị chưa đạt: ' + c.errors.slice(0, 6).join('; '), { code: 'VALIDATION_FAILED', errors: c.errors }) : json({ ok: true, errors: [], gates: GC.itemGate(c.def) });
       }
       case 'save_item': {
+        const lg = this.libraryGuard(ctx, 'item', args.item); if (lg) return lg;
         let rec;
         try { rec = this.saveItemChecked(args.item, args.note || 'Lưu qua MCP'); }
         catch (e) { return legacyError({ saved: false, errors: e.errors || [e.message] }, e); }
@@ -637,6 +647,7 @@ class MCP {
         return c.errors.length ? legacyError({ ok: false, errors: c.errors, gates: [] }, 'Cảnh chưa đạt: ' + c.errors.slice(0, 6).join('; '), { code: 'VALIDATION_FAILED', errors: c.errors }) : json({ ok: true, errors: [], gates: GC.sceneGate(c.def) });
       }
       case 'save_scene': {
+        const lg = this.libraryGuard(ctx, 'scene', args.scene); if (lg) return lg;
         let rec;
         try { rec = this.saveSceneChecked(args.scene, args.note || 'Lưu qua MCP'); }
         catch (e) { return legacyError({ saved: false, errors: e.errors || [e.message] }, e); }
@@ -1559,7 +1570,7 @@ const UI_BASE = [
 ];
 const ANCHOR_SYNTAX = [
   'SOI — chỉ chỗ cho người dùng: khi nhắc tới một phần tử trên giao diện, LUÔN viết anchor dạng ⟦anchor|nhãn ngắn⟧ (giao diện hiện thành nút bấm: rê = tô sáng, bấm = đi tới). Không nói suông "ở trên", "bảng kia".',
-  'Anchor: asset:<pack>/<id> (nhân vật) · item:<pack>/<id> (vật phẩm) · scene:<pack>/<id> (bối cảnh) · action:<id> (hành động / đòn) · work:<id> (tác phẩm) · shot:<id tác phẩm>/<id phân cảnh> · step:<id tác phẩm>/<id phân cảnh>/<số bước, từ 1> · project:<id> (dự án chủ đề). Ví dụ: ⟦shot:phim-ci/canh-2|Cảnh 2 · Vườn đào⟧, ⟦asset:local.my/gia-cat-luong|Gia Cát Lượng⟧.',
+  'Anchor: asset:<pack>/<id> (nhân vật) · item:<pack>/<id> (vật phẩm) · scene:<pack>/<id> (bối cảnh) · action:<id> (hành động / đòn) · work:<id> (tác phẩm) · shot:<id tác phẩm>/<id phân cảnh> · step:<id tác phẩm>/<id phân cảnh>/<số bước, từ 1> · project:<id> (dự án chủ đề) · zone:<xuong|khung|thu-vien|tao-tac> (chuyển sang khu đó). Ví dụ: ⟦shot:phim-ci/canh-2|Cảnh 2 · Vườn đào⟧, ⟦asset:local.my/gia-cat-luong|Gia Cát Lượng⟧, ⟦zone:xuong|Mở Xưởng⟧.',
   'Chỉ dùng id CÓ THẬT (từ tool hoặc từ phần tử người dùng ghim). Thứ vừa tạo / sửa bằng tool tự hiện thành nút — vẫn nên nhắc bằng anchor trong lời.'
 ];
 // ranh giới tin cậy (CNS-118): chỉ dẫn hệ thống là luật; mọi chữ người / AI khác viết nằm trong tin DỮ LIỆU GIAO DIỆN

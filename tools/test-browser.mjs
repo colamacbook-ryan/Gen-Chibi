@@ -2240,22 +2240,24 @@ if (!ONLY || ONLY === 'dock') {
 
     // ---- 4) Soi: chip trong trả lời → rê tô sáng, bấm đi tới + tô sáng 2 s; "không còn"; kết quả tool tự thành chip ----
     q = await open11(ctx11, U11 + 'thu-vien');
-    LLM.steps = [['save_character', { asset: { id: 'tq-ai-moi', name: 'Tướng AI mới', project: 'mau-tam-quoc', look: { eyes: 'round', brows: 'normal', parts: { hat: 'gen.khung/khoi-mu' } } } }]];
+    // khu Thư viện chỉ ghép / sửa asset ĐÃ CÓ (CNS-125): AI chỉnh Lưu Bị → kết quả tool tự thành chip
+    const luuRec = await fetch(U11 + 'api/assets/local.my/tq-luu-bi', { headers: H11 }).then(r => r.json());
+    LLM.steps = [['save_character', { asset: Object.assign({}, luuRec, { persona: 'Đại ca nhân hậu (AI chỉnh ở Thư viện)' }) }]];
     LLM.reply = 'Mời xem ⟦shot:' + WID + '/' + S1.id + '|Cảnh đầu⟧ và ⟦asset:local.my/ma-khong-ton-tai|Người lạ⟧ nhé.';
-    await ask(q, 'Làm một tướng mới và chỉ cho tôi cảnh đầu');
+    await ask(q, 'Chỉnh tính cách Lưu Bị và chỉ cho tôi cảnh đầu');
     const chips = await q.$$('#dock .msg.assistant .achip');
     if (chips.length < 3) throw new Error('thiếu chip trong trả lời (cảnh, người lạ, kết quả tool): ' + chips.length);
     await q.waitForFunction(() => document.querySelector('#dock .msg.assistant .achip.gone'));
     const gtx = await q.textContent('#dock .msg.assistant .achip.gone');
     if (!/không còn/.test(gtx) || !(await q.$eval('#dock .achip.gone', e => e.disabled)) || !/không còn/.test(await q.getAttribute('#dock .achip.gone', 'aria-label'))) throw new Error('chip phần tử không tồn tại: ' + gtx);
-    if (!(await q.$('#dock .msg.assistant .made .achip[data-chip="asset:local.my/tq-ai-moi"]'))) throw new Error('nhân vật AI vừa tạo không tự thành chip');
+    if (!(await q.$('#dock .msg.assistant .made .achip[data-chip="asset:local.my/tq-luu-bi"]'))) throw new Error('nhân vật AI vừa sửa không tự thành chip');
     const kind = await q.$eval('#dock .msg.assistant .achip', e => e.tagName + ':' + (e.getAttribute('aria-label') || ''));
     if (!/^BUTTON:Chỉ tới/.test(kind)) throw new Error('chip phải là <button> có aria-label: ' + kind);
     // rê chip nhân vật vừa tạo (thẻ nằm trong Thư viện sau khi dock nạp lại): thẻ được tô sáng, phần còn lại mờ
-    await q.waitForSelector('.libcard[data-anchor="asset:local.my/tq-ai-moi"]', { timeout: 5000 });
-    await q.hover('#dock .msg.assistant .made .achip[data-chip="asset:local.my/tq-ai-moi"]');
+    await q.waitForSelector('.libcard[data-anchor="asset:local.my/tq-luu-bi"]', { timeout: 5000 });
+    await q.hover('#dock .msg.assistant .made .achip[data-chip="asset:local.my/tq-luu-bi"]');
     await q.waitForSelector('.spot-ring:not([hidden])'); const dimShadow = await q.$eval('.spot-ring', e => getComputedStyle(e).boxShadow);
-    if (!/rgba?\(0, 0, 0, 0\.4/.test(dimShadow) || !/Tướng AI mới/.test(await q.textContent('.spot-ring'))) throw new Error('rê chip: tô sáng + nhãn + làm mờ phần còn lại: ' + dimShadow);
+    if (!/rgba?\(0, 0, 0, 0\.4/.test(dimShadow) || !/Lưu Bị/.test(await q.textContent('.spot-ring'))) throw new Error('rê chip: tô sáng + nhãn + làm mờ phần còn lại: ' + dimShadow);
     await q.mouse.move(700, 600); await q.waitForSelector('.spot-ring', { state: 'hidden' });
     // bấm chip phân cảnh: điều hướng sang Tạo tác (ứng dụng khác) → tô sáng đúng phân cảnh 2 giây
     await q.click('#dock .msg.assistant .achip[data-chip="shot:' + WID + '/' + S1.id + '"]');
@@ -2265,7 +2267,18 @@ if (!ONLY || ONLY === 'dock') {
     if (!near) throw new Error('vòng tô sáng không nằm đúng phân cảnh');
     await q.waitForSelector('.spot-ring', { state: 'hidden', timeout: 4000 });
     await q.close();
-    console.log('  ✓ Soi: anchor trong trả lời thành <button aria-label> · rê = viền + nhãn + phần còn lại mờ · bấm = đi tới (qua ứng dụng khác) + tô sáng 2 s rồi tắt · phần tử không tồn tại = chip "không còn" (vô hiệu) · asset AI vừa tạo tự thành chip');
+    // Thư viện KHÔNG tạo asset mới từ đầu: tool bị từ chối (✗ trong nhật ký), không có asset mới; AI mời sang Xưởng bằng chip zone: bấm vào → mở ứng dụng Xưởng
+    q = await open11(ctx11, U11 + 'thu-vien');
+    LLM.steps = [['save_character', { asset: { id: 'tq-ai-moi', name: 'Tướng AI mới', project: 'mau-tam-quoc', look: { eyes: 'round', brows: 'normal', parts: { hat: 'gen.khung/khoi-mu' } } } }]];
+    LLM.reply = 'Tạo asset mới thì sang Xưởng nhé: ⟦zone:xuong|Mở Xưởng⟧.';
+    await ask(q, 'Vẽ cho tôi một tướng mới');
+    if (!(await q.$('#dock .msg.assistant .toollog .bad')) || (await fetch(U11 + 'api/assets/local.my/tq-ai-moi', { headers: H11 })).status !== 404) throw new Error('Thư viện: tạo asset mới từ đầu phải bị từ chối');
+    const zchip = '#dock .msg.assistant .achip[data-chip="zone:xuong"]';
+    await q.waitForSelector(zchip); if ((await q.textContent(zchip + ' .tx')).trim() !== 'Mở Xưởng' || await q.$eval(zchip, e => e.disabled)) throw new Error('chip chuyển khu: ' + await q.textContent(zchip));
+    await q.click(zchip); await q.waitForURL(/\/xuong$/, { timeout: 8000 }); await q.waitForSelector('#dock .dock-ctx .path');
+    if (!/Xưởng/.test(await q.textContent('#dock .dock-ctx .path'))) throw new Error('sau chip: chưa ở khu Xưởng: ' + await q.textContent('#dock .dock-ctx .path'));
+    await q.close();
+    console.log('  ✓ Thư viện không tạo asset mới từ đầu (tool bị từ chối, AI mời sang Xưởng bằng chip ⟦zone:xuong⟧; bấm chip = mở ứng dụng Xưởng) · sửa / ghép asset đã có vẫn được\n  ✓ Soi: anchor trong trả lời thành <button aria-label> · rê = viền + nhãn + phần còn lại mờ · bấm = đi tới (qua ứng dụng khác) + tô sáng 2 s rồi tắt · phần tử không tồn tại = chip "không còn" (vô hiệu) · asset AI vừa tạo tự thành chip');
 
     // ---- 5) danh sách tác phẩm → phòng tác phẩm (địa chỉ có id); lịch sử chat theo tác phẩm ----
     q = await open11(ctx11, U11 + 'tao-tac'); await q.click('.nav-item:text-is("Tác phẩm")');   // tuyến đã lưu có thể đang ở trong một phòng — về danh sách
@@ -2298,7 +2311,7 @@ if (!ONLY || ONLY === 'dock') {
     if (await q.getAttribute('#wtab-review', 'aria-selected') !== 'true') throw new Error('deep link tab review không mở đúng tab');
     await q.close();
     q = await open11(ctx11, U11 + 'thu-vien'); await q.click('.nav-item.zone-lib:has-text("Nhân vật")'); await q.waitForSelector('.libcard[data-anchor^="asset:"]'); await q.waitForTimeout(400);
-    if (/Ý tưởng hay|cầu Trường Bản|Xin chào ở/.test(await q.textContent('#dock .dock-log'))) throw new Error('luồng asset không được lẫn tin của tác phẩm / khu');
+    if (/Ý tưởng hay|cầu Trường Bản|Xin chào ở (Tạo tác|Xưởng|Bộ khung)/.test(await q.textContent('#dock .dock-log'))) throw new Error('luồng asset không được lẫn tin của tác phẩm / khu');
     await q.close();
     console.log('  ✓ Tạo tác: danh sách (cột ID · tên · dự án · cảnh · Đạt · giọng AI · cập nhật · trạng thái) → click hàng vào phòng, địa chỉ #/tac-pham/<id>/<tab> (deep link, Back); 5 tab; context bar nói tác phẩm; lịch sử chat theo tác phẩm (đổi đối tượng đổi luồng, mở lại / tải lại vẫn thấy, server giữ data/chats)');
 

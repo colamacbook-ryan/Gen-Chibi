@@ -180,7 +180,7 @@ class AI {
         else if (!args) text = 'arguments không phải JSON hợp lệ.';
         else {
           let res;
-          try { res = await mcp.callTool(name, args, { channel: 'ui' }); }
+          try { res = await mcp.callTool(name, args, { channel: 'ui', zone }); }   // zone: khu Thư viện không tạo asset mới (mcp.libraryGuard)
           catch (e) { res = { isError: true, content: [{ type: 'text', text: 'Tool lỗi: ' + String(e.message).slice(0, 300) }] }; }
           ok = !!res && !res.isError;
           if (ok) { try { anchors = mcp.anchorsOf(name, args, res.structuredContent); } catch (e) { anchors = []; } }   // thứ vừa tạo / sửa → chip Soi trong dock

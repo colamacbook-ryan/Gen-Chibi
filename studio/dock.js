@@ -66,6 +66,7 @@
         else if (p.kind === 'scene') { var sc = GC.getScene(p.id); if (sc) return sc.name; }
         else if (p.kind === 'action') { var ac = GC.choreo && GC.choreo.ACTIONS[p.id]; if (ac) return ac.label; }
         else if (p.kind === 'project') return B.Projects.name(p.id);
+        else if (p.kind === 'zone') return 'Mở ' + zoneLabel(p.id);
         else if (p.kind === 'work') { w = Works.peek(p.id); if (w) return w.title; }
         else if (p.kind === 'shot' || p.kind === 'step') {
           var q = p.id.split('/'); w = Works.peek(q[0]); s = w && (w.shots || []).filter(function (z) { return z.id === q[1]; })[0];
@@ -85,6 +86,7 @@
         if (p.kind === 'action') return !!(GC.choreo && GC.choreo.ACTIONS[p.id]);
         if (p.kind === 'project') return B.Projects.all().some(function (x) { return x.id === p.id; });
         if (p.kind === 'panel') return !!this.find(a);
+        if (p.kind === 'zone') return !!B.zoneHome(p.id);
         q = p.id.split('/');
         return Works.get(q[0]).then(function (w) {
           if (!w) return false;
@@ -104,6 +106,7 @@
       if (p.kind === 'action') return { page: 'lib-motions', action: p.id };
       if (p.kind === 'project') return { page: 'projects', project: p.id };
       if (p.kind === 'panel') return null;
+      if (p.kind === 'zone') return B.zoneHome(p.id);   // chip "Mở Xưởng": về trang chủ của khu đó (khác khu → mở ứng dụng của khu)
       q = p.id.split('/');
       if (p.kind === 'work') return { page: 'works', work: q[0], tab: 'shots' };
       return { page: 'works', work: q[0], tab: 'shots', shot: q[1], step: p.kind === 'step' ? +q[2] : undefined };
@@ -126,6 +129,7 @@
           return pack({ id: p.id, name: pj && pj.name, description: pj && pj.description, nhanVat: B.inProject(GC.assets(), p.id).length, vatPham: B.inProject(GC.items(), p.id).length, boiCanh: B.inProject(GC.scenes(), p.id).length });
         }
         if (p.kind === 'panel') { var el = this.find(a); return Promise.resolve(el ? cut(plain(el.textContent), max) : ''); }
+        if (p.kind === 'zone') return Promise.resolve('');
         var q = p.id.split('/');
         return Works.get(q[0], true).then(function (w) {
           if (!w) return '';
@@ -210,9 +214,9 @@
     var r = Anchors.route(a);
     if (!r) { toast('Phần tử này không còn trên màn hình.'); return; }
     var z = B.zoneOfPage(r.page), cross = z !== 'sys' && z !== 'home' && (!B.APP() || z !== B.APP().zone);
-    if (cross) { try { sessionStorage.setItem('gc-spot', a); } catch (e) { /* bỏ qua */ } B.go(r); return; }
+    if (cross) { if (Anchors.parse(a).kind !== 'zone') { try { sessionStorage.setItem('gc-spot', a); } catch (e) { /* bỏ qua */ } } B.go(r); return; }
     B.go(r);
-    waitFor(a, 2500, function () { Spot.flash(a); });
+    if (Anchors.parse(a).kind !== 'zone') waitFor(a, 2500, function () { Spot.flash(a); });   // chip chuyển khu không có phần tử để tô sáng
   }
   function waitFor(a, ms, fn) {
     var t0 = Date.now();

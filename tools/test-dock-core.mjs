@@ -180,5 +180,32 @@ try {
     ok(empty.length < 400, 'khu không có tác phẩm / ghim: tin dữ liệu chỉ vài trăm ký tự');
   }
 
+  /* ---------------------------------------------------------------- CNS-125 + CNS-124: khu Thư viện không tạo mới; nhãn khu từ server; chatCount */
+  {
+    const { m, store, GC } = fresh();
+    store.saveProject({ id: 'du-an-y', name: 'Y' });
+    const a = clone(GC.ASSETS['gen.khung/ma-no-canh']); a.id = 'nv-moi'; a.name = 'Nhân vật mới'; a.project = 'du-an-y'; delete a.key; a.pack = 'local.my';
+    let r = await m.callTool('save_character', { asset: a }, { channel: 'ui', zone: 'thu-vien' });
+    ok(r.isError && /FORBIDDEN/.test(txt(r)) && /zone:xuong/.test(txt(r)) && !store.getAsset('local.my/nv-moi'), 'Thư viện: save_character cho khoá chưa có → từ chối, kèm chip ⟦zone:xuong|Mở Xưởng⟧');
+    r = await m.callTool('save_item', { item: { id: 'vat-moi', name: 'Vật mới' } }, { channel: 'ui', zone: 'thu-vien' });
+    const r2 = await m.callTool('save_scene', { scene: { id: 'canh-moi', name: 'Cảnh mới' } }, { channel: 'ui', zone: 'thu-vien' });
+    ok(r.isError && /FORBIDDEN/.test(txt(r)) && r2.isError && /FORBIDDEN/.test(txt(r2)), 'Thư viện: save_item / save_scene cho khoá chưa có → từ chối');
+    r = await m.callTool('save_character', { asset: a }, { channel: 'ui', zone: 'xuong' });
+    ok(!r.isError && J(r).saved, 'Xưởng: cùng lời gọi → tạo được');
+    const b = clone(store.getAsset('local.my/nv-moi')); b.persona = 'Đã ghép / chỉnh ở Thư viện';
+    r = await m.callTool('save_character', { asset: b }, { channel: 'ui', zone: 'thu-vien' });
+    ok(!r.isError && store.getAsset('local.my/nv-moi').persona === 'Đã ghép / chỉnh ở Thư viện', 'Thư viện: sửa / ghép asset ĐÃ CÓ vẫn được');
+    r = await m.callTool('save_character', { asset: Object.assign(clone(a), { id: 'nv-qua-mcp' }) }, {});
+    ok(!r.isError, 'MCP (không phải dock) không bị hạn chế theo khu');
+    const info = m.zoneInfo();
+    ok(Object.keys(ZONES).every(k => info[k] && info[k].label && info[k].short && info[k].intro && info[k].ask && info[k].systemChars > 500) && info['thu-vien'].label === 'Thư viện' && /sang Xưởng/.test(info['thu-vien'].intro) && /gói động tác/.test(info.xuong.intro), 'zoneInfo(): nhãn / vai ngắn / lời giới thiệu / gợi ý ô nhập của 5 khu từ ZONES (dock không chép lại)');
+    // chatCount: đếm từ data/chats + work.chat cũ chưa chuyển
+    const w = m.saveWorkChecked({ title: 'Phim đếm', project: 'du-an-y' }), wr = store.getWork(w.id);
+    store.saveChat('work', w.id, [{ role: 'user', content: 'a' }, { role: 'assistant', content: 'b' }]);
+    ok(m.workView(store.getWork(w.id)).chatCount === 2, 'workView.chatCount đếm tin trong data/chats (trước: luôn 0 sau khi chuyển)');
+    store.saveWork(Object.assign(wr, { chat: [{ role: 'user', content: 'cũ' }] }));
+    ok(m.workView(store.getWork(w.id)).chatCount === 3, 'chatCount cộng cả work.chat cũ chưa chuyển');
+  }
+
 } catch (e) { fail = 1; console.log('   ✗', e.stack || e.message); }
 process.exit(fail);
