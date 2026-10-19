@@ -331,6 +331,12 @@ async function route(req, res) {
     const b = await body(req, 400 * 1024);
     try { return send(res, 200, mcp.saveMotionPackChecked(b.pack, b.note || 'Lưu trong Studio')); } catch (e) { return send(res, e.code || 400, { error: e.message, errors: e.errors || null }); }
   }
+  // gói âm (v0.18): GET = bản đã lưu (Studio nạp vào GC.sounds lúc mở); POST = qua cổng GC.sounds + lưu phiên bản; trả bản xuất sạch + warnings
+  if (p === '/api/sound-packs' && m === 'GET') return send(res, 200, store.listSoundPacks());
+  if (p === '/api/sound-packs' && m === 'POST') {
+    const b = await body(req, 400 * 1024);
+    try { return send(res, 200, mcp.saveSoundPackChecked(b.pack, b.note || 'Lưu trong Studio')); } catch (e) { return send(res, e.code || 400, { error: e.message, errors: e.errors || null }); }
+  }
   if (p === '/api/parts' && m === 'POST') {
     const b = await body(req, 400 * 1024);
     try { return send(res, 200, mcp.savePartChecked(b.part, b.note || 'Lưu trong Studio')); } catch (e) { return send(res, e.code || 400, { error: e.message, errors: e.errors || null }); }

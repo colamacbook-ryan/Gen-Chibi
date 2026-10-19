@@ -213,7 +213,8 @@
       if (ac) {
         // hành động (biên đạo): dựng sẵn ở đây (thuần dữ liệu) để biết ai đứng đâu sau màn đấu — câu sau quay mặt đúng chỗ
         var tg = ac.attack && s.target && s.target !== me && ids.indexOf(s.target) >= 0 ? s.target : null;
-        var beat = { type: 'act', i: i, actor: me, action: s.action, label: ac.label, target: tg, react: tg ? (own(RE, s.react) ? s.react : 'hit') : null };
+        var beat = { type: 'act', i: i, actor: me, action: s.action, label: ac.label, target: tg, react: tg ? (own(RE, s.react) ? s.react : 'hit') : null,
+          sfx: silent && s.sfx ? s.sfx.slice(0, 3) : [] };   // bước ra đòn KHÔNG lời: sfx ghi tay phát lúc vào màn (bước có lời thì line.sfx đã phát ở speak) — chỗ hợp để đặt âm nhấn (S3)
         if (silent && line.move) beat.move = line.move;
         var Pa = { asset: byId[me], x: sx(cur[me]), y: row[me].y, k: row[me].k }, tl = null;
         var walls = ids.filter(function (id) { return id !== me && id !== tg; }).map(function (id) { return sx(cur[id]); });   // người đứng xem: không lộn / văng đè lên
@@ -812,6 +813,7 @@
     function perform(beat, r) {
       var C = GC.choreo, ids = [beat.actor].concat(beat.target ? [beat.target] : []);
       if (!C || ids.some(function (id) { return !insts[id] || !insts[id].drive; })) return Promise.resolve();
+      (beat.sfx || []).forEach(function (n, i) { timers.push(setTimeout(function () { if (r === run) sfx(n, { pan: panOf(beat.actor) }); }, 120 + i * 260)); });
       var tl = beat.tl;
       // đứng lệch chỗ so với lúc đạo diễn tính (vd. tua giữa chừng) → dựng lại cho khớp vị trí thật
       if (!tl || Math.abs(pos[beat.actor].x - beat.from[0]) > 2 || (beat.target && Math.abs(pos[beat.target].x - beat.from[1]) > 2)) {
@@ -944,5 +946,5 @@
     };
   }
 
-  GC.film = { clipKey: clipKey, readiness: readiness, issues: issues, still: still, spots: spots, actors: actors, scene: scene, direct: direct, player: player, injectCSS: injectCSS, solveLayout: solveLayout, chipColor: chipColor, contrast: contrast, dialogModes: DIALOGS.slice() };
+  GC.film = { moodOf: moodOf, clipKey: clipKey, readiness: readiness, issues: issues, still: still, spots: spots, actors: actors, scene: scene, direct: direct, player: player, injectCSS: injectCSS, solveLayout: solveLayout, chipColor: chipColor, contrast: contrast, dialogModes: DIALOGS.slice() };
 })(window.GenChibi);

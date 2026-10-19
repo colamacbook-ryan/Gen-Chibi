@@ -20,6 +20,7 @@
  *   cueFor({state, fx, activity, event, mood, project, max}) → [tên…] ≤ 2: tự gán âm cho một bước (gói dự án > gói chung > khung)
  *   cueTable({project, mood}) → { state: {…}, fx: {…}, activity: {…}, event: {…} } — bảng tương thích để bộ phát thay bảng cứng
  *   lintSoundTrack(steps | shot | work, {project, mood, auto}) → [{ code: 'S1'…'S7', level: 'error'|'warn', path, step, name, msg }]
+ *                                     mood: chuỗi | hàm (steps) → chuỗi (GC.film.moodOf) — không khí để tính âm tự gán; auto: false = không tính âm tự gán
  *   RULES · RECIPES · CATS · VOCAB · INST · nodesOf(sound) · spec() · guide({project}) · EXAMPLE
  */
 (function (GC) {
@@ -527,6 +528,7 @@
   }
   function lintShot(sh, opts, project, out) {
     var steps = sh.steps, t = 0, ev = [], run = {}, R = RULES;
+    var mood = typeof opts.mood === 'function' ? opts.mood(steps) : opts.mood;     // không khí của cảnh (âm tự gán có điều kiện mood): chuỗi, hoặc hàm (các bước) → chuỗi — GC.film.moodOf
     var W = function (code, i, name, msg, sub) {
       var rl = R.list.filter(function (r) { return r.code === code; })[0];
       var o = { code: code, level: rl.level, path: sh.path + '[' + i + ']' + (sub || ''), step: i, name: name || null, msg: code + ': ' + msg };
@@ -557,7 +559,7 @@
           if (snd.dur > R.long.dur && i !== 0 && i !== steps.length - 1) W('S7', i, nm, 'âm dài "' + nm + '" (' + snd.dur + ' s) giữa cảnh — để ở bước đầu / cuối cảnh', sub);
         });
       } else if (opts.auto !== false) {
-        eff = cueFor({ state: s.state, fx: s.fx, activity: s.activity, mood: opts.mood, project: project });
+        eff = cueFor({ state: s.state, fx: s.fx, activity: s.activity, mood: mood, project: project });
       }
       eff.forEach(function (nm, k) {
         if (R.density.skip.indexOf(nm) < 0) ev.push({ t: t + R.speech.sfxAt[Math.min(k, 2)], i: i, name: nm });
