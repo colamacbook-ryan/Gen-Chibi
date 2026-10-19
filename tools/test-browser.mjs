@@ -316,19 +316,36 @@ if (!ONLY) {
     if (!fm) throw new Error('không tìm thấy DATA trong phim xuất ra');
     const FD = JSON.parse(fm[1]);
     if (!Array.isArray(FD.motionPacks) || !FD.motionPacks.some(x => x.id === 'tq-dong-tac' && x.actions && x.actions.combo)) throw new Error('DATA.motionPacks thiếu gói tq-dong-tac: ' + JSON.stringify(FD.motionPacks && FD.motionPacks.map(x => x.id)));
+    // v0.18: gói âm của dự án đi theo phim (DATA.soundPacks + project) — mở file:// vẫn có âm Tam Quốc, bộ phát chọn đúng gói theo dự án
+    if (!Array.isArray(FD.soundPacks) || FD.soundPacks.length !== 1 || FD.soundPacks[0].id !== 'tq-am' || FD.project !== 'mau-tam-quoc' || FD.soundPacks[0].sounds['trong-tran'].nodes !== undefined) throw new Error('DATA.soundPacks / project của phim: ' + JSON.stringify(FD.soundPacks && FD.soundPacks.map(x => x.id)) + ' / ' + FD.project);
+    if (!/<script>\/\* engine\/sounds\.js \*\//.test(fhtml)) throw new Error('phim xuất ra thiếu engine/sounds.js');
+    if (!/player\.setProject\(DATA\.project\)/.test(fhtml)) throw new Error('phim xuất ra không đặt dự án cho bộ phát (player.setProject)');
+    // Studio (Tạo tác) nạp gói âm của server lúc mở; lược đồ bảng bước theo dự án của dàn diễn viên; nhãn âm trong ô chọn lấy từ thư viện
+    const sbr = await q.evaluate(() => ({ has: GenChibi.sounds.has('trong-tran'), n: GenChibi.sounds.names().length, lbl: GenChibi.sounds.get('wham').label,
+      sch: GenChibi.director.schema(GenChibi.assets().filter(a => a.project === 'mau-tam-quoc')).properties.steps.items.properties.sfx.items.enum.length,
+      sch0: GenChibi.director.schema([GenChibi.ASSETS['gen.khung/ma-no-canh']]).properties.steps.items.properties.sfx.items.enum.length }));
+    if (!sbr.has || sbr.n !== 69 || sbr.sch !== 69 || sbr.sch0 !== 62 || !sbr.lbl) throw new Error('Studio chưa nạp gói âm / lược đồ theo dự án: ' + JSON.stringify(sbr));
     const ff = await b5.newPage({ viewport: { width: 1280, height: 900 } }), fe = [];
     ff.on('pageerror', e => fe.push(e.message)); ff.on('requestfailed', r => fe.push('mạng: ' + r.url()));
     await ff.goto('file://' + fpath); await ff.waitForTimeout(500);
-    const fr = await ff.evaluate(() => ({
+    const fr = await ff.evaluate(async () => ({
+      snd: { has: GenChibi.sounds.has('trong-tran'), n: GenChibi.sounds.names().length, plan: (p => ({ project: p.project, tu: p.beats.filter(b => b.type === 'line')[2].sfx }))(GenChibi.film.direct(FILM.shots.find(s => s.id === 'canh-1'), { project: DATA.project })),
+        wav: (await GenChibi.audio.renderWav('trong-tran', { seed: 1 })).byteLength },
       chapters: document.querySelectorAll('#chapters li').length,
       missing: GenChibi.film.readiness(FILM).filter(x => !x.ok).map(x => x.shot.id + ': ' + x.missing.join('+')),
       warn: GenChibi.film.direct(FILM.shots.find(s => s.id === 'canh-dau-tap')).warnings
     }));
+    // phát thật chương 1 từ phim xuất: lời thề (vow + hùng tráng) phải gọi tù và của gói Tam Quốc → bộ phát nhận đúng dự án + gói âm nhúng
+    await ff.evaluate(() => { window.__sfx = []; const A = GenChibi.audio, o = A.sfx; A.sfx = function (n) { window.__sfx.push(n); return o.apply(A, arguments); }; });
+    await ff.click('#chapters li:nth-child(1) button');
+    await ff.waitForFunction(() => window.__sfx.includes('tu-va'), null, { timeout: 45000 });
+    await ff.click('#stop');
     await ff.close();
+    if (!fr.snd.has || fr.snd.n !== 69 || fr.snd.plan.project !== 'mau-tam-quoc' || !fr.snd.plan.tu.includes('tu-va') || fr.snd.wav < 100000) throw new Error('phim xuất ra: gói âm Tam Quốc ' + JSON.stringify(fr.snd));
     if (fr.chapters !== 6 || fr.missing.length || fr.warn.length) throw new Error('phim Tam Quốc xuất ra: ' + fr.chapters + '/6 chương, thiếu ' + JSON.stringify(fr.missing) + ', cảnh báo ' + JSON.stringify(fr.warn));
     if (fe.length) throw new Error('phim xuất ra lỗi: ' + fe.slice(0, 3).join(' | '));
     if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
-    console.log('  ✓ Phim HTML Tam Quốc: DATA.motionPacks có tq-dong-tac · mở file:// đủ 6/6 chương, màn đấu không thiếu đòn');
+    console.log('  ✓ Phim HTML Tam Quốc: DATA.motionPacks có tq-dong-tac · DATA.soundPacks có tq-am + project → mở file:// phát lời thề gọi tù và của gói âm nhúng, renderWav chạy · đủ 6/6 chương, màn đấu không thiếu đòn');
   } catch (e) { fail = 1; console.log('  ✗ phim HTML Tam Quốc (gói động tác):', e.message); }
   try {
     // v0.16 (Q9, ADR 0006): BẢNG BƯỚC — soạn kịch bản không cần AI. Ô chọn sinh từ lược đồ đạo diễn; ô Hành động chỉ có đòn người của hàng
@@ -588,7 +605,7 @@ if (!ONLY) {
   const shot = B.works[0].shots.find(s => s.id === 'canh-dau-tap');
   const page = path.join(home, 'duel.html');
   require('fs').writeFileSync(page, '<!doctype html><meta charset=utf-8><body style="margin:0"><div id=st style="width:960px"></div><div id=pg></div>' +
-    ['engine/core.js', 'engine/render.js', 'engine/audio.js', 'engine/player.js', 'engine/choreo.js', 'kinds/character/gen.core.js', 'kinds/khung/gen.khung.js', 'kinds/character/gen.choreo.js'].map(f => '<script src="' + R(f) + '"></script>').join('') +
+    ['engine/core.js', 'engine/render.js', 'engine/sounds.js', 'engine/audio.js', 'engine/player.js', 'engine/choreo.js', 'kinds/character/gen.core.js', 'kinds/khung/gen.khung.js', 'kinds/character/gen.choreo.js'].map(f => '<script src="' + R(f) + '"></script>').join('') +
     '<script>var B=' + JSON.stringify({ parts: B.parts, items: B.items, scenes: B.scenes, characters: B.characters, motionPacks: B.motionPacks || [] }) + ',SHOT=' + JSON.stringify(shot) + ';var GC=window.GenChibi;' +
     'GC.pack({id:"local.my",name:"x",owner:"x",group:"mine",license:"x"},function(){});B.parts.forEach(function(p){GC.registerDataPart("local.my",p)});B.items.forEach(function(x){GC.registerItem("local.my",x)});' +
     'B.scenes.forEach(function(x){GC.registerScene("local.my",x)});B.characters.forEach(function(a){GC.registerAsset("local.my",a)});' +
