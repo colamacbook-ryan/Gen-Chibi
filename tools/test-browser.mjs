@@ -1,5 +1,5 @@
 // Kiểm thử trong trình duyệt (chạy cục bộ, cần Playwright): mọi lớp gắn vào đầu phải đi cùng đầu.
-// Dùng: node tools/test-browser.mjs   (tự dựng server tạm ở cổng 7496) · GC_ONLY=voice node tools/test-browser.mjs → chỉ nhóm giọng AI (cổng 7660) · GC_ONLY=lib → chỉ Thư viện Âm thanh / Giọng (cổng 7662) · GC_ONLY=bubble → chỉ "lời thoại chuyên nghiệp" (cổng 7495; GC_THROTTLE=4 → CPU trang chậm 4× như máy yếu)
+// Dùng: node tools/test-browser.mjs   (tự dựng server tạm ở cổng 7496) · GC_ONLY=voice node tools/test-browser.mjs → chỉ nhóm giọng AI (cổng 7660) · GC_ONLY=lib → chỉ Thư viện Âm thanh / Giọng (cổng 7662) · GC_ONLY=oauth → chỉ nhóm OAuth (cổng 7664–7666) · GC_ONLY=bubble → chỉ "lời thoại chuyên nghiệp" (cổng 7495; GC_THROTTLE=4 → CPU trang chậm 4× như máy yếu)
 import { createRequire } from 'module';
 import { spawn, execFileSync } from 'child_process';
 import { mkdtempSync } from 'fs';
@@ -2563,5 +2563,121 @@ if (!ONLY || ONLY === 'dock') {
     if (errs11.length) throw new Error('lỗi trang: ' + errs11.slice(0, 3).join(' | '));
   } catch (e) { fail = 1; console.log('  ✗ dock Trợ lý AI + phòng tác phẩm:', e.message); if (errs11.length) console.log('    lỗi trang:', errs11.slice(0, 3).join(' | ')); if (q) { try { console.log('    trang:', q.url()); } catch (x) { /* đã đóng */ } } }
   finally { await b11.close(); srv11.kill(); mock11.close(); }
+}
+// ---- v0.19: OAuth cho MCP từ xa — trang "Cấp phép kết nối agent" (tự chứa, ngoài Studio) + Cài đặt › Kết nối agent. GC_ONLY=oauth chỉ chạy nhóm này (cổng 7664–7666).
+// Không ra mạng ngoài: callback của agent (claude.ai …) bị chặn lại bằng page.route và đọc URL đích.
+if (!ONLY || ONLY === 'oauth') {
+  const crypto = await import('crypto');
+  const H = 'https://chibi.example.test', TOK = 'tok-oauth-' + crypto.randomBytes(6).toString('hex'), CB = 'https://claude.ai/api/mcp/auth_callback', ALT = 'https://agent.example.org/cb';
+  const home13 = mkdtempSync(path.join(tmpdir(), 'gc-')), srv13 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home13, GC_PORT: '7664', GC_NO_AUTOCHECK: '1', GC_API_TOKEN: TOK, GC_PUBLIC_URL: H, GC_OAUTH_REDIRECTS: ALT }, stdio: 'ignore' }));
+  const home14 = mkdtempSync(path.join(tmpdir(), 'gc-')), srv14 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home14, GC_PORT: '7665', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
+  const home15 = mkdtempSync(path.join(tmpdir(), 'gc-')), srv15 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home15, GC_PORT: '7666', GC_NO_AUTOCHECK: '1', GC_PUBLIC_URL: H }, stdio: 'ignore' }));
+  await new Promise(r => setTimeout(r, 1500));
+  const B = 'http://127.0.0.1:7664', b13 = await pw.chromium.launch();
+  const own = { 'Content-Type': 'application/json', 'X-GC-Request': '1', Authorization: 'Bearer ' + TOK };
+  const reg = async (base, name, uri) => (await fetch(base + '/oauth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client_name: name, redirect_uris: [uri || CB] }) })).json();
+  const mkq = (cl, uri) => { const v = crypto.randomBytes(32).toString('base64url'); return { v, q: new URLSearchParams({ response_type: 'code', client_id: cl.client_id, redirect_uri: uri || CB, code_challenge: crypto.createHash('sha256').update(v).digest('base64url'), code_challenge_method: 'S256', state: 'trinh-duyet-1', scope: 'mcp:write' }).toString() }; };
+  const errs13 = []; let q = null;
+  try {
+    const ctx = await b13.newContext(); q = await ctx.newPage();
+    q.on('pageerror', e => errs13.push(e.message));
+    const landed = [];
+    await ctx.route(/^https:\/\/(claude\.ai|agent\.example\.org)\//, r => { landed.push(r.request().url()); return r.fulfill({ status: 200, contentType: 'text/html', body: '<title>cb</title>cb' }); });
+    // ---- trang Cấp phép: chưa có token trong trình duyệt
+    const c1 = await reg(B, '<img src=x onerror=alert(1)> Claude', CB), k1 = mkq(c1);
+    await q.goto(B + '/oauth/authorize?' + k1.q);
+    await q.waitForSelector('#ok');
+    const t0 = await q.textContent('main');
+    if (!/Cấp phép kết nối agent/.test(t0) || !/claude\.ai/.test(await q.textContent('#cb')) || !/tên miền quen/.test(await q.textContent('#cc'))) throw new Error('trang thiếu tiêu đề / tên miền callback / nhãn "quen": ' + t0.slice(0, 200));
+    if (await q.$('main img') || !/<img src=x/.test(await q.textContent('#cn'))) throw new Error('tên agent phải hiện nguyên chữ, không dựng thẻ');
+    if (!(await q.isVisible('#tk')) || (await q.inputValue('#tki')) !== '') throw new Error('có GC_API_TOKEN mà chưa đăng nhập: phải hiện ô nhập token chủ máy');
+    if ((await q.$$('#sc input[type=radio]')).length !== 3 || (await q.inputValue('#sc input:checked')) !== 'mcp:write') throw new Error('3 mức quyền, mặc định mcp:write');
+    console.log('  ✓ Trang Cấp phép: tiêu đề · tên agent (chữ thô) · domain callback + nhãn "quen" · ô token chủ máy · 3 mức quyền, mặc định mcp:write');
+    await q.fill('#tki', 'token-sai'); await q.click('#ok');
+    await q.waitForFunction(() => !document.getElementById('er').hidden);
+    if (!/token chủ máy/.test(await q.textContent('#er')) || landed.length) throw new Error('token sai: phải báo lỗi và KHÔNG quay về agent');
+    console.log('  ✓ Token chủ sai → báo lỗi, không cấp, không quay về agent');
+    await q.fill('#tki', TOK); await q.check('#sc input[value="mcp:read"]'); await q.click('#ok');
+    await q.waitForFunction(() => location.protocol === 'https:', null, { timeout: 8000 });
+    const u1 = new URL(landed[0]);
+    if (u1.origin + u1.pathname !== CB || u1.searchParams.get('state') !== 'trinh-duyet-1' || u1.searchParams.get('iss') !== H || !u1.searchParams.get('code')) throw new Error('redirect sai: ' + landed[0]);
+    const tk1 = await (await fetch(B + '/oauth/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ grant_type: 'authorization_code', code: u1.searchParams.get('code'), redirect_uri: CB, client_id: c1.client_id, code_verifier: k1.v }).toString() })).json();
+    if (tk1.scope !== 'mcp:read') throw new Error('phạm vi chủ chọn (mcp:read) không vào token: ' + JSON.stringify(tk1));
+    console.log('  ✓ Cấp phép → quay về callback kèm code + state + iss; token mang đúng mức chủ chọn (mcp:read)');
+    // ---- Từ chối
+    landed.length = 0;
+    const c2 = await reg(B, 'Agent B', CB), k2 = mkq(c2);
+    await q.addInitScript(t => { try { localStorage.setItem('gc-token', t); } catch (e) { /* bỏ qua */ } }, TOK);
+    await q.goto(B + '/oauth/authorize?' + k2.q); await q.waitForSelector('#ok');
+    if (await q.isVisible('#tk')) throw new Error('đã có token trong trình duyệt (đăng nhập Studio): không hỏi lại');
+    await q.click('#no'); await q.waitForFunction(() => location.protocol === 'https:', null, { timeout: 8000 });
+    const u2 = new URL(landed[0]);
+    if (u2.searchParams.get('error') !== 'access_denied' || u2.searchParams.get('state') !== 'trinh-duyet-1' || u2.searchParams.get('code')) throw new Error('từ chối: ' + landed[0]);
+    console.log('  ✓ Từ chối → error=access_denied (+state), không có code');
+    // ---- callback lạ + lỗi redirect_uri
+    landed.length = 0;
+    const c3 = await reg(B, 'Agent lạ', ALT), k3 = mkq(c3, ALT);
+    await q.goto(B + '/oauth/authorize?' + k3.q); await q.waitForSelector('#ok');
+    if (await q.isVisible('#warn') || !/bạn đã thêm/.test(await q.textContent('#cc')) || !/agent\.example\.org/.test(await q.textContent('#cb'))) throw new Error('callback do chủ thêm (GC_OAUTH_REDIRECTS): phải ghi rõ "bạn đã thêm" + domain: ' + await q.textContent('#cc'));
+    await q.goto(B + '/oauth/authorize?' + mkq(c3, ALT).q.replace(encodeURIComponent(ALT), encodeURIComponent('https://evil.example/cb')));
+    const bad = await q.textContent('main');
+    if (!/không chuyển hướng/.test(bad) || landed.length || new URL(q.url()).origin !== B) throw new Error('redirect_uri lệch: phải hiện trang lỗi, không chuyển hướng');
+    console.log('  ✓ Callback do chủ thêm (GC_OAUTH_REDIRECTS) → ghi rõ domain + "bạn đã thêm"; redirect_uri lệch → trang lỗi, KHÔNG chuyển hướng');
+    // ---- Cài đặt › Kết nối agent
+    await q.goto(B + '/xuong'); await q.waitForFunction(() => /^v\d/.test(document.getElementById('verChip').textContent), null, { timeout: 8000 });
+    await q.click('.nav-item:has-text("Kết nối agent")'); await q.waitForSelector('#connectUrl');
+    if ((await q.textContent('#connectUrl')) !== H + '/mcp') throw new Error('địa chỉ MCP sai: ' + await q.textContent('#connectUrl'));
+    const pageTxt = await q.textContent('#connectBox');
+    if (!/Settings › Connectors › Add custom connector/.test(pageTxt) || !/3 bước/.test(pageTxt) || !/Ba mức quyền/.test(pageTxt) || !/Link có khoá \(cách cũ/.test(pageTxt)) throw new Error('thiếu hướng dẫn 3 bước / mức quyền / mục link cũ');
+    if (!(await q.isChecked('#connectReg'))) throw new Error('công tắc tự đăng ký mặc định phải BẬT khi có GC_PUBLIC_URL');
+    const rows = await q.$$('#connectTable tr[data-client]');
+    if (rows.length !== 3) throw new Error('bảng client: muốn 3 dòng, có ' + rows.length);
+    const row1 = q.locator('#connectTable tr[data-client="' + c1.client_id + '"]');
+    const r1 = await row1.textContent();
+    if (!/claude\.ai/.test(r1) || !/Đang kết nối/.test(r1) || !/<img src=x/.test(r1)) throw new Error('dòng client 1: ' + r1);
+    if (!/Chờ cấp phép/.test(await q.locator('#connectTable tr[data-client="' + c2.client_id + '"]').textContent())) throw new Error('client chưa cấp phép phải hiện "Chờ cấp phép"');
+    if (await q.$('#connectBox img')) throw new Error('tên agent dựng thành thẻ img');
+    if ((await q.content()).includes(tk1.access_token) || (await q.content()).includes(tk1.refresh_token)) throw new Error('trang Cài đặt lộ token');
+    console.log('  ✓ Cài đặt › Kết nối agent: địa chỉ MCP + 3 bước + công tắc (mặc định bật) + bảng client (tên, domain, trạng thái) + 3 mức quyền + mục link cũ; không lộ token');
+    // đổi phạm vi + thu hồi
+    const mcp = (tok, name, args) => fetch(B + '/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tok }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }) }).then(r => r.json());
+    if (!/FORBIDDEN/.test((await mcp(tk1.access_token, 'save_project', { id: 'bt-1', name: 'x' })).result.content[0].text)) throw new Error('mcp:read phải chặn save_project');
+    await row1.locator('select').selectOption('mcp:write');
+    await row1.locator('button:has-text("Đổi phạm vi")').click();
+    await q.waitForFunction(id => /Tạo và sửa/.test(document.querySelector('tr[data-client="' + id + '"] select option:checked').textContent) && document.querySelector('tr[data-client="' + id + '"] button.sm:not(.danger)').disabled, c1.client_id);
+    if ((await mcp(tk1.access_token, 'save_project', { id: 'bt-1', name: 'x' })).result.isError) throw new Error('đổi phạm vi lên mcp:write: phải có hiệu lực ngay');
+    console.log('  ✓ Đổi phạm vi (read → write) trên bảng: token đang dùng đổi quyền ngay');
+    q.once('dialog', d => d.accept());
+    await row1.locator('button:has-text("Thu hồi")').click();
+    await q.waitForFunction(id => /Đã thu hồi/.test(document.querySelector('tr[data-client="' + id + '"]').textContent), c1.client_id);
+    const after = await fetch(B + '/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tk1.access_token }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'ping' }) });
+    if (after.status !== 401) throw new Error('thu hồi: token vẫn dùng được (' + after.status + ')');
+    console.log('  ✓ Thu hồi (có hỏi lại) → trạng thái "Đã thu hồi", token của client đó 401');
+    // công tắc tự đăng ký
+    await q.uncheck('#connectReg'); await q.waitForFunction(() => !document.getElementById('connectReg').checked);
+    const off = await fetch(B + '/oauth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client_name: 'x', redirect_uris: [CB] }) });
+    if (off.status !== 403) throw new Error('tắt công tắc: /oauth/register phải 403, nay ' + off.status);
+    await q.check('#connectReg'); await q.waitForFunction(() => document.getElementById('connectReg').checked);
+    if ((await fetch(B + '/oauth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client_name: 'x', redirect_uris: [CB] }) })).status !== 201) throw new Error('bật lại phải đăng ký được');
+    console.log('  ✓ Công tắc "Cho phép agent tự đăng ký": tắt → 403, bật lại → 201');
+    // ---- chưa đặt GC_PUBLIC_URL: báo cần đặt, không hiện địa chỉ
+    const q14 = await ctx.newPage(); q14.on('pageerror', e => errs13.push(e.message));
+    await q14.goto('http://127.0.0.1:7665/xuong'); await q14.waitForFunction(() => /^v\d/.test(document.getElementById('verChip').textContent), null, { timeout: 8000 });
+    await q14.click('.nav-item:has-text("Kết nối agent")'); await q14.waitForSelector('#connectBox .chip');
+    const off14 = await q14.textContent('#connectBox');
+    if (!/Chưa bật/.test(off14) || !/GC_PUBLIC_URL/.test(off14) || await q14.$('#connectUrl')) throw new Error('thiếu GC_PUBLIC_URL: phải báo cần đặt + không có địa chỉ MCP: ' + off14.slice(0, 200));
+    console.log('  ✓ Chưa đặt GC_PUBLIC_URL: Cài đặt báo "Chưa bật — cần đặt GC_PUBLIC_URL", không có địa chỉ MCP');
+    // ---- máy không GC_API_TOKEN, mở ở chính máy: trang Cấp phép không đòi token
+    const c5 = await reg('http://127.0.0.1:7666', 'Agent local', CB), k5 = mkq(c5), q15 = await (await b13.newContext()).newPage();
+    await q15.route(/^https:\/\/claude\.ai\//, r => { landed.push(r.request().url()); return r.fulfill({ status: 200, contentType: 'text/html', body: 'cb' }); });
+    landed.length = 0;
+    await q15.goto('http://127.0.0.1:7666/oauth/authorize?' + k5.q); await q15.waitForSelector('#ok');
+    if (await q15.isVisible('#tk')) throw new Error('không GC_API_TOKEN: không cần ô token');
+    await q15.click('#ok'); await q15.waitForFunction(() => location.protocol === 'https:', null, { timeout: 8000 });
+    if (!new URL(landed[0]).searchParams.get('code')) throw new Error('không có code: ' + landed[0]);
+    console.log('  ✓ Không đặt GC_API_TOKEN, chủ ở chính máy: Cấp phép không đòi token (như quy tắc /api cục bộ)');
+    if (errs13.length) throw new Error('lỗi trang: ' + errs13.slice(0, 3).join(' | '));
+  } catch (e) { fail = 1; console.log('  ✗ OAuth (trang Cấp phép + Kết nối agent):', e.message); if (errs13.length) console.log('    lỗi trang:', errs13.slice(0, 3).join(' | ')); }
+  finally { await b13.close(); srv13.kill(); srv14.kill(); srv15.kill(); }
 }
 process.exit(fail);

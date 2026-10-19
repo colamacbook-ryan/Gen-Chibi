@@ -161,12 +161,12 @@
     ['fab', 'Khung chuẩn', 'quy cách · kiểm (Gen Labs giữ)', [['khung', 'Bộ khung chuẩn'], ['library', 'Kho linh kiện & phông'], ['poses', 'Khung tư thế & hoạt động'], ['states', 'Khung biểu cảm & động tác'], ['gates', 'Cổng kiểm & hiệu năng']], 'khung'],
     ['lib', 'Thư viện', 'theo dự án chủ đề · lấy về dùng', [['projects', 'Dự án chủ đề'], ['lib-characters', 'Nhân vật'], ['lib-items', 'Vật phẩm'], ['lib-scenes', 'Bối cảnh'], ['lib-motions', 'Động tác'], ['lib-sounds', 'Âm thanh'], ['lib-voices', 'Giọng']]],
     ['make', 'Tạo tác', 'làm phim / truyện với AI', [['works', 'Tác phẩm']]],
-    ['sys', 'Hệ thống', '', [['ai', 'Cài đặt AI'], ['update', 'Cập nhật']]]
+    ['sys', 'Hệ thống', '', [['ai', 'Cài đặt AI'], ['connect', 'Kết nối agent'], ['update', 'Cập nhật']]]
   ];
   var PAGE_ALIAS = { character: 'characters', export: 'lib-characters', workshop: 'create' };   // workshop = trang chat cũ → nay là dock Trợ lý AI (mở dock rồi về trang chủ của khu)
   // BA ỨNG DỤNG ĐỘC LẬP (Ryan 2026-10-18): mỗi lớp một địa chỉ, một menu, một màu — không lẫn nhau.
   //   /xuong · /thu-vien · /tao-tac (bản xem thử không có server: ?app=…). "/" = màn chọn lớp.
-  //   Trang Hệ thống (Cài đặt AI, Cập nhật) có ở cả ba. Bấm sang trang của lớp khác → mở ứng dụng của lớp đó.
+  //   Trang Hệ thống (Cài đặt AI, Kết nối agent, Cập nhật) có ở cả ba. Bấm sang trang của lớp khác → mở ứng dụng của lớp đó.
   var PAGES = {};
   var APPS = [
     { id: 'xuong', zone: 'fab', name: 'Xưởng', desc: 'Bộ khung chuẩn (không chủ đề) → tạo asset: chọn khung, thêm tham số, soát mọi góc, qua cổng kiểm, lưu vào dự án.', home: 'create' },
@@ -5279,6 +5279,86 @@
           h('button', { class: 'btn', onclick: function () { bench(60, 'idle'); } }, '60 · tầng thở'),
           h('button', { class: 'btn', onclick: function () { bench(8, 'full'); } }, '8 · diễn đủ')),
         res, host))));
+  };
+
+  /* ============================================================ trang: Kết nối agent (OAuth, v0.19) */
+  // Agent (claude.ai, Claude Code…) tự kết nối vào <GC_PUBLIC_URL>/mcp; chủ chỉ bấm "Cấp phép" ở trang của app. Ở đây: URL để dán, công tắc tự đăng ký, bảng client, đổi phạm vi / thu hồi.
+  // KHÔNG bao giờ hiện token: server không trả token / băm / secret (GET api/oauth). Mọi chữ do agent tự khai (tên) đặt qua h() → textContent.
+  PAGES.connect = function () {
+    crumbs([{ t: 'Kết nối agent' }]);
+    if (Store.mode !== 'server') { $('view').appendChild(h('div', { class: 'panel empty', text: 'Kết nối agent chỉ có ở bản cài trên máy (cần máy chủ để cấp và giữ token).' })); return; }
+    var box = h('div', { class: 'stack', id: 'connectBox' });
+    $('view').appendChild(box);
+    function load() { Store.api('GET', 'api/oauth').then(render).catch(function (e) { clear(box); box.appendChild(h('div', { class: 'panel empty', text: e.message })); }); }
+    var STATUS = { active: ['ok', 'Đang kết nối'], pending: ['warn', 'Chờ cấp phép'], expired: ['', 'Hết hạn'], revoked: ['bad', 'Đã thu hồi'] };
+    var RANK = { active: 0, expired: 1, revoked: 2, pending: 3 };
+    function scopeLabel(v, id) { var m = v.scopes.filter(function (x) { return x.id === id; })[0]; return m ? m.label + ' (' + id + ')' : id; }
+    function render(v) {
+      clear(box);
+      var link = Store.info && Store.info.mcp && Store.info.mcp.link;
+      // ---- 1) địa chỉ để dán
+      var head = h('div', { class: 'panel' }, h('h3', null, 'Kết nối OAuth', h('span', { class: 'r note', text: 'không phải chép khoá — agent tự khám phá, bạn bấm Cấp phép' })));
+      if (!v.enabled) {
+        head.appendChild(h('div', { class: 'pad stack' },
+          h('div', { class: 'row' }, h('span', { class: 'chip warn', text: 'Chưa bật' })),
+          h('div', { text: v.configured ? 'GC_PUBLIC_URL không hợp lệ: phải là gốc của địa chỉ công khai, vd. https://chibi.example.com (không có đường dẫn).' : 'Cần đặt GC_PUBLIC_URL (địa chỉ công khai của máy này) để bật. Trong terminal: genchibi expose <tên-miền> — lệnh tự đặt GC_PUBLIC_URL và mở tunnel; hoặc tự đặt GC_PUBLIC_URL=https://<tên-miền> trong .env rồi cho proxy của bạn chuyển /mcp, /.well-known/oauth-*, /oauth/* về app (xem docs/HUONG-DAN.md).' }),
+          h('div', { class: 'note', text: 'Khi chưa bật, /mcp vẫn dùng như cũ: token chủ máy hoặc link có khoá (mục dưới).' })));
+      } else {
+        var url = v.mcpUrl;
+        head.appendChild(h('div', { class: 'pad stack' },
+          h('div', { class: 'row' }, h('span', { class: 'chip ok', text: 'Đã bật' }), v.tokenSet ? null : h('span', { class: 'chip warn', text: 'Chưa đặt GC_API_TOKEN: chỉ chủ ở chính máy này cấp phép được' })),
+          h('div', { class: 'kv' },
+            h('label', { text: 'Địa chỉ MCP' }), h('div', { class: 'stack' }, h('pre', { class: 'code', id: 'connectUrl', text: url }), h('div', null, h('button', { class: 'btn sm', id: 'connectCopy', type: 'button', onclick: function () { copyText(url, 'địa chỉ MCP'); } }, 'Sao chép địa chỉ'), ' ',
+              h('button', { class: 'btn sm', type: 'button', onclick: function () { copyText('claude mcp add --transport http gen-chibi ' + url, 'lệnh Claude Code'); } }, 'Sao chép lệnh Claude Code'))),
+            h('label', { text: '3 bước' }), h('ol', { style: 'margin:0;padding-left:18px' },
+              h('li', { text: 'Mở claude.ai › Settings › Connectors › Add custom connector, dán địa chỉ trên (để trống Client ID / Secret).' }),
+              h('li', { text: 'Bấm Connect — trang "Cấp phép kết nối agent" của máy này hiện ra; nhập GC_API_TOKEN, chọn mức quyền, bấm Cấp phép.' }),
+              h('li', { text: 'Mở phiên chat mới: agent thấy các tool của gen-chibi. Thu hồi bất cứ lúc nào ở bảng dưới.' })),
+            h('label', { text: 'Tự đăng ký' }), h('label', { class: 'row' },
+              h('input', { type: 'checkbox', id: 'connectReg', checked: v.register, onchange: function (ev) {
+                var on = ev.target.checked;
+                Store.api('PUT', 'api/settings', { oauthRegister: on }).then(function () { toast(on ? 'Agent được phép tự đăng ký.' : 'Đã tắt: agent mới không tự đăng ký được (client đã có vẫn dùng).'); load(); }).catch(function (e) { toast(e.message); load(); });
+              } }), h('span', { class: 'note', text: 'Cho phép agent tự đăng ký (DCR). Tắt khi bạn không đang thêm kết nối mới. Chỉ nhận callback: ' + v.redirects.map(function (u) { return u.replace(/^https?:\/\//, ''); }).join(' · ') + '.' })),
+            h('label', { text: 'Thêm callback' }), h('span', { class: 'note', text: 'Agent khác (không phải claude.ai / claude.com / máy bạn): thêm GC_OAUTH_REDIRECTS=<url>,<url> trong .env rồi khởi động lại.' }))));
+      }
+      box.appendChild(head);
+      // ---- 2) bảng client
+      var tbl = h('table', { class: 'grid', id: 'connectTable' });
+      tbl.appendChild(h('tr', null, ['Agent', 'Quay về', 'Phạm vi', 'Cấp lúc', 'Dùng lần cuối', 'Trạng thái', ''].map(function (c) { return h('th', { text: c }); })));
+      var rows = v.clients.slice().sort(function (a, b) { return RANK[a.status] - RANK[b.status] || String(b.createdAt).localeCompare(String(a.createdAt)); });
+      rows.forEach(function (c) {
+        var st = STATUS[c.status] || ['', c.status], sel = h('select', { 'aria-label': 'Phạm vi của ' + c.name, disabled: c.status === 'pending' });
+        v.scopes.forEach(function (sc) { var o = h('option', { value: sc.id, text: sc.label + ' (' + sc.id + ')' }); if (sc.id === c.scope) o.selected = true; sel.appendChild(o); });
+        var chg = h('button', { class: 'btn sm', type: 'button', disabled: true, text: 'Đổi phạm vi', onclick: function () {
+          chg.disabled = true;
+          Store.api('PUT', 'api/oauth/clients/' + c.id, { scope: sel.value }).then(function (nv) { toast('Đã đổi phạm vi: ' + scopeLabel(v, sel.value) + ' — có hiệu lực ngay.'); render(nv); }).catch(function (e) { toast(e.message); load(); });
+        } });
+        sel.addEventListener('change', function () { chg.disabled = sel.value === c.scope; });
+        var rev = h('button', { class: 'btn sm danger', type: 'button', disabled: c.status === 'revoked', text: 'Thu hồi', onclick: function () {
+          if (!window.confirm('Thu hồi "' + c.name + '"?\n\nMọi token của agent này (truy cập + làm mới) bị huỷ ngay; muốn nối lại phải cấp phép lại.')) return;
+          Store.api('POST', 'api/oauth/clients/' + c.id + '/revoke').then(function (nv) { toast('Đã thu hồi "' + c.name + '".'); render(nv); }).catch(function (e) { toast(e.message); load(); });
+        } });
+        tbl.appendChild(h('tr', { 'data-client': c.id, 'data-status': c.status },
+          h('td', null, h('b', { text: c.name })),
+          h('td', null, c.hosts.map(function (x) { return h('div', { class: 'mono nw' }, x.host, x.known || x.loopback ? null : h('span', { class: 'chip warn', style: 'margin-left:6px', text: 'lạ' })); })),
+          h('td', null, h('div', { class: 'row' }, sel, chg)),
+          h('td', { class: 'nw note', text: fmtTime(c.approvedAt) }),
+          h('td', { class: 'nw note', text: fmtTime(c.lastUsedAt) }),
+          h('td', { class: 'nw' }, h('span', { class: 'chip ' + st[0], text: st[1] }), c.status === 'pending' && c.expiresAt ? h('div', { class: 'note', text: 'tự xoá ' + fmtTime(c.expiresAt) }) : null),
+          h('td', { class: 'nw' }, rev)));
+      });
+      box.appendChild(h('div', { class: 'panel' }, h('h3', null, 'Agent đã kết nối', h('span', { class: 'r note', text: rows.length + ' / 50 client · token không bao giờ hiện ở đây' })),
+        rows.length ? tbl : h('div', { class: 'pad note', text: 'Chưa có agent nào. Dán địa chỉ MCP ở trên vào claude.ai (hoặc chạy lệnh Claude Code) là agent xuất hiện ở đây.' })));
+      // ---- 3) mức quyền
+      box.appendChild(h('div', { class: 'panel' }, h('h3', null, 'Ba mức quyền'), h('div', { class: 'pad kv' }, v.scopes.map(function (sc) { return [h('label', { text: sc.label }), h('div', null, h('span', { class: 'mono', text: sc.id }), h('div', { class: 'note', text: sc.desc }))]; }))));
+      // ---- 4) link có khoá (cũ)
+      box.appendChild(h('div', { class: 'panel' }, h('h3', null, 'Link có khoá (cách cũ, vẫn dùng được)', h('span', { class: 'r note', text: 'không qua OAuth' })),
+        h('div', { class: 'pad stack' },
+          link ? h('div', { class: 'stack' }, h('pre', { class: 'code', text: link }), h('div', null, h('button', { class: 'btn sm', type: 'button', onclick: function () { copyText(link, 'link MCP'); } }, 'Sao chép link')))
+            : h('div', { class: 'note', text: 'Chưa có. Trong terminal: genchibi expose <tên-miền>.' }),
+          h('div', { class: 'note', text: 'Ai có link là dùng được MCP ở mức "Tạo và sửa" (không mở Studio). Lộ link: genchibi expose --rotate. Link không đổi gì khi bạn dùng OAuth.' }))));
+    }
+    load();
   };
 
   /* ============================================================ trang: Cập nhật */
