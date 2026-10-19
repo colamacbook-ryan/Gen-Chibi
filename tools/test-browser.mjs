@@ -573,6 +573,8 @@ if (!ONLY) {
     const cost = await q.evaluate(() => { const s = document.getElementById('seek'), t0 = performance.now(); for (let i = 0; i < 40; i++) { s.value = (i * 0.75).toFixed(2); s.oninput(); } return (performance.now() - t0) / 40; });
     if (cost > 8) throw new Error('một khung vẽ tốn ' + cost.toFixed(1) + ' ms (ngân sách 8 ms)');
     await q.evaluate(() => { const s = document.getElementById('seek'); s.value = 14.4; s.oninput(); });
+    // nhãn #now cập nhật ở khung vẽ kế tiếp (rAF), không đồng bộ với oninput — chờ tới 2 s thay vì đọc ngay (đọc ngay = đỏ chập chờn khi máy bận)
+    await q.waitForFunction(() => /Bổ thương/.test(document.getElementById('now').textContent), null, { timeout: 2000 }).catch(() => {});
     if (!/Bổ thương/.test(await q.textContent('#now'))) throw new Error('tua tới 14,4 s phải là "Bổ thương xuống đất": ' + await q.textContent('#now'));
     const audio = await q.evaluate(() => window.GenChibi.audio && window.GenChibi.audio.info().ctx);
     if (!audio) throw new Error('âm thanh không bật khi bấm xem');
