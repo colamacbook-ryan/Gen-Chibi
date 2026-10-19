@@ -1,0 +1,33 @@
+# gen-chibi v0.19 — Caddyfile mẫu khi có cổng đăng nhập riêng đứng trước app.
+# © 2026 Gen Labs — All rights reserved.
+#
+# Nguyên tắc: đường của MÁY (agent) đi THẲNG vào app, không qua cổng đăng nhập; còn lại (Studio, /api, trang Cấp phép) đi qua cổng.
+# Bảo vệ của đường máy đến từ chính Bearer token của app (access token OAuth / GC_API_TOKEN / link có khoá) + PKCE — không cần cookie của cổng.
+#
+# Vì sao không đặt forward_auth ở cấp site: nó sẽ chạy cả cho /mcp. Cổng trả 302 /login hoặc 401 của nó (không có WWW-Authenticate)
+# → agent không tự khám phá được OAuth. Đặt forward_auth BÊN TRONG handle cuối như dưới đây.
+#
+# App KHÔNG tin header Remote-User / X-Forwarded-User do cổng gắn: /oauth/authorize vẫn đòi chủ máy nhập GC_API_TOKEN (hoặc có phiên Studio).
+# Điều kiện của claude.ai: cổng 443, hostname có bản ghi A công khai, không redirect apex ↔ www (redirect làm rơi header Authorization).
+# Cloudflare: Bot Fight Mode / "Block AI bots" trả 403 cho UA Claude-User → tạo WAF skip rule cho IP 160.79.104.0/21 (egress của Anthropic)
+# hoặc tắt các tính năng đó cho các path máy bên dưới.
+#
+# Thay: chibi.example.com → tên miền của bạn · 7480 → GC_PORT · đặt GC_PUBLIC_URL=https://chibi.example.com và GC_ALLOWED_HOSTS=chibi.example.com trong .env của gen-chibi.
+
+chibi.example.com {
+	# đường máy: khám phá (RFC 9728 / 8414), đăng ký, đổi token, thu hồi, và chính MCP
+	@machine path /mcp /mcp/* /.well-known/oauth-protected-resource* /.well-known/oauth-authorization-server* /oauth/register /oauth/token /oauth/revoke
+	handle @machine {
+		reverse_proxy 127.0.0.1:7480
+	}
+
+	# mọi thứ còn lại — Studio, /api/*, /oauth/authorize (trang Cấp phép), /api/oauth/approve — nằm SAU cổng đăng nhập hiện có
+	handle {
+		# forward_auth đặt Ở TRONG handle này (ví dụ — đổi theo cổng của bạn):
+		# forward_auth 127.0.0.1:9000 {
+		# 	uri /verify
+		# 	copy_headers Remote-User
+		# }
+		reverse_proxy 127.0.0.1:7480
+	}
+}
