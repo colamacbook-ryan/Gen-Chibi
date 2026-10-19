@@ -203,13 +203,13 @@ class AI {
   }
 
   // Viết kịch bản sự kiện: sinh → kiểm → gửi lỗi cho model sửa (≤ 2 lần)
-  async director({ description, cast: ids, model }, extraAssets) {
+  async director({ description, cast: ids, model, project }, extraAssets) {
     const c = this.config();
     if (model) c.model = model;
     if (!c.model) throw Object.assign(new Error('Chưa chọn model'), { code: 400 });
     if (!description || String(description).length > 2000) throw Object.assign(new Error('mô tả sự kiện cần 1–2000 ký tự'), { code: 400 });
     const cast = this.castFrom(ids, extraAssets);
-    const system = this.GC.director.prompt(cast).replace('Sự kiện: <mô tả sự kiện ở đây>', 'Trả lời bằng json.');
+    const system = this.GC.director.prompt(cast, typeof project === 'string' ? { project } : undefined).replace('Sự kiện: <mô tả sự kiện ở đây>', 'Trả lời bằng json.');
     const messages = [{ role: 'system', content: system }, { role: 'user', content: 'Sự kiện: ' + description }];
     const t0 = Date.now();
     const usage = { prompt: 0, completion: 0 };

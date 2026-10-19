@@ -17,6 +17,7 @@
  *   validateSoundPack(pack, {frame}) → { errors, def }      cổng kiểm; def = bản CHUẨN HOÁ dựng lại từ đầu (không giữ khoá lạ)
  *   registerPack(pack) → { errors, def } · unregisterPack(id) · packs() · pack(id)    tên âm là không gian tên CHUNG (trùng → lỗi chỉ ra gói)
  *   get(name) → âm (chỉ đọc) · has(name) · names({project}) · list({cat, tag, q, project}) · info(name)
+ *   allowedSounds({work, cast, project, shot, scene}) → [tên…] âm dùng được: MỘT hàm cho lược đồ / lời nhắc đạo diễn, Bảng bước, S6 và bộ phát · projectFor(…) → dự án quyết
  *   cueFor({state, fx, activity, event, mood, project, max}) → [tên…] ≤ 2: tự gán âm cho một bước (gói dự án > gói chung > khung)
  *   cueTable({project, mood}) → { state: {…}, fx: {…}, activity: {…}, event: {…} } — bảng tương thích để bộ phát thay bảng cứng
  *   lintSoundTrack(steps | shot | work, {project, mood, auto}) → [{ code: 'S1'…'S7', level: 'error'|'warn', path, step, name, msg }]
@@ -412,6 +413,20 @@
     ORDER.forEach(function (id) { var d = PACKS[id]; if (all || visible(d, pr)) out = out.concat(Object.keys(d.sounds)); });
     return out;
   }
+  // "ÂM NÀO DÙNG ĐƯỢC" — MỘT định nghĩa cho lược đồ / lời nhắc đạo diễn, Bảng bước, S6 (lintSoundTrack) và bộ phát (CNS-104; CNS-064 tái phạm cho âm).
+  // Dự án quyết: chỉ định (project) > tác phẩm (work.project) > phân cảnh (shot.project) > bối cảnh > diễn viên đầu tiên có dự án > '' (khung + gói dùng chung).
+  // Dàn diễn viên chỉ là DỰ PHÒNG khi chưa biết tác phẩm: nhân vật bộ mẫu trong phim của dự án khác không được mời âm của bộ mẫu rồi bị S6 từ chối
+  function projectFor(o) {
+    o = o || {};
+    if (typeof o.project === 'string') return o.project;
+    if (o.work && typeof o.work.project === 'string') return o.work.project;
+    if (o.shot && typeof o.shot.project === 'string') return o.shot.project;
+    if (o.scene && o.scene.project) return String(o.scene.project);
+    var cast = Array.isArray(o.cast) ? o.cast : [];
+    for (var i = 0; i < cast.length; i++) if (cast[i] && cast[i].project) return String(cast[i].project);
+    return '';
+  }
+  function allowedSounds(o) { return names({ project: projectFor(o) }); }
   function packs() { return ORDER.map(function (id) { var d = PACKS[id]; return { id: d.id, name: d.name, project: d.project, version: d.version, status: d.status, count: Object.keys(d.sounds).length, frame: id === FRAME }; }); }
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
   // bản xuất của một gói (gen-chibi.sound/1 chạy lại được qua cổng): không có trường nội bộ (name / pack / nodes trên từng âm)
@@ -1304,7 +1319,7 @@
 
   var API = {
     FORMAT: FORMAT, FRAME: FRAME, LINT_MAX: LINT_MAX, CATS: CATS, ACCENT: ACCENT, VOCAB: VOCAB, LEGACY: LEGACY, INST: INST, BUDGET: BUDGET, RULES: RULES, RECIPES: RECIPES, EXAMPLE: EXAMPLE,
-    validateSoundPack: validateSoundPack, registerPack: registerPack, unregisterPack: unregisterPack, get: get, has: has, names: names, packs: packs, pack: pack,
+    validateSoundPack: validateSoundPack, projectFor: projectFor, allowedSounds: allowedSounds, registerPack: registerPack, unregisterPack: unregisterPack, get: get, has: has, names: names, packs: packs, pack: pack,
     info: info, list: list, cueFor: cueFor, cueTable: cueTable, lintSoundTrack: lintSoundTrack, suggest: suggest, nodesOf: nodesOf, layerDur: layerDur, spec: spec, guide: guide,
     catLabel: function (c) { return CAT_LABEL[c] || ''; }
   };

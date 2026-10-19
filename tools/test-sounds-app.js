@@ -98,6 +98,39 @@ const FRAME_STEPS = [{ actor: 'ma-no-canh', state: 'normal', say: 'Chào bạn.'
     console.log('   ✓ bộ phát: âm tự gán = GC.sounds.cueFor theo state / fx / activity + không khí + dự án (suy ra từ bối cảnh / diễn viên, hoặc chỉ định) · sfx ghi tay (cả gói dự án) vào kế hoạch · bước ra đòn không lời có sfx riêng · thiếu sounds.js → bảng cũ');
   }
 
+  // ---------- 2b. CNS-104: "âm nào dùng được" CHỈ MỘT định nghĩa — dự án của TÁC PHẨM quyết (lược đồ, lời nhắc, Bảng bước, S6, bộ phát, list_sounds); dàn diễn viên chỉ dự phòng
+  {
+    const { GC, S, m } = fresh(); m.importProject(clone(TQB), {});
+    await m.callTool('save_project', { id: 'cua-toi', name: 'Của tôi' }); await m.callTool('save_work', { id: 'phim-toi', title: 'Phim của tôi', project: 'cua-toi' });
+    const qv = GC.assets().find(a => /\/tq-quan-vu$/.test(a.key)), enumOf = sch => sch.properties.steps.items.properties.sfx.items.enum;
+    no(!qv || qv.project !== 'mau-tam-quoc', 'p4: nhân vật Quan Vũ của bộ mẫu Tam Quốc');
+    const work = { project: 'cua-toi' };
+    no(S.allowedSounds({ work, cast: [qv] }).includes('trong-tran') || !S.allowedSounds({ cast: [qv] }).includes('trong-tran') || !S.allowedSounds({ project: 'mau-tam-quoc', work }).includes('trong-tran'), 'allowedSounds: project chỉ định > tác phẩm > dàn; dàn chỉ là dự phòng');
+    no(S.projectFor({ work, cast: [qv] }) !== 'cua-toi' || S.projectFor({ cast: [qv] }) !== 'mau-tam-quoc' || S.projectFor({ work: { project: '' }, cast: [qv] }) !== '' || S.projectFor({ shot: { project: 'x' }, cast: [qv] }) !== 'x' || S.projectFor({}) !== '', 'projectFor: thứ tự chỉ định > tác phẩm > phân cảnh > bối cảnh > dàn > rỗng');
+    const sch = GC.director.schema([qv], { work }), pr = GC.director.prompt([qv], { work });
+    no(enumOf(sch).includes('trong-tran') || /trong-tran/.test(pr), 'p4: tác phẩm của dự án "cua-toi" dàn Tam Quốc → lược đồ + lời nhắc KHÔNG mời trong-tran (trước đây mời rồi S6 từ chối)');
+    no(!enumOf(GC.director.schema([qv])).includes('trong-tran') || !/trong-tran/.test(GC.director.prompt([qv])), 'chưa biết tác phẩm: dự phòng theo dàn (dự án của diễn viên)');
+    // MCP get_director_schema nhận work / project — cùng danh sách save_shot chấp nhận
+    const gd = J(await m.callTool('get_director_schema', { cast: [qv.id], work: 'phim-toi' })), gp = J(await m.callTool('get_director_schema', { cast: [qv.id], project: 'mau-tam-quoc' }));
+    no(enumOf(gd.schema).includes('trong-tran') || /trong-tran/.test(gd.guide) || !enumOf(gp.schema).includes('trong-tran') || errOf(await m.callTool('get_director_schema', { work: 'khong-co' })).code !== 'NOT_FOUND', 'get_director_schema { work | project }: âm theo dự án của tác phẩm; tác phẩm lạ → NOT_FOUND');
+    // S6 + lược đồ + list_sounds + allowedSounds = cùng một tập, ở từng dự án
+    for (const P of ['', 'cua-toi', 'mau-tam-quoc']) {
+      const allowed = S.allowedSounds({ project: P }), set = new Set(allowed), en = enumOf(GC.director.schema([qv], { project: P }));
+      const viaList = J(await m.callTool('list_sounds', { project: P })).sounds.map(x => x.name);
+      const s6 = S.names().filter(n => S.lintSoundTrack([{ say: '', sfx: [n] }], { project: P, auto: false }).some(x => x.code === 'S6'));
+      no(JSON.stringify(en) !== JSON.stringify(allowed) || JSON.stringify(viaList.slice().sort()) !== JSON.stringify(allowed.slice().sort()) || s6.some(n => set.has(n)) || S.names().some(n => !set.has(n) && !s6.includes(n)), 'dự án "' + P + '": lược đồ = list_sounds = allowedSounds, và S6 chặn đúng phần còn lại (' + allowed.length + ' / ' + S.names().length + ')');
+    }
+    // lưu: âm không được mời thì S6 từ chối (cùng tập)
+    const shotOf = sfx => ({ title: 'C', scene: 'gen.khung/san-khau-chuan', cast: [qv.key], event: { title: 'C', steps: [{ actor: qv.id, state: 'vow', say: '', sfx }] } });
+    const sr = await m.callTool('save_shot', { work: 'phim-toi', shot: Object.assign({ id: 'c1' }, shotOf(['trong-tran'])) });
+    no(!sr.isError || !errOf(sr).details.some(d => /S6/.test(d.message)), 'save_shot: âm không được mời (trong-tran trong dự án cua-toi) → S6');
+    // bộ phát: cùng dự án của tác phẩm (opts.project) — không tự gán âm Tam Quốc cho phim của dự án khác
+    const step = { actor: qv.id, state: 'vow', activity: 'charge', say: 'Xông lên!' }, sc = GC.SCENES[Object.keys(GC.SCENES).find(k => /vuon-dao|doanh-trai/.test(k))].key;
+    const pl = project => GC.film.direct({ scene: sc, cast: [qv.key], event: { title: 'x', steps: [step] } }, project === undefined ? undefined : { project }), sfxOf = p => p.beats.filter(b => b.say).map(b => b.sfx);
+    no(pl().project !== 'mau-tam-quoc' || pl('cua-toi').project !== 'cua-toi' || JSON.stringify(sfxOf(pl('cua-toi'))) !== '[["whoosh"]]' || !sfxOf(pl()).flat().includes('tu-va'), 'bộ phát: dự án tác phẩm (opts.project) thắng dự án của diễn viên: ' + JSON.stringify([sfxOf(pl()), sfxOf(pl('cua-toi'))]));
+    console.log('   ✓ âm nào dùng được = một hàm: lược đồ / lời nhắc đạo diễn / get_director_schema / list_sounds / S6 / bộ phát cùng theo dự án của TÁC PHẨM (dàn diễn viên chỉ dự phòng) — nhân vật Tam Quốc trong phim dự án khác không được mời trong-tran');
+  }
+
   // ---------- 3. MCP: 52 tool, 6 tool âm thanh (danh sách · chuẩn · gói · kiểm · lưu · chấm luật), lưu bền, nạp lại, cảnh báo âm bị bỏ
   {
     const dir = tmpDir(), { GC, S, store, m } = fresh(dir), call = (t, a) => m.callTool(t, a);

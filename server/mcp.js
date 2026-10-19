@@ -63,7 +63,7 @@ const TOOLS = [
   { name: 'validate_character', title: 'Kiểm công thức', description: 'Chạy cổng kiểm (linh kiện, license, tham số, nhận diện, 18 biểu cảm, động tác) trên một công thức chưa lưu.', inputSchema: obj({ asset: { type: 'object', description: 'công thức nhân vật: { id, name, look: { eyes, brows, parts, params, palette }, expressions?, identity, persona? }' } }, ['asset']), annotations: { readOnlyHint: true } },
   { name: 'save_character', title: 'Lưu nhân vật', description: 'Kiểm rồi lưu nhân vật (có phiên bản). Mặc định vào thư viện local.my; nếu key trùng nhân vật đã có thì lưu thành phiên bản mới. Trạng thái (cả item / cảnh): status "draft" (mặc định — nháp, dùng ngay trong dự án) hoặc "published" (phát hành — vào gói bán; nhân vật phát hành cần dấu nhận diện identity). AI tự tạo thì để nháp; người dùng quyết phát hành. Giọng trong phim: voice { role (vai giọng — get_catalog › voiceRoles; bỏ trống = đoán theo vai trò / tính cách / tên), accent (giọng vùng riêng, tuỳ chọn), ai (giọng AI chọn tay: tên dựng sẵn / id thư viện / voice_… đã thiết kế), pitch 0.5–2 (trầm → cao), rate 0.6–1.6 (chậm → nhanh) — pitch / rate cho giọng trình duyệt }.', inputSchema: obj({ asset: { type: 'object' }, note: { type: 'string', description: 'ghi chú phiên bản' } }, ['asset']) },
   { name: 'render_character', title: 'Dựng hình', description: 'Dựng SVG của một nhân vật ở một biểu cảm. Dùng key của nhân vật đã có, hoặc truyền asset chưa lưu để xem thử. action = id hành động (list_actions) → khung lúc va chạm / giữa động tác (cả chuỗi: render_action).', inputSchema: obj({ key: { type: 'string' }, action: { type: 'string', description: 'id hành động (tuỳ chọn)' }, asset: { type: 'object' }, state: { type: 'string', description: 'id biểu cảm, mặc định normal' }, activity: { type: 'string', description: 'hoạt động: eat, sleep, run, attack… (get_catalog › activities)' }, posture: { type: 'string' }, move: { type: 'string' }, motion: { type: 'string' }, facing: { type: 'string', enum: ['left', 'right'] }, view: { type: 'string', enum: ['front', 'left', 'right', 'left45', 'right45', 'left90', 'right90', 'left135', 'right135', 'back'], description: 'góc nhìn 8 hướng: chính diện, nghiêng nhẹ 3/4, 45°, 90° (nhìn ngang), 135° (quay lưng chéo), back (sau lưng) — trái/phải theo màn hình' }, t: { type: 'number', description: 'giây trong chu kỳ động tác (bỏ trống = khung đại diện)' }, crop: { type: 'boolean', description: 'true = khung avatar (đầu và vai)' } }) , annotations: { readOnlyHint: true } },
-  { name: 'get_director_schema', title: 'Schema kịch bản', description: 'JSON Schema + hướng dẫn viết kịch bản sự kiện cho các diễn viên đã chọn.', inputSchema: obj({ cast: { type: 'array', items: { type: 'string' }, description: 'id diễn viên; bỏ trống = tất cả' } }), annotations: { readOnlyHint: true } },
+  { name: 'get_director_schema', title: 'Schema kịch bản', description: 'JSON Schema + hướng dẫn viết kịch bản sự kiện cho các diễn viên đã chọn. Truyền work (id tác phẩm) hoặc project để danh sách âm (step.sfx) đúng dự án của TÁC PHẨM — cùng danh sách save_shot chấp nhận (luật S6); không truyền thì suy từ dàn diễn viên.', inputSchema: obj({ cast: { type: 'array', items: { type: 'string' }, description: 'id diễn viên; bỏ trống = tất cả' }, work: { type: 'string', description: 'id tác phẩm — dự án của nó quyết âm nào được mời' }, project: { type: 'string', description: 'id dự án (khi chưa có tác phẩm); "" = chỉ khung + gói dùng chung' } }), annotations: { readOnlyHint: true } },
   { name: 'validate_event', title: 'Kiểm kịch bản', description: 'Kiểm một kịch bản sự kiện theo schema (diễn viên, biểu cảm, động tác, hiệu ứng có trong kho).', inputSchema: obj({ event: { type: 'object' }, cast: { type: 'array', items: { type: 'string' } } }, ['event']), annotations: { readOnlyHint: true } },
   { name: 'save_event', title: 'Lưu kịch bản', description: 'Kiểm rồi lưu kịch bản để owner mở và diễn trong Studio.', inputSchema: obj({ event: { type: 'object' }, author: { type: 'string', description: 'tên agent viết kịch bản' } }, ['event']) },
   { name: 'get_part_spec', title: 'Chuẩn tạo linh kiện', description: 'Khung sườn để tự vẽ linh kiện mới: khung 200×240, neo khuôn mặt/thân, lớp nên dùng cho từng bộ phận, token màu, tập SVG cho phép, quy tắc góc 45° (drawn | same | face45 | body45) và ví dụ hoàn chỉnh. Gọi trước khi vẽ.', inputSchema: obj({ slot: { type: 'string', description: 'bộ phận muốn vẽ (hat, outfit, hair…); bỏ trống = tất cả' } }), annotations: { readOnlyHint: true } },
@@ -397,9 +397,10 @@ class MCP {
       }
       case 'get_director_schema': {
         this.sync();
-        const cast = this.castOf(args.cast);
-        const sch = GC.director.schema(cast), en = (sch.properties.steps.items.properties.action || {}).enum || [];
-        return json({ schema: sch, actorsCan: cast.map(a => ({ id: a.id, weapon: GC.choreo.hasWeapon(a), actions: GC.choreo.actionsFor(a).filter(k => en.indexOf(k) >= 0) })), guide: GC.director.prompt(cast).split('\nSchema:')[0] });
+        const cast = this.castOf(args.cast), scope = this.soundScope(args);
+        if (scope === null) return toolError('Không có tác phẩm ' + String(args.work).slice(0, 64) + ' (list_works)', { code: 'NOT_FOUND' });
+        const sch = GC.director.schema(cast, scope), en = (sch.properties.steps.items.properties.action || {}).enum || [];
+        return json({ schema: sch, actorsCan: cast.map(a => ({ id: a.id, weapon: GC.choreo.hasWeapon(a), actions: GC.choreo.actionsFor(a).filter(k => en.indexOf(k) >= 0) })), guide: GC.director.prompt(cast, scope).split('\nSchema:')[0] });
       }
       case 'validate_event': {
         this.sync();
@@ -1411,6 +1412,12 @@ class MCP {
     const all = this.GC.assets();
     if (!Array.isArray(ids) || !ids.length) return all;
     return all.filter(a => ids.indexOf(a.id) >= 0 || ids.indexOf(a.key) >= 0);   // nhận cả id lẫn key (agent hay đưa key từ list_characters)
+  }
+
+  // phạm vi âm của lược đồ / lời nhắc đạo diễn: dự án của TÁC PHẨM (args.work) > args.project > undefined (suy từ dàn diễn viên) — null nếu tác phẩm không có
+  soundScope(args) {
+    if (args && args.work !== undefined) { const w = this.store.getWork(String(args.work)); return w ? { project: w.project || '' } : null; }
+    return args && typeof args.project === 'string' ? { project: args.project } : undefined;
   }
 
   // Xử lý một thông điệp JSON-RPC. Trả về phản hồi, hoặc null với notification.

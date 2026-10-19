@@ -123,7 +123,9 @@
   }
 
   // dự án của phân cảnh để chọn gói âm: người gọi chỉ định > shot.project > dự án của bối cảnh > dự án của diễn viên đầu tiên có dự án (phim xuất mang project của tác phẩm)
+  // quyết ở GC.sounds.projectFor — cùng hàm với lược đồ đạo diễn, Bảng bước và S6 (CNS-104); chưa nạp sounds.js thì cách cũ
   function projectOf(shot, o) {
+    if (GC.sounds && GC.sounds.projectFor) return GC.sounds.projectFor({ project: o && o.project, shot: shot, scene: scene(shot), cast: actors(shot) });
     if (o && typeof o.project === 'string') return o.project;
     if (shot && typeof shot.project === 'string') return shot.project;
     var sc = scene(shot), a = actors(shot).filter(function (x) { return x.project; })[0];

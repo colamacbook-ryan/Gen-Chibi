@@ -759,18 +759,15 @@
   var FILM_BUBBLES = ['say', 'shout', 'think', 'whisper'];
   // 17 tên âm cũ (v0.17) — từ vựng công khai, luôn hợp lệ; từ v0.18 step.sfx nhận MỌI tên trong thư viện âm (engine/sounds.js: bộ chuẩn + gói của dự án)
   var FILM_SFX = ['pop', 'whoosh', 'step', 'sting', 'hit', 'boing', 'sparkle', 'rumble', 'drip', 'sad', 'snore', 'party', 'hmm', 'gong', 'chime', 'swish', 'tick'];
-  // âm đưa vào lược đồ / lời nhắc đạo diễn: bộ chuẩn + gói dùng chung + gói của dự án trong dàn diễn viên (lược đồ không phình theo gói dự án khác — như filmActions);
-  // chưa nạp sounds.js thì 17 tên cũ. Bộ kiểm (validateEvent) nhận mọi âm đã nạp; âm của dự án khác bị luật S6 của lintSoundTrack chặn lúc lưu tác phẩm.
+  // âm đưa vào lược đồ / lời nhắc đạo diễn: GC.sounds.allowedSounds — cùng MỘT hàm với S6 (lint) và bộ phát (CNS-104): dự án quyết theo o.project / o.work (tác phẩm),
+  // không có thì dự phòng theo dàn diễn viên; không cả cast lẫn dự án thì mọi âm đã nạp. Chưa nạp sounds.js thì 17 tên cũ.
+  // Bộ kiểm (validateEvent) nhận mọi âm đã nạp; âm của dự án khác bị luật S6 của lintSoundTrack chặn lúc lưu tác phẩm.
   function filmSounds() { return G.GenChibi && G.GenChibi.sounds || null; }
-  function filmSfx(cast) {
+  function filmSfx(cast, o) {
     var S = filmSounds();
     if (!S) return FILM_SFX.slice();
-    if (!cast) return S.names();
-    var pj = {}, seen = {}, out = [];
-    cast.forEach(function (a) { pj[a.project || ''] = 1; });
-    if (!Object.keys(pj).length) pj[''] = 1;
-    Object.keys(pj).forEach(function (p) { S.names({ project: p }).forEach(function (n) { if (!seen[n]) { seen[n] = 1; out.push(n); } }); });
-    return out;
+    if (!cast && !(o && (o.work || typeof o.project === 'string'))) return S.names();
+    return S.allowedSounds({ work: o && o.work, project: o && o.project, cast: cast });
   }
   // từ vựng HÀNH ĐỘNG (biên đạo, v0.15) nằm ở engine/choreo.js + kinds/character/gen.choreo.js — chưa nạp thì kịch bản không có action
   // cast (tuỳ chọn): chỉ đòn của KHUNG + đòn của gói động tác thuộc dự án của dàn diễn viên (prompt / lược đồ không phình theo mọi gói — CNS-046);
@@ -783,7 +780,8 @@
     }
     return { act: act, react: (C && C.REACTS) || {} };
   }
-  function directorSchema(cast) {
+  // o (tuỳ chọn) = { project | work }: dự án của TÁC PHẨM quyết âm nào được mời (xem filmSfx)
+  function directorSchema(cast, o) {
     var FA = filmActions(cast);
     return {
       $schema: 'https://json-schema.org/draft/2020-12/schema',
@@ -812,7 +810,7 @@
               to: { enum: castIds(cast) },
               camera: { enum: FILM_CAMERAS.slice() },
               bubble: { enum: FILM_BUBBLES.slice() },
-              sfx: { type: 'array', maxItems: 3, items: { enum: filmSfx(cast) } },
+              sfx: { type: 'array', maxItems: 3, items: { enum: filmSfx(cast, o) } },
               // hành động (biên đạo): đòn đánh cần target; người bị đánh phản ứng đúng khung va chạm (chưa nạp biên đạo → enum rỗng = không dùng được)
               action: { enum: Object.keys(FA.act) },
               target: { enum: castIds(cast) },
@@ -882,7 +880,7 @@
     });
     return errs;
   }
-  function directorPrompt(cast) {
+  function directorPrompt(cast, o) {
     var L = [];
     L.push('Bạn là đạo diễn hài cho dàn nhân vật chibi của gen-chibi.');
     L.push('Viết kịch bản ngắn (3–6 cảnh) cho sự kiện mô tả cuối cùng. Biểu cảm luôn khoa trương, hài, không bạo lực, không máu.');
@@ -910,7 +908,7 @@
     if (SP) {
       // âm thanh: để TRỐNG gần hết các bước (bộ phát tự gán âm theo cảm xúc / hiệu ứng / hoạt động); chỉ đặt sfx khi muốn NHẤN — luật ghép ở GC.sounds (một nguồn)
       L.push('- sfx (tuỳ chọn, mảng ≤ ' + SP.RULES.maxPerStep + ' tên): bộ phát TỰ gán âm theo state / fx / activity — hãy để TRỐNG gần hết các bước, chỉ đặt sfx khi muốn NHẤN một khoảnh khắc (≤ ' + SP.RULES.maxAccent + ' âm nhấn mỗi bước, không đặt âm nhấn ở bước có lời); sfx: [] = bước im. Tên âm theo nhóm:');
-      var fs = filmSfx(cast);
+      var fs = filmSfx(cast, o);
       SP.CATS.forEach(function (c) { var xs = fs.filter(function (n) { return SP.get(n).cat === c[0]; }); if (xs.length) L.push('  · ' + c[1] + (SP.ACCENT.indexOf(c[0]) >= 0 ? ' (âm NHẤN)' : '') + ': ' + xs.join(', ')); });
     } else L.push('- sfx: ' + FILM_SFX.join(', '));
     L.push('- Đổi spot giữa các bước để nhân vật đi lại trên sân khấu (đừng để mọi người đứng yên cả cảnh); xen activity (bow, salute, point, wave, cheer, attack…) cho câu thoại có hành động.');
@@ -925,7 +923,7 @@
       L.push('- react (phản ứng của target, mặc định hit): ' + Object.keys(FA.react).map(function (k) { return k + ' (' + FA.react[k].label + ')'; }).join(', '));
       L.push('- Cảnh đấu: hai người cùng hàng trước (left, midLeft, center, midRight, right), cách nhau ít nhất một chỗ đứng; người ra đòn tự áp sát / lùi cho trúng. "say" có thể là "" khi chỉ ra đòn, hoặc một tiếng hô ngắn. Tối đa 3 đòn một phân cảnh; xen câu thoại giữa các đòn. Hài kiểu phim võ, không máu.');
     }
-    L.push('', 'Schema:', JSON.stringify(directorSchema(cast), null, 2), '', 'Sự kiện: <mô tả sự kiện ở đây>');
+    L.push('', 'Schema:', JSON.stringify(directorSchema(cast, o), null, 2), '', 'Sự kiện: <mô tả sự kiện ở đây>');
     return L.join('\n');
   }
 

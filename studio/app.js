@@ -1728,7 +1728,7 @@
     function castAssets() { return cast.map(function (k) { return GC.ASSETS[k] || GC.getAsset(k, MY_PACK); }).filter(Boolean); }
     function assetOf(id) { return castAssets().filter(function (a) { return a.id === id; })[0] || null; }
     var SCH = null;   // thuộc tính của một bước trong lược đồ — tính lại khi đổi dàn diễn viên
-    function schema() { SCH = GC.director.schema(castAssets()).properties.steps.items.properties; }
+    function schema() { SCH = GC.director.schema(castAssets(), typeof cfg.project === 'string' ? { project: cfg.project } : undefined).properties.steps.items.properties; }   // âm mời theo dự án của TÁC PHẨM (cùng danh sách S6 — CNS-104)
     schema();
     if (!rows.length) { var a0 = castAssets()[0]; rows.push({ actor: a0 ? a0.id : '', state: 'normal', say: '' }); }
     // bước sạch: bỏ ô trống (lược đồ không nhận chuỗi rỗng ở ô tuỳ chọn), giữ nguyên mọi khoá khác do AI / JSON viết
@@ -2538,7 +2538,7 @@
         aiB.disabled = true; aiB.textContent = 'Đang viết…';
         var ids = cast.map(function (k) { return (GC.ASSETS[k] || {}).id; }).filter(Boolean);
         saveShot({ shot: { id: s.id, title: t.value, description: d.value, scene: sc.value, cast: cast } })
-          .then(function () { return Store.api('POST', 'api/ai/director', { description: (t.value + '. ' + d.value + (sc.value ? ' Bối cảnh: ' + sc.value + ' — dùng "scene": "' + sc.value + '" và spot.' : '')).slice(0, 2000), cast: ids }); })
+          .then(function () { return Store.api('POST', 'api/ai/director', { description: (t.value + '. ' + d.value + (sc.value ? ' Bối cảnh: ' + sc.value + ' — dùng "scene": "' + sc.value + '" và spot.' : '')).slice(0, 2000), cast: ids, project: W.project || '' }); })
           .then(function (res) { return saveShot({ shot: { id: s.id, event: res.event } }); })
           .then(function () { toast('Đã viết lời thoại cho ' + s.title); })
           .catch(function (e) { if (e) toast(e.message); aiB.disabled = false; aiB.textContent = 'AI viết lời thoại'; });
@@ -2546,7 +2546,7 @@
       // soạn tay từng bước (không cần AI) — dùng bản nháp đang gõ dở của phân cảnh (tên, mô tả, bối cảnh, dàn diễn viên)
       var stepB = h('button', { class: 'btn sm', title: 'Soạn từng bước bằng ô chọn: ai nói gì, biểu cảm, chỗ đứng, đòn đánh… — không cần AI', onclick: function () {
         var base = { title: t.value, description: d.value, scene: sc.value, cast: cast.slice() };
-        var sh = stepSheet({ base: base, event: s.event, chars: chars,
+        var sh = stepSheet({ base: base, event: s.event, chars: chars, project: W.project || '',
           save: function (shot) { return saveShot({ shot: Object.assign({ id: s.id }, shot) }); },
           close: function () {} });   // đã lưu thì saveShot vẽ lại trang; đóng không lưu = bỏ thay đổi
         $('view').appendChild(sh.el); onLeave(sh.destroy);
