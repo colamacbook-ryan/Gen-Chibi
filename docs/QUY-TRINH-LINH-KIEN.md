@@ -105,7 +105,7 @@ Một loại asset mới không phải "một bộ vẽ mới" mà là **một c
 | | **Xưởng** `/xuong` | **Thư viện** `/thu-vien` | **Tạo tác** `/tao-tac` |
 |---|---|---|---|
 | Là gì | bộ khung chuẩn (không chủ đề) + nơi **tạo asset từ khung** | asset đã qua cổng kiểm, **xếp theo dự án chủ đề** | **Tác phẩm**: làm phim / truyện với AI đạo diễn |
-| Chứa | khung xương, luật, linh kiện, phông, khung tư thế & biểu cảm, cổng kiểm; Tạo asset mới, bàn chỉnh, Trợ lý AI tạo asset | dự án chủ đề → nhân vật, vật phẩm, bối cảnh | kịch bản, phân cảnh, cảnh thành phẩm, sân khấu final, kịch bản lẻ từ agent |
+| Chứa | khung xương, luật, linh kiện, phông, khung tư thế & biểu cảm, cổng kiểm; Tạo asset mới, bàn chỉnh (Trợ lý AI ở dock cột phải) | dự án chủ đề → nhân vật, vật phẩm, bối cảnh | kịch bản, phân cảnh, cảnh thành phẩm, sân khấu final, kịch bản lẻ từ agent |
 | Việc | chọn khung → tham số → soát → cổng → lưu vào dự án | xem, **lấy về** (ảnh, sprite 8 hướng, mã), tải / nhập **gói dự án** | chat AI đạo diễn, diễn cả chuỗi, **xuất phim HTML**, storyboard |
 
 Dòng chảy một chiều: **Xưởng → Thư viện → Tạo tác → thành phẩm**. Khung không bao giờ bị sửa: lưu vào khung (kể cả từ Studio) thành bản sao trong "Của tôi".

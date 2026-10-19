@@ -1080,6 +1080,8 @@ if (!ONLY || ONLY === 'lib') {
     await boot.close();
 
     /* ================= A. THƯ VIỆN › ÂM THANH ================= */
+    // khung 1440: dock Trợ lý AI (380 px) mở thì vùng làm việc < 880 px → inspector xếp dưới bảng (STD-07: chật thì inspector thu lại). Kiểm cạnh nhau khi dock đóng, xếp dưới khi dock mở
+    await q.evaluate(() => { try { localStorage.setItem('gc-dock', JSON.stringify({ open: false })); } catch (e) { /* bỏ qua */ } });
     await open({ page: 'lib-sounds' });
     await q.waitForSelector('.lc-t tbody tr[data-id]');
     // A1) bảng đủ 62 âm khung + 7 âm của mẫu Tam Quốc; 8 nhóm có số đếm; ID = tên âm; nav có số đếm; chữ cột A B C…
@@ -1093,6 +1095,10 @@ if (!ONLY || ONLY === 'lib') {
     must((await q.$$eval('.lc-t tr.letters th', es => es.map(e => e.textContent).join(''))).startsWith('ABCDEFGHIJ'), 'thiếu dải chữ cột A…J');
     must(/69 âm · 8 nhóm/.test(await q.textContent('.lc-foot')), 'footer: ' + await q.textContent('.lc-foot'));
     must(await q.$eval('.lc-insp', e => Math.round(e.getBoundingClientRect().width)) === 400, 'inspector phải rộng 400 px');
+    await q.keyboard.press('Alt+j'); await q.waitForTimeout(300);
+    const stack = await q.evaluate(() => { const i = document.querySelector('.lc-insp').getBoundingClientRect(), t = document.querySelector('.lc-t').getBoundingClientRect(), d = document.querySelector('.dock'); return { dock: !!d && d.getBoundingClientRect().width > 300, below: i.top >= t.bottom - 1, w: Math.round(i.width) }; });
+    must(stack.dock && stack.below && stack.w >= 380, 'dock mở: inspector phải xếp dưới bảng, đủ rộng: ' + JSON.stringify(stack));
+    await q.keyboard.press('Alt+j'); await q.waitForTimeout(300);
     // A2) lọc theo nhóm · tìm không dấu · thẻ · gói · dự án
     await q.click('.lc-cats button[data-cat="hai"]');
     const nHai = await q.evaluate(() => window.GenChibi.sounds.list({ cat: 'hai' }).length);   // trong trang: gồm cả âm gói Tam Quốc

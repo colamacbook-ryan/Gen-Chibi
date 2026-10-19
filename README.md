@@ -83,7 +83,7 @@ Lỗi có mã ổn định: `[VALIDATION_FAILED]`, `NOT_FOUND`… kèm `structur
 - **Dự án & bộ mẫu:** `list/save_project` · `export/import_project` · `list_samples` · `install_sample`
 - **Hệ thống:** `get_app_version` · `update_app` · `rollback_app`
 
-Tạo linh kiện: `get_part_spec` → vẽ (SVG an toàn, token màu) → `preview_part` (bàn soát) → `save_part`. AI trong Studio (Xưởng › Trợ lý AI tạo asset, Tạo tác › AI đạo diễn) dùng đúng bộ tool này — mọi lối ghi đi qua một cổng kiểm (xem `docs/QUY-TRINH-LINH-KIEN.md` mục 6).
+Tạo linh kiện: `get_part_spec` → vẽ (SVG an toàn, token màu) → `preview_part` (bàn soát) → `save_part`. Trợ lý AI trong Studio (dock cột phải ở mọi khu; ở Tạo tác là AI đạo diễn) dùng đúng bộ tool này — mọi lối ghi đi qua một cổng kiểm (xem `docs/QUY-TRINH-LINH-KIEN.md` mục 6).
 
 ### Mở MCP ra Internet — một lệnh, một link
 Cần một tên miền do Cloudflare quản lý DNS (gói miễn phí là đủ).
