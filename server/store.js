@@ -173,10 +173,13 @@ class Store {
       if (Array.isArray(m.log)) o.log = m.log.slice(0, 30).map(l => ({ tool: String(l.tool || '').slice(0, 60), ok: !!l.ok, summary: String(l.summary || '').slice(0, 200), anchors: Array.isArray(l.anchors) ? l.anchors.slice(0, 6).map(a => ({ anchor: String(a.anchor).slice(0, 200), label: String(a.label || '').slice(0, 80) })) : undefined }));
       if (Array.isArray(m.anchors)) o.anchors = m.anchors.slice(0, 8).map(a => ({ anchor: String(a.anchor).slice(0, 200), label: String(a.label || '').slice(0, 80) }));
       if (Array.isArray(m.pins)) o.pins = m.pins.slice(0, 8).map(a => ({ anchor: String(a.anchor).slice(0, 200), label: String(a.label || '').slice(0, 80) }));
+      // token thật của lượt (cộng mọi vòng gọi LLM) gắn vào tin trả lời — nền cho "chi phí theo tin" (CNS-127)
+      if (m.usage && typeof m.usage === 'object') { const n = x => (Number.isFinite(x) && x >= 0 ? Math.round(x) : 0); o.usage = { prompt: n(m.usage.prompt), completion: n(m.usage.completion) }; }
       return o;
     };
     let list = (Array.isArray(messages) ? messages : []).filter(m => m && typeof m === 'object').map(clean).slice(-CHAT_MAX);
-    while (list.length > 2 && Buffer.byteLength(JSON.stringify(list)) > CHAT_BYTES) list = list.slice(1);   // quá lớn: bỏ tin cũ nhất trước
+    const bytes = l => Buffer.byteLength(JSON.stringify({ kind, id, messages: l, updatedAt: '2000-01-01T00:00:00.000Z' }, null, 2));   // kích thước TỆP (có thụt lề như writeJSON) — trần 200 KB là của tệp
+    while (list.length > 2 && bytes(list) > CHAT_BYTES) list = list.slice(1);   // quá lớn: bỏ tin cũ nhất trước
     const rec = { kind, id, messages: list, updatedAt: new Date().toISOString() };
     writeJSON(f, rec);
     return rec;

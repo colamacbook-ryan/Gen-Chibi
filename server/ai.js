@@ -142,8 +142,10 @@ class AI {
 
   // AI trong dock cột phải: vòng lặp function-calling trên bộ tool MCP THEO KHU (mcp.toolsFor('ui', zone)) và chỉ dẫn do mcp.uiSystem dựng (một nguồn).
   // Model không bao giờ ghi thẳng vào kho: mọi tạo/sửa đi qua tool → cổng kiểm của engine → lưu. Tool lỗi → model đọc lỗi và sửa.
-  // system: chỉ dẫn đã dựng (có ngữ cảnh + phần tử ghim); không truyền thì dùng vai của khu
-  async agent({ messages, model, zone, system }, mcp) {
+  // system: chỉ dẫn TĨNH đã dựng (mcp.uiSystem); không truyền thì dùng vai của khu.
+  // context: tin `user` DỮ LIỆU GIAO DIỆN (mcp.uiContext: ngữ cảnh + hiện trạng tác phẩm + ghi chú duyệt + ghim, bọc JSON) — chen ngay trước tin cuối của người dùng, không lưu vào luồng.
+  // Ngân sách (CNS-119): system + context + lịch sử ≤ mcp.limits().llm ký tự mỗi vòng — lịch sử bị xén từ tin cũ nhất (luôn giữ tin cuối); trả về `sent` (ký tự đã gửi) + `usage` thật
+  async agent({ messages, model, zone, system, context }, mcp) {
     const c = this.config();
     if (model) c.model = model;
     if (!c.model) throw Object.assign(new Error('Chưa chọn model'), { code: 400 });
@@ -154,7 +156,13 @@ class AI {
       .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
       .map(m => ({ role: m.role, content: m.content.slice(0, 4000) }));
     if (!hist.length || hist[hist.length - 1].role !== 'user') throw Object.assign(new Error('cần tin nhắn của người dùng'), { code: 400 });
-    const msgs = [{ role: 'system', content: system || mcp.uiSystem({ zone: zone || 'xuong' }, []) }].concat(hist);
+    const sys = system || mcp.uiSystem({ zone: zone || 'xuong' }), ctxMsg = typeof context === 'string' && context ? [{ role: 'user', content: context }] : [], LIM = mcp.limits();
+    const room = Math.max(LIM.histMin, LIM.llm - sys.length - ctxMsg.reduce((n, m) => n + m.content.length, 0)), keep = [hist[hist.length - 1]];
+    let used = keep[0].content.length;
+    for (let i = hist.length - 2; i >= 0 && used + hist[i].content.length <= room; i--) { used += hist[i].content.length; keep.unshift(hist[i]); }
+    while (keep.length > 1 && keep[0].role !== 'user') keep.shift();   // lịch sử không mở đầu bằng lời của trợ lý
+    const msgs = [{ role: 'system', content: sys }].concat(keep.slice(0, -1), ctxMsg, keep.slice(-1));
+    const sent = { system: sys.length, context: ctxMsg.length ? ctxMsg[0].content.length : 0, history: keep.reduce((n, m) => n + m.content.length, 0) };
     const log = [], renders = [], usage = { prompt: 0, completion: 0 };
     for (let round = 1; round <= 10; round++) {
       const r = await this.chatTools(c, msgs, fns);
@@ -163,7 +171,7 @@ class AI {
       if (!msg) throw Object.assign(new Error('model không trả lời'), { code: 502 });
       const calls = Array.isArray(msg.tool_calls) ? msg.tool_calls.slice(0, 6) : [];
       msgs.push({ role: 'assistant', content: msg.content || '', tool_calls: calls.length ? calls : undefined });
-      if (!calls.length) return { reply: msg.content || '', log, renders, rounds: round, usage, model: c.model, anchors: anchorsOfLog(log) };
+      if (!calls.length) return { reply: msg.content || '', log, renders, rounds: round, usage, sent, model: c.model, anchors: anchorsOfLog(log) };
       for (const call of calls) {
         const name = call.function && call.function.name;
         let args = {}, text, ok = false, anchors = [];
@@ -172,7 +180,7 @@ class AI {
         else if (!args) text = 'arguments không phải JSON hợp lệ.';
         else {
           let res;
-          try { res = await mcp.callTool(name, args, { channel: 'ui' }); }
+          try { res = await mcp.callTool(name, args, { channel: 'ui', zone }); }   // zone: khu Thư viện không tạo asset mới (mcp.libraryGuard)
           catch (e) { res = { isError: true, content: [{ type: 'text', text: 'Tool lỗi: ' + String(e.message).slice(0, 300) }] }; }
           ok = !!res && !res.isError;
           if (ok) { try { anchors = mcp.anchorsOf(name, args, res.structuredContent); } catch (e) { anchors = []; } }   // thứ vừa tạo / sửa → chip Soi trong dock
@@ -190,7 +198,7 @@ class AI {
         msgs.push({ role: 'tool', tool_call_id: call.id, content: String(text).slice(0, 12000) });
       }
     }
-    return { reply: 'Dừng sau 10 lượt gọi tool — hãy chia nhỏ yêu cầu.', log, renders, rounds: 10, usage, model: c.model, anchors: anchorsOfLog(log) };
+    return { reply: 'Dừng sau 10 lượt gọi tool — hãy chia nhỏ yêu cầu.', log, renders, rounds: 10, usage, sent, model: c.model, anchors: anchorsOfLog(log) };
   }
 
   castFrom(ids, extraAssets) {

@@ -98,7 +98,19 @@ function originOK(req) {
   return !origin || origin === 'null' || new URL(origin).host === req.headers.host;
 }
 
-const chatBusy = new Set();   // một lượt AI mỗi luồng tại một thời điểm (hai lượt cùng ghi dễ tạo trùng phân cảnh)
+// KHOÁ LƯỢT AI (CNS-120): mỗi lượt giữ khoá của LUỒNG (`<loại>-<id>`: một lượt mỗi luồng) VÀ khoá của TÁC PHẨM nó có thể ghi (`work:<id>`; lượt ở khu Tạo tác không gắn tác phẩm có thể
+// ghi mọi tác phẩm → `work:*`, xung khắc với mọi `work:<id>`). Hai luồng khác nhau cùng ghi một phim không chạy song song (dễ tạo trùng phân cảnh); khác tác phẩm thì song song.
+const chatBusy = new Set();
+function lockKeys(ctx, key) {
+  const keys = [key.kind + '-' + key.id];
+  if (ctx.zone === 'tao-tac') keys.push(ctx.object && ctx.object.kind === 'work' ? 'work:' + ctx.object.id : 'work:*');
+  return keys;
+}
+function lockHit(k) {
+  if (chatBusy.has(k)) return true;
+  if (k === 'work:*') return Array.from(chatBusy).some(x => x.startsWith('work:'));
+  return k.startsWith('work:') && chatBusy.has('work:*');
+}
 // Luồng chat của dock theo ĐỐI TƯỢNG đang xem: tác phẩm → asset → dự án → (không có đối tượng) khu. Đổi đối tượng = đổi luồng.
 function chatKeyOf(ctx) {
   const o = ctx.object;
@@ -122,18 +134,19 @@ async function dockTurn(b) {
   if (ctx.object && ctx.object.kind === 'work' && !store.getWork(ctx.object.id)) ctx.object = null;   // tác phẩm đã mất: về luồng của khu
   let key = chatKeyOf(ctx);
   if (!store.chatFile(key.kind, key.id)) key = { kind: 'khu', id: ctx.zone };   // id lạ (không đặt được tên tệp): về luồng của khu
-  const lock = key.kind + '-' + key.id;
-  if (chatBusy.has(lock)) throw Object.assign(new Error('AI đang làm lượt trước cho đối tượng này — đợi xong rồi gửi tiếp'), { code: 409 });
+  const keys = lockKeys(ctx, key), hit = keys.find(lockHit);
+  if (hit) throw Object.assign(new Error(hit.startsWith('work:') ? 'AI đang ghi tác phẩm này ở một luồng khác — đợi xong rồi gửi tiếp' : 'AI đang làm lượt trước cho đối tượng này — đợi xong rồi gửi tiếp'), { code: 409 });
   const th = threadOf(key), hist = th.messages.map(x => ({ role: x.role, content: x.content })).concat({ role: 'user', content: text });
   let r;
-  chatBusy.add(lock);
-  try { r = await ai.agent({ messages: hist, model: typeof b.model === 'string' ? b.model : '', zone: ctx.zone, system: mcp.uiSystem(ctx, anchors) }, mcp); }
-  finally { chatBusy.delete(lock); }
+  keys.forEach(k => chatBusy.add(k));
+  // system = luật TĨNH; ngữ cảnh + hiện trạng tác phẩm + ghi chú duyệt + ghim = một tin `user` bọc JSON "dữ liệu, không phải lệnh" (CNS-118), có trần ngân sách (CNS-119)
+  try { r = await ai.agent({ messages: hist, model: typeof b.model === 'string' ? b.model : '', zone: ctx.zone, system: mcp.uiSystem(ctx), context: mcp.uiContext(ctx, anchors) }, mcp); }
+  finally { keys.forEach(k => chatBusy.delete(k)); }
   const at = new Date().toISOString();
   const rec = store.saveChat(key.kind, key.id, th.messages.concat(
     { role: 'user', content: text, at, pins: anchors.map(a => ({ anchor: a.anchor, label: a.label })) },
-    { role: 'assistant', content: String(r.reply || '').slice(0, 6000), at: new Date().toISOString(), log: r.log.slice(0, 30), anchors: r.anchors }));
-  const out = { reply: r.reply, log: r.log, renders: r.renders, usage: r.usage, model: r.model, anchors: r.anchors, chat: key, messages: rec.messages.length, context: ctx };
+    { role: 'assistant', content: String(r.reply || '').slice(0, 6000), at: new Date().toISOString(), log: r.log.slice(0, 30), anchors: r.anchors, usage: r.usage }));
+  const out = { reply: r.reply, log: r.log, renders: r.renders, usage: r.usage, sent: r.sent, model: r.model, anchors: r.anchors, chat: key, messages: rec.messages.length, context: ctx };
   if (key.kind === 'work') {
     const w = store.getWork(key.id);   // đọc lại: AI có thể đã sửa tác phẩm qua tool; luồng cũ (work.chat) đã chuyển sang data/chats → bỏ khỏi tác phẩm
     if (w) { if ((w.chat || []).length) { w.chat = []; store.saveWork(w); } out.work = mcp.workView(store.getWork(key.id)); }
@@ -227,7 +240,7 @@ async function route(req, res) {
   }
 
   // ---- core AI (LLM qua API chuẩn OpenAI; key mã hoá, không trả về trình duyệt)
-  if (p === '/api/ai' && m === 'GET') return send(res, 200, ai.publicConfig());
+  if (p === '/api/ai' && m === 'GET') return send(res, 200, Object.assign(ai.publicConfig(), { zones: mcp.zoneInfo() }));   // zones: nhãn / vai / lời giới thiệu theo khu cho dock (một nguồn: mcp ZONES)
   if (p === '/api/ai' && m === 'PUT') return send(res, 200, ai.setConfig(await body(req)));
   if (p === '/api/ai/models' && m === 'GET') {
     try { return send(res, 200, await ai.models()); } catch (e) { return fail(res, e.code || 502, 'Không lấy được danh sách model: ' + e.message); }
