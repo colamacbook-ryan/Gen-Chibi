@@ -1,5 +1,5 @@
 // Kiểm thử trong trình duyệt (chạy cục bộ, cần Playwright): mọi lớp gắn vào đầu phải đi cùng đầu.
-// Dùng: node tools/test-browser.mjs   (tự dựng server tạm ở cổng 7496) · GC_ONLY=voice node tools/test-browser.mjs → chỉ nhóm giọng AI (cổng 7660) · GC_ONLY=lib → chỉ Thư viện Âm thanh / Giọng (cổng 7662)
+// Dùng: node tools/test-browser.mjs   (tự dựng server tạm ở cổng 7496) · GC_ONLY=voice node tools/test-browser.mjs → chỉ nhóm giọng AI (cổng 7660) · GC_ONLY=lib → chỉ Thư viện Âm thanh / Giọng (cổng 7662) · GC_ONLY=bubble → chỉ "lời thoại chuyên nghiệp" (cổng 7495; GC_THROTTLE=4 → CPU trang chậm 4× như máy yếu)
 import { createRequire } from 'module';
 import { spawn, execFileSync } from 'child_process';
 import { mkdtempSync } from 'fs';
@@ -713,7 +713,8 @@ if (!ONLY) {
 // Diễn THẬT hai phim mẫu (Tam Quốc có các cảnh cận, Văn phòng vui) trong trình duyệt và ĐO từng câu thoại: hình chữ nhật của bong bóng
 // (không đuôi) so với hình chữ nhật của ĐẦU mọi diễn viên (hợp getBoundingClientRect các lớp mặt / tai / tóc mái / mũ ĐANG vẽ — không dùng số liệu
 // của chính bộ giải), đo hai lần cách nhau 1 s vì nhân vật vẫn cử động. Mỗi rào đã thử ngược: tắt bộ giải → test đỏ.
-if (!ONLY) {
+// CNS-099: máy chậm / bảy trang song song thì khung hình chạy SAU đồng hồ hẹn giờ — bong bóng phải mở khi sân khấu ĐÃ đứng yên trên màn hình và hiện đủ lâu tính từ lúc thật sự hiện.
+if (!ONLY || ONLY === 'bubble') {
   const fs = require('fs');
   const home9 = mkdtempSync(path.join(tmpdir(), 'gc-'));
   const srv9 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home9, GC_PORT: '7495', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
@@ -785,28 +786,41 @@ if (!ONLY) {
       },
       mutate(src) { window.__orig2 = GenChibi.film.solveLayout; const f = eval(src); GenChibi.film.solveLayout = function (c) { window.__calls++; return f(c); }; },
       restore() { GenChibi.film.solveLayout = function (c) { window.__calls++; return window.__orig(c); }; },
-      start(sid) {
-        const st = ST(); window.__seq = 0; window.__res = {}; window.__pend = 0; window.__prog = ''; window.__calls = 0;
+      start(sid, cost) {
+        const st = ST(); window.__seq = 0; window.__res = {}; window.__life = {}; window.__pend = 0; window.__prog = ''; window.__calls = 0; window.__xcalls = 0;
         if (window.__mo) window.__mo.disconnect();
-        window.__mo = new MutationObserver(() => st.querySelectorAll('.gcp-bub.on,.gcp-cap.on').forEach(e => {
+        window.__mo = new MutationObserver(() => {
+          // bong bóng tắt (bỏ lớp "on"): ghi giờ → thời gian hiện THẬT trên màn hình
+          st.querySelectorAll('.gcp-bub[data-seq]:not(.on),.gcp-cap[data-seq]:not(.on)').forEach(e => { const L = window.__life[e.dataset.seq]; if (L && !L.off) L.off = performance.now(); });
+          st.querySelectorAll('.gcp-bub.on,.gcp-cap.on').forEach(e => {
           if (e.dataset.seq) return;
           const n = e.dataset.seq = String(++window.__seq); window.__res[n] = [];
-          // đo sau 0,35 s và 0,95 s kể từ lúc bong bóng hiện. Máy tải nặng / chạy song song làm khung hình tới trễ, đọc style sớm sẽ khởi động chuyển tiếp CSS
-          // lúc đó (opacity 0, máy quay chưa tới nơi) → kết thúc ngay các chuyển tiếp của bong bóng + máy quay để đo trạng thái cuối, đúng thứ người xem thấy sau 0,8 s
+          // lúc bong bóng mở, sân khấu phải ĐỨNG YÊN trên màn hình: không còn chuyển tiếp nào của diễn viên (đi / bước tới / lùi) hay máy quay đang chạy.
+          // Bố cục tính theo chỗ đích; hình còn đang đi thì bong bóng đè đầu (máy chậm: chuyển tiếp CSS chạy sau đồng hồ hẹn giờ của bộ phát)
+          const moving = [...st.querySelectorAll('.gcp-actor'), st.querySelector('.gcp-cam')].filter(Boolean).flatMap(x => x.getAnimations().filter(a => isFinite(a.effect.getComputedTiming().endTime))
+            .map(a => (x.title || 'máy quay') + ' ' + (a.transitionProperty || a.animationName) + ' ' + Math.round(a.currentTime) + '/' + a.effect.getTiming().duration + ' ms'));
+          window.__life[n] = { on: performance.now(), off: 0, moving };
+          // đo sau 0,35 s và 0,95 s kể từ lúc bong bóng hiện; kết thúc ngay chuyển tiếp vào của CHÍNH bong bóng (mờ → rõ, nảy) để đo trạng thái cuối — khung hình tới trễ thì nó còn treo ở đầu.
+          // Máy quay / diễn viên KHÔNG được kết thúc hộ: họ phải tự đứng yên trước khi bong bóng mở (rào "moving" ở trên)
           [350, 950].forEach(ms => { window.__pend++; setTimeout(() => {
-            const cam = st.querySelector('.gcp-cam'); if (e.isConnected) { [e, cam].forEach(x => x && x.getAnimations().forEach(a => { try { a.finish(); } catch (_) { /* hoạt hình vô hạn: bỏ qua */ } })); }
-            const m = measure(e); if (m) window.__res[n].push(m); window.__pend--; }, ms); });
-        }));
+            if (e.isConnected) e.getAnimations().forEach(a => { try { a.finish(); } catch (_) { /* hoạt hình vô hạn: bỏ qua */ } });
+            const m = measure(e);
+            // chi phí bố cục (lượt đo riêng): giải lại "cost" lần đúng câu này (setDialog → bố cục đầy đủ: đo khung xương, cỡ chữ, bộ giải), lấy NHỎ NHẤT. Giờ treo tường của một mẫu
+            // trên máy dùng chung còn gồm lúc hệ điều hành cho tiến trình khác chạy (CNS-099: một mẫu 44,8 ms khi tải 3–6); nhỏ nhất = chi phí thật, ngưỡng giữ nguyên
+            if (m && cost && ms === 350) { const c0 = window.__calls; m.costs = [m.ms]; for (let k = 0; k < cost; k++) { window.__P.setDialog(window.__P.dialog()); m.costs.push(parseFloat(e.dataset.ms)); } window.__xcalls += window.__calls - c0; }
+            if (m) window.__res[n].push(m); window.__pend--; }, ms); });
+          });
+        });
         window.__mo.observe(st, { attributes: true, subtree: true, attributeFilter: ['class'] });
         window.__P.play([window.__W.shots.find(s => s.id === sid)], 'T');
       },
       progress() { return GenChibi && document.querySelector('#__st') ? { pend: window.__pend, seq: window.__seq, card: !!document.querySelector('#__st .gcp-title b') && /^T$/.test(document.querySelector('#__st .gcp-title b').textContent) } : null; },
-      result() { return { res: window.__res, calls: window.__calls }; }
+      result() { return { res: window.__res, life: window.__life, calls: window.__calls - window.__xcalls }; }
     };
   })();`;
   // chạy một phân cảnh tới hết, trả các lần đo của từng câu
-  const playShot = async (page, sid) => {
-    await page.evaluate(sid => window.__lt.start(sid), sid);
+  const playShot = async (page, sid, cost) => {
+    await page.evaluate(([sid, cost]) => window.__lt.start(sid, cost), [sid, cost || 0]);
     const t0 = Date.now(); let ended = 0;
     while (Date.now() - t0 < 150000) {
       await page.waitForTimeout(150);
@@ -815,10 +829,11 @@ if (!ONLY) {
     }
     await page.evaluate(() => window.__P.stop());
     const r = await page.evaluate(() => window.__lt.result());
-    return { lines: Object.keys(r.res).sort((a, c) => a - c).map(k => ({ shot: sid, idx: +k, ms: r.res[k] })), calls: r.calls };
+    return { lines: Object.keys(r.res).sort((a, c) => a - c).map(k => { const L = r.life[k] || {}; return { shot: sid, idx: +k, ms: r.res[k], moving: L.moving || [], life: L.off ? Math.round(L.off - L.on) : null }; }), calls: r.calls };
   };
   const mkPage = async (opts, work, W, dialog) => {
     const q = await b9.newPage(opts || { viewport: { width: 1320, height: 780 } }), errs = []; q.on('pageerror', e => errs.push(e.message));
+    if (+process.env.GC_THROTTLE > 1) await (await q.context().newCDPSession(q)).send('Emulation.setCPUThrottlingRate', { rate: +process.env.GC_THROTTLE });   // giả lập máy yếu (tái hiện CNS-099)
     await q.goto(URL9 + 'tao-tac'); await q.waitForFunction(() => window.GenChibi && window.GenChibi.film && /^v\d/.test(document.getElementById('verChip').textContent), null, { timeout: 8000 });
     await q.waitForTimeout(500);
     await q.evaluate(LT);
@@ -831,6 +846,7 @@ if (!ONLY) {
     L.ms.forEach((m, k) => {
       const tag = L.shot + '#' + L.idx + (k ? 'b' : 'a') + ' "' + m.text + '"';
       if (m.overlaps.length) bad.push(tag + ': ' + m.mode + ' ĐÈ ĐẦU ' + JSON.stringify(m.overlaps));
+      if (!m.text.trim()) bad.push(tag + ': bong bóng rỗng (bước im — không lời — không được mở bong bóng)');
       if (m.margin < 0.02) bad.push(tag + ': ra ngoài vùng an toàn (lề ' + (m.margin * 100).toFixed(1) + '%)');
       if (m.minOpacity < 0.85) bad.push(tag + ': chữ mờ (opacity ' + m.minOpacity.toFixed(2) + ' ← chưa đọc / đã đọc / cả khối: ' + m.opParts.map(v => v.toFixed(2)).join(' / ') + ')');
       if (m.contrast < 4.5) bad.push(tag + ': tương phản chữ ' + m.contrast.toFixed(2) + ' < 4,5');
@@ -847,6 +863,8 @@ if (!ONLY) {
       if (o && o.mode && m.mode !== o.mode) bad.push(tag + ': chế độ ' + m.mode + ' ≠ ' + o.mode);
     });
     if (!L.ms.length) bad.push(L.shot + '#' + L.idx + ': không đo được (bong bóng biến mất sớm?)');
+    if (L.moving.length) bad.push(L.shot + '#' + L.idx + ': bong bóng mở khi sân khấu chưa đứng yên (' + L.moving.slice(0, 3).join(' · ') + ')');
+    if (L.life != null && L.life < 380) bad.push(L.shot + '#' + L.idx + ': bong bóng chỉ hiện ' + L.life + ' ms trên màn hình (< 380 ms giữ khung tối thiểu)');
     return bad;
   };
   const errsAll = [];
@@ -909,7 +927,9 @@ if (!ONLY) {
       x = Math.max(c.m, Math.min(c.W - c.m - s.w, cx - s.w / 2)), y = Math.max(0.04 * c.H, Math.min(0.6 * c.H, S.y0 - 0.05 * c.H - s.h));
       return { x0: x, y0: y, x1: x + s.w, y1: y + s.h, w: s.w, h: s.h, si: 0, tail: { px: cx, py: y + s.h, tx: cx, ty: y + s.h + 0.05 * c.H, len: 0.05 * c.H }, hard: 0, soft: 0, tag: 'lỗi-cố-ý', clean: true }; }`;   // hành vi CŨ: đặt trên đỉnh đầu người nói, không biết ai khác
     const job = async (fn) => { try { return await fn(); } catch (e) { return { err: e }; } };
-    const [rTQ, rVP, rCap, rBub, r640, r360, rMut] = await Promise.all([
+    // khung hình tới trễ (máy yếu / bận: đo được rAF đứng 0,7–3 s trong khi hẹn giờ vẫn chạy): mọi khung trễ 0,9 s — câu vẫn phải mở khi sân khấu đứng yên và hiện đủ lâu
+    const SLOW_FRAMES = () => { const raf = window.requestAnimationFrame.bind(window); window.requestAnimationFrame = cb => raf(() => setTimeout(() => raf(cb), 900)); };
+    const [rTQ, rVP, rCap, rBub, r640, r360, rMut, rSlow] = await Promise.all([
       job(async () => { const q = await mkPage(null, TQ, 1280); const out = []; let calls = 0; for (const s of q.shots) { const r = await playShot(q, s); out.push(...r.lines); calls += r.calls; } await q.close(); return { lines: out, calls, errs: q.errs }; }),
       job(async () => { const q = await mkPage(null, VP, 1280); const out = []; let calls = 0; for (const s of q.shots) { const r = await playShot(q, s); out.push(...r.lines); calls += r.calls; } await q.close(); return { lines: out, calls, errs: q.errs }; }),
       job(async () => { const q = await mkPage(null, TQ, 1280, 'caption'); const r = await playShot(q, 'canh-dau-tap'); await q.close(); return { lines: r.lines, errs: q.errs }; }),
@@ -922,10 +942,11 @@ if (!ONLY) {
         await q.evaluate(() => window.__lt.restore());
         const back = await playShot(q, 'canh-dau-tap'); await q.close();
         return { mut: a.lines.concat(c.lines), back: back.lines, errs: q.errs };
-      })
+      }),
+      job(async () => { const q = await mkPage(null, VP, 1280); await q.evaluate(SLOW_FRAMES); const r = await playShot(q, 'canh-2'); await q.close(); return { lines: r.lines, errs: q.errs }; })
     ]);
-    for (const r of [rTQ, rVP, rCap, rBub, r640, r360, rMut]) if (r.err) throw r.err;
-    [rTQ, rVP, rCap, rBub, r640, r360, rMut].forEach(r => errsAll.push(...r.errs));
+    for (const r of [rTQ, rVP, rCap, rBub, r640, r360, rMut, rSlow]) if (r.err) throw r.err;
+    [rTQ, rVP, rCap, rBub, r640, r360, rMut, rSlow].forEach(r => errsAll.push(...r.errs));
     // Tam Quốc + Văn phòng vui, chế độ tự động: mọi câu sạch
     const film = [...rTQ.lines, ...rVP.lines];
     if (film.length < 40) throw new Error('chỉ đo được ' + film.length + ' câu thoại (cần ≥ 40: Tam Quốc 31 + Văn phòng vui 15)');
@@ -936,7 +957,7 @@ if (!ONLY) {
     if (calls > 3) throw new Error('bố cục chạy ' + calls.toFixed(1) + ' lần mỗi câu (> 3) — nghi tính lại theo khung hình');
     const tqClose = rTQ.lines.filter(L => L.shot === 'canh-dau-tap').length;
     if (tqClose < 5) throw new Error('thiếu câu thoại ở cảnh cận "Đấu tập trước trận" (' + tqClose + ')');
-    console.log('  ✓ Lời thoại hai phim mẫu (' + film.length + ' câu, đo 2 lần mỗi câu): bong bóng ' + nB + ' · phụ đề ' + nC + ' · đè đầu 0 px² · trong lề an toàn ≥ 2% · chữ ≥ 85% đậm & tương phản ≥ 4,5:1 · bong bóng ≤ 38% khung · đuôi không cắt đầu / không đâm lõi mặt · Be Vietnam Pro đã nạp · bố cục ' + calls.toFixed(1) + ' lần/câu');
+    console.log('  ✓ Lời thoại hai phim mẫu (' + film.length + ' câu, đo 2 lần mỗi câu): bong bóng ' + nB + ' · phụ đề ' + nC + ' · mở khi sân khấu đứng yên, hiện ≥ 380 ms, không bong bóng rỗng · đè đầu 0 px² · trong lề an toàn ≥ 2% · chữ ≥ 85% đậm & tương phản ≥ 4,5:1 · bong bóng ≤ 38% khung · đuôi không cắt đầu / không đâm lõi mặt · Be Vietnam Pro đã nạp · bố cục ' + calls.toFixed(1) + ' lần/câu');
     // phụ đề ép buộc: cũng không đè đầu, trong lề
     const badCap = rCap.lines.flatMap(L => judge(L, { mode: 'caption' }));
     if (badCap.length || rCap.lines.length < 5) throw new Error('phụ đề ép buộc: ' + (badCap.slice(0, 3).join(' | ') || 'chỉ ' + rCap.lines.length + ' câu'));
@@ -949,6 +970,9 @@ if (!ONLY) {
     // khung 420 px (tự động; cỡ sân khấu nhỏ trong Studio): bong bóng 38% chỉ còn ~160 px → nhiều câu không còn chỗ sạch → PHẢI chuyển phụ đề, vẫn không đè đầu
     const bad420 = r360.lines.flatMap(L => judge(L)), cap360 = r360.lines.filter(L => L.ms[0].mode === 'caption').length;
     if (bad420.length || r360.lines.length < 5 || cap360 < 1) throw new Error('khung 420 px (tự động): ' + (bad420.slice(0, 3).join(' | ') || r360.lines.length + ' câu, phụ đề ' + cap360 + ' — mong đợi ≥ 1 câu chuyển phụ đề'));
+    const badSlow = rSlow.lines.flatMap(L => judge(L));
+    if (badSlow.length || rSlow.lines.length < 5) throw new Error('khung hình trễ 0,9 s: ' + (badSlow.slice(0, 3).join(' | ') || 'chỉ ' + rSlow.lines.length + ' câu'));
+    console.log('  ✓ Khung hình trễ 0,9 s (máy yếu): ' + rSlow.lines.length + ' câu Văn phòng vui "canh-2" mở khi sân khấu đứng yên, hiện ' + Math.min(...rSlow.lines.map(L => L.life)) + '–' + Math.max(...rSlow.lines.map(L => L.life)) + ' ms tính từ lúc thật sự hiện, 0 px² đè đầu');
     console.log('  ✓ Chế độ lời thoại: phụ đề ép buộc ' + rCap.lines.length + ' câu (dải dưới, không đè đầu) · bong bóng ép buộc ' + rBub.lines.length + ' câu · khung 640 px: chữ ≥ 13 px, ' + r640.lines.length + ' câu sạch · khung 420 px tự động: ' + (r360.lines.length - cap360) + ' bong bóng + ' + cap360 + ' phụ đề (hết chỗ sạch thì chuyển phụ đề), 0 px² đè đầu');
     // THỬ NGƯỢC: bộ giải hỏng (đặt trên đỉnh đầu, không biết ai khác) → phải đè đầu ở cảnh cận; khôi phục → hết đè
     const mutHits = rMut.mut.filter(L => L.ms.some(m => m.overlaps.length)).length;
@@ -958,10 +982,12 @@ if (!ONLY) {
     console.log('  ✓ Thử ngược: bộ giải hỏng làm ' + mutHits + '/' + rMut.mut.length + ' câu đè đầu (test đỏ) → khôi phục lại sạch ' + rMut.back.length + '/' + rMut.back.length);
     // ngân sách hiệu năng (L-42): bố cục tính MỘT lần mỗi câu — đo cô lập (không trang nào khác chạy) trên cảnh cận nhiều diễn viên nhất
     {
-      const q = await mkPage(null, TQ, 1280), r = await playShot(q, 'canh-dau-tap'); await q.close();
-      const ms = r.lines.flatMap(L => L.ms.map(m => m.ms)).sort((a, c) => a - c);
-      if (ms.length < 6 || ms[ms.length - 1] > 30 || r.calls / r.lines.length > 3) throw new Error('chi phí bố cục (đo riêng): tối đa ' + ms[ms.length - 1] + ' ms (> 30 ms) hoặc ' + (r.calls / r.lines.length).toFixed(1) + ' lần/câu');
-      console.log('  ✓ Hiệu năng lời thoại (L-42, đo riêng ' + r.lines.length + ' câu): bố cục trung vị ' + ms[Math.floor(ms.length / 2)] + ' ms, tối đa ' + ms[ms.length - 1] + ' ms (≤ 30), ' + (r.calls / r.lines.length).toFixed(1) + ' lần giải mỗi câu — không tính theo khung hình');
+      const q = await mkPage(null, TQ, 1280), r = await playShot(q, 'canh-dau-tap', 4); await q.close();
+      const ms = r.lines.flatMap(L => L.ms.filter(m => m.costs).map(m => Math.min(...m.costs))).sort((a, c) => a - c), one = r.lines.flatMap(L => L.ms.filter(m => m.costs).map(m => m.ms)).sort((a, c) => a - c);
+      // GC_THROTTLE=N (núm giả lập, CI không đặt): CPU của trang bị làm chậm N× THẬT → ngân sách quy về máy chuẩn = 30 ms × N
+      const thr = Math.max(1, +process.env.GC_THROTTLE || 1), bud = 30 * thr, budTxt = bud + ' ms' + (thr > 1 ? ' = 30 × GC_THROTTLE ' + thr : '');
+      if (ms.length < 6 || ms[ms.length - 1] > bud || r.calls / r.lines.length > 3) throw new Error('chi phí bố cục (đo riêng, nhỏ nhất của 5 lần giải mỗi câu): ' + ms.length + ' câu, tối đa ' + ms[ms.length - 1] + ' ms (> ' + budTxt + ') hoặc ' + (r.calls / r.lines.length).toFixed(1) + ' lần/câu');
+      console.log('  ✓ Hiệu năng lời thoại (L-42, đo riêng ' + r.lines.length + ' câu, mỗi câu giải 5 lần lấy nhỏ nhất): bố cục trung vị ' + ms[Math.floor(ms.length / 2)] + ' ms, tối đa ' + ms[ms.length - 1] + ' ms (≤ ' + budTxt + '; lần giải đầu tối đa ' + one[one.length - 1] + ' ms), ' + (r.calls / r.lines.length).toFixed(1) + ' lần giải mỗi câu — không tính theo khung hình');
     }
     // ---- 3) Studio: ô chọn kiểu lời thoại, nhớ theo máy, áp vào sân khấu; phim xuất ra mang kiểu đã chọn + phông nhúng (mở file://, không mạng) ----
     const sq = await b9.newPage({ viewport: { width: 1440, height: 900 }, acceptDownloads: true }); sq.on('pageerror', e => errsAll.push(e.message));
