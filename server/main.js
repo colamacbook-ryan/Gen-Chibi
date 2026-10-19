@@ -93,9 +93,27 @@ function serveStatic(req, res, urlPath) {
 
 /* ---------------------------------------------------------------- định tuyến */
 function restartSoon() { setTimeout(() => { log('[server] thoát để launcher khởi động lại'); process.exit(RESTART_CODE); }, 400); }
+// Origin (nếu có) phải trỏ về chính máy chủ này. Lớp chặn chính là header X-GC-Request (trang khác không gửi được nếu không qua preflight CORS, mà máy chủ
+// không trả CORS); đây là lớp thứ hai nên chấp nhận các cách mở hợp lệ: trùng Host · trùng tên mà proxy báo (X-Forwarded-Host) hoặc GC_PUBLIC_URL ·
+// cùng là máy cục bộ (localhost / 127.0.0.1 / [::1]) và cùng cổng. Origin hỏng → chặn (không ném lỗi 500).
+const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]']);
+function hostPort(h) { const m = /^(\[[^\]]+\]|[^:]+)(?::(\d+))?$/.exec(String(h || '').toLowerCase()); return m ? [m[1], m[2] || ''] : ['', '']; }
 function originOK(req) {
   const origin = req.headers.origin;
-  return !origin || origin === 'null' || new URL(origin).host === req.headers.host;
+  if (!origin || origin === 'null') return true;
+  let oh; try { oh = new URL(origin).host.toLowerCase(); } catch (e) { return false; }
+  const host = String(req.headers.host || '').toLowerCase();
+  if (oh === host) return true;
+  if (String(req.headers['x-forwarded-host'] || '').toLowerCase().split(',').map(x => x.trim()).includes(oh)) return true;
+  if (PUBLIC_URL) { try { if (new URL(PUBLIC_URL).host.toLowerCase() === oh) return true; } catch (e) { /* GC_PUBLIC_URL hỏng: bỏ qua */ } }
+  const [a, ap] = hostPort(oh), [b, bp] = hostPort(host);
+  return LOOPBACK.has(a) && LOOPBACK.has(b) && ap === bp;
+}
+// câu báo khi chặn: nói rõ trang mở ở đâu và máy chủ nhận địa chỉ nào để người dùng tự sửa (chuỗi đã cắt ngắn, chỉ là chữ)
+function originMsg(req) {
+  const cut = x => String(x || '?').replace(/[^\x20-\x7e]/g, '').slice(0, 120);
+  return 'yêu cầu từ nguồn lạ bị chặn: trang đang mở ở ' + cut(req.headers.origin) + ' nhưng máy chủ nhận địa chỉ ' + cut(req.headers.host) +
+    ' — mở Studio bằng đúng địa chỉ máy chủ (vd. http://127.0.0.1:' + PORT + '), hoặc cập nhật bằng lệnh: genchibi update';
 }
 
 // KHOÁ LƯỢT AI (CNS-120): mỗi lượt giữ khoá của LUỒNG (`<loại>-<id>`: một lượt mỗi luồng) VÀ khoá của TÁC PHẨM nó có thể ghi (`work:<id>`; lượt ở khu Tạo tác không gắn tác phẩm có thể
@@ -206,7 +224,7 @@ async function route(req, res) {
   // fetch từ nguồn khác bị preflight chặn vì server không trả CORS) và Origin (nếu có) phải trùng Host
   if (m !== 'GET') {
     if (req.headers['x-gc-request'] !== '1') return fail(res, 403, 'thiếu header X-GC-Request');
-    if (!originOK(req)) return fail(res, 403, 'yêu cầu từ nguồn lạ bị chặn');
+    if (!originOK(req)) return fail(res, 403, originMsg(req));
   }
 
   if (p === '/api/health') return send(res, 200, { ok: true, version: VERSION });

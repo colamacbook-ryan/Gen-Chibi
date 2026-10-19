@@ -181,4 +181,5 @@ Bảng kiểu Data Console (desktop): mỗi hàng một âm — **ID âm** (tên
 - **AI tự tạo asset có cần duyệt không?** Không — lưu dạng **nháp** trong dự án của tác phẩm và dùng ngay. Chỉ khi muốn đưa vào gói bán bạn mới bấm **Phát hành**.
 - **Phim HTML gửi đi có lộ engine không?** Bộ phát nằm trong tệp phim với giấy phép **chỉ để xem phim đó**. Bản SaaS sau này sẽ chuyển sang trình phát do Gen Labs lưu trữ hoặc xuất video.
 - **Lỡ sửa hỏng?** Mọi asset và tác phẩm có phiên bản; bản cũ nằm trong thư mục dữ liệu (`versions/`).
+- **Bấm Cập nhật báo "yêu cầu từ nguồn lạ bị chặn"?** Máy chủ chỉ nhận lệnh thay đổi từ chính trang Studio của nó. Câu báo (từ v0.18.1) ghi rõ *trang đang mở ở đâu* và *máy chủ nhận địa chỉ nào*: mở lại Studio bằng đúng địa chỉ máy chủ (thường là `http://127.0.0.1:7480`), hoặc cập nhật ngay trong terminal bằng `genchibi update` (không đi qua trình duyệt). `localhost` / `127.0.0.1` / `[::1]` cùng cổng được coi là một; proxy đứng trước thì cho proxy gửi `X-Forwarded-Host` hoặc đặt `GC_PUBLIC_URL`.
 - **Hiệu năng?** Mỗi sân khấu tối đa 8 diễn viên sống; ảnh tĩnh được cache; hết phân cảnh là huỷ diễn viên.

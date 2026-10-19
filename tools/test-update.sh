@@ -58,6 +58,17 @@ waitver 0.1.1 && ok "đang chạy v0.1.1" || bad "không lên v0.1.1"
 sleep 1; api GET /api/update | grep -q '"to": *"v0.1.1"' && ok "lịch sử ghi cập nhật" || bad "thiếu lịch sử"
 ls "$HOME_DIR/backups" | grep -q before-v0.1.1 && ok "đã backup dữ liệu trước khi cập nhật" || bad "không có backup"
 
+echo "1b) chống CSRF: Origin hợp lệ qua, nguồn lạ bị chặn kèm lời giải thích (Ryan 2026-10-19: nút cập nhật báo chặn nguồn lạ)"
+orig() { curl -s -o "$W/orig.out" -w '%{http_code}' -X POST -H 'X-GC-Request: 1' -H "Origin: $1" ${2:+-H "$2"} "http://127.0.0.1:$PORT/api/update/check"; }
+[ "$(orig "http://127.0.0.1:$PORT")" = 200 ] && ok "Origin trùng Host → qua" || bad "Origin trùng Host bị chặn"
+[ "$(orig "http://localhost:$PORT")" = 200 ] && ok "localhost ↔ 127.0.0.1 cùng cổng → qua" || bad "localhost bị coi là nguồn lạ"
+[ "$(orig "http://[::1]:$PORT")" = 200 ] && ok "[::1] cùng cổng → qua" || bad "[::1] bị coi là nguồn lạ"
+[ "$(orig "https://chibi.example" "X-Forwarded-Host: chibi.example")" = 200 ] && ok "proxy báo X-Forwarded-Host trùng Origin → qua" || bad "proxy hợp lệ bị chặn"
+[ "$(orig "http://localhost:1$PORT")" = 403 ] && ok "localhost khác cổng → chặn" || bad "khác cổng mà qua"
+c="$(orig "https://evil.example")"; [ "$c" = 403 ] && grep -q 'nguồn lạ' "$W/orig.out" && grep -q 'evil.example' "$W/orig.out" && grep -q 'genchibi update' "$W/orig.out" \
+  && ok "nguồn lạ → 403 kèm địa chỉ trang + địa chỉ máy chủ + cách khắc phục" || bad "nguồn lạ: $c $(cat "$W/orig.out")"
+[ "$(orig "http://[")" = 403 ] && ok "Origin hỏng → 403 (không 500)" || bad "Origin hỏng không ra 403"
+
 echo "2) sai checksum"
 feed 0.1.2 badsum
 R2=$(api POST /api/update/apply); echo "$R2" | grep -q 'checksum' && ok "từ chối gói sai checksum" || { bad "không chặn checksum"; echo "      phản hồi: $(echo "$R2" | head -c 300)"; }
