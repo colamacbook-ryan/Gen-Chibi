@@ -1320,6 +1320,45 @@ if (!ONLY || ONLY === 'lib') {
     must(oldRoute.page === 'lib-voices' && !oldRoute.tab && !oldRoute.work, 'tuyến cũ của Thư viện phải được dọn (không còn tab / work): ' + JSON.stringify(oldRoute));
     console.log('  ✓ Thư viện › Giọng (CNS-106): không còn tab "Giọng của dự án / tác phẩm" · còn cột "Nhân vật dùng vai" + liên kết "Chốt giọng cho tác phẩm › phòng làm phim" mở đúng tab Giọng & âm thanh · tuyến cũ (tab works) mở đúng phòng và được dọn'); await q.close();
 
+    // B5) CNS-106: giọng của TÁC PHẨM chốt ở phòng làm phim (Tạo tác › tác phẩm › tab Giọng & âm thanh) — MỘT bảng: nhân vật → vai → giọng chốt (work.voices) · nguồn · ▶ máy / AI · Chốt giọng cả dàn
+    // (các điều kiện của tab "Giọng của dự án / tác phẩm" cũ ở Thư viện, nay kiểm ở phòng; "không chọn tác phẩm thì không chốt được" = tác phẩm chưa có diễn viên thì nút mờ)
+    const openRoom = async (work, tabName) => {
+      q = await ctx11.newPage(); q.on('pageerror', e => errs11.push(e.message)); q.on('dialog', d => d.accept());
+      await q.goto(URL11 + 'VERSION'); await q.evaluate(([pj]) => { localStorage.setItem('gc-last-project', pj); localStorage.setItem('gc-dock', JSON.stringify({ open: false })); }, [PROJ]);
+      await q.goto(URL11 + 'tao-tac#/tac-pham/' + work + '/' + (tabName || 'voice')); await q.waitForFunction(() => window.GenChibi && /^v\d/.test(document.getElementById('verChip').textContent), null, { timeout: 8000 });
+      await q.waitForSelector('#wpanel-voice:not([hidden])', { timeout: 8000 }); await q.evaluate(SPY); await q.evaluate(SPY_T); return q;
+    };
+    await openRoom(WORK);
+    await pollq(async () => (await rowsOf()).length > 0 && /Alnilam/.test(await q.textContent('tr[data-id="tq-quan-vu"]')), 'bảng giọng chốt của tác phẩm', 8000);
+    must((await q.$$('#wpanel-voice table')).length === 1 && !(await q.$('#wpanel-voice table.roles')), 'tab Giọng & âm thanh chỉ được có MỘT bảng giọng của tác phẩm');
+    const wr = await rowsOf(); must(wr.includes('tq-quan-vu') && wr.includes('tq-luu-bi') && wr.includes('tq-tao-thao'), 'bảng tác phẩm thiếu nhân vật: ' + wr.join());
+    must(/Võ tướng/.test(await q.textContent('tr[data-id="tq-quan-vu"]')) && /Đã chốt/.test(await q.textContent('tr[data-id="tq-quan-vu"]')) && /Schedar/.test(await q.textContent('tr[data-id="tq-luu-bi"]')), 'cột vai / giọng chốt sai');
+    must(/Chưa chốt/.test(await q.textContent('tr[data-id="tq-tao-thao"]')), 'nhân vật chưa chốt phải ghi "Chưa chốt"');
+    must(/Ngôn ngữ phim: Tiếng Việt/.test(await q.textContent('#wvLangNote')), 'thiếu ngôn ngữ phim');
+    must(/Câu thoại/.test(await q.textContent('.lc-t thead')), 'bảng gộp phải giữ cột "Câu thoại" của bảng giọng chốt cũ');
+    await q.evaluate(SPY); await q.click('tr[data-id="tq-quan-vu"] [data-machine]'); const sw = (await spy('say'))[0]; must(sw && sw.role === 'vo-tuong' && /^Ta là đại tướng/.test(sw.text), '▶ giọng máy nhân vật tác phẩm: ' + JSON.stringify(sw));
+    await pollq(async () => (await q.$$('tr[data-id="tq-quan-vu"] [data-ai="read"], tr[data-id="tq-quan-vu"] [data-ai="play"]')).length === 1, 'kiểm clip của Quan Vũ'); must(M.lines.some(l => l.voice === 'Alnilam' && l.role === 'vo-tuong' && l.dry === true && l.lang === 'vi'), 'kiểm clip phải dùng giọng chốt Alnilam (dry)');
+    must(await q.$eval('tr[data-id="tq-tao-thao"] [data-ai]', e => e.disabled), 'nhân vật chưa chốt giọng: nút giọng AI mờ');
+    await q.click('tr[data-id="tq-quan-vu"] td.id'); await q.waitForSelector('.lc-insp h3 .mono:text-is("tq-quan-vu")'); await shot('phong-giong-chot');
+    must(!(await q.$eval('#wvCastAll', e => e.disabled)), 'có diễn viên: nút "Chốt giọng cả dàn" phải bấm được');
+    const nCast5 = M.casts.length; await q.evaluate(SPY_T); await q.click('#wvCastAll');
+    await pollq(async () => M.casts.length > nCast5 && /Chốt giọng cả dàn \(miễn phí\)/.test(await q.textContent('#wvCastAll')), 'chốt giọng cả dàn xong');
+    const cast5 = M.casts[M.casts.length - 1];
+    must(cast5.work === WORK && cast5.lang === 'vi' && cast5.accent === 'bac' && cast5.actors.length === (await rowsOf()).length && cast5.actors.length >= 3, 'chốt giọng cả dàn phải gửi work + cả dàn của tác phẩm: ' + JSON.stringify([cast5.work, cast5.actors.length]));
+    must((await toasts()).some(t => /Đã chốt giọng cho \d+ nhân vật của/.test(t)), 'thiếu toast chốt giọng cả dàn');
+    // đổi ngôn ngữ phim: bảng đọc work.voices của ngôn ngữ đó (en|us chưa chốt gì); về lại vi|bac thì giọng chốt trở lại
+    await q.selectOption('select[aria-label="Ngôn ngữ phim"]', 'en|us'); await pollq(async () => /Anh|English/.test(await q.textContent('#wvLangNote')) && /Chưa chốt/.test(await q.textContent('tr[data-id="tq-quan-vu"]')), 'đổi ngôn ngữ phim: bảng đọc giọng chốt của ngôn ngữ đó');
+    must(await q.$eval('tr[data-id="tq-quan-vu"] [data-ai]', e => e.disabled), 'ngôn ngữ chưa chốt: nút AI mờ');
+    await q.selectOption('select[aria-label="Ngôn ngữ phim"]', 'vi|bac'); await pollq(async () => /Alnilam/.test(await q.textContent('tr[data-id="tq-quan-vu"]')), 'về tiếng Việt: giọng chốt trở lại');
+    // bộ giọng vai (nghe / thiết kế) chỉ ở Thư viện › Giọng: liên kết dẫn tới đó
+    await q.click('#wvToLib'); await q.waitForURL(/\/thu-vien/, { timeout: 10000 }); await waitRows(22); must(/Giọng/.test(await q.textContent('.crumbs')), 'liên kết "Bộ giọng vai ›" phải mở Thư viện › Giọng');
+    await q.close();
+    // tác phẩm chưa có diễn viên: không có gì để chốt → nút mờ + dòng nhắc, không bảng
+    const emptyW = await fetch(URL11 + 'api/works', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify({ id: 'trong-giong', title: 'Tác phẩm trống', project: PROJ }) }).then(r => r.json());
+    await openRoom(emptyW.id); await q.waitForSelector('#wvEmpty:not([hidden])');
+    must(await q.$eval('#wvCastAll', e => e.disabled) && !(await q.isVisible('#wpanel-voice .lc-t')), 'tác phẩm chưa có diễn viên: nút "Chốt giọng cả dàn" mờ, không có bảng');
+    console.log('  ✓ Phòng tác phẩm › Giọng & âm thanh (CNS-106): MỘT bảng giọng chốt — nhân vật → vai → giọng chốt (work.voices) · nguồn (Đã chốt / Chưa chốt) · cột Câu thoại · ▶ máy + ▶ AI dùng đúng giọng đã chốt (dry) · chưa chốt thì nút AI mờ · "Chốt giọng cả dàn (miễn phí)" gửi work + cả dàn, toast, đọc lại work.voices · đổi ngôn ngữ phim → bảng theo ngôn ngữ đó · liên kết sang Thư viện › Giọng · tác phẩm chưa có diễn viên thì nút mờ'); await q.close();
+
     must(M.leaks.length === 0, 'có yêu cầu ra ngoài máy: ' + M.leaks.slice(0, 3).join(' | '));
     must(errs11.length === 0, 'lỗi trang: ' + errs11.slice(0, 3).join(' | '));
   } catch (e) { fail = 1; console.log('  ✗ Thư viện Âm thanh / Giọng:', e.message); if (errs11.length) console.log('    lỗi trang:', errs11.slice(0, 3).join(' | ')); if (q) { try { console.log('    trang:', (await q.evaluate(() => (document.querySelector('.view') || document.body).innerText)).replace(/\s+/g, ' ').slice(0, 500)); } catch (e2) { /* trang đã đóng */ } } }
