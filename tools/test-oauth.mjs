@@ -9,16 +9,16 @@
 import http from 'http';
 import crypto from 'crypto';
 import { spawn } from 'child_process';
-import { mkdtempSync, readFileSync, statSync } from 'fs';
+import { mkdtempSync, readFileSync, writeFileSync, readdirSync, statSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const { TOOLS } = require('../server/mcp');
-const { OAuth, clientIp } = require('../server/oauth');
+const { OAuth, clientIp, isDirectLocal } = require('../server/oauth');
 const H = 'https://chibi.example.test', OWNER = 'owner-token-' + crypto.randomBytes(8).toString('hex'), KEY = 'linkkey_' + crypto.randomBytes(12).toString('hex');
-const P = { main: 7611, off: 7612, open: 7613, ttl: 7614, proxy: 7615, caps: 7616 };
+const P = { main: 7611, off: 7612, open: 7613, ttl: 7614, proxy: 7615, caps: 7616, cfip: 7617, gl: 7618 };
 let failn = 0, passn = 0;
 const ok = (c, m) => { if (c) { passn++; console.log('   ✓', m); } else { failn++; console.log('   ✗', m); } };
 const b64 = b => Buffer.from(b).toString('base64url');
@@ -42,8 +42,8 @@ const own = { Authorization: 'Bearer ' + OWNER, 'X-GC-Request': '1', 'Content-Ty
 const rpc = (base, method, params, headers, id) => fetch(base + '/mcp', { method: 'POST', headers: { ...jh, Accept: 'application/json, text/event-stream', ...headers }, body: JSON.stringify(id === null ? { jsonrpc: '2.0', method, params } : { jsonrpc: '2.0', id: id || 1, method, params }) });
 const call = async (base, tok, name, args) => { const r = await rpc(base, 'tools/call', { name, arguments: args || {} }, { Authorization: 'Bearer ' + tok }); const j = await r.json(); return j.result || j; };
 const forbidden = r => r && r.isError === true && /^\[FORBIDDEN\]/.test(r.content[0].text);
-// mỗi lời gọi một "IP" khác (cf-connecting-ip) để không dính giới hạn tốc độ theo IP — trừ máy chủ không token (header proxy ở đó = bị chặn) và ca thử giới hạn (tự đặt IP)
-let ipn = 0; const noise = base => (base === open.base ? {} : { 'cf-connecting-ip': '10.' + ((++ipn >> 8) & 255) + '.' + (ipn & 255) + '.1' });
+// mỗi lời gọi một "IP" khác (mục cuối x-forwarded-for — header mặc định) để không dính giới hạn tốc độ theo IP — trừ máy chủ không token (header proxy ở đó = bị chặn) và ca thử giới hạn (tự đặt IP)
+let ipn = 0; const noise = base => (base === open.base ? {} : { 'x-forwarded-for': '10.' + ((++ipn >> 8) & 255) + '.' + (ipn & 255) + '.1' });
 const form = (base, p, o, headers) => fetch(base + p, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...noise(base), ...headers }, body: new URLSearchParams(o).toString() });
 const dcr = (base, body, headers) => fetch(base + '/oauth/register', { method: 'POST', headers: { ...jh, ...noise(base), ...headers }, body: JSON.stringify(body) });
 const CB = 'https://claude.ai/api/mcp/auth_callback';
@@ -74,10 +74,12 @@ const main = spawnServer(P.main, { GC_API_TOKEN: OWNER, GC_PUBLIC_URL: H, GC_MCP
 const off = spawnServer(P.off, { GC_API_TOKEN: OWNER });                                   // không GC_PUBLIC_URL → OAuth tắt
 const open = spawnServer(P.open, { GC_PUBLIC_URL: H });                                    // không GC_API_TOKEN → chỉ máy cục bộ
 const ttl = spawnServer(P.ttl, { GC_API_TOKEN: OWNER, GC_PUBLIC_URL: H, GC_OAUTH_ACCESS_TTL: '2', GC_OAUTH_REDIRECTS: 'https://agent.example.org/cb' });   // access token sống 2 giây; callback thêm
-const caps = spawnServer(P.caps, { GC_API_TOKEN: OWNER, GC_PUBLIC_URL: H });                // trần toàn cục mặc định
+const caps = spawnServer(P.caps, { GC_API_TOKEN: OWNER, GC_PUBLIC_URL: H });                // giới hạn mặc định (header IP mặc định = mục cuối x-forwarded-for)
+const cfip = spawnServer(P.cfip, { GC_API_TOKEN: OWNER, GC_PUBLIC_URL: H, GC_CLIENT_IP_HEADER: 'cf-connecting-ip' });   // đứng sau Cloudflare
+const glob = spawnServer(P.gl, { GC_API_TOKEN: OWNER, GC_PUBLIC_URL: H });                    // thử trần toàn cục (không dùng chung bộ đếm với caps)
 let proxy = null;
 try {
-  await Promise.all([main, off, open, ttl, caps].map(ready));
+  await Promise.all([main, off, open, ttl, caps, cfip, glob].map(ready));
   const M = main.base;
 
   console.log('1) khám phá — 401 + WWW-Authenticate, metadata, đăng ký');
@@ -116,12 +118,16 @@ try {
   r = await dcr(M, { client_name: 'A'.repeat(500) + '‮<b>x</b>\n\t' + 'B', redirect_uris: [CB] }); const cn = await r.json();
   ok(cn.client_name.length <= 80 && !cn.client_name.includes('‮') && !/[\n\t]/.test(cn.client_name), 'DCR kẹp tên ≤ 80 ký tự, bỏ ký tự điều khiển / đảo chiều');
   r = await dcr(M, { client_name: 'x', redirect_uris: [CB, CB, CB, CB, CB, CB] }); ok(r.status === 400, 'DCR trần 5 redirect_uris');
+  const INVIS = String.fromCodePoint(0xAD, 0x200B, 0x3164, 0x2800, 0xE0041, 0x115F, 0x1160, 0xFFA0, 0x34F, 0x2066, 0x200E);
+  r = await dcr(M, { client_name: 'Cla' + INVIS + 'ude', redirect_uris: [CB] }); const cin = await r.json();
+  ok(cin.client_name === 'Cla ude' && [...cin.client_name].every(ch => ch.codePointAt(0) < 128), 'tên client: ký tự vô hình / định dạng (Cf, Hangul filler, braille trống, tag chars, soft hyphen…) bị thay bằng khoảng trắng');
 
   console.log('2) authorize — chỉ chủ duyệt được, lỗi an toàn');
   const pk = pkce(), st = 'giu-nguyen-state-123';
   const A = (o, cl) => fetch(M + '/oauth/authorize?' + authQ(cl || c1, { code_challenge: pk.challenge, state: st, ...o }), { redirect: 'manual', headers: noise(M) });
   r = await A({}); const page = await r.text();
   ok(r.status === 200 && /text\/html/.test(r.headers.get('content-type')) && page.includes('Cấp phép kết nối agent') && /nonce-/.test(r.headers.get('content-security-policy') || ''), 'GET /oauth/authorize → trang "Cấp phép kết nối agent" (HTML, có CSP nonce)');
+  ok(!/\sstyle\s*=/.test(page) && /style-src 'nonce-/.test(r.headers.get('content-security-policy') || ''), 'trang Cấp phép không có style="…" inline (CSP style-src chỉ nonce)');
   const rid = reqId(page);
   const aprBody = { request: rid, decision: 'approve', scope: 'mcp:write' };
   const apr = (headers, body) => fetch(M + '/api/oauth/approve', { method: 'POST', headers, body: JSON.stringify(body || aprBody) });
@@ -161,6 +167,18 @@ try {
   r = await A({ state: 'x'.repeat(600) }); ok(r.status === 302 && /error=invalid_request/.test(r.headers.get('location')), 'state quá dài bị chặn');
   r = await A({ client_id: 'x'.repeat(5000) }); ok(r.status === 400 && !r.headers.get('location'), 'client_id dài bất thường → trang lỗi');
   r = await fetch(M + '/oauth/authorize', { method: 'POST' }); ok(r.status === 405, '/oauth/authorize chỉ nhận GET');
+  for (const bad of ['__proto__', 'constructor', 'prototype', 'toString']) {
+    r = await A({ client_id: bad }); const okAuth = r.status === 400 && !r.headers.get('location');
+    const tp = await form(M, '/oauth/token', { grant_type: 'authorization_code', client_id: bad }), tj = await tp.json();
+    if (!(okAuth && tp.status === 401 && tj.error === 'invalid_client')) ok(false, 'client_id=' + bad + ': authorize ' + r.status + ', token ' + tp.status);
+  }
+  ok(true, 'client_id = __proto__ / constructor / prototype / toString → trang lỗi + 401 invalid_client (không 500, không chạm Object.prototype)');
+  for (const [m2, pth] of [['PUT', '/api/oauth/clients/__proto__'], ['POST', '/api/oauth/clients/constructor/revoke'], ['PUT', '/api/oauth/clients/prototype']]) { r = await fetch(M + pth, { method: m2, headers: own, body: JSON.stringify({ scope: 'mcp:owner' }) }); if (r.status !== 404) ok(false, m2 + ' ' + pth + ' → ' + r.status); }
+  ok(true, 'đường quản lý client với id __proto__ / constructor / prototype → 404 (regex loại ngay)');
+  const rawReq = (base, rawPath, method) => new Promise(done => { const u = new URL(base), q = http.request({ host: u.hostname, port: u.port, path: rawPath, method: method || 'GET', headers: { 'content-type': 'application/json', ...noise(base) } }, rs => { rs.resume(); rs.on('end', () => done(rs.statusCode)); }); q.end(method === 'POST' ? '{}' : undefined); });
+  let dots = []; for (const pth of ['/oauth/./register', '/oauth/%2e/register', '/oauth/%2E%2e/oauth/token', '/.well-known/../oauth/token', '/mcp/../api/info', '/oauth/%2e%2e/api/info', '/studio/%2e%2e/%2e%2e/etc/passwd', '/.well-known/oauth-authorization-server/.', '/oauth//../token', '/oauth/token/..']) dots.push(await rawReq(M, pth, /token|register/.test(pth) ? 'POST' : 'GET'));
+  ok(dots.every(c => c === 400), 'đường dẫn có dot-segment / %2e (' + dots.join(',') + ') → 400 trước mọi định tuyến');
+  ok(await rawReq(M, '/.well-known/oauth-authorization-server', 'GET') === 200 && await rawReq(M, '/.well-known/oauth-protected-resource/mcp', 'GET') === 200, '…đường .well-known hợp lệ không bị chặn nhầm');
   // tên client do agent tự khai không phá được trang
   const evil = await (await dcr(M, { client_name: '</script><img src=x onerror=alert(1)>', redirect_uris: [CB] })).json();
   r = await A({}, evil); const evilPage = await r.text();
@@ -245,6 +263,10 @@ try {
   }
   const rv = await call(M, S['mcp:write'].j.access_token, 'render_voice', { text: 'xin chào' }); ok(rv.isError === true, 'mcp:write: render_voice không chi tiêu giọng AI (kênh link: chỉ lấy câu đã lồng) → lỗi');
   const gv = await call(M, S['mcp:write'].j.access_token, 'get_app_version', { check: false }); ok(!gv.isError, 'mcp:write: get_app_version (chỉ đọc) vẫn xem được');
+  const unk = await call(M, S['mcp:read'].j.access_token, 'khong_co_tool_nay', {}); ok(forbidden(unk), 'mcp:read: tên tool lạ cũng FORBIDDEN (cổng đóng khi nghi ngờ)');
+  const gvc = await call(M, S['mcp:write'].j.access_token, 'get_app_version', { check: true }); const gvj = JSON.parse(gvc.content[0].text);
+  ok(!gvc.isError && gvj.lastCheck === null && !gvj.error, 'kết nối OAuth: get_app_version check:true KHÔNG gọi GitHub (lastCheck vẫn null, không lỗi mạng)');
+  const gvo = await call(M, S['mcp:read'].j.access_token, 'get_app_version', { check: true }); ok(!gvo.isError && JSON.parse(gvo.content[0].text).lastCheck === null, '…mcp:read cũng vậy');
   const ow = await call(M, S['mcp:owner'].j.access_token, 'rollback_app', {}); ok(ow.isError && !/^\[FORBIDDEN\]/.test(ow.content[0].text) && /confirm/i.test(ow.content[0].text), 'mcp:owner: rollback_app qua được cổng phạm vi (dừng ở xác nhận ROLLBACK) — như token chủ máy');
   const owl = await (await rpc(M, 'tools/list', {}, { Authorization: 'Bearer ' + S['mcp:owner'].j.access_token })).json(); ok(owl.result.tools.length === TOOLS.length, 'mcp:owner: thấy đủ ' + TOOLS.length + ' tool');
   const ow2 = await call(M, OWNER, 'rollback_app', {}); ok(ow2.content[0].text === ow.content[0].text, 'mcp:owner trả đúng như token chủ máy');
@@ -307,29 +329,68 @@ try {
   r = await exchange(Q, gl); j = await r.json(); ok(gl.approve.status === 200 && r.status === 200 && j.access_token, 'không GC_API_TOKEN: chủ ở chính máy này duyệt được không cần token (như quy tắc /api)');
   const gp = await grantCode(Q, { headers: { ...jh, 'X-GC-Request': '1', 'X-Forwarded-For': '1.2.3.4' } }); ok(gp.approve.status === 403, '…nhưng qua proxy / tunnel (X-Forwarded-For) mà chưa có token → 403 (không bao giờ mở ra Internet không khoá)');
 
-  // giới hạn tốc độ + trần client (mỗi "IP" khác nhau qua cf-connecting-ip)
-  const ip = n => ({ 'cf-connecting-ip': '10.9.' + n });
+  // giới hạn tốc độ theo IP + trần client (mỗi "IP" khác nhau qua x-forwarded-for)
+  const ip = n => ({ 'x-forwarded-for': '10.9.' + n });
   for (let i = 0; i < 20; i++) await dcr(M, { client_name: 'RL', redirect_uris: [CB] }, ip(1));
   r = await dcr(M, { client_name: 'RL', redirect_uris: [CB] }, ip(1)); j = await r.json();
   ok(r.status === 429 && Number(r.headers.get('retry-after')) > 0 && j.error === 'temporarily_unavailable', 'rate-limit đăng ký theo IP: yêu cầu thứ 21 → 429 + Retry-After');
   r = await dcr(M, { client_name: 'RL', redirect_uris: [CB] }, ip(2)); ok(r.status === 201, '…IP khác không bị ảnh hưởng');
-  let tl = 0; for (let i = 0; i < 61; i++) { const x = await form(M, '/oauth/token', { grant_type: 'authorization_code', client_id: 'gcc_x' }, ip(3)); if (x.status === 429) tl++; } ok(tl >= 1, 'rate-limit /oauth/token theo IP (60 / phút) → 429');
+  let tl = 0; for (let i = 0; i < 61; i++) { const x = await form(M, '/oauth/token', { grant_type: 'authorization_code', client_id: 'gcc_x' }, ip(3)); if (x.status === 429) tl++; } ok(tl >= 1, 'rate-limit /oauth/token theo IP: quá 60 lần THẤT BẠI / phút → 429');
   for (let i = 10; i < 70; i++) await dcr(M, { client_name: 'Lũ ' + i, redirect_uris: [CB] }, ip(i));
   view = await (await fetch(M + '/api/oauth', { headers: own })).json();
   ok(view.clients.length <= 50 && view.clients.length >= 45, 'trần 50 client: đầy thì xoá client cũ CHƯA từng cấp phép, không phình (đang có ' + view.clients.length + ')');
   ok(view.clients.some(c => c.status === 'active'), '…client đang hoạt động không bị xoá');
 
-  console.log('6b) trần TOÀN CỤC (không dựa vào IP — header proxy có thể bị giả) · client đang chờ duyệt không bị đuổi');
-  const C = caps.base, spoof = n => [{ 'cf-connecting-ip': '198.51.100.' + n }, { 'x-forwarded-for': '203.0.113.' + n }, { 'x-real-ip': '192.0.2.' + n }][n % 3];
-  let reg201 = 0, firstBlocked = 0;
-  for (let i = 1; i <= 31; i++) { const x = await dcr(C, { client_name: 'Flood ' + i, redirect_uris: [CB] }, spoof(i)); if (x.status === 201) reg201++; else if (!firstBlocked) firstBlocked = i; if (i === 31) { j = await x.json(); r = x; } }
-  ok(reg201 === 30 && firstBlocked === 31 && r.status === 429 && Number(r.headers.get('retry-after')) > 0 && j.error === 'temporarily_unavailable', 'đăng ký: 31 lần với IP giả khác nhau (cf-connecting-ip / x-forwarded-for / x-real-ip) → lần thứ 31 vẫn bị 429 (trần toàn cục 30 / 10 phút)');
-  let ap10 = []; for (let i = 0; i < 12; i++) { const x = await fetch(C + '/api/oauth/approve', { method: 'POST', headers: { ...jh, 'X-GC-Request': '1', Authorization: 'Bearer doan-token-' + i, ...spoof(i) }, body: '{}' }); ap10.push(x.status); }
-  ok(ap10.slice(0, 10).every(c => c === 401) && ap10[10] === 429 && ap10[11] === 429, 'approve (chỗ thử token chủ máy): 10 lần sai token → 401, lần thứ 11 → 429 TRƯỚC khi kiểm token (' + ap10.join(',') + ')');
-  let tk429 = 0, tkAt = 0; for (let i = 1; i <= 301; i++) { const x = await form(C, '/oauth/token', { grant_type: 'authorization_code', client_id: 'gcc_x' }, spoof(i)); if (x.status === 429) { tk429++; tkAt = tkAt || i; } }
-  ok(tkAt === 301 && tk429 === 1, 'token: trần toàn cục 300 / phút — lần 301 với IP giả khác nhau → 429 (đầu tiên bị chặn ở lần ' + tkAt + ')');
-  let au429 = 0, auAt = 0; for (let i = 1; i <= 121; i++) { const x = await fetch(C + '/oauth/authorize?client_id=x', { headers: spoof(i), redirect: 'manual' }); if (x.status === 429) { au429++; auAt = auAt || i; } }
-  ok(auAt === 121 && au429 === 1, 'authorize: trần toàn cục 120 / phút — lần 121 → 429');
+  console.log('6b) giới hạn tốc độ: chỉ đếm thất bại, theo IP · token đúng không bao giờ bị chặn · trần toàn cục chỉ cộng sau trần IP · header giả vô tác dụng');
+  const C = caps.base, xff = n => ({ 'x-forwarded-for': '198.51.100.' + n });
+  const pend = async (base, o) => { const cl = (o && o.client) || await (await dcr(base, { client_name: 'Claude', redirect_uris: [CB] })).json(), pk2 = pkce(); const pg = await fetch(base + '/oauth/authorize?' + authQ(cl, { code_challenge: pk2.challenge }), { redirect: 'manual', headers: noise(base) }); return { cl, pk: pk2, id: pg.status === 200 ? reqId(await pg.text()) : null }; };
+  const apv = (base, id, headers) => fetch(base + '/api/oauth/approve', { method: 'POST', headers, body: JSON.stringify({ request: id, decision: 'approve', scope: 'mcp:write' }) });
+  const wrong = (i, extra) => ({ ...jh, 'X-GC-Request': '1', Authorization: 'Bearer doan-token-' + i, ...extra });
+  // (1) approve: kẻ lạ thử sai token từ nhiều IP khác nhau không được làm chính chủ nhận 429
+  let pd = await pend(C), codes = [];
+  for (let i = 1; i <= 12; i++) codes.push((await apv(C, pd.id, wrong(i, xff(i)))).status);
+  ok(codes.every(c => c === 401), '12 lần thử sai token approve từ 12 IP khác nhau → đều 401 (mỗi IP chỉ bị đếm lần sai của mình)');
+  r = await apv(C, pd.id, { ...own, ...xff(99) }); ok(r.status === 200 && (await r.json()).redirect, '…chủ máy dùng token ĐÚNG ngay sau đó vẫn duyệt được (không bị trần)');
+  // cùng một IP sai nhiều lần → bị chặn; nhưng token ĐÚNG từ chính IP đó vẫn qua
+  codes = []; for (let i = 0; i < 12; i++) codes.push((await apv(C, 'x', wrong(i, xff(200)))).status);
+  ok(codes.slice(0, 10).every(c => c === 401) && codes[10] === 429 && codes[11] === 429, 'cùng một IP sai 10 lần → 401, lần 11 → 429 (' + codes.join(',') + ')');
+  pd = await pend(C); r = await apv(C, pd.id, { ...own, ...xff(200) }); ok(r.status === 200, '…token đúng từ chính IP đã bị chặn vẫn duyệt được (chỉ đếm thất bại, token đúng không bao giờ bị trần)');
+  // (2) token: rác từ nhiều IP không làm refresh thật nhận 429; thành công không bị đếm
+  codes = []; for (let i = 1; i <= 301; i++) codes.push((await form(C, '/oauth/token', { grant_type: 'authorization_code', client_id: 'gcc_x' }, xff(i % 250 + 1))).status);
+  ok(codes.every(c => c === 401 || c === 429) && codes.filter(c => c === 429).length === 0, '301 request rác vào /oauth/token từ nhiều IP → toàn 401 (không có 429)');
+  const RT = await tokens(C, { redirect_uri: CB }); ok(RT.r.status === 200, '…trao đổi mã thật sau đó vẫn 200');
+  let rt0 = RT.j.refresh_token, okRot = 0;
+  for (let i = 0; i < 70; i++) { const x = await form(C, '/oauth/token', { grant_type: 'refresh_token', refresh_token: rt0, client_id: RT.g.client.client_id }, xff(251)); if (x.status === 200) { okRot++; rt0 = (await x.json()).refresh_token; } }
+  ok(okRot === 70, '70 lần refresh THÀNH CÔNG liên tiếp từ cùng một IP (quá 60 / phút) → không lần nào bị chặn: thành công không bị đếm');
+  codes = []; for (let i = 0; i < 62; i++) codes.push((await form(C, '/oauth/token', { grant_type: 'authorization_code', client_id: 'gcc_x' }, xff(252))).status);
+  ok(codes.slice(0, 60).every(c => c === 401) && codes[60] === 429, 'cùng một IP thất bại 60 lần → 401, lần 61 → 429');
+  // (3) request loopback thật (không header proxy) được miễn
+  codes = []; for (let i = 0; i < 100; i++) codes.push((await fetch(C + '/oauth/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'grant_type=authorization_code&client_id=gcc_x' })).status);
+  ok(codes.every(c => c === 401), '100 lần thất bại từ loopback THẬT (không header proxy) → không bị trần');
+  codes = []; for (let i = 0; i < 25; i++) codes.push((await fetch(C + '/oauth/register', { method: 'POST', headers: jh, body: JSON.stringify({ client_name: 'local', redirect_uris: [CB] }) })).status);
+  ok(codes.every(c => c === 201), '25 lần đăng ký từ loopback thật → đều 201 (miễn trần IP)');
+  ok(isDirectLocal({}, '127.0.0.1') && isDirectLocal({}, '::ffff:127.0.0.1') && !isDirectLocal({ 'x-forwarded-for': '1.2.3.4' }, '127.0.0.1') && !isDirectLocal({ 'cf-connecting-ip': '1.2.3.4' }, '::1') && !isDirectLocal({}, '10.0.0.5') && !isDirectLocal({}, '203.0.113.9'), 'isDirectLocal: chỉ loopback + KHÔNG có header proxy nào');
+  // (4) header giả vô tác dụng: mặc định chỉ đọc mục CUỐI x-forwarded-for
+  codes = []; for (let i = 0; i < 22; i++) codes.push((await fetch(C + '/oauth/register', { method: 'POST', headers: { ...jh, 'cf-connecting-ip': '7.7.7.' + i, 'x-real-ip': '8.8.8.' + i }, body: JSON.stringify({ client_name: 'giả', redirect_uris: [CB] }) })).status);
+  ok(codes.slice(0, 20).every(c => c === 201) && codes[20] === 429, 'mặc định cf-connecting-ip / x-real-ip KHÔNG được tin: đổi chúng mỗi lần không né được trần IP (21 lần → 429) [' + codes.join(',') + ']');
+  r = await dcr(C, { client_name: 'x', redirect_uris: [CB] }, { 'x-forwarded-for': '6.6.6.6, 5.5.5.5, 4.4.4.4' }); ok(r.status === 201, 'x-forwarded-for: tính theo mục CUỐI (do proxy gần nhất ghi), IP khác không bị liên đới');
+  // GC_CLIENT_IP_HEADER=cf-connecting-ip (đứng sau Cloudflare)
+  codes = []; for (let i = 0; i < 22; i++) codes.push((await dcr(cfip.base, { client_name: 'cf', redirect_uris: [CB] }, { 'cf-connecting-ip': '1.1.1.1', 'x-forwarded-for': '2.2.2.' + i })).status);
+  ok(codes.slice(0, 20).every(c => c === 201) && codes[20] === 429, 'GC_CLIENT_IP_HEADER=cf-connecting-ip: IP lấy từ header đó (đổi x-forwarded-for không né được)');
+  codes = []; for (let i = 0; i < 25; i++) codes.push((await dcr(cfip.base, { client_name: 'cf', redirect_uris: [CB] }, { 'cf-connecting-ip': '3.3.3.' + i, 'x-forwarded-for': '2.2.2.2' })).status);
+  ok(codes.every(c => c === 201), '…IP khác nhau (cf-connecting-ip) đếm riêng, không liên đới');
+  // (5) trần toàn cục: rất cao, chỉ cộng cho request đã qua trần IP
+  const G = glob.base; codes = []; for (let i = 0; i < 120; i++) codes.push((await dcr(G, { client_name: 'lũ', redirect_uris: [CB] }, { 'x-forwarded-for': '203.0.113.1' })).status);
+  ok(codes.filter(c => c === 201).length === 20 && codes.filter(c => c === 429).length === 100, 'một IP spam đăng ký 120 lần → chỉ 20 qua, 100 bị trần IP chặn');
+  codes = []; for (let i = 0; i < 180; i++) codes.push((await dcr(G, { client_name: 'khác ' + i, redirect_uris: [CB] }, { 'x-forwarded-for': '203.0.114.' + (i + 1) })).status);
+  ok(codes.every(c => c === 201), '…100 lần bị chặn KHÔNG cộng vào trần toàn cục: 180 IP khác vẫn đăng ký được');
+  r = await dcr(G, { client_name: 'vượt', redirect_uris: [CB] }, { 'x-forwarded-for': '203.0.115.1' }); ok(r.status === 429 && Number(r.headers.get('retry-after')) > 0, 'đủ 200 đăng ký / 10 phút toàn máy (20 + 180) → lần kế 429 + Retry-After (chống lũ rất cao)');
+  codes = []; for (let i = 0; i < 601; i++) codes.push((await fetch(G + '/oauth/authorize?client_id=x', { headers: { 'x-forwarded-for': '192.0.2.' + (i % 250 + 1) + '.' + Math.floor(i / 250) }, redirect: 'manual' })).status);
+  ok(codes.slice(0, 600).every(c => c === 400) && codes[600] === 429, 'authorize: trần toàn cục 600 / phút (rất cao) — lần 601 mới 429');
+  // (6) bảng yêu cầu chờ duyệt: kẻ lạ gọi authorize nhiều lần không đẩy được yêu cầu của chủ
+  const owner1 = await pend(M), atk = await (await dcr(M, { client_name: 'kẻ gian', redirect_uris: [CB] })).json();
+  for (let i = 0; i < 150; i++) await fetch(M + '/oauth/authorize?' + authQ(atk, { code_challenge: pkce().challenge }), { headers: noise(M), redirect: 'manual' });
+  r = await apv(M, owner1.id, own); ok(r.status === 200, 'kẻ gian gọi authorize 150 lần (client khác) → yêu cầu đang chờ của chủ vẫn duyệt được (không 410)');
 
   console.log('7) đường máy qua "cổng đăng nhập ngoài" giả (Caddy + /login): không cần cookie / phiên Studio');
   // cổng ngoài: path máy đi thẳng; còn lại 401 {"error":"Chưa đăng nhập"} nếu thiếu cookie gate=ok — giống trang login của Ryan. App KHÔNG được tin cookie này.
@@ -397,7 +458,10 @@ try {
   for (let i = 0; i < 49; i++) { now += 1000; reg(o, 'f' + i); } now += 1000; o.register({ client_name: 'mới', redirect_uris: [CB] });
   ok(!!o.s.clients[cl.client_id], 'đầy trần: client đang có yêu cầu chờ duyệt (chủ đang xem trang Cấp phép) được giữ, xoá cái khác');
   ok(o.approve(a1.view.request, 'approve', 'mcp:write').redirect, '…và vẫn duyệt được');
-  o = mk(); ok(o.limit('k', 3, 60) === 0 && o.limit('k', 3, 60) === 0 && o.limit('k', 3, 60) === 0 && o.limit('k', 3, 60) > 0, 'limit(): đủ 3 lần rồi chặn'); now += 61000; ok(o.limit('k', 3, 60) === 0, 'limit(): hết cửa sổ thì mở lại');
+  o = mk(); for (let i = 0; i < 10; i++) { o.tick('approve', '1.1.1.1'); } ok(o.gate('approve', '1.1.1.1') > 0 && o.gate('approve', '2.2.2.2') === 0, 'gate/tick: đủ 10 lần sai thì chặn đúng IP đó, IP khác không bị ảnh hưởng'); now += 61000; ok(o.gate('approve', '1.1.1.1') === 0, 'gate(): hết cửa sổ 60 giây thì mở lại');
+  o = mk(); for (let i = 0; i < 200; i++) o.tick('register', 'ip' + i); ok(o.gate('register', 'ipMoi') > 0 && o.gate('register', 'ipMoi', 2) === 0, 'trần toàn cục register 200 / 10 phút: IP mới cũng bị chặn; hệ số GC_OAUTH_RATE nhân trần');
+  o = mk(); for (let i = 0; i < 200; i++) o.tick('register', 'g' + i); for (let i = 0; i < 6000; i++) o.tick('authorize', 'ip' + i); ok(o.gate('register', 'ipHoanToanMoi') > 0 && o.buckets.size <= 5000, 'kẻ tấn công tràn 6000 khoá IP chỉ làm đầy bảng IP (có trần 5000, bỏ khoá cũ nhất) — KHÔNG xoá được bộ đếm toàn cục');
+  o = mk(); for (let i = 0; i < 250; i++) o.tick('token', 'i' + i); ok(o.gate('token', 'ipMoi') === 0, 'token: KHÔNG có trần toàn cục (thất bại rác từ nhiều IP không chặn được người khác)');
   // lastUsedAt ghi trễ nhưng flush được
   o = mk(); cl = reg(o); a = approve(o, cl); x = xchg(o, cl, a); now += 5000; o.verify(x.body.access_token); o.flush(); const saved = JSON.parse(readFileSync(path.join(path.dirname(o.file), 'oauth.json'), 'utf8')); ok(Object.values(saved.clients)[0].lastUsedAt, 'lastUsedAt được ghi (trễ) vào oauth.json');
   const o2 = new OAuth({ dir: path.dirname(o.file), publicUrl: H, now: () => now }); ok(!!o2.verify(x.body.access_token), 'khởi động lại server: token vẫn dùng được (nạp từ oauth.json)');
@@ -421,16 +485,12 @@ try {
     const dirK = mkdtempSync(path.join(tmpdir(), 'gc-oauthaud3-')), ok1 = new OAuth({ dir: dirK, publicUrl: A, now: () => now }), cK = ok1.register({ client_name: 'c', redirect_uris: [CB] }).body, xK = xchg(ok1, cK, approve(ok1, cK));
     new OAuth({ dir: dirK, publicUrl: '', now: () => now }); const ok2 = new OAuth({ dir: dirK, publicUrl: A, now: () => now }); ok(!!ok2.verify(xK.body.access_token), 'tắt tạm rồi bật lại đúng miền cũ → token còn dùng được');
   }
-  { // 2b) chỉ tin header proxy khi kết nối TRỰC TIẾP tới app là của proxy (loopback / mạng riêng)
+  { // 2b) chỉ tin header proxy khi kết nối TRỰC TIẾP tới app là của proxy; mặc định chỉ mục CUỐI x-forwarded-for
     const hd = { 'cf-connecting-ip': '1.1.1.1', 'x-forwarded-for': '2.2.2.2, 3.3.3.3', 'x-real-ip': '4.4.4.4' };
-    ok(clientIp(hd, '203.0.113.9') === '203.0.113.9' && clientIp({ 'x-forwarded-for': '9.9.9.9' }, '8.8.8.8') === '8.8.8.8' && clientIp({ 'x-real-ip': '9.9.9.9' }, '172.32.0.1') === '172.32.0.1', 'peer công cộng: bỏ qua header proxy, dùng địa chỉ socket (kể cả 172.32.x — ngoài 172.16/12)');
-    for (const peer of ['127.0.0.1', '::1', '::ffff:127.0.0.1', '10.0.0.5', '172.16.0.2', '172.31.255.1', '192.168.1.9', 'fd12:3456::1', 'fc00::2']) ok(clientIp(hd, peer) === '1.1.1.1', 'peer ' + peer + ' (loopback / mạng riêng) → tin cf-connecting-ip');
-    ok(clientIp({ 'x-real-ip': '4.4.4.4', 'x-forwarded-for': '2.2.2.2, 3.3.3.3' }, '10.0.0.5') === '4.4.4.4' && clientIp({ 'x-forwarded-for': '2.2.2.2, 3.3.3.3' }, '10.0.0.5') === '3.3.3.3' && clientIp({}, '10.0.0.5') === '10.0.0.5', 'thứ tự tin: cf-connecting-ip → x-real-ip → mục CUỐI x-forwarded-for → socket');
-    // trần toàn cục không bị dồn ra khỏi bộ nhớ khi kẻ tấn công tràn khoá IP
-    now = Date.UTC(2026, 9, 19, 12, 0, 0); const og = mk();
-    for (let i = 0; i < 30; i++) og.limitGlobal('register', 30, 600);
-    for (let i = 0; i < 6000; i++) og.limit('ip:' + i, 5, 60);
-    ok(og.limitGlobal('register', 30, 600) > 0, 'tràn 6000 khoá IP giả không xoá bộ đếm toàn cục (vẫn bị chặn)');
+    ok(clientIp(hd, '203.0.113.9') === '203.0.113.9' && clientIp({ 'x-forwarded-for': '9.9.9.9' }, '8.8.8.8') === '8.8.8.8' && clientIp({ 'x-real-ip': '9.9.9.9' }, '172.32.0.1', 'x-real-ip') === '172.32.0.1', 'peer công cộng: bỏ qua mọi header proxy, dùng địa chỉ socket (kể cả 172.32.x — ngoài 172.16/12)');
+    for (const peer of ['127.0.0.1', '::1', '::ffff:127.0.0.1', '10.0.0.5', '172.16.0.2', '172.31.255.1', '192.168.1.9', 'fd12:3456::1', 'fc00::2']) ok(clientIp(hd, peer) === '3.3.3.3', 'peer ' + peer + ' (loopback / mạng riêng) → mặc định tin mục CUỐI x-forwarded-for');
+    ok(clientIp({ 'cf-connecting-ip': '1.1.1.1', 'x-real-ip': '4.4.4.4' }, '10.0.0.5') === '10.0.0.5', 'mặc định cf-connecting-ip / x-real-ip không được tin (không có x-forwarded-for → dùng socket)');
+    ok(clientIp(hd, '10.0.0.5', 'cf-connecting-ip') === '1.1.1.1' && clientIp(hd, '10.0.0.5', 'x-real-ip') === '4.4.4.4' && clientIp(hd, '10.0.0.5', 'x-forwarded-for') === '3.3.3.3' && clientIp(hd, '10.0.0.5', 'host') === '3.3.3.3' && clientIp({}, '10.0.0.5', 'cf-connecting-ip') === '10.0.0.5', 'GC_CLIENT_IP_HEADER chọn header (giá trị lạ → mặc định); thiếu header → socket');
   }
   { // 2c) đầy trần: không đuổi client đang chờ duyệt / đang hoạt động; chỉ đuổi client chưa duyệt không pending
     now = Date.UTC(2026, 9, 19, 12, 0, 0); const oe = mk(), busy = [], q0 = () => new URLSearchParams({ response_type: 'code', client_id: '', redirect_uri: CB, code_challenge: pkce().challenge, code_challenge_method: 'S256' });
@@ -440,6 +500,47 @@ try {
     ok(!!oe.approve(busy[0].a.view.request, 'approve', 'mcp:write').redirect, '…client đang chờ vẫn duyệt được');
     oe.pending.delete(busy[1].a.view.request); now += 1000; y = oe.register({ client_name: 'mới', redirect_uris: [CB] });
     ok(y.status === 201 && !oe.s.clients[busy[1].c.client_id] && !!oe.s.clients[busy[0].c.client_id] && !!oe.s.clients[busy[2].c.client_id], 'chỉ client chưa duyệt VÀ không còn pending bị đuổi (đúng cái đó); client đã duyệt + client đang chờ giữ nguyên');
+  }
+  { // 🟡3 prototype: id client lạ không chạm Object.prototype
+    now = Date.UTC(2026, 9, 19, 12, 0, 0); const op = mk(); reg(op);
+    let bad = 0; for (const id of ['__proto__', 'constructor', 'prototype', 'toString', 'hasOwnProperty', 'valueOf']) { if (op.setScope(id, 'mcp:owner') || op.revokeClient(id) || op.getClient(id) !== null) bad++; if (op.token({ grant_type: 'authorization_code', client_id: id }).status !== 401) bad++; if (!op.authorize(new URLSearchParams({ client_id: id, redirect_uri: CB })).page) bad++; }
+    ok(bad === 0 && ({}).scope === undefined && ({}).revokedAt === undefined && Object.keys(Object.prototype).length === 0, 'setScope / revokeClient / token / authorize với id __proto__ · constructor · prototype… → từ chối, Object.prototype nguyên vẹn');
+    ok(Object.getPrototypeOf(op.s.clients) === null && Object.getPrototypeOf(op.s.grants) === null && Object.getPrototypeOf(op.s.tokens) === null, 'bảng client / grant / token không có prototype (kể cả khi nạp từ tệp)');
+  }
+  { // 🟡11 oauth.json hỏng: đổi tên giữ lại + cảnh báo, không âm thầm ghi đè
+    const dirC = mkdtempSync(path.join(tmpdir(), 'gc-oauthbad-')), warns = [];
+    writeFileSync(path.join(dirC, 'oauth.json'), '{hỏng nặng');
+    const oc2 = new OAuth({ dir: dirC, publicUrl: H, now: () => now, warn: m => warns.push(m) }), left = readdirSync(dirC), kept = left.find(f => /^oauth\.json\.corrupt-\d+$/.test(f));
+    ok(kept && !left.includes('oauth.json') && readFileSync(path.join(dirC, kept), 'utf8') === '{hỏng nặng' && warns.length === 1 && /hỏng/.test(warns[0]) && Object.keys(oc2.s.clients).length === 0, 'oauth.json hỏng → đổi tên oauth.json.corrupt-<ts> (giữ nguyên nội dung) + cảnh báo + bắt đầu trống');
+    const dirD = mkdtempSync(path.join(tmpdir(), 'gc-oauthbad2-')); writeFileSync(path.join(dirD, 'oauth.json'), '[1,2]'); const w2 = []; new OAuth({ dir: dirD, publicUrl: H, now: () => now, warn: m => w2.push(m) });
+    ok(readdirSync(dirD).some(f => f.includes('.corrupt-')) && w2.length === 1, 'oauth.json là JSON hợp lệ nhưng không phải đối tượng → cũng giữ lại + cảnh báo');
+    const dirE = mkdtempSync(path.join(tmpdir(), 'gc-oauthbad3-')), w3 = []; new OAuth({ dir: dirE, publicUrl: H, now: () => now, warn: m => w3.push(m) }); ok(w3.length === 0 && readdirSync(dirE).length === 0, 'chưa có oauth.json (lần đầu) → không cảnh báo, không tạo gì');
+  }
+  { // 🟡12 xoay refresh có ân hạn 60 s
+    now = Date.UTC(2026, 9, 19, 12, 0, 0); const mkg = () => { const og = mk(), cg = reg(og), t0 = xchg(og, cg, approve(og, cg)).body; return { og, cg, t0, rf: rt => og.token({ grant_type: 'refresh_token', refresh_token: rt, client_id: cg.client_id }) }; };
+    let G1 = mkg(); const A1 = G1.rf(G1.t0.refresh_token).body; now += 30000; const B1 = G1.rf(G1.t0.refresh_token);
+    ok(B1.status === 200 && B1.body.access_token !== A1.access_token && B1.body.refresh_token !== A1.refresh_token, 'ân hạn: refresh vừa xoay bị gửi lại trong 60 s, cặp kế CHƯA dùng → cấp cặp mới (không thu hồi cả chuỗi)');
+    ok(G1.og.verify(A1.access_token) === null && G1.rf(A1.refresh_token).status === 400 && !!G1.og.verify(B1.body.access_token), '…cặp kế cũ bị thu hồi; cặp mới dùng được; chuỗi còn nguyên');
+    ok(G1.rf(B1.body.refresh_token).status === 200, '…và refresh của cặp mới xoay tiếp bình thường');
+    G1 = mkg(); const A2 = G1.rf(G1.t0.refresh_token).body; G1.og.verify(A2.access_token); now += 10000; x = G1.rf(G1.t0.refresh_token);
+    ok(x.status === 400 && G1.og.verify(A2.access_token) === null && Object.keys(G1.og.s.grants).length === 0, 'cặp kế ĐÃ được dùng (access) → dùng lại refresh cũ = thu hồi cả chuỗi');
+    G1 = mkg(); const A3 = G1.rf(G1.t0.refresh_token).body; now += 61000; x = G1.rf(G1.t0.refresh_token);
+    ok(x.status === 400 && G1.og.verify(A3.access_token) === null && Object.keys(G1.og.s.grants).length === 0, 'ngoài ân hạn 60 s → thu hồi cả chuỗi');
+    G1 = mkg(); const A4 = G1.rf(G1.t0.refresh_token).body; const A4b = G1.rf(A4.refresh_token).body; now += 5000; x = G1.rf(G1.t0.refresh_token);
+    ok(x.status === 400 && G1.og.verify(A4b.access_token) === null, 'cặp kế đã xoay tiếp (refresh đã dùng) → thu hồi cả chuỗi');
+  }
+  { // 🟠2 yêu cầu chờ duyệt có trần: mỗi client ≤ 3; bảng đầy → 429, không xoá của client khác
+    now = Date.UTC(2026, 9, 19, 12, 0, 0); const op = mk(), c1 = reg(op), c2 = reg(op), qf = (o2, c) => o2.authorize(new URLSearchParams({ response_type: 'code', client_id: c.client_id, redirect_uri: CB, code_challenge: pkce().challenge, code_challenge_method: 'S256' }));
+    const first = qf(op, c1); for (let i = 0; i < 4; i++) qf(op, c1);
+    ok([...op.pending.values()].filter(v => v.client === c1.client_id).length === 3 && !op.pending.has(first.view.request), 'mỗi client tối đa 3 yêu cầu chờ duyệt; vượt thì đẩy cái cũ nhất CỦA CHÍNH client đó');
+    const other = qf(op, c2); for (let i = 0; i < 10; i++) qf(op, c1); ok(op.pending.has(other.view.request), '…không đụng yêu cầu của client khác');
+    const o2 = mk(), owners = []; for (let i = 0; i < 34; i++) { const c = reg(o2); owners.push(c); for (let k = 0; k < 3 && o2.pending.size < 100; k++) qf(o2, c); }
+    const before = [...o2.pending.keys()], full = qf(o2, owners[33]);
+    ok(before.length === 100 && full.status === 429 && full.page && !full.view && before.every(k => o2.pending.has(k)), 'bảng 100 yêu cầu đầy → authorize mới trả 429 (trang lỗi), KHÔNG xoá yêu cầu của client nào');
+  }
+  { // 🟡8 GC_PUBLIC_URL: https; http chỉ cho loopback
+    const dh = mkdtempSync(path.join(tmpdir(), 'gc-oauthhttp-')), mkp = u => new OAuth({ dir: dh, publicUrl: u, now: () => now });
+    ok(!mkp('http://chibi.example.test').enabled && /https/.test(mkp('http://chibi.example.test').why) && !mkp('http://192.168.1.5:7480').enabled && mkp('https://chibi.example.test').enabled && mkp('http://localhost:7480').enabled && mkp('http://127.0.0.1:7480').enabled && !mkp('ftp://x.example.test').enabled && !mkp('https://x.example.test/mcp').enabled && /gốc/.test(mkp('https://x.example.test/mcp').why), 'GC_PUBLIC_URL: https mới bật OAuth; http chỉ khi loopback; http host công cộng → TẮT kèm lý do');
   }
   // chủ bỏ một callback khỏi GC_OAUTH_REDIRECTS sau khi client đã đăng ký → authorize từ chối callback đó
   const dirX = mkdtempSync(path.join(tmpdir(), 'gc-oauthx-')), ALT = 'https://agent.example.org/cb';

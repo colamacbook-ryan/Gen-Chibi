@@ -2593,6 +2593,13 @@ if (!ONLY || ONLY === 'oauth') {
     if (!(await q.isVisible('#tk')) || (await q.inputValue('#tki')) !== '') throw new Error('có GC_API_TOKEN mà chưa đăng nhập: phải hiện ô nhập token chủ máy');
     if ((await q.$$('#sc input[type=radio]')).length !== 3 || (await q.inputValue('#sc input:checked')) !== 'mcp:write') throw new Error('3 mức quyền, mặc định mcp:write');
     console.log('  ✓ Trang Cấp phép: tiêu đề · tên agent (chữ thô) · domain callback + nhãn "quen" · ô token chủ máy · 3 mức quyền, mặc định mcp:write');
+    // chống bấm nhầm / clickjacking qua popup: nút Cấp phép chỉ bật sau 800 ms kể từ khi trang hiện hoặc nhận lại focus
+    for (const ev of ['focus', 'visibilitychange']) {
+      const armT = await q.evaluate(async name => { if (name === 'focus') window.dispatchEvent(new Event('focus')); else document.dispatchEvent(new Event('visibilitychange')); const b = document.getElementById('ok'), dis = b.disabled; b.click(); const t0 = performance.now(); await new Promise(res => { const iv = setInterval(() => { if (!b.disabled) { clearInterval(iv); res(); } }, 5); }); return { dis, ms: performance.now() - t0 }; }, ev);
+      if (!armT.dis || armT.ms < 700 || armT.ms > 4000 || landed.length) throw new Error('nút Cấp phép phải tắt ~800 ms sau ' + ev + ' (tắt=' + armT.dis + ', chờ ' + Math.round(armT.ms) + ' ms, đã quay về=' + landed.length + ')');
+    }
+    console.log('  ✓ Nút Cấp phép chỉ bật sau ~800 ms kể từ khi trang hiện / nhận lại focus (bấm khi đang tắt không làm gì)');
+    if (/\sstyle\s*=/.test(await q.content())) throw new Error('trang Cấp phép còn style inline (CSP chặn)');
     await q.fill('#tki', 'token-sai'); await q.click('#ok');
     await q.waitForFunction(() => !document.getElementById('er').hidden);
     if (!/token chủ máy/.test(await q.textContent('#er')) || landed.length) throw new Error('token sai: phải báo lỗi và KHÔNG quay về agent');
