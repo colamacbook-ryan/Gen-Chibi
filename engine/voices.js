@@ -14,13 +14,13 @@
   'use strict';
   var hasOwn = function (o, k) { return Object.prototype.hasOwnProperty.call(o, k); };
 
-  // 30 giọng dựng sẵn của Gemini TTS (API không có lệnh liệt kê giọng): [tên, giới m/f (DỰ KIẾN — nghe thử trước khi chốt), chất giọng]
+  // 30 giọng dựng sẵn của Gemini TTS: [tên, giới m / f / n (đối chiếu dữ liệu thư viện giọng Google 2026-10-19), chất giọng]
   var AI_VOICES = [
     ['Charon', 'm', 'trầm, rõ'], ['Algenib', 'm', 'khàn, dày'], ['Orus', 'm', 'chắc, dứt khoát'], ['Alnilam', 'm', 'chắc'], ['Rasalgethi', 'm', 'rõ ý'],
     ['Iapetus', 'm', 'trong, rõ'], ['Schedar', 'm', 'đều, điềm tĩnh'], ['Sadaltager', 'm', 'từng trải'], ['Algieba', 'm', 'mượt'], ['Enceladus', 'm', 'nhiều hơi thở'],
     ['Umbriel', 'm', 'thoải mái'], ['Zubenelgenubi', 'm', 'tự nhiên, đời thường'], ['Achird', 'm', 'thân thiện'], ['Puck', 'm', 'vui tươi'], ['Fenrir', 'm', 'hào hứng'], ['Sadachbia', 'm', 'sinh động'],
     ['Kore', 'f', 'chắc, rõ'], ['Gacrux', 'f', 'trưởng thành'], ['Sulafat', 'f', 'ấm áp'], ['Vindemiatrix', 'f', 'dịu dàng'], ['Achernar', 'f', 'nhẹ nhàng'], ['Despina', 'f', 'mượt'],
-    ['Erinome', 'f', 'trong'], ['Callirrhoe', 'f', 'thoải mái'], ['Aoede', 'f', 'thoáng, nhẹ'], ['Pulcherrima', 'f', 'thẳng thắn'], ['Zephyr', 'f', 'sáng'], ['Autonoe', 'f', 'sáng'],
+    ['Erinome', 'f', 'trong'], ['Callirrhoe', 'f', 'thoải mái'], ['Aoede', 'f', 'thoáng, nhẹ'], ['Pulcherrima', 'n', 'thẳng thắn, trung tính'], ['Zephyr', 'f', 'sáng'], ['Autonoe', 'f', 'sáng'],
     ['Laomedeia', 'f', 'vui tươi'], ['Leda', 'f', 'trẻ trung']
   ].map(function (v) { return { name: v[0], gender: v[1], style: v[2] }; });
   var AI_SET = {}; AI_VOICES.forEach(function (v) { AI_SET[v.name] = v; });
@@ -30,39 +30,55 @@
   // kiểu vai (văn / võ / quyền quý / tính cách) — để lọc và để Studio gom nhóm
   var KINDS = { thuong: 'Thường ngày', van: 'Văn', vo: 'Võ', quy: 'Quyền quý', hai: 'Hài', ac: 'Phản diện', ke: 'Kể chuyện' };
 
-  // [id, nhãn, tuổi, giới m/f, kiểu, thẻ giọng (tiếng Anh, ngắn), giọng Gemini hợp vai (thứ tự ưu tiên), cao độ, tốc độ (giọng trình duyệt)]
+  // [id, nhãn, nhóm tuổi, giới m/f, kiểu, cách nói (style — KHÔNG ghi tuổi / giới / giọng vùng: Google dặn những thứ đó thuộc về GIỌNG),
+  //  chân dung để THIẾT KẾ giọng (tuổi + chất giọng, tiếng Anh), tuổi hợp vai [min, max] để chọn giọng thư viện (null = vai trẻ em: thư viện
+  //  không có, Google chặn thiết kế giọng trẻ em → giọng trẻ trung có sẵn), cao độ ưu tiên low / medium / high,
+  //  giọng dựng sẵn hợp vai (thứ tự ưu tiên; đã đối chiếu giới + cao độ với dữ liệu Google 2026-10-19), cao độ, tốc độ (giọng trình duyệt)]
+  // Vai trẻ em lồng bằng giọng nữ cao trẻ trung — cách làm phổ biến của phim hoạt hình, không giả lập giọng trẻ thật.
   var ROLE_ROWS = [
-    ['be-trai', 'Bé trai', 'tre-em', 'm', 'thuong', 'young boy, child voice, bright and playful', ['Puck', 'Fenrir', 'Sadachbia'], 1.55, 1.08],
-    ['be-gai', 'Bé gái', 'tre-em', 'f', 'thuong', 'little girl, child voice, sweet and cheerful', ['Leda', 'Laomedeia', 'Zephyr', 'Autonoe'], 1.7, 1.08],
-    ['thieu-nien', 'Cậu thiếu niên', 'thieu-nien', 'm', 'thuong', 'teenage boy, energetic', ['Fenrir', 'Puck', 'Achird'], 1.25, 1.06],
-    ['thieu-nu', 'Cô thiếu nữ', 'thieu-nien', 'f', 'thuong', 'teenage girl, lively and clear', ['Leda', 'Autonoe', 'Zephyr'], 1.38, 1.06],
-    ['nam-tre', 'Nam thanh niên', 'thanh-nien', 'm', 'thuong', 'young man, friendly and natural', ['Achird', 'Puck', 'Umbriel', 'Zubenelgenubi'], 1.05, 1.02],
-    ['nu-tre', 'Nữ thanh niên', 'thanh-nien', 'f', 'thuong', 'young woman, warm and natural', ['Aoede', 'Callirrhoe', 'Despina', 'Zephyr'], 1.2, 1.02],
-    ['hiep-khach', 'Hiệp khách trẻ', 'thanh-nien', 'm', 'vo', 'young swordsman, calm and confident', ['Iapetus', 'Orus', 'Algieba'], 1, 1],
-    ['nu-tuong', 'Nữ tướng', 'thanh-nien', 'f', 'vo', 'fierce female warrior, firm and commanding', ['Kore', 'Pulcherrima'], 1, 1],
-    ['tieu-thu', 'Tiểu thư / nữ văn sĩ', 'thanh-nien', 'f', 'van', 'elegant refined lady, soft and graceful', ['Despina', 'Erinome', 'Achernar', 'Vindemiatrix'], 1.15, 0.95],
-    ['nam-trung-nien', 'Đàn ông trung niên', 'trung-nien', 'm', 'thuong', 'middle-aged man, steady', ['Charon', 'Iapetus', 'Schedar'], 0.9, 0.97],
-    ['nu-trung-nien', 'Phụ nữ trung niên', 'trung-nien', 'f', 'thuong', 'middle-aged woman, warm and firm', ['Sulafat', 'Kore', 'Gacrux'], 1.02, 0.97],
-    ['vo-tuong', 'Võ tướng', 'trung-nien', 'm', 'vo', 'powerful warrior general, booming and commanding', ['Alnilam', 'Orus', 'Algenib', 'Charon'], 0.72, 0.96],
-    ['quan-su', 'Quân sư / văn sĩ', 'trung-nien', 'm', 'van', 'calm scholarly strategist, measured and wise', ['Sadaltager', 'Rasalgethi', 'Schedar', 'Iapetus'], 0.95, 0.9],
-    ['vua-chua', 'Vua / chủ công', 'trung-nien', 'm', 'quy', 'regal ruler, dignified and authoritative', ['Charon', 'Schedar', 'Alnilam'], 0.85, 0.92],
-    ['hoang-hau', 'Hoàng hậu / phu nhân', 'trung-nien', 'f', 'quy', 'regal noble lady, dignified and composed', ['Gacrux', 'Kore', 'Despina'], 1, 0.93],
-    ['phan-dien', 'Phản diện', 'trung-nien', 'm', 'ac', 'menacing villain, sly and low', ['Algenib', 'Enceladus', 'Charon'], 0.8, 0.94],
-    ['nu-phan-dien', 'Nữ phản diện', 'trung-nien', 'f', 'ac', 'cunning villainess, cold and smooth', ['Pulcherrima', 'Despina', 'Gacrux'], 0.95, 0.95],
-    ['hai-huoc', 'Vai hài', 'thanh-nien', 'm', 'hai', 'comic sidekick, silly and exaggerated', ['Fenrir', 'Sadachbia', 'Puck'], 1.3, 1.14],
-    ['nu-hai-huoc', 'Vai hài (nữ)', 'thanh-nien', 'f', 'hai', 'comic girl, bubbly and exaggerated', ['Laomedeia', 'Leda', 'Autonoe'], 1.4, 1.12],
-    ['ong-lao', 'Ông lão', 'cao-tuoi', 'm', 'thuong', 'elderly old man, slow, slightly raspy, wise', ['Algenib', 'Sadaltager', 'Enceladus'], 0.8, 0.84],
-    ['ba-lao', 'Bà lão', 'cao-tuoi', 'f', 'thuong', 'elderly old woman, slow, gentle, slightly shaky', ['Gacrux', 'Vindemiatrix', 'Sulafat'], 0.95, 0.84],
-    ['ke-chuyen', 'Người kể chuyện', 'trung-nien', 'm', 'ke', 'warm storyteller narrator, even pacing', ['Schedar', 'Charon', 'Sulafat'], 0.95, 0.95]
+    ['be-trai', 'Bé trai', 'tre-em', 'm', 'thuong', 'bright, playful, energetic', '', null, 'high', ['Leda', 'Laomedeia', 'Zephyr'], 1.55, 1.08],
+    ['be-gai', 'Bé gái', 'tre-em', 'f', 'thuong', 'sweet, cheerful, bubbly', '', null, 'high', ['Leda', 'Zephyr', 'Laomedeia', 'Achernar'], 1.7, 1.08],
+    ['thieu-nien', 'Cậu thiếu niên', 'thieu-nien', 'm', 'thuong', 'energetic, eager', '', null, 'high', ['Fenrir', 'Puck', 'Achird'], 1.25, 1.06],
+    ['thieu-nu', 'Cô thiếu nữ', 'thieu-nien', 'f', 'thuong', 'lively, clear', '', null, 'high', ['Leda', 'Autonoe', 'Zephyr'], 1.38, 1.06],
+    ['nam-tre', 'Nam thanh niên', 'thanh-nien', 'm', 'thuong', 'friendly, natural', 'a friendly young man in his mid 20s with a clear, natural voice', [20, 32], 'medium', ['Achird', 'Puck', 'Umbriel', 'Zubenelgenubi'], 1.05, 1.02],
+    ['nu-tre', 'Nữ thanh niên', 'thanh-nien', 'f', 'thuong', 'warm, natural', 'a warm young woman in her mid 20s with a clear, natural voice', [20, 32], 'medium', ['Aoede', 'Callirrhoe', 'Despina', 'Zephyr'], 1.2, 1.02],
+    ['hiep-khach', 'Hiệp khách trẻ', 'thanh-nien', 'm', 'vo', 'calm, confident, resolute', 'a calm, confident young swordsman in his late 20s with a clear, steady voice', [22, 35], 'medium', ['Iapetus', 'Orus', 'Algieba'], 1, 1],
+    ['nu-tuong', 'Nữ tướng', 'thanh-nien', 'f', 'vo', 'fierce, firm, commanding', 'a fierce female general in her 30s with a firm, commanding voice', [26, 45], 'low', ['Kore', 'Gacrux'], 1, 1],
+    ['tieu-thu', 'Tiểu thư / nữ văn sĩ', 'thanh-nien', 'f', 'van', 'soft, graceful, refined', 'an elegant, refined young lady poet in her 20s with a soft, graceful voice', [20, 32], 'high', ['Despina', 'Erinome', 'Achernar', 'Vindemiatrix'], 1.15, 0.95],
+    ['nam-trung-nien', 'Đàn ông trung niên', 'trung-nien', 'm', 'thuong', 'steady, grounded', 'a steady middle-aged man in his late 40s with a grounded voice', [38, 55], 'low', ['Charon', 'Iapetus', 'Schedar'], 0.9, 0.97],
+    ['nu-trung-nien', 'Phụ nữ trung niên', 'trung-nien', 'f', 'thuong', 'warm, firm', 'a warm, firm middle-aged woman in her late 40s', [38, 55], 'medium', ['Sulafat', 'Kore', 'Gacrux'], 1.02, 0.97],
+    ['vo-tuong', 'Võ tướng', 'trung-nien', 'm', 'vo', 'booming, commanding, powerful', 'a powerful battle-hardened general in his 40s with a booming, deep, commanding voice', [32, 55], 'low', ['Alnilam', 'Orus', 'Algenib', 'Charon'], 0.72, 0.96],
+    ['quan-su', 'Quân sư / văn sĩ', 'trung-nien', 'm', 'van', 'calm, measured, wise', 'a calm, scholarly strategist in his 40s with a measured, wise and refined voice', [35, 60], 'medium', ['Sadaltager', 'Rasalgethi', 'Schedar', 'Iapetus'], 0.95, 0.9],
+    ['vua-chua', 'Vua / chủ công', 'trung-nien', 'm', 'quy', 'dignified, authoritative, regal', 'a dignified ruler in his 50s with a regal, authoritative and resonant voice', [40, 62], 'low', ['Charon', 'Schedar', 'Alnilam'], 0.85, 0.92],
+    ['hoang-hau', 'Hoàng hậu / phu nhân', 'trung-nien', 'f', 'quy', 'dignified, composed, regal', 'a dignified noble lady in her 40s with a composed, regal voice', [35, 58], 'medium', ['Gacrux', 'Kore', 'Despina'], 1, 0.93],
+    ['phan-dien', 'Phản diện', 'trung-nien', 'm', 'ac', 'menacing, sly, low', 'a cunning, menacing villain in his 40s with a low, sly, smooth voice', [30, 58], 'low', ['Algenib', 'Enceladus', 'Charon'], 0.8, 0.94],
+    ['nu-phan-dien', 'Nữ phản diện', 'trung-nien', 'f', 'ac', 'cold, cunning, smooth', 'a cunning villainess in her 30s with a cold, smooth voice', [28, 55], 'medium', ['Despina', 'Gacrux', 'Kore'], 0.95, 0.95],
+    ['hai-huoc', 'Vai hài', 'thanh-nien', 'm', 'hai', 'silly, exaggerated, bouncy', 'a goofy comic sidekick in his 20s with a silly, exaggerated, bouncy voice', [20, 40], 'medium', ['Fenrir', 'Sadachbia', 'Puck'], 1.3, 1.14],
+    ['nu-hai-huoc', 'Vai hài (nữ)', 'thanh-nien', 'f', 'hai', 'bubbly, exaggerated, playful', 'a bubbly comic young woman in her 20s with an exaggerated, playful voice', [20, 40], 'high', ['Laomedeia', 'Leda', 'Autonoe'], 1.4, 1.12],
+    ['ong-lao', 'Ông lão', 'cao-tuoi', 'm', 'thuong', 'slow, slightly raspy, wise', 'a wise grandfather in his late 70s with a slow, slightly raspy, warm voice', [55, 99], 'low', ['Algenib', 'Sadaltager', 'Enceladus'], 0.8, 0.84],
+    ['ba-lao', 'Bà lão', 'cao-tuoi', 'f', 'thuong', 'slow, gentle, slightly shaky', 'a kind grandmother in her late 70s with a soft, slightly shaky, slow and warm voice', [53, 99], 'medium', ['Gacrux', 'Vindemiatrix', 'Sulafat'], 0.95, 0.84],
+    ['ke-chuyen', 'Người kể chuyện', 'trung-nien', 'm', 'ke', 'warm, even pacing, storytelling', 'a warm storyteller in his 50s with an even, engaging narrator voice', [40, 65], 'low', ['Schedar', 'Charon', 'Sulafat'], 0.95, 0.95]
   ];
   var ROLES = {};
-  ROLE_ROWS.forEach(function (r) { ROLES[r[0]] = { id: r[0], label: r[1], age: r[2], gender: r[3], kind: r[4], tags: r[5], ai: r[6], pitch: r[7], rate: r[8] }; });
+  ROLE_ROWS.forEach(function (r) { ROLES[r[0]] = { id: r[0], label: r[1], age: r[2], gender: r[3], kind: r[4], style: r[5], tags: r[5], design: r[6], ages: r[7], prefPitch: r[8], ai: r[9], pitch: r[10], rate: r[11] }; });
+  // Google chặn THIẾT KẾ giọng trẻ em / vị thành niên (chính sách an toàn — đo 2026-10-19: "Voice prompt was blocked by safety policies")
+  function canDesign(id) { return hasOwn(ROLES, id) && !!ROLES[id].design; }
 
   // ngôn ngữ phim + giọng vùng; mặc định của mỗi ngôn ngữ đứng đầu. Thẻ giọng vùng đi cùng thẻ vai trong [ ] đầu câu.
+  // [id, nhãn, thẻ giọng vùng (giọng cũ: model đời trước), cụm mô tả khi THIẾT KẾ giọng, mã ngôn ngữ thư viện giọng Google]
+  // Thư viện giọng Google (quét 2026-10-19): vi-VN 40 giọng người lớn 22–62 tuổi, KHÔNG phân Bắc / Nam; en-US 215, en-GB 117; tiếng Trung 0
+  // → giọng vùng tiếng Việt và mọi giọng tiếng Trung đúng chất chỉ có qua Thiết kế giọng.
   var LANGS = {
-    vi: { label: 'Tiếng Việt', bcp: 'vi-VN', accents: [['bac', 'Giọng Bắc', 'Northern Vietnamese (Hanoi) accent'], ['nam', 'Giọng Nam', 'Southern Vietnamese (Saigon) accent'], ['trung', 'Giọng Trung (Huế)', 'Central Vietnamese (Hue) accent']] },
-    en: { label: 'Tiếng Anh', bcp: 'en-US', accents: [['us', 'Anh Mỹ', 'American English accent'], ['uk', 'Anh Anh', 'British English accent']] },
-    zh: { label: 'Tiếng Trung', bcp: 'zh-CN', accents: [['pt', 'Phổ thông', 'standard Mandarin Chinese'], ['tw', 'Đài Loan', 'Taiwanese Mandarin accent']] }
+    vi: { label: 'Tiếng Việt', bcp: 'vi-VN', accents: [
+      ['bac', 'Giọng Bắc', 'Northern Vietnamese (Hanoi) accent', 'Vietnamese, from Hanoi, speaking Vietnamese with a natural Northern (Hanoi) accent', 'vi-VN'],
+      ['nam', 'Giọng Nam', 'Southern Vietnamese (Saigon) accent', 'Vietnamese, from Saigon, speaking Vietnamese with a natural Southern (Saigon) accent', 'vi-VN'],
+      ['trung', 'Giọng Trung (Huế)', 'Central Vietnamese (Hue) accent', 'Vietnamese, from Hue, speaking Vietnamese with a natural Central (Hue) accent', 'vi-VN']] },
+    en: { label: 'Tiếng Anh', bcp: 'en-US', accents: [
+      ['us', 'Anh Mỹ', 'American English accent', 'American, speaking English with a General American accent', 'en-US'],
+      ['uk', 'Anh Anh', 'British English accent', 'British, speaking English with a Southern British accent', 'en-GB']] },
+    zh: { label: 'Tiếng Trung', bcp: 'zh-CN', accents: [
+      ['pt', 'Phổ thông', 'standard Mandarin Chinese', 'Chinese, speaking standard Mandarin Chinese (Putonghua) with clear pronunciation', 'cmn-CN'],
+      ['tw', 'Đài Loan', 'Taiwanese Mandarin accent', 'Taiwanese, speaking Mandarin Chinese with a Taiwanese accent', 'cmn-TW']] }
   };
   function lang(id) { return hasOwn(LANGS, id) ? id : 'vi'; }
   function accent(l, a) {
@@ -118,7 +134,9 @@
     var l = lang(o.lang), ac = accent(l, v.accent && accent(l, v.accent)[0] === v.accent ? v.accent : o.accent);
     var ai = typeof v.ai === 'string' && hasOwn(AI_SET, v.ai) ? v.ai : pickAi(R, asset, o.taken);
     return { role: rid, label: R.label, gender: R.gender, lang: l, bcp: LANGS[l].bcp, accent: ac[0], ai: ai,
-      tags: R.tags + ', ' + ac[2], pitch: num(v.pitch, 0, 2, R.pitch), rate: num(v.rate, 0.5, 1.8, R.rate) };
+      style: R.style, tags: R.style, legacy: R.style + ', ' + ac[2], libLang: ac[4], ages: R.ages, prefPitch: R.prefPitch,
+      design: R.design ? 'A ' + R.design.replace(/^an? /, '') + '. ' + ac[3] + '.' : '',
+      pitch: num(v.pitch, 0, 2, R.pitch), rate: num(v.rate, 0.5, 1.8, R.rate) };
   }
   // cả dàn diễn viên của một tác phẩm: mỗi người một giọng AI khác nhau khi còn giọng (người tự chọn giọng giữ trước) → { id: cast }
   function castAll(list, opts) {
@@ -150,7 +168,11 @@
     return Object.keys(LANGS).map(function (k) { return { id: k, label: LANGS[k].label, bcp: LANGS[k].bcp, accents: LANGS[k].accents.map(function (a) { return { id: a[0], label: a[1] }; }) }; });
   }
 
-  var V = { AI_VOICES: AI_VOICES, isAiVoice: function (n) { return hasOwn(AI_SET, n); }, castAll: castAll, ROLES: ROLES, LANGS: LANGS, AGES: AGES, KINDS: KINDS, STATE_TAGS: STATE_TAGS, BUBBLE_TAGS: BUBBLE_TAGS,
+  // khoá clip của một câu (Studio lưu đệm, phim xuất tra DATA.voices): cùng giọng + vai + ngôn ngữ + cảm xúc + chữ → cùng clip
+  function lineKey(line, voice, c) {
+    return [voice || '', c ? c.role : '', c ? c.lang : '', c ? c.accent : '', line.state || '', line.bubble || '', String(line.say == null ? '' : line.say)].join('|');
+  }
+  var V = { AI_VOICES: AI_VOICES, canDesign: canDesign, lineKey: lineKey, isAiVoice: function (n) { return hasOwn(AI_SET, n); }, castAll: castAll, ROLES: ROLES, LANGS: LANGS, AGES: AGES, KINDS: KINDS, STATE_TAGS: STATE_TAGS, BUBBLE_TAGS: BUBBLE_TAGS,
     cast: cast, guessRole: guessRole, tags: tags, mood: mood, lang: lang, accent: function (l, a) { return accent(l, a)[0]; }, roleList: roleList, langList: langList };
   if (GC) GC.voices = V;
   if (typeof module === 'object' && module && module.exports) module.exports = V;

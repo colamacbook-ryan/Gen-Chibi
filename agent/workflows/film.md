@@ -19,10 +19,16 @@
    (`shot.id` to edit an existing shot; `remove: true` to drop one).
 7. `preview_shot` with `{ "work": "<work id>", "shot": "<shot id>" }` → `ready`, `missing`, `warnings`,
    and the planned beats (who moves, which actions, how long). Fix anything listed.
-8. Optional voices: `render_voice` with `{ "text", "character": "<key>", "state", "bubble" }` returns the line read by a
-   Google AI voice (WAV, `audio` content). Voice names: `get_catalog` › `aiVoices`. It only works when the owner turned
-   on Giọng AI with a Google AI Studio key; the free tier allows about 10 lines per day per model — on `UNAVAILABLE`
-   stop and tell the owner (`retryAt`), do not loop. Lines already read are cached (no quota used).
+8. Optional voices (voice by ROLE): set the film language once — `save_work` with `{ "id", "lang": "vi" | "en" | "zh",
+   "accent": "bac" | "nam" | "trung" (vi) · "us" | "uk" (en) · "pt" | "tw" (zh) }`; write every line in that language.
+   Give each character a voice role when saving it: `voice: { "role": "<id>" }` from `get_catalog` › `voiceRoles`
+   (be-trai, be-gai, ong-lao, ba-lao, vo-tuong, quan-su, vua-chua, phan-dien…; without it the role is guessed from role / persona / name).
+   `render_voice` with `{ "text", "character": "<key>", "lang", "accent", "state", "bubble" }` returns the line read by a
+   Google AI voice (WAV, `audio` content) — the app picks the voice: designed voice of that role → Google voice library
+   (right language, gender, age) → prebuilt voice. `design_voice` with `{ "role", "lang", "accent" }` creates a better voice
+   for an adult role (elders, generals, regional accents; costs one Google call; child roles are refused by Google policy).
+   It only works when the owner pasted a Google AI Studio key (Studio › Cài đặt AI › Giọng AI). The free tier allows very
+   few lines per day — on `UNAVAILABLE` stop and tell the owner (`retryAt`), do not loop. Lines already read are cached (no quota used).
 
 ## Existing works and loose scripts
 - `list_works` / `get_work` with `{ "id" }` — read a work (all shots, events) before editing it; edit a shot with `save_shot` + `shot.id`.

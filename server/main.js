@@ -8,7 +8,7 @@ const path = require('path');
 const { Updater, RESTART_CODE } = require('./updater');
 const { Secrets } = require('./secrets');
 const { AI } = require('./ai');
-const { Voice } = require('./voice');
+const { Voice, VOICES, GV } = require('./voice');
 const { MCP, INSTRUCTIONS: MCP_INSTRUCTIONS, TOOLS: MCP_TOOLS } = require('./mcp');
 const Agent = require('./agent.js');
 const { Store, KEY, readJSON, writeJSON } = require('./store');
@@ -216,16 +216,32 @@ async function route(req, res) {
     return send(res, 200, voice.setConfig(b));
   }
   if (p === '/api/voice/models' && m === 'GET') { try { return send(res, 200, await voice.models()); } catch (e) { return fail(res, e.code || 502, e.message); } }
+  // lỗi giọng AI → mã HTTP + retryAt (hết lượt) cho Studio
+  const vfail = (e) => send(res, e.code >= 400 && e.code < 600 ? e.code : 502, Object.assign({ error: e.message }, e.retryAt ? { retryAt: e.retryAt } : {}));
   if (p === '/api/voice/line' && m === 'POST') {
     const b = await body(req);
-    // character (key) → vai giọng + giọng AI của nhân vật (chưa chọn thì đoán theo vai); voice / role / lang / accent ghi rõ thì thắng.
-    // dry: chỉ lấy clip đã đọc (xuất phim) — chưa có thì 404, không bao giờ gọi Google
+    // voice = giọng đã cast cho cả tác phẩm (api/voice/cast); không gửi thì chọn theo nhân vật (character) / vai (role) + ngôn ngữ.
+    // role → cách nói của vai; state + bubble → cảm xúc. dry: chỉ lấy clip đã đọc (xuất phim) — chưa có thì 404, không gọi Google
     const A = b.character ? mcp.findAsset(String(b.character)) : null;
     if (b.character && !A) return fail(res, 404, 'không có nhân vật ' + String(b.character).slice(0, 60));
-    const v = voice.resolve({ asset: A, voice: b.voice, role: b.role, lang: b.lang, accent: b.accent });
-    try { const r = await voice.line({ text: b.text, voice: v.voice, state: b.state, bubble: b.bubble, persona: v.persona, dry: b.dry === true }); return send(res, 200, Object.assign(r, { voice: v.voice, role: v.role, lang: v.lang, accent: v.accent, url: 'api/voice/clip/' + r.id + '.wav' })); }
-    catch (e) { return send(res, e.code >= 400 && e.code < 600 ? e.code : 502, Object.assign({ error: e.message }, e.retryAt ? { retryAt: e.retryAt } : {})); }
+    try {
+      const v = b.voice && b.voice !== 'auto' && !A && b.role ? { voice: b.voice, role: b.role, lang: b.lang, accent: b.accent } : await voice.pick({ asset: A, voice: b.voice, role: b.role, lang: b.lang, accent: b.accent });
+      const r = await voice.line({ text: b.text, voice: v.voice, role: v.role, state: b.state, bubble: b.bubble, dry: b.dry === true });
+      return send(res, 200, Object.assign(r, { voice: v.voice, role: v.role, url: 'api/voice/clip/' + r.id + '.wav' }));
+    } catch (e) { return vfail(e); }
   }
+  // cả dàn diễn viên một tác phẩm → mỗi người một giọng AI (thiết kế → thư viện → dựng sẵn); không tốn lượt đọc
+  if (p === '/api/voice/cast' && m === 'POST') { try { return send(res, 200, await voice.cast(await body(req))); } catch (e) { return vfail(e); } }
+  // giọng chọn được cho một ngôn ngữ: thư viện Google (quét lúc chạy, lưu 24 giờ) + giọng đã thiết kế + 30 giọng dựng sẵn
+  if (p === '/api/voice/library' && m === 'GET') {
+    const L = GV.lang(url.searchParams.get('lang')), code = GV.cast({ id: 'x' }, { lang: L, accent: url.searchParams.get('accent') }).libLang;
+    let lib = []; try { lib = await voice.library(code); } catch (e) { lib = []; }   // mất mạng / chưa có key: chỉ còn giọng dựng sẵn
+    const have = new Set(lib.map(v => v.id));
+    const pre = VOICES.filter(v => !have.has(v.name)).map(v => ({ id: v.name, name: v.name, gender: v.gender === 'nữ' ? 'f' : 'm', age: null, pitch: '', description: v.style, type: 'prebuilt' }));
+    return send(res, 200, { lang: L, code, voices: lib.concat(pre) });
+  }
+  // THIẾT KẾ giọng cho một vai (tốn một lượt; vai trẻ em bị Google chặn → 400)
+  if (p === '/api/voice/design' && m === 'POST') { try { return send(res, 200, await voice.design(await body(req))); } catch (e) { return vfail(e); } }
   if (p.startsWith('/api/voice/clip/') && m === 'GET') {
     const f = voice.clipPath(p.slice('/api/voice/clip/'.length).replace(/\.wav$/, ''));
     if (!f || !fs.existsSync(f)) return fail(res, 404, 'chưa có clip');

@@ -69,7 +69,7 @@ const TOOLS = [
   { name: 'save_project', title: 'Tạo / sửa dự án chủ đề', description: 'Tạo hoặc đổi tên một dự án chủ đề (id slug, name, description). Không xoá asset.', inputSchema: obj({ id: { type: 'string', description: 'slug: chữ thường, số, gạch nối' }, name: { type: 'string' }, description: { type: 'string' } }, ['id', 'name']) },
   { name: 'list_works', title: 'Danh sách tác phẩm', description: 'Các tác phẩm (phim / truyện) đang làm ở khu Tạo tác: id, tên, dự án chủ đề, số phân cảnh, số cảnh đã có lời thoại.', inputSchema: obj({}), annotations: { readOnlyHint: true } },
   { name: 'get_work', title: 'Xem tác phẩm', description: 'Toàn bộ một tác phẩm: kịch bản, danh sách phân cảnh (mô tả, cảnh, dàn diễn viên, lời thoại / diễn xuất).', inputSchema: obj({ id: { type: 'string' } }, ['id']), annotations: { readOnlyHint: true } },
-  { name: 'save_work', title: 'Lưu tác phẩm', description: 'Tạo hoặc sửa phần chung của tác phẩm: title, project (dự án chủ đề), logline (một câu), script (kịch bản tổng, văn xuôi). Không đụng phân cảnh. Bỏ id để tạo mới.', inputSchema: obj({ id: { type: 'string' }, title: { type: 'string' }, project: { type: 'string' }, logline: { type: 'string' }, script: { type: 'string' } }) },
+  { name: 'save_work', title: 'Lưu tác phẩm', description: 'Tạo hoặc sửa phần chung của tác phẩm: title, project (dự án chủ đề), logline (một câu), script (kịch bản tổng, văn xuôi), lang (ngôn ngữ lời thoại vi | en | zh — mặc định vi) + accent (giọng vùng: bac / nam / trung · us / uk · pt / tw). Không đụng phân cảnh. Bỏ id để tạo mới.', inputSchema: obj({ id: { type: 'string' }, title: { type: 'string' }, project: { type: 'string' }, logline: { type: 'string' }, script: { type: 'string' }, lang: { type: 'string', enum: Object.keys(GV.LANGS) }, accent: { type: 'string' } }) },
   { name: 'save_shot', title: 'Lưu phân cảnh', description: 'Thêm / sửa / bỏ một phân cảnh của tác phẩm. shot = { id? (bỏ trống = thêm mới), title, description (mô tả phân cảnh), scene (key cảnh trong Thư viện, xem list_scenes), cast (≤ 8 nhân vật: id hoặc key, xem list_characters), event? (lời thoại + diễn xuất theo get_director_schema; engine tự đặt event.scene = scene) }. position = vị trí chèn (0 = đầu). remove = true để bỏ phân cảnh. Thiếu nhân vật / cảnh thì tạo ở Xưởng trước (save_character / save_scene với project của tác phẩm).', inputSchema: obj({ work: { type: 'string' }, shot: { type: 'object' }, position: { type: 'integer' }, remove: { type: 'boolean' } }, ['work', 'shot']) },
   { name: 'export_project', title: 'Xuất gói dự án', description: 'Gói JSON của một dự án chủ đề (gen-chibi.project/1): nhân vật, item, cảnh, linh kiện / phông tự vẽ đang dùng, tác phẩm. Dùng để sao lưu, chuyển máy, bán / chia sẻ bộ asset theo chủ đề.', inputSchema: obj({ id: { type: 'string', description: 'id dự án (list_projects)' }, sale: { type: 'boolean', description: 'true = GÓI BÁN: chỉ asset trạng thái published (phát hành), không kèm tác phẩm' } }, ['id']), annotations: { readOnlyHint: true } },
   { name: 'import_project', title: 'Nhập gói dự án', description: 'Nhập một gói gen-chibi.project/1 vào Thư viện. Mọi linh kiện, item, cảnh, nhân vật, tác phẩm đi qua đúng cổng kiểm như khi tạo mới. Trùng id thì báo danh sách trùng; overwrite = true để lưu đè thành phiên bản mới (bản cũ vẫn giữ trong lịch sử).', inputSchema: obj({ bundle: { type: 'object' }, overwrite: { type: 'boolean' } }, ['bundle']) },
@@ -81,6 +81,7 @@ const TOOLS = [
   { name: 'save_motion_pack', title: 'Lưu gói động tác', description: 'Kiểm, dựng thử rồi lưu gói động tác vào Thư viện (có phiên bản). Hành động của gói dùng ngay trong kịch bản (step.action) và render_action. Đặt "project".', inputSchema: obj({ pack: { type: 'object' }, note: { type: 'string' } }, ['pack']) },
   { name: 'render_action', title: 'Xuất hoạt ảnh một hành động', description: 'Một nhân vật diễn một hành động → khung cố định, nền trong suốt. format: sheet (một SVG sprite sheet + timeline), frames (SVG từng khung, tối đa 60), meta (chỉ timeline: fps, số khung, thời lượng, khung va chạm, khung ôm). Đòn đánh: partner (mặc định ma-nơ-canh) + react.', inputSchema: obj({ character: { type: 'string' }, action: { type: 'string' }, partner: { type: 'string' }, react: { type: 'string', enum: ['hit', 'fall', 'ko', 'block', 'dodge'] }, fps: { type: 'integer', minimum: 4, maximum: 30 }, format: { type: 'string', enum: ['sheet', 'frames', 'meta'] }, cell: { type: 'integer', minimum: 48, maximum: 512 } }, ['character', 'action']), annotations: { readOnlyHint: true } },
   { name: 'render_voice', title: 'Đọc thoại bằng giọng AI', description: 'Đọc một câu thoại bằng giọng AI (Google Gemini TTS) → clip WAV (nội dung audio). Giọng theo VAI: character (vai + giọng đã chọn của nhân vật; chưa chọn thì đoán từ vai trò / tính cách / tên) hoặc role (get_catalog › voiceRoles: bé trai, bà lão, võ tướng, quân sư…); voice = tên giọng ghi đè (get_catalog › aiVoices). Ngôn ngữ lang = vi | en | zh (chữ phải đúng ngôn ngữ đó), accent = giọng vùng (get_catalog › voiceLangs: bac / nam / trung, us / uk, pt / tw). Cảm xúc theo state + bubble. Câu đã đọc được lưu đệm (không tốn lượt). Cần chủ máy dán key Google AI Studio ở Studio › Cài đặt AI › Giọng AI (tự bật); gói miễn phí ~10 câu / ngày / model — hết lượt trả UNAVAILABLE kèm retryAt.', inputSchema: obj({ text: { type: 'string', maxLength: 240 }, character: { type: 'string' }, role: { type: 'string', enum: Object.keys(GV.ROLES) }, lang: { type: 'string', enum: Object.keys(GV.LANGS) }, accent: { type: 'string' }, voice: { type: 'string' }, state: { type: 'string' }, bubble: { type: 'string', enum: ['say', 'shout', 'think', 'whisper'] } }, ['text']), annotations: { readOnlyHint: false, openWorldHint: true } },
+  { name: 'design_voice', title: 'Thiết kế giọng vai', description: 'THIẾT KẾ một giọng AI mới cho một vai (get_catalog › voiceRoles: ông lão, bà lão, võ tướng, quân sư…) + ngôn ngữ (vi | en | zh) + giọng vùng (accent: bac / nam / trung · us / uk · pt / tw) trên project Google của chủ máy; từ đó render_voice của mọi nhân vật vai đó tự dùng giọng này. Tốn một lượt Google (~25 giây); Google chặn thiết kế giọng trẻ em / vị thành niên (vai bé, thiếu niên → BAD_REQUEST, dùng giọng trẻ trung có sẵn). Trả JSON + clip nghe thử.', inputSchema: obj({ role: { type: 'string', enum: Object.keys(GV.ROLES) }, lang: { type: 'string', enum: Object.keys(GV.LANGS) }, accent: { type: 'string' } }, ['role']), annotations: { readOnlyHint: false, openWorldHint: true } },
   { name: 'preview_shot', title: 'Xem trước phân cảnh', description: 'Phân cảnh đã sẵn sàng diễn chưa (ready, missing) + kế hoạch dàn dựng của bộ phát: ai ra sân / đi đâu / nói gì / ra đòn gì, bao lâu, cảnh báo (đòn thiếu, không dựng được). Gọi sau save_shot.', inputSchema: obj({ work: { type: 'string' }, shot: { type: 'string', description: 'id phân cảnh (hoặc số thứ tự từ 0)' } }, ['work', 'shot']), annotations: { readOnlyHint: true } },
   { name: 'list_samples', title: 'Bộ mẫu đi kèm', description: 'Các dự án mẫu đi kèm bản cài (Văn phòng vui, bộ chủ đề Tam Quốc…): id, tên, phiên bản, đã cài chưa, có bản mới không.', inputSchema: obj({}), annotations: { readOnlyHint: true } },
   { name: 'install_sample', title: 'Cài / cập nhật bộ mẫu', description: 'Nhập một bộ mẫu đi kèm vào Thư viện qua đúng cổng nhập. overwrite = true để cập nhật bộ mẫu đã cài (chỗ đã sửa thành phiên bản cũ). Bộ mẫu chỉ để xem, thử, làm phim — không bán.', inputSchema: obj({ id: { type: 'string' }, overwrite: { type: 'boolean' } }, ['id']) },
@@ -411,14 +412,28 @@ class MCP {
         if (!this.voice) return toolError('Giọng AI chỉ có ở bản cài chạy server', { code: 'UNAVAILABLE' });
         const A = args.character ? this.findAsset(String(args.character)) : null;
         if (args.character && !A) return toolError('Không có nhân vật ' + args.character + ' (list_characters)', { code: 'NOT_FOUND' });
-        const v = this.voice.resolve({ asset: A, voice: args.voice, role: args.role, lang: args.lang, accent: args.accent }), vname = v.voice;
         try {
-          const r = await this.voice.line({ text: args.text, voice: vname, state: args.state || 'normal', bubble: args.bubble || 'say', persona: v.persona });
+          const v = await this.voice.pick({ asset: A, voice: args.voice, role: args.role, lang: args.lang, accent: args.accent }), vname = v.voice;
+          const r = await this.voice.line({ text: args.text, voice: vname, role: v.role, state: args.state || 'normal', bubble: args.bubble || 'say' });
           const wav = fs.readFileSync(this.voice.clipPath(r.id)), meta = { voice: vname, role: v.role, lang: v.lang, accent: v.accent, seconds: r.seconds, cached: r.cached, clip: 'api/voice/clip/' + r.id + '.wav' };
           return { content: [{ type: 'text', text: JSON.stringify(meta) }, { type: 'audio', data: wav.toString('base64'), mimeType: 'audio/wav' }], structuredContent: meta };
         } catch (e) {
           const code = e.code === 429 ? 'UNAVAILABLE' : e.code === 409 ? 'FORBIDDEN' : e.code === 400 ? 'BAD_REQUEST' : 'UNAVAILABLE';
           return toolError(e, { code, hint: e.code === 409 ? 'Giọng AI chưa có key / bị tắt — nhờ chủ máy dán key Google AI Studio ở Studio › Cài đặt AI › Giọng AI (dán là chạy).' : e.code === 429 ? 'Hết hạn mức Google — thử lại sau ' + (e.retryAt || 'vài giờ') + ' hoặc dùng giọng trình duyệt.' : undefined });
+        }
+      }
+      case 'design_voice': {
+        if (!this.voice) return toolError('Giọng AI chỉ có ở bản cài chạy server', { code: 'UNAVAILABLE' });
+        try {
+          const d = await this.voice.design({ role: args.role, lang: args.lang, accent: args.accent });
+          const meta = Object.assign({ designed: true, use: 'render_voice với role "' + d.role + '" + lang "' + d.lang + '" + accent "' + d.accent + '" tự dùng giọng này' }, d);
+          const f = d.preview ? this.voice.clipPath(d.preview.replace(/^api\/voice\/clip\//, '').replace(/\.wav$/, '')) : null;
+          const content = [{ type: 'text', text: JSON.stringify(meta) }];
+          if (f && fs.existsSync(f)) content.push({ type: 'audio', data: fs.readFileSync(f).toString('base64'), mimeType: 'audio/wav' });
+          return { content, structuredContent: meta };
+        } catch (e) {
+          const code = e.code === 429 ? 'UNAVAILABLE' : e.code === 409 ? 'FORBIDDEN' : e.code === 400 ? 'BAD_REQUEST' : 'UNAVAILABLE';
+          return toolError(e, Object.assign({ code }, e.retryAt ? { retryAt: e.retryAt } : {}));
         }
       }
       case 'render_action': {
@@ -888,6 +903,12 @@ class MCP {
     }
     if (args.logline !== undefined) w.logline = plain(args.logline, 300);
     if (args.script !== undefined) w.script = plain(args.script, 8000);
+    // ngôn ngữ lời thoại + giọng vùng của phim (engine/voices.js): giọng trình duyệt đúng tiếng, giọng AI đúng vùng
+    if (args.lang !== undefined) { if (Object.prototype.hasOwnProperty.call(GV.LANGS, args.lang)) w.lang = args.lang; else errs.push('lang: ' + Object.keys(GV.LANGS).join(' | ')); }
+    if (args.accent !== undefined) {
+      const L = GV.lang(w.lang);
+      if (GV.accent(L, args.accent) === args.accent) w.accent = args.accent; else errs.push('accent: giọng vùng của ' + L + ' — ' + GV.LANGS[L].accents.map(a => a[0]).join(' | '));
+    }
     if (errs.length) throw Object.assign(new Error(errs.join('; ')), { code: 422, errors: errs });
     return this.store.saveWork(w);
   }
