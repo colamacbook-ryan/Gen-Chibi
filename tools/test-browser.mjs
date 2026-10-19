@@ -1072,7 +1072,7 @@ if (!ONLY || ONLY === 'lib') {
     await q.goto(URL11 + 'thu-vien'); await q.waitForFunction(() => window.GenChibi && /^v\d/.test(document.getElementById('verChip').textContent), null, { timeout: 8000 });
     await q.evaluate(SPY); await q.evaluate(SPY_T); return q;
   };
-  const shot = async (name, scroll) => { if (!SHOTS) return; fs.mkdirSync(SHOTS, { recursive: true }); await q.evaluate(sc => { const t = document.getElementById('toast'); if (t) t.hidden = true; const v = document.getElementById('view'); if (v) v.scrollTop = sc ? v.scrollHeight : 0; }, !!scroll); await q.waitForTimeout(300); await q.screenshot({ path: path.join(SHOTS, 'lib-' + name + (SCHEME === 'light' ? '-light' : '') + '.png') }); };
+  const shot = async (name, scroll) => { if (!SHOTS) return; fs.mkdirSync(SHOTS, { recursive: true }); await q.evaluate(sc => { const t = document.getElementById('toast'); if (t) t.hidden = true; const v = document.getElementById('view'); if (typeof sc === 'string') { const e = document.querySelector(sc); if (e) e.scrollIntoView({ block: 'start' }); } else if (v) v.scrollTop = sc ? v.scrollHeight : 0; }, scroll || false); await q.waitForTimeout(300); await q.screenshot({ path: path.join(SHOTS, 'lib-' + name + (SCHEME === 'light' ? '-light' : '') + '.png') }); };
   const rowsOf = () => q.$$eval('.lc-t tbody tr[data-id]', es => es.map(e => e.getAttribute('data-id')));
   const selOf = () => q.$eval('.lc-t tbody tr[aria-selected="true"]', e => e.getAttribute('data-id')).catch(() => '');
   const spy = (k) => q.evaluate(k => window.GenChibi.audio.__spy[k].slice(), k);
@@ -1237,7 +1237,7 @@ if (!ONLY || ONLY === 'lib') {
     await q.click(delB); await q.click(delB); await q.waitForSelector('#lsDelForce', { timeout: 5000 });
     const deps = await q.$$eval('#lsDelBox li', es => es.map(e => e.textContent));
     must(deps.length === 2 && /tq-vuon-dao-xich-bich/.test(deps[0]) && /gói động tác tq-dong-tac/.test(deps[1]) && /còn được gọi ở 2 chỗ/.test(await q.textContent('#lsDelBox')), 'danh sách phụ thuộc: ' + deps.join(' | '));
-    must(M.soundDels.length === 1 && !M.soundDels[0].force && !!(await q.$('tr[data-pack="vi-du-am"]')), 'chưa bấm "Vẫn gỡ" thì chưa gửi force, gói vẫn còn');
+    must(M.soundDels.length === 1 && !M.soundDels[0].force && !!(await q.$('tr[data-pack="vi-du-am"]')), 'chưa bấm "Vẫn gỡ" thì chưa gửi force, gói vẫn còn'); await shot('goi-am-go');
     await q.click('#lsDelForce'); await q.waitForFunction(() => !document.querySelector('tr[data-pack="vi-du-am"]'), null, { timeout: 5000 });
     must(M.soundDels.length === 2 && M.soundDels[1].force === true, '"Vẫn gỡ" phải gửi ?force=1: ' + JSON.stringify(M.soundDels));
     must(!(await q.evaluate(() => window.GenChibi.sounds.has('vi-du-coc') || window.GenChibi.sounds.packs().some(p => p.id === 'vi-du-am'))), 'gỡ xong phải bỏ khỏi GC.sounds');
@@ -1376,7 +1376,8 @@ if (!ONLY || ONLY === 'lib') {
     await q.evaluate(SPY); await q.click('tr[data-id="tq-quan-vu"] [data-machine]'); const sw = (await spy('say'))[0]; must(sw && sw.role === 'vo-tuong' && /^Ta là đại tướng/.test(sw.text), '▶ giọng máy nhân vật tác phẩm: ' + JSON.stringify(sw));
     await pollq(async () => (await q.$$('tr[data-id="tq-quan-vu"] [data-ai="read"], tr[data-id="tq-quan-vu"] [data-ai="play"]')).length === 1, 'kiểm clip của Quan Vũ'); must(M.lines.some(l => l.voice === 'Alnilam' && l.role === 'vo-tuong' && l.dry === true && l.lang === 'vi'), 'kiểm clip phải dùng giọng chốt Alnilam (dry)');
     must(await q.$eval('tr[data-id="tq-tao-thao"] [data-ai]', e => e.disabled), 'nhân vật chưa chốt giọng: nút giọng AI mờ');
-    await q.click('tr[data-id="tq-quan-vu"] td.id'); await q.waitForSelector('.lc-insp h3 .mono:text-is("tq-quan-vu")'); await shot('phong-giong-chot');
+    await q.click('tr[data-id="tq-quan-vu"] td.id'); await q.waitForSelector('.lc-insp h3 .mono:text-is("tq-quan-vu")'); await shot('phong-giong-am-thanh');
+    await shot('phong-giong-chot-bang', '#wpanel-voice .lc');
     must(!(await q.$eval('#wvCastAll', e => e.disabled)), 'có diễn viên: nút "Chốt giọng cả dàn" phải bấm được');
     const nCast5 = M.casts.length; await q.evaluate(SPY_T); await q.click('#wvCastAll');
     await pollq(async () => M.casts.length > nCast5 && /Chốt giọng cả dàn \(miễn phí\)/.test(await q.textContent('#wvCastAll')), 'chốt giọng cả dàn xong');
@@ -1561,7 +1562,7 @@ if (!ONLY || ONLY === 'voice') {
     // ---- 2) Cài đặt AI chỉ còn CÀI ĐẶT (CNS-106): không bảng "Bộ giọng vai", không nút Thiết kế giọng — chỉ có liên kết sang Thư viện › Giọng ----
     if (await q.$('#voice-panel table') || await q.$('#voice-panel button[aria-label^="Thiết kế giọng"]') || await q.$('#voice-panel button:text-is("Thiết kế giọng")') || await q.$$eval('#voice-panel h3', es => es.some(e => /Bộ giọng vai/.test(e.textContent)))) throw new Error('Cài đặt AI không được còn bảng "Bộ giọng vai" / nút Thiết kế giọng (nơi duy nhất là Thư viện › Giọng)');
     if (!/Xem bộ giọng vai → Thư viện › Giọng/.test(await q.textContent('#voiceToLib'))) throw new Error('thiếu liên kết "Xem bộ giọng vai → Thư viện › Giọng"');
-    await shot(q, 'panel-giong-ai', '#voice-panel');
+    await shot(q, 'panel-giong-ai', '#voice-panel'); await shot(q, 'cai-dat-giong');
 
     // ---- 2a) Thư viện › Giọng = nơi DUY NHẤT của bộ giọng vai: đủ 22 vai, vai trẻ em không thiết kế được (các điều kiện của bảng cũ ở Cài đặt AI, nay kiểm ở đây) ----
     await q.click('#voiceToLib'); await q.waitForSelector('.lc-t tbody tr[data-id]', { timeout: 10000 }); await spyOn(q);   // liên kết đổi ứng dụng (Tạo tác → Thư viện)
