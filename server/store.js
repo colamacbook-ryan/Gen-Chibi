@@ -24,11 +24,12 @@ class Store {
     this.itemDir = path.join(dataDir, 'items');
     this.sceneDir = path.join(dataDir, 'scenes');
     this.motionDir = path.join(dataDir, 'motionpacks');
+    this.soundDir = path.join(dataDir, 'soundpacks');
     this.projectFile = path.join(dataDir, 'projects.json');
     this.provFile = path.join(dataDir, 'provenance.json');
     this.workDir = path.join(dataDir, 'works');
     fs.mkdirSync(this.workDir, { recursive: true });
-    [this.assetDir, this.verDir, this.trashDir, this.eventDir, this.partDir, this.itemDir, this.sceneDir, this.motionDir].forEach(d => fs.mkdirSync(d, { recursive: true }));
+    [this.assetDir, this.verDir, this.trashDir, this.eventDir, this.partDir, this.itemDir, this.sceneDir, this.motionDir, this.soundDir].forEach(d => fs.mkdirSync(d, { recursive: true }));
   }
   fileOf(key) { return key.replace('/', '~'); }
   listAssets() {
@@ -95,6 +96,9 @@ class Store {
   // gói động tác (v0.16): tư thế + clip + hành động + màn diễn dạng dữ liệu, đã qua cổng choreo.checkPack
   listMotionPacks() { return this.listKind(this.motionDir); }
   saveMotionPack(def, note) { return this.saveKind(this.motionDir, 'motionpacks', def, note); }
+  // gói âm (v0.18, gen-chibi.sound/1): công thức tổng hợp + siêu dữ liệu, đã qua cổng GC.sounds.validateSoundPack; có phiên bản như gói động tác
+  listSoundPacks() { return this.listKind(this.soundDir); }
+  saveSoundPack(def, note) { return this.saveKind(this.soundDir, 'soundpacks', def, note); }
   // dự án chủ đề: một tệp projects.json (ít, đọc cả cụm) — asset trỏ tới bằng trường project
   listProjects() { return readJSON(this.projectFile, []); }
   // opts.sample: { owner, license } — chỉ cổng nhập gói mẫu đặt; sửa tên / mô tả về sau giữ nguyên dấu "bộ mẫu" (không gỡ được qua save_project)
@@ -118,7 +122,7 @@ class Store {
     const clean = (t, n) => String(t || '').replace(/[\u0000-\u001F\u007F]/g, '').trim().slice(0, n);
     const m = { owner: clean(mark && mark.owner, 40) || 'Gen Labs', license: clean(mark && mark.license, 200) }, cur = this.provenance();
     let n = 0;
-    keys.forEach(k => { if (typeof k === 'string' && k.length <= 160 && /^(part:[a-zA-Z]+|item|scene|char|motion):[a-z0-9-]+$/.test(k) && !cur[k]) { cur[k] = m; n++; } });
+    keys.forEach(k => { if (typeof k === 'string' && k.length <= 160 && /^(part:[a-zA-Z]+|item|scene|char|motion|sound):[a-z0-9-]+$/.test(k) && !cur[k]) { cur[k] = m; n++; } });
     if (n) writeJSON(this.provFile, cur);
     return n;
   }

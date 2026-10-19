@@ -384,7 +384,7 @@ no(!GC.svgString(GC.ASSETS["local.my/t-toc-nv"], "normal", { director: { view: "
 const b = JSON.parse(fs.readFileSync("studio/mau/tam-quoc.json", "utf8"));
 const r = m.importProject(b, {});
 no(r.errors.length, "Tam Quốc có mục không qua cổng: " + JSON.stringify(r.errors.slice(0, 3)));
-no(JSON.stringify(r.counts) !== JSON.stringify({ parts: 55, items: 13, scenes: 8, characters: 7, motionPacks: 1, works: 1, shots: 6 }), "Tam Quốc thiếu mục: " + JSON.stringify(r.counts));
+no(JSON.stringify(r.counts) !== JSON.stringify({ parts: 55, items: 13, scenes: 8, characters: 7, soundPacks: 1, motionPacks: 1, works: 1, shots: 6 }), "Tam Quốc thiếu mục: " + JSON.stringify(r.counts));
 const tq = GC.assets().filter(a => a.project === "mau-tam-quoc");
 let n = 0;
 for (const a of tq) for (const v of GC.VIEW_ORDER) for (const st of ["normal", "rage", "shock"]) {
@@ -452,7 +452,7 @@ node -e '
 const fs = require("fs"), os = require("os"), path = require("path"), vm = require("vm");
 const { MCP } = require("./server/mcp.js"); const { Store } = require("./server/store.js");
 const ctx = { window: {}, console }; vm.createContext(ctx);
-["engine/core.js", "engine/choreo.js", "kinds/character/gen.core.js", "kinds/khung/gen.khung.js", "kinds/character/gen.choreo.js", "engine/player.js"].forEach(f => vm.runInContext(fs.readFileSync(f, "utf8"), ctx, { filename: f }));
+["engine/core.js", "engine/sounds.js", "engine/choreo.js", "kinds/character/gen.core.js", "kinds/khung/gen.khung.js", "kinds/character/gen.choreo.js", "engine/player.js"].forEach(f => vm.runInContext(fs.readFileSync(f, "utf8"), ctx, { filename: f }));
 const GC = ctx.window.GenChibi, no = (c, msg) => { if (c) { console.log("   ✗", msg); process.exit(1); } };
 const m = new MCP({ engine: GC, store: new Store(fs.mkdtempSync(path.join(os.tmpdir(), "gc-p-"))), version: "t", system: {} });
 for (const f of ["van-phong-vui", "tam-quoc"]) no(m.importProject(JSON.parse(fs.readFileSync("studio/mau/" + f + ".json", "utf8")), {}).errors.length, f + " không qua cổng");
@@ -601,6 +601,8 @@ echo "2k) giọng AI (Google Gemini TTS) với mạng giả: lưu đệm, đổi
 node tools/test-voice.js || exit 1
 echo "2m) thư viện âm thanh: cổng kiểm gói âm (từng luật một ca sai, không mã, ≤ 60 node) · trùng tên chỉ ra gói giữ tên · 17 tên cũ · tự gán = bảng cũ · luật ghép S1–S7 · gói Tam Quốc"
 node tools/test-sounds.js || exit 1
+echo "2n) thư viện âm thanh nối vào app: lược đồ / bộ kiểm đạo diễn · bộ phát tự gán theo dự án + không khí · gói động tác gọi tên âm · store + MCP 6 tool + HTTP · lint S1–S7 khi lưu · gói dự án (sao lưu / nhập / bán, chặn bán theo nội dung) · Tam Quốc · hướng dẫn agent một nguồn"
+node tools/test-sounds-app.js || exit 1
 echo "2l) âm thanh: dựng offline MỌI âm của thư viện (không vỡ / NaN, không câm, không gắt kéo dài, độ to ±7 dB, đúng thời lượng, node ≤ ngân sách) · limiter khi chồng · ghép mẫu · rò node · CPU sfx() · nạp gói / trùng tên trên trang · clip giọng trong say() — cần Playwright, không có thì bỏ qua phần trình duyệt"
 node tools/test-audio.mjs || exit 1
 echo "3) MCP"
@@ -656,10 +658,10 @@ const L = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n")
 const by = id => L.find(r => r.id === id);
 const ok = (c, m) => { if (!c) { console.log("   ✗", m); process.exit(1); } };
 ok(by(1).result.protocolVersion === "2025-06-18", "bắt tay");
-ok(by(2).result.tools.length === 46, "46 tool");
+ok(by(2).result.tools.length === 52, "52 tool");
 ok(!by(3).result.isError && JSON.parse(by(3).result.content[0].text).saved, "lưu nhân vật hợp lệ");
 ok(by(4).result.isError, "chặn linh kiện lạ");
-console.log("   ✓ MCP: bắt tay, 46 tool, lưu hợp lệ, chặn linh kiện lạ");
+console.log("   ✓ MCP: bắt tay, 52 tool, lưu hợp lệ, chặn linh kiện lạ");
 const spec = JSON.parse(by(5).result.content[0].text);
 ok(spec.slots[0].slot === "hat" && spec.example && spec.views.q45, "get_part_spec có khung + ví dụ");
 ok(!by(6).result.isError && /<svg/.test(by(6).result.content[1].resource.text), "preview_part trả bàn soát SVG");

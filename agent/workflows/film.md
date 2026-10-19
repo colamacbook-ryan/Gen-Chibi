@@ -12,13 +12,14 @@
 4. Write the event: `{ "title", "scene": "<scene key>", "steps": [ … ≤ 12 ] }`. Each step:
    - required: `actor` (id), `state` (enum), `say` (in the work's language — `get_work` › `lang`, default Vietnamese; ≤ 120 chars; `""` allowed when the step is an action);
    - staging (optional — the player directs automatically if omitted): `spot`, `to`, `camera`, `bubble`, `sfx`, `activity`, `hold`;
+     leave `sfx` out on most steps — sounds are auto-assigned; hand-placed ones follow the mixing rules (topic `sound`: `list_sounds`, `lint_sound_track`);
    - action (optional): `action` from `actorsCan`; an **attack** needs `target` (another actor) and may set `react`
      (`hit | fall | ko | block | dodge`); a solo action has no target.
 5. `validate_event` with `{ "event": <event>, "cast": [ids] }` → `ok: true`.
 6. `save_shot` with `{ "work": "<work id>", "shot": { "title", "description", "scene", "cast": [keys], "event" } }`
    (`shot.id` to edit an existing shot; `remove: true` to drop one).
 7. `preview_shot` with `{ "work": "<work id>", "shot": "<shot id>" }` → `ready`, `missing`, `warnings`,
-   and the planned beats (who moves, which actions, how long). Fix anything listed.
+   and the planned beats (who moves, which actions, how long, and the sounds that will play — `sfx`, auto-assigned or yours). Fix anything listed.
 8. Optional voices (voice by ROLE): set the film language once — `save_work` with `{ "id", "lang": "vi" | "en" | "zh" | "yue",
    "accent": "bac" | "nam" | "trung" (vi) · "us" | "uk" (en) · "pt" | "tw" (zh) · "hk" (yue = Cantonese) }`; write every line in that
    language (the voice reads the language of the text — for Cantonese write colloquial Cantonese in Traditional characters: 喺, 咩, 我哋).

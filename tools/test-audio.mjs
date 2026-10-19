@@ -1,5 +1,5 @@
 // Kiểm thử âm thanh (engine/sounds.js + engine/audio.js): thư viện âm · dựng offline MỌI âm (bộ chuẩn + gói Tam Quốc) · độ to · gắt ·
-// limiter khi chồng · ghép mẫu · rò node · CPU của sfx() · nạp gói / trùng tên trên trang thật · clip giọng trong say().
+// limiter khi chồng · ghép mẫu · rò node · CPU của sfx() · nạp gói / trùng tên trên trang thật · renderWav (WAV tải về) · clip giọng trong say().
 // © 2026 Gen Labs — All rights reserved.
 // Dùng: node tools/test-audio.mjs     [GC_AUDIO_METRICS=bang-do.json] (cần Playwright + Chromium; không có thì phần trình duyệt BỎ QUA có báo — đặt GC_REQUIRE_PLAYWRIGHT=1 để coi là lỗi)
 // Không cần cổng mạng: trang thử được phục vụ bằng page.route. Phần dữ liệu thuần (cổng kiểm, luật ghép, tự gán) ở tools/test-sounds.js.
@@ -227,6 +227,34 @@ try {
   }, { names: NAMES, info: INFO });
   const want = NAMES.reduce((a, nm) => a + INFO[nm].nodes - 1, 0);   // không pan → mỗi âm ít hơn số tính trước 1 node
   ok(leak.made >= want * 0.9 && leak.disc >= leak.made, 'không rò node: ' + leak.made + ' node dựng cho ' + NAMES.length + ' âm (đủ, không âm nào bị bỏ), ' + leak.disc + ' đã ngắt khi xong', { leak, want });
+  // renderWav (v0.18): dựng một âm / một công thức ghép ra WAV ngoại tuyến để nghe lại / tải về — chuỗi trộn riêng, KHÔNG đụng bộ phát đang chạy
+  const wv = await pg.evaluate(async () => {
+    const A = window.GenChibi.audio, S = window.GenChibi.sounds, ctx0 = window.__ctx;
+    const info = x => { const v = new DataView(x), u = new Uint8Array(x); let pk = 0; for (let i = 44; i < u.length; i += 2) pk = Math.max(pk, Math.abs(v.getInt16(i, true))); return { riff: String.fromCharCode(...u.slice(0, 4)) + String.fromCharCode(...u.slice(8, 12)), ch: v.getUint16(22, true), sr: v.getUint32(24, true), bits: v.getUint16(34, true), data: v.getUint32(40, true), len: x.byteLength, pk }; };
+    const diff = (p, q) => { const x = new Int16Array(p.slice(44)), y = new Int16Array(q.slice(44)); let m = 0; for (let i = 0; i < x.length; i++) m = Math.max(m, Math.abs(x[i] - y[i])); return m; };
+    const a = await A.renderWav('wham', { seed: 1 }), b = await A.renderWav('wham', { seed: 1 }), c = await A.renderWav('wham', { seed: 9 });
+    const seq = await A.renderWav(S.RECIPES[0].seq.map(x => ({ name: x[1], delay: x[0] })), { seed: 2 }), half = await A.renderWav([{ name: 'wham', gain: 0.5 }], { seed: 1 });
+    const out = { a: info(a), seq: info(seq), half: info(half).pk, same: diff(a, b), other: diff(a, c), rej: [] };
+    for (const bad of ['khong-co', [], Array(13).fill('pop'), 5]) { try { await A.renderWav(bad); out.rej.push(null); } catch (e) { out.rej.push(e.message); } }
+    const m0 = window.__nodes.made; A.sfx('pop');
+    out.live = { same: window.__ctx === ctx0, made: window.__nodes.made - m0, state: window.__ctx.state };
+    return out;
+  });
+  ok(wv.a.riff === 'RIFFWAVE' && wv.a.ch === 2 && wv.a.sr === 44100 && wv.a.bits === 16 && wv.a.data === wv.a.len - 44, 'renderWav: WAV 16-bit stereo 44,1 kHz đúng đầu tệp (' + wv.a.len + ' byte)', wv.a);
+  ok(wv.a.pk > 3000 && wv.a.pk <= 31700, 'renderWav: có tiếng, đỉnh ≤ −0,3 dBFS (limiter như lúc phát): ' + wv.a.pk + ' / 32767', wv.a);
+  ok(wv.seq.len > wv.a.len * 1.5 && wv.seq.pk > 3000, 'renderWav: danh sách công thức ghép (5 âm theo delay) dài hơn một âm: ' + wv.seq.len + ' byte', wv.seq);
+  ok(wv.half < wv.a.pk * 0.75, 'renderWav: opts gain 0,5 nhỏ hơn rõ (' + wv.half + ' < ' + Math.round(wv.a.pk * 0.75) + ')');
+  ok(wv.same <= 8 && wv.other > wv.same, 'renderWav: cùng seed gần như cùng tệp (lệch tối đa ' + wv.same + ' LSB), khác seed khác hẳn (' + wv.other + ' LSB)', wv);
+  ok(/Không có âm "khong-co"/.test(wv.rej[0]) && /1…12/.test(wv.rej[1]) && /1…12/.test(wv.rej[2]) && wv.rej[3] && /Không có âm/.test(wv.rej[3]), 'renderWav: âm lạ / danh sách rỗng / > 12 lần phát → từ chối rõ ràng', wv.rej);
+  ok(wv.live.same && wv.live.made >= 4 && wv.live.state === 'running', 'renderWav không đụng bộ phát đang chạy: cùng AudioContext, sfx() vẫn dựng node sau đó', wv.live);
+  {
+    // không cần unlock / AudioContext thật: trang chưa bấm gì vẫn dựng được WAV (nút tải ở Thư viện bấm lần đầu cũng chạy)
+    const p2 = await bg.newPage(); await p2.setContent('<!doctype html><meta charset="utf-8"><body></body>');
+    for (const f of ['engine/core.js', 'engine/sounds.js', 'engine/audio.js']) await p2.addScriptTag({ content: fs.readFileSync(path.join(ROOT, f), 'utf8') });
+    const pre = await p2.evaluate(async () => ({ ctx: window.GenChibi.audio.info().ctx, bytes: (await window.GenChibi.audio.renderWav('pop', { sampleRate: 22050 })).byteLength, full: (await window.GenChibi.audio.renderWav('pop')).byteLength }));
+    await p2.close();
+    ok(pre.ctx === false && pre.full > 2000 && Math.abs(pre.bytes / pre.full - 0.5) < 0.02, 'renderWav chạy khi chưa unlock() (chưa có AudioContext); sampleRate 22050 → tệp nhỏ đúng một nửa: ' + pre.bytes + ' / ' + pre.full + ' byte', pre);
+  }
   const SAY = `async (o) => {
     const A = window.GenChibi.audio, log = { mouth: [], word: [], tm: [], tw: [], t0: performance.now() };
     const mk = k => k === 'buf' ? Uint8Array.from(atob(o.b64), c => c.charCodeAt(0)).buffer : k === 'view' ? new Uint8Array(Uint8Array.from(atob(o.b64), c => c.charCodeAt(0)).buffer, 0) : k === 'blob' ? new Blob([Uint8Array.from(atob(o.b64), c => c.charCodeAt(0))], { type: 'audio/wav' }) : k === 'data' ? 'data:audio/wav;base64,' + o.b64 : k === 'raw' ? Uint8Array.from(atob(o.b64), c => c.charCodeAt(0)).slice(44).buffer : o.url;

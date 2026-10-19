@@ -5,12 +5,12 @@
  "sample": {
   "owner": "Gen Labs",
   "license": "© 2026 Gen Labs — bộ mẫu trưng bày: xem, sửa thử, làm phim; không bán lại, không phân phối",
-  "version": "2026.10.19-giong"
+  "version": "2026.10.19-am"
  },
  "project": {
   "id": "mau-tam-quoc",
   "name": "Tam Quốc (bộ chủ đề mẫu)",
-  "description": "Bộ chủ đề trọn vẹn dựng từ khung: 7 tướng, 13 trang bị, 8 bối cảnh, 28 linh kiện nhân vật, 27 phông — và phim 6 phân cảnh có dàn dựng, giọng nói, âm thanh, một màn đấu võ. Bộ mẫu của Gen Labs: xem gói bán trông thế nào (xem trước), không xuất bán."
+  "description": "Bộ chủ đề trọn vẹn dựng từ khung: 7 tướng, 13 trang bị, 8 bối cảnh, 28 linh kiện nhân vật, 27 phông — và phim 6 phân cảnh có dàn dựng, giọng nói, âm thanh (gói âm Tam Quốc: trống trận, tù và, vó ngựa…), một màn đấu võ. Bộ mẫu của Gen Labs: xem gói bán trông thế nào (xem trước), không xuất bán."
  },
  "requires": {
   "packs": []
@@ -2288,6 +2288,7 @@
         "state": "vow",
         "spot": "midLeft",
         "to": "tq-luu-bi",
+        "sfx": [],
         "say": "…chỉ nguyện chết cùng ngày cùng tháng cùng năm!"
        },
        {
@@ -2425,6 +2426,9 @@
          "exclaim"
         ],
         "to": "tq-gia-cat-luong",
+        "sfx": [
+         "vo-ngua"
+        ],
         "say": "Báo! Báo! Tào quân tám mươi vạn!"
        },
        {
@@ -2499,6 +2503,9 @@
         "action": "combo",
         "target": "tq-trieu-van",
         "react": "dodge",
+        "sfx": [
+         "trong-tran"
+        ],
         "say": ""
        },
        {
@@ -2582,6 +2589,9 @@
         "actor": "tq-tao-thao",
         "state": "panic",
         "spot": "left",
+        "sfx": [
+         "ngua-hi"
+        ],
         "say": "Rút! Rút mau!!!"
        },
        {
@@ -2595,6 +2605,943 @@
      }
     }
    ]
+  }
+ ],
+ "soundPacks": [
+  {
+   "format": "gen-chibi.sound/1",
+   "id": "tq-am",
+   "name": "Âm thanh Tam Quốc",
+   "project": "mau-tam-quoc",
+   "version": 1,
+   "status": "published",
+   "license": "© 2026 Gen Labs — All rights reserved",
+   "description": "Gói âm của bộ mẫu Tam Quốc, phong cách hoạt hình khoa trương: trống trận, tù và, vó ngựa, kiếm cổ, mưa tên, ngựa hí, bắn tên. Dự án mau-tam-quoc tự dùng trống trận khi xông trận và tù và khi thề quyết trong cảnh hùng tráng.",
+   "sounds": {
+    "trong-tran": {
+     "label": "Trống trận “TÙNG—TÙNG-TÙNG—TÙNG!”",
+     "cat": "nhac-cu",
+     "tags": [
+      "trống",
+      "trận",
+      "hào hùng",
+      "xông lên"
+     ],
+     "use": "Mở màn trận đánh, quân xông lên, khí thế hừng hực — trống lớn hai bên tai + gõ tang; đặt ở bước đầu cảnh.",
+     "dur": 1.9,
+     "level": 0.41,
+     "rev": 0.3,
+     "vary": 0.02,
+     "cue": {
+      "activity": [
+       "charge"
+      ],
+      "mood": [
+       "epic"
+      ]
+     },
+     "lanes": [
+      [
+       -0.35
+      ],
+      [
+       0.35
+      ]
+     ],
+     "layers": [
+      {
+       "k": "drum",
+       "hz": 92,
+       "to": 46,
+       "glide": 0.45,
+       "dur": 0.6,
+       "peak": 0.9,
+       "sat": 2.2,
+       "bias": 0.1,
+       "click": 0.35,
+       "lane": 0
+      },
+      {
+       "k": "tone",
+       "type": "triangle",
+       "hz": 190,
+       "to": 110,
+       "glide": 0.5,
+       "dur": 0.14,
+       "peak": 0.35,
+       "a": 0.002,
+       "lane": 0
+      },
+      {
+       "k": "drum",
+       "at": 0.42,
+       "hz": 96,
+       "to": 48,
+       "glide": 0.45,
+       "dur": 0.5,
+       "peak": 0.75,
+       "sat": 2.2,
+       "bias": 0.1,
+       "click": 0.35,
+       "lane": 1
+      },
+      {
+       "k": "drum",
+       "at": 0.62,
+       "hz": 96,
+       "to": 48,
+       "glide": 0.45,
+       "dur": 0.5,
+       "peak": 0.75,
+       "sat": 2.2,
+       "bias": 0.1,
+       "click": 0.35,
+       "lane": 0
+      },
+      {
+       "k": "drum",
+       "at": 1,
+       "hz": 86,
+       "to": 40,
+       "glide": 0.5,
+       "dur": 0.85,
+       "peak": 1,
+       "sat": 2.6,
+       "bias": 0.12,
+       "click": 0.5
+      },
+      {
+       "k": "tone",
+       "at": 1,
+       "type": "triangle",
+       "hz": 175,
+       "to": 100,
+       "glide": 0.5,
+       "dur": 0.18,
+       "peak": 0.4,
+       "a": 0.002
+      },
+      {
+       "k": "mallet",
+       "inst": "wood",
+       "notes": [
+        [
+         0.22,
+         900,
+         0.6
+        ],
+        [
+         0.32,
+         950,
+         0.5
+        ],
+        [
+         0.84,
+         900,
+         0.6
+        ]
+       ],
+       "decay": 0.05,
+       "peak": 0.35
+      },
+      {
+       "k": "noise",
+       "at": 1,
+       "col": "brown",
+       "type": "lowpass",
+       "f0": 300,
+       "dur": 0.6,
+       "peak": 0.4,
+       "a": 0.005
+      }
+     ]
+    },
+    "tu-va": {
+     "label": "Tù và “TU—UUUU”",
+     "cat": "nhac-cu",
+     "tags": [
+      "tù và",
+      "hiệu lệnh",
+      "kèn",
+      "ra quân"
+     ],
+     "use": "Hiệu lệnh ra quân, thề quyết trước trận, quân đến — tù và trầm vút lên rồi ngân rung.",
+     "dur": 2,
+     "level": 0.26,
+     "rev": 0.35,
+     "vary": 0.01,
+     "cue": {
+      "state": [
+       "vow"
+      ],
+      "mood": [
+       "epic"
+      ]
+     },
+     "layers": [
+      {
+       "k": "voice",
+       "det": 8,
+       "sat": 1.9,
+       "q": 2,
+       "peak": 0.45,
+       "hz": [
+        [
+         0,
+         130.81
+        ],
+        [
+         0.06,
+         146.83
+        ],
+        [
+         0.3,
+         146.83
+        ]
+       ],
+       "cut": [
+        [
+         0,
+         500
+        ],
+        [
+         0.06,
+         1300
+        ],
+        [
+         0.3,
+         900
+        ]
+       ],
+       "amp": [
+        [
+         0,
+         0
+        ],
+        [
+         0.04,
+         1
+        ],
+        [
+         0.26,
+         0.85
+        ],
+        [
+         0.32,
+         0
+        ]
+       ]
+      },
+      {
+       "k": "voice",
+       "at": 0.45,
+       "det": 8,
+       "sat": 1.9,
+       "q": 2,
+       "peak": 0.5,
+       "hz": [
+        [
+         0,
+         130.81
+        ],
+        [
+         0.1,
+         146.83
+        ],
+        [
+         1.2,
+         146.83
+        ],
+        [
+         1.45,
+         130.81
+        ]
+       ],
+       "cut": [
+        [
+         0,
+         500
+        ],
+        [
+         0.1,
+         1500
+        ],
+        [
+         1.2,
+         1100
+        ],
+        [
+         1.45,
+         600
+        ]
+       ],
+       "amp": [
+        [
+         0,
+         0
+        ],
+        [
+         0.06,
+         1
+        ],
+        [
+         1.15,
+         0.9
+        ],
+        [
+         1.45,
+         0
+        ]
+       ],
+       "vib": 5,
+       "vibc": 18,
+       "vibd": 0.5,
+       "vibr": 0.3
+      },
+      {
+       "k": "voice",
+       "at": 0.45,
+       "type": "triangle",
+       "q": 0.7,
+       "peak": 0.3,
+       "hz": [
+        [
+         0,
+         65.41
+        ],
+        [
+         0.1,
+         73.42
+        ],
+        [
+         1.2,
+         73.42
+        ],
+        [
+         1.45,
+         65.41
+        ]
+       ],
+       "cut": [
+        [
+         0,
+         600
+        ],
+        [
+         1.45,
+         600
+        ]
+       ],
+       "amp": [
+        [
+         0,
+         0
+        ],
+        [
+         0.08,
+         1
+        ],
+        [
+         1.15,
+         0.9
+        ],
+        [
+         1.45,
+         0
+        ]
+       ]
+      }
+     ]
+    },
+    "vo-ngua": {
+     "label": "Vó ngựa “lộc-cộc lộc-cộc”",
+     "cat": "di-chuyen",
+     "tags": [
+      "ngựa",
+      "phi ngựa",
+      "kỵ binh",
+      "gáo dừa"
+     ],
+     "use": "Ngựa phi ngang qua, kỵ binh kéo tới — nhịp vó ba tiếng gáo dừa + bụi đường, lướt trái sang phải.",
+     "dur": 1.7,
+     "level": 0.37,
+     "rev": 0.15,
+     "vary": 0.03,
+     "lanes": [
+      [
+       -0.6,
+       0.6,
+       1.5
+      ]
+     ],
+     "layers": [
+      {
+       "k": "mallet",
+       "inst": "wood",
+       "notes": [
+        [
+         0,
+         620
+        ],
+        [
+         0.09,
+         760
+        ],
+        [
+         0.18,
+         690
+        ],
+        [
+         0.4,
+         620
+        ],
+        [
+         0.49,
+         760
+        ],
+        [
+         0.58,
+         690
+        ],
+        [
+         0.8,
+         620
+        ],
+        [
+         0.89,
+         760
+        ],
+        [
+         0.98,
+         690
+        ],
+        [
+         1.2,
+         620
+        ],
+        [
+         1.29,
+         760
+        ],
+        [
+         1.38,
+         690
+        ]
+       ],
+       "decay": 0.06,
+       "peak": 0.7,
+       "lane": 0
+      },
+      {
+       "k": "drum",
+       "hz": 120,
+       "to": 70,
+       "dur": 0.08,
+       "peak": 0.45,
+       "lane": 0
+      },
+      {
+       "k": "drum",
+       "at": 0.4,
+       "hz": 120,
+       "to": 70,
+       "dur": 0.08,
+       "peak": 0.45,
+       "lane": 0
+      },
+      {
+       "k": "drum",
+       "at": 0.8,
+       "hz": 120,
+       "to": 70,
+       "dur": 0.08,
+       "peak": 0.45,
+       "lane": 0
+      },
+      {
+       "k": "drum",
+       "at": 1.2,
+       "hz": 120,
+       "to": 70,
+       "dur": 0.08,
+       "peak": 0.45,
+       "lane": 0
+      },
+      {
+       "k": "noise",
+       "col": "brown",
+       "type": "lowpass",
+       "f0": 500,
+       "dur": 1.5,
+       "peak": 0.1,
+       "a": 0.3,
+       "lane": 0
+      }
+     ]
+    },
+    "kiem-co": {
+     "label": "Kiếm cổ chạm “KEEENG”",
+     "cat": "danh",
+     "tags": [
+      "kiếm",
+      "đao",
+      "đồng thau",
+      "đỡ"
+     ],
+     "use": "Đao kiếm đồng thau chạm nhau, đỡ đòn binh khí trong trận — trầm, ngân dài, rung lắc hơn kiem-cham.",
+     "dur": 1.6,
+     "level": 0.43,
+     "rev": 0.3,
+     "vary": 0.02,
+     "cue": {
+      "event": [
+       "block"
+      ],
+      "mood": [
+       "epic"
+      ]
+     },
+     "layers": [
+      {
+       "k": "noise",
+       "col": "pink",
+       "type": "lowpass",
+       "f0": 5000,
+       "dur": 0.006,
+       "peak": 0.5,
+       "a": 0.0004
+      },
+      {
+       "k": "noise",
+       "type": "bandpass",
+       "f0": 2600,
+       "f1": 1800,
+       "q": 1.8,
+       "dur": 0.16,
+       "peak": 0.35,
+       "a": 0.001
+      },
+      {
+       "k": "modes",
+       "hz": 820,
+       "list": [
+        [
+         1,
+         1,
+         1.4,
+         0.001
+        ],
+        [
+         1.51,
+         0.6,
+         1,
+         0.001
+        ],
+        [
+         2.43,
+         0.4,
+         0.6,
+         0.001
+        ],
+        [
+         3.1,
+         0.25,
+         0.35,
+         0.001
+        ],
+        [
+         4.3,
+         0.12,
+         0.2,
+         0.001
+        ]
+       ],
+       "peak": 0.45
+      },
+      {
+       "k": "fm",
+       "hz": 820,
+       "ratio": 1.41,
+       "index": 1,
+       "index1": 0.1,
+       "dur": 1.4,
+       "peak": 0.22,
+       "a": 0.002,
+       "hold": 0.1,
+       "vib": 5,
+       "vibc": 20,
+       "vibc1": 6
+      },
+      {
+       "k": "drum",
+       "hz": 260,
+       "to": 140,
+       "dur": 0.08,
+       "peak": 0.4,
+       "sat": 1.5
+      }
+     ]
+    },
+    "mua-ten": {
+     "label": "Mưa tên “vút-vút-vút… phập-phập”",
+     "cat": "danh",
+     "tags": [
+      "mưa tên",
+      "cung",
+      "trận",
+      "bắn"
+     ],
+     "use": "Loạt tên bay rợp trời rồi cắm phập xuống khiên / đất — vút nhiều lớp hai bên tai, rồi một tràng phập.",
+     "dur": 1.6,
+     "level": 0.78,
+     "rev": 0.2,
+     "vary": 0.03,
+     "lanes": [
+      [
+       -0.6,
+       0.2,
+       0.7
+      ],
+      [
+       0.6,
+       -0.2,
+       0.7
+      ]
+     ],
+     "layers": [
+      {
+       "k": "noise",
+       "col": "pink",
+       "type": "bandpass",
+       "f0": 2000,
+       "f1": 800,
+       "q": 1.4,
+       "dur": 0.7,
+       "peak": 0.3,
+       "a": 0.1
+      },
+      {
+       "k": "tone",
+       "jit": 0.03,
+       "type": "sine",
+       "hz": 2600,
+       "to": 900,
+       "glide": 1,
+       "dur": 0.16,
+       "peak": 0.25,
+       "a": 0.01,
+       "lane": 0
+      },
+      {
+       "k": "tone",
+       "at": 0.12,
+       "jit": 0.03,
+       "type": "sine",
+       "hz": 2400,
+       "to": 850,
+       "glide": 1,
+       "dur": 0.16,
+       "peak": 0.22,
+       "a": 0.01,
+       "lane": 1
+      },
+      {
+       "k": "tone",
+       "at": 0.25,
+       "jit": 0.03,
+       "type": "sine",
+       "hz": 2700,
+       "to": 950,
+       "glide": 1,
+       "dur": 0.16,
+       "peak": 0.25,
+       "a": 0.01,
+       "lane": 0
+      },
+      {
+       "k": "tone",
+       "at": 0.33,
+       "jit": 0.03,
+       "type": "sine",
+       "hz": 2500,
+       "to": 900,
+       "glide": 1,
+       "dur": 0.16,
+       "peak": 0.22,
+       "a": 0.01,
+       "lane": 1
+      },
+      {
+       "k": "tone",
+       "at": 0.45,
+       "jit": 0.03,
+       "type": "sine",
+       "hz": 2650,
+       "to": 920,
+       "glide": 1,
+       "dur": 0.16,
+       "peak": 0.24,
+       "a": 0.01,
+       "lane": 0
+      },
+      {
+       "k": "tone",
+       "at": 0.55,
+       "jit": 0.03,
+       "type": "sine",
+       "hz": 2450,
+       "to": 880,
+       "glide": 1,
+       "dur": 0.16,
+       "peak": 0.22,
+       "a": 0.01,
+       "lane": 1
+      },
+      {
+       "k": "drum",
+       "at": 0.6,
+       "jit": 0.02,
+       "hz": 330,
+       "to": 160,
+       "dur": 0.07,
+       "peak": 0.6,
+       "sat": 1.6
+      },
+      {
+       "k": "drum",
+       "at": 0.72,
+       "jit": 0.02,
+       "hz": 300,
+       "to": 150,
+       "dur": 0.07,
+       "peak": 0.5,
+       "sat": 1.6
+      },
+      {
+       "k": "drum",
+       "at": 0.84,
+       "jit": 0.02,
+       "hz": 340,
+       "to": 170,
+       "dur": 0.07,
+       "peak": 0.55,
+       "sat": 1.6
+      },
+      {
+       "k": "drum",
+       "at": 0.97,
+       "jit": 0.02,
+       "hz": 310,
+       "to": 155,
+       "dur": 0.07,
+       "peak": 0.45,
+       "sat": 1.6
+      },
+      {
+       "k": "drum",
+       "at": 1.12,
+       "jit": 0.02,
+       "hz": 330,
+       "to": 160,
+       "dur": 0.07,
+       "peak": 0.4,
+       "sat": 1.6
+      },
+      {
+       "k": "tone",
+       "at": 0.6,
+       "type": "triangle",
+       "hz": 180,
+       "dur": 0.5,
+       "peak": 0.12,
+       "a": 0.002,
+       "lp": 1000,
+       "vib": 22,
+       "vibc": 60,
+       "vibc1": 4
+      }
+     ]
+    },
+    "ngua-hi": {
+     "label": "Ngựa hí “HÍ-hí-hí” (hoạt hình)",
+     "cat": "hai",
+     "tags": [
+      "ngựa",
+      "hí",
+      "chiến mã"
+     ],
+     "use": "Chiến mã chồm lên hí vang, ngựa hoảng — tiếng hí tổng hợp run rẩy, vút lên rồi tụt.",
+     "dur": 1.3,
+     "level": 0.37,
+     "rev": 0.25,
+     "vary": 0.03,
+     "layers": [
+      {
+       "k": "voice",
+       "type": "sawtooth",
+       "det": 10,
+       "sat": 1.6,
+       "q": 4,
+       "ftype": "bandpass",
+       "peak": 0.7,
+       "hz": [
+        [
+         0,
+         700
+        ],
+        [
+         0.12,
+         1250
+        ],
+        [
+         0.5,
+         1050
+        ],
+        [
+         1.1,
+         600
+        ]
+       ],
+       "cut": [
+        [
+         0,
+         1100
+        ],
+        [
+         0.12,
+         1600
+        ],
+        [
+         1.1,
+         900
+        ]
+       ],
+       "amp": [
+        [
+         0,
+         0
+        ],
+        [
+         0.03,
+         1
+        ],
+        [
+         0.5,
+         0.8
+        ],
+        [
+         1,
+         0.5
+        ],
+        [
+         1.15,
+         0
+        ]
+       ],
+       "vib": 9,
+       "vibc": 220,
+       "vibc1": 320,
+       "vib1": 7
+      },
+      {
+       "k": "noise",
+       "col": "pink",
+       "type": "bandpass",
+       "f0": 2200,
+       "q": 1.5,
+       "dur": 1,
+       "peak": 0.12,
+       "a": 0.05
+      }
+     ]
+    },
+    "ban-ten": {
+     "label": "Bắn tên “TƯNG—vút—PHẬP”",
+     "cat": "danh",
+     "tags": [
+      "cung",
+      "tên",
+      "bắn",
+      "trúng"
+     ],
+     "use": "Một mũi tên rời dây cung, bay vút và cắm phập — đuôi tên rung tưng tưng.",
+     "dur": 0.9,
+     "level": 0.74,
+     "rev": 0.15,
+     "vary": 0.03,
+     "lanes": [
+      [
+       -0.5,
+       0.5,
+       0.28,
+       0.08
+      ]
+     ],
+     "layers": [
+      {
+       "k": "fm",
+       "hz": 110,
+       "ratio": 1,
+       "index": 2,
+       "index1": 0.2,
+       "dur": 0.35,
+       "peak": 0.45,
+       "a": 0.002,
+       "vib": 20,
+       "vibc": 80,
+       "vibc1": 10
+      },
+      {
+       "k": "tone",
+       "at": 0.08,
+       "type": "sine",
+       "hz": 2600,
+       "to": 900,
+       "glide": 1,
+       "dur": 0.22,
+       "peak": 0.25,
+       "a": 0.01,
+       "lane": 0
+      },
+      {
+       "k": "noise",
+       "at": 0.08,
+       "col": "pink",
+       "type": "bandpass",
+       "f0": 2200,
+       "f1": 900,
+       "q": 1.5,
+       "dur": 0.24,
+       "peak": 0.3,
+       "a": 0.02,
+       "lane": 0
+      },
+      {
+       "k": "drum",
+       "at": 0.36,
+       "hz": 330,
+       "to": 160,
+       "dur": 0.07,
+       "peak": 0.7,
+       "sat": 1.6,
+       "click": 0.45
+      },
+      {
+       "k": "tone",
+       "at": 0.36,
+       "type": "triangle",
+       "hz": 190,
+       "dur": 0.4,
+       "peak": 0.14,
+       "a": 0.002,
+       "lp": 1100,
+       "vib": 24,
+       "vibc": 70,
+       "vibc1": 5
+      }
+     ]
+    }
+   }
   }
  ],
  "motionPacks": [

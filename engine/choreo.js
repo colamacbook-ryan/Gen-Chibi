@@ -92,7 +92,7 @@
     views: ['front', 'back', 'q45', 'q90', 'q135'],
     points: ['tip', 'butt', 'hand', 'handL', 'head', 'chest', 'feet', 'foot'],
     fx: ['impact', 'spark', 'glint', 'dust', 'ring', 'debris', 'smear', 'text', 'projectile'],
-    sfx: ['pop', 'whoosh', 'step', 'sting', 'hit', 'boing', 'sparkle', 'rumble', 'drip', 'sad', 'snore', 'party', 'hmm', 'gong', 'chime', 'swish', 'tick'],
+    sfx: ['pop', 'whoosh', 'step', 'sting', 'hit', 'boing', 'sparkle', 'rumble', 'drip', 'sad', 'snore', 'party', 'hmm', 'gong', 'chime', 'swish', 'tick'],   // 17 tên cũ — luôn hợp lệ; sự kiện nhận mọi âm của GC.sounds (soundOk trong checkPack)
     music: ['calm', 'tense', 'epic', 'comic', 'sad'],
     grades: ['none', 'cool', 'warm', 'dark', 'gold'],
     arts: ['rock', 'tomato'],
@@ -179,6 +179,14 @@
         return true;
       });
     };
+    // âm của sự kiện: tên trong thư viện âm (GC.sounds) nhìn thấy từ dự án của gói — 17 tên cũ (MOTION.sfx) vẫn hợp lệ; chưa nạp sounds.js thì chỉ 17 tên cũ.
+    // Gói âm của dự án phải nạp TRƯỚC gói động tác tham chiếu nó (Studio / server / gói dự án đều nạp theo thứ tự đó).
+    var evProject = typeof def.project === 'string' && def.project ? def.project : '', visSnd = null;
+    var soundOk = function (x) {
+      if (typeof x !== 'string') return false;
+      if (!GC.sounds) return MOTION.sfx.indexOf(x) >= 0;
+      return (visSnd = visSnd || GC.sounds.names({ project: evProject })).indexOf(x) >= 0;
+    };
     var EVN = { gain: [0, 1.5], dx: [-300, 300], dy: [-300, 300], size: [0.1, 4], hitstop: [0, 0.4], shake: [0, 30], flash: [0, 1], push: [-1, 1],
       lines: [0, 3], ghosts: [0, 3], smear: [0, 0.6], rot: [-45, 45], flight: [0.1, 2], hold: [0, 8], letterbox: [0, 1] };
     var event = function (e, path) {
@@ -187,7 +195,7 @@
       Object.keys(e).forEach(function (k) {
         var v = e[k], p = path + '.' + String(k).slice(0, 16);
         if (hasOwn(EVN, k)) o[k] = num(v, EVN[k][0], EVN[k][1], p);
-        else if (k === 'sfx') { var s = Array.isArray(v) ? v : [v]; if (!s.length || s.length > 3 || s.some(function (x) { return MOTION.sfx.indexOf(x) < 0; })) E(p + ': chọn tối đa 3 trong ' + MOTION.sfx.join(', ')); else o.sfx = Array.isArray(v) ? s.slice() : v; }
+        else if (k === 'sfx') { var s = Array.isArray(v) ? v : [v], bad = s.filter(function (x) { return !soundOk(x); }); if (!s.length || s.length > 3) E(p + ': chọn 1–3 tên âm trong thư viện âm (get_sound_spec · list_sounds)'); else if (bad.length) E(p + ': âm ' + bad.slice(0, 3).map(function (x) { return '"' + String(x).slice(0, 32) + '"'; }).join(', ') + ' không có trong thư viện âm của ' + (evProject ? 'dự án "' + evProject + '"' : 'gói dùng chung') + ' (list_sounds)'); else o.sfx = Array.isArray(v) ? s.slice() : v; }
         else if (k === 'at') o.at = oneOf(v, MOTION.points, p);
         else if (k === 'fx') o.fx = oneOf(v, MOTION.fx, p);
         else if (k === 'from') { if (typeof v === 'number') o.from = num(v, -600, 600, p); else o.from = oneOf(v, MOTION.points, p); }

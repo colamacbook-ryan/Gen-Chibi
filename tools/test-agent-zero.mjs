@@ -23,7 +23,7 @@ const ok = (c, m) => { if (!c) fail(m); };
 const names = TOOLS.map(t => t.name), corpus = Agent.guide('all');
 const missingDoc = names.filter(n => !new RegExp('`' + n + '`').test(corpus));
 ok(!missingDoc.length, 'tool chưa có trong hướng dẫn agent: ' + missingDoc.join(', '));
-const cited = [...new Set([...corpus.matchAll(/`([a-z]+(?:_[a-z]+)+)`/g)].map(m => m[1]))].filter(n => /^(get|list|save|validate|render|preview|import|export|install|update|rollback|start)_/.test(n));
+const cited = [...new Set([...corpus.matchAll(/`([a-z]+(?:_[a-z]+)+)`/g)].map(m => m[1]))].filter(n => /^(get|list|save|validate|render|preview|import|export|install|update|rollback|start|lint)_/.test(n));
 const stale = cited.filter(n => names.indexOf(n) < 0);
 ok(!stale.length, 'hướng dẫn nhắc tool không tồn tại: ' + stale.join(', '));
 const topicIds = Agent.topics().map(t => t.id), table = [...Agent.guide('guide').matchAll(/^\| `([a-z-]+)` \|/gm)].map(m => m[1]);
@@ -80,6 +80,16 @@ await good('validate_scene', { scene }); await good('save_scene', { scene });
 const pack = exampleIn(G['motion-pack'], 'motion-pack.json');
 await good('get_motion_spec', {}, r => r.structuredContent.example && r.structuredContent.framePoses.indexOf('fistGuard') >= 0);
 await good('validate_motion_pack', { pack }); await good('save_motion_pack', { pack });
+// thư viện âm (v0.18): CHỈ bằng hướng dẫn — spec → danh sách → mẫu → kiểm → lưu → ghép → chấm luật; luật S1–S7 trong hướng dẫn sinh từ engine
+ok(/\*\*S1\*\*/.test(G.sound) && /\*\*S7\*\*/.test(G.sound) && /`vo-chuoi`/.test(G.sound) && !/<!-- generated:/.test(G.sound), 'hướng dẫn sound phải nhúng luật S1–S7 + công thức mẫu sinh từ engine');
+const sndPack = exampleIn(G.sound, 'sound-pack.json'), sndTrack = exampleIn(G.sound, 'sound-track.json');
+await good('get_sound_spec', {}, r => r.structuredContent.rules.length === 7 && r.structuredContent.recipes.length >= 5 && r.structuredContent.example && r.structuredContent.kinds.mallet);
+await good('list_sounds', { project: project.id, cat: 'danh' }, r => r.structuredContent.sounds.some(x => x.name === 'wham') && r.structuredContent.sounds.every(x => x.cat === 'danh'));
+await good('get_sound_pack', { id: 'gen.am', names: ['bonk'] }, r => r.structuredContent.sounds.bonk && Object.keys(r.structuredContent.sounds).length === 1);
+await good('validate_sound_pack', { pack: sndPack }, r => r.structuredContent.sounds === 2);
+await good('save_sound_pack', { pack: sndPack }, r => r.structuredContent.version === 1);
+await good('list_sounds', { project: project.id, q: 'cốc' }, r => r.structuredContent.sounds.some(x => x.name === 'coc-dau-go' && x.pack === sndPack.id));
+await good('lint_sound_track', sndTrack, r => r.structuredContent.ok === true && r.structuredContent.issues.length === 0);
 const work = exampleIn(G.film, 'work.json'), shot = exampleIn(G.film, 'shot.json');
 await good('save_work', work);
 const cast = shot.event.steps.map(s => s.actor).filter((v, i, a) => a.indexOf(v) === i);
@@ -90,8 +100,8 @@ const pv = await good('preview_shot', { work: work.id, shot: '0' }, r => r.struc
 await good('render_action', { character: 'local.my/' + asset.id, action: 'bonk', format: 'sheet', fps: 8 }, r => r.content[1] && /^<svg/.test(r.content[1].resource.text) && r.structuredContent.impactFrame > 0);
 await good('render_character', { key: 'local.my/' + asset.id, action: 'bowDeep' }, r => /^<svg/.test(r.content[1].resource.text));
 const bundle = (await good('export_project', { id: project.id })).structuredContent;
-ok(bundle.motionPacks.length === 1 && bundle.characters.length === 1 && bundle.works.length === 1, 'gói dự án thiếu mục: ' + JSON.stringify({ m: bundle.motionPacks.length, c: bundle.characters.length, w: bundle.works.length }));
-console.log('   ✓ chỉ bằng hướng dẫn + ví dụ nguyên văn: dự án → linh kiện → trang bị → nhân vật (có binh khí) → cảnh → gói động tác → phim (' + pv.structuredContent.beats.length + ' nhịp, sẵn sàng) → hoạt ảnh → gói dự án đủ mục');
+ok(bundle.motionPacks.length === 1 && bundle.characters.length === 1 && bundle.works.length === 1 && bundle.soundPacks.length === 1 && bundle.soundPacks[0].id === sndPack.id, 'gói dự án thiếu mục: ' + JSON.stringify({ m: bundle.motionPacks.length, c: bundle.characters.length, w: bundle.works.length, s: bundle.soundPacks.length }));
+console.log('   ✓ chỉ bằng hướng dẫn + ví dụ nguyên văn: dự án → linh kiện → trang bị → nhân vật (có binh khí) → cảnh → gói động tác → gói âm (spec → danh sách → mẫu → kiểm → lưu → chấm luật S1–S7) → phim (' + pv.structuredContent.beats.length + ' nhịp, sẵn sàng) → hoạt ảnh → gói dự án đủ mục');
 
 // ---------- 3. hợp đồng lỗi: mã ổn định + path + gợi ý; tự sửa theo path rồi qua
 const bad = JSON.parse(JSON.stringify(pack)); bad.id = 'zero-sai'; bad.actions = { bonkTwo: { label: 'x', clips: ['bonk'], attack: true } }; bad.clips.bonk.keys[0][0] = 99;
@@ -101,6 +111,12 @@ bad.clips.bonk.keys[0][0] = 0.16;   // "agent" sửa đúng path được chỉ
 await good('validate_motion_pack', { pack: bad });
 const e2 = await call('render_action', { character: 'gen.khung/ma-no-canh', action: 'thrust' });
 ok(e2.isError && e2.structuredContent.error.code === 'VALIDATION_FAILED' && e2.structuredContent.error.allowed.indexOf('punch') >= 0, 'tay không gọi đòn binh khí phải bị chặn kèm danh sách đòn làm được');
+const e5 = await call('lint_sound_track', { steps: [{ actor: 'a', state: 'normal', say: '', sfx: ['bonkk'] }] }), er5 = e5.structuredContent && e5.structuredContent.error;
+ok(e5.isError && /^\[VALIDATION_FAILED\]/.test(e5.content[0].text) && er5.details.some(d => d.path === 'steps[0].sfx[0]' && /gần nhất: "bonk"/.test(d.message)), 'lint_sound_track: tên âm lạ phải là lỗi có path + gợi ý tên gần nhất: ' + e5.content[0].text.slice(0, 240));
+const e6 = await call('save_shot', { work: work.id, shot: Object.assign({}, shot, { id: 'canh-am-sai', event: Object.assign({}, shot.event, { steps: shot.event.steps.map((s, i) => i === 0 ? Object.assign({}, s, { sfx: ['bonkk'] }) : s) }) }) });
+ok(e6.isError && e6.structuredContent.error.details.some(d => d.path === 'shot.event.steps[0].sfx' && /gần nhất: "bonk"/.test(d.message)), 'save_shot với âm lạ phải bị chặn tại shot.event.steps[0].sfx kèm gợi ý: ' + e6.content[0].text.slice(0, 240));
+const e7 = await call('validate_sound_pack', { pack: Object.assign({}, sndPack, { id: 'am-sai', sounds: { 'coc-dau-go': sndPack.sounds['coc-dau-go'] } }) });
+ok(e7.isError && e7.structuredContent.error.details.some(d => d.path === 'sounds.coc-dau-go' && /trùng tên âm của gói "am-vi-du-agent"/.test(d.message)), 'tên âm trùng gói khác phải bị chặn, nêu gói giữ tên: ' + e7.content[0].text.slice(0, 240));
 const e3 = await call('get_guide', { topic: 'khong-co' });
 ok(e3.isError && e3.structuredContent.error.code === 'NOT_FOUND' && e3.structuredContent.error.allowed.indexOf('film') >= 0, 'chủ đề lạ phải NOT_FOUND kèm danh sách');
 const e4 = await call('save_motion_pack', { pack: Object.assign({}, pack, { id: 'zero-trung', actions: { punch: pack.actions.bonk } }) });
