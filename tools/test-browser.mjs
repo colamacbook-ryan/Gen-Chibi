@@ -1462,7 +1462,7 @@ if (!ONLY || ONLY === 'voice') {
     if (!await noDl(() => q.click(EXP), 800) || await q.$(BOX) || !(await toasts(q)).some(t => /Đang lồng tiếng AI — chờ xong/.test(t))) throw new Error('đang lồng tiếng thì Phim (HTML) chỉ nhắc chờ');
     await q.click('button:text-is("Dừng lồng tiếng")'); await q.waitForFunction(() => /Đã dừng/.test(document.body.textContent), null, { timeout: 15000 }); M.delay = 0;
     // Giọng AI chưa sẵn sàng (chưa có key): xuất như cũ, không hộp
-    await q.close(); M.hasKey = false; M.ids.clear();
+    await q.close(); await new Promise(r => setTimeout(r, 600)); M.hasKey = false; M.ids.clear();   // chờ các lời gọi lồng tiếng còn bay của trang vừa đóng (M.delay = 200) trả xong rồi mới xoá clip — không thì clip về muộn lọt vào "chưa có key"
     q = await pg(await ctx10.newPage(), { page: 'works', work: WORK }); await q.waitForSelector('.shot'); await spyOn(q); await q.waitForFunction(() => /Chưa có key Google/.test(document.body.textContent), null, { timeout: 5000 });
     dx = await dlOf(() => q.click(EXP));
     if (Object.keys(dx.voices).length !== 0 || await q.$(BOX)) throw new Error('chưa có key: xuất như cũ, không hộp · ' + JSON.stringify({ voices: Object.keys(dx.voices).length, box: !!(await q.$(BOX)), hasKey: M.hasKey, ids: M.ids.size, cfg: await q.evaluate(() => JSON.stringify(window.GCDock && window.GCDock.state())) }));
