@@ -170,7 +170,8 @@ class Store {
       return o;
     };
     let list = (Array.isArray(messages) ? messages : []).filter(m => m && typeof m === 'object').map(clean).slice(-CHAT_MAX);
-    while (list.length > 2 && Buffer.byteLength(JSON.stringify(list)) > CHAT_BYTES) list = list.slice(1);   // quá lớn: bỏ tin cũ nhất trước
+    const bytes = l => Buffer.byteLength(JSON.stringify({ kind, id, messages: l, updatedAt: '2000-01-01T00:00:00.000Z' }, null, 2));   // kích thước TỆP (có thụt lề như writeJSON) — trần 200 KB là của tệp
+    while (list.length > 2 && bytes(list) > CHAT_BYTES) list = list.slice(1);   // quá lớn: bỏ tin cũ nhất trước
     const rec = { kind, id, messages: list, updatedAt: new Date().toISOString() };
     writeJSON(f, rec);
     return rec;

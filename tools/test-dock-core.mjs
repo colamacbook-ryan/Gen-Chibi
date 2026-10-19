@@ -207,5 +207,15 @@ try {
     ok(m.workView(store.getWork(w.id)).chatCount === 3, 'chatCount cộng cả work.chat cũ chưa chuyển');
   }
 
+  /* ---------------------------------------------------------------- CNS-121: trần 200 KB của TỆP luồng (đo tệp thật, kể cả thụt lề) */
+  {
+    const { store } = fresh(), L = 5034, msgs = Array.from({ length: 40 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', content: String(i % 10).repeat(L), at: '2026-10-19T00:00:00.000Z' }));
+    const compact = Buffer.byteLength(JSON.stringify(msgs));
+    ok(compact < 200 * 1024 && compact > 200 * 1024 - 1500, 'tiền đề: 40 tin, JSON gọn ' + compact + ' B < 204 800 nhưng sát trần (thụt lề của tệp sẽ đẩy qua)');
+    store.saveChat('khu', 'xuong', msgs);
+    const file = path.join(store.chatDir, 'khu-xuong.json'), size = statSync(file).size, n = store.getChat('khu', 'xuong').messages.length;
+    ok(size <= 200 * 1024 && n >= 30 && n < 40, 'tệp luồng ' + size + ' B ≤ 204 800 (trần đo trên tệp có thụt lề); còn ' + n + ' / 40 tin, tin cũ nhất rơi trước');
+    ok(store.getChat('khu', 'xuong').messages[0].content[0] !== '0', 'tin cũ nhất (số 0) là tin rơi trước');
+  }
 } catch (e) { fail = 1; console.log('   ✗', e.stack || e.message); }
 process.exit(fail);

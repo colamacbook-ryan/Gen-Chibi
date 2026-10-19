@@ -47,7 +47,7 @@ Lưu xong: **+ Tạo tiếp** (cùng khung, cùng dự án) · **Xem trong Thư 
 Khung không bao giờ bị sửa — asset của bạn là bản sao của khung + tham số của bạn.
 
 ## 3. Làm phim (Tạo tác › Tác phẩm)
-**Bảng tác phẩm** (Data Console): cột *ID · Tên · Dự án · Cảnh · Đạt · Giọng AI · Cập nhật · Trạng thái*; có tìm, lọc theo dự án / trạng thái; **Tác phẩm mới** (đặt tên + dự án). Bấm một hàng để vào **phòng làm phim** của tác phẩm đó — địa chỉ có id (`/tao-tac#/tac-pham/<id>/<tab>`), gửi được cho người khác / đánh dấu trang. **Trợ lý AI ở cột phải luôn là AI đạo diễn của tác phẩm đang mở**, biết bạn đang ở tab nào và cảnh nào.
+**Bảng tác phẩm** (Data Console): cột *ID · Tên · Dự án · Cảnh · Đạt · Giọng AI · Cập nhật · Trạng thái*; có tìm, lọc theo dự án / trạng thái; **Tác phẩm mới** (đặt tên + dự án). Bấm một hàng để vào **phòng làm phim** của tác phẩm đó — địa chỉ có id (`/tao-tac#/tac-pham/<id>/<tab>`) — đánh dấu trang được, nhưng chỉ mở được trên chính máy có bản cài đó (không gửi cho người khác được; muốn chia sẻ thì xuất gói dự án). **Trợ lý AI ở cột phải luôn là AI đạo diễn của tác phẩm đang mở**, biết bạn đang ở tab nào và cảnh nào.
 Phòng có 5 tab:
 1. **Kịch bản** — logline, kịch bản tổng, **dàn nhân vật** (mọi diễn viên của các phân cảnh, vai giọng, giọng AI đã chốt), **ngôn ngữ phim**.
 2. **Phân cảnh** — mỗi cảnh một thẻ: **ảnh khung đầu**, tên, mô tả, bối cảnh, dàn diễn viên, số bước, **thời lượng ước tính**, *Xem bước* (mở danh sách bước), **Bảng bước**, *AI viết lời thoại*, *Diễn thử*, *Hỏi AI* (ghim cảnh vào dock). Mọi thứ AI đạo diễn viết ra hiện ở đây; đề xuất sửa chưa áp thì hiện **diff** với Áp dụng / Bỏ.
