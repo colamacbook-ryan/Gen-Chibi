@@ -14,6 +14,8 @@
  *                                   opts.voiceClip(line, asset) → Promise<clip>|clip|null: giọng thu sẵn (vd. giọng AI) cho một câu; clip = ArrayBuffer / URL / data: URI
  *                                     như GC.audio.say. Bộ phát hỏi TRƯỚC khi nói (chờ tối đa opts.clipWait ms — số hoặc hàm (line) → ms, mặc định 2500); có clip thì phát clip,
  *                                     lỗi / null / quá hạn thì giọng trình duyệt như cũ. Đầu mỗi phân cảnh hỏi trước mọi câu (song song ≤ 2) để lúc nói đã sẵn.
+ *                                   opts.needGood = true | (line) → boolean: câu không có clip chỉ được đọc bằng giọng trình duyệt hạng GOOD (thần kinh / Google / Apple có tên), không thì blip —
+ *                                     hỏi lúc nói. Người gọi bật khi chế độ giọng "tự động" và tác phẩm có clip AI (đừng để robot lẫn giọng AI); chọn hẳn "máy đọc" thì không bật.
  *   GC.film.clipKey(line)        → khoá một câu thoại (diễn viên | cảm xúc | kiểu bong bóng | chữ) — bộ phát và Studio / phim xuất ra cùng dùng
  *   GC.film.solveLayout(ctx)     → BỐ CỤC LỜI THOẠI (thuần số, chạy cả trong Node): chọn chỗ cho bong bóng / phụ đề sao cho không che đầu ai
  *
@@ -760,6 +762,7 @@
         var n = String(line.say).split(/\s+/).filter(Boolean).length;
         var hooks = { onMouth: function (v) { if (r === run && !done) mouth(v); }, onWord: function (i) { if (r === run && !done) b.word(i); } };
         if (clip) hooks.clip = clip;
+        if (voice && (typeof opts.needGood === 'function' ? opts.needGood(line) : opts.needGood)) voice.needGood = true;   // phim có giọng AI: câu thiếu clip (hoặc clip hỏng) không rơi vào robot — GC.audio chỉ nhận giọng hạng good, không thì blip
         var talk = A ? A.say(line.say, voice, hooks) : fallbackSay(line, n, hooks, r);
         var cap = wait((line.estimate * 2.2 + 3) * 1000, r);   // giọng đọc treo (onend không về) cũng không làm kẹt phim
         return Promise.race([talk, cap]).then(function () { b.word(n); mouth(0); return wait(Math.max(380, (line.hold || 0) * 1000 - (Date.now() - t0)), r); });   // hold = khung hiện tối thiểu

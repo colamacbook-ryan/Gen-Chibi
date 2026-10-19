@@ -943,7 +943,7 @@ if (!ONLY || ONLY === 'voice') {
   const WAV = wav(0.6, 220);
   const M = { good: 'AIzaSy-key-gia-0123456789abcdef', hasKey: false, off: false, keySource: '', today: 0, designs: {}, ids: new Set(), budget: Infinity, fresh: 0, calls: [], casts: [], puts: [], designCalls: [], failFn: null, clipFail: false, delay: 0, retryAt: new Date(Date.now() + 3600e3).toISOString(), leaks: [], workPosts: [],
     // hợp đồng server v0.17 (CNS-085 / 087 / 090): trần câu / ngày, giọng tạm hỏng, dàn vượt 48, thiết kế tuần tự có thể dừng ở 429
-    dailyCap: 200, bad: [], missing: [], capHit: false, designBudget: Infinity, designCap: false, designDelay: 0, designLive: 0, designPeak: 0 };
+    dailyCap: 200, bad: [], missing: [], capHit: false, minute: null, designBudget: Infinity, designCap: false, designDelay: 0, designLive: 0, designPeak: 0 };
   const tomorrow = () => { const d = new Date(); d.setHours(24, 0, 0, 0); return d.toISOString(); };   // 00:00 ngày mai giờ máy (retryAt của 429 do trần ngày)
   const cfgOf = () => ({ enabled: M.hasKey && !M.off, off: M.off, model: 'gemini-3.8-flash-tts', hasKey: M.hasKey, keySource: M.hasKey ? M.keySource : '', blocked: M.fresh >= M.budget ? [{ model: 'gemini-3.8-flash-tts', until: M.retryAt }] : [],
     today: M.today, cached: M.ids.size, keyUrl: 'https://aistudio.google.com/apikey', roles: GV.roleList(), langs: GV.langList(), designs: M.designs, dailyCap: M.dailyCap, bad: M.bad });
@@ -1002,6 +1002,13 @@ if (!ONLY || ONLY === 'voice') {
       if (!M.hasKey || M.off) return json(409, { error: 'Giọng AI đang tắt (Cài đặt AI › Giọng AI)' });
       if (M.capHit) return json(429, { error: 'Đã chạm trần ' + M.dailyCap + ' câu hôm nay', retryAt: tomorrow(), cap: true });
       if (M.fresh >= M.budget) return json(429, { error: 'Hết lượt đọc giọng hôm nay', retryAt: M.retryAt });
+      // giới hạn MỖI PHÚT giả (CNS-098): sau `after` câu mới thì 429 kèm retryAt = now + ms (ms epoch nếu numeric, ISO nếu không); tới giờ thì cho qua; `episodes` = số đợt; stuck = 429 mãi
+      const mn = M.minute;
+      if (mn && M.fresh >= mn.after && (mn.stuck || mn.episodes > 0)) {
+        if (mn.stuck || !mn.until) mn.until = Date.now() + mn.ms;
+        if (mn.stuck || Date.now() < mn.until) { mn.hits++; return json(429, { error: 'mock: Google giới hạn mỗi phút', retryAt: mn.numeric ? mn.until : new Date(mn.until).toISOString() }); }
+        mn.episodes--; mn.until = 0;
+      }
       if (M.delay) await new Promise(r => setTimeout(r, M.delay));
       M.fresh++; M.today++; M.ids.add(id);
       return json(200, { id, cached: false, seconds: 0.6, voice: body.voice, url: 'api/voice/clip/' + id + '.wav' });
@@ -1033,7 +1040,7 @@ if (!ONLY || ONLY === 'voice') {
   const poll = async (fn, what, ms) => { const t = Date.now(); for (;;) { let v = null; try { v = await fn(); } catch (e) { /* chưa có */ } if (v) return v; if (Date.now() - t > (ms || 6000)) throw new Error('hết giờ chờ: ' + what); await q.waitForTimeout(80); } };
   const SPY_A = `(() => { const A = window.GenChibi.audio; if (A.__spy) return; const orig = A.say; A.__spy = [];
     A.say = function (text, voice, hooks) { const h = hooks || {}, c = h.clip;
-      A.__spy.push({ text, lang: voice && voice.lang, gender: voice && voice.gender, role: voice && voice.role, clip: c ? (typeof c === 'string' ? 'str:' + c.slice(0, 22) : 'buf:' + (c.byteLength || 0)) : null, t: Date.now() });
+      A.__spy.push({ text, lang: voice && voice.lang, gender: voice && voice.gender, role: voice && voice.role, needGood: !!(voice && voice.needGood), clip: c ? (typeof c === 'string' ? 'str:' + c.slice(0, 22) : 'buf:' + (c.byteLength || 0)) : null, t: Date.now() });
       if (window.__realSay) return orig.apply(A, arguments);
       return new Promise(r => setTimeout(r, 80)); }; })()`;
   const SPY_T = `(() => { window.__toasts = []; new MutationObserver(() => { const t = document.getElementById('toast'); if (t && !t.hidden) window.__toasts.push(t.textContent); }).observe(document.getElementById('toast'), { childList: true, characterData: true, subtree: true, attributes: true }); })()`;
@@ -1153,10 +1160,10 @@ if (!ONLY || ONLY === 'voice') {
     await q.click(row('ong-lao') + ' button[aria-label^="Nghe giọng AI"]');
     await poll(async () => (await toasts(q)).some(t => /Đã chạm trần 200 câu hôm nay \(Cài đặt AI\)/.test(t)), 'toast chạm trần');
     let capT = (await toasts(q)).filter(t => /chạm trần/.test(t));
-    if (!/đọc tiếp lúc \d{2}:\d{2} \d{2}[\/-]\d{2}/.test(capT[0]) || (await toasts(q)).some(t => /Hết lượt giọng AI/.test(t))) throw new Error('trần ngày phải có giờ đọc tiếp và KHÔNG được báo như hết lượt Google: ' + JSON.stringify(await toasts(q)));
+    if (!/đọc tiếp lúc \d{2}:\d{2} \d{2}[\/-]\d{2}/.test(capT[0]) || (await toasts(q)).some(t => /Hết lượt|giới hạn mỗi phút/.test(t))) throw new Error('trần ngày phải có giờ đọc tiếp và KHÔNG được báo như hết lượt Google: ' + JSON.stringify(await toasts(q)));
     M.capHit = false; M.today = 0; M.budget = 0; await q.reload(); await q.waitForSelector('#voice-panel table.roles td.id'); await spyOn(q);   // hết lượt của Google (không cap)
     await q.click(row('ba-lao') + ' button[aria-label^="Nghe giọng AI"]');
-    await poll(async () => (await toasts(q)).some(t => /Hết lượt giọng AI — thử lại lúc \d{2}:\d{2}/.test(t)), 'toast hết lượt Google');
+    await poll(async () => (await toasts(q)).some(t => /^Hết lượt hôm nay — thử lại lúc \d{2}:\d{2}/.test(t)), 'toast hết lượt Google (retryAt xa → "Hết lượt hôm nay")');
     if ((await toasts(q)).some(t => /chạm trần/.test(t))) throw new Error('hết lượt Google không được báo là chạm trần: ' + JSON.stringify(await toasts(q)));
     M.budget = Infinity;
     // giọng tạm hỏng: "M giọng tạm hỏng (tự thử lại sau 24 h)" + nút gỡ → PUT { clearBad: true }
@@ -1246,10 +1253,12 @@ if (!ONLY || ONLY === 'voice') {
     await q.reload(); await q.waitForSelector('.shot'); await spyOn(q); M.ids.clear(); M.fresh = 0; M.budget = 2; M.calls.length = 0;
     spy = await playN(4);
     if (spy.filter(s => s.clip).length !== 2 || spy.filter(s => !s.clip).length !== 2) throw new Error('hết lượt: 2 câu có clip + 2 câu giọng máy, thấy ' + JSON.stringify(spy.map(s => !!s.clip)));
-    tt = (await toasts(q)).filter(t => /Hết lượt giọng AI/.test(t));
-    if (tt.length !== 1 || !/thử lại lúc \d{2}:\d{2}/.test(tt[0])) throw new Error('hết lượt: một toast kèm giờ thử lại, thấy ' + JSON.stringify(tt));
+    tt = (await toasts(q)).filter(t => /Hết lượt/.test(t));
+    if (tt.length !== 1 || !/^Hết lượt hôm nay — thử lại lúc \d{2}:\d{2}/.test(tt[0]) || !/giọng máy đọc hoặc blip/.test(tt[0])) throw new Error('hết lượt: một toast kèm giờ thử lại, thấy ' + JSON.stringify(tt));
     const non429 = M.calls.filter(c => !c.dry).length;
     if (non429 > 4) throw new Error('hết lượt rồi vẫn hỏi server ' + non429 + ' lần');
+    // phim đã có clip AI (2 câu đầu) → câu thiếu clip chỉ đọc bằng giọng máy hạng tốt, không thì blip: bộ phát bật needGood
+    if (!spy.every(s => s.needGood)) throw new Error('kiểu AI Google, tác phẩm có clip AI: mọi câu phải needGood: ' + JSON.stringify(spy.map(s => [!!s.clip, s.needGood])));
     // kiểu "tự động": chỉ clip ĐÃ đọc (dry) — 2 câu đã đọc ở trên có giọng AI, câu còn lại không; không bao giờ gọi đọc mới, không toast
     await q.reload(); await q.waitForSelector('.shot'); await spyOn(q); M.calls.length = 0; M.budget = Infinity; M.fresh = 0;
     await q.selectOption('select[aria-label="Giọng nhân vật"]', 'auto');
@@ -1257,11 +1266,18 @@ if (!ONLY || ONLY === 'voice') {
     if (M.calls.length < 4 || !M.calls.every(c => c.dry === true)) throw new Error('kiểu tự động phải chỉ hỏi dry: ' + JSON.stringify(M.calls.map(c => !!c.dry)));
     if (spy.filter(s => s.clip).length !== 2) throw new Error('kiểu tự động: đúng 2 câu đã đọc có clip, thấy ' + spy.filter(s => s.clip).length);
     if ((await toasts(q)).length) throw new Error('kiểu tự động không được báo gì: ' + JSON.stringify(await toasts(q)));
+    if (!spy.filter(s => !s.clip).length || !spy.every(s => s.needGood)) throw new Error('kiểu tự động + có clip AI: câu thiếu clip phải needGood (không rơi vào robot): ' + JSON.stringify(spy.map(s => [!!s.clip, s.needGood])));
     // máy đọc / blip / tắt: không đụng tới giọng AI
     await q.selectOption('select[aria-label="Giọng nhân vật"]', 'tts'); M.calls.length = 0; M.casts.length = 0;
     spy = await playN(2);
     if (M.calls.length || spy.some(s => s.clip)) throw new Error('kiểu máy đọc không được gọi giọng AI');
-    console.log('  ✓ Bộ phát: kiểu "AI Google" đọc từng câu bằng clip · clip lỗi / tải hỏng → giọng máy + đúng MỘT toast · hết lượt (429) → 2 câu AI rồi giọng máy, một toast có giờ thử lại, thôi hỏi server · kiểu "tự động" chỉ lấy clip đã đọc (dry), không tốn lượt, không toast · máy đọc không đụng tới giọng AI');
+    if (spy.some(s => s.needGood)) throw new Error('chọn hẳn "máy đọc" thì KHÔNG được bật needGood (người dùng muốn TTS thì cứ đọc): ' + JSON.stringify(spy.map(s => s.needGood)));
+    // tác phẩm CHƯA có clip AI nào (kiểu tự động): giọng máy như cũ, không needGood (toàn bộ là giọng máy thì không có gì để lẫn)
+    await q.reload(); await q.waitForSelector('.shot'); await spyOn(q); M.ids.clear(); M.calls.length = 0;
+    await q.selectOption('select[aria-label="Giọng nhân vật"]', 'auto');
+    spy = await playN(3);
+    if (spy.some(s => s.clip || s.needGood)) throw new Error('chưa có clip AI nào: không clip, không needGood: ' + JSON.stringify(spy.map(s => [!!s.clip, s.needGood])));
+    console.log('  ✓ Bộ phát: kiểu "AI Google" đọc từng câu bằng clip · clip lỗi / tải hỏng → giọng máy + đúng MỘT toast · hết lượt (429) → 2 câu AI rồi giọng máy, một toast "Hết lượt hôm nay — thử lại lúc", thôi hỏi server · kiểu "tự động" chỉ lấy clip đã đọc (dry), không tốn lượt, không toast · máy đọc không đụng tới giọng AI · needGood: bật khi (tự động | AI Google) + tác phẩm đã có clip AI, KHÔNG bật khi chọn máy đọc hoặc tác phẩm chưa có clip nào');
 
     // ---- 5) Lồng tiếng AI: đủ câu · câu đã có thì nhanh · dừng đúng khi 429 (báo giờ thử lại + số câu đã xong) · 409 mở Cài đặt AI ----
     const dubText = () => q.evaluate(() => [...document.querySelectorAll('.readybar')].map(e => e.textContent).filter(t => /Lồng tiếng AI \d/.test(t)).join('|'));
@@ -1283,11 +1299,11 @@ if (!ONLY || ONLY === 'voice') {
     if (!/Xong 15\/15 câu \(0 mới · 15 có sẵn\)/.test(await dubText()) || M.fresh !== fresh0) throw new Error('lồng lại phải toàn câu có sẵn, không tốn lượt: ' + await dubText());
     // hết lượt giữa chừng: dừng đúng chỗ — 4 câu xong, câu thứ 5 gặp 429 rồi KHÔNG hỏi thêm; báo giờ thử lại + số câu đã xong
     await q.reload(); await q.waitForSelector('.shot'); await spyOn(q); await q.selectOption('select[aria-label="Ngôn ngữ phim"]', 'vi|nam'); M.ids.clear(); M.fresh = 0; M.budget = 4; M.calls.length = 0;
-    await q.click(dubB); await q.waitForFunction(() => /Dừng vì hết lượt/.test(document.body.textContent), null, { timeout: 30000 });
-    if (!/Dừng vì hết lượt — thử lại lúc \d{2}:\d{2}(?: \d{2}\/\d{2})? · đã lồng 4\/15 câu \(4 mới · 0 có sẵn\)/.test(await dubText()) || !/Lồng tiếng AI 4\/15/.test(await dubText())) throw new Error('báo hết lượt: ' + await dubText());
+    await q.click(dubB); await q.waitForFunction(() => /Hết lượt hôm nay/.test(document.body.textContent), null, { timeout: 30000 });
+    if (!/Hết lượt hôm nay — thử lại lúc \d{2}:\d{2}(?: \d{2}\/\d{2})? · đã lồng 4\/15 câu \(4 mới · 0 có sẵn\)/.test(await dubText()) || !/Lồng tiếng AI 4\/15/.test(await dubText())) throw new Error('báo hết lượt: ' + await dubText());
     await q.waitForTimeout(500);
     if (M.calls.filter(c => !c.dry).length !== 5) throw new Error('phải dừng ngay sau 429 (5 lời gọi), thấy ' + M.calls.filter(c => !c.dry).length);
-    if (!(await toasts(q)).some(t => /Hết lượt giọng AI — thử lại lúc/.test(t) && /Đã lồng 4\/15 câu/.test(t))) throw new Error('thiếu toast hết lượt');
+    if (!(await toasts(q)).some(t => /^Hết lượt hôm nay — thử lại lúc/.test(t) && /Đã lồng 4\/15 câu/.test(t))) throw new Error('thiếu toast hết lượt');
     if (await q.$eval(dubB, e => e.disabled)) throw new Error('hết lượt xong nút phải bấm lại được (lượt sau đọc tiếp)');
     // còn lượt trở lại: đọc tiếp — 4 câu đã đọc là "có sẵn", 11 câu mới
     M.budget = Infinity; await q.click(dubB); await q.waitForFunction(() => /Xong 15\/15 câu/.test(document.body.textContent), null, { timeout: 30000 });
@@ -1321,6 +1337,91 @@ if (!ONLY || ONLY === 'voice') {
     M.hasKey = true;
     console.log('  ✓ Lồng tiếng AI: thanh tiến độ "Lồng tiếng AI k/15" · đủ 15 câu đúng ngôn ngữ / giọng vùng · lồng lại toàn "có sẵn", không tốn lượt · hết lượt giữa chừng: dừng ngay sau 429 (4/15 xong), báo giờ thử lại, bấm lại đọc tiếp (11 mới + 4 có sẵn) · nút Dừng · 409 mở Cài đặt AI › Giọng AI trỏ vào ô key · chưa có key: nút mờ + lời nhắc');
     await q.close();
+
+    // ---- 5b) CNS-098: Google giới hạn MỖI PHÚT (429 không cap, retryAt cách ≤ 2 phút) → KHÔNG dừng hẳn: "tự lồng tiếp lúc HH:MM:SS", chờ tới giờ rồi đọc tiếp CHÍNH câu đó; Dừng huỷ cả lúc chờ; tối đa 10 lần chờ ----
+    q = await pg(await ctx10.newPage(), { page: 'works', work: WORK }); await q.waitForSelector('.shot'); await spyOn(q);
+    const waitRe = 'Google giới hạn mỗi phút — tự lồng tiếp lúc \\d{2}:\\d{2}:\\d{2}';
+    const resetDub = async () => { await q.reload(); await q.waitForSelector('.shot'); await spyOn(q); await q.selectOption('select[aria-label="Ngôn ngữ phim"]', 'vi|nam'); await q.waitForTimeout(300); M.ids.clear(); M.fresh = 0; M.budget = Infinity; M.calls.length = 0; M.today = 0; M.capHit = false; M.minute = null; };
+    const nonDry = () => M.calls.filter(c => !c.dry).length;
+    // (a) 429 sau 4 câu, retryAt = now + 3 s (ms epoch): hiện giờ lồng tiếp, chờ, rồi đủ 15 câu — đúng MỘT lần 429, không toast lỗi
+    await resetDub(); M.minute = { after: 4, ms: 3000, episodes: 1, hits: 0, until: 0, numeric: true };
+    const tA = Date.now(); await q.click(dubB);
+    await q.waitForFunction(re => new RegExp(re).test(document.body.textContent), waitRe, { timeout: 10000 });
+    if (!/Lồng tiếng AI 4\/15/.test(await dubText()) || await q.$eval('button:text-is("Dừng lồng tiếng")', e => e.disabled)) throw new Error('đang chờ giới hạn mỗi phút: phải ở 4/15 và nút Dừng bấm được: ' + await dubText());
+    await q.waitForFunction(() => /Xong 15\/15 câu/.test(document.body.textContent), null, { timeout: 30000 });
+    if (!/Xong 15\/15 câu \(15 mới · 0 có sẵn\)/.test(await dubText()) || M.minute.hits !== 1 || Date.now() - tA < 2800 || nonDry() !== 16) throw new Error('lồng tiếp sau giới hạn mỗi phút: ' + await dubText() + ' · 429 ×' + M.minute.hits + ' · ' + nonDry() + ' lời gọi · ' + (Date.now() - tA) + ' ms');
+    if ((await toasts(q)).some(t => /Hết lượt|Google giới hạn|Dừng/.test(t))) throw new Error('giới hạn mỗi phút tự qua không được toast lỗi: ' + JSON.stringify(await toasts(q)));
+    // (b) bấm Dừng khi đang chờ: huỷ ngay (không đợi hết giờ), không đọc thêm
+    await resetDub(); M.minute = { after: 2, ms: 20000, episodes: 1, hits: 0, until: 0 };
+    await q.click(dubB); await q.waitForFunction(re => new RegExp(re).test(document.body.textContent), waitRe, { timeout: 10000 });
+    const tB = Date.now(); await q.click('button:text-is("Dừng lồng tiếng")');
+    await q.waitForFunction(() => /Đã dừng · đã lồng 2\/15 câu/.test(document.body.textContent), null, { timeout: 5000 });
+    if (Date.now() - tB > 3000) throw new Error('Dừng khi đang chờ giới hạn mỗi phút phải huỷ ngay, mất ' + (Date.now() - tB) + ' ms');
+    await q.waitForTimeout(800);
+    if (nonDry() !== 3 || await q.$eval(dubB, e => e.disabled)) throw new Error('Dừng lúc chờ: đúng 3 lời gọi (2 xong + 1 bị 429), nút bấm lại được: ' + nonDry());
+    // (c) 429 mãi mãi: chờ tối đa 10 lần rồi dừng, báo giờ thử lại (không phải "hôm nay")
+    await resetDub(); M.minute = { after: 0, ms: 150, stuck: true, hits: 0, until: 0 };
+    await q.click(dubB);
+    await q.waitForFunction(() => /Google giới hạn mỗi phút — thử lại lúc \d{2}:\d{2}:\d{2} \(đã chờ 10 lần\) · đã lồng 0\/15 câu/.test(document.body.textContent), null, { timeout: 40000 });
+    if (M.minute.hits !== 11 || nonDry() !== 11 || !(await toasts(q)).some(t => /^Google giới hạn mỗi phút — thử lại lúc \d{2}:\d{2}:\d{2}\. Đã lồng 0\/15 câu/.test(t)) || (await toasts(q)).some(t => /hôm nay/.test(t))) throw new Error('tối đa 10 lần chờ (11 lời gọi): ' + M.minute.hits + ' lần 429 · ' + JSON.stringify(await toasts(q)));
+    // (d) trần câu / ngày của máy (cap) KHÔNG chờ: dừng ngay, giữ chữ cũ
+    await resetDub(); M.capHit = true; await q.click(dubB);
+    await q.waitForFunction(() => /Dừng vì chạm trần câu \/ ngày \(Cài đặt AI\) — đọc tiếp lúc \d{2}:\d{2} \d{2}[\/-]\d{2} · đã lồng 0\/15 câu/.test(document.body.textContent), null, { timeout: 15000 });
+    await q.waitForTimeout(500);
+    if (nonDry() !== 1 || /giới hạn mỗi phút/.test(await q.textContent('.works'))) throw new Error('chạm trần phải dừng ngay, không chờ: ' + nonDry() + ' lời gọi');
+    M.capHit = false; M.minute = null;
+    await q.close();
+    console.log('  ✓ Giới hạn mỗi phút (CNS-098): 429 không cap + retryAt ≤ 2 phút → "Google giới hạn mỗi phút — tự lồng tiếp lúc HH:MM:SS", chờ rồi đọc tiếp đúng câu đó (4/15 → 15/15, một lần 429, không toast lỗi, retryAt ms epoch cũng được) · Dừng huỷ cả lúc chờ · 429 mãi → tối đa 10 lần chờ rồi dừng · retryAt xa → "Hết lượt hôm nay — thử lại lúc" · chạm trần ngày dừng ngay, giữ chữ cũ');
+
+    // ---- 5c) bấm "Phim (HTML)" khi còn câu chưa có giọng AI (và Giọng AI sẵn sàng): hộp 3 nút [Lồng tiếng rồi xuất] [Xuất luôn] [Huỷ]; chưa sẵn sàng / đủ giọng → xuất thẳng ----
+    const BOX = '[aria-label="Xác nhận xuất phim thiếu giọng AI"]', EXP = 'button:text-is("Phim (HTML)")';
+    const dlOf = async trigger => { const [d] = await Promise.all([q.waitForEvent('download', { timeout: 30000 }), trigger()]); const f = path.join(home10, 'x-' + Date.now() + '.html'); await d.saveAs(f); return JSON.parse(fs.readFileSync(f, 'utf8').match(/var DATA = (\{.*?\});\nvar FILM/s)[1]); };
+    const noDl = async (trigger, ms) => { let n = 0; const on = () => n++; q.on('download', on); await trigger(); await q.waitForTimeout(ms || 1200); q.off('download', on); return n === 0; };
+    q = await pg(await ctx10.newPage(), { page: 'works', work: WORK }); await q.waitForSelector('.shot'); await spyOn(q);
+    await resetDub();
+    await q.click(EXP); await q.waitForSelector(BOX, { timeout: 8000 });
+    const bt = await q.textContent(BOX), bn = await q.$$eval(BOX + ' button', bs => bs.map(b => b.textContent));
+    if (!/Còn 15\/15 câu chưa có giọng AI — câu thiếu sẽ đọc bằng giọng máy \/ blip\./.test(bt) || bn.join('|') !== 'Lồng tiếng rồi xuất|Xuất luôn|Huỷ') throw new Error('hộp thiếu giọng AI: ' + bt + ' · ' + bn.join('|'));
+    if (nonDry() || !await q.$eval(BOX + ' button', e => e === document.activeElement)) throw new Error('hộp chỉ hỏi (không tốn lượt), nút đầu nhận focus');
+    await shot(q, 'xuat-phim-thieu-giong', '.works > .stack:last-child > .panel:first-child');
+    // Huỷ: đóng hộp, không tải gì, không đọc mới
+    if (!await noDl(() => q.click(BOX + ' button:text-is("Huỷ")')) || await q.$(BOX) || nonDry()) throw new Error('Huỷ phải đóng hộp, không tải tệp, không tốn lượt');
+    // Xuất luôn: tải đúng tệp ngay, 0/15 câu có giọng, DATA.voiceTotal = 15 (nhãn "Giọng AI x/15" của phim)
+    await q.click(EXP); await q.waitForSelector(BOX);
+    let dx = await dlOf(() => q.click(BOX + ' button:text-is("Xuất luôn")'));
+    if (Object.keys(dx.voices).length !== 0 || dx.voiceTotal !== 15 || nonDry() || await q.$(BOX)) throw new Error('Xuất luôn: 0 clip, voiceTotal 15, không đọc mới: ' + JSON.stringify([Object.keys(dx.voices).length, dx.voiceTotal, nonDry()]));
+    // Lồng tiếng rồi xuất: lồng đủ 15 câu như nút Lồng tiếng AI, xong tự tải phim có đủ 15 clip
+    await q.click(EXP); await q.waitForSelector(BOX);
+    dx = await dlOf(() => q.click(BOX + ' button:text-is("Lồng tiếng rồi xuất")'));
+    if (Object.keys(dx.voices).length !== 15 || dx.voiceTotal !== 15 || M.fresh !== 15 || !/Xong 15\/15 câu/.test(await q.textContent('.works')) || await q.$(BOX)) throw new Error('Lồng tiếng rồi xuất: ' + JSON.stringify([Object.keys(dx.voices).length, dx.voiceTotal, M.fresh]));
+    if (!(await toasts(q)).some(t => /15\/15 câu có giọng AI/.test(t))) throw new Error('thiếu toast xuất 15/15: ' + JSON.stringify(await toasts(q)));
+    // đủ giọng: không hộp, tải thẳng
+    dx = await dlOf(() => q.click(EXP));
+    if (Object.keys(dx.voices).length !== 15 || await q.$(BOX)) throw new Error('đủ 15/15 phải xuất thẳng, không hộp');
+    // hết lượt giữa lúc "lồng tiếng rồi xuất": vẫn xuất những câu đã có (6/15), báo hết lượt hôm nay
+    await resetDub(); M.budget = 6;
+    await q.click(EXP); await q.waitForSelector(BOX);
+    dx = await dlOf(() => q.click(BOX + ' button:text-is("Lồng tiếng rồi xuất")'));
+    if (Object.keys(dx.voices).length !== 6 || dx.voiceTotal !== 15) throw new Error('hết lượt giữa chừng: phải xuất 6/15 câu có giọng: ' + Object.keys(dx.voices).length + '/' + dx.voiceTotal);
+    await q.waitForFunction(() => /Hết lượt hôm nay — thử lại lúc \d{2}:\d{2}(?: \d{2}\/\d{2})? · đã lồng 6\/15 câu/.test(document.body.textContent), null, { timeout: 5000 });
+    // bấm Dừng lồng tiếng giữa chừng: KHÔNG xuất (người dùng đổi ý)
+    await resetDub(); M.delay = 150;
+    await q.click(EXP); await q.waitForSelector(BOX);
+    if (!await noDl(async () => { await q.click(BOX + ' button:text-is("Lồng tiếng rồi xuất")'); await q.waitForFunction(() => /Lồng tiếng AI [1-9]\d?\/15/.test(document.body.textContent)); await q.click('button:text-is("Dừng lồng tiếng")'); await q.waitForFunction(() => /Đã dừng · đã lồng \d+\/15 câu/.test(document.body.textContent), null, { timeout: 15000 }); }, 1800)) throw new Error('Dừng lồng tiếng thì không được tự xuất');
+    if (!(await toasts(q)).some(t => /Đã dừng lồng tiếng — chưa xuất phim/.test(t))) throw new Error('thiếu toast "chưa xuất phim": ' + JSON.stringify(await toasts(q)));
+    M.delay = 0;
+    // đang lồng tiếng mà bấm Phim (HTML): nhắc chờ, không xuất, không lồng đôi
+    await resetDub(); M.delay = 200; await q.click(dubB); await q.waitForFunction(() => /Lồng tiếng AI [1-9]\d?\/15/.test(document.body.textContent));
+    if (!await noDl(() => q.click(EXP), 800) || await q.$(BOX) || !(await toasts(q)).some(t => /Đang lồng tiếng AI — chờ xong/.test(t))) throw new Error('đang lồng tiếng thì Phim (HTML) chỉ nhắc chờ');
+    await q.click('button:text-is("Dừng lồng tiếng")'); await q.waitForFunction(() => /Đã dừng/.test(document.body.textContent), null, { timeout: 15000 }); M.delay = 0;
+    // Giọng AI chưa sẵn sàng (chưa có key): xuất như cũ, không hộp
+    await q.close(); M.hasKey = false; M.ids.clear();
+    q = await pg(await ctx10.newPage(), { page: 'works', work: WORK }); await q.waitForSelector('.shot'); await spyOn(q); await q.waitForFunction(() => /Chưa có key Google/.test(document.body.textContent), null, { timeout: 5000 });
+    dx = await dlOf(() => q.click(EXP));
+    if (Object.keys(dx.voices).length !== 0 || await q.$(BOX)) throw new Error('chưa có key: xuất như cũ, không hộp');
+    M.hasKey = true; M.ids.clear();
+    await q.close();
+    console.log('  ✓ Xuất phim thiếu giọng AI: bấm Phim (HTML) khi còn câu chưa có clip + Giọng AI sẵn sàng → hộp "Còn 15/15 câu chưa có giọng AI — câu thiếu sẽ đọc bằng giọng máy / blip" với đúng 3 nút (focus nút đầu, chưa tốn lượt) · Huỷ: đóng, không tải · Xuất luôn: tải ngay (DATA.voiceTotal) · Lồng tiếng rồi xuất: lồng đủ 15 câu rồi tự tải · hết lượt giữa chừng vẫn xuất phần đã có · Dừng lồng tiếng thì KHÔNG xuất · đang lồng tiếng chỉ nhắc chờ · đủ giọng / chưa có key: xuất thẳng, không hộp');
 
     // ---- 6) Hồ sơ nhân vật: vai · giọng vùng · giọng AI; cao độ / tốc độ chỉ ghi khi đã kéo ----
     M.hasKey = true; M.ids.clear(); M.calls.length = 0; M.casts.length = 0;
@@ -1389,7 +1490,12 @@ if (!ONLY || ONLY === 'voice') {
     M.ids.clear(); M.fresh = 0; M.budget = Infinity; M.calls.length = 0;
     q = await pg(await ctx10.newPage(), { page: 'works', work: WORK }); await q.waitForSelector('.shot'); await spyOn(q);
     await q.selectOption('select[aria-label="Ngôn ngữ phim"]', 'en|us'); await q.waitForTimeout(300);
-    const exportFilm = async name => { const [dl] = await Promise.all([q.waitForEvent('download'), q.click('button:text-is("Phim (HTML)")')]); const f = path.join(home10, name); await dl.saveAs(f); return f; };
+    // còn câu chưa có giọng AI (và Giọng AI sẵn sàng) thì hiện hộp hỏi → chọn "Xuất luôn" (lồng tiếng rồi xuất có test riêng ở 5c)
+    const exportFilm = async name => { const BX = '[aria-label="Xác nhận xuất phim thiếu giọng AI"]', dlP = q.waitForEvent('download', { timeout: 30000 }); dlP.catch(() => null);
+      await q.click('button:text-is("Phim (HTML)")');
+      let d = await Promise.race([dlP, q.waitForSelector(BX, { timeout: 20000 }).then(() => 'box', () => new Promise(() => {}))]);
+      if (d === 'box') { await q.click(BX + ' button:text-is("Xuất luôn")'); d = await dlP; }
+      const f = path.join(home10, name); await d.saveAs(f); return f; };
     // chưa lồng tiếng câu nào: phim vẫn xuất được, 0/15 câu có giọng AI
     let fp0 = await exportFilm('phim-0.html'), h0 = fs.readFileSync(fp0, 'utf8');
     if (!/"voices":\{\}/.test(h0) || !/"lang":"en"/.test(h0) || !/"accent":"us"/.test(h0)) throw new Error('phim chưa lồng tiếng: DATA.voices phải rỗng, DATA.lang / accent phải theo tác phẩm');
@@ -1408,7 +1514,7 @@ if (!ONLY || ONLY === 'voice') {
     await q.reload(); await q.waitForSelector('.shot'); await spyOn(q); await q.selectOption('select[aria-label="Ngôn ngữ phim"]', 'en|us'); await q.waitForTimeout(300);
     [...M.ids].slice(0, 6).forEach(i => M.ids.delete(i));
     const fp2 = await exportFilm('phim-mot-phan.html'), D2 = JSON.parse(fs.readFileSync(fp2, 'utf8').match(/var DATA = (\{.*?\});\nvar FILM/s)[1]);
-    if (Object.keys(D2.voices).length !== 9 || !(await toasts(q)).some(t => /9\/15 câu có giọng AI \(câu còn lại dùng giọng máy đọc/.test(t))) throw new Error('xuất một phần: ' + Object.keys(D2.voices).length + ' clip');
+    if (Object.keys(D2.voices).length !== 9 || !(await toasts(q)).some(t => /9\/15 câu có giọng AI \(câu còn lại dùng giọng máy đọc hoặc blip/.test(t))) throw new Error('xuất một phần: ' + Object.keys(D2.voices).length + ' clip');
     // <html lang> theo ngôn ngữ phim (không cố định "vi"): vi · en · zh-CN (phổ thông) · zh-TW (Đài Loan) · zh-HK (Quảng Đông)
     const langOfHtml = t => (t.match(/<html lang="([^"]+)">/) || [])[1];
     if (langOfHtml(html) !== 'en') throw new Error('phim tiếng Anh phải <html lang="en">, thấy ' + langOfHtml(html));
@@ -1427,12 +1533,33 @@ if (!ONLY || ONLY === 'voice') {
     const fs1 = await ff.evaluate(() => ({ spy: window.GenChibi.audio.__spy.slice(), err: window.GenChibi.audio.info().clipError }));
     if (!fs1.spy.slice(0, 3).every(s => s.clip && /^str:data:audio\/wav;base64/.test(s.clip)) || !fs1.spy.slice(0, 3).every(s => s.lang === 'en-US')) throw new Error('phim file://: kiểu tự động phải dùng clip nhúng + giọng en-US: ' + JSON.stringify(fs1.spy));
     if (fs1.err) throw new Error('clip nhúng giải mã lỗi: ' + fs1.err);
+    if (!fs1.spy.every(s => s.needGood)) throw new Error('phim có giọng AI + kiểu tự động: needGood phải bật: ' + JSON.stringify(fs1.spy.map(s => s.needGood)));
+    if (!await ff.$eval('#ainote', e => e.hidden)) throw new Error('đủ 15/15 câu thì không hiện nhãn "Giọng AI x/y"');
     await ff.click('#stop'); await ff.evaluate(() => { window.GenChibi.audio.__spy.length = 0; }); await ff.selectOption('#voice', 'tts'); await ff.click('#big');
     await ff.waitForFunction(() => window.GenChibi.audio.__spy.length >= 2, null, { timeout: 60000 }); await ff.click('#stop');
-    if ((await ff.evaluate(() => window.GenChibi.audio.__spy.slice())).some(s => s.clip)) throw new Error('chọn máy đọc mà phim vẫn dùng clip AI');
+    { const sp2 = await ff.evaluate(() => window.GenChibi.audio.__spy.slice());
+      if (sp2.some(s => s.clip)) throw new Error('chọn máy đọc mà phim vẫn dùng clip AI');
+      if (sp2.some(s => s.needGood)) throw new Error('chọn hẳn "máy đọc" thì không needGood: ' + JSON.stringify(sp2.map(s => s.needGood))); }
     if (fe.length) throw new Error('phim file:// lỗi: ' + fe.slice(0, 3).join(' | '));
     await ff.close();
-    console.log('  ✓ Phim xuất ra: DATA.voices = 15 clip AI đã có (dry — không đọc mới, không tốn lượt) + DATA.lang / accent · engine/voices.js nhúng trước audio.js · chưa lồng tiếng → 0/15 vẫn xuất · server giữ một phần → 9/15, câu thiếu bị bỏ qua · toast "15/15 câu có giọng AI" + cỡ tệp · <html lang> theo ngôn ngữ phim (vi · en · zh-CN phổ thông · zh-TW Đài Loan · zh-HK Quảng Đông) · mở file://: không yêu cầu mạng, kiểu tự động phát clip nhúng (en-US), máy đọc bỏ qua clip');
+    // phim chỉ có MỘT PHẦN clip (9/15): nhãn "Giọng AI 9/15" + title; kiểu tự động → câu thiếu needGood; chọn máy đọc → nhãn ẩn, không needGood. Phim 0 clip AI: không nhãn, không needGood
+    const part = async (file, fn) => { const pg2 = await ctx10.newPage(); pg2.on('pageerror', e => fe.push(e.message)); await pg2.goto('file://' + file); await pg2.waitForSelector('#voice'); await pg2.evaluate(SPY_A); try { return await fn(pg2); } finally { await pg2.close(); } };
+    const playSome = async (pg2, n) => { await pg2.evaluate(() => { window.GenChibi.audio.__spy.length = 0; }); await pg2.click('#big'); await pg2.waitForFunction(k => window.GenChibi.audio.__spy.length >= k, n, { timeout: 60000 }); await pg2.click('#stop'); return pg2.evaluate(() => window.GenChibi.audio.__spy.slice()); };
+    await part(fp2, async pg2 => {
+      const nt = await pg2.$eval('#ainote', e => ({ hidden: e.hidden, text: e.textContent, title: e.title }));
+      if (nt.hidden || nt.text !== 'Giọng AI 9/15' || !/6 câu chưa có giọng AI/.test(nt.title) || !/giọng máy \/ blip/.test(nt.title)) throw new Error('nhãn phim 9/15: ' + JSON.stringify(nt));
+      const sp3 = await playSome(pg2, 6);
+      if (!sp3.every(s => s.needGood)) throw new Error('phim 9/15 + tự động: needGood phải bật: ' + JSON.stringify(sp3.map(s => s.needGood)));
+      await pg2.selectOption('#voice', 'tts'); if (!await pg2.$eval('#ainote', e => e.hidden)) throw new Error('chọn máy đọc thì nhãn "Giọng AI 9/15" phải ẩn (clip AI không dùng)');
+      const sp4 = await playSome(pg2, 3); if (sp4.some(s => s.needGood || s.clip)) throw new Error('phim 9/15 + máy đọc: không needGood, không clip');
+      await pg2.selectOption('#voice', 'blip'); await pg2.selectOption('#voice', 'auto'); if (await pg2.$eval('#ainote', e => e.hidden)) throw new Error('về tự động thì nhãn hiện lại');
+    });
+    await part(fp0, async pg2 => {
+      if (!await pg2.$eval('#ainote', e => e.hidden)) throw new Error('phim 0 clip AI: không nhãn "Giọng AI"');
+      const sp5 = await playSome(pg2, 3); if (sp5.some(s => s.needGood || s.clip)) throw new Error('phim 0 clip AI: giọng máy như cũ, không needGood: ' + JSON.stringify(sp5.map(s => s.needGood)));
+    });
+    if (fe.length) throw new Error('phim file:// lỗi: ' + fe.slice(0, 3).join(' | '));
+    console.log('  ✓ Phim xuất ra: DATA.voices = 15 clip AI đã có (dry — không đọc mới, không tốn lượt) + DATA.lang / accent · engine/voices.js nhúng trước audio.js · chưa lồng tiếng → 0/15 vẫn xuất · server giữ một phần → 9/15, câu thiếu bị bỏ qua · toast "15/15 câu có giọng AI" + cỡ tệp · <html lang> theo ngôn ngữ phim (vi · en · zh-CN phổ thông · zh-TW Đài Loan · zh-HK Quảng Đông) · mở file://: không yêu cầu mạng, kiểu tự động phát clip nhúng (en-US), máy đọc bỏ qua clip · phim thiếu clip (9/15): nhãn "Giọng AI 9/15" + title "câu chưa có giọng AI — giọng máy / blip", tự động → câu thiếu needGood, máy đọc → nhãn ẩn + không needGood · phim 0 clip: không nhãn, không needGood');
 
     // ---- 8) bộ phát thuần (không qua Studio): hỏi clip một lần mỗi câu từ đầu phân cảnh (≤ 2 song song), chờ ≤ 2,5 s, lỗi / quá hạn → giọng trình duyệt ----
     q = await pg(await ctx10.newPage(), { page: 'works', work: WORK }); await q.waitForSelector('.shot'); await spyOn(q);
@@ -1547,10 +1674,10 @@ if (!ONLY || ONLY === 'voice') {
     M.designs = {}; M.designCalls.length = 0; M.designDelay = 0; M.designBudget = 1;
     await openRg('vi|nam'); await poll(async () => /^giọng vùng có ở 0\/3/.test(await regionLine()), 'đếm 0/3 trước khi thử 429');
     await startRg(3);
-    await q.waitForFunction(() => /Dừng vì hết lượt — thử lại lúc \d{2}:\d{2}(?: \d{2}\/\d{2})? · đã thiết kế 1\/3 vai/.test(document.body.textContent), null, { timeout: 15000 });
+    await q.waitForFunction(() => /Hết lượt hôm nay — thử lại lúc \d{2}:\d{2}(?: \d{2}\/\d{2})? · đã thiết kế 1\/3 vai/.test(document.body.textContent), null, { timeout: 15000 });
     await q.waitForTimeout(500);
     if (M.designCalls.length !== 2) throw new Error('phải dừng ngay sau 429 (2 lời gọi: 1 xong + 1 bị 429), thấy ' + M.designCalls.length + ': ' + JSON.stringify(M.designCalls.map(c => c.role)));
-    if (!/^giọng vùng có ở 1\/3/.test(await regionLine()) || !(await toasts(q)).some(t => /Hết lượt giọng AI — thử lại lúc/.test(t) && /Đã thiết kế 1\/3 vai/.test(t))) throw new Error('sau 429: đếm 1/3 + toast hết lượt: ' + await regionLine() + ' · ' + JSON.stringify(await toasts(q)));
+    if (!/^giọng vùng có ở 1\/3/.test(await regionLine()) || !(await toasts(q)).some(t => /^Hết lượt hôm nay — thử lại lúc/.test(t) && /Đã thiết kế 1\/3 vai/.test(t))) throw new Error('sau 429: đếm 1/3 + toast hết lượt: ' + await regionLine() + ' · ' + JSON.stringify(await toasts(q)));
     if (await q.$eval(regB, b => b.disabled)) throw new Error('hết lượt xong nút phải bấm lại được (lần sau thiết kế tiếp 2 vai còn lại)');
     await q.close();
     // chạm trần câu / ngày giữa lúc thiết kế: thông điệp "chạm trần" (không phải hết lượt Google)
@@ -1559,7 +1686,7 @@ if (!ONLY || ONLY === 'voice') {
     if (!/Trần câu \/ ngày còn 1 lượt \(Cài đặt AI\) — chạy tới đó sẽ dừng/.test(await q.textContent(cf))) throw new Error('hộp xác nhận phải báo trần ngày còn 1 lượt: ' + await q.textContent(cf));
     await q.click(cf + ' button:text-is("Bắt đầu thiết kế 3 vai")');
     await q.waitForFunction(() => /Dừng vì chạm trần câu \/ ngày \(Cài đặt AI\) — đọc tiếp lúc \d{2}:\d{2} \d{2}[\/-]\d{2} · đã thiết kế 0\/3 vai/.test(document.body.textContent), null, { timeout: 15000 });
-    if (M.designCalls.length !== 1 || !(await toasts(q)).some(t => /Đã chạm trần 200 câu hôm nay \(Cài đặt AI\)/.test(t)) || (await toasts(q)).some(t => /Hết lượt giọng AI/.test(t))) throw new Error('chạm trần khi thiết kế: ' + M.designCalls.length + ' lời gọi · ' + JSON.stringify(await toasts(q)));
+    if (M.designCalls.length !== 1 || !(await toasts(q)).some(t => /Đã chạm trần 200 câu hôm nay \(Cài đặt AI\)/.test(t)) || (await toasts(q)).some(t => /Hết lượt/.test(t))) throw new Error('chạm trần khi thiết kế: ' + M.designCalls.length + ' lời gọi · ' + JSON.stringify(await toasts(q)));
     M.designCap = false; M.designBudget = Infinity; M.today = 0;
     await q.close();
     // bấm "Dừng thiết kế" giữa chừng: vai đang chạy làm nốt, các vai sau không chạy

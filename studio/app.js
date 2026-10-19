@@ -1218,6 +1218,9 @@
     var t = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
     return d.toDateString() === n.toDateString() ? t : t + ' ' + d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
   }
+  // retryAt của server (ISO, hoặc ms epoch) → ms epoch; không hiểu thì 0 · "14:05:09" (giây — giới hạn mỗi phút tính theo giây)
+  function atMs(v) { var n = typeof v === 'number' ? v : Date.parse(v); return n > 0 ? n : 0; }
+  function clockSec(ms) { return new Date(ms).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }); }
   // WAV (ArrayBuffer) → data: URI nhúng vào phim xuất ra
   function bufDataURI(buf) {
     var u = new Uint8Array(buf), s = '', i;
@@ -1226,10 +1229,12 @@
   }
   var SRC_CHIP = { design: ['thiết kế', 'chip ok'], library: ['thư viện Google', 'chip info'], prebuilt: ['có sẵn', 'chip'], chosen: ['đã chọn', 'chip warn'] };
   var CAST_MAX = 48;   // server chỉ chọn giọng AI cho 48 diễn viên đầu của một tác phẩm (api/voice/cast → missing)
+  var MINUTE_MS = 120000, MINUTE_WAITS = 10;   // CNS-098: 429 có giờ thử lại trong ≤ 2 phút = Google giới hạn MỖI PHÚT → chờ rồi lồng tiếp (tối đa 10 lần chờ mỗi lượt bấm)
   var CHILD_AGE = { 'tre-em': 1, 'thieu-nien': 1 };   // Google chặn thiết kế giọng trẻ em (chính sách an toàn) — dùng giọng trẻ trung có sẵn
 
   var AiVoice = {
     cfg: null, cfgP: null, clips: new Map(), casts: {}, libs: {}, flight: {}, blockedUntil: 0, blockedCap: false, told: {},
+    has: {},       // tác phẩm|ngôn ngữ|giọng vùng → đã thấy ÍT NHẤT 1 clip giọng AI (một clip về / lồng tiếng xong / xuất phim có clip) → câu thiếu clip không được rơi vào robot (needGood)
     missing: {},   // tác phẩm|ngôn ngữ|giọng vùng → [id diễn viên] server báo chưa có giọng (dàn vượt 48 người)
     onCast: null,  // trang Tạo tác đăng ký để vẽ lại dòng báo khi có kết quả cast
     on: function () { return Store.mode === 'server' && !!GC.audio && !!GC.voices; },
@@ -1248,18 +1253,28 @@
     ready: function () { var c = this.cfg; return !!(c && c.hasKey && c.enabled !== false && !c.off); },
     // một thông báo mỗi loại trong 60 giây (hết lượt không được bắn toast từng câu)
     tell: function (kind, msg) { var t = this.told[kind] || 0; if (Date.now() - t < 60000) return; this.told[kind] = Date.now(); toast(msg); },
-    // câu báo hết lượt (429): cap = chạm TRẦN câu / ngày của máy (đặt ở Cài đặt AI, hết lúc 00:00) — khác với hết lượt của Google (gói miễn phí / model)
+    // câu báo hết lượt (429): cap = chạm TRẦN câu / ngày của máy (đặt ở Cài đặt AI, hết lúc 00:00) — khác với hết lượt của Google (gói miễn phí / model).
+    // Google còn chia hai kiểu: giới hạn MỖI PHÚT (retryAt cách ≤ 2 phút — chờ chút là đọc tiếp) và hết lượt HÔM NAY (retryAt xa). e.minute (nếu có) thắng việc tự tính theo giờ
+    isMinute: function (e) {
+      if (!e || e.cap) return false;
+      if (e.minute !== undefined) return e.minute === true;
+      var at = atMs(e.retryAt); return at > 0 && at - Date.now() <= MINUTE_MS;
+    },
     quotaText: function (e) {
-      var when = e && e.retryAt ? clockOf(e.retryAt) : '', c = this.cfg;
-      if (e && e.cap) return 'Đã chạm trần ' + (c && c.dailyCap > 0 ? c.dailyCap + ' câu' : 'số câu') + ' hôm nay (Cài đặt AI)' + (when ? ' — đọc tiếp lúc ' + when : '');
-      return 'Hết lượt giọng AI' + (when ? ' — thử lại lúc ' + when : '');
+      var at = atMs(e && e.retryAt), c = this.cfg;
+      if (e && e.cap) return 'Đã chạm trần ' + (c && c.dailyCap > 0 ? c.dailyCap + ' câu' : 'số câu') + ' hôm nay (Cài đặt AI)' + (at ? ' — đọc tiếp lúc ' + clockOf(at) : '');
+      if (this.isMinute(e)) return 'Google giới hạn mỗi phút' + (at ? ' — thử lại lúc ' + clockSec(at) : '');
+      return at ? 'Hết lượt hôm nay — thử lại lúc ' + clockOf(at) : 'Hết lượt giọng AI';
     },
     explain: function (e) {
-      if (e.status === 429) this.tell('quota', this.quotaText(e) + '. Các câu còn lại dùng giọng máy đọc.');
+      if (e.status === 429) this.tell('quota', this.quotaText(e) + '. Các câu còn lại dùng giọng máy đọc hoặc blip.');
       else if (e.status === 409) this.tell('off', e.message + ' — dùng giọng máy đọc.');
       else this.tell('err', 'Giọng AI lỗi: ' + e.message + ' — dùng giọng máy đọc.');
     },
-    block: function (e) { this.blockedUntil = (e.retryAt && Date.parse(e.retryAt)) || Date.now() + 5 * 60000; this.blockedCap = !!e.cap; },
+    block: function (e) { this.blockedUntil = atMs(e.retryAt) || Date.now() + 5 * 60000; this.blockedCap = !!e.cap; },
+    workKey: function (W, L) { return [W.id, L.lang, L.accent].join('|'); },
+    markHas: function (W, L) { if (W && L) this.has[this.workKey(W, L)] = true; },
+    hasClips: function (W, L) { return !!(W && L && this.has[this.workKey(W, L)]); },
     // vai giọng của nhân vật (đã chọn, hoặc đoán từ vai trò / tính cách / tên) · giọng vùng riêng nếu hợp ngôn ngữ phim
     roleOf: function (a) { var r = a && a.voice && a.voice.role; return r && GC.voices.ROLES[r] ? r : GC.voices.guessRole(a); },
     accentOf: function (a, lang, dflt) { var x = a && a.voice && a.voice.accent; return x && GC.voices.accent(lang, x) === x ? x : dflt; },
@@ -1339,7 +1354,7 @@
         if (!self.ready()) { if (spend) self.tell('nokey', 'Giọng AI chưa sẵn sàng (chưa có key hoặc đang tắt) — dùng giọng máy đọc. Dán key ở Cài đặt AI › Giọng AI.'); return null; }
         return self.castOf(W, L.lang, L.accent).then(function (cast) {
           var p = self.paramsOf(L, a, line, cast);
-          return p ? self.get(p, !spend).then(function (r) { return r.buf; }) : null;
+          return p ? self.get(p, !spend).then(function (r) { self.markHas(W, L); return r.buf; }) : null;
         });
       }).catch(function (e) { if (spend) self.explain(e); return null; });
     },
@@ -1360,7 +1375,9 @@
     // đọc một câu mẫu bằng giọng AI rồi phát (tốn tối đa 1 lượt): buf → phát qua GC.audio với cùng giọng trình duyệt dự phòng
     speak: function (text, buf, voice) { GC.audio.unlock(); return GC.audio.say(text, voice, { clip: buf }); },
     // LỒNG TIẾNG AI: đọc lần lượt mọi câu của mọi phân cảnh sẵn sàng (không dry — tốn lượt với câu chưa có; câu đã có trả ngay). ui: { cancelled(), progress(st) }
-    // → Promise<st>: { total, done, fresh, cached, failed, stop (429 | 409 | null), retryAt, error }. Gặp 429 / 409 là dừng hẳn (còn lượt hay chưa có key — đọc tiếp vô ích)
+    // → Promise<st>: { total, done, fresh, cached, failed, stop (429 | 409 | null), retryAt, cap, minute, waits, waitAt, error }.
+    // Gặp 409 là dừng hẳn (chưa có key). Gặp 429: trần câu / ngày (cap) hoặc Google hết lượt hôm nay (retryAt xa) → dừng hẳn; còn giới hạn MỖI PHÚT (retryAt cách ≤ 2 phút,
+    // CNS-098) → st.waitAt = giờ thử lại, chờ rồi đọc tiếp CHÍNH câu đó (tối đa 10 lần chờ mỗi lượt; bấm Dừng thì huỷ cả lúc đang chờ)
     dub: function (W, L, ui) {
       var self = this;
       return this.castOf(W, L.lang, L.accent).then(function (cast) {
@@ -1375,18 +1392,27 @@
             seen[k] = 1; jobs.push(p);
           });
         });
-        var st = { total: jobs.length, done: 0, fresh: 0, cached: 0, failed: 0, stop: null, retryAt: null, error: '' }, i = 0;
+        var st = { total: jobs.length, done: 0, fresh: 0, cached: 0, failed: 0, stop: null, retryAt: null, error: '', minute: false, waits: 0, waitAt: 0 }, i = 0;
         ui.progress(st);
         return (function next() {
           if (ui.cancelled() || i >= jobs.length) return Promise.resolve(st);
-          return self.get(jobs[i++], false, true).then(function (r) { st.done++; if (r.cached) st.cached++; else st.fresh++; }, function (e) {
-            if (e.status === 429 || e.status === 409) { st.stop = e.status; st.retryAt = e.retryAt || null; st.cap = !!e.cap; st.error = e.message; i = jobs.length; return; }
+          return self.get(jobs[i++], false, true).then(function (r) { st.done++; if (r.cached) st.cached++; else st.fresh++; self.markHas(W, L); }, function (e) {
+            var at = atMs(e.retryAt);
+            if (e.status === 429 && self.isMinute(e) && st.waits < MINUTE_WAITS) {   // giới hạn mỗi phút: chờ tới giờ Google cho thử lại rồi đọc lại đúng câu này
+              st.waits++; st.waitAt = at; i--; ui.progress(st);
+              return sleepUntil(Math.max(at + 300, Date.now() + 1500), ui).then(function () { st.waitAt = 0; });   // giờ thử lại đã qua (đồng hồ máy chạy nhanh hơn server) vẫn chờ tối thiểu 1,5 s
+            }
+            if (e.status === 429 || e.status === 409) { st.stop = e.status; st.retryAt = e.retryAt || null; st.cap = !!e.cap; st.minute = self.isMinute(e); st.error = e.message; i = jobs.length; return; }
             st.failed++; st.error = e.message;
           }).then(function () { ui.progress(st); return next(); });
         })();
       });
     }
   };
+  // chờ tới `at` (ms epoch); bấm Dừng / rời trang thì thôi ngay (hỏi mỗi 250 ms)
+  function sleepUntil(at, ui) {
+    return new Promise(function (ok) { (function tick() { var d = at - Date.now(); if (d <= 0 || ui.cancelled()) ok(); else setTimeout(tick, Math.min(250, d)); })(); });
+  }
   // Phim xuất ra mang các clip AI ĐÃ có (không đọc mới, không tốn lượt): { khoá câu (GC.film.clipKey): data: URI } + số đếm
   function filmVoices(W, L) {
     var out = { voices: {}, have: 0, total: 0 };
@@ -1413,7 +1439,7 @@
           var j = jobs[i++];
           return AiVoice.get(j.p, true).then(function (r) { out.voices[j.k] = bufDataURI(r.buf); out.have++; }, function () { /* chưa đọc câu này: bỏ qua */ }).then(worker);
         }
-        return Promise.all([worker(), worker(), worker()]).then(function () { return out; });
+        return Promise.all([worker(), worker(), worker()]).then(function () { if (out.have) AiVoice.markHas(W, L); return out; });
       });
     }).catch(function () { return out; });
   }
@@ -1529,7 +1555,8 @@
   function workLang(W) { var l = GC.voices.lang(W && W.lang); return { lang: l, accent: GC.voices.accent(l, W && W.accent) }; }
   // thẻ <html lang> của phim xuất theo ngôn ngữ phim (trình đọc màn hình + phông chữ + gợi ý dịch của trình duyệt): vi · en · zh-CN (phổ thông) · zh-TW (Đài Loan) · zh-HK (Quảng Đông)
   function htmlLang(L) { return L.lang === 'en' ? 'en' : L.lang === 'zh' ? (L.accent === 'tw' ? 'zh-TW' : 'zh-CN') : L.lang === 'yue' ? 'zh-HK' : 'vi'; }
-  function exportFilm(W) {
+  // pre (tuỳ chọn) = kết quả filmVoices đã hỏi (hộp "thiếu giọng AI" ở Sân khấu final) — khỏi hỏi lại
+  function exportFilm(W, pre) {
     var L = workLang(W), chars = [], scenes = [];
     W.shots.forEach(function (s) { chars = chars.concat(GC.film.actors(s)); var sc = GC.film.scene(s); if (sc) scenes.push(sc); });
     var data = bundleOf(chars, [], scenes);
@@ -1541,7 +1568,7 @@
     if (srcs.indexOf('engine/player.js') < 0) { toast('Thiếu engine/player.js'); return; }
     toast('Đang đóng gói phim…');
     // kèm các clip giọng AI ĐÃ có của từng câu (hỏi "dry": không đọc mới, không tốn lượt) — phim mở bằng file:// vẫn có giọng AI, không gọi mạng
-    Promise.all([Promise.all(srcs.map(function (f) { return fetch(f).then(function (r) { if (!r.ok) throw new Error('Không tải được ' + f); return r.text(); }); })), filmVoices(W, L)])
+    Promise.all([Promise.all(srcs.map(function (f) { return fetch(f).then(function (r) { if (!r.ok) throw new Error('Không tải được ' + f); return r.text(); }); })), pre ? Promise.resolve(pre) : filmVoices(W, L)])
       .then(function (res) {
         var texts = res[0], vo = res[1];
         var pick = function (o, keys) { var r = {}; keys.forEach(function (k) { if (o[k] !== undefined) r[k] = o[k]; }); return r; };
@@ -1554,7 +1581,7 @@
           }),
           items: data.items.map(function (x) { return pick(x, ['id', 'name', 'type', 'rarity', 'equip']); }),
           scenes: data.scenes.map(function (x) { return pick(x, ['id', 'name', 'layers', 'deco', 'palette', 'time', 'weather', 'spots']); }),
-          lang: L.lang, accent: L.accent, voices: vo.voices };   // ngôn ngữ phim + clip giọng AI theo khoá GC.film.clipKey
+          lang: L.lang, accent: L.accent, voices: vo.voices, voiceTotal: vo.total };   // ngôn ngữ phim + clip giọng AI theo khoá GC.film.clipKey + tổng số câu (nhãn "Giọng AI 19/31")
         var film = { title: W.title, logline: W.logline || '', dialog: StagePref.get().dialog, shots: W.shots.map(function (s) { return { id: s.id, title: s.title, description: s.description || '', scene: s.scene, cast: s.cast, event: s.event }; }) };
         var safe = function (t) { return t.replace(/<\/script/gi, '<\\/script').replace(/<!--/g, '<\\!--'); };
         var html = '<!doctype html>\n<!--\n  Phim "' + xml(W.title) + '" — làm bằng gen-chibi.\n  Bộ phát (engine/*, kinds/*) © 2026 Gen Labs — All rights reserved. Giấy phép: CHỈ ĐỂ XEM phim này.\n  Không trích xuất, sao chép, sửa đổi hay tái sử dụng mã bộ phát cho mục đích khác.\n  Riêng phông chữ lời thoại Be Vietnam Pro (engine/fonts.js) © 2021 The Be Vietnam Pro Project Authors — SIL Open Font License 1.1 (toàn văn nằm trong chính tệp này).\n-->\n<html lang="' + htmlLang(L) + '">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>' + xml(W.title) + ' — gen-chibi</title>\n' +
@@ -1562,14 +1589,14 @@
           '<main class="film"><header><div><h1>' + xml(W.title) + '</h1><p>' + xml(W.logline || '') + '</p></div><span class="badge">' + W.shots.length + ' phân cảnh</span></header>\n' +
           '<div class="screen"><div id="stage"></div><button id="big" class="big" aria-label="Xem phim">▶</button></div>\n' +
           '<div class="bar"><button id="play">▶ Xem</button><button id="stop">■ Dừng</button><button id="full">⛶ Toàn màn hình</button><button id="mute" aria-label="Bật / tắt tiếng">🔊</button>' +
-          '<select id="voice" aria-label="Giọng nhân vật"><option value="auto">Giọng: tự động</option><option value="tts">Giọng: máy đọc</option><option value="blip">Giọng: blip</option><option value="off">Giọng: tắt</option></select>' +
+          '<select id="voice" aria-label="Giọng nhân vật"><option value="auto">Giọng: tự động</option><option value="tts">Giọng: máy đọc</option><option value="blip">Giọng: blip</option><option value="off">Giọng: tắt</option></select><span id="ainote" class="ainote" hidden></span>' +
           '<select id="dialog" aria-label="Kiểu lời thoại">' + DIALOG_MODES.map(function (m) { return '<option value="' + m[0] + '">' + m[1] + '</option>'; }).join('') + '</select><span id="prog"></span></div>\n' +
           '<ol id="chapters"></ol>\n<footer>Làm bằng gen-chibi · Bộ phát © 2026 Gen Labs — chỉ để xem phim này</footer></main>\n' +
           texts.map(function (t, i) { return '<script>/* ' + srcs[i] + ' */\n' + safe(t) + '\n</script>'; }).join('\n') + '\n' +
           '<script>\nvar DATA = ' + jsonForScript(data) + ';\nvar FILM = ' + jsonForScript(film) + ';\n' + FILM_BOOT + '\n</script>\n</body>\n</html>\n';
         var bytes = new Blob([html]).size, sz = bytes >= 1048576 ? (bytes / 1048576).toFixed(1) + ' MB' : Math.round(bytes / 1024) + ' KB';
         download(slugify(W.title) + '.html', html, 'text/html');
-        toast('Đã xuất phim "' + W.title + '" (' + sz + ') · ' + vo.have + '/' + vo.total + ' câu có giọng AI' + (vo.total && vo.have < vo.total ? ' (câu còn lại dùng giọng máy đọc — bấm Lồng tiếng AI trước khi xuất để có đủ)' : '') + ' — mở bằng trình duyệt bất kỳ để xem.');
+        toast('Đã xuất phim "' + W.title + '" (' + sz + ') · ' + vo.have + '/' + vo.total + ' câu có giọng AI' + (vo.total && vo.have < vo.total ? ' (câu còn lại dùng giọng máy đọc hoặc blip — bấm Lồng tiếng AI trước khi xuất để có đủ)' : '') + ' — mở bằng trình duyệt bất kỳ để xem.');
       }).catch(function (e) { toast(e.message); });
   }
   var FILM_CSS = [
@@ -1577,6 +1604,7 @@
     '.film{max-width:min(1200px,96vw);margin:0 auto;padding:24px 0 40px;display:grid;gap:14px}',
     'header{display:flex;align-items:flex-end;gap:16px}header h1{margin:0;font-size:26px;letter-spacing:-.01em}header p{margin:4px 0 0;color:#a8a49d}',
     '.badge{margin-left:auto;font-size:12px;color:#a8a49d;border:1px solid #34333a;border-radius:12px;padding:2px 10px;white-space:nowrap}',
+    '.ainote{font-size:12px;color:#a8a49d;border:1px solid #34333a;border-radius:12px;padding:2px 10px;white-space:nowrap;cursor:help}',
     '.screen{position:relative;border-radius:10px;overflow:hidden;box-shadow:0 20px 60px rgb(0 0 0/.45)}.screen .gcp{border-radius:0}',
     '.big{position:absolute;inset:0;margin:auto;width:84px;height:84px;border-radius:50%;border:0;background:rgb(255 255 255/.92);color:#121214;font-size:30px;cursor:pointer;z-index:9;box-shadow:0 8px 30px rgb(0 0 0/.35)}',
     '.big[hidden]{display:none}',
@@ -1600,16 +1628,20 @@
     '  (DATA.motionPacks || []).forEach(function (m) { GC.choreo.registerPack("local.my", m); });',
     '  var rs = GC.film.readiness(FILM), ready = rs.filter(function (x) { return x.ok; }).map(function (x) { return x.shot; });',
     // giọng AI nhúng sẵn (DATA.voices: khoá câu → data: URI) chỉ dùng khi chọn "tự động"; chọn máy đọc / blip / tắt thì bỏ qua. Không gọi mạng.
-    '  var VO = DATA.voices || {}, aiN = Object.keys(VO).length;',
+    '  var VO = DATA.voices || {}, aiN = Object.keys(VO).length, aiT = DATA.voiceTotal || 0;',
     '  if (aiN) $("voice").options[0].text = "Giọng: tự động (có giọng AI)";',
+    // chưa đủ clip: nhãn nhỏ cạnh ô Giọng nói rõ phần còn lại đọc bằng giọng máy / blip (chỉ khi đang ở "tự động" — chọn máy đọc / blip thì clip AI không dùng)
+    '  function aiNote() { var n = $("ainote"), lack = aiT - aiN; n.hidden = !(aiN && lack > 0 && $("voice").value === "auto"); n.textContent = "Giọng AI " + aiN + "/" + aiT; n.title = lack + " câu chưa có giọng AI — phần còn lại đọc bằng giọng máy / blip."; }',
     '  var player = GC.film.player($("stage"), { onProgress: function (t) { $("prog").textContent = t; }, onEnd: function () { $("big").hidden = false; }, dialog: FILM.dialog || "auto", lang: DATA.lang, accent: DATA.accent,',
-    '    voiceClip: function (line) { return $("voice").value === "auto" && aiN ? VO[GC.film.clipKey(line)] || null : null; } });',
+    '    voiceClip: function (line) { return $("voice").value === "auto" && aiN ? VO[GC.film.clipKey(line)] || null : null; },',
+    // phim có giọng AI + đang ở "tự động": câu thiếu clip chỉ đọc bằng giọng máy hạng tốt, không thì blip (không để robot lẫn với giọng AI); chọn "máy đọc" thì đọc như cũ
+    '    needGood: function () { return $("voice").value === "auto" && aiN > 0; } });',
     '  $("dialog").value = player.dialog(); $("dialog").onchange = function () { player.setDialog($("dialog").value); };',
     '  player.show(ready[0] || FILM.shots[0]);',
     '  function play(from) { $("big").hidden = true; player.play(ready.slice(from || 0), FILM.title); }',
     '  $("big").onclick = $("play").onclick = function () { play(0); };',
     '  $("stop").onclick = function () { player.stop(); $("big").hidden = false; };',
-    '  var A = GC.audio; if (A) { $("mute").onclick = function () { A.setMuted(!A.muted); $("mute").textContent = A.muted ? "🔇" : "🔊"; }; $("voice").onchange = function () { A.setVoiceMode($("voice").value); }; } else { $("mute").hidden = $("voice").hidden = true; }',
+    '  var A = GC.audio; if (A) { $("mute").onclick = function () { A.setMuted(!A.muted); $("mute").textContent = A.muted ? "🔇" : "🔊"; }; $("voice").onchange = function () { A.setVoiceMode($("voice").value); aiNote(); }; aiNote(); } else { $("mute").hidden = $("voice").hidden = true; }',
     '  $("full").onclick = function () { var s = document.querySelector(".screen"); (s.requestFullscreen || s.webkitRequestFullscreen || function () {}).call(s); };',
     '  document.addEventListener("keydown", function (e) { if (e.code === "Space" && e.target === document.body) { e.preventDefault(); if ($("big").hidden) $("stop").onclick(); else play(0); } });',
     '  ready.forEach(function (s, i) {',
@@ -1953,7 +1985,10 @@
       if (!AiVoice.on() || (pref !== 'auto' && pref !== 'ai')) return null;
       return AiVoice.clipForLine(W, workLang(W), asset, line, pref === 'ai');
     }
-    var player = GC.film.player(stage, { onProgress: function (t) { prog.textContent = t; }, dialog: StagePref.get().dialog, voiceClip: voiceClip, clipWait: function () { return AudioPref.get().voice === 'ai' ? 10000 : 2500; } });
+    // tác phẩm đã có clip AI (kiểu tự động / AI Google): câu thiếu clip không được rơi vào robot lẫn giọng AI → giọng máy chỉ nhận hạng good, không thì blip.
+    // "Đã có clip" = đã thấy ít nhất 1 clip (câu đầu đã lồng thì có ngay từ câu đầu) — không hỏi trước cả tác phẩm để nút Diễn vẫn mở âm thanh ngay trong cú bấm. Chọn hẳn "máy đọc" thì không bật.
+    function needGood() { var pref = AudioPref.get().voice || 'auto'; return (pref === 'auto' || pref === 'ai') && !!W && AiVoice.on() && AiVoice.ready() && AiVoice.hasClips(W, workLang(W)); }
+    var player = GC.film.player(stage, { onProgress: function (t) { prog.textContent = t; }, dialog: StagePref.get().dialog, voiceClip: voiceClip, needGood: needGood, clipWait: function () { return AudioPref.get().voice === 'ai' ? 10000 : 2500; } });
     var onCast = function () { if (alive) paintDub(); };   // kết quả cast mới (dàn vượt 48 người → dòng báo ở Lồng tiếng)
     AiVoice.onCast = onCast;
     onLeave(function () { alive = false; player.destroy(); if (AiVoice.onCast === onCast) AiVoice.onCast = null; });   // phản hồi đến sau khi rời trang thì bỏ qua (không dựng diễn viên mồ côi)
@@ -1972,6 +2007,7 @@
     var dubB = h('button', { class: 'btn sm primary', onclick: function () { if (dubbing) dubCancel = true; else startDub(); } }, 'Lồng tiếng AI'), dubNote = h('span', { class: 'note' });
     var dubBox = h('div', { class: 'readybar dubbar', hidden: true }), dubbing = false, dubCancel = false, dubSt = null;
     var castNote = h('div', { class: 'note warn', role: 'status', hidden: true });   // "N diễn viên vượt 48 chưa có giọng AI"
+    var exportBox = h('div', { class: 'stack', style: 'gap:6px', hidden: true }), exportBusy = false;   // hộp "còn N/M câu chưa có giọng AI" khi bấm Phim (HTML)
     // GIỌNG VÙNG THẬT (Q14): Google chỉ cho giọng Bắc / Trung / Nam, Đài Loan… đúng chất qua "Thiết kế giọng" từng vai — bấm tay, báo trước số lượt
     var regionNote = h('span', { class: 'note', role: 'status', title: 'Google chỉ cho giọng vùng thật khi Thiết kế giọng từng vai (mỗi vai 1 lượt, ~25 giây). Giọng có sẵn / thư viện tiếng Việt đọc giọng chung — không phân Bắc / Trung / Nam. Anh Mỹ / Anh Anh có thư viện riêng.' });
     var regionB = h('button', { class: 'btn sm', onclick: function () { designAsk = true; paintRegion(); var go1 = regionBox.querySelector('button.primary'); if (go1) go1.focus(); } }, 'Thiết kế giọng vùng cho các vai');
@@ -1992,14 +2028,14 @@
               h('div', { class: 'usebar' }, h('b', { text: 'Giọng vùng' }), regionNote, regionB), regionBox),
             h('div', { class: 'stack', style: 'gap:6px' }, h('div', { class: 'usebar' }, h('b', { text: 'Lồng tiếng' }), dubB, dubNote), dubBox, castNote),
             h('div', { class: 'usebar' }, h('b', { text: 'Xuất' }),
-              h('button', { class: 'btn sm primary', title: 'Một tệp .html chạy được ở mọi trình duyệt, không cần cài gì — gửi cho người xem', onclick: function () { if (W) exportFilm(W); } }, 'Phim (HTML)'),
+              h('button', { class: 'btn sm primary', title: 'Một tệp .html chạy được ở mọi trình duyệt, không cần cài gì — gửi cho người xem. Còn câu chưa có giọng AI thì hỏi trước: lồng tiếng rồi xuất / xuất luôn', onclick: function () { exportClick(); } }, 'Phim (HTML)'),
               h('button', { class: 'btn sm', title: 'Bảng phân cảnh: ảnh từng cảnh + mô tả + lời thoại', onclick: function () { if (W) download(W.id + '-storyboard.svg', storyboard(W), 'image/svg+xml'); } }, 'Storyboard SVG'),
               h('button', { class: 'btn sm', onclick: function () {
                 if (!W) return;
                 try { var sv = storyboard(W), m = sv.match(/viewBox="0 0 (\d+) (\d+)"/); savePng(W.id + '-storyboard.png', svgURL(sv), +m[1], +m[2]); }
                 catch (e) { toast('Không dựng được storyboard PNG: ' + e.message + ' — thử bản SVG.'); }
               } }, 'Storyboard PNG'),
-              h('button', { class: 'btn sm', title: 'Kịch bản + phân cảnh + lời thoại dạng JSON', onclick: function () { if (W) download(W.id + '.json', JSON.stringify(Object.assign({}, W, { chat: undefined }), null, 2), 'application/json'); } }, 'JSON')))),
+              h('button', { class: 'btn sm', title: 'Kịch bản + phân cảnh + lời thoại dạng JSON', onclick: function () { if (W) download(W.id + '.json', JSON.stringify(Object.assign({}, W, { chat: undefined }), null, 2), 'application/json'); } }, 'JSON')), exportBox)),
         h('div', { class: 'panel' }, h('h3', null, 'Cảnh thành phẩm', h('span', { class: 'r note', text: 'bấm để diễn thử' })), h('div', { class: 'pad' }, stills)))));
 
     // Kịch bản lẻ: agent ngoài gửi qua MCP (save_event) → thêm thành phân cảnh của tác phẩm đang mở (qua cổng đạo diễn)
@@ -2037,7 +2073,7 @@
         if (id) { pick.value = id; open(id); } else paint();
       }).catch(function (e) { toast(e.message); });
     }
-    function open(id) { Store.api('GET', 'api/works/' + id).then(function (w) { if (!alive) return; if (!W || W.id !== w.id) { drafts = {}; draftScript = null; } W = w; route.work = w.id; paint(); }).catch(function (e) { toast(e.message); }); }
+    function open(id) { Store.api('GET', 'api/works/' + id).then(function (w) { if (!alive) return; if (!W || W.id !== w.id) { drafts = {}; draftScript = null; closeExport(); } W = w; route.work = w.id; paint(); }).catch(function (e) { toast(e.message); }); }
     function saveScript() {
       if (!W) return;
       Store.api('POST', 'api/works', { id: W.id, logline: logline.value, script: script.value }).then(function () { draftScript = null; toast('Đã lưu kịch bản.'); open(W.id); }).catch(function (e) { toast(e.message); });
@@ -2070,16 +2106,21 @@
     function saveLang(v) {
       if (!W) { syncLang(); return; }
       var p = v.split('|'), w0 = W, prev = { lang: w0.lang, accent: w0.accent };
-      w0.lang = p[0]; w0.accent = p[1]; designAsk = false; syncLang();
+      w0.lang = p[0]; w0.accent = p[1]; designAsk = false; closeExport(); syncLang();
       if (!dubbing) { dubSt = null; paintDub(); }
       Store.api('POST', 'api/works', { id: w0.id, lang: p[0], accent: p[1] })
         .then(function () { if (alive) toast('Phim đọc bằng ' + langSel.options[langSel.selectedIndex].text.replace('Ngôn ngữ: ', '') + '.'); })
         .catch(function (e) { w0.lang = prev.lang; w0.accent = prev.accent; if (alive && W === w0) { syncLang(); paintDub(); } toast(e.message); });
     }
+    // đầu câu báo DỪNG vì 429: trần câu / ngày của máy · Google giới hạn mỗi phút (đã chờ đủ 10 lần) · hết lượt hôm nay
+    function quotaHead(st) {
+      if (st.cap) return 'Dừng vì chạm trần câu / ngày (Cài đặt AI)' + (st.retryAt ? ' — đọc tiếp lúc ' + clockOf(st.retryAt) : '');
+      return AiVoice.quotaText({ retryAt: st.retryAt, minute: !!st.minute }) + (st.minute && st.waits ? ' (đã chờ ' + st.waits + ' lần)' : '');
+    }
     function dubSummary(st) {
       var mix = st.fresh + ' mới · ' + st.cached + ' có sẵn' + (st.failed ? ' · ' + st.failed + ' lỗi' : '');
-      if (!st.end) return mix;
-      if (st.end === 'quota') return (st.cap ? 'Dừng vì chạm trần câu / ngày (Cài đặt AI)' + (st.retryAt ? ' — đọc tiếp lúc ' + clockOf(st.retryAt) : '') : 'Dừng vì hết lượt' + (st.retryAt ? ' — thử lại lúc ' + clockOf(st.retryAt) : '')) + ' · đã lồng ' + st.done + '/' + st.total + ' câu (' + mix + ')';
+      if (!st.end) return (st.waitAt ? 'Google giới hạn mỗi phút — tự lồng tiếp lúc ' + clockSec(st.waitAt) + ' · ' : '') + mix;
+      if (st.end === 'quota') return quotaHead(st) + ' · đã lồng ' + st.done + '/' + st.total + ' câu (' + mix + ')';
       if (st.end === 'nokey') return 'Dừng: ' + st.error + ' · đã lồng ' + st.done + '/' + st.total + ' câu';
       if (st.end === 'cancel') return 'Đã dừng · đã lồng ' + st.done + '/' + st.total + ' câu (' + mix + ')';
       if (st.end === 'err') return 'Lỗi: ' + st.error;
@@ -2103,7 +2144,7 @@
         dubBox.appendChild(h('span', { class: 'meter', role: 'progressbar', 'aria-label': 'Tiến độ lồng tiếng AI', 'aria-valuemin': '0', 'aria-valuemax': String(st.total), 'aria-valuenow': String(n) },
           h('i', { style: 'width:' + (st.total ? Math.round(n / st.total * 100) : 0) + '%' })));
         dubBox.appendChild(h('b', { text: 'Lồng tiếng AI ' + n + '/' + st.total }));
-        dubBox.appendChild(h('span', { class: 'note', 'aria-live': st.end ? 'polite' : 'off', text: dubSummary(st) }));
+        dubBox.appendChild(h('span', { class: 'note', 'aria-live': st.end || st.waitAt ? 'polite' : 'off', text: dubSummary(st) }));
       }
       paintRegion();
     }
@@ -2113,7 +2154,7 @@
     function designSummary(st) {
       var left = ' · đã thiết kế ' + st.done + '/' + st.total + ' vai' + (st.failed ? ' · ' + st.failed + ' lỗi' : '');
       if (!st.end) return 'đang thiết kế ' + st.cur + ' (~25 s mỗi vai, tốn 1 lượt)…' + (st.failed ? ' · ' + st.failed + ' lỗi' : '');
-      if (st.end === 'quota') return (st.cap ? 'Dừng vì chạm trần câu / ngày (Cài đặt AI)' + (st.retryAt ? ' — đọc tiếp lúc ' + clockOf(st.retryAt) : '') : 'Dừng vì hết lượt' + (st.retryAt ? ' — thử lại lúc ' + clockOf(st.retryAt) : '')) + left;
+      if (st.end === 'quota') return quotaHead(st) + left;
       if (st.end === 'nokey') return 'Dừng: ' + st.error + left;
       if (st.end === 'cancel') return 'Đã dừng' + left;
       return 'Xong' + left + (st.failed ? ' — ' + st.error : '') + ' · đã chọn lại giọng cả dàn';
@@ -2161,7 +2202,7 @@
           var c = AiVoice.cfg; if (c) { c.designs = c.designs || {}; c.designs[j.key] = { voice: x.voice, at: new Date().toISOString() }; }
           designSt.done++;
         }, function (e) {
-          if (e.status === 429 || e.status === 409) { designSt.stop = e.status; designSt.retryAt = e.retryAt || null; designSt.cap = !!e.cap; designSt.error = e.message; i = jobs.length; return; }
+          if (e.status === 429 || e.status === 409) { designSt.stop = e.status; designSt.retryAt = e.retryAt || null; designSt.cap = !!e.cap; designSt.minute = AiVoice.isMinute(e); designSt.error = e.message; i = jobs.length; return; }
           designSt.failed++; designSt.error = e.message;   // lỗi một vai (vd. Google chặn): ghi lại, làm tiếp các vai sau
         }).then(function () { if (alive) paintRegion(); return next(); });
       })().then(function () {
@@ -2169,7 +2210,7 @@
         st.end = st.stop === 429 ? 'quota' : st.stop === 409 ? 'nokey' : designCancel ? 'cancel' : 'done';
         AiVoice.casts = {}; AiVoice.libs = {};   // phim dùng ngay giọng đã thiết kế
         if (alive) {
-          if (st.end === 'quota') toast(AiVoice.quotaText({ cap: st.cap, retryAt: st.retryAt }) + '. Đã thiết kế ' + st.done + '/' + st.total + ' vai.');
+          if (st.end === 'quota') toast(AiVoice.quotaText({ cap: st.cap, retryAt: st.retryAt, minute: st.minute }) + '. Đã thiết kế ' + st.done + '/' + st.total + ' vai.');
           else if (st.end === 'nokey') toast(st.error + ' — mở Cài đặt AI › Giọng AI.');
           else if (st.end === 'done') toast('Đã thiết kế giọng vùng cho ' + st.done + '/' + st.total + ' vai.' + (st.failed ? ' ' + st.failed + ' vai lỗi.' : ''));
         }
@@ -2178,21 +2219,61 @@
       }).catch(function (e) { designSt = { work: w0.id, lang: L.lang + '|' + L.accent, total: jobs.length, done: 0, failed: 0, stop: null, cap: false, retryAt: null, error: e.message, cur: '', end: 'nokey' }; if (alive) toast(e.message); })
         .then(function () { designing = false; if (alive) paintDub(); });
     }
+    // → Promise<st | null>: st.end = done | quota | nokey | cancel | err (null = chưa bắt đầu được: không có tác phẩm / đang lồng / đang thiết kế / chưa có key)
     function startDub() {
-      if (!W || dubbing || designing || !AiVoice.ready()) return;
+      if (!W || dubbing || designing || !AiVoice.ready()) return Promise.resolve(null);
       var w0 = W, L = workLang(W);
+      closeExport();
       dubbing = true; dubCancel = false; dubSt = { total: 0, done: 0, fresh: 0, cached: 0, failed: 0 }; paintDub();
-      AiVoice.dub(w0, L, { cancelled: function () { return dubCancel || !alive; }, progress: function (st) { dubSt = st; if (alive) paintDub(); } })
+      return AiVoice.dub(w0, L, { cancelled: function () { return dubCancel || !alive; }, progress: function (st) { dubSt = st; if (alive) paintDub(); } })
         .then(function (st) {
           st.end = st.stop === 429 ? 'quota' : st.stop === 409 ? 'nokey' : dubCancel ? 'cancel' : 'done';
           dubSt = st;
-          if (!alive) return;
+          if (!alive) return st;
           if (st.end === 'nokey') { toast(st.error + ' — mở Cài đặt AI › Giọng AI.'); go({ page: 'ai', focus: 'voice' }); }
-          else if (st.end === 'quota') toast(AiVoice.quotaText({ cap: st.cap, retryAt: st.retryAt }) + '. Đã lồng ' + st.done + '/' + st.total + ' câu.');
+          else if (st.end === 'quota') toast(AiVoice.quotaText({ cap: st.cap, retryAt: st.retryAt, minute: st.minute }) + '. Đã lồng ' + st.done + '/' + st.total + ' câu.');
           else if (st.end === 'done') toast('Đã lồng tiếng AI ' + st.done + '/' + st.total + ' câu.');
+          return st;
         })
-        .catch(function (e) { dubSt = { total: 0, done: 0, fresh: 0, cached: 0, failed: 0, end: 'err', error: e.message }; if (alive) toast(e.message); })
-        .then(function () { dubbing = false; if (alive) paintDub(); });
+        .catch(function (e) { dubSt = { total: 0, done: 0, fresh: 0, cached: 0, failed: 0, end: 'err', error: e.message }; if (alive) toast(e.message); return dubSt; })
+        .then(function (st) { dubbing = false; if (alive) paintDub(); return st; });
+    }
+    // ---- xuất phim: còn câu chưa có giọng AI (mà Giọng AI đã sẵn sàng) thì hỏi trước — lồng tiếng rồi xuất · xuất luôn · huỷ. Chưa sẵn sàng thì xuất như cũ ----
+    function closeExport() { clear(exportBox); exportBox.hidden = true; }
+    function exportClick() {
+      if (!W || exportBusy) return;
+      var w0 = W, L = workLang(W);
+      closeExport();
+      if (dubbing) { toast('Đang lồng tiếng AI — chờ xong (hoặc bấm Dừng lồng tiếng) rồi xuất phim.'); return; }
+      if (!AiVoice.on() || !AiVoice.ready()) { exportFilm(w0); return; }
+      exportBusy = true;
+      filmVoices(w0, L).then(function (vo) {   // hỏi "dry" các clip đã có (không tốn lượt) — chính kết quả này được dùng để xuất, khỏi hỏi lại
+        exportBusy = false;
+        if (!alive || !W || W.id !== w0.id) return;   // đã đổi tác phẩm trong lúc hỏi: bỏ, không hiện hộp của tác phẩm cũ
+        if (!vo.total || vo.have >= vo.total) exportFilm(w0, vo); else askExport(w0, vo);
+      });
+    }
+    function askExport(w0, vo) {
+      exportBox.hidden = false;
+      var go1 = h('button', { class: 'btn sm primary', title: 'Đọc các câu còn thiếu bằng giọng AI (tốn lượt Google; hết lượt thì dừng) rồi tự xuất phim', onclick: function () { dubThenExport(w0); } }, 'Lồng tiếng rồi xuất');
+      exportBox.appendChild(h('div', { class: 'banner warn', role: 'group', 'aria-label': 'Xác nhận xuất phim thiếu giọng AI', style: 'flex-wrap:wrap' },
+        h('span', { style: 'flex:1 1 320px', text: 'Còn ' + (vo.total - vo.have) + '/' + vo.total + ' câu chưa có giọng AI — câu thiếu sẽ đọc bằng giọng máy / blip.' }),
+        go1,
+        h('button', { class: 'btn sm', onclick: function () { closeExport(); if (W && W.id === w0.id) exportFilm(W); } }, 'Xuất luôn'),   // tính lại lúc bấm (dry, không tốn lượt): hộp có thể đã mở lâu — vừa lồng thêm, đổi ngôn ngữ, sửa kịch bản
+        h('button', { class: 'btn sm', onclick: function () { closeExport(); } }, 'Huỷ')));
+      go1.focus();
+    }
+    // lồng tiếng như nút Lồng tiếng AI, xong (hoặc dừng vì hết lượt) thì tự xuất; bấm Dừng lồng tiếng = không xuất (người dùng đổi ý); thiếu key / lỗi thì không xuất
+    function dubThenExport(w0) {
+      closeExport();
+      if (!W || W.id !== w0.id) return;
+      if (dubbing || designing) { toast(dubbing ? 'Đang lồng tiếng AI — chờ xong rồi xuất phim.' : 'Đang thiết kế giọng vùng — chờ xong rồi xuất phim.'); return; }
+      startDub().then(function (st) {
+        if (!st || !alive || !W || W.id !== w0.id) return;
+        if (st.end === 'cancel') { toast('Đã dừng lồng tiếng — chưa xuất phim.'); return; }
+        if (st.end === 'nokey' || st.end === 'err') return;   // startDub đã báo lỗi / mở Cài đặt AI
+        exportFilm(W);
+      });
     }
     function paint() {
       syncLang(); paintDub();

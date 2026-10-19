@@ -35,7 +35,12 @@
  *   GC.audio.decodeClip(src, {rate}) → Promise<AudioBuffer>   cùng đầu vào như clip; LRU 16 clip / 300 s (cùng nguồn → cùng AudioBuffer);
  *       dùng để nạp sẵn trước khi diễn. Không dùng bộ nhớ của ArrayBuffer đã đưa vào (không "detach" nó).
  *   GC.audio.setVoiceMode('auto'|'tts'|'blip'|'off') / voiceMode   auto = TTS nếu có giọng Việt, không thì blip
- *   GC.audio.hush() / stopAll() / info() → { ctx, tts, viVoice, mode, clipError }   ctx: đã có AudioContext · tts: có speechSynthesis
+ *   GC.audio.voiceTier(giọng | tên) → 'good' | 'basic'   hạng giọng trình duyệt: basic = máy đọc kiểu cũ nhận ra được (espeak, speech-dispatcher, pico, festival,
+ *       mbrola, "+Tên", Microsoft đời cũ không "Online", tên chỉ là tên ngôn ngữ); còn lại good (Natural / Online / Neural / Google, Apple "Linh", Android Google TTS…)
+ *   voice.needGood (tuỳ chọn của say): true → chỉ dùng giọng trình duyệt nếu giọng tìm được thuộc hạng good, còn lại blip — phim có giọng AI thì phần thiếu clip
+ *       không được rơi vào robot (espeak…) lẫn với giọng AI. Người gọi bật khi chế độ "tự động" + có clip AI; chọn hẳn "máy đọc" thì không bật.
+ *   Giọng trình duyệt "kẹt" (không onstart sau 1,5 s mà synth.speaking vẫn false): cancel + nói lại 1 lần; vẫn kẹt → cả câu bằng blip (không bao giờ im lặng mà miệng nhép).
+ *   GC.audio.hush() / stopAll() / info() → { ctx, tts, viVoice, viTier, mode, clipError }   ctx: đã có AudioContext · tts: có speechSynthesis
  */
 (function (GC) {
   'use strict';
@@ -55,7 +60,7 @@
   var bed = null, mus = null, job = null;
   var fxLive = [];
   var synth = W && W.speechSynthesis && typeof W.SpeechSynthesisUtterance === 'function' ? W.speechSynthesis : null;
-  var viVoice = null, lastCancel = 0, clipError = null;
+  var viVoice = null, lastCancel = 0, clipError = null, stuckAt = -1e9;   // stuckAt: lần cuối giọng trình duyệt kẹt phải bỏ cuộc (đừng thử lại ngay)
 
   /* ------------------------------------------------------------ tiện ích */
   function clamp(v, lo, hi, dflt) { v = +v; if (v !== v) return dflt != null ? dflt : lo; return v < lo ? lo : v > hi ? hi : v; }
@@ -832,14 +837,14 @@
     v = v || {};
     var pitch = clamp(v.pitch, 0, 2, 1);
     return { pitch: pitch, rate: clamp(v.rate, 0.5, 1.8, 1), blip: v.blip > 0 ? +v.blip : blipOf(pitch),
-      lang: typeof v.lang === 'string' && /^[a-z]{2}(-[A-Za-z]{2,4})?$/.test(v.lang) ? v.lang : 'vi-VN', gender: v.gender === 'f' || v.gender === 'm' ? v.gender : '' };
+      lang: typeof v.lang === 'string' && /^[a-z]{2}(-[A-Za-z]{2,4})?$/.test(v.lang) ? v.lang : 'vi-VN', gender: v.gender === 'f' || v.gender === 'm' ? v.gender : '', needGood: v.needGood === true };
   }
 
   /* ---------------------------------------------------------- giọng đọc TTS */
   // nạp bất đồng bộ (Chrome trả [] lần đầu rồi bắn voiceschanged). Chỉ nhận giọng ĐÚNG ngôn ngữ (vi / en / zh…) — không bao giờ đọc
   // tiếng Việt bằng giọng Anh; ưu tiên giọng thần kinh (Edge "Online (Natural)", Google), rồi đúng giới của vai (theo tên giọng phổ biến).
   var F_NAMES = /HiuMaan|HiuGaai|Sin-?Ji|HoaiMy|\bLinh\b|Xiaoxiao|Xiaoyi|Xiaohan|Xiaomo|Xiaoxuan|Xiaochen|Huihui|Yaoyao|Tingting|Meijia|Sinji|HsiaoChen|HsiaoYu|Aria|Jenny|Michelle|Sonia|Libby|Zira|Samantha|Karen|Moira|Tessa|Victoria|Susan|Hazel|Emma|Ava|Female|女/i;
-  var M_NAMES = /WanLung|NamMinh|\bAn\b|Yunxi|Yunjian|Yunyang|Yunze|Yunhao|Kangkang|YunJhe|\bGuy\b|Davis|Tony|\bRyan\b|Thomas|David|\bMark\b|\bAlex\b|Daniel|\bFred\b|George|Andrew|Brian|Christopher|\bMale\b|男/i;
+  var M_NAMES = /WanLung|NamMinh|\bAn\b|Yunxi|Yunjian|Yunyang|Yunze|Yunhao|Kangkang|YunJhe|\bGuy\b|Davis|Tony|\bRyan\b|Thomas|David|\bMark\b|\bAlex\b|Daniel|George|Andrew|Brian|Christopher|\bMale\b|男/i;
   var vcache = {}, YUE = /^(yue|zh-hk|zh-mo)/;
   function findVoice(lang, gender) {
     if (!synth) return null;
@@ -854,7 +859,7 @@
       var s = 1, fem = F_NAMES.test(v.name), mal = M_NAMES.test(v.name);
       if (/google|microsoft/i.test(v.name)) s += 3;
       if (/\b(Linh|An|HoaiMy|NamMinh)\b/.test(v.name)) s += 2;
-      if (/natural|online/i.test(v.name)) s += 1;
+      if (/natural|online/i.test(v.name)) s += 2;                  // thắng điểm localService: Edge liệt kê giọng máy cũ (An) TRƯỚC NamMinh Online — hoà điểm thì giọng cũ thắng
       if (v.localService) s += 1;
       if (vl === lang.toLowerCase()) s += 1;                        // đúng vùng (zh-CN, en-US…)
       if (gender) s += (gender === 'f' ? fem && !mal : mal && !fem) ? 3 : (fem || mal) ? -3 : 0;
@@ -863,6 +868,17 @@
     if (list.length) vcache[key] = best;                           // danh sách rỗng = chưa nạp xong → lần sau tìm lại
     if (pre === 'vi' && !gender) viVoice = best;
     return best;
+  }
+  // hạng giọng trình duyệt (cho voice.needGood): xem mô tả ở đầu tệp. basic = chỉ những loại NHẬN RA được là robot (espeak, speech-dispatcher, pico…, Microsoft SAPI đời cũ,
+  // tên chỉ là tên ngôn ngữ = espeak của Chrome Linux); tên lạ còn lại là good — đánh nhầm giọng tốt thành basic (vd. Google TTS Android "vi-vn-x-gft-local") thì điện thoại mất giọng thật.
+  // ^(Fred|Albert…): giọng đùa / MacinTalk / Eloquence của macOS — nghe máy móc như espeak
+  var T_BASIC = /espeak|speech[-_ ]?dispatcher|\bpico|festival|mbrola|\+[A-Za-z]|^(Fred|Albert|Zarvox|Bad News|Good News|Whisper|Trinoids|Bahh|Bells|Boing|Bubbles|Cellos|Wobble|Jester|Organ|Pipe Organ|Superstar|Ralph|Kathy|Junior|Princess|Hysterical|Deranged|Eddy|Flo|Grandma|Grandpa|Reed|Rocko|Sandy|Shelley)\b/i, T_GOOD = /natural|online|neural|google|premium|enhanced/i, T_LANG = /^(vietnam|english|chinese|mandarin|cantonese)/i;
+  function voiceTier(v) {
+    var n = String((v && typeof v === 'object' ? v.name : v) || '').trim();
+    if (!n || T_BASIC.test(n)) return 'basic';
+    if (T_GOOD.test(n)) return 'good';
+    if (/^microsoft/i.test(n) || T_LANG.test(n)) return 'basic';      // Microsoft đời cũ (SAPI: An, David, Zira…) không có "Online"; "Vietnamese", "English (America)" = espeak của Chrome Linux
+    return 'good';
   }
   if (synth) {
     findVoice();
@@ -890,8 +906,8 @@
   function hookWord(j, i) { if (i !== j.wi) { j.wi = i; hook(j, 'onWord', i, j.total); } }
   function hookMouth(j, level) { hook(j, 'onMouth', level); }
   function clearTimers(j) {
-    clearTimeout(j.tm); clearTimeout(j.mouthT); clearTimeout(j.safeT); clearTimeout(j.fbT); clearTimeout(j.endT); clearTimeout(j.cw);
-    clearInterval(j.iv); j.tm = j.mouthT = j.safeT = j.fbT = j.endT = j.cw = j.iv = null;
+    clearTimeout(j.tm); clearTimeout(j.mouthT); clearTimeout(j.safeT); clearTimeout(j.fbT); clearTimeout(j.endT); clearTimeout(j.cw); clearTimeout(j.stallT);
+    clearInterval(j.iv); j.tm = j.mouthT = j.safeT = j.fbT = j.endT = j.cw = j.stallT = j.iv = null;
   }
   function cancelSynth() { if (synth) { synth.cancel(); lastCancel = now(); } }
   function finish(j) {
@@ -919,7 +935,10 @@
     if (muted || mode === 'off') return 'silent';
     var blipOK = ready();
     if (mode === 'blip') return blipOK ? 'blip' : 'silent';
-    if (allowTTS && synth && findVoice(j ? j.v.lang : 'vi-VN', j ? j.v.gender : '')) return 'tts';   // không có giọng đúng ngôn ngữ → blip, không đọc sai tiếng
+    if (allowTTS && synth && now() - stuckAt > STUCK_COOL) {
+      var vc = findVoice(j ? j.v.lang : 'vi-VN', j ? j.v.gender : '');
+      if (vc && !(j && j.v.needGood && voiceTier(vc) !== 'good')) return 'tts';   // không có giọng đúng ngôn ngữ → blip, không đọc sai tiếng · needGood mà giọng chỉ basic → blip (không để robot lẫn giọng AI)
+    }
     return blipOK ? 'blip' : 'silent';
   }
   function start(j, from, allowTTS) {
@@ -1009,47 +1028,92 @@
     j.tm = setTimeout(function () { pump(j); }, Math.max(0, ev[j.k].t * 1000 - el));
   }
 
-  /* TTS: onboundary nhép miệng + chạy chữ; không có boundary trong 400 ms thì nhép theo đồng hồ */
+  // câu đưa cho giọng trình duyệt: "…" và "—" / "–" hay bị đọc vấp (đọc tên ký hiệu) hoặc không nghỉ → đổi thành dấu phẩy (đầu chữ / cuối câu / trước dấu câu thì bỏ).
+  // starts[i] = vị trí chữ thứ i CỦA CÂU GỐC trong chuỗi mới — onboundary.charIndex tính trên chuỗi mới nên chỉ số từ vẫn đúng; chữ hiện trên màn hình giữ nguyên.
+  function ttsPrep(src) {
+    var re = /\S+/g, m, toks = [], starts = [], out = '', i;
+    while ((m = re.exec(src))) toks.push(m);
+    if (!/[…—–]/.test(src)) return { text: src, starts: toks.map(function (t) { return t.index; }) };
+    for (i = 0; i < toks.length; i++) {
+      var t = toks[i][0], alone = /^[…—–]+$/.test(t), last = i === toks.length - 1, gap = out && !alone ? ' ' : '', w;
+      if (alone) w = last || !out || /[,;:.!?]$/.test(out) ? '' : ',';        // " — " đứng riêng: dính vào chữ trước làm dấu phẩy
+      else w = t.replace(/[…—–]+/g, function (x, at) {
+        var nx = t.charAt(at + x.length);
+        if (!at) return '';
+        if (!nx) return last ? '' : ',';
+        return /[,;:.!?]/.test(nx) ? '' : ', ';
+      });
+      starts.push(out.length + gap.length); out += gap + w;
+    }
+    return { text: out, starts: starts };
+  }
+
+  /* TTS: onboundary nhép miệng + chạy chữ; không có boundary trong 400 ms thì nhép theo đồng hồ.
+   * Synth "kẹt" (Chrome hay nuốt speak() sau cancel(): không onstart, speaking=false): sau 1,5 s cancel + nói lại 1 lần; vẫn kẹt → cả câu bằng blip.
+   * Giọng mạng đang nạp (speaking=true, Edge Online / Google trễ 0,3–2 s) thì chờ, tới 4 s mà vẫn chưa bắt đầu mới bỏ. Miệng chỉ nhép khi đã có dấu hiệu đang nói. */
+  var STALL = 1500, STALL_HARD = 4000, RETRY_GAP = 200, STUCK_COOL = 30000;   // kiểm sau (ms) · hạn cứng khi synth báo bận · nghỉ trước khi nói lại · sau khi bỏ cuộc: chừng này ms đừng thử lại giọng máy
   function startTTS(j) {
-    var vc = findVoice(j.v.lang, j.v.gender), u = new W.SpeechSynthesisUtterance(j.text), starts = [], m, re = /\S+/g, est = estimate(j.total, j.v.rate);
-    while ((m = re.exec(j.text))) starts.push(m.index);
-    u.voice = vc; u.lang = j.v.lang;
-    u.pitch = clamp(j.v.pitch, 0, 2, 1); u.rate = clamp(j.v.rate, 0.5, 1.8, 1); u.volume = volume;
-    j.u = u; j.gotBoundary = false; j.armed = false;
+    var vc = findVoice(j.v.lang, j.v.gender), prep = ttsPrep(j.text), starts = prep.starts, est = estimate(j.total, j.v.rate), tries = 0, started = false, spokeAt = 0, u;
+    if (!prep.text) { start(j, 0, false); return; }             // câu chỉ toàn "…" / "—": không có gì để đọc
+    j.gotBoundary = false; j.armed = false;
     function arm() {                     // 400 ms sau khi bắt đầu mà chưa có boundary → nhép giả
       if (j.armed || j.done) return;
       j.armed = true;
       j.fbT = setTimeout(function () { if (!j.done && !j.gotBoundary) startFlap(j, 0, est, true); }, 400);
     }
-    u.onstart = function () { if (!j.done) { hookWord(j, 0); arm(); } };
-    u.onboundary = function (e) {
-      if (j.done || (e.name && e.name !== 'word')) return;
-      j.gotBoundary = true;
-      clearInterval(j.iv); j.iv = null;
-      var wi = 0;
-      for (var i = 0; i < starts.length && starts[i] <= e.charIndex; i++) wi = i;
-      hookWord(j, wi);
-      hookMouth(j, 0.55 + Math.random() * 0.45);
-      clearTimeout(j.mouthT);
-      j.mouthT = setTimeout(function () { if (!j.done) hookMouth(j, 0); }, 120);
-    };
-    u.onend = function () { finish(j); };
-    u.onerror = function (e) {
-      if (j.done || e.error === 'canceled' || e.error === 'interrupted') return;
-      // TTS hỏng (not-allowed, synthesis-failed…): nói lại cả câu bằng blip/im lặng để phim không mất nhịp
-      console.warn('[GC.audio] speechSynthesis lỗi (' + e.error + ') — chuyển sang blip');
-      clearTimers(j); j.u = null; j.wi = -1; j.gotBoundary = false;
+    // Chrome đôi khi không bao giờ bắn onend → tự giải phóng. Hạn tính từ lúc BẮT ĐẦU NÓI (giọng mạng Edge Online / Google trễ 0,3–2 s
+    // trước onstart — tính từ speak() thì câu ngắn nhiều dấu câu bị cắt đuôi) + quãng nghỉ dấu câu mà estimate() không đếm
+    var safe = (Math.max(est * 1.8, 2.5) + (j.text.match(/[.!?…]+/g) || []).length * 0.35 + (j.text.match(/[,;:—–]/g) || []).length * 0.2) * 1000;
+    function guard() { clearTimeout(j.safeT); j.safeT = setTimeout(function () { if (!j.done) { cancelSynth(); finish(j); } }, safe); }
+    function begin() { if (started || j.done) return; started = true; clearTimeout(j.stallT); guard(); hookWord(j, 0); arm(); }   // onstart hoặc boundary đầu tiên = chắc chắn đang nói
+    function build() {                   // mỗi lần nói một utterance mới (utterance đã bị cancel không nói lại được); sự kiện của utterance cũ bị bỏ qua (j.u !== x)
+      var x = new W.SpeechSynthesisUtterance(prep.text);
+      x.voice = vc; x.lang = j.v.lang;
+      x.pitch = clamp(j.v.pitch, 0, 2, 1); x.rate = clamp(j.v.rate, 0.5, 1.8, 1); x.volume = volume;
+      x.onstart = function () { if (!j.done && j.u === x) begin(); };
+      x.onboundary = function (e) {
+        if (j.done || j.u !== x || (e.name && e.name !== 'word')) return;
+        begin();
+        j.gotBoundary = true;
+        clearInterval(j.iv); j.iv = null;
+        var wi = 0;
+        for (var i = 0; i < starts.length && starts[i] <= e.charIndex; i++) wi = i;
+        hookWord(j, wi);
+        hookMouth(j, 0.55 + Math.random() * 0.45);
+        clearTimeout(j.mouthT);
+        j.mouthT = setTimeout(function () { if (!j.done) hookMouth(j, 0); }, 120);
+      };
+      x.onend = function () { if (j.u === x) finish(j); };
+      x.onerror = function (e) {
+        if (j.done || j.u !== x || e.error === 'canceled' || e.error === 'interrupted') return;
+        // TTS hỏng (not-allowed, synthesis-failed…): nói lại cả câu bằng blip/im lặng để phim không mất nhịp
+        console.warn('[GC.audio] speechSynthesis lỗi (' + e.error + ') — chuyển sang blip');
+        clearTimers(j); j.u = null; j.wi = -1; j.gotBoundary = false;
+        start(j, 0, false);
+      };
+      return x;
+    }
+    function stalled() {                 // quá hạn mà chưa có onstart / boundary nào
+      if (j.done || started || j.u !== u) return;   // onerror đã chuyển câu sang blip (có thể bắn ngay trong speak()) → không nói lại
+      var el = now() - spokeAt, busy = !!(synth.speaking || synth.pending);
+      if (busy && el < STALL_HARD) { j.stallT = setTimeout(stalled, STALL_HARD - el + 5); return; }
+      u.onstart = u.onboundary = u.onend = u.onerror = null; cancelSynth();
+      if (!busy && tries < 2) { j.stallT = setTimeout(speak, RETRY_GAP); return; }   // kẹt lần đầu: dọn rồi nói lại đúng 1 lần
+      stuckAt = now();                   // đã bỏ cuộc: các câu sau đi thẳng blip một lúc (STUCK_COOL), khỏi chờ lại từng câu
+      console.warn('[GC.audio] speechSynthesis không bắt đầu nói' + (busy ? ' (quá ' + STALL_HARD / 1000 + ' s)' : ' (đã thử lại)') + ' — đọc bằng blip');
+      clearTimers(j); j.wi = -1; j.gotBoundary = false;
       start(j, 0, false);
-    };
-    // Chrome đôi khi không bao giờ bắn onend → tự giải phóng
-    j.safeT = setTimeout(function () { if (!j.done) { cancelSynth(); finish(j); } }, Math.max(est * 1.8, 2.5) * 1000);
-    var wait = Math.max(0, 70 - (now() - lastCancel));   // speak() ngay sau cancel() hay bị Chrome nuốt
+    }
     function speak() {
       if (j.done) return;
+      if (tries++) u = j.u = build();
       if (synth.paused) synth.resume();
+      spokeAt = now();
       synth.speak(u);
-      j.fbT = setTimeout(arm, 700);      // nếu onstart không tới
+      if (j.u === u && !j.done) j.stallT = setTimeout(stalled, STALL);
     }
+    u = j.u = build();
+    var wait = Math.max(0, 70 - (now() - lastCancel));   // speak() ngay sau cancel() hay bị Chrome nuốt
     if (wait > 0) j.tm = setTimeout(speak, wait); else speak();
   }
 
@@ -1308,7 +1372,7 @@
       text = String(text == null ? '' : text);
       var w = words(text);
       var j = { text: text, words: w, total: w.length, v: normVoice(voice), hooks: hooks || {}, resolve: resolve, done: false, wi: -1,
-        t0: 0, tm: null, iv: null, mouthT: null, safeT: null, fbT: null, endT: null, cw: null, src: null, sg: null, cT0: 0, ev: null, k: 0, u: null, warned: false };
+        t0: 0, tm: null, iv: null, mouthT: null, safeT: null, fbT: null, endT: null, cw: null, stallT: null, src: null, sg: null, cT0: 0, ev: null, k: 0, u: null, warned: false };
       job = j;
       if (ctx && ctx.state !== 'running') unlock();          // thử đánh thức lại nếu bị treo
       // có clip thu sẵn (và người dùng không ép giọng blip) → phát clip; hỏng thì rơi về đường cũ. Hạ nền khi clip bắt đầu (runClip) / khi rơi về.
@@ -1334,13 +1398,14 @@
     ambient: ambient,
     music: music,
     voiceOf: voiceOf,
+    voiceTier: voiceTier,
     say: say,
     decodeClip: decodeClip,
     get voiceMode() { return mode; },
     setVoiceMode: function (m) { if (MODES.indexOf(m) >= 0) mode = m; },
     hush: hush,
     stopAll: function () { hush(); ambient(null); music(null); },
-    info: function () { findVoice(); return { ctx: !!ctx, tts: !!synth, viVoice: viVoice ? viVoice.name : null, mode: mode, clipError: clipError }; }
+    info: function () { findVoice(); return { ctx: !!ctx, tts: !!synth, viVoice: viVoice ? viVoice.name : null, viTier: viVoice ? voiceTier(viVoice) : null, mode: mode, clipError: clipError }; }
   };
   GC.audio = API;
   if (typeof module !== 'undefined' && module.exports) module.exports = API;

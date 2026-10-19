@@ -296,6 +296,140 @@ const rejectAll = (fn, msg) => fn().then(() => no(true, msg + ': phải lỗi'),
       [{ id: 'c', voice: { role: 'quan-su' } }, { lang: 'zh', accent: 'tw' }, 'YunJhe/zh-TW'], [{ id: 'd', voice: { role: 'be-gai' } }, { lang: 'zh' }, 'Xiaoxiao/zh-CN'],
       [{ id: 'e', voice: { role: 'nu-tre' } }, { lang: 'en', accent: 'uk' }, 'Sonia/en-GB'], [{ id: 'f', voice: { role: 'vua-chua' } }, { lang: 'vi', accent: 'nam' }, 'NamMinh/vi-VN']];
     for (const [a, o, w] of want) { const got = await said(a, o); no(got !== w, 'giọng trình duyệt ' + JSON.stringify(o) + ' ' + a.voice.role + ': ' + got + ' (phải ' + w + ')'); } }
+  // ---- giọng trình duyệt dự phòng v0.17.1 (phim thiếu clip AI rơi về đây) — tái hiện từ harness phim xuất (speechSynthesis giả) ----
+  { const vm = require('vm');
+    // speechSynthesis giả: onstart sau `lat` ms, nói `dur` ms rồi onend; cancel() giữa chừng = câu bị CẮT
+    const fake = (voices, lat, dur, log) => { let cur = null; return { getVoices: () => voices, addEventListener() {}, get speaking() { return !!cur; }, pending: false, paused: false,
+      speak(u) { cur = u; log.push('speak:' + (u.voice ? u.voice.name : '-')); setTimeout(() => { if (cur !== u) return; u.onstart && u.onstart({}); setTimeout(() => { if (cur !== u) return; cur = null; log.push('end'); u.onend && u.onend({}); }, dur); }, lat); },
+      cancel() { if (cur) { const u = cur; cur = null; log.push('cancel'); u.onerror && u.onerror({ error: 'interrupted' }); } } }; };
+    const engine = synth => { const ctx = { console, setTimeout, clearTimeout, setInterval, clearInterval, Promise, Math, Date, JSON, Float32Array, Int16Array, Uint8Array, ArrayBuffer, DataView,
+      window: { GenChibi: {}, speechSynthesis: synth, SpeechSynthesisUtterance: function (t) { this.text = t; } } };
+      vm.createContext(ctx); ['engine/voices.js', 'engine/audio.js'].forEach(f => vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f }));
+      const A = ctx.window.GenChibi.audio; A.setVoiceMode('tts'); return A; };
+    // (1) Edge thật liệt kê giọng MÁY (SAPI, localService) TRƯỚC giọng Online (Natural): vai nam không được rơi vào "Microsoft An" cũ khi có NamMinh
+    const edge = [['Microsoft An - Vietnamese (Vietnam)', 'vi-VN', true], ['Microsoft David - English (United States)', 'en-US', true],
+      ['Microsoft HoaiMy Online (Natural) - Vietnamese (Vietnam)', 'vi-VN', false], ['Microsoft NamMinh Online (Natural) - Vietnamese (Vietnam)', 'vi-VN', false]].map(v => ({ name: v[0], lang: v[1], localService: v[2] }));
+    for (const [role, want] of [['vua-chua', 'NamMinh'], ['vo-tuong', 'NamMinh'], ['ba-lao', 'HoaiMy']]) {
+      const log = [], A = engine(fake(edge, 5, 5, log));
+      await Promise.race([A.say('Thử giọng', A.voiceOf({ id: 'x-' + role, voice: { role } }, { lang: 'vi' })), new Promise(r => setTimeout(r, 300))]);
+      no(!/Online \(Natural\)/.test(log[0] || '') || log[0].indexOf(want) < 0, 'Edge: vai ' + role + ' phải dùng giọng thần kinh ' + want + ' (Online (Natural)), không phải giọng máy cũ: ' + log[0]);
+    }
+    // (2) giọng mạng khởi động chậm (Edge Online / Google: onstart sau ~0,6 s) — đồng hồ an toàn không được tính cả độ trễ đó rồi CẮT câu đang nói
+    { const log = [], A = engine(fake(edge, 600, 2100, log));
+      await A.say('Oa… nhanh quá, nhìn không kịp!', A.voiceOf({ id: 'tq-linh-que', voice: { role: 'hai-huoc', pitch: 1.42, rate: 1.22 } }, { lang: 'vi' }));
+      no(log.indexOf('cancel') >= 0 || log[log.length - 1] !== 'end', 'giọng mạng trễ 0,6 s: câu "Oa… nhanh quá, nhìn không kịp!" (2,1 s) bị cắt giữa chừng: ' + log.join(' → ')); }
+  }
+  // ---- giọng trình duyệt dự phòng v0.17.1 (2): synth kẹt · hạng giọng good / basic · needGood · ký hiệu "…" "—" — ĐỒNG HỒ ẢO (chạy tức thì, tất định) ----
+  { const vm = require('vm');
+    const vclock = () => { let t = 0, n = 0, q = []; const add = (f, ms, every) => { const id = ++n; q.push({ id, at: t + Math.max(0, ms || 0), f, every }); return id; }, del = id => { q = q.filter(x => x.id !== id); };
+      return { now: () => t, setTimeout: (f, ms) => add(f, ms), setInterval: (f, ms) => add(f, ms, Math.max(1, ms || 1)), clearTimeout: del, clearInterval: del,
+        async until(done, limit) { while (!done()) { q.sort((a, b) => a.at - b.at || a.id - b.id); const x = q[0]; if (!x || x.at > limit) break; t = Math.max(t, x.at); if (x.every) x.at = t + x.every; else q.shift(); x.f(); for (let k = 0; k < 4; k++) await Promise.resolve(); } },
+        async wait(ms) { await this.until(() => false, t + ms + 0.001); t += ms; } }; };
+    // AudioContext GIẢ: mọi nút là no-op, chỉ đếm số oscillator (= số âm tiết blip đã phát)
+    const stub = () => new Proxy(function () {}, { get: (o, k) => (k in o ? o[k] : (o[k] = stub())), apply: () => stub() });
+    const FakeAC = function () { const self = { state: 'running', sampleRate: 48000, currentTime: 0, blips: 0, destination: stub(),
+        createOscillator() { self.blips++; return stub(); }, createBuffer(c, n, sr) { return { duration: n / sr, length: n, sampleRate: sr, numberOfChannels: c, getChannelData: () => new Float32Array(n) }; } };
+      return (FakeAC.last = new Proxy(self, { get: (o, k) => (k in o ? o[k] : typeof k === 'string' && /^create/.test(k) ? stub : undefined), set: (o, k, v) => { o[k] = v; return true; } })); };
+    const mk = (synth, clk) => { const ctx = { console: { log() {}, warn() {}, debug() {}, error: console.error }, setTimeout: clk.setTimeout, clearTimeout: clk.clearTimeout, setInterval: clk.setInterval, clearInterval: clk.clearInterval, performance: { now: clk.now },
+        Promise, Math, Date, JSON, Float32Array, Int16Array, Uint8Array, ArrayBuffer, DataView, window: { GenChibi: {}, speechSynthesis: synth, AudioContext: FakeAC, SpeechSynthesisUtterance: function (t) { this.text = t; } } };
+      vm.createContext(ctx); ['engine/voices.js', 'engine/audio.js'].forEach(f => vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f }));
+      return ctx.window.GenChibi.audio; };
+    // synth giả theo kịch bản: mode(k) cho lần speak thứ k → 'ok' (onstart sau 50 ms, nói 1,5 s) · 'late' (onstart sau 1,8 s — giọng mạng nạp chậm) · 'drop' (nuốt hẳn: speaking=false, không sự kiện nào — lỗi thật của Chrome) · 'busy' (speaking=true nhưng không bao giờ onstart)
+    const fsynth = (voices, clk, log, mode) => { let cur = null, n = 0;
+      const S = { getVoices: () => voices, addEventListener() {}, pending: false, paused: false, get speaking() { return !!cur; }, last: null,
+        speak(u) { const md = mode(++n); log.push('speak'); S.last = u; if (md === 'drop') return; if (md === 'syncerr') { u.onerror && u.onerror({ error: 'not-allowed' }); return; } cur = u; if (md === 'busy') return;
+          const words = []; for (const m of u.text.matchAll(/\S+/g)) words.push(m.index);
+          clk.setTimeout(() => { if (cur !== u) return; u.onstart && u.onstart({});
+            words.forEach((ci, i) => clk.setTimeout(() => { if (cur === u && u.onboundary) u.onboundary({ name: 'word', charIndex: ci }); }, 1500 * i / words.length));
+            clk.setTimeout(() => { if (cur !== u) return; cur = null; log.push('end'); u.onend && u.onend({}); }, 1500); }, md === 'late' ? 1800 : 50); },
+        cancel() { log.push('cancel'); if (cur) { const u = cur; cur = null; u.onerror && u.onerror({ error: 'interrupted' }); } } };
+      return S; };
+    const VS = (...a) => a.map(v => ({ name: v[0], lang: v[1], localService: !!v[2] }));
+    const SET = { edge: VS(['Microsoft An - Vietnamese (Vietnam)', 'vi-VN', 1], ['Microsoft HoaiMy Online (Natural) - Vietnamese (Vietnam)', 'vi-VN'], ['Microsoft NamMinh Online (Natural) - Vietnamese (Vietnam)', 'vi-VN']),
+      mac: VS(['Linh', 'vi-VN', 1], ['Samantha', 'en-US', 1]), firefox: VS(['espeak-ng vietnam', 'vi', 1], ['espeak-ng vietnam_central', 'vi-VN-x-central', 1]),
+      chromeLinux: VS(['Vietnamese', 'vi', 1], ['Vietnamese (Central)', 'vi-VN-x-central', 1], ['Google US English', 'en-US']), winOld: VS(['Microsoft An - Vietnamese (Vietnam)', 'vi-VN', 1]),
+      chromeNoVi: VS(['Google US English', 'en-US'], ['Google 普通话（中国大陆）', 'zh-CN']) };
+    // một lượt say() trên engine mới: { log, words, mouth (mốc ms của mỗi lần miệng mở), ms, blips(), speaks(), again(text) }
+    const go = async (set, o) => { const clk = vclock(), log = [], synth = fsynth(set, clk, log, o.mode || (() => 'ok')), A = mk(synth, clk);
+      A.unlock(); A.setVoiceMode(o.vmode || 'auto');
+      const r = { A, clk, log, synth, words: [], mouth: [], blips: () => FakeAC.last.blips, speaks: () => log.filter(x => x === 'speak').length };
+      r.again = async text => { const t0 = clk.now(); let done = false; r.mouth.length = 0; r.words.length = 0;
+        const v = Object.assign(A.voiceOf({ id: 'x-' + (o.role || 'vua-chua'), voice: { role: o.role || 'vua-chua' } }, { lang: 'vi' }), o.needGood ? { needGood: true } : {});
+        A.say(text, v, { onMouth: l => { if (l > 0) r.mouth.push(clk.now() - t0); }, onWord: i => r.words.push(i) }).then(() => { done = true; });
+        await clk.until(() => done, clk.now() + 120000); r.done = done; r.ms = clk.now() - t0; return r; };
+      return r.again(o.text || 'Xin chào các bạn'); };
+
+    // (3a) onerror bắn NGAY trong speak() (Chrome 'not-allowed'): câu chuyển blip, đồng hồ kẹt KHÔNG được nói lại đè lên blip (review v0.17.1)
+    { const r = await go(SET.edge, { mode: () => 'syncerr', text: 'Xin chào các bạn, hôm nay trời đẹp quá, chúng ta cùng nhau ra vườn đào uống rượu kết nghĩa anh em, không say không về nhé' });   // câu dài: blip kéo quá 1,5 s
+      no(!r.done || r.blips() < 3, 'onerror đồng bộ: cả câu phải đọc bằng blip (blip ' + r.blips() + ')');
+      await r.clk.until(() => false, r.clk.now() + 6000);
+      no(r.speaks() !== 1, 'onerror đồng bộ: không được speak lại sau khi đã chuyển blip: ' + r.log.join(' → ')); }
+
+    // (3) synth KẸT (Chrome nuốt speak() sau cancel(): không onstart, speaking=false) → cancel + nói lại ĐÚNG 1 lần; vẫn kẹt → cả câu bằng blip.
+    //     Không bao giờ im lặng mà miệng vẫn nhép: miệng chỉ mở khi đã có tiếng (blip), không mở trong lúc chờ.
+    { const r = await go(SET.edge, { mode: () => 'drop' });
+      no(!r.done, 'synth kẹt: say() phải xong');
+      no(r.speaks() !== 2 || r.log.indexOf('cancel') < 0 || r.log.indexOf('cancel') > r.log.lastIndexOf('speak'), 'synth kẹt: cancel rồi nói lại đúng 1 lần (2 speak, cancel nằm trước lần nói lại): ' + r.log.join(' → '));
+      no(r.log[r.log.length - 1] === 'speak', 'synth kẹt: không để lại lời speak lơ lửng: ' + r.log.join(' → '));
+      no(r.blips() < 3, 'synth kẹt hai lần: phải đọc cả câu bằng blip (số âm tiết blip ' + r.blips() + ')');
+      no(!r.mouth.length || Math.min.apply(null, r.mouth) < 3000, 'synth kẹt: miệng mở khi chưa có tiếng nào (' + Math.min.apply(null, r.mouth) + ' ms; blip chỉ bắt đầu sau ~3,2 s)');
+      no(r.words[r.words.length - 1] !== 4 || r.words.indexOf(3) < 0, 'blip cả câu: chữ phải chạy hết (' + r.words.join() + ')');
+      const sp = r.speaks(); await r.again('Câu kế tiếp nữa');
+      no(r.speaks() !== sp || r.blips() < 6 || r.ms > 2500, 'synth vừa kẹt hai lần: câu kế đi thẳng blip (không đợi lại ~3 s): ' + r.log.join(' → ') + ' · ' + r.ms + ' ms');
+      await r.clk.wait(31000); await r.again('Giờ thử lại tiếng máy');
+      no(r.speaks() <= sp, 'hết 30 s thì thử lại giọng máy: ' + r.speaks()); }
+    // kẹt MỘT lần rồi lần nói lại chạy được → vẫn là giọng máy, không blip
+    { const r = await go(SET.edge, { mode: k => k === 1 ? 'drop' : 'ok' });
+      no(r.speaks() !== 2 || r.blips() !== 0 || r.log[r.log.length - 1] !== 'end', 'kẹt 1 lần rồi nói lại được: giọng máy, không blip: ' + r.log.join(' → ') + ' · blip ' + r.blips());
+      no(Math.max.apply(null, r.words) < 4, 'nói lại được: chữ phải chạy hết ' + r.words.join()); }
+    // giọng mạng nạp chậm (onstart sau 1,8 s, speaking=true suốt): KHÔNG cắt, không nói lại
+    { const r = await go(SET.edge, { mode: () => 'late' });
+      no(r.speaks() !== 1 || r.log.indexOf('cancel') >= 0 || r.log[r.log.length - 1] !== 'end' || r.blips() !== 0, 'giọng nạp chậm 1,8 s (speaking=true): phải chờ, không cancel / nói lại / blip: ' + r.log.join(' → ')); }
+    // speaking=true mà quá 4 s vẫn không onstart: coi như hỏng → blip, không nhép lúc im
+    { const r = await go(SET.edge, { mode: () => 'busy' });
+      no(r.speaks() !== 1 || r.log.indexOf('cancel') < 0 || r.blips() < 3, 'speaking=true nhưng không bao giờ onstart: tới hạn 4 s thì cancel + blip: ' + r.log.join(' → ') + ' · blip ' + r.blips());
+      no(!r.mouth.length || Math.min.apply(null, r.mouth) < 3900, 'speaking=true không onstart: miệng không được nhép trước hạn 4 s (' + Math.min.apply(null, r.mouth) + ')');
+      const sp = r.speaks(); await r.again('Câu kế tiếp nữa');
+      no(r.speaks() !== sp || r.ms > 2500, 'bỏ cuộc rồi: câu kế đi thẳng blip, không đợi lại 4 s: ' + r.log.join(' → ') + ' · ' + r.ms + ' ms'); }
+    // bình thường: giọng máy trọn câu, không đụng gì
+    { const r = await go(SET.edge, {}); no(r.log.join() !== 'speak,end' || r.blips() !== 0 || r.words[r.words.length - 1] !== 4, 'bình thường: speak → end: ' + r.log.join(' → ')); }
+
+    // (4) hạng giọng trình duyệt: good (thần kinh / Google / Apple có tên riêng) · basic (espeak, speech-dispatcher, pico, festival, mbrola, "+Tên", Microsoft đời cũ, tên chỉ là tên ngôn ngữ)
+    { const A = mk(fsynth([], vclock(), [], () => 'ok'), vclock());
+      const good = ['Microsoft HoaiMy Online (Natural) - Vietnamese (Vietnam)', 'Microsoft NamMinh Online (Natural) - Vietnamese (Vietnam)', 'Microsoft AriaNeural Online (Natural) - English (United States)', 'Microsoft Guy Online (Natural) - English (United States)',
+        'Microsoft Xiaoxiao Online (Natural) - Chinese (Mainland)', 'Microsoft HiuMaan Online (Natural) - Chinese (Hong Kong)', 'Google US English', 'Google UK English Female', 'Google 普通话（中国大陆）', 'Google 粤語（香港）', 'Google Vietnamese',
+        'Linh', 'Samantha', 'Daniel', 'Tingting', 'Sin-ji', 'Linh (Enhanced)', 'Linh (Premium)', 'Samantha (Premium)', 'Siri Voice 1 (Neural)',
+        'vi-vn-x-gft-local', 'vi-vn-x-gft-network', 'vi-VN-language', 'Tiếng Việt Việt Nam', 'Samsung Tiếng Việt'];   // Android: Google TTS / Samsung TTS — tên lạ mặc định good
+      const basic = ['espeak-ng vietnam', 'espeak-ng vietnam_central', 'espeak-ng english', 'eSpeak vi', 'ESPEAK', 'speech-dispatcher vietnamese', 'Pico TTS vi', 'pico2wave', 'festival_vi', 'mbrola vi1', 'MBROLA-en1', 'Vietnamese', 'Vietnamese (Central)', 'Vietnamese (Southern)',
+        'Vietnamese_Central', 'Vietnamese_Northern', 'Vietnamese+Demonic', 'Vietnamese+whisper', 'Vietnamese+Annie', 'Vietnamese+Michael', 'English (America)', 'English (Great Britain)', 'Chinese (Mandarin)', 'Chinese (Cantonese)',
+        'Microsoft An - Vietnamese (Vietnam)', 'Microsoft David - English (United States)', 'Microsoft Zira - English (United States)', 'Microsoft Huihui - Chinese (Simplified, PRC)', 'Microsoft Hanhan - Chinese (Traditional, Taiwan)', '',
+        'Fred', 'Albert', 'Zarvox', 'Bad News', 'Whisper', 'Trinoids', 'Eddy (English (US))', 'Grandpa (English (UK))', 'Flo (English (US))'];   // macOS: giọng đùa / MacinTalk / Eloquence
+      good.forEach(n => no(A.voiceTier({ name: n }) !== 'good' || A.voiceTier(n) !== 'good', 'hạng giọng "' + n + '" phải là good, ra ' + A.voiceTier({ name: n })));
+      basic.forEach(n => no(A.voiceTier({ name: n }) !== 'basic' || A.voiceTier(n) !== 'basic', 'hạng giọng "' + n + '" phải là basic, ra ' + A.voiceTier({ name: n })));
+      no(A.voiceTier(null) !== 'basic' || A.voiceTier({}) !== 'basic', 'không có giọng → basic'); }
+
+    // (5) needGood: giọng tìm được phải thuộc hạng good thì mới đọc bằng giọng máy, còn lại blip (không để robot lẫn với giọng AI). Không bật → như cũ.
+    for (const [name, set, role, ng, wantTTS] of [
+      ['Edge: vai nam → NamMinh Online (Natural)', SET.edge, 'vua-chua', true, true], ['Edge: vai nữ → HoaiMy Online (Natural)', SET.edge, 'ba-lao', true, true], ['macOS: Linh', SET.mac, 'ba-lao', true, true],
+      ['Firefox Linux (espeak-ng)', SET.firefox, 'vua-chua', true, false], ['Firefox Linux, không needGood', SET.firefox, 'vua-chua', false, true],
+      ['Chrome Linux (espeak "Vietnamese")', SET.chromeLinux, 'vo-tuong', true, false], ['Chrome Linux, không needGood', SET.chromeLinux, 'vo-tuong', false, true],
+      ['Windows cũ (Microsoft An)', SET.winOld, 'vua-chua', true, false], ['Windows cũ, không needGood', SET.winOld, 'vua-chua', false, true],
+      ['Chrome không có tiếng Việt', SET.chromeNoVi, 'vua-chua', true, false], ['Chrome không có tiếng Việt, không needGood', SET.chromeNoVi, 'vua-chua', false, false]]) {
+      const r = await go(set, { role, needGood: ng });
+      no(r.done !== true || (wantTTS ? r.speaks() !== 1 || r.blips() !== 0 : r.speaks() !== 0 || r.blips() < 3), 'needGood ' + name + ': phải ' + (wantTTS ? 'giọng máy' : 'blip') + ' — speak ' + r.speaks() + ', blip ' + r.blips()); }
+    // chế độ "máy đọc" của engine không đổi gì: needGood chỉ là tuỳ chọn của người gọi (Studio / phim bật khi chế độ tự động + có clip AI, KHÔNG bật khi chọn máy đọc)
+    { const r = await go(SET.firefox, { needGood: false, vmode: 'tts' }); no(r.speaks() !== 1 || r.blips() !== 0, 'máy đọc (không needGood): espeak vẫn đọc'); }
+
+    // (6) "…" và "—" / "–" → dấu phẩy ngay trước khi đưa cho SpeechSynthesisUtterance; chỉ số từ (onboundary.charIndex → onWord) vẫn đúng
+    for (const [src, want, words] of [
+      ['Oa… nhanh quá — nhìn không kịp!', 'Oa, nhanh quá, nhìn không kịp!', [0, 1, 2, 4, 5, 6, 7]],
+      ['Thừa tướng… nhìn lá cờ kìa — Gió…gió?!', 'Thừa tướng, nhìn lá cờ kìa, Gió, gió?!', [0, 1, 2, 3, 4, 5, 7, 8]],
+      ['Thôi… – được rồi –', 'Thôi, được rồi', [0, 2, 3, 5]], ['…Khoan đã…', 'Khoan đã', [0, 1, 2]], ['Sao…? Thật—không tin!', 'Sao? Thật, không tin!', [0, 1, 2, 3]]]) {
+      const r = await go(SET.edge, { text: src }), seq = r.words.filter((x, i, a) => a.indexOf(x) === i).join();
+      no(!r.done || r.speaks() !== 1, 'ký hiệu "' + src + '": một lần speak, say() phải xong: ' + r.log.join(' → '));
+      no(r.synth.last.text !== want || /[…—–]/.test(r.synth.last.text), 'ký hiệu "' + src + '": chữ đưa cho giọng máy phải là "' + want + '", ra "' + r.synth.last.text + '"');
+      no(seq !== words.join(), 'ký hiệu "' + src + '": chỉ số từ phải ' + words.join() + ', ra ' + seq); }
+  }
   [dir, d3, d4].forEach(d => fs.rmSync(d, { recursive: true, force: true }));
-  console.log('   ✓ giọng AI (mạng giả, 0 lời gọi Google): dán key là chạy (kiểm miễn phí, sai → 400 giữ key cũ, không lộ key) · model 3.8 qua Interactions (chữ nguyên văn + style) · đời trước qua [thẻ] + giọng dựng sẵn · lưu đệm theo nội dung · hết hạn mức → khoá theo retryDelay, đổi model, nhớ qua khởi động · hết hẳn → 429 + giờ thử lại · dry chỉ lấy clip có sẵn · giọng THEO VAI: thư viện Google theo giới + tuổi + cao độ, giọng thiết kế thắng, vai bé giọng trẻ trung, mỗi người một giọng, tiếng Trung về giọng dựng sẵn · thiết kế giọng (vai trẻ em bị chặn, chính sách / hết lượt / mã ngôn ngữ lạ) · nhân vật lưu voice.role / accent / ai · tác phẩm lưu lang / accent · tiếng Quảng Đông (yue-HK) cast + thiết kế · bộ mẫu mang vai giọng · cổng cortex v0.17: 429 thật (fixture) → giờ thử lại đúng · giọng hỏng có hạn 24 h, lỗi lược đồ không đánh dấu · trần câu / ngày (cả khi gửi cùng lúc) · giọng chốt theo tác phẩm (thêm người không đổi người cũ, MCP {work} = Studio) · dàn > 48 báo missing · khoá prototype · link / chatroom không chi tiêu · gói dự án giữ lang / accent / voices · luật ngôn ngữ lời thoại · giọng trình duyệt đúng vùng + giới');
+  console.log('   ✓ giọng AI (mạng giả, 0 lời gọi Google): dán key là chạy (kiểm miễn phí, sai → 400 giữ key cũ, không lộ key) · model 3.8 qua Interactions (chữ nguyên văn + style) · đời trước qua [thẻ] + giọng dựng sẵn · lưu đệm theo nội dung · hết hạn mức → khoá theo retryDelay, đổi model, nhớ qua khởi động · hết hẳn → 429 + giờ thử lại · dry chỉ lấy clip có sẵn · giọng THEO VAI: thư viện Google theo giới + tuổi + cao độ, giọng thiết kế thắng, vai bé giọng trẻ trung, mỗi người một giọng, tiếng Trung về giọng dựng sẵn · thiết kế giọng (vai trẻ em bị chặn, chính sách / hết lượt / mã ngôn ngữ lạ) · nhân vật lưu voice.role / accent / ai · tác phẩm lưu lang / accent · tiếng Quảng Đông (yue-HK) cast + thiết kế · bộ mẫu mang vai giọng · cổng cortex v0.17: 429 thật (fixture) → giờ thử lại đúng · giọng hỏng có hạn 24 h, lỗi lược đồ không đánh dấu · trần câu / ngày (cả khi gửi cùng lúc) · giọng chốt theo tác phẩm (thêm người không đổi người cũ, MCP {work} = Studio) · dàn > 48 báo missing · khoá prototype · link / chatroom không chi tiêu · gói dự án giữ lang / accent / voices · luật ngôn ngữ lời thoại · giọng trình duyệt đúng vùng + giới · Edge: giọng Online (Natural) thắng giọng máy cũ xếp trước · giọng mạng trễ không bị đồng hồ an toàn cắt câu');
 })().catch(e => { console.log('   ✗', e.stack || e.message); process.exit(1); });
