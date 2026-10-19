@@ -9,6 +9,33 @@ import path from 'path';
 const require = createRequire(import.meta.url);
 const { Store } = require('../server/store.js');
 let pw; try { pw = require('playwright'); } catch { pw = require('/opt/node22/lib/node_modules/playwright'); }
+// Phòng tác phẩm (v0.18) có 5 tab: thao tác vào phần tử đang nằm ở tab ẩn thì bấm đúng tab trước — như người dùng. Chỉ có tác dụng khi phần tử nằm trong [role=tabpanel] đang ẩn.
+async function revealTab(page, sel, ms) {
+  const t0 = Date.now();
+  for (;;) {
+    let id = null;
+    try { id = await page.locator(sel).first().evaluate(e => { const p = e.closest('[role="tabpanel"]'); return p && p.hidden ? p.id.replace('wpanel-', '') : ''; }, null, { timeout: 300 }); } catch (e) { /* chưa có phần tử */ }
+    if (id) { await page.locator('#wtab-' + id).click(); return; }
+    if (id === '' || Date.now() - t0 > ms) return;
+    await page.waitForTimeout(100);
+  }
+}
+function autoTab(page) {
+  for (const m of ['click', 'selectOption', 'fill', 'hover', 'check', 'press']) {
+    const orig = page[m].bind(page);
+    page[m] = async (sel, ...rest) => { if (typeof sel === 'string' && !/^#wtab-/.test(sel)) await revealTab(page, sel, 3000); return orig(sel, ...rest); };
+  }
+  const ws = page.waitForSelector.bind(page);
+  page.waitForSelector = async (sel, o) => { if (typeof sel === 'string' && (!o || !o.state || o.state === 'visible')) await revealTab(page, sel, (o && o.timeout) || 8000); return ws(sel, o); };
+  return page;
+}
+{ const launch = pw.chromium.launch.bind(pw.chromium);
+  pw.chromium.launch = async (...a) => {
+    const b = await launch(...a), np = b.newPage.bind(b), nc = b.newContext.bind(b);
+    b.newPage = async (...x) => autoTab(await np(...x));
+    b.newContext = async (...x) => { const c = await nc(...x), cp = c.newPage.bind(c); c.newPage = async (...y) => autoTab(await cp(...y)); return c; };
+    return b;
+  }; }
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 // server con do test dựng: tắt hết khi thoát — kể cả khi test sập giữa chừng (L-55: server sót lại khiến lần chạy sau dùng nhầm dữ liệu cũ)
 const kids = []; const kid = c => { kids.push(c); return c; };
@@ -170,11 +197,11 @@ if (!ONLY) {
       const post = (u, b) => fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify(b) }).then(r => { if (!r.ok) throw new Error(u + ' ' + r.status); return r.json(); });
       await post('api/works', { title: 'Phim CI', project: 'ci-du-an' });
       for (const t of ['Một', 'Hai']) await post('api/works/phim-ci/shots', { shot: { title: 'Cảnh ' + t, scene: 'gen.khung/san-khau-chuan', cast: ['ma-no-canh'], event: { title: t, steps: [{ actor: 'ma-no-canh', state: 'shock', spot: 'center', say: 'Cảnh ' + t, hold: 1 }] } } });
-      localStorage.setItem('gc-route-tao-tac', JSON.stringify({ page: 'works' }));
+      localStorage.setItem('gc-route-tao-tac', JSON.stringify({ page: 'works', work: 'phim-ci' }));   // v0.18: Tạo tác mở danh sách; vào thẳng phòng của tác phẩm bằng tuyến có work
     });
     await q.goto('http://localhost:7499/tao-tac'); await q.waitForTimeout(900);
-    if ((await q.$$('.stillgrid .libcard img')).length !== 2 || (await q.$$('.shot')).length !== 2) throw new Error('trang Tác phẩm thiếu phân cảnh / cảnh thành phẩm');
-    await q.click('button:has-text("Diễn toàn bộ")'); await q.waitForTimeout(300);
+    if ((await q.$$('.shot img.still')).length !== 2 || (await q.$$('.shot')).length !== 2) throw new Error('phòng tác phẩm thiếu phân cảnh (ảnh khung đầu + thẻ)');
+    await q.click('button[data-playall]'); await q.waitForTimeout(300);
     if (!(await q.$('.gcp .gcp-title'))) throw new Error('sân khấu final không mở bằng thẻ tiêu đề phân cảnh');
     await q.waitForSelector('.gcp .gcp-bub', { timeout: 6000 });   // bong bóng truyện tranh (v0.14: lớp phủ .gcp-bub, không còn gắn trong diễn viên)
     if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
@@ -222,7 +249,9 @@ if (!ONLY) {
     const card = await q.textContent('.libcard.proj');
     if (!/Văn phòng vui/.test(card) || !/3 nhân vật · 1 vật phẩm · 2 bối cảnh/.test(card)) throw new Error('dự án mẫu: ' + card);
     if (await q.$('button:has-text("Dự án mẫu")')) throw new Error('đã có dự án mẫu mà vẫn mời mở lại');
-    await q.goto('http://localhost:7494/tao-tac'); await q.waitForSelector('.readybar');
+    await q.goto('http://localhost:7494/tao-tac'); await q.waitForSelector('table.worklist tr.click');   // v0.18: danh sách tác phẩm trước, click hàng vào phòng
+    if (!/mau-ngay-dau-di-lam/.test(await q.textContent('table.worklist'))) throw new Error('danh sách thiếu tác phẩm mẫu');
+    await q.click('table.worklist a.rowlink'); await q.waitForSelector('.readybar');
     const rb = await q.textContent('.readybar');
     if (!/Sẵn sàng diễn cả 4 phân cảnh/.test(rb)) throw new Error('tác phẩm mẫu: ' + rb);
     await q.goto('http://localhost:7494/'); await q.waitForSelector('.qsteps');
@@ -256,7 +285,7 @@ if (!ONLY) {
     // PHIM SỐNG (L-51): đo đúng thứ người xem thấy — nhân vật di chuyển thật, miệng nhép thật, bong bóng vẽ thật, máy quay cận, âm thanh bật
     await q.evaluate(() => { localStorage.setItem('gc-audio', JSON.stringify({ voice: 'blip' })); localStorage.setItem('gc-route-tao-tac', JSON.stringify({ page: 'works', work: 'mau-ngay-dau-di-lam' })); });
     await q.goto('http://localhost:7494/tao-tac'); await q.waitForSelector('.readybar');
-    await q.click('button:has-text("Diễn toàn bộ")');
+    await q.click('button[data-playall]');
     const seen = { left: new Set(), mouth: new Set(), scale: 0, bubble: 0, tail: 0, name: 0 };
     for (let k = 0; k < 26; k++) {
       await q.waitForTimeout(350);
@@ -908,10 +937,10 @@ if (!ONLY) {
     if ((await sq.evaluate(() => localStorage.getItem('gc-stage'))) !== '{"dialog":"caption"}') throw new Error('chưa nhớ kiểu lời thoại: ' + await sq.evaluate(() => localStorage.getItem('gc-stage')));
     await sq.goto(URL9 + 'tao-tac'); await sq.waitForSelector('select[aria-label="Kiểu lời thoại"]');
     if (await sq.$eval('select[aria-label="Kiểu lời thoại"]', e => e.value) !== 'caption') throw new Error('tải lại trang mất kiểu lời thoại');
-    await sq.click('button:has-text("Diễn toàn bộ")'); await sq.waitForSelector('.gcp .gcp-cap.on', { timeout: 30000 });
+    await sq.click('button[data-playall]'); await sq.waitForSelector('.gcp .gcp-cap.on', { timeout: 30000 });
     if (await sq.$('.gcp .gcp-bub.on')) throw new Error('chọn "phụ đề" mà sân khấu vẫn hiện bong bóng');
     await sq.click('button:text-is("Dừng")');
-    await sq.selectOption('select[aria-label="Kiểu lời thoại"]', 'bubble'); await sq.click('button:has-text("Diễn toàn bộ")'); await sq.waitForSelector('.gcp .gcp-bub.on', { timeout: 30000 });
+    await sq.selectOption('select[aria-label="Kiểu lời thoại"]', 'bubble'); await sq.click('button[data-playall]'); await sq.waitForSelector('.gcp .gcp-bub.on', { timeout: 30000 });
     if (await sq.$('.gcp .gcp-cap.on')) throw new Error('chọn "bong bóng" mà sân khấu hiện phụ đề');
     await sq.click('button:text-is("Dừng")');
     await sq.selectOption('select[aria-label="Kiểu lời thoại"]', 'caption');   // xuất phim với kiểu "phụ đề"
@@ -1310,7 +1339,7 @@ if (!ONLY || ONLY === 'voice') {
     const dubCalls = M.calls.filter(c => !c.dry);
     if (dubCalls.length !== 15 || new Set(dubCalls.map(c => c.text)).size !== 15 || !dubCalls.every(c => c.lang === 'vi' && c.accent === 'nam')) throw new Error('lồng tiếng phải đọc đủ 15 câu, đúng ngôn ngữ / giọng vùng: ' + dubCalls.length);
     if (await q.$eval('.readybar span.meter[role="progressbar"]', e => e.parentElement.hidden || +e.getAttribute('aria-valuenow') !== 15 || +e.getAttribute('aria-valuemax') !== 15)) throw new Error('thanh tiến độ ẩn hoặc aria-valuenow / aria-valuemax sai');
-    await shot(q, 'san-khau-final', '.works > .stack:last-child > .panel:first-child');
+    await shot(q, 'san-khau-final', '#wpanel-voice > .panel:first-child');
     // làm lại sau khi tải lại trang (bộ nhớ trình duyệt sạch): server báo cached → "15 có sẵn", nhanh, không tốn lượt
     await q.reload(); await q.waitForSelector('.shot'); await spyOn(q); await q.selectOption('select[aria-label="Ngôn ngữ phim"]', 'vi|nam'); M.calls.length = 0; const fresh0 = M.fresh;
     await q.click(dubB); await q.waitForFunction(() => /Xong 15\/15 câu/.test(document.body.textContent), null, { timeout: 30000 });
@@ -1401,7 +1430,7 @@ if (!ONLY || ONLY === 'voice') {
     const bt = await q.textContent(BOX), bn = await q.$$eval(BOX + ' button', bs => bs.map(b => b.textContent));
     if (!/Còn 15\/15 câu chưa có giọng AI — câu thiếu sẽ đọc bằng giọng máy \/ blip\./.test(bt) || bn.join('|') !== 'Lồng tiếng rồi xuất|Xuất luôn|Huỷ') throw new Error('hộp thiếu giọng AI: ' + bt + ' · ' + bn.join('|'));
     if (nonDry() || !await q.$eval(BOX + ' button', e => e === document.activeElement)) throw new Error('hộp chỉ hỏi (không tốn lượt), nút đầu nhận focus');
-    await shot(q, 'xuat-phim-thieu-giong', '.works > .stack:last-child > .panel:first-child');
+    await shot(q, 'xuat-phim-thieu-giong', '#wpanel-publish > .panel:first-child');
     // Huỷ: đóng hộp, không tải gì, không đọc mới
     if (!await noDl(() => q.click(BOX + ' button:text-is("Huỷ")')) || await q.$(BOX) || nonDry()) throw new Error('Huỷ phải đóng hộp, không tải tệp, không tốn lượt');
     // Xuất luôn: tải đúng tệp ngay, 0/15 câu có giọng, DATA.voiceTotal = 15 (nhãn "Giọng AI x/15" của phim)
@@ -1666,7 +1695,7 @@ if (!ONLY || ONLY === 'voice') {
     let cfT = await q.textContent(cf);
     if (!/cho 2 vai/.test(cfT) || !/≈ 2 lượt Google/.test(cfT) || !/~25 s mỗi vai/.test(cfT) || !/Bắt đầu thiết kế 2 vai/.test(cfT) || /Võ tướng/.test(cfT) || /Trần câu \/ ngày còn/.test(cfT) || kidLabels.test(cfT.replace(/Vai trẻ em không thiết kế được nên không tính\./, ''))) throw new Error('hộp xác nhận: ' + cfT);
     if (M.designCalls.length || dialogs) throw new Error('chưa bấm "Bắt đầu" mà đã tốn lượt / hiện hộp thoại hệ thống: ' + M.designCalls.length + ' lượt, ' + dialogs + ' hộp');
-    await shot(q, 'san-khau-giong-vung-xac-nhan', '.works > .stack:last-child > .panel:first-child');
+    await shot(q, 'san-khau-giong-vung-xac-nhan', '#wpanel-voice > .panel:first-child');
     await q.click(cf + ' button:text-is("Huỷ")'); if (await q.$(cf) || M.designCalls.length) throw new Error('Huỷ phải đóng hộp, không tốn lượt');
     // chạy: tuần tự (không bao giờ 2 lời gọi cùng lúc), đúng 2 vai chưa thiết kế, KHÔNG có vai trẻ em, tiến độ, xong thì cast lại cả dàn
     M.designDelay = 150; const nCast9 = M.casts.length;
@@ -1680,7 +1709,7 @@ if (!ONLY || ONLY === 'voice') {
     const lastCast = M.casts[M.casts.length - 1];
     if (lastCast.work !== RG || lastCast.actors.length !== 6 || lastCast.lang !== 'vi' || lastCast.accent !== 'nam') throw new Error('xong phải cast lại cả dàn của tác phẩm (6 diễn viên): ' + JSON.stringify([lastCast.work, lastCast.actors.length, lastCast.lang, lastCast.accent]));
     if (!await q.$eval(regB, b => b.disabled) || !/Mọi vai trong phim đã có giọng thiết kế/.test(await q.$eval(regB, b => b.title))) throw new Error('đủ 3/3 thì nút phải mờ kèm lý do');
-    await shot(q, 'san-khau-giong-vung-xong', '.works > .stack:last-child > .panel:first-child');
+    await shot(q, 'san-khau-giong-vung-xong', '#wpanel-voice > .panel:first-child');
     if (!(await toasts(q)).some(t => /Đã thiết kế giọng vùng cho 2\/2 vai/.test(t)) || dialogs) throw new Error('thiếu toast xong / có hộp thoại hệ thống: ' + JSON.stringify(await toasts(q)));
     // đổi giọng vùng của phim → đếm lại theo (vai, ngôn ngữ, giọng vùng): tiếng Trung Đài Loan chưa thiết kế vai nào
     await q.selectOption('select[aria-label="Ngôn ngữ phim"]', 'zh|tw'); await q.waitForTimeout(300);

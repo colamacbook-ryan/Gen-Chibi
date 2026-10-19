@@ -546,3 +546,10 @@ table.worklist .tag { max-width: 200px; overflow: hidden; text-overflow: ellipsi
 @media (prefers-reduced-motion: reduce) { .shot.flash { animation: none; box-shadow: 0 0 0 3px var(--accent); } }
 @media (max-width: 1280px) { .shotlist .shot { grid-template-columns: 196px minmax(0, 1fr); } .revtop { grid-template-columns: minmax(0, 440px) minmax(0, 1fr); } }
 @media (max-width: 1100px) { .revtop { grid-template-columns: minmax(0, 1fr); } .shotlist .shot { grid-template-columns: minmax(0, 1fr); } }
+
+/* Khi dock Trợ lý AI đang mở, vùng làm việc hẹp lại (1440 → ~800 px): trang có cột phải cố định (hồ sơ, bàn chỉnh, tạo asset, bối cảnh) xếp một cột theo bề rộng THẬT của vùng làm việc, không theo bề rộng cửa sổ */
+.view { container-type: inline-size; container-name: pane; }
+@container pane (max-width: 1000px) {
+  .detail, .detail.scenefab, .split.create, .split.lib.wide { grid-template-columns: minmax(0, 1fr); }
+  .detail .sticky, .split.create .sticky, .split.lib.wide .sticky { position: static; }
+}
