@@ -20,27 +20,42 @@ const DEFAULT_SCOPE = 'mcp:write';
 // — loopback so BỎ QUA port (CLI chọn port ngẫu nhiên), mọi địa chỉ khác so tuyệt đối. Chủ máy thêm client khác bằng GC_OAUTH_REDIRECTS (danh sách, cách nhau dấu phẩy).
 const DEFAULT_REDIRECTS = ['https://claude.ai/api/mcp/auth_callback', 'https://claude.com/api/mcp/auth_callback', 'http://localhost/callback', 'http://127.0.0.1/callback'];
 const LOOP = new Set(['127.0.0.1', 'localhost', '[::1]']);
-const MAX = { clients: 50, uris: 5, uri: 512, name: 80, id: 128, state: 512, challenge: 128, scope: 200, secret: 256, code: 256, verifier: 128, pending: 100, codes: 1000, buckets: 5000 };
+const MAX = { clients: 50, uris: 5, uri: 512, name: 80, id: 128, state: 512, challenge: 128, scope: 200, secret: 256, code: 256, verifier: 128, pending: 100, pendingPerClient: 3, codes: 1000, buckets: 5000 };
+// Giới hạn tốc độ (số lần, giây). CHỈ ĐẾM lần thất bại với token / approve (request đúng không bao giờ bị trần), và mọi lần với register / authorize (mỗi lần tạo trạng thái).
+// Luôn kiểm trần theo IP trước; trần toàn cục (rất cao, chỉ chống lũ) chỉ cộng cho request đã qua trần IP. Request loopback thật (không header proxy) được miễn — xem isDirectLocal.
+const RATE = { register: { ip: [20, 600], all: [200, 600] }, authorize: { ip: [60, 60], all: [600, 60] }, token: { ip: [60, 60] }, approve: { ip: [10, 60] } };
+const GRACE = 60;   // giây: refresh vừa xoay được dùng lại trong khoảng này (mất response / hai phiên refresh song song) mà token kế chưa dùng → cấp cặp mới thay vì thu hồi chuỗi
 const TTL = { access: 3600, refresh: 30 * 86400, code: 60, client: 86400, pending: 600, revoked: 7 * 86400, keepUsed: 5 };   // giây (client: hạn của client chưa từng cấp phép — Claude đăng ký client mới mỗi lần Connect; keepUsed: số refresh cũ giữ lại để bắt dùng-lại)
 
 const sha = s => crypto.createHash('sha256').update(String(s)).digest('hex');
 const rnd = n => crypto.randomBytes(n).toString('base64url');
 function safeEq(x, y) { const a = Buffer.from(String(x)), b = Buffer.from(String(y)); return a.length === b.length && crypto.timingSafeEqual(a, b); }
 const str = (v, n) => (typeof v === 'string' ? v.slice(0, n) : '');
-// chữ do agent tự khai (tên client): bỏ ký tự điều khiển + ký tự đảo chiều chữ (giả mạo hiển thị), gom khoảng trắng, cắt độ dài
-const text = (v, n) => str(v, n * 2).replace(/[\u0000-\u001F\u007F-\u009F\u061C\u200B-\u200F\u2028-\u202E\u2066-\u2069\uFEFF]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n);
+// chữ do agent tự khai (tên client): bỏ ký tự điều khiển, ký tự định dạng / vô hình (Cf: đảo chiều chữ, zero-width, tag chars…), ký tự Hangul / braille trống, gom khoảng trắng, cắt độ dài
+const text = (v, n) => str(v, n * 2).replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\u034F\u115F\u1160\u3164\uFFA0\u2800\u00AD\u061C\u{E0000}-\u{E007F}]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, n);
 const iso = ms => new Date(ms).toISOString();
 const oerr = (status, error, error_description, extra) => ({ status, body: Object.assign({ error, error_description }, extra || {}) });
 
-// IP khách để giới hạn tốc độ. Header proxy (cf-connecting-ip, x-real-ip, mục CUỐI của x-forwarded-for = do proxy gần nhất ghi) chỉ đáng tin khi kết nối TRỰC TIẾP tới app là của proxy
-// (loopback / mạng riêng: 127/8, ::1, 10/8, 172.16/12, 192.168/16, fc00::/7); ngược lại ai cũng tự đặt được header → dùng địa chỉ socket. Đây chỉ là lớp phụ: trần TOÀN CỤC (limitGlobal) không dựa vào IP.
+// IP khách để giới hạn tốc độ. Header proxy chỉ đáng tin khi kết nối TRỰC TIẾP tới app là của proxy (loopback / mạng riêng: 127/8, ::1, 10/8, 172.16/12, 192.168/16, fc00::/7);
+// ngược lại ai cũng tự đặt được header → dùng địa chỉ socket. Mặc định chỉ đọc mục CUỐI của x-forwarded-for (do proxy gần nhất ghi; Caddy ghi đè khi client không phải trusted proxy);
+// đứng sau Cloudflare thì chủ đặt GC_CLIENT_IP_HEADER=cf-connecting-ip (hoặc x-real-ip). Chỉ là lớp phụ chống lạm dụng — rào thật là trạng thái có trần + chỉ đếm thất bại.
 const PRIVATE_PEER = /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|::1$|f[cd][0-9a-f]{2}:)/i;
-function clientIp(headers, peer) {
-  peer = String(peer || '').replace(/^::ffff:/i, '');
+const IP_HEADERS = ['x-forwarded-for', 'cf-connecting-ip', 'x-real-ip'];
+const peerOf = peer => String(peer || '').replace(/^::ffff:/i, '');
+function clientIp(headers, peer, header) {
+  peer = peerOf(peer);
   if (!PRIVATE_PEER.test(peer)) return peer.slice(0, 64) || '?';
-  const h = headers || {};
-  return String(h['cf-connecting-ip'] || h['x-real-ip'] || String(h['x-forwarded-for'] || '').split(',').pop().trim() || peer).slice(0, 64);
+  const name = IP_HEADERS.indexOf(header) >= 0 ? header : 'x-forwarded-for';
+  let v = String((headers || {})[name] || '');
+  if (name === 'x-forwarded-for') v = v.split(',').pop();
+  return (v.trim() || peer).slice(0, 64);
 }
+// request loopback THẬT: socket là 127.x / ::1 và không có header proxy nào (curl / trình duyệt của chủ ngay trên máy) → miễn giới hạn (tunnel nằm trên cùng máy luôn để lại header)
+function isDirectLocal(headers, peer) {
+  const h = headers || {};
+  return /^(127\.|::1$)/.test(peerOf(peer)) && !(h['x-forwarded-for'] || h.forwarded || h['cf-connecting-ip'] || h['x-real-ip']);
+}
+const nul = o => Object.assign(Object.create(null), o && typeof o === 'object' && !Array.isArray(o) ? o : {});   // bảng không prototype: id do client gửi (__proto__, constructor…) không chạm tới Object.prototype
 
 // redirect_uri: https hoặc http loopback (CLI); không fragment, không user:pass, độ dài có trần. Trả '' nếu hợp lệ, ngược lại lý do
 function shapeRedirect(u) {
@@ -64,9 +79,18 @@ function canonResource(u) {
 class OAuth {
   // opts: { dir, publicUrl, now?, accessTtl?, redirects?: [] (thêm vào DEFAULT_REDIRECTS) }
   constructor(opts) {
-    // H = origin công khai: scheme + host chữ thường, không port mặc định, không "/" cuối, không đường dẫn. Thiếu / sai thì OAuth tắt
-    let raw = ''; try { const x = new URL(String(opts.publicUrl || '')); if (/^https?:$/.test(x.protocol) && (x.pathname === '/' || x.pathname === '') && !x.search && !x.hash && !x.username) raw = x.origin; } catch (e) { raw = ''; }
+    // H = origin công khai: scheme + host chữ thường, không port mặc định, không "/" cuối, không đường dẫn. Chỉ https (riêng loopback được http). Thiếu / sai thì OAuth tắt (this.why nói lý do)
+    let raw = '', why = '';
+    if (opts.publicUrl) {
+      try {
+        const x = new URL(String(opts.publicUrl));
+        if (x.protocol !== 'https:' && !(x.protocol === 'http:' && LOOP.has(x.hostname.toLowerCase()))) why = 'GC_PUBLIC_URL phải là https (http chỉ cho loopback như http://localhost:7480) — token bay qua mạng không được để trần';
+        else if (!((x.pathname === '/' || x.pathname === '') && !x.search && !x.hash && !x.username)) why = 'GC_PUBLIC_URL phải là gốc, vd https://chibi.example.com (không đường dẫn, query, user:pass)';
+        else raw = x.origin;
+      } catch (e) { why = 'GC_PUBLIC_URL không phải URL hợp lệ'; }
+    }
     this.publicUrl = raw;
+    this.why = why;
     this.enabled = !!raw;
     this.now = opts.now || Date.now;
     this.accessTtl = Math.max(1, Math.min(86400, Math.round(+opts.accessTtl) || TTL.access));
@@ -75,12 +99,21 @@ class OAuth {
     this.redirectKeys = new Set(this.redirects.map(redirectKey));
     this.defaultKeys = new Set(DEFAULT_REDIRECTS.map(redirectKey));
     this.file = path.join(opts.dir, 'oauth.json');
-    let d = {}; try { d = JSON.parse(fs.readFileSync(this.file, 'utf8')); } catch (e) { d = {}; }
-    this.s = { v: 1, clients: d.clients || {}, grants: d.grants || {}, tokens: d.tokens || {} };
+    // tệp hỏng: KHÔNG âm thầm ghi đè (mất hết kết nối) — đổi tên giữ lại để chủ xem, rồi bắt đầu trống
+    let d = {};
+    if (fs.existsSync(this.file)) {
+      try { d = JSON.parse(fs.readFileSync(this.file, 'utf8')); if (!d || typeof d !== 'object' || Array.isArray(d)) throw new Error('không phải đối tượng JSON'); }
+      catch (e) {
+        d = {}; const bak = this.file + '.corrupt-' + Date.now();
+        try { fs.renameSync(this.file, bak); (opts.warn || (() => {}))('[oauth] oauth.json hỏng (' + e.message + ') — đã đổi tên thành ' + path.basename(bak) + ', bắt đầu với danh sách trống'); }
+        catch (e2) { (opts.warn || (() => {}))('[oauth] oauth.json hỏng và không đổi tên được: ' + e2.message); }
+      }
+    }
+    this.s = { v: 1, clients: nul(d.clients), grants: nul(d.grants), tokens: nul(d.tokens) };
     this.codes = new Map();      // băm mã → { client, redirectUri, challenge, scope, exp, used, grant } — chỉ trong bộ nhớ
     this.pending = new Map();    // id yêu cầu chờ chủ duyệt → { client, redirectUri, state, challenge, requested, resource, exp }
-    this.buckets = new Map();    // giới hạn tốc độ theo IP (lớp phụ; đầy thì bỏ khoá cũ nhất)
-    this.global = new Map();     // trần TOÀN CỤC theo loại việc (không phụ thuộc IP, không bị dồn ra khỏi bộ nhớ)
+    this.buckets = new Map();    // giới hạn tốc độ theo IP (đầy thì bỏ khoá cũ nhất)
+    this.global = new Map();     // trần toàn cục theo loại việc (rất cao, chỉ chống lũ; không bị dồn ra khỏi bộ nhớ)
     this.useDirty = false;
     // đổi GC_PUBLIC_URL sang miền khác: mọi token cấp cho miền cũ (aud ≠ H/mcp hiện tại) bị gỡ cùng cả chuỗi — kể cả refresh. Chỉ khi OAuth bật (tắt tạm thì giữ nguyên để bật lại còn dùng)
     if (this.enabled) {
@@ -135,16 +168,24 @@ class OAuth {
     for (const h of Object.keys(this.s.tokens)) if (this.s.tokens[h].g === gid) delete this.s.tokens[h];
   }
 
+  // tra client theo id do bên ngoài gửi: chỉ khoá sở hữu thật (bảng đã không có prototype, kiểm hasOwn là lớp thứ hai)
+  getClient(id) { return typeof id === 'string' && id.length <= MAX.id && Object.hasOwn(this.s.clients, id) ? this.s.clients[id] : null; }
+
   /* ------------------------------------------------------------ giới hạn tốc độ (trong bộ nhớ) */
-  // trả 0 nếu cho qua, ngược lại số giây phải đợi
-  hit(map, key, max, windowSec) {
-    const t = this.now(), b = map.get(key);
-    if (!b || b.reset <= t) { if (map === this.buckets && map.size >= MAX.buckets) map.delete(map.keys().next().value); map.set(key, { n: 1, reset: t + windowSec * 1000 }); return 0; }
-    if (++b.n > max) return Math.max(1, Math.ceil((b.reset - t) / 1000));
-    return 0;
+  // gate: cho qua (0) hay phải đợi (số giây)? Chỉ ĐỌC — không đếm. IP trước, rồi trần toàn cục. scale nhân trần toàn cục (chỉ để test số lượng lớn).
+  gate(kind, ip, scale) {
+    const t = this.now(), r = RATE[kind], full = (map, key, max) => { const b = map.get(key); return b && b.reset > t && b.n >= max ? Math.max(1, Math.ceil((b.reset - t) / 1000)) : 0; };
+    return full(this.buckets, kind + ':' + ip, r.ip[0]) || (r.all ? full(this.global, kind, r.all[0] * (scale || 1)) : 0);
   }
-  limit(key, max, windowSec) { return this.hit(this.buckets, key, max, windowSec); }                 // theo IP
-  limitGlobal(kind, max, windowSec) { return this.hit(this.global, kind, max, windowSec); }          // cho cả máy — chặn trước khi tới lớp theo IP
+  // tick: ghi MỘT sự kiện bị đếm (thất bại, hoặc mọi lần với register / authorize). Gọi sau khi gate cho qua → trần toàn cục chỉ cộng cho request đã qua trần IP
+  tick(kind, ip) {
+    const t = this.now(), r = RATE[kind], bump = (map, key, sec, cap) => {
+      const b = map.get(key);
+      if (!b || b.reset <= t) { if (cap && map.size >= MAX.buckets) map.delete(map.keys().next().value); map.set(key, { n: 1, reset: t + sec * 1000 }); } else b.n++;
+    };
+    bump(this.buckets, kind + ':' + ip, r.ip[1], true);
+    if (r.all) bump(this.global, kind, r.all[1], false);
+  }
 
   /* ------------------------------------------------------------ metadata (RFC 9728 / RFC 8414) */
   protectedResource() {
@@ -201,7 +242,7 @@ class OAuth {
     this.sweep();
     const p = k => str(q.get ? q.get(k) : q[k], MAX.state + 1);
     const cid = p('client_id'), uri = p('redirect_uri'), state = p('state');
-    const c = cid.length <= MAX.id ? this.s.clients[cid] : null;
+    const c = this.getClient(cid);
     if (!c) return { page: 'client_id không tồn tại hoặc đã hết hạn (client chưa được cấp phép tự xoá sau 24 giờ). Quay lại agent và thêm kết nối lại.' };
     // trùng tuyệt đối với bản đã đăng ký (riêng loopback bỏ qua port — CLI chọn port lúc chạy); lệch → trang lỗi, KHÔNG chuyển hướng (không open-redirect)
     if (!uri || uri.length > MAX.uri || shapeRedirect(uri) || !c.redirectUris.some(r => r === uri || redirectKey(r) === redirectKey(uri))) return { page: 'redirect_uri không trùng địa chỉ agent đã đăng ký — từ chối, không chuyển hướng.' };
@@ -219,7 +260,10 @@ class OAuth {
     // gợi ý mức quyền: mức cao nhất agent xin nhưng không quá mcp:write — mcp:owner chỉ khi chủ chủ động chọn
     const top = req.length ? SCOPES[Math.max.apply(null, req.map(x => SCOPES.indexOf(x)))] : '';
     const def = top === 'mcp:read' ? 'mcp:read' : DEFAULT_SCOPE;
-    if (this.pending.size >= MAX.pending) this.pending.delete(this.pending.keys().next().value);
+    // yêu cầu chờ duyệt có trần: mỗi client tối đa 3 (vượt thì đẩy cái cũ nhất CỦA CHÍNH client đó), cả bảng 100 — đầy thì từ chối, KHÔNG xoá yêu cầu của client khác (chủ đang xem trang Cấp phép không bị 410)
+    const mine = [...this.pending].filter(([, x]) => x.client === c.id);
+    if (mine.length >= MAX.pendingPerClient) this.pending.delete(mine[0][0]);
+    if (this.pending.size >= MAX.pending) return { page: 'Máy này đang có quá nhiều yêu cầu cấp phép chờ duyệt — thử lại sau vài phút.', status: 429 };
     const id = rnd(24);
     this.pending.set(id, { client: c.id, redirectUri: uri, state, challenge: ch, requested: req, resource: res, exp: this.now() + TTL.pending * 1000 });
     return { view: { request: id, client: c.name, callback: this.callbackInfo(uri), requested: req, scope: def, scopes: SCOPES.map(s => Object.assign({ id: s }, SCOPE_INFO[s])), expiresIn: TTL.pending } };
@@ -244,7 +288,7 @@ class OAuth {
     if (decision !== 'approve') return { status: 400, error: 'decision phải là approve hoặc deny' };
     if (SCOPES.indexOf(scope) < 0) return { status: 400, error: 'phạm vi không hợp lệ (mcp:read | mcp:write | mcp:owner)' };
     this.pending.delete(id);
-    const c = this.s.clients[p.client];
+    const c = this.getClient(p.client);
     if (!c) return { status: 410, error: 'Agent này đã bị xoá. Quay lại agent và thêm kết nối lại.' };
     if (this.codes.size >= MAX.codes) this.codes.delete(this.codes.keys().next().value);
     const code = rnd(32);
@@ -257,7 +301,7 @@ class OAuth {
   /* ------------------------------------------------------------ token */
   // client công khai: chỉ cần client_id (PKCE chứng minh phần còn lại). Không có client_secret ở bất cứ đâu
   authClient(f) {
-    const cid = str(f.client_id, MAX.id), c = cid ? this.s.clients[cid] : null;
+    const c = this.getClient(str(f.client_id, MAX.id));
     return c ? { client: c } : oerr(401, 'invalid_client', 'client_id không tồn tại hoặc đã hết hạn');
   }
   token(f) {
@@ -289,9 +333,19 @@ class OAuth {
     if (t.aud !== this.resource) { this.dropGrant(t.g); this.save(); return oerr(400, 'invalid_grant', 'refresh_token cấp cho địa chỉ khác (đã đổi GC_PUBLIC_URL) — cần cấp phép lại'); }
     const g = this.s.grants[t.g];
     if (!g || g.client !== c.id) return oerr(400, 'invalid_grant', 'refresh_token không thuộc client này');
-    if (t.used) { this.dropGrant(t.g); this.save(); return oerr(400, 'invalid_grant', 'refresh_token đã được dùng — cả chuỗi token đã bị thu hồi, cần cấp phép lại'); }
-    t.used = true;
-    return { status: 200, body: this.issue(c, g.id) };
+    if (t.used) {
+      // ân hạn 60 s: refresh VỪA xoay mà bị gửi lại (mất response, hoặc hai phiên refresh song song) và cặp kế của nó chưa ai dùng → thu hồi cặp kế đó, cấp cặp mới. Ngoài ân hạn / cặp kế đã dùng → thu hồi cả chuỗi
+      const nx = t.next, nr = nx && this.s.tokens[nx.r], na = nx && this.s.tokens[nx.a];
+      if (nx && this.now() - t.usedAt <= GRACE * 1000 && nr && !nr.used && na && !na.seen) {
+        delete this.s.tokens[nx.r]; delete this.s.tokens[nx.a];
+        const body = this.issue(c, g.id); t.next = { a: sha(body.access_token), r: body.refresh_token ? sha(body.refresh_token) : '' }; this.save();
+        return { status: 200, body };
+      }
+      this.dropGrant(t.g); this.save(); return oerr(400, 'invalid_grant', 'refresh_token đã được dùng — cả chuỗi token đã bị thu hồi, cần cấp phép lại');
+    }
+    t.used = true; t.usedAt = this.now();
+    const body = this.issue(c, g.id); t.next = { a: sha(body.access_token), r: body.refresh_token ? sha(body.refresh_token) : '' }; this.save();
+    return { status: 200, body };
   }
   issue(c, gid) {
     const t = this.now(), S = this.s, access = rnd(32), refresh = rnd(32), g = S.grants[gid];
@@ -323,7 +377,7 @@ class OAuth {
     if (!t || t.k !== 'a' || t.exp <= this.now() || t.aud !== this.resource) return null;   // aud: token chỉ dành cho H/mcp (đổi GC_PUBLIC_URL thì token cũ chết)
     const g = this.s.grants[t.g], c = g && this.s.clients[g.client];
     if (!g || !c) return null;
-    g.lastUsedAt = c.lastUsedAt = iso(this.now()); this.useDirty = true;
+    g.lastUsedAt = c.lastUsedAt = iso(this.now()); t.seen = true; this.useDirty = true;   // seen: cặp token này đã được dùng (hết ân hạn xoay vòng)
     return { client: c, grant: g, scope: g.scope };
   }
 
@@ -340,14 +394,14 @@ class OAuth {
     }).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   }
   setScope(id, scope) {
-    const c = this.s.clients[String(id || '').slice(0, MAX.id)];
+    const c = this.getClient(id);
     if (!c || SCOPES.indexOf(scope) < 0) return false;
     c.scope = scope;
     Object.values(this.s.grants).filter(g => g.client === c.id).forEach(g => { g.scope = scope; });
     this.save(); return true;
   }
   revokeClient(id) {
-    const c = this.s.clients[String(id || '').slice(0, MAX.id)];
+    const c = this.getClient(id);
     if (!c) return false;
     Object.keys(this.s.grants).filter(g => this.s.grants[g].client === c.id).forEach(g => this.dropGrant(g));
     for (const [h, x] of this.codes) if (x.client === c.id) this.codes.delete(h);
@@ -357,4 +411,4 @@ class OAuth {
   }
 }
 
-module.exports = { OAuth, clientIp, SCOPES, SCOPE_INFO, DEFAULT_SCOPE, DEFAULT_REDIRECTS, TTL, shapeRedirect, canonResource };
+module.exports = { OAuth, clientIp, isDirectLocal, SCOPES, SCOPE_INFO, DEFAULT_SCOPE, DEFAULT_REDIRECTS, TTL, shapeRedirect, canonResource };

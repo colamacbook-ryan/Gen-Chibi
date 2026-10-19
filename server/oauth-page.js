@@ -23,7 +23,7 @@ body{background:var(--bg);color:var(--fg);font:13px/1.5 'IBM Plex Sans','Segoe U
 .chip.ok{color:var(--ok)}.chip.warn{color:var(--warn)}
 .alert{border:1px solid color-mix(in srgb,var(--warn) 50%,var(--line));background:var(--accent-soft);border-radius:6px;padding:8px 10px;font-size:12.5px}
 .alert.bad{border-color:color-mix(in srgb,var(--danger) 50%,var(--line));color:var(--danger)}
-.scopes{display:grid;gap:6px}
+.lbl{margin-bottom:6px;color:var(--fg2)}.scopes{display:grid;gap:6px}
 .scope{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--raised);cursor:pointer}
 .scope:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
 .scope input{grid-row:span 2;margin-top:3px;accent-color:var(--accent)}.scope b{font-weight:600}.scope span{color:var(--fg2);font-size:12px}
@@ -60,7 +60,7 @@ function consentPage(view, opts) {
     '<label>Quay về</label><div><span class="mono" id="cb"></span><span class="chip" id="cc"></span></div>' +
     '<label>Agent xin</label><div class="mono" id="rq"></div></div>' +
     '<div class="alert" id="warn" hidden></div>' +
-    '<div><div style="margin-bottom:6px;color:var(--fg2)">Phạm vi cấp (đổi lại được ở Cài đặt › Kết nối agent)</div><div class="scopes" id="sc" role="radiogroup" aria-label="Phạm vi cấp"></div></div>' +
+    '<div><div class="lbl">Phạm vi cấp (đổi lại được ở Cài đặt › Kết nối agent)</div><div class="scopes" id="sc" role="radiogroup" aria-label="Phạm vi cấp"></div></div>' +
     '<div id="tk" hidden><label for="tki" class="note">Token chủ máy (GC_API_TOKEN) — để chứng minh bạn là chủ máy</label><input id="tki" type="password" autocomplete="current-password" placeholder="GC_API_TOKEN"></div>' +
     '<div class="alert bad" id="er" hidden></div>' +
     '<div class="row"><button class="btn" id="no" type="button">Từ chối</button><button class="btn primary" id="ok" type="button">Cấp phép</button></div></div>';
@@ -76,9 +76,13 @@ D.scopes.forEach(function(s){var l=document.createElement('label');l.className='
 var b=document.createElement('b');b.textContent=s.label+' ('+s.id+')';var d=document.createElement('span');d.textContent=s.desc;l.appendChild(r);l.appendChild(b);l.appendChild(d);$('sc').appendChild(l);});
 var token='';try{token=localStorage.getItem('gc-token')||''}catch(e){}
 if(D.needToken&&!token)$('tk').hidden=false;
-function err(m){$('er').hidden=false;$('er').textContent=m;$('ok').disabled=false;$('no').disabled=false;}
+// chống bấm nhầm / clickjacking qua popup: nút Cấp phép chỉ bật sau 800 ms kể từ khi trang hiện hoặc nhận lại focus (hẹn giờ đặt lại mỗi lần)
+var armT=0,busy=false;
+function arm(){$('ok').disabled=true;clearTimeout(armT);armT=setTimeout(function(){if(!busy)$('ok').disabled=false;},800);}
+arm();window.addEventListener('focus',arm);document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')arm();});
+function err(m){busy=false;$('er').hidden=false;$('er').textContent=m;$('no').disabled=false;arm();}
 function go(decision){
-  $('er').hidden=true;$('ok').disabled=true;$('no').disabled=true;
+  busy=true;$('er').hidden=true;$('ok').disabled=true;$('no').disabled=true;
   var t=$('tki').value.trim()||token,h={'Content-Type':'application/json','X-GC-Request':'1'};if(t)h.Authorization='Bearer '+t;
   fetch('/api/oauth/approve',{method:'POST',headers:h,body:JSON.stringify({request:D.request,decision:decision,scope:sel})}).then(function(r){return r.json().catch(function(){return{}}).then(function(j){return{s:r.status,j:j}})}).then(function(x){
     if(x.s===401){$('tk').hidden=false;token='';return err('Cần token chủ máy (GC_API_TOKEN) đúng để cấp phép.')}
@@ -87,7 +91,7 @@ function go(decision){
     $('ok').textContent='Đang quay về agent…';location.assign(x.j.redirect);
   }).catch(function(e){err('Không gọi được máy chủ: '+e.message)});
 }
-$('ok').addEventListener('click',function(){go('approve')});$('no').addEventListener('click',function(){go('deny')});
+$('ok').addEventListener('click',function(){if(!$('ok').disabled)go('approve')});$('no').addEventListener('click',function(){go('deny')});
 })();`;
   return { html: shell('Cấp phép kết nối agent', body, n, '<script type="application/json" id="gc-data">' + safeJSON(data) + '</script><script nonce="' + n + '">' + js + '</script>'), csp: csp(n) };
 }

@@ -23,6 +23,7 @@ services:
       GC_PUBLIC_URL: ${GC_PUBLIC_URL:-}
       GC_OAUTH_REDIRECTS: ${GC_OAUTH_REDIRECTS:-}
       GC_OAUTH_ACCESS_TTL: ${GC_OAUTH_ACCESS_TTL:-}
+      GC_CLIENT_IP_HEADER: ${GC_CLIENT_IP_HEADER:-}
       GC_REPO: ${GC_REPO:-colamacbook-ryan/Gen-Chibi}
       GC_GITHUB_TOKEN: ${GC_GITHUB_TOKEN:-}
       # mạng công ty có proxy: đặt trong .env

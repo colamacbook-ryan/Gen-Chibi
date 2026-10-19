@@ -275,7 +275,7 @@ ingress:
     path: ^/mcp(/.*)?$
     service: $(origin_url)
   - hostname: $host
-    path: ^/\.well-known/oauth-(protected-resource|authorization-server)(/.*)?$
+    path: ^/\.well-known/oauth-(protected-resource|authorization-server)(/mcp)?$
     service: $(origin_url)
   - hostname: $host
     path: ^/oauth/(register|token|revoke|authorize)$

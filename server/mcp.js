@@ -368,10 +368,10 @@ class MCP {
   async callTool(name, args, ctx) {
     const GC = this.GC;
     args = args || {};
-    // kết nối OAuth mcp:read (v0.19): chỉ tool tự khai readOnlyHint — danh sách đã lọc ở tools/list, đây là cổng thật (gọi thẳng tên tool cũng bị chặn)
+    // kết nối OAuth mcp:read (v0.19): chỉ tool tự khai readOnlyHint — danh sách đã lọc ở tools/list, đây là cổng thật, ĐÓNG khi nghi ngờ (gọi thẳng tên tool, hay tên lạ, đều bị chặn)
     if (ctx && ctx.readOnly) {
       const t = TOOLS.find(x => x.name === name);
-      if (t && !(t.annotations && t.annotations.readOnlyHint === true)) return toolError('Kết nối này chỉ có quyền xem (mcp:read) — tool ' + name + ' ghi / tốn tài nguyên. Nhờ chủ máy đổi phạm vi ở Studio › Hệ thống › Kết nối agent.', { code: 'FORBIDDEN' });
+      if (!t || !(t.annotations && t.annotations.readOnlyHint === true)) return toolError('Kết nối này chỉ có quyền xem (mcp:read) — tool ' + name + ' ghi / tốn tài nguyên. Nhờ chủ máy đổi phạm vi ở Studio › Hệ thống › Kết nối agent.', { code: 'FORBIDDEN' });
     }
     switch (name) {
       case 'get_catalog': return json(this.catalog());
@@ -746,7 +746,7 @@ class MCP {
       previous: st.previous, canRollback: !!st.canRollback, busy: !!st.busy, history: (st.history || []).slice(0, 5)
     });
     if (name === 'get_app_version') {
-      if (args.check === false) return json(view(up.status()));
+      if (args.check === false || ctx.viaOAuth) return json(view(up.status()));   // kết nối OAuth: không bao giờ gọi GitHub / ghi trạng thái cập nhật — chỉ đọc bản đã biết
       try { return json(view(await up.check())); }
       catch (e) { return json(Object.assign(view(up.status()), { error: 'Không hỏi được GitHub: ' + e.message })); }
     }
