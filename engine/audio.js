@@ -26,6 +26,9 @@
  *   GC.audio.sfx(name, {gain, pan, delay})   mọi âm đã nạp (GC.sounds) — 17 tên cũ (pop whoosh step sting hit boing sparkle rumble drip
  *                                      sad snore party hmm gong chime swish tick) giữ nguyên; delay (s, 0…4) = phát trễ theo đồng hồ âm thanh
  *   GC.audio.sfxNames / sfxInfo()      danh sách tên · { tên: { dur, level, cat, label, nodes } } (cho công cụ kiểm thử / Studio)
+ *   GC.audio.renderWav(tên | danh sách, {sampleRate, volume, tail, seed}) → Promise<ArrayBuffer> WAV 16-bit stereo: dựng OFFLINE (OfflineAudioContext, chuỗi trộn
+ *                                      riêng như lúc phát) để tải về / nghe lại. Danh sách = [tên | [delay, tên] | {name, delay, gain, pan}…] ≤ 12 (công thức ghép
+ *                                      mẫu: GC.sounds.RECIPES[i].seq). Không cần unlock(); không đụng bộ phát đang chạy. Âm lạ / thiếu OfflineAudioContext → reject
  *   GC.audio.ambient({time, weather, indoor} | null)    tiếng nền cảnh, chéo mờ 0.8 s; cùng spec thì không làm lại
  *   GC.audio.music('calm'|'tense'|'epic'|'comic'|'sad' | null)   nhạc nền rất nhỏ; null tắt dần 1 s; tên lạ → bỏ qua
  *   GC.audio.voiceOf(asset, {lang, accent}) → { pitch, rate, blip, lang, gender, role }  theo vai giọng (engine/voices.js); pitch/rate của nhân vật thắng
@@ -499,6 +502,16 @@
     }
   }
   var warned = false;
+  // dựng + lập lịch MỘT lần phát của âm đã chuẩn hoá d (sfx() và renderWav() dùng chung — tai nghe và tệp WAV là cùng một đường)
+  function fire(d, opts, delay) {
+    var v = d.vary == null ? 0.03 : d.vary;
+    var f = mkFx(sfxBus, d.dur + 0.1 + delay, true, d.level * clamp(opts.gain, 0, 1, 1), opts.pan != null ? clamp(opts.pan, -1, 1, 0) : null, d.rev);
+    if (!f) return;
+    f.dc = 1200 * Math.log(1 + rnd(-v, v)) / Math.LN2;       // lệch nhẹ mỗi lần phát để lặp lại không "máy"
+    f.fc = 1200 * Math.log(1 + rnd(-0.1, 0.1)) / Math.LN2;
+    f.av = Math.pow(10, rnd(-1, 1) / 20);
+    play(f, d, ctx.currentTime + 0.005 + delay);
+  }
   function sfx(name, opts) {
     if (!ready() || muted || typeof name !== 'string') return;
     var S = GC.sounds, d = S && S.get(name);
@@ -507,19 +520,63 @@
       return;
     }
     opts = opts || {};
-    var v = d.vary == null ? 0.03 : d.vary, delay = clamp(opts.delay, 0, 4, 0);
-    var f = mkFx(sfxBus, d.dur + 0.1 + delay, true, d.level * clamp(opts.gain, 0, 1, 1), opts.pan != null ? clamp(opts.pan, -1, 1, 0) : null, d.rev);
-    if (!f) return;
-    f.dc = 1200 * Math.log(1 + rnd(-v, v)) / Math.LN2;       // lệch nhẹ mỗi lần phát để lặp lại không "máy"
-    f.fc = 1200 * Math.log(1 + rnd(-0.1, 0.1)) / Math.LN2;
-    f.av = Math.pow(10, rnd(-1, 1) / 20);
-    play(f, d, ctx.currentTime + 0.005 + delay);
+    fire(d, opts, clamp(opts.delay, 0, 4, 0));
   }
   function sfxNames() { return GC.sounds ? GC.sounds.names() : []; }
   function sfxInfo() {
     var o = {}, S = GC.sounds, N = sfxNames(), i, d;
     for (i = 0; i < N.length; i++) { d = S.get(N[i]); o[N[i]] = { dur: d.dur, level: d.level, cat: d.cat, label: d.label, nodes: d.nodes }; }
     return o;
+  }
+
+  /* ---------------------------------------- dựng một âm ra WAV (nghe lại / tải về, Studio › Thư viện › Âm thanh) */
+  // renderWav(tên | [tên | [delay, tên] | { name, delay?, gain?, pan? }…], { sampleRate?, volume?, tail?, seed? }) → Promise<ArrayBuffer> (WAV 16-bit stereo).
+  // Dựng OFFLINE trên OfflineAudioContext với chuỗi trộn RIÊNG (cùng build() như lúc phát: nén nhẹ, phòng vang, limiter, cắt mềm) — không đụng
+  // AudioContext đang phát, không cần unlock(). Ngân sách (L-42): ≤ 12 lần phát, ≤ 14 s, dựng một lần khi người dùng bấm tải, không lặp.
+  function getState() { return [ctx, master, sfxMaster, sfxBus, voiceBus, ambBus, musBus, duckBus, revIn, noiseBuf, pinkBuf, brownBuf, voiceWave, fxLive, volume, muted, duckOn]; }
+  function setState(a) { ctx = a[0]; master = a[1]; sfxMaster = a[2]; sfxBus = a[3]; voiceBus = a[4]; ambBus = a[5]; musBus = a[6]; duckBus = a[7]; revIn = a[8]; noiseBuf = a[9]; pinkBuf = a[10]; brownBuf = a[11]; voiceWave = a[12]; fxLive = a[13]; volume = a[14]; muted = a[15]; duckOn = a[16]; }
+  function mulberry(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  function wavOf(buf) {
+    var n = buf.length, ch = buf.numberOfChannels, sr = buf.sampleRate, out = new ArrayBuffer(44 + n * 4), v = new DataView(out), L = buf.getChannelData(0), R = ch > 1 ? buf.getChannelData(1) : L, i, o = 44, x;
+    var str = function (at, t) { for (var k = 0; k < t.length; k++) v.setUint8(at + k, t.charCodeAt(k)); };
+    str(0, 'RIFF'); v.setUint32(4, 36 + n * 4, true); str(8, 'WAVE'); str(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 2, true);
+    v.setUint32(24, sr, true); v.setUint32(28, sr * 4, true); v.setUint16(32, 4, true); v.setUint16(34, 16, true); str(36, 'data'); v.setUint32(40, n * 4, true);
+    for (i = 0; i < n; i++) {
+      x = L[i]; v.setInt16(o, x < -1 ? -32768 : x > 1 ? 32767 : Math.round(x * 32767), true); o += 2;
+      x = R[i]; v.setInt16(o, x < -1 ? -32768 : x > 1 ? 32767 : Math.round(x * 32767), true); o += 2;
+    }
+    return out;
+  }
+  function renderWav(what, o) {
+    o = o || {};
+    var OC = W && (W.OfflineAudioContext || W.webkitOfflineAudioContext), S = GC.sounds, list = [].concat(what), cues = [], end = 0, i, c, d;
+    if (!OC) return Promise.reject(new Error('Trình duyệt không có OfflineAudioContext — không dựng được WAV'));
+    if (!S) return Promise.reject(new Error('Thiếu engine/sounds.js (thư viện âm)'));
+    if (!list.length || list.length > MAX_FX) return Promise.reject(new Error('renderWav: 1…' + MAX_FX + ' lần phát'));
+    for (i = 0; i < list.length; i++) {
+      c = list[i]; c = typeof c === 'string' ? { name: c } : Array.isArray(c) ? { delay: c[0], name: c[1] } : (c || {});
+      d = S.get(c.name);
+      if (!d) return Promise.reject(new Error('Không có âm "' + String(c.name).slice(0, 32) + '" trong thư viện (GC.sounds.list)'));
+      c = { d: d, delay: clamp(c.delay, 0, 10, 0), gain: c.gain, pan: c.pan };
+      cues.push(c); end = Math.max(end, c.delay + d.dur + 0.1);
+    }
+    var sr = Math.round(clamp(o.sampleRate, 8000, 96000, 44100)), len = Math.ceil(Math.min(14, end + clamp(o.tail, 0, 3, 0.6)) * sr);
+    var keep = getState(), realRandom = Math.random, off;
+    try {
+      if (typeof o.seed === 'number') Math.random = mulberry(o.seed);      // cùng seed → cùng tệp (kiểm thử, so sánh)
+      off = new OC(2, len, sr);
+      setState([off, null, null, null, null, null, null, null, null, null, null, null, null, [], clamp(o.volume, 0, 1, 1), false, false]);
+      build();
+      for (i = 0; i < cues.length; i++) fire(cues[i].d, { gain: cues[i].gain, pan: cues[i].pan }, cues[i].delay);
+    } catch (e) {
+      setState(keep); Math.random = realRandom;
+      return Promise.reject(e);
+    }
+    setState(keep); Math.random = realRandom;                               // đồ thị đã dựng xong (đồng bộ); phần còn lại chỉ là offline render
+    return new Promise(function (ok, no) {
+      var p = off.startRendering();
+      if (p && p.then) p.then(ok, no); else off.oncomplete = function (e) { ok(e.renderedBuffer); };
+    }).then(wavOf);
   }
 
   /* ------------------------------------------------------------ tiếng nền */
@@ -1297,6 +1354,7 @@
     sfx: sfx,
     get sfxNames() { return sfxNames(); },
     sfxInfo: sfxInfo,
+    renderWav: renderWav,
     ambient: ambient,
     music: music,
     voiceOf: voiceOf,
