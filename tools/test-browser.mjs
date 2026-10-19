@@ -3,11 +3,39 @@
 import { createRequire } from 'module';
 import { spawn, execFileSync } from 'child_process';
 import { mkdtempSync } from 'fs';
+import * as fs from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 const require = createRequire(import.meta.url);
 const { Store } = require('../server/store.js');
 let pw; try { pw = require('playwright'); } catch { pw = require('/opt/node22/lib/node_modules/playwright'); }
+// Phòng tác phẩm (v0.18) có 5 tab: thao tác vào phần tử đang nằm ở tab ẩn thì bấm đúng tab trước — như người dùng. Chỉ có tác dụng khi phần tử nằm trong [role=tabpanel] đang ẩn.
+async function revealTab(page, sel, ms) {
+  const t0 = Date.now();
+  for (;;) {
+    let id = null;
+    try { id = await page.locator(sel).first().evaluate(e => { const p = e.closest('[role="tabpanel"]'); return p && p.hidden ? p.id.replace('wpanel-', '') : ''; }, null, { timeout: 300 }); } catch (e) { /* chưa có phần tử */ }
+    if (id) { await page.locator('#wtab-' + id).click(); return; }
+    if (id === '' || Date.now() - t0 > ms) return;
+    await page.waitForTimeout(100);
+  }
+}
+function autoTab(page) {
+  for (const m of ['click', 'selectOption', 'fill', 'hover', 'check', 'press']) {
+    const orig = page[m].bind(page);
+    page[m] = async (sel, ...rest) => { if (typeof sel === 'string' && !/^#wtab-/.test(sel)) await revealTab(page, sel, 3000); return orig(sel, ...rest); };
+  }
+  const ws = page.waitForSelector.bind(page);
+  page.waitForSelector = async (sel, o) => { if (typeof sel === 'string' && (!o || !o.state || o.state === 'visible')) await revealTab(page, sel, (o && o.timeout) || 8000); return ws(sel, o); };
+  return page;
+}
+{ const launch = pw.chromium.launch.bind(pw.chromium);
+  pw.chromium.launch = async (...a) => {
+    const b = await launch(...a), np = b.newPage.bind(b), nc = b.newContext.bind(b);
+    b.newPage = async (...x) => autoTab(await np(...x));
+    b.newContext = async (...x) => { const c = await nc(...x), cp = c.newPage.bind(c); c.newPage = async (...y) => autoTab(await cp(...y)); return c; };
+    return b;
+  }; }
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 // server con do test dựng: tắt hết khi thoát — kể cả khi test sập giữa chừng (L-55: server sót lại khiến lần chạy sau dùng nhầm dữ liệu cũ)
 const kids = []; const kid = c => { kids.push(c); return c; };
@@ -170,11 +198,11 @@ if (!ONLY) {
       const post = (u, b) => fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify(b) }).then(r => { if (!r.ok) throw new Error(u + ' ' + r.status); return r.json(); });
       await post('api/works', { title: 'Phim CI', project: 'ci-du-an' });
       for (const t of ['Một', 'Hai']) await post('api/works/phim-ci/shots', { shot: { title: 'Cảnh ' + t, scene: 'gen.khung/san-khau-chuan', cast: ['ma-no-canh'], event: { title: t, steps: [{ actor: 'ma-no-canh', state: 'shock', spot: 'center', say: 'Cảnh ' + t, hold: 1 }] } } });
-      localStorage.setItem('gc-route-tao-tac', JSON.stringify({ page: 'works' }));
+      localStorage.setItem('gc-route-tao-tac', JSON.stringify({ page: 'works', work: 'phim-ci' }));   // v0.18: Tạo tác mở danh sách; vào thẳng phòng của tác phẩm bằng tuyến có work
     });
     await q.goto('http://localhost:7499/tao-tac'); await q.waitForTimeout(900);
-    if ((await q.$$('.stillgrid .libcard img')).length !== 2 || (await q.$$('.shot')).length !== 2) throw new Error('trang Tác phẩm thiếu phân cảnh / cảnh thành phẩm');
-    await q.click('button:has-text("Diễn toàn bộ")'); await q.waitForTimeout(300);
+    if ((await q.$$('.shot img.still')).length !== 2 || (await q.$$('.shot')).length !== 2) throw new Error('phòng tác phẩm thiếu phân cảnh (ảnh khung đầu + thẻ)');
+    await q.click('button[data-playall]'); await q.waitForTimeout(300);
     if (!(await q.$('.gcp .gcp-title'))) throw new Error('sân khấu final không mở bằng thẻ tiêu đề phân cảnh');
     await q.waitForSelector('.gcp .gcp-bub', { timeout: 6000 });   // bong bóng truyện tranh (v0.14: lớp phủ .gcp-bub, không còn gắn trong diễn viên)
     if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
@@ -222,7 +250,9 @@ if (!ONLY) {
     const card = await q.textContent('.libcard.proj');
     if (!/Văn phòng vui/.test(card) || !/3 nhân vật · 1 vật phẩm · 2 bối cảnh/.test(card)) throw new Error('dự án mẫu: ' + card);
     if (await q.$('button:has-text("Dự án mẫu")')) throw new Error('đã có dự án mẫu mà vẫn mời mở lại');
-    await q.goto('http://localhost:7494/tao-tac'); await q.waitForSelector('.readybar');
+    await q.goto('http://localhost:7494/tao-tac'); await q.waitForSelector('table.worklist tr.click');   // v0.18: danh sách tác phẩm trước, click hàng vào phòng
+    if (!/mau-ngay-dau-di-lam/.test(await q.textContent('table.worklist'))) throw new Error('danh sách thiếu tác phẩm mẫu');
+    await q.click('table.worklist a.rowlink'); await q.waitForSelector('.readybar');
     const rb = await q.textContent('.readybar');
     if (!/Sẵn sàng diễn cả 4 phân cảnh/.test(rb)) throw new Error('tác phẩm mẫu: ' + rb);
     await q.goto('http://localhost:7494/'); await q.waitForSelector('.qsteps');
@@ -256,7 +286,7 @@ if (!ONLY) {
     // PHIM SỐNG (L-51): đo đúng thứ người xem thấy — nhân vật di chuyển thật, miệng nhép thật, bong bóng vẽ thật, máy quay cận, âm thanh bật
     await q.evaluate(() => { localStorage.setItem('gc-audio', JSON.stringify({ voice: 'blip' })); localStorage.setItem('gc-route-tao-tac', JSON.stringify({ page: 'works', work: 'mau-ngay-dau-di-lam' })); });
     await q.goto('http://localhost:7494/tao-tac'); await q.waitForSelector('.readybar');
-    await q.click('button:has-text("Diễn toàn bộ")');
+    await q.click('button[data-playall]');
     const seen = { left: new Set(), mouth: new Set(), scale: 0, bubble: 0, tail: 0, name: 0 };
     for (let k = 0; k < 26; k++) {
       await q.waitForTimeout(350);
@@ -910,10 +940,10 @@ if (!ONLY) {
     if ((await sq.evaluate(() => localStorage.getItem('gc-stage'))) !== '{"dialog":"caption"}') throw new Error('chưa nhớ kiểu lời thoại: ' + await sq.evaluate(() => localStorage.getItem('gc-stage')));
     await sq.goto(URL9 + 'tao-tac'); await sq.waitForSelector('select[aria-label="Kiểu lời thoại"]');
     if (await sq.$eval('select[aria-label="Kiểu lời thoại"]', e => e.value) !== 'caption') throw new Error('tải lại trang mất kiểu lời thoại');
-    await sq.click('button:has-text("Diễn toàn bộ")'); await sq.waitForSelector('.gcp .gcp-cap.on', { timeout: 30000 });
+    await sq.click('button[data-playall]'); await sq.waitForSelector('.gcp .gcp-cap.on', { timeout: 30000 });
     if (await sq.$('.gcp .gcp-bub.on')) throw new Error('chọn "phụ đề" mà sân khấu vẫn hiện bong bóng');
     await sq.click('button:text-is("Dừng")');
-    await sq.selectOption('select[aria-label="Kiểu lời thoại"]', 'bubble'); await sq.click('button:has-text("Diễn toàn bộ")'); await sq.waitForSelector('.gcp .gcp-bub.on', { timeout: 30000 });
+    await sq.selectOption('select[aria-label="Kiểu lời thoại"]', 'bubble'); await sq.click('button[data-playall]'); await sq.waitForSelector('.gcp .gcp-bub.on', { timeout: 30000 });
     if (await sq.$('.gcp .gcp-cap.on')) throw new Error('chọn "bong bóng" mà sân khấu hiện phụ đề');
     await sq.click('button:text-is("Dừng")');
     await sq.selectOption('select[aria-label="Kiểu lời thoại"]', 'caption');   // xuất phim với kiểu "phụ đề"
@@ -1399,7 +1429,7 @@ if (!ONLY || ONLY === 'voice') {
     page.on('pageerror', e => errs10.push(e.message));
     await page.goto(URL10 + app); await page.waitForFunction(() => window.GenChibi && /^v\d/.test(document.getElementById('verChip').textContent), null, { timeout: 8000 });
     if (route) { await page.waitForSelector('.nav-item', { timeout: 8000 });   // go() đầu tiên ghi tuyến vào localStorage SAU khi verChip hiện — đợi nó xong rồi mới đặt tuyến
-      await page.evaluate(([k, r]) => localStorage.setItem(k, JSON.stringify(r)), ['gc-route-' + app, route]); await page.reload(); await page.waitForFunction(() => /^v\d/.test(document.getElementById('verChip').textContent), null, { timeout: 8000 }); }
+      await page.evaluate(([k, r]) => localStorage.setItem(k, JSON.stringify(r)), ['gc-route-' + app, route]); await page.goto(URL10 + app); await page.waitForFunction(() => /^v\d/.test(document.getElementById('verChip').textContent), null, { timeout: 8000 }); }
     return page;
   };
   // chờ một điều kiện phía Node (selector kiểu Playwright dùng được) — waitForFunction chỉ hiểu CSS thuần
@@ -1658,7 +1688,7 @@ if (!ONLY || ONLY === 'voice') {
     const dubCalls = M.calls.filter(c => !c.dry);
     if (dubCalls.length !== 15 || new Set(dubCalls.map(c => c.text)).size !== 15 || !dubCalls.every(c => c.lang === 'vi' && c.accent === 'nam')) throw new Error('lồng tiếng phải đọc đủ 15 câu, đúng ngôn ngữ / giọng vùng: ' + dubCalls.length);
     if (await q.$eval('.readybar span.meter[role="progressbar"]', e => e.parentElement.hidden || +e.getAttribute('aria-valuenow') !== 15 || +e.getAttribute('aria-valuemax') !== 15)) throw new Error('thanh tiến độ ẩn hoặc aria-valuenow / aria-valuemax sai');
-    await shot(q, 'san-khau-final', '.works > .stack:last-child > .panel:first-child');
+    await shot(q, 'san-khau-final', '#wpanel-voice > .panel:first-child');
     // làm lại sau khi tải lại trang (bộ nhớ trình duyệt sạch): server báo cached → "15 có sẵn", nhanh, không tốn lượt
     await q.reload(); await q.waitForSelector('.shot'); await spyOn(q); await q.selectOption('select[aria-label="Ngôn ngữ phim"]', 'vi|nam'); M.calls.length = 0; const fresh0 = M.fresh;
     await q.click(dubB); await q.waitForFunction(() => /Xong 15\/15 câu/.test(document.body.textContent), null, { timeout: 30000 });
@@ -1749,7 +1779,7 @@ if (!ONLY || ONLY === 'voice') {
     const bt = await q.textContent(BOX), bn = await q.$$eval(BOX + ' button', bs => bs.map(b => b.textContent));
     if (!/Còn 15\/15 câu chưa có giọng AI — câu thiếu sẽ đọc bằng giọng máy \/ blip\./.test(bt) || bn.join('|') !== 'Lồng tiếng rồi xuất|Xuất luôn|Huỷ') throw new Error('hộp thiếu giọng AI: ' + bt + ' · ' + bn.join('|'));
     if (nonDry() || !await q.$eval(BOX + ' button', e => e === document.activeElement)) throw new Error('hộp chỉ hỏi (không tốn lượt), nút đầu nhận focus');
-    await shot(q, 'xuat-phim-thieu-giong', '.works > .stack:last-child > .panel:first-child');
+    await shot(q, 'xuat-phim-thieu-giong', '#wpanel-publish > .panel:first-child');
     // Huỷ: đóng hộp, không tải gì, không đọc mới
     if (!await noDl(() => q.click(BOX + ' button:text-is("Huỷ")')) || await q.$(BOX) || nonDry()) throw new Error('Huỷ phải đóng hộp, không tải tệp, không tốn lượt');
     // Xuất luôn: tải đúng tệp ngay, 0/15 câu có giọng, DATA.voiceTotal = 15 (nhãn "Giọng AI x/15" của phim)
@@ -1781,10 +1811,10 @@ if (!ONLY || ONLY === 'voice') {
     if (!await noDl(() => q.click(EXP), 800) || await q.$(BOX) || !(await toasts(q)).some(t => /Đang lồng tiếng AI — chờ xong/.test(t))) throw new Error('đang lồng tiếng thì Phim (HTML) chỉ nhắc chờ');
     await q.click('button:text-is("Dừng lồng tiếng")'); await q.waitForFunction(() => /Đã dừng/.test(document.body.textContent), null, { timeout: 15000 }); M.delay = 0;
     // Giọng AI chưa sẵn sàng (chưa có key): xuất như cũ, không hộp
-    await q.close(); M.hasKey = false; M.ids.clear();
+    await q.close(); await new Promise(r => setTimeout(r, 600)); M.hasKey = false; M.ids.clear();   // chờ các lời gọi lồng tiếng còn bay của trang vừa đóng (M.delay = 200) trả xong rồi mới xoá clip — không thì clip về muộn lọt vào "chưa có key"
     q = await pg(await ctx10.newPage(), { page: 'works', work: WORK }); await q.waitForSelector('.shot'); await spyOn(q); await q.waitForFunction(() => /Chưa có key Google/.test(document.body.textContent), null, { timeout: 5000 });
     dx = await dlOf(() => q.click(EXP));
-    if (Object.keys(dx.voices).length !== 0 || await q.$(BOX)) throw new Error('chưa có key: xuất như cũ, không hộp');
+    if (Object.keys(dx.voices).length !== 0 || await q.$(BOX)) throw new Error('chưa có key: xuất như cũ, không hộp · ' + JSON.stringify({ voices: Object.keys(dx.voices).length, box: !!(await q.$(BOX)), hasKey: M.hasKey, ids: M.ids.size, cfg: await q.evaluate(() => JSON.stringify(window.GCDock && window.GCDock.state())) }));
     M.hasKey = true; M.ids.clear();
     await q.close();
     console.log('  ✓ Xuất phim thiếu giọng AI: bấm Phim (HTML) khi còn câu chưa có clip + Giọng AI sẵn sàng → hộp "Còn 15/15 câu chưa có giọng AI — câu thiếu sẽ đọc bằng giọng máy / blip" với đúng 3 nút (focus nút đầu, chưa tốn lượt) · Huỷ: đóng, không tải · Xuất luôn: tải ngay (DATA.voiceTotal) · Lồng tiếng rồi xuất: lồng đủ 15 câu rồi tự tải · hết lượt giữa chừng vẫn xuất phần đã có · Dừng lồng tiếng thì KHÔNG xuất · đang lồng tiếng chỉ nhắc chờ · đủ giọng / chưa có key: xuất thẳng, không hộp');
@@ -2008,13 +2038,13 @@ if (!ONLY || ONLY === 'voice') {
     if (!/đọc giọng chung của ngôn ngữ/.test(await regionLine())) throw new Error('dòng giọng vùng phải nói vai chưa thiết kế đọc giọng chung: ' + await regionLine());
     // đã có một vai thiết kế (bên server) → 1/3, chỉ còn 2 vai phải thiết kế
     M.designs['vo-tuong|vi|nam'] = { voice: 'design-vo-tuong', at: new Date().toISOString() };
-    await q.reload(); await q.waitForSelector('.shot'); await spyOn(q); await poll(async () => /^giọng vùng có ở 1\/3 vai \(đã thiết kế\)/.test(await regionLine()), 'đếm 1/3');
+    await q.reload(); await q.waitForSelector('.shot'); await spyOn(q); await poll(async () => /^giọng vùng có ở 1\/3 vai \(đã thiết kế\)/.test(await regionLine()), 'đếm 1/3').catch(async e => { throw new Error(e.message + ' · dòng hiện: «' + await regionLine() + '» · url ' + q.url()); });
     // bấm nút → hộp xác nhận TRONG TRANG (không window.confirm): ghi số vai ≈ số lượt Google + ~25 s mỗi vai; chưa tốn gì
     await q.click(regB); await q.waitForSelector(cf);
     let cfT = await q.textContent(cf);
     if (!/cho 2 vai/.test(cfT) || !/≈ 2 lượt Google/.test(cfT) || !/~25 s mỗi vai/.test(cfT) || !/Bắt đầu thiết kế 2 vai/.test(cfT) || /Võ tướng/.test(cfT) || /Trần câu \/ ngày còn/.test(cfT) || kidLabels.test(cfT.replace(/Vai trẻ em không thiết kế được nên không tính\./, ''))) throw new Error('hộp xác nhận: ' + cfT);
     if (M.designCalls.length || dialogs) throw new Error('chưa bấm "Bắt đầu" mà đã tốn lượt / hiện hộp thoại hệ thống: ' + M.designCalls.length + ' lượt, ' + dialogs + ' hộp');
-    await shot(q, 'san-khau-giong-vung-xac-nhan', '.works > .stack:last-child > .panel:first-child');
+    await shot(q, 'san-khau-giong-vung-xac-nhan', '#wpanel-voice > .panel:first-child');
     await q.click(cf + ' button:text-is("Huỷ")'); if (await q.$(cf) || M.designCalls.length) throw new Error('Huỷ phải đóng hộp, không tốn lượt');
     // chạy: tuần tự (không bao giờ 2 lời gọi cùng lúc), đúng 2 vai chưa thiết kế, KHÔNG có vai trẻ em, tiến độ, xong thì cast lại cả dàn
     M.designDelay = 150; const nCast9 = M.casts.length;
@@ -2028,7 +2058,7 @@ if (!ONLY || ONLY === 'voice') {
     const lastCast = M.casts[M.casts.length - 1];
     if (lastCast.work !== RG || lastCast.actors.length !== 6 || lastCast.lang !== 'vi' || lastCast.accent !== 'nam') throw new Error('xong phải cast lại cả dàn của tác phẩm (6 diễn viên): ' + JSON.stringify([lastCast.work, lastCast.actors.length, lastCast.lang, lastCast.accent]));
     if (!await q.$eval(regB, b => b.disabled) || !/Mọi vai trong phim đã có giọng thiết kế/.test(await q.$eval(regB, b => b.title))) throw new Error('đủ 3/3 thì nút phải mờ kèm lý do');
-    await shot(q, 'san-khau-giong-vung-xong', '.works > .stack:last-child > .panel:first-child');
+    await shot(q, 'san-khau-giong-vung-xong', '#wpanel-voice > .panel:first-child');
     if (!(await toasts(q)).some(t => /Đã thiết kế giọng vùng cho 2\/2 vai/.test(t)) || dialogs) throw new Error('thiếu toast xong / có hộp thoại hệ thống: ' + JSON.stringify(await toasts(q)));
     // đổi giọng vùng của phim → đếm lại theo (vai, ngôn ngữ, giọng vùng): tiếng Trung Đài Loan chưa thiết kế vai nào
     await q.selectOption('select[aria-label="Ngôn ngữ phim"]', 'zh|tw'); await q.waitForTimeout(300);
@@ -2081,5 +2111,246 @@ if (!ONLY || ONLY === 'voice') {
     if (errs10.length) throw new Error('lỗi trang: ' + errs10.slice(0, 3).join(' | '));
   } catch (e) { fail = 1; console.log('  ✗ giọng AI theo vai:', e.message); if (errs10.length) console.log('    lỗi trang:', errs10.slice(0, 3).join(' | ')); if (q) { try { console.log('    trang đang mở:', q.url(), '·', (await q.evaluate(() => document.getElementById('view').innerText)).slice(0, 240).replace(/\n/g, ' / ')); } catch (e2) { /* trang đã đóng */ } } }
   finally { await b10.close(); srv10.kill(); }
+}
+// ===== v0.18 — Dock "Trợ lý AI" ở cột phải (mọi khu) + Tạo tác = danh sách tác phẩm → phòng làm phim riêng =====
+// LLM giả lập chuẩn OpenAI (tất định, không ra mạng ngoài); server tạm có bộ mẫu Tam Quốc. GC_ONLY=dock chỉ chạy nhóm này.
+if (!ONLY || ONLY === 'dock') {
+  const http11 = require('http');
+  const LLM = { steps: [], reply: 'Xong.', last: null, calls: 0 };
+  const mock11 = http11.createServer((req, res) => {
+    let b = ''; req.on('data', d => b += d).on('end', () => {
+      const body = JSON.parse(b), done = body.messages.filter(m => m.role === 'tool').length;
+      LLM.last = { system: body.messages[0].content, tools: body.tools.map(t => t.function.name), messages: body.messages }; LLM.calls++;
+      const msg = done < LLM.steps.length
+        ? { role: 'assistant', content: '', tool_calls: [{ id: 'c' + done, type: 'function', function: { name: LLM.steps[done][0], arguments: JSON.stringify(LLM.steps[done][1]) } }] }
+        : { role: 'assistant', content: typeof LLM.reply === 'function' ? LLM.reply() : LLM.reply };
+      res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ choices: [{ message: msg }], usage: { prompt_tokens: 10, completion_tokens: 5 } }));
+    });
+  }).listen(7571, '127.0.0.1');
+  const home11 = mkdtempSync(path.join(tmpdir(), 'gc-'));
+  const srv11 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home11, GC_PORT: '7570', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
+  await new Promise(r => setTimeout(r, 1200));
+  const U11 = 'http://localhost:7570/', H11 = { 'Content-Type': 'application/json', 'X-GC-Request': '1' };
+  const b11 = await pw.chromium.launch();
+  const errs11 = [];
+  const open11 = async (ctx, url, vw) => { const pg = await ctx.newPage(); pg.on('pageerror', e => errs11.push(e.message)); await pg.goto(url); await pg.waitForFunction(() => window.GenChibi && /^v\d/.test(document.getElementById('verChip').textContent) && window.GCDock && window.GCDock.state().ready !== undefined, null, { timeout: 8000 }); await pg.waitForSelector('#dock .dock-ctx .path', { timeout: 8000 }); return pg; };
+  const ask = async (pg, text) => { await pg.fill('#dock textarea.dock-ta', text); await pg.click('#dock button.send'); await pg.waitForFunction(() => !document.querySelector('#dock .msg.busy') && !window.GCDock.state().busy, null, { timeout: 8000 }); };
+  let ctx11 = null, q = null;
+  try {
+    const bundle = JSON.parse(fs.readFileSync(path.join(ROOT, 'studio/mau/tam-quoc.json'), 'utf8'));
+    const imp = await fetch(U11 + 'api/projects/import', { method: 'POST', headers: H11, body: JSON.stringify({ bundle }) }).then(r => r.json());
+    if (!imp.imported || imp.errors.length) throw new Error('nhập Tam Quốc: ' + JSON.stringify(imp.errors).slice(0, 200));
+    await fetch(U11 + 'api/ai', { method: 'PUT', headers: H11, body: JSON.stringify({ provider: 'custom', baseUrl: 'http://127.0.0.1:7571/v1', apiKey: 'khoa-thu', model: 'mock' }) });
+    const WID = 'tq-vuon-dao-xich-bich', W0 = await fetch(U11 + 'api/works/' + WID, { headers: H11 }).then(r => r.json()), S1 = W0.shots[0], S2 = W0.shots[1];
+    ctx11 = await b11.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' });
+    await ctx11.route(u => !/^(http:\/\/localhost:|file:|data:|blob:|about:)/.test(u.href), route => route.abort());
+
+    // ---- 1) dock có ở cả 4 khu + context đổi theo khu (bar "Đang xem" + payload + bộ tool + chỉ dẫn theo khu) ----
+    q = await open11(ctx11, U11 + 'xuong');
+    const posts = []; q.on('request', r => { if (/\/api\/ai\/agent$/.test(r.url()) && r.method() === 'POST') posts.push(JSON.parse(r.postData())); });
+    if (await q.$('.nav-item:has-text("Trợ lý AI tạo asset")')) throw new Error('còn trang chat riêng "Trợ lý AI tạo asset"');
+    const zones = [['xuong', 'Bàn chỉnh nhân vật', 'Xưởng', 'xuong', 'save_part', 'save_shot'], ['xuong', 'Bộ khung chuẩn', 'Bộ khung', 'khung', 'save_motion_pack', 'save_shot'],
+      ['thu-vien', 'Nhân vật', 'Thư viện', 'thu-vien', 'list_characters', 'save_part'], ['tao-tac', 'Tác phẩm', 'Tạo tác', 'tao-tac', 'save_shot', null]];
+    for (const [app, nav, label, zone, has, hasnt] of zones) {
+      if (!new RegExp('/' + app + '$').test(new URL(q.url()).pathname)) { await q.goto(U11 + app); await q.waitForSelector('#dock .dock-ctx .path'); }
+      await q.click('.nav-item:text-is("' + nav + '")', { timeout: 5000 }).catch(async () => q.click('.nav-item:has-text("' + nav + '")')); await q.waitForTimeout(350);
+      if (!(await q.isVisible('#dock .dock-head')) || !/Trợ lý AI/.test(await q.textContent('#dock .dock-head'))) throw new Error('khu ' + label + ': dock không hiện');
+      const path11 = await q.textContent('#dock .dock-ctx .path');
+      if (path11.indexOf(label) < 0) throw new Error('khu ' + label + ': context bar ' + path11);
+      LLM.steps = []; LLM.reply = 'Chào từ ' + label; await ask(q, 'Xin chào ở ' + label);
+      const c = posts[posts.length - 1].context;
+      if (c.zone !== zone || !LLM.last.tools.includes(has) || (hasnt && LLM.last.tools.includes(hasnt)) || LLM.last.tools.includes('update_app')) throw new Error('khu ' + label + ': context ' + JSON.stringify(c) + ' tools ' + LLM.last.tools.length);
+      if (!new RegExp('khu ' + label).test(LLM.last.system)) throw new Error('chỉ dẫn không nói khu ' + label);
+    }
+    // liên kết cũ tới trang chat riêng → mở dock
+    await q.evaluate(() => { localStorage.setItem('gc-route-xuong', JSON.stringify({ page: 'workshop' })); localStorage.setItem('gc-dock', JSON.stringify({ open: false, w: 380 })); });
+    await q.goto(U11 + 'xuong'); await q.waitForSelector('#dock .dock-head'); await q.waitForTimeout(500);
+    if (!(await q.evaluate(() => document.body.classList.contains('dock-open') && window.GCDock.state().open))) throw new Error('route workshop cũ không mở dock');
+    // màn chọn khu ("/") và trang Hệ thống cũng có dock (vai chung)
+    await q.goto(U11); await q.waitForSelector('.appcard'); await q.waitForSelector('#dock .dock-ctx .path');
+    if (!(await q.isVisible('#dock .dock-head')) || !/Hệ thống|Chọn khu/.test(await q.textContent('#dock .dock-ctx .path'))) throw new Error('màn chọn khu: dock / context: ' + await q.textContent('#dock .dock-ctx'));
+    await q.close();
+    console.log('  ✓ Dock Trợ lý AI có ở cả 4 khu (Xưởng · Bộ khung · Thư viện · Tạo tác), không còn trang chat riêng; context bar + payload + bộ tool + chỉ dẫn đổi theo khu; route cũ "workshop" mở dock');
+
+    // ---- 2) thu gọn / mở / kéo rộng / nhớ trạng thái / ngăn kéo màn hẹp ----
+    q = await open11(ctx11, U11 + 'thu-vien');
+    await q.evaluate(() => localStorage.setItem('gc-dock', JSON.stringify({ open: true, w: 380 }))); await q.reload(); await q.waitForSelector('#dock .dock-head');
+    const wid = () => q.evaluate(() => Math.round(document.getElementById('dock').getBoundingClientRect().width));
+    if (await wid() !== 380) throw new Error('rộng mặc định ' + await wid());
+    await q.focus('#dock .dock-sep'); await q.keyboard.press('ArrowLeft'); await q.keyboard.press('ArrowLeft');
+    if (await wid() !== 412) throw new Error('kéo bằng phím: ' + await wid());
+    await q.keyboard.down('Alt'); await q.keyboard.press('KeyJ'); await q.keyboard.up('Alt');
+    if (await q.isVisible('#dock .dock-head')) throw new Error('Alt+J không thu gọn');
+    await q.reload(); await q.waitForSelector('.nav-item'); await q.waitForTimeout(300);
+    if (await q.isVisible('#dock .dock-head')) throw new Error('trạng thái thu gọn không được nhớ');
+    await q.click('#dockToggle'); await q.waitForSelector('#dock .dock-head', { state: 'visible' });
+    if (await wid() !== 412) throw new Error('độ rộng không được nhớ: ' + await wid());
+    const box = await (await q.$('#dock .dock-sep')).boundingBox();
+    await q.mouse.move(box.x + 3, box.y + 300); await q.mouse.down(); await q.mouse.move(box.x - 60, box.y + 300, { steps: 4 }); await q.mouse.up();
+    if (await wid() < 460) throw new Error('kéo chuột không đổi rộng: ' + await wid());
+    await q.close();
+    const qn = await ctx11.newPage(); await qn.setViewportSize({ width: 1000, height: 800 }); qn.on('pageerror', e => errs11.push(e.message));
+    await qn.goto(U11 + 'tao-tac'); await qn.waitForSelector('#dockToggle'); await qn.waitForTimeout(500);
+    if (await qn.isVisible('#dock .dock-head')) throw new Error('màn hẹp: dock phải mặc định đóng');
+    await qn.click('#dockToggle'); await qn.waitForSelector('#dock .dock-head', { state: 'visible' }); await qn.waitForTimeout(300);
+    const nar = await qn.evaluate(() => { const d = document.getElementById('dock'), r = d.getBoundingClientRect(); return { pos: getComputedStyle(d).position, right: Math.round(r.right), w: Math.round(r.width), vw: innerWidth }; });
+    if (nar.pos !== 'fixed' || nar.right !== nar.vw || nar.w > 560) throw new Error('màn hẹp: dock không thành ngăn kéo phủ ' + JSON.stringify(nar));
+    await qn.close();
+    console.log('  ✓ Dock: rộng mặc định 380, kéo đổi được (phím + chuột), thu gọn / mở bằng nút và Alt+J, nhớ trạng thái + độ rộng; < 1100 px thành ngăn kéo phủ');
+
+    // ---- 3) @ picker mờ → chip; chế độ chỉ Alt+P; payload có anchors + snapshot + ước tính token ----
+    q = await open11(ctx11, U11 + 'thu-vien'); posts.length = 0; q.on('request', r => { if (/\/api\/ai\/agent$/.test(r.url()) && r.method() === 'POST') posts.push(JSON.parse(r.postData())); });
+    await q.click('.nav-item.zone-lib:has-text("Nhân vật")'); await q.waitForSelector('.libcard[data-anchor^="asset:"]');
+    const ta = '#dock textarea.dock-ta';
+    await q.fill(ta, 'Xem giúp @luubi'); await q.waitForSelector('#dock .dock-pop .pop-opt');
+    if (!/Lưu Bị/.test(await q.textContent('#dock .dock-pop .pop-opt'))) throw new Error('@luubi không khớp mờ Lưu Bị: ' + await q.textContent('#dock .dock-pop'));
+    await q.keyboard.press('Enter');
+    if (!(await q.$('#dock .dock-pins .achip[data-chip="asset:local.my/tq-luu-bi"]')) || /@/.test(await q.inputValue(ta))) throw new Error('@ không chèn chip / không xoá chữ @: ' + await q.inputValue(ta));
+    const tk0 = await q.textContent('#dock .tok');
+    await q.keyboard.down('Alt'); await q.keyboard.press('KeyP'); await q.keyboard.up('Alt');
+    if (!(await q.evaluate(() => document.body.classList.contains('dock-pick')))) throw new Error('Alt+P không bật chế độ chỉ');
+    await q.hover('.libcard[data-anchor="asset:local.my/tq-quan-vu"]'); await q.waitForSelector('.pick-ring:not([hidden])');
+    if (!/Quan Vũ/.test(await q.textContent('.pick-ring'))) throw new Error('nhãn viền đứt: ' + await q.textContent('.pick-ring'));
+    await q.click('.libcard[data-anchor="asset:local.my/tq-quan-vu"]');
+    if (await q.evaluate(() => document.body.classList.contains('dock-pick'))) throw new Error('bấm xong chế độ chỉ phải tắt');
+    if (!(await q.$('#dock .dock-pins .achip[data-chip="asset:local.my/tq-quan-vu"]'))) throw new Error('click ở chế độ chỉ không thêm chip');
+    await q.keyboard.down('Alt'); await q.keyboard.press('KeyP'); await q.keyboard.up('Alt'); await q.keyboard.press('Escape');
+    if (await q.evaluate(() => document.body.classList.contains('dock-pick'))) throw new Error('Esc không thoát chế độ chỉ');
+    if (await q.textContent('#dock .tok') === tk0) throw new Error('ước tính token không đổi khi ghim thêm');
+    LLM.steps = []; LLM.reply = 'Đã xem.'; await ask(q, 'So sánh hai người này');
+    const ap = posts[posts.length - 1];
+    if (!ap.anchors || ap.anchors.length !== 2 || ap.anchors[0].anchor !== 'asset:local.my/tq-luu-bi' || ap.anchors[1].anchor !== 'asset:local.my/tq-quan-vu' || !/Lưu Bị/.test(ap.anchors[0].snapshot) || ap.anchors[0].kind !== 'asset' || !ap.anchors[0].label) throw new Error('payload anchors: ' + JSON.stringify(ap.anchors).slice(0, 300));
+    if (!/⟦asset:local\.my\/tq-luu-bi\|/.test(LLM.last.system) || !/Quan Vũ/.test(LLM.last.system)) throw new Error('chỉ dẫn gửi LLM thiếu phần tử ghim');
+    if (await q.$('#dock .dock-pins .achip')) throw new Error('chip ghim phải được dọn sau khi gửi');
+    if (!(await q.$('#dock .msg.user .achip'))) throw new Error('tin của chủ phải còn chip ghim');
+    await q.close();
+    console.log('  ✓ Ghim: @ mở picker mờ ("@luubi" → Lưu Bị) chèn chip · Alt+P rê → viền đứt + nhãn, click = chip, Esc thoát · ước tính token đổi · payload có anchors[{anchor, kind, id, label, snapshot}] · LLM nhận chỉ dẫn kèm phần tử ghim');
+
+    // ---- 4) Soi: chip trong trả lời → rê tô sáng, bấm đi tới + tô sáng 2 s; "không còn"; kết quả tool tự thành chip ----
+    q = await open11(ctx11, U11 + 'thu-vien');
+    LLM.steps = [['save_character', { asset: { id: 'tq-ai-moi', name: 'Tướng AI mới', project: 'mau-tam-quoc', look: { eyes: 'round', brows: 'normal', parts: { hat: 'gen.khung/khoi-mu' } } } }]];
+    LLM.reply = 'Mời xem ⟦shot:' + WID + '/' + S1.id + '|Cảnh đầu⟧ và ⟦asset:local.my/ma-khong-ton-tai|Người lạ⟧ nhé.';
+    await ask(q, 'Làm một tướng mới và chỉ cho tôi cảnh đầu');
+    const chips = await q.$$('#dock .msg.assistant .achip');
+    if (chips.length < 3) throw new Error('thiếu chip trong trả lời (cảnh, người lạ, kết quả tool): ' + chips.length);
+    await q.waitForFunction(() => document.querySelector('#dock .msg.assistant .achip.gone'));
+    const gtx = await q.textContent('#dock .msg.assistant .achip.gone');
+    if (!/không còn/.test(gtx) || !(await q.$eval('#dock .achip.gone', e => e.disabled)) || !/không còn/.test(await q.getAttribute('#dock .achip.gone', 'aria-label'))) throw new Error('chip phần tử không tồn tại: ' + gtx);
+    if (!(await q.$('#dock .msg.assistant .made .achip[data-chip="asset:local.my/tq-ai-moi"]'))) throw new Error('nhân vật AI vừa tạo không tự thành chip');
+    const kind = await q.$eval('#dock .msg.assistant .achip', e => e.tagName + ':' + (e.getAttribute('aria-label') || ''));
+    if (!/^BUTTON:Chỉ tới/.test(kind)) throw new Error('chip phải là <button> có aria-label: ' + kind);
+    // rê chip nhân vật vừa tạo (thẻ nằm trong Thư viện sau khi dock nạp lại): thẻ được tô sáng, phần còn lại mờ
+    await q.waitForSelector('.libcard[data-anchor="asset:local.my/tq-ai-moi"]', { timeout: 5000 });
+    await q.hover('#dock .msg.assistant .made .achip[data-chip="asset:local.my/tq-ai-moi"]');
+    await q.waitForSelector('.spot-ring:not([hidden])'); const dimShadow = await q.$eval('.spot-ring', e => getComputedStyle(e).boxShadow);
+    if (!/rgba?\(0, 0, 0, 0\.4/.test(dimShadow) || !/Tướng AI mới/.test(await q.textContent('.spot-ring'))) throw new Error('rê chip: tô sáng + nhãn + làm mờ phần còn lại: ' + dimShadow);
+    await q.mouse.move(700, 600); await q.waitForSelector('.spot-ring', { state: 'hidden' });
+    // bấm chip phân cảnh: điều hướng sang Tạo tác (ứng dụng khác) → tô sáng đúng phân cảnh 2 giây
+    await q.click('#dock .msg.assistant .achip[data-chip="shot:' + WID + '/' + S1.id + '"]');
+    await q.waitForURL(/\/tao-tac/, { timeout: 8000 }); await q.waitForSelector('#shot-' + S1.id, { timeout: 8000 });
+    await q.waitForSelector('.spot-ring:not([hidden])', { timeout: 5000 });
+    const near = await q.evaluate(id => { const r = document.querySelector('.spot-ring').getBoundingClientRect(), t = document.getElementById('shot-' + id).getBoundingClientRect(); return Math.abs(r.top - t.top) < 12 && Math.abs(r.left - t.left) < 12; }, S1.id);
+    if (!near) throw new Error('vòng tô sáng không nằm đúng phân cảnh');
+    await q.waitForSelector('.spot-ring', { state: 'hidden', timeout: 4000 });
+    await q.close();
+    console.log('  ✓ Soi: anchor trong trả lời thành <button aria-label> · rê = viền + nhãn + phần còn lại mờ · bấm = đi tới (qua ứng dụng khác) + tô sáng 2 s rồi tắt · phần tử không tồn tại = chip "không còn" (vô hiệu) · asset AI vừa tạo tự thành chip');
+
+    // ---- 5) danh sách tác phẩm → phòng tác phẩm (địa chỉ có id); lịch sử chat theo tác phẩm ----
+    q = await open11(ctx11, U11 + 'tao-tac'); await q.click('.nav-item:text-is("Tác phẩm")');   // tuyến đã lưu có thể đang ở trong một phòng — về danh sách
+    await q.waitForSelector('table.worklist tr.click'); const row = await q.textContent('table.worklist tr.click');
+    if (!new RegExp(WID).test(row) || !/Từ vườn đào tới Xích Bích/.test(row) || !/Tam Quốc/.test(row) || !/6/.test(row)) throw new Error('hàng danh sách: ' + row);
+    const heads = await q.$$eval('table.worklist th', es => es.map(e => e.textContent)); if (heads.join() !== 'ID,Tên tác phẩm,Dự án,Cảnh,Đạt,Giọng AI,Cập nhật,Trạng thái') throw new Error('cột danh sách: ' + heads.join());
+    if (!(await q.$('#dock .dock-ctx .path')) || /Từ vườn/.test(await q.textContent('#dock .dock-ctx .path'))) throw new Error('ở danh sách chưa có tác phẩm đang mở');
+    await q.click('table.worklist tr.click'); await q.waitForSelector('.roomtabs'); await q.waitForSelector('#shot-' + S1.id);
+    if (!new RegExp('#/tac-pham/' + WID + '/shots$').test(q.url())) throw new Error('địa chỉ phòng tác phẩm: ' + q.url());
+    if (!/Từ vườn đào tới Xích Bích/.test(await q.textContent('#dock .dock-ctx .path'))) throw new Error('context bar không nói tác phẩm đang mở: ' + await q.textContent('#dock .dock-ctx .path'));
+    const tabs = await q.$$eval('.roomtabs button', es => es.map(e => e.textContent.replace(/[\d\/·\s]+đề xuất|\s*\d+(\/\d+)?$/g, '').trim())); if (tabs.join() !== 'Kịch bản,Phân cảnh,Xem & duyệt,Giọng & âm thanh,Xuất bản') throw new Error('tab phòng: ' + tabs.join());
+    LLM.steps = []; LLM.reply = 'Ý tưởng hay cho phim này.'; await ask(q, 'Đề xuất thêm một cảnh về cầu Trường Bản');
+    if (!/Ý tưởng hay/.test(await q.textContent('#dock .dock-log'))) throw new Error('chưa thấy trả lời');
+    if (!/AI đạo diễn của tác phẩm đang mở/.test(LLM.last.system) && !/TÁC PHẨM ĐANG MỞ: id tq-vuon/.test(LLM.last.system)) throw new Error('chỉ dẫn Tạo tác thiếu tác phẩm đang mở');
+    await q.click('.crumbs a:text-is("Tác phẩm")'); await q.waitForSelector('table.worklist'); 
+    await q.waitForTimeout(500); if (/Ý tưởng hay|cầu Trường Bản/.test(await q.textContent('#dock .dock-log'))) throw new Error('rời tác phẩm mà dock vẫn hiện luồng của tác phẩm');
+    await q.goBack(); await q.waitForSelector('.roomtabs'); await q.waitForTimeout(500);
+    if (!/Ý tưởng hay/.test(await q.textContent('#dock .dock-log')) || !/cầu Trường Bản/.test(await q.textContent('#dock .dock-log'))) throw new Error('mở lại tác phẩm không thấy lại luồng');
+    await q.reload(); await q.waitForSelector('.roomtabs'); await q.waitForTimeout(500);
+    if (!/Ý tưởng hay/.test(await q.textContent('#dock .dock-log'))) throw new Error('sau tải lại không thấy lại luồng (server giữ)');
+    // luồng của asset khác hẳn: sang Thư viện mở nhân vật → luồng riêng, trống
+    const th = await fetch(U11 + 'api/chats/work/' + WID, { headers: H11 }).then(r => r.json()); if (th.messages.length !== 2) throw new Error('luồng trên server: ' + th.messages.length);
+    // × bỏ ngữ cảnh: AI chỉ biết khu (payload không có đối tượng, chỉ dẫn không có tác phẩm), luồng về luồng của khu; "Gắn lại" trả lại
+    const p5 = []; q.on('request', r => { if (/\/api\/ai\/agent$/.test(r.url()) && r.method() === 'POST') p5.push(JSON.parse(r.postData())); });
+    await q.click('#dock .dock-ctx .x'); await q.waitForSelector('#dock .dock-ctx button:text-is("Gắn lại")');
+    LLM.steps = []; LLM.reply = 'Tôi chỉ biết bạn đang ở khu Tạo tác.'; await ask(q, 'Chào bạn');
+    if (p5[0].context.zone !== 'tao-tac' || p5[0].context.object || p5[0].context.page || /TÁC PHẨM ĐANG MỞ/.test(LLM.last.system) || !LLM.last.tools.includes('save_shot')) throw new Error('bỏ ngữ cảnh: ' + JSON.stringify(p5[0].context));
+    await q.click('#dock .dock-ctx button:text-is("Gắn lại")'); await q.waitForFunction(() => /Từ vườn đào/.test(document.querySelector('#dock .dock-ctx .path').textContent));
+    await q.goto(U11 + 'tao-tac#/tac-pham/' + WID + '/review'); await q.waitForSelector('.roomtabs'); await q.waitForTimeout(400);
+    if (await q.getAttribute('#wtab-review', 'aria-selected') !== 'true') throw new Error('deep link tab review không mở đúng tab');
+    await q.close();
+    q = await open11(ctx11, U11 + 'thu-vien'); await q.click('.nav-item.zone-lib:has-text("Nhân vật")'); await q.waitForSelector('.libcard[data-anchor^="asset:"]'); await q.waitForTimeout(400);
+    if (/Ý tưởng hay|cầu Trường Bản|Xin chào ở/.test(await q.textContent('#dock .dock-log'))) throw new Error('luồng asset không được lẫn tin của tác phẩm / khu');
+    await q.close();
+    console.log('  ✓ Tạo tác: danh sách (cột ID · tên · dự án · cảnh · Đạt · giọng AI · cập nhật · trạng thái) → click hàng vào phòng, địa chỉ #/tac-pham/<id>/<tab> (deep link, Back); 5 tab; context bar nói tác phẩm; lịch sử chat theo tác phẩm (đổi đối tượng đổi luồng, mở lại / tải lại vẫn thấy, server giữ data/chats)');
+
+    // ---- 6) Xem & duyệt: trạng thái + ghi chú lưu vào tác phẩm, "Đạt x/y" ở phòng + danh sách; Gửi AI sửa theo ghi chú ghim vào dock ----
+    q = await open11(ctx11, U11 + 'tao-tac#/tac-pham/' + WID + '/review'); await q.waitForSelector('.rvrow');
+    if (!/Đạt 0\/6/.test(await q.textContent('.roomhead'))) throw new Error('đầu phòng: ' + await q.textContent('.roomhead'));
+    const rv1 = '.rvrow[data-anchor="shot:' + WID + '/' + S1.id + '"]', rv2 = '.rvrow[data-anchor="shot:' + WID + '/' + S2.id + '"]';
+    await q.click(rv1 + ' button[data-review="' + S1.id + ':fix"]'); await q.waitForFunction(sel => document.querySelector(sel + ' button[aria-pressed="true"]').textContent === 'Cần sửa', rv1);
+    await q.fill(rv1 + ' input[aria-label^="Ghi chú duyệt"]', 'Lời thoại dài quá, cắt bớt'); await q.selectOption(rv1 + ' select[aria-label="Gắn ghi chú vào bước"]', '2'); await q.click(rv1 + ' button:text-is("+ Ghi chú")');
+    await q.waitForSelector(rv1 + ' .note-row'); if (!/Lời thoại dài quá/.test(await q.textContent(rv1 + ' .note-row')) || !/B02/.test(await q.textContent(rv1 + ' .note-row'))) throw new Error('ghi chú gắn bước: ' + await q.textContent(rv1 + ' .note-row'));
+    await q.click(rv2 + ' button[data-review="' + S2.id + ':ok"]'); await q.waitForFunction(() => /Đạt 1\/6/.test(document.querySelector('.roomhead').textContent));
+    const wsv = await fetch(U11 + 'api/works/' + WID, { headers: H11 }).then(r => r.json());
+    if (wsv.review.shots[S1.id].status !== 'fix' || wsv.review.shots[S1.id].notes[0].step !== 2 || wsv.review.shots[S2.id].status !== 'ok') throw new Error('review không lưu vào tác phẩm: ' + JSON.stringify(wsv.review).slice(0, 200));
+    await q.click(rv1 + ' button[data-askai]'); await q.waitForSelector('#dock .dock-pins .achip[data-chip="shot:' + WID + '/' + S1.id + '"]');
+    if (!(await q.$('#dock .dock-pins .achip[data-chip="step:' + WID + '/' + S1.id + '/2"]')) || !/cắt bớt/.test(await q.inputValue(ta))) throw new Error('Gửi AI sửa theo ghi chú: thiếu ghim cảnh / bước / ghi chú');
+    posts.length = 0; q.on('request', r => { if (/\/api\/ai\/agent$/.test(r.url()) && r.method() === 'POST') posts.push(JSON.parse(r.postData())); });
+    LLM.steps = []; LLM.reply = 'Đã đọc ghi chú.'; await q.click('#dock button.send'); await q.waitForFunction(() => !window.GCDock.state().busy && /Đã đọc ghi chú/.test(document.querySelector('#dock .dock-log').textContent));
+    if (!/ghi chú: bước 2|bước 2: Lời thoại dài/.test(LLM.last.system) && !/Lời thoại dài quá/.test(LLM.last.system)) throw new Error('AI không thấy ghi chú duyệt trong chỉ dẫn');
+    if (posts[0].anchors.length !== 2 || !/Lời thoại dài quá/.test(JSON.stringify(posts[0].anchors))) throw new Error('payload ghim cảnh + ghi chú: ' + JSON.stringify(posts[0].anchors).slice(0, 300));
+    await q.close();
+    q = await open11(ctx11, U11 + 'tao-tac'); await q.click('.nav-item:text-is("Tác phẩm")'); await q.waitForSelector('table.worklist tr.click');
+    const lrow = await q.$$eval('table.worklist tr.click td', es => es.map(e => e.textContent));
+    if (lrow[4] !== '1/6' || lrow[7] !== 'Cần sửa') throw new Error('danh sách chưa hiện Đạt 1/6 + Cần sửa: ' + lrow.join('|'));
+    await q.close();
+    console.log('  ✓ Xem & duyệt: trạng thái Nháp / Cần sửa / Đạt + ghi chú (gắn cảnh, tuỳ chọn bước) lưu vào work.review qua cổng server · "Đạt 1/6" ở đầu phòng và danh sách (trạng thái "Cần sửa") · "Gửi AI sửa theo ghi chú" ghim cảnh + bước + soạn câu nhờ sửa · AI đọc được ghi chú');
+
+    // ---- 7) đề xuất sửa của AI: diff chờ duyệt với Áp dụng / Bỏ (mô tả + danh sách bước) ----
+    q = await open11(ctx11, U11 + 'tao-tac#/tac-pham/' + WID + '/shots'); await q.waitForSelector('#shot-' + S1.id);
+    const newSteps = JSON.parse(JSON.stringify(S2.event.steps)); newSteps[0].say = 'Câu mới do AI đề xuất';
+    LLM.steps = [['propose_edit', { work: WID, shot: S1.id, field: 'description', value: 'Ba anh em thề nguyện dưới hoa đào, trời quang mây tạnh.', note: 'rõ hơn' }], ['propose_edit', { work: WID, shot: S2.id, field: 'steps', value: newSteps }]];
+    LLM.reply = 'Đã đề xuất sửa ⟦shot:' + WID + '/' + S1.id + '|Cảnh 1⟧ và ⟦shot:' + WID + '/' + S2.id + '|Cảnh 2⟧.';
+    await ask(q, 'Sửa mô tả cảnh 1 và lời cảnh 2');
+    await q.waitForSelector('#shot-' + S1.id + ' .diff', { timeout: 5000 });
+    const d1 = await q.textContent('#shot-' + S1.id + ' .diff'), d2 = await q.textContent('#shot-' + S2.id + ' .diff');
+    if (!/AI đề xuất sửa mô tả/.test(d1) || !/Áp dụng/.test(d1) || !/Bỏ/.test(d1) || !/hoa đào/.test(d1) || !/AI đề xuất sửa danh sách bước/.test(d2) || !/Câu mới do AI đề xuất/.test(d2)) throw new Error('diff: ' + d1.slice(0, 150) + ' // ' + d2.slice(0, 150));
+    if (!(await q.$('#shot-' + S1.id + ' .diff .d-ins')) || !(await q.$('#shot-' + S2.id + ' .diff .d-ins')) || !(await q.$('#shot-' + S2.id + ' .diff .d-del'))) throw new Error('diff thiếu phần thêm / bớt');
+    const before = await fetch(U11 + 'api/works/' + WID, { headers: H11 }).then(r => r.json()); if (before.shots[0].description === 'Ba anh em thề nguyện dưới hoa đào, trời quang mây tạnh.') throw new Error('đề xuất đã ghi thẳng');
+    if (!/2 đề xuất/.test(await q.textContent('#wtab-shots'))) throw new Error('tab Phân cảnh không báo đề xuất: ' + await q.textContent('#wtab-shots'));
+    await q.click('#shot-' + S1.id + ' .diff button:text-is("Áp dụng")'); await q.waitForFunction(id => !document.querySelector('#shot-' + id + ' .diff'), S1.id);
+    if (await q.inputValue('#shot-' + S1.id + ' textarea') !== 'Ba anh em thề nguyện dưới hoa đào, trời quang mây tạnh.') throw new Error('Áp dụng không đổi mô tả: ' + await q.inputValue('#shot-' + S1.id + ' textarea'));
+    await q.click('#shot-' + S2.id + ' .diff button:text-is("Bỏ")'); await q.waitForFunction(id => !document.querySelector('#shot-' + id + ' .diff'), S2.id);
+    const after = await fetch(U11 + 'api/works/' + WID, { headers: H11 }).then(r => r.json());
+    if (after.shots[0].description !== 'Ba anh em thề nguyện dưới hoa đào, trời quang mây tạnh.' || JSON.stringify(after.shots[1].event.steps) !== JSON.stringify(S2.event.steps) || (after.proposals || []).length) throw new Error('sau Áp dụng / Bỏ: ' + JSON.stringify({ d: after.shots[0].description, p: after.proposals }));
+    await q.close();
+    console.log('  ✓ Đề xuất sửa (propose_edit): AI không ghi thẳng — Phân cảnh hiện diff chờ duyệt (mô tả: từ thêm / bớt; bước: dòng thêm / bớt) với Áp dụng / Bỏ; Áp dụng đổi qua cổng phân cảnh, Bỏ không đổi gì');
+
+    // ---- 8) các tab còn lại của phòng + chưa có key LLM ----
+    q = await open11(ctx11, U11 + 'tao-tac#/tac-pham/' + WID + '/voice'); await q.waitForSelector('#wpanel-voice:not([hidden])');
+    const vt = await q.textContent('#wpanel-voice');
+    if (!/Ngôn ngữ & giọng vùng/.test(vt) || !/Lồng tiếng AI/.test(vt) || !/Giọng chốt theo nhân vật/.test(vt) || !/Âm thanh/.test(vt) || !/Đạt luật ghép S1–S7|cảnh báo|lỗi/.test(vt)) throw new Error('tab Giọng & âm thanh: ' + vt.slice(0, 200));
+    await q.click('#wtab-publish'); const pt = await q.textContent('#wpanel-publish');
+    if (!/Phim \(HTML\)/.test(pt) || !/Storyboard SVG/.test(pt) || !/Storyboard PNG/.test(pt) || !/JSON/.test(pt) || !/Gói dự án/.test(pt)) throw new Error('tab Xuất bản: ' + pt.slice(0, 200));
+    await q.click('#wtab-script'); if (!(await q.$('#wpanel-script textarea')) || !/Dàn nhân vật/.test(await q.textContent('#wpanel-script')) || !(await q.$('#wpanel-script select[aria-label="Ngôn ngữ lời thoại"]'))) throw new Error('tab Kịch bản thiếu logline / dàn nhân vật / ngôn ngữ');
+    await q.close();
+    const home12 = mkdtempSync(path.join(tmpdir(), 'gc-')), srv12 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home12, GC_PORT: '7572', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
+    await new Promise(r => setTimeout(r, 1200));
+    q = await open11(ctx11, 'http://localhost:7572/xuong');
+    const gate = await q.textContent('#dock .dock-gate'); if (!/Chưa có API key LLM/.test(gate) || !(await q.isDisabled('#dock button.send'))) throw new Error('chưa có key: thiếu lời nhắc / nút gửi chưa khoá: ' + gate);
+    await q.click('#dock .dock-gate button:has-text("Mở Cài đặt AI")'); await q.waitForSelector('text=Cài đặt AI >> nth=0');
+    if (!(await q.isVisible('#dock .dock-head'))) throw new Error('dock biến mất ở trang Cài đặt AI');
+    await q.close(); srv12.kill();
+    console.log('  ✓ Phòng tác phẩm đủ 5 tab (Kịch bản: logline + dàn nhân vật + ngôn ngữ · Giọng & âm thanh: giọng vùng, lồng tiếng, giọng chốt, lint S1–S7 · Xuất bản: phim, storyboard, JSON, gói) · chưa có key LLM: dock vẫn hiện, kèm lời nhắc + lối tới Cài đặt AI');
+    if (errs11.length) throw new Error('lỗi trang: ' + errs11.slice(0, 3).join(' | '));
+  } catch (e) { fail = 1; console.log('  ✗ dock Trợ lý AI + phòng tác phẩm:', e.message); if (errs11.length) console.log('    lỗi trang:', errs11.slice(0, 3).join(' | ')); if (q) { try { console.log('    trang:', q.url()); } catch (x) { /* đã đóng */ } } }
+  finally { await b11.close(); srv11.kill(); mock11.close(); }
 }
 process.exit(fail);

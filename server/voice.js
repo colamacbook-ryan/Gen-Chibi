@@ -328,6 +328,17 @@ class Voice {
     this._busy = job.catch(() => {});
     return job;
   }
+  // câu này đã có clip chưa? (không gọi Google, không ném lỗi, không tốn lượt) — dùng đếm "giọng AI x/y" ở danh sách tác phẩm; cùng khoá clip với line()
+  has({ text, voice, role, state, bubble }) {
+    try {
+      const t = cleanText(text);
+      if (!t || t.length > 240) return false;
+      const vid = this.validVoice(voice, { skipBad: true });
+      if (!vid) return false;
+      const R = hasOwn(GV.ROLES, role) ? GV.ROLES[role] : null, style = [R ? R.style : '', tagsOf(state, bubble)].filter(Boolean).join(', ');
+      return fs.existsSync(this.clipPath(this.idOf(t, vid, style)));
+    } catch { return false; }
+  }
   seconds(file) { try { const w = wavInfo(fs.readFileSync(file)); return w ? +(w.data.length / (w.rate * 2)).toFixed(2) : null; } catch { return null; } }
   async render(t, voice, style, id, file) {
     if (fs.existsSync(file)) return { id, cached: true, seconds: this.seconds(file) };

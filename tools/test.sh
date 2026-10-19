@@ -715,6 +715,8 @@ echo "3c) agent từ số 0 (mọi hãng): chỉ dùng hướng dẫn agent/ + J
 node tools/test-agent-zero.mjs || exit 1
 echo "3b) AI trong chatroom (LLM API) đi đúng cổng nhà xưởng"
 node tools/test-agent.mjs || exit 1
+echo "3b2) dock Trợ lý AI: vai + tool theo khu · ghim · luồng theo đối tượng · đề xuất sửa chờ duyệt · duyệt từng cảnh"
+node tools/test-dock.mjs || exit 1
 
 echo "4) khoá truy cập"
 bash tools/test-auth.sh || exit 1

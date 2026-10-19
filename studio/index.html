@@ -22,9 +22,11 @@
     <header class="pagehead">
       <div class="crumbs" id="crumbs"></div>
       <div class="actions" id="actions"></div>
+      <button type="button" class="btn dock-toggle" id="dockToggle" aria-controls="dock" aria-expanded="true" title="Mở / thu gọn Trợ lý AI (Alt+J)">Trợ lý AI <kbd>Alt+J</kbd></button>
     </header>
     <div id="view" class="view"></div>
   </main>
+  <aside id="dock" class="dock" aria-label="Trợ lý AI"></aside>
 </div>
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 <div id="gateHost" aria-hidden="true" style="position:absolute;left:-9999px;top:0;width:200px;height:240px;visibility:hidden"></div>
@@ -40,6 +42,7 @@
 <script src="kinds/khung/gen.khung.js"></script>
 <script src="kinds/character/gen.choreo.js"></script>
 <script src="studio/gif.js"></script>
+<script src="studio/dock.js"></script>
 <script src="studio/app.js"></script>
 </body>
 </html>

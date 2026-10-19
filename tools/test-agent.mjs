@@ -71,7 +71,9 @@ try {
   ok(keep.shots && keep.shots.length === 1, 'remove phải là true thật mới bỏ phân cảnh ("false" không xoá)');
   const many = await fetch('http://127.0.0.1:' + APP + '/api/works/phim-ci/shots', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify({ shot: { id: 7, title: 'x' } }) });
   ok(many.status === 422, 'shot.id không phải chuỗi bị chặn');
-  ok(wf.chat.length === 2 && wf.chat[1].log.length === 6, 'lịch sử chat được lưu cùng tác phẩm (kèm nhật ký tool)');
+  const th = await api('GET', '/api/chats/work/phim-ci');
+  ok(th.messages.length === 2 && th.messages[1].log.length === 6, 'lịch sử chat được lưu theo tác phẩm (data/chats/work-<id>.json, kèm nhật ký tool)');
+  ok(th.messages[1].anchors && th.messages[1].anchors.some(a => a.anchor === 'shot:phim-ci/canh-1') && th.messages[1].anchors.some(a => a.anchor === 'asset:local.my/ai-be-na'), 'thứ AI vừa tạo / sửa (nhân vật, phân cảnh) có anchor để dock hiện chip');
 } catch (e) { fail = 1; console.log('   ✗', e.message); }
 finally { srv.kill(); mock.close(); }
 process.exit(fail);
