@@ -1,0 +1,39 @@
+{
+  "id": "vi-du-thu-thu",
+  "name": "Thủ Thư",
+  "role": "Võ sinh tập sự",
+  "persona": "Lễ phép, hay cốc đầu bạn tập khi thắng.",
+  "project": "vi-du-agent",
+  "look": {
+    "eyes": "round",
+    "brows": "normal",
+    "parts": {
+      "hat": "local.my/non-la",
+      "outfit": "gen.khung/khoi-ao",
+      "shoes": "gen.khung/khoi-giay"
+    },
+    "equip": {
+      "heldR": "local.my/vi-du-kiem-go"
+    },
+    "params": {},
+    "palette": {
+      "robe": "#5b8fd6",
+      "trim": "#2f5b9a",
+      "boots": "#6b4a36",
+      "skin": "#f1d9c4",
+      "skinShade": "#dfbea3"
+    }
+  },
+  "identity": {
+    "p1": "Nón lá + áo xanh + kiếm gỗ",
+    "must": [
+      "hat:non-la"
+    ],
+    "source": "agent/examples/character.json"
+  },
+  "status": "draft",
+  "voice": {
+    "pitch": 1.2,
+    "rate": 1.05
+  }
+}

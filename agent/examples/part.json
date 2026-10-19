@@ -1,0 +1,30 @@
+{
+  "id": "non-la",
+  "slot": "hat",
+  "label": "Nón lá",
+  "layers": {
+    "hat": "<path d=\"M38,78 L100,22 L162,78 C130,86 70,86 38,78 Z\" fill=\"#e8d39a\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\"/><path d=\"M100,22 L118,80 M100,22 L82,80\" fill=\"none\" stroke=\"#b89a55\" stroke-width=\"1.4\"/><path d=\"M60,80 C80,92 120,92 140,80\" fill=\"none\" stroke=\"{accent}\" stroke-width=\"2.4\"/>"
+  },
+  "views": {
+    "q45": {
+      "mode": "drawn",
+      "layers": {
+        "hat": "<path d=\"M36,80 L92,22 L162,76 C128,86 68,88 36,80 Z\" fill=\"#e8d39a\" stroke=\"{ink}\" stroke-width=\"2.8\" stroke-linejoin=\"round\"/><path d=\"M92,22 L104,82 M92,22 L72,82\" fill=\"none\" stroke=\"#b89a55\" stroke-width=\"1.4\"/><path d=\"M56,82 C76,92 112,92 134,82\" fill=\"none\" stroke=\"{accent}\" stroke-width=\"2.4\"/>"
+      }
+    }
+  },
+  "params": {
+    "height": {
+      "label": "Độ cao nón",
+      "type": "scaleY",
+      "min": 0.85,
+      "max": 1.2,
+      "def": 1,
+      "pivot": [
+        100,
+        80
+      ]
+    }
+  },
+  "project": "vi-du-agent"
+}

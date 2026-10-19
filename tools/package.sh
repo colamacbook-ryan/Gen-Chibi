@@ -9,7 +9,7 @@ OUT="${1:-$ROOT/dist}"
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 mkdir -p "$STAGE/$NAME" "$OUT"
-for p in VERSION CHANGELOG.md LICENSE README.md launcher.js install.sh docker-compose.yml server engine kinds studio cli; do
+for p in VERSION CHANGELOG.md LICENSE README.md launcher.js install.sh docker-compose.yml server engine kinds studio cli agent; do
   [ -e "$ROOT/$p" ] && cp -R "$ROOT/$p" "$STAGE/$NAME/"
 done
 tar --format=pax --owner=0 --group=0 --numeric-owner -C "$STAGE" -czf "$OUT/$NAME.tar.gz" "$NAME"

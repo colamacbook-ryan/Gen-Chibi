@@ -67,4 +67,22 @@ function extractTarGz(file, dest, { stripTop = true } = {}) {
   return files;
 }
 
-module.exports = { extractTarGz };
+// đóng gói vài tệp văn bản thành tar (ustar) — để CLI giải nén bằng `tar -x` có sẵn trên mọi Linux (chế độ Docker có thể không có Node)
+function packTar(files) {
+  const blocks = [], now = Math.floor(Date.now() / 1000);
+  const put = (buf, off, str, len) => { buf.write(String(str).slice(0, len), off, len, 'utf8'); };
+  files.forEach(f => {
+    const name = String(f.path).replace(/^\/+/, ''), data = Buffer.from(f.content, 'utf8'), h = Buffer.alloc(512);
+    if (Buffer.byteLength(name) > 100 || /(^|\/)\.\.(\/|$)/.test(name)) throw new Error('tar: tên tệp không hợp lệ ' + name);
+    put(h, 0, name, 100); put(h, 100, '0000644\0', 8); put(h, 108, '0000000\0', 8); put(h, 116, '0000000\0', 8);
+    put(h, 124, data.length.toString(8).padStart(11, '0') + '\0', 12); put(h, 136, now.toString(8).padStart(11, '0') + '\0', 12);
+    h.fill(0x20, 148, 156); h[156] = 0x30; put(h, 257, 'ustar\0', 6); put(h, 263, '00', 2);
+    let sum = 0; for (let i = 0; i < 512; i++) sum += h[i];
+    put(h, 148, sum.toString(8).padStart(6, '0') + '\0 ', 8);
+    blocks.push(h, data, Buffer.alloc((512 - data.length % 512) % 512));
+  });
+  blocks.push(Buffer.alloc(1024));
+  return Buffer.concat(blocks);
+}
+
+module.exports = { extractTarGz, packTar };

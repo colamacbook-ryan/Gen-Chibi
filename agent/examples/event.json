@@ -1,0 +1,33 @@
+{
+  "title": "Chiêu mới",
+  "scene": "local.my/vi-du-san-tap",
+  "steps": [
+    {
+      "actor": "vi-du-thu-thu",
+      "state": "proud",
+      "spot": "midLeft",
+      "to": "ma-no-canh",
+      "say": "Xem chiêu mới của ta!"
+    },
+    {
+      "actor": "vi-du-thu-thu",
+      "state": "rage",
+      "action": "bonk",
+      "target": "ma-no-canh",
+      "react": "hit",
+      "say": ""
+    },
+    {
+      "actor": "ma-no-canh",
+      "state": "shock",
+      "to": "vi-du-thu-thu",
+      "say": "Ui da!"
+    },
+    {
+      "actor": "vi-du-thu-thu",
+      "state": "proud",
+      "action": "bowDeep",
+      "say": "Đa tạ đã chỉ giáo!"
+    }
+  ]
+}

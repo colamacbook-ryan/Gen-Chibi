@@ -317,12 +317,61 @@ link_cmd() {
   else print_link; fi
 }
 
+# genchibi agent …: bootstrap cho agent BẤT KỲ hãng nào (INT-05) — cấu hình nối từng client, hướng dẫn, schema tool, cài skill.
+# Lấy mọi thứ qua HTTP của app (chế độ Docker có thể không có Node trên máy chủ); token không bao giờ in ra màn hình.
+agent_curl() { if [ -n "${GC_API_TOKEN:-}" ]; then curl -fsS -H "Authorization: Bearer $GC_API_TOKEN" "$@"; else curl -fsS "$@"; fi; }
+agent_connect() {
+  local u link hdr=""
+  u="$URL/mcp"; link="$(link_url)"
+  [ -n "${GC_API_TOKEN:-}" ] && hdr="Authorization: Bearer <token — xem GC_API_TOKEN trong $HOME_DIR/.env>"
+  local jh="" target="${link:-$u}"; [ -n "$hdr" ] && jh=',"headers":{"Authorization":"Bearer <token>"}'
+  local cur_json='{"mcpServers":{"gen-chibi":{"url":"'"$target"'"'"$jh"'}}}' gem_json='{"mcpServers":{"gen-chibi":{"httpUrl":"'"$target"'"'"$jh"'}}}'
+  local cc_hdr=""; [ -n "$hdr" ] && cc_hdr=' --header "Authorization: Bearer <token>"'
+  cat <<EOF
+Nối agent vào gen-chibi (MCP, giao thức 2025-06-18). Sau khi nối, dặn agent: "gọi start_here trước".
+
+Địa chỉ
+  Trên máy này   $u${hdr:+   (header: $hdr)}
+  Qua Internet   ${link:-chưa mở — genchibi expose <tên-miền> | --quick}
+  stdio          genchibi mcp
+
+Claude Code      claude mcp add -s user --transport http gen-chibi $target$cc_hdr
+                 (hoặc stdio)  claude mcp add -s user gen-chibi -- genchibi mcp
+Claude app/web   Settings › Connectors › Add custom connector › dán link Internet
+Cursor           ~/.cursor/mcp.json   $cur_json
+Gemini CLI       ~/.gemini/settings.json   $gem_json
+Codex CLI        ~/.codex/config.toml   [mcp_servers.gen-chibi]  command = "genchibi"  args = ["mcp"]
+Không có MCP     curl -s ${link:-$u} -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"start_here","arguments":{}}}'
+                 schema dạng function-calling: genchibi agent tools --format openai | gemini
+(Định dạng tệp cấu hình của từng client có thể đổi theo phiên bản client — đối chiếu tài liệu của client nếu không nhận.)
+
+Hướng dẫn cho agent: genchibi agent guide [chủ đề]   ·   cài skill: genchibi agent skill claude | cursor | gemini | codex | generic [--dir thư-mục]
+EOF
+}
+agent_cmd() {
+  local sub="${1:-connect}"; shift || true
+  case "$sub" in
+    connect) agent_connect ;;
+    guide) agent_curl "$URL/api/agent/guide?topic=${1:-guide}"; echo ;;
+    topics) agent_curl "$URL/api/agent/topics"; echo ;;
+    tools) local f=openai; [ "${1:-}" = --format ] && f="${2:-openai}"; agent_curl "$URL/api/agent/tools?format=$f"; echo ;;
+    skill)
+      local v="${1:-claude}" dir=""; shift || true; [ "${1:-}" = --dir ] && dir="${2:-}"
+      case "$v" in claude) dir="${dir:-$HOME/.claude/skills}" ;; cursor|gemini|codex|generic) dir="${dir:-$PWD}" ;; *) echo "skill: claude | cursor | gemini | codex | generic" >&2; return 1 ;; esac
+      mkdir -p "$dir"
+      agent_curl "$URL/api/agent/skill?vendor=$v" | tar -x -C "$dir"
+      echo "Đã cài hướng dẫn gen-chibi cho $v vào $dir (sinh từ agent/ của bản đang chạy — cập nhật app thì chạy lại lệnh này)" ;;
+    *) echo "genchibi agent connect | guide [chủ đề] | topics | tools [--format openai|gemini|mcp] | skill <hãng> [--dir thư-mục]" >&2; return 1 ;;
+  esac
+}
+
 case "${1:-help}" in
   start) start ;; stop) stop ;; restart) stop; start ;; status) status ;; update) update ;;
   logs) logs ;; backup) backup ;; restore) shift; restore "${1:-}" ;; uninstall) uninstall ;;
   mcp) mcp ;; open) open_ui ;; version) status ;;
   expose) shift; expose "$@" ;; link) shift; link_cmd "$@" ;;
   token|github-token) shift; token_cmd "${1:-}" ;;
+  agent) shift; agent_cmd "$@" ;;
   *) cat <<EOF
 genchibi — quản lý gen-chibi ($HOME_DIR, chế độ $MODE)
   start | stop | restart | status   chạy, dừng, xem trạng thái
@@ -332,6 +381,7 @@ genchibi — quản lý gen-chibi ($HOME_DIR, chế độ $MODE)
   mcp                               cầu MCP (stdio) cho agent: claude mcp add gen-chibi -- genchibi mcp
   expose <tên-miền> | --quick       mở MCP ra Internet qua Cloudflare Tunnel, in link nối agent (--off, --rotate)
   link [--check]                    in link MCP + lệnh nối agent
+  agent connect|guide|tools|skill   bootstrap cho agent mọi hãng: cấu hình nối, hướng dẫn, schema tool, cài skill
   token [giá-trị|--clear]           đặt token GitHub (repo private) cho tự cập nhật; bỏ trống = nhập ẩn
   open                              mở Studio trong trình duyệt
   uninstall                         gỡ (hỏi giữ hay xoá dữ liệu)

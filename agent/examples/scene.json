@@ -1,0 +1,26 @@
+{
+  "id": "vi-du-san-tap",
+  "name": "Sân tập",
+  "description": "Sân tập võ buổi sáng: tường kem, nền gỗ, chậu cây.",
+  "project": "vi-du-agent",
+  "layers": {
+    "sky": "gen.khung/khung-tuong",
+    "ground": "gen.khung/khung-nen"
+  },
+  "deco": [
+    {
+      "part": "gen.khung/khoi-cay",
+      "x": 578,
+      "y": 296,
+      "scale": 0.8
+    }
+  ],
+  "palette": {
+    "wall": "#f3ead8",
+    "ground": "#cdb48a",
+    "leaf": "#6fa86b"
+  },
+  "time": "day",
+  "weather": "clear",
+  "status": "draft"
+}

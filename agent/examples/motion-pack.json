@@ -1,0 +1,184 @@
+{
+  "id": "vi-du-dong-tac",
+  "name": "Đòn hài của Thủ Thư",
+  "project": "vi-du-agent",
+  "status": "draft",
+  "description": "Ví dụ gói động tác: một đòn đánh tay không (cốc đầu) + một động tác một mình (cúi chào sâu).",
+  "poses": {
+    "bonkUp": {
+      "$": "fistGuard",
+      "root": {
+        "rot": 6
+      },
+      "body": {
+        "rot": 6
+      },
+      "armR": {
+        "rot": 170,
+        "sy": 1.2
+      },
+      "foreR": {
+        "rot": 40
+      }
+    },
+    "bonkDown": {
+      "$": "fistGuard",
+      "root": {
+        "rot": -2,
+        "x": -4
+      },
+      "armR": {
+        "rot": 118,
+        "sy": 1.9
+      },
+      "foreR": {
+        "rot": -10,
+        "sy": 1.5
+      }
+    }
+  },
+  "clips": {
+    "bonk": {
+      "label": "Cốc đầu",
+      "view": "q90",
+      "face": {
+        "eyes": "smug",
+        "brows": "smug",
+        "mouth": "grin"
+      },
+      "keys": [
+        [
+          0.16,
+          "bonkUp",
+          "out"
+        ],
+        [
+          0.3,
+          "bonkDown",
+          "snap"
+        ],
+        [
+          0.6,
+          "fistGuard",
+          "io"
+        ]
+      ],
+      "travel": [
+        [
+          0,
+          0
+        ],
+        [
+          0.3,
+          16,
+          "snap"
+        ],
+        [
+          0.6,
+          18,
+          "out"
+        ]
+      ],
+      "events": [
+        [
+          0.22,
+          {
+            "sfx": "whoosh",
+            "gain": 0.6
+          }
+        ],
+        [
+          0.3,
+          {
+            "at": "hand",
+            "fx": "impact",
+            "size": 0.8,
+            "hitstop": 0.06,
+            "shake": 3,
+            "sfx": "boing"
+          }
+        ],
+        [
+          0.32,
+          {
+            "at": "hand",
+            "fx": "text",
+            "text": "CỐC!",
+            "dy": -26,
+            "size": 1,
+            "color": "#ff9a3c"
+          }
+        ]
+      ],
+      "cam": [
+        [
+          0.1,
+          {
+            "z": 1.9,
+            "lead": 50,
+            "fy": 0.55,
+            "roll": 0,
+            "lag": 6
+          }
+        ]
+      ]
+    },
+    "bowDeep": {
+      "label": "Cúi chào sâu",
+      "view": "front",
+      "face": {
+        "eyes": "closed",
+        "brows": "neutral",
+        "mouth": "smile"
+      },
+      "keys": [
+        [
+          0.3,
+          "fSalute",
+          "io"
+        ],
+        [
+          0.7,
+          "fBow",
+          "io"
+        ],
+        [
+          1.1,
+          "fBow",
+          "sine"
+        ],
+        [
+          1.4,
+          "fStand",
+          "io"
+        ]
+      ],
+      "events": [
+        [
+          0.7,
+          {
+            "sfx": "chime",
+            "gain": 0.5
+          }
+        ]
+      ]
+    }
+  },
+  "actions": {
+    "bonk": {
+      "label": "Cốc đầu",
+      "clips": [
+        "bonk"
+      ],
+      "attack": true,
+      "aim": "head",
+      "hint": "hài, tay không, đánh vào đầu"
+    },
+    "bowDeep": {
+      "label": "Cúi chào sâu",
+      "clips": [
+        "bowDeep"
+      ]
+    }
+  }
+}

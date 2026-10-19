@@ -8,7 +8,8 @@ const path = require('path');
 const { Updater, RESTART_CODE } = require('./updater');
 const { Secrets } = require('./secrets');
 const { AI } = require('./ai');
-const { MCP, INSTRUCTIONS: MCP_INSTRUCTIONS } = require('./mcp');
+const { MCP, INSTRUCTIONS: MCP_INSTRUCTIONS, TOOLS: MCP_TOOLS } = require('./mcp');
+const Agent = require('./agent.js');
 const { Store, KEY, readJSON, writeJSON } = require('./store');
 const { loadEngine } = require('./engine-node');
 
@@ -140,7 +141,12 @@ async function route(req, res) {
 
   // ---- MCP (Streamable HTTP, trả JSON). Chống CSRF: bắt buộc Content-Type JSON (trang khác gửi kiểu này phải qua preflight, server không cho)
   if (p === '/mcp') {
-    if (m !== 'POST') return send(res, 405, { error: 'MCP: chỉ nhận POST' });
+    // GET cho agent KHÔNG có MCP client (trung lập model, INT-05): ?guide=<chủ đề> → markdown · ?tools=openai|gemini|mcp → schema tool
+    if (m === 'GET' && (url.searchParams.has('guide') || url.searchParams.has('tools'))) {
+      if (url.searchParams.has('guide')) { const md = Agent.guide(url.searchParams.get('guide') || 'guide'); return md == null ? fail(res, 404, 'chủ đề lạ: ' + Agent.topics().map(t => t.id).join(', ')) : send(res, 200, md, 'text/markdown; charset=utf-8'); }
+      const out = Agent.toolsExport(MCP_TOOLS, url.searchParams.get('tools') || 'openai'); return out ? send(res, 200, out) : fail(res, 400, 'tools: openai | gemini | mcp');
+    }
+    if (m !== 'POST') return send(res, 405, { error: 'MCP: chỉ nhận POST (GET ?guide=<chủ đề> hoặc ?tools=openai|gemini|mcp cho agent không có MCP client)' });
     if (!originOK(req)) return fail(res, 403, 'Origin không được phép');
     if (!/^application\/json\b/i.test(String(req.headers['content-type'] || ''))) return fail(res, 415, 'MCP cần Content-Type: application/json');
     const msg = await body(req, 2 * 1024 * 1024);
@@ -278,6 +284,14 @@ async function route(req, res) {
     const b = await body(req);
     try { return send(res, 200, mcp.saveSceneChecked(b.scene, b.note || 'Lưu trong Studio')); } catch (e) { return send(res, e.code || 400, { error: e.message, errors: e.errors || null }); }
   }
+  // hướng dẫn agent (một nguồn agent/) cho Studio + agent cục bộ: /api/agent/guide?topic= · /api/agent/tools?format=openai|gemini|mcp
+  if (p === '/api/agent/guide' && m === 'GET') { const md = Agent.guide(url.searchParams.get('topic') || 'guide'); return md == null ? fail(res, 404, 'chủ đề lạ') : send(res, 200, md, 'text/markdown; charset=utf-8'); }
+  if (p === '/api/agent/topics' && m === 'GET') return send(res, 200, Agent.topics());
+  if (p === '/api/agent/skill' && m === 'GET') {   // lớp bọc của một hãng (claude | cursor | gemini | codex | generic) dạng tar — genchibi agent skill
+    const files = Agent.wrapper(url.searchParams.get('vendor')); if (!files) return fail(res, 400, 'vendor: ' + Agent.VENDORS.join(' | '));
+    return send(res, 200, require('./tar').packTar(files), 'application/x-tar');
+  }
+  if (p === '/api/agent/tools' && m === 'GET') { const out = Agent.toolsExport(MCP_TOOLS, url.searchParams.get('format') || 'openai'); return out ? send(res, 200, out) : fail(res, 400, 'format: openai | gemini | mcp'); }
   if (p === '/api/motion-packs' && m === 'GET') return send(res, 200, store.listMotionPacks());
   if (p === '/api/motion-packs' && m === 'POST') {
     const b = await body(req, 400 * 1024);

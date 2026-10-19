@@ -648,10 +648,10 @@ const L = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n")
 const by = id => L.find(r => r.id === id);
 const ok = (c, m) => { if (!c) { console.log("   ✗", m); process.exit(1); } };
 ok(by(1).result.protocolVersion === "2025-06-18", "bắt tay");
-ok(by(2).result.tools.length === 31, "31 tool");
+ok(by(2).result.tools.length === 44, "44 tool");
 ok(!by(3).result.isError && JSON.parse(by(3).result.content[0].text).saved, "lưu nhân vật hợp lệ");
 ok(by(4).result.isError, "chặn linh kiện lạ");
-console.log("   ✓ MCP: bắt tay, 31 tool, lưu hợp lệ, chặn linh kiện lạ");
+console.log("   ✓ MCP: bắt tay, 44 tool, lưu hợp lệ, chặn linh kiện lạ");
 const spec = JSON.parse(by(5).result.content[0].text);
 ok(spec.slots[0].slot === "hat" && spec.example && spec.views.q45, "get_part_spec có khung + ví dụ");
 ok(!by(6).result.isError && /<svg/.test(by(6).result.content[1].resource.text), "preview_part trả bàn soát SVG");
@@ -700,6 +700,9 @@ console.log("   ✓ MCP cảnh: chuẩn phông → soát → lưu phông → ph�
 ' "$H/mcp.out"
 kill $SP 2>/dev/null || true
 
+echo "3c) agent từ số 0 (mọi hãng): chỉ dùng hướng dẫn agent/ + JSON-RPC thuần — trọn luồng, lỗi có mã, đường không-MCP, lớp bọc từng hãng"
+(echo > /dev/tcp/127.0.0.1/7493) 2>/dev/null && { echo "Cổng 7493 đang bị chiếm"; exit 1; }
+node tools/test-agent-zero.mjs || exit 1
 echo "3b) AI trong chatroom (LLM API) đi đúng cổng nhà xưởng"
 node tools/test-agent.mjs || exit 1
 

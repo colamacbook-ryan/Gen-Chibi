@@ -1,0 +1,19 @@
+{
+  "id": "vi-du-kiem-go",
+  "name": "Kiếm gỗ tập",
+  "type": "weapon",
+  "rarity": "common",
+  "project": "vi-du-agent",
+  "equip": {
+    "slot": "heldR",
+    "part": "gen.khung/khoi-que-ngan",
+    "palette": {
+      "wood": "#b8864e"
+    }
+  },
+  "stats": {
+    "atk": 8,
+    "spd": 4
+  },
+  "description": "Kiếm gỗ để tập — đánh không đau."
+}
