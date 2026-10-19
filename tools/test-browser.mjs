@@ -2125,7 +2125,8 @@ if (!ONLY || ONLY === 'dock') {
   const mock11 = http11.createServer((req, res) => {
     let b = ''; req.on('data', d => b += d).on('end', () => {
       const body = JSON.parse(b), done = body.messages.filter(m => m.role === 'tool').length;
-      LLM.last = { system: body.messages[0].content, tools: body.tools.map(t => t.function.name), messages: body.messages }; LLM.calls++;
+      const cm = body.messages.find(m => m.role === 'user' && /^DỮ LIỆU GIAO DIỆN/.test(m.content));   // tin dữ liệu giao diện (JSON) — tách khỏi chỉ dẫn hệ thống (CNS-118)
+      LLM.last = { system: body.messages[0].content, tools: body.tools.map(t => t.function.name), messages: body.messages, ctxText: cm ? cm.content : '', ctx: cm ? JSON.parse(cm.content.slice(cm.content.indexOf('\n') + 1)) : null }; LLM.calls++;
       const msg = done < LLM.steps.length
         ? { role: 'assistant', content: '', tool_calls: [{ id: 'c' + done, type: 'function', function: { name: LLM.steps[done][0], arguments: JSON.stringify(LLM.steps[done][1]) } }] }
         : { role: 'assistant', content: typeof LLM.reply === 'function' ? LLM.reply() : LLM.reply };
@@ -2165,7 +2166,7 @@ if (!ONLY || ONLY === 'dock') {
       LLM.steps = []; LLM.reply = 'Chào từ ' + label; await ask(q, 'Xin chào ở ' + label);
       const c = posts[posts.length - 1].context;
       if (c.zone !== zone || !LLM.last.tools.includes(has) || (hasnt && LLM.last.tools.includes(hasnt)) || LLM.last.tools.includes('update_app')) throw new Error('khu ' + label + ': context ' + JSON.stringify(c) + ' tools ' + LLM.last.tools.length);
-      if (!new RegExp('khu ' + label).test(LLM.last.system)) throw new Error('chỉ dẫn không nói khu ' + label);
+      if (!LLM.last.ctx || LLM.last.ctx.zone_label !== label || /khu .*› trang/.test(LLM.last.system)) throw new Error('dữ liệu giao diện không nói khu ' + label + ': ' + LLM.last.ctxText.slice(0, 120));
     }
     // liên kết cũ tới trang chat riêng → mở dock
     await q.evaluate(() => { localStorage.setItem('gc-route-xuong', JSON.stringify({ page: 'workshop' })); localStorage.setItem('gc-dock', JSON.stringify({ open: false, w: 380 })); });
@@ -2225,9 +2226,15 @@ if (!ONLY || ONLY === 'dock') {
     LLM.steps = []; LLM.reply = 'Đã xem.'; await ask(q, 'So sánh hai người này');
     const ap = posts[posts.length - 1];
     if (!ap.anchors || ap.anchors.length !== 2 || ap.anchors[0].anchor !== 'asset:local.my/tq-luu-bi' || ap.anchors[1].anchor !== 'asset:local.my/tq-quan-vu' || !/Lưu Bị/.test(ap.anchors[0].snapshot) || ap.anchors[0].kind !== 'asset' || !ap.anchors[0].label) throw new Error('payload anchors: ' + JSON.stringify(ap.anchors).slice(0, 300));
-    if (!/⟦asset:local\.my\/tq-luu-bi\|/.test(LLM.last.system) || !/Quan Vũ/.test(LLM.last.system)) throw new Error('chỉ dẫn gửi LLM thiếu phần tử ghim');
+    const pinsLLM = (LLM.last.ctx && LLM.last.ctx.pins) || [];
+    if (pinsLLM.length !== 2 || pinsLLM[0].anchor !== 'asset:local.my/tq-luu-bi' || !/Quan Vũ/.test(JSON.stringify(pinsLLM)) || /Quan Vũ/.test(LLM.last.system)) throw new Error('tin dữ liệu gửi LLM thiếu phần tử ghim (hoặc ghim lọt vào chỉ dẫn hệ thống)');
     if (await q.$('#dock .dock-pins .achip')) throw new Error('chip ghim phải được dọn sau khi gửi');
     if (!(await q.$('#dock .msg.user .achip'))) throw new Error('tin của chủ phải còn chip ghim');
+    // token THẬT hiện dưới câu trả lời; ô "~N token" ước tính gồm cả chỉ dẫn khu + dữ liệu giao diện + lịch sử (không chỉ chữ gõ + ghim)
+    const usageTxt = await q.textContent('#dock .msg.assistant .usage');
+    if (!/^token vào 10 · ra 5$/.test(usageTxt.trim())) throw new Error('dock không hiện token thật: ' + usageTxt);
+    const tokNow = +(await q.textContent('#dock .tok')).replace(/\D/g, ''), tokReal = Math.round(LLM.last.messages.reduce((n, m) => n + String(m.content || '').length, 0) / 3);
+    if (tokNow < 0.6 * tokReal || tokNow > 2 * tokReal || !/chỉ dẫn của khu/.test(await q.getAttribute('#dock .tok', 'title'))) throw new Error('ước tính token ' + tokNow + ' lệch số đo thật ~' + tokReal + ' (phải gồm cả ngữ cảnh)');
     await q.close();
     console.log('  ✓ Ghim: @ mở picker mờ ("@luubi" → Lưu Bị) chèn chip · Alt+P rê → viền đứt + nhãn, click = chip, Esc thoát · ước tính token đổi · payload có anchors[{anchor, kind, id, label, snapshot}] · LLM nhận chỉ dẫn kèm phần tử ghim');
 
@@ -2272,7 +2279,7 @@ if (!ONLY || ONLY === 'dock') {
     const tabs = await q.$$eval('.roomtabs button', es => es.map(e => e.textContent.replace(/[\d\/·\s]+đề xuất|\s*\d+(\/\d+)?$/g, '').trim())); if (tabs.join() !== 'Kịch bản,Phân cảnh,Xem & duyệt,Giọng & âm thanh,Xuất bản') throw new Error('tab phòng: ' + tabs.join());
     LLM.steps = []; LLM.reply = 'Ý tưởng hay cho phim này.'; await ask(q, 'Đề xuất thêm một cảnh về cầu Trường Bản');
     if (!/Ý tưởng hay/.test(await q.textContent('#dock .dock-log'))) throw new Error('chưa thấy trả lời');
-    if (!/AI đạo diễn của tác phẩm đang mở/.test(LLM.last.system) && !/TÁC PHẨM ĐANG MỞ: id tq-vuon/.test(LLM.last.system)) throw new Error('chỉ dẫn Tạo tác thiếu tác phẩm đang mở');
+    if (!/TÁC PHẨM ĐANG MỞ: id tq-vuon/.test(LLM.last.system) || !LLM.last.ctx.work || !/Từ vườn đào tới Xích Bích/.test(LLM.last.ctx.work.title) || /Từ vườn đào/.test(LLM.last.system)) throw new Error('Tạo tác: quy trình ở chỉ dẫn, hiện trạng tác phẩm ở tin dữ liệu');
     await q.click('.crumbs a:text-is("Tác phẩm")'); await q.waitForSelector('table.worklist'); 
     await q.waitForTimeout(500); if (/Ý tưởng hay|cầu Trường Bản/.test(await q.textContent('#dock .dock-log'))) throw new Error('rời tác phẩm mà dock vẫn hiện luồng của tác phẩm');
     await q.goBack(); await q.waitForSelector('.roomtabs'); await q.waitForTimeout(500);
@@ -2285,7 +2292,7 @@ if (!ONLY || ONLY === 'dock') {
     const p5 = []; q.on('request', r => { if (/\/api\/ai\/agent$/.test(r.url()) && r.method() === 'POST') p5.push(JSON.parse(r.postData())); });
     await q.click('#dock .dock-ctx .x'); await q.waitForSelector('#dock .dock-ctx button:text-is("Gắn lại")');
     LLM.steps = []; LLM.reply = 'Tôi chỉ biết bạn đang ở khu Tạo tác.'; await ask(q, 'Chào bạn');
-    if (p5[0].context.zone !== 'tao-tac' || p5[0].context.object || p5[0].context.page || /TÁC PHẨM ĐANG MỞ/.test(LLM.last.system) || !LLM.last.tools.includes('save_shot')) throw new Error('bỏ ngữ cảnh: ' + JSON.stringify(p5[0].context));
+    if (p5[0].context.zone !== 'tao-tac' || p5[0].context.object || p5[0].context.page || /TÁC PHẨM ĐANG MỞ/.test(LLM.last.system) || LLM.last.ctx.work || LLM.last.ctx.object || !LLM.last.tools.includes('save_shot')) throw new Error('bỏ ngữ cảnh: ' + JSON.stringify(p5[0].context));
     await q.click('#dock .dock-ctx button:text-is("Gắn lại")'); await q.waitForFunction(() => /Từ vườn đào/.test(document.querySelector('#dock .dock-ctx .path').textContent));
     await q.goto(U11 + 'tao-tac#/tac-pham/' + WID + '/review'); await q.waitForSelector('.roomtabs'); await q.waitForTimeout(400);
     if (await q.getAttribute('#wtab-review', 'aria-selected') !== 'true') throw new Error('deep link tab review không mở đúng tab');
@@ -2309,7 +2316,7 @@ if (!ONLY || ONLY === 'dock') {
     if (!(await q.$('#dock .dock-pins .achip[data-chip="step:' + WID + '/' + S1.id + '/2"]')) || !/cắt bớt/.test(await q.inputValue(ta))) throw new Error('Gửi AI sửa theo ghi chú: thiếu ghim cảnh / bước / ghi chú');
     posts.length = 0; q.on('request', r => { if (/\/api\/ai\/agent$/.test(r.url()) && r.method() === 'POST') posts.push(JSON.parse(r.postData())); });
     LLM.steps = []; LLM.reply = 'Đã đọc ghi chú.'; await q.click('#dock button.send'); await q.waitForFunction(() => !window.GCDock.state().busy && /Đã đọc ghi chú/.test(document.querySelector('#dock .dock-log').textContent));
-    if (!/ghi chú: bước 2|bước 2: Lời thoại dài/.test(LLM.last.system) && !/Lời thoại dài quá/.test(LLM.last.system)) throw new Error('AI không thấy ghi chú duyệt trong chỉ dẫn');
+    if (!/Lời thoại dài quá/.test(JSON.stringify(LLM.last.ctx.work.review)) || /Lời thoại dài quá/.test(LLM.last.system)) throw new Error('AI không thấy ghi chú duyệt trong tin dữ liệu (hoặc ghi chú lọt vào chỉ dẫn hệ thống)');
     if (posts[0].anchors.length !== 2 || !/Lời thoại dài quá/.test(JSON.stringify(posts[0].anchors))) throw new Error('payload ghim cảnh + ghi chú: ' + JSON.stringify(posts[0].anchors).slice(0, 300));
     await q.close();
     q = await open11(ctx11, U11 + 'tao-tac'); await q.click('.nav-item:text-is("Tác phẩm")'); await q.waitForSelector('table.worklist tr.click');

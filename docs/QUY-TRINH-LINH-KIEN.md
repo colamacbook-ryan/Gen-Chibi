@@ -106,7 +106,7 @@ Một loại asset mới không phải "một bộ vẽ mới" mà là **một c
 |---|---|---|---|
 | Là gì | bộ khung chuẩn (không chủ đề) + nơi **tạo asset từ khung** | asset đã qua cổng kiểm, **xếp theo dự án chủ đề** | **Tác phẩm**: làm phim / truyện với AI đạo diễn |
 | Chứa | khung xương, luật, linh kiện, phông, khung tư thế & biểu cảm, cổng kiểm; Tạo asset mới, bàn chỉnh (Trợ lý AI ở dock cột phải) | dự án chủ đề → nhân vật, vật phẩm, bối cảnh | kịch bản, phân cảnh, cảnh thành phẩm, sân khấu final, kịch bản lẻ từ agent |
-| Việc | chọn khung → tham số → soát → cổng → lưu vào dự án | xem, **lấy về** (ảnh, sprite 8 hướng, mã), tải / nhập **gói dự án** | chat AI đạo diễn, diễn cả chuỗi, **xuất phim HTML**, storyboard |
+| Việc | chọn khung → tham số → soát → cổng → lưu vào dự án | xem, **lấy về** (ảnh, sprite 8 hướng, mã), tải / nhập **gói dự án** | danh sách tác phẩm → phòng làm phim (AI đạo diễn ở dock), diễn cả chuỗi, **xuất phim HTML**, storyboard |
 
 Dòng chảy một chiều: **Xưởng → Thư viện → Tạo tác → thành phẩm**. Khung không bao giờ bị sửa: lưu vào khung (kể cả từ Studio) thành bản sao trong "Của tôi".
 Asset người dùng hoặc AI tạo lưu dạng **nháp trong dự án** và dùng được ngay — không có bước duyệt (Ryan, 2026-10-18). AI đạo diễn thiếu nhân vật / bối cảnh thì tự vào Xưởng tạo (đúng dự án, qua cổng kiểm).

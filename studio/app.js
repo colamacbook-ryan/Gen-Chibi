@@ -158,7 +158,7 @@
   //   TẠO TÁC  = làm phim / truyện với AI đạo diễn từ asset trong Thư viện. Dòng chảy: Xưởng → Thư viện → Tạo tác (docs/spec/DAC-TA-3-GIAI-DOAN.md).
   var NAV = [
     ['fab', 'Xưởng', 'tạo asset từ khung', [['create', 'Tạo asset mới'], ['characters', 'Bàn chỉnh nhân vật'], ['items', 'Bàn chỉnh vật phẩm'], ['scenes', 'Bàn chỉnh bối cảnh']]],
-    ['fab', 'Khung chuẩn', 'quy cách · kiểm (Gen Labs giữ)', [['khung', 'Bộ khung chuẩn'], ['library', 'Kho linh kiện & phông'], ['poses', 'Khung tư thế & hoạt động'], ['states', 'Khung biểu cảm & động tác'], ['gates', 'Cổng kiểm & hiệu năng']]],
+    ['fab', 'Khung chuẩn', 'quy cách · kiểm (Gen Labs giữ)', [['khung', 'Bộ khung chuẩn'], ['library', 'Kho linh kiện & phông'], ['poses', 'Khung tư thế & hoạt động'], ['states', 'Khung biểu cảm & động tác'], ['gates', 'Cổng kiểm & hiệu năng']], 'khung'],
     ['lib', 'Thư viện', 'theo dự án chủ đề · lấy về dùng', [['projects', 'Dự án chủ đề'], ['lib-characters', 'Nhân vật'], ['lib-items', 'Vật phẩm'], ['lib-scenes', 'Bối cảnh'], ['lib-motions', 'Động tác'], ['lib-sounds', 'Âm thanh'], ['lib-voices', 'Giọng']]],
     ['make', 'Tạo tác', 'làm phim / truyện với AI', [['works', 'Tác phẩm']]],
     ['sys', 'Hệ thống', '', [['ai', 'Cài đặt AI'], ['update', 'Cập nhật']]]
@@ -171,7 +171,7 @@
   var APPS = [
     { id: 'xuong', zone: 'fab', name: 'Xưởng', desc: 'Bộ khung chuẩn (không chủ đề) → tạo asset: chọn khung, thêm tham số, soát mọi góc, qua cổng kiểm, lưu vào dự án.', home: 'create' },
     { id: 'thu-vien', zone: 'lib', name: 'Thư viện', desc: 'Asset đã qua cổng kiểm, xếp theo dự án chủ đề — xem, tải ảnh / sprite, chép mã, tải gói dự án.', home: 'projects' },
-    { id: 'tao-tac', zone: 'make', name: 'Tạo tác', desc: 'Làm phim / truyện với AI đạo diễn: chat, kịch bản, phân cảnh, cảnh thành phẩm, sân khấu final.', home: 'works' }
+    { id: 'tao-tac', zone: 'make', name: 'Tạo tác', desc: 'Làm phim / truyện: danh sách tác phẩm → phòng làm phim riêng của từng tác phẩm (kịch bản, phân cảnh, xem & duyệt, giọng & âm thanh, xuất bản); AI đạo diễn ở cột phải.', home: 'works' }
   ];
   function appById(id) { return APPS.filter(function (a) { return a.id === id; })[0] || null; }
   function appOfZone(z) { return APPS.filter(function (a) { return a.zone === z; })[0] || null; }
@@ -249,7 +249,7 @@
     var z = zoneOf(page);
     if (z === 'make') return 'tao-tac';
     if (z === 'lib') return 'thu-vien';
-    if (z === 'fab') { var p = PAGE_ALIAS[page] || page; return NAV[1][3].some(function (it) { return it[0] === p; }) ? 'khung' : 'xuong'; }   // nhóm "Khung chuẩn" = khu Bộ khung
+    if (z === 'fab') { var p = PAGE_ALIAS[page] || page; return NAV.filter(function (g) { return g[4] === 'khung'; })[0][3].some(function (it) { return it[0] === p; }) ? 'khung' : 'xuong'; }   // nhóm NAV mang id 'khung' (Khung chuẩn) = khu Bộ khung
     return 'he-thong';
   }
   function pageLabel(page) {
@@ -302,7 +302,7 @@
     var stat = {
       xuong: GC.assets().filter(function (a) { return groupOf(a) === 'frame'; }).length + ' khung nhân vật · ' + GC.items().filter(function (a) { return groupOf(a) === 'frame'; }).length + ' khối vật phẩm · ' + GC.scenes().filter(function (a) { return groupOf(a) === 'frame'; }).length + ' sân khấu chuẩn',
       'thu-vien': Projects.all().length + ' dự án · ' + lib(GC.assets()) + ' nhân vật · ' + lib(GC.items()) + ' vật phẩm · ' + lib(GC.scenes()) + ' bối cảnh',
-      'tao-tac': 'chat AI đạo diễn · kịch bản · phân cảnh · sân khấu final'
+      'tao-tac': 'danh sách tác phẩm → phòng làm phim (5 tab) · AI đạo diễn ở cột phải'
     };
     var row = h('div', { class: 'apps' });
     APPS.forEach(function (a, i) {
@@ -1102,7 +1102,7 @@
   };
 
   /* ============================================================ TẠO TÁC › Tác phẩm (giai đoạn ③) */
-  // 5 khu: chat với AI đạo diễn · kịch bản · phân cảnh (mô tả) · cảnh thành phẩm · sân khấu final (ghép mọi phân cảnh thành chuỗi).
+  // Danh sách tác phẩm → PHÒNG LÀM PHIM 5 tab: kịch bản · phân cảnh · xem & duyệt (sân khấu ghép mọi phân cảnh thành chuỗi) · giọng & âm thanh · xuất bản. AI đạo diễn = dock cột phải.
   // Mọi ghi đều qua API → cùng cổng với MCP; AI thiếu asset thì tự vào Xưởng tạo (đúng dự án của tác phẩm).
   // Trình diễn nằm ở engine/player.js (GC.film) — dùng chung với tệp phim xuất ra.
   function stillURL(shot) { var svg = GC.film.still(shot); return svg ? svgURL(svg) : ''; }
