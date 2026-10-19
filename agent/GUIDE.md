@@ -20,6 +20,7 @@ gen-chibi is a **factory of chibi assets made from code**. Everything is JSON da
 | **character** | a recipe: frame + parts + items + palette + identity | `save_character` |
 | **scene** | backdrop layers + props + palette + time + weather | `save_scene` |
 | **motion pack** | poses + animation clips + actions (attacks, solo moves) + shows | `save_motion_pack` |
+| **sound pack** | cartoon sound effects as synthesis recipes (`gen-chibi.sound/1`) + when-to-use + cues | `save_sound_pack` |
 | **project** | a themed collection; every asset you create belongs to one | `save_project` |
 | **work** | a film: shots → event (script steps) using the assets above | `save_work`, `save_shot` |
 
@@ -57,11 +58,11 @@ with a runnable JSON example.
 
 1. **Never invent vocabulary.** Ids of parts, slots, eyes, brows, states, activities, scenes, spots,
    actions, reactions, sfx… come from the system: `get_catalog`, `get_part_spec`, `get_motion_spec`,
-   `get_director_schema`, `list_*`. An unknown value is always rejected.
+   `get_sound_spec` / `list_sounds`, `get_director_schema`, `list_*`. An unknown value is always rejected.
 2. **Validate → fix → save.** Use the `validate_*` / `preview_*` tool first; `save_*` re-runs the
    same gate and stores a new version. Never skip validation by guessing.
 3. **One project.** Create or pick a project (`list_projects` / `save_project`) and set
-   `"project": "<id>"` on every part, item, character, scene, motion pack and work you create.
+   `"project": "<id>"` on every part, item, character, scene, motion pack, sound pack and work you create.
 4. **Drafts by default.** New assets are `status: "draft"` (usable immediately). Set
    `"published"` only when the owner asks; publishing a character requires `identity.must`.
 5. **Ids**: assets, projects, works, motion packs → lowercase slug `[a-z0-9-]`, 2–40 chars (valid for every type;
@@ -80,7 +81,9 @@ with a runnable JSON example.
    (`overwrite: true`, or `save_*` on the same id) creates a NEW version — the old one stays in history.
    `save_shot` with `remove` takes a shot out of a work — only when the owner asks. `rollback_app` needs the
    owner's explicit confirmation.
-10. **Budgets**: ≤ 8 actors per shot, ≤ 12 steps per event, ≤ 3 sfx per step, ≤ 10 props per scene.
+10. **Budgets**: ≤ 8 actors per shot, ≤ 12 steps per event, ≤ 3 sfx per step, ≤ 10 props per scene, ≤ 60 Web Audio nodes per sound.
+11. **Sound is mixed, not sprinkled.** Leave `sfx` empty on most steps (the player auto-assigns sounds); a hand-placed `sfx` follows the
+    mixing rules S1–S7 (topic `sound`) — `save_shot` / `save_work` reject errors and `lint_sound_track` shows all issues.
 
 ## 4. Topics (call `get_guide` with the topic id)
 
@@ -91,6 +94,7 @@ with a runnable JSON example.
 | `item` | equipment from an existing part | `list_items` → `validate_item` → `save_item` → `render_item` |
 | `scene` | backdrop + props | `list_scenes` → `validate_scene` → `save_scene` → `render_scene` |
 | `motion-pack` | new poses, clips, actions | `get_motion_spec` → `validate_motion_pack` → `save_motion_pack` → `render_action` |
+| `sound` | pick / mix sound effects into a film, or author a sound pack | `list_sounds` → `get_sound_spec` → `get_sound_pack` → `validate_sound_pack` → `save_sound_pack` → `lint_sound_track` |
 | `animation` | export an action as sprite / frames / timeline | `list_actions` → `render_action` |
 | `film` | a work with shots, dialogue and fights | `save_work` → `get_director_schema` → `validate_event` → `save_shot` → `preview_shot` |
 | `project-bundle` | backup, move, sell a themed set | `export_project`, `import_project`, `list_samples`, `install_sample` |
@@ -119,6 +123,7 @@ with a runnable JSON example.
 | Nhân vật · Vật phẩm / Trang bị · Bối cảnh | character · item · scene |
 | Linh kiện · Phông | part · scenery part |
 | Gói động tác | motion pack (`gen-chibi.motion/1`) — not the same as `LIB.motions` (looping idle motions) |
+| Thư viện âm thanh · Gói âm · Âm nhấn | sound library · sound pack (`gen-chibi.sound/1`) · accent sound (group `cam-xuc` / `nhac-cu`, ≤ 1 per step) |
 | Hành động · Đòn đánh · Phản ứng | action · attack action · reaction (`react`) |
 | Phân cảnh · Kịch bản · Bước | shot · event · step |
 | Nháp · Phát hành | draft · published |
