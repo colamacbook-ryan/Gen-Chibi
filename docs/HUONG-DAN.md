@@ -53,7 +53,7 @@ Khung không bao giờ bị sửa — asset của bạn là bản sao của khun
   - **bong bóng không che mặt ai**: mỗi câu thoại, bộ phát đo vị trí đầu của mọi diễn viên trên khung hình (kể cả khi máy quay đang cận) rồi chọn chỗ không đè đầu — trên đầu, cạnh đầu, góc khung — gần miệng người nói; đuôi chỉ về phía miệng nhưng dừng cách mặt một đoạn và không cắt ngang đầu người khác. Cùng một người nói liên tiếp thì bong bóng giữ chỗ cũ, không nhảy. Cận cảnh quá chật không còn chỗ sạch thì câu đó hiện thành **phụ đề dải dưới** (thẻ tên màu nhân vật + chữ trắng trên nền tối mờ);
   - ô **Lời thoại** cạnh nút âm thanh (Sân khấu final): *tự động* (bong bóng khi có chỗ sạch, không thì phụ đề — mặc định) · *bong bóng* (luôn bong bóng) · *phụ đề* (luôn phụ đề, hợp khi cần đọc nhanh hoặc quay video). Nhớ theo máy; **phim HTML xuất ra mang kiểu đang chọn** làm mặc định và người xem tự đổi được bằng ô cùng tên trên thanh điều khiển. Hệ điều hành bật "giảm chuyển động" thì bong bóng không nảy;
   - **âm thanh**: hiệu ứng theo cảm xúc / hành động, nền theo bối cảnh (chim, dế, mưa, gió), nhạc nhẹ theo không khí, **giọng riêng từng nhân vật**.
-  - Nút 🔊 bật / tắt tiếng; chọn giọng: *tự động* (máy đọc tiếng Việt nếu trình duyệt có, không thì giọng blip), *máy đọc*, *blip kiểu game*, *tắt*.
+  - Nút 🔊 bật / tắt tiếng; chọn giọng: *tự động* (giọng AI đã lồng tiếng nếu có, không thì máy đọc đúng ngôn ngữ + giới của vai, không có thì blip), *AI Google* (đọc bằng giọng AI ngay khi diễn — tốn lượt), *máy đọc*, *blip kiểu game*, *tắt*. Các ô **Âm thanh · Ngôn ngữ · Lồng tiếng · Xuất** nằm dưới sân khấu. Xem mục **Giọng AI theo vai** ngay dưới.
   - Muốn chỉ đạo kỹ hơn: mỗi câu thoại có thể đặt `to` (nói với ai), `camera` (close / two / wide), `bubble` (say / shout / think / whisper), `sfx`; AI đạo diễn biết các trường này. Đổi `spot` giữa các câu để nhân vật đi lại.
   - **Hành động & đấu võ**: một bước kịch bản có thể là một màn biên đạo — `action` + `target` (người bị đánh) + `react` (`hit` trúng, `fall` ngã lộn rồi bật dậy, `ko` ngã choáng, `block` gạt đỡ, `dodge` lộn ra sau né).
     - **Đòn của khung** (ai cũng dùng được): `punch` đấm (vào mặt), `kick` đá, `push` đẩy mặt, `throw` ném cà chua từ xa; cần cầm binh khí: `thrust` đâm, `sweep` quét; một mình: `rage`, `hero`, `victory`, `dance`, `salute`, `wave`, `stretch`, `scratch`, `startle`, `flip`.
@@ -63,10 +63,21 @@ Khung không bao giờ bị sửa — asset của bạn là bản sao của khun
     - Viết bằng **AI đạo diễn**, qua MCP, hoặc ngay trong Studio bằng **Bảng bước** (ở trên). Thanh **Sẵn sàng** báo nếu một đòn không có (thiếu gói động tác) hoặc diễn viên không làm được.
     - Máy đang giữ bộ Tam Quốc cũ? Ở **Thư viện › Dự án chủ đề**, bấm **⟳ Cập nhật Tam Quốc** để nhập bản mới (có gói động tác).
 
+### Giọng AI theo vai
+Giọng theo **vai** (tuổi · giới · văn / võ · quyền quý · hài · phản diện · kể chuyện — 22 vai, có ông lão, bà lão, bé trai, bé gái, võ tướng, quân sư…) cho **tiếng Việt** (Bắc / Nam / Trung), **tiếng Anh** (Mỹ / Anh), **tiếng Trung** (phổ thông / Đài Loan), **tiếng Quảng Đông** (Hồng Kông).
+- **Dán key là chạy**: *Cài đặt AI › Giọng AI (Google Gemini)* — dán key Google AI Studio vào ô duy nhất, bấm **Kết nối**; máy kiểm key (miễn phí) rồi **tự bật**. Đã dán key Gemini cho AI đạo diễn thì dùng được ngay, khỏi dán lại. Key chỉ nằm trên máy chủ, không hiện lại trong trình duyệt. Có nút **Tắt / Bật**.
+- **Bộ giọng vai** (cùng trang): bảng 22 vai theo ngôn ngữ + giọng vùng đã chọn — giọng đang dùng và nguồn (*thiết kế* / *thư viện Google* / *có sẵn*), **▶** nghe giọng máy đọc (miễn phí), **▶ AI** nghe một câu mẫu bằng giọng AI (**tốn 1 lượt**), **Thiết kế giọng** (~25 giây, **tốn 1 lượt**; làm lại bằng *Thiết kế lại*). **Vai trẻ em** (bé trai, bé gái, thiếu niên, thiếu nữ) **không thiết kế được** — Google chặn giọng trẻ em; dùng giọng trẻ trung có sẵn.
+- **Từng nhân vật**: *Thư viện › Nhân vật › Giọng* — vai giọng ("Tự đoán" nếu chưa chọn), giọng vùng, giọng AI (khi đã có key), cao độ + tốc độ. **Lưu giọng** chỉ ghi cao độ / tốc độ khi bạn đã kéo.
+- **Ngôn ngữ phim** (ô *Ngôn ngữ*, Sân khấu final, lưu vào tác phẩm): giọng máy đọc, giọng AI và lồng tiếng đọc theo ngôn ngữ này — lời thoại phải viết đúng ngôn ngữ đó (tiếng Quảng Đông: chữ phồn thể + khẩu ngữ như 喺 / 咩 / 我哋, không dùng văn phổ thông). Mỗi nhân vật một giọng AI khác nhau.
+- **Lồng tiếng AI** (Sân khấu final): đọc lần lượt mọi câu và **lưu lại** ("Lồng tiếng AI 7/31"); câu đã đọc thì nhanh, không tốn lượt. **Hết lượt** thì dừng, báo giờ thử lại + số câu đã xong — bấm lại sau để đọc tiếp. Chưa có key: nút mờ, kèm lối tới *Cài đặt AI*.
+- **Phát và xuất phim**: kiểu giọng *tự động* chỉ dùng giọng AI **đã lồng** (không tốn lượt); *AI Google* đọc ngay khi diễn. **Phim HTML** nhúng sẵn giọng AI của các câu đã lồng (toast "N/M câu có giọng AI" + cỡ tệp), mở bằng `file://` không gọi mạng — muốn đủ giọng thì lồng tiếng trước khi xuất.
+- **Gói miễn phí của Google rất ít lượt mỗi ngày** (cỡ vài chục câu); câu đã đọc lưu đệm nên không tốn lại. Bật thanh toán ở Google AI Studio là quyết định của chủ máy — gen-chibi không tự bật.
+- **Giọng trình duyệt dự phòng**: không key, hết lượt, tắt giọng AI hay clip lỗi thì phim vẫn chạy bằng giọng máy đọc của trình duyệt, đúng ngôn ngữ + giới của vai (không có giọng đúng ngôn ngữ thì dùng blip, không đọc sai tiếng).
+
 ### Xuất thành phẩm
 | Nút | Ra gì |
 |---|---|
-| **Phim (HTML)** | Một tệp .html tự chứa (bộ phát + nhân vật + bối cảnh + lời thoại). Mở bằng trình duyệt, không cần cài, không cần mạng. Có danh sách phân cảnh, toàn màn hình, phím cách để xem / dừng. Bộ phát bên trong thuộc Gen Labs — giấy phép **chỉ để xem phim đó** (ghi trong tệp) |
+| **Phim (HTML)** | Một tệp .html tự chứa (bộ phát + nhân vật + bối cảnh + lời thoại + **giọng AI đã lồng tiếng**). Mở bằng trình duyệt, không cần cài, không cần mạng. Có danh sách phân cảnh, toàn màn hình, phím cách để xem / dừng. Bộ phát bên trong thuộc Gen Labs — giấy phép **chỉ để xem phim đó** (ghi trong tệp) |
 | **Storyboard SVG / PNG** | Bảng phân cảnh: ảnh từng cảnh + mô tả + lời thoại — để duyệt, in, gửi khách |
 | **JSON** | Kịch bản + phân cảnh dạng dữ liệu |
 
@@ -84,7 +95,7 @@ Mỗi asset có một trong hai trạng thái:
 - **Nhập gói…** — mọi mục đi qua đúng cổng kiểm như khi tạo mới. Trùng id thì hỏi lưu đè — lưu đè tạo **phiên bản mới**, bản cũ vẫn trong lịch sử. Gói khai báo thư viện cần có (`requires.packs`); thiếu thì báo rõ.
 
 ### Giọng nhân vật
-Thư viện › Nhân vật › khu **Dùng** › **Giọng**: kéo cao độ (trầm ↔ cao) và tốc độ (chậm ↔ nhanh), bấm **▶ Nghe thử**, **Lưu giọng** để dùng trong mọi phim. Chưa đặt thì gen-chibi tự chọn theo vai (tướng / sếp trầm hơn, lính / bé cao hơn).
+Thư viện › Nhân vật › khu **Dùng** › **Giọng**: chọn **vai giọng** và giọng vùng, kéo cao độ (trầm ↔ cao) và tốc độ (chậm ↔ nhanh), bấm **▶ Nghe thử**, **Lưu giọng** để dùng trong mọi phim. Chưa đặt thì gen-chibi tự đoán vai (tướng / sếp trầm hơn, lính / bé cao hơn). Chi tiết giọng AI: mục **Giọng AI theo vai** ở phần Làm phim.
 
 ## 5. Dùng asset ở nơi khác
 Ở Thư viện, mỗi asset có khu **Dùng**: tải SVG / PNG / avatar / sprite biểu cảm / **sprite 8 hướng**, chép mã tham chiếu, mã gọi MCP, mã nhúng web, JSON công thức.

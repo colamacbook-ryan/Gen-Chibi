@@ -228,7 +228,7 @@ async function route(req, res) {
       const v = b.voice && b.voice !== 'auto' && !A && b.role ? { voice: b.voice, role: b.role, lang: b.lang, accent: b.accent } : await voice.pick({ asset: A, voice: b.voice, role: b.role, lang: b.lang, accent: b.accent });
       const r = await voice.line({ text: b.text, voice: v.voice, role: v.role, state: b.state, bubble: b.bubble, dry: b.dry === true });
       return send(res, 200, Object.assign(r, { voice: v.voice, role: v.role, url: 'api/voice/clip/' + r.id + '.wav' }));
-    } catch (e) { return vfail(e); }
+    } catch (e) { return e.code === 404 && b.dry === true ? send(res, 200, { found: false }) : vfail(e); }   // dry: câu chưa đọc không phải lỗi (khỏi rác console khi xuất phim)
   }
   // cả dàn diễn viên một tác phẩm → mỗi người một giọng AI (thiết kế → thư viện → dựng sẵn); không tốn lượt đọc
   if (p === '/api/voice/cast' && m === 'POST') { try { return send(res, 200, await voice.cast(await body(req))); } catch (e) { return vfail(e); } }

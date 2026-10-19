@@ -287,7 +287,8 @@ class MCP {
       const out = {}, pitch = num(v.pitch, 0.5, 2), rate = num(v.rate, 0.6, 1.6);
       if (pitch !== undefined) out.pitch = pitch;
       if (rate !== undefined) out.rate = rate;
-      if (typeof v.ai === 'string' && AI_VOICES.has(v.ai)) out.ai = v.ai;
+      // ai: tên giọng dựng sẵn, id giọng thư viện Google (vi-vn-tutor-2) hoặc giọng đã thiết kế (voice_…) — chữ tự do bị bỏ
+      if (typeof v.ai === 'string' && (AI_VOICES.has(v.ai) || /^[a-z]{2,3}-[a-z0-9]{2,4}-[a-z0-9-]{2,40}$/.test(v.ai) || /^voice_[a-z0-9]{6,40}$/.test(v.ai))) out.ai = v.ai;
       if (typeof v.role === 'string' && Object.prototype.hasOwnProperty.call(GV.ROLES, v.role)) out.role = v.role;   // vai giọng (get_catalog › voiceRoles)
       if (typeof v.accent === 'string' && GV.langList().some(l => l.accents.some(a => a.id === v.accent))) out.accent = v.accent;
       if (Object.keys(out).length) x.voice = out; else delete x.voice;

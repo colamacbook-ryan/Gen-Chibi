@@ -8,12 +8,18 @@
  *   GC.film.still(shot)          → chuỗi SVG ảnh tĩnh của phân cảnh (bối cảnh + diễn viên ở chỗ đứng)
  *   GC.film.direct(shot)         → KẾ HOẠCH DÀN DỰNG (thuần dữ liệu, chạy cả trong Node): ai ra sân từ đâu, ai đi tới đâu,
  *                                   ai nói với ai, quay mặt, cử chỉ, bong bóng, máy quay, hiệu ứng màn hình, âm thanh, khẩu hình
- *   GC.film.player(el, opts)     → { show(shot), play(shots, title), stop(), destroy(), setDialog(mode), dialog(), plan() }
+ *   GC.film.player(el, opts)     → { show(shot), play(shots, title), stop(), destroy(), setDialog(mode), dialog(), setLang(lang, accent), plan() }
  *                                   opts.onProgress(text), opts.onEnd(), opts.dialog = 'auto' | 'bubble' | 'caption'
+ *                                   opts.lang / opts.accent = ngôn ngữ phim (vi | en | zh) + giọng vùng → giọng trình duyệt đúng ngôn ngữ theo vai (engine/voices.js)
+ *                                   opts.voiceClip(line, asset) → Promise<clip>|clip|null: giọng thu sẵn (vd. giọng AI) cho một câu; clip = ArrayBuffer / URL / data: URI
+ *                                     như GC.audio.say. Bộ phát hỏi TRƯỚC khi nói (chờ tối đa opts.clipWait ms — số hoặc hàm (line) → ms, mặc định 2500); có clip thì phát clip,
+ *                                     lỗi / null / quá hạn thì giọng trình duyệt như cũ. Đầu mỗi phân cảnh hỏi trước mọi câu (song song ≤ 2) để lúc nói đã sẵn.
+ *   GC.film.clipKey(line)        → khoá một câu thoại (diễn viên | cảm xúc | kiểu bong bóng | chữ) — bộ phát và Studio / phim xuất ra cùng dùng
  *   GC.film.solveLayout(ctx)     → BỐ CỤC LỜI THOẠI (thuần số, chạy cả trong Node): chọn chỗ cho bong bóng / phụ đề sao cho không che đầu ai
  *
  * Ngân sách (L-42): diễn viên sống ≤ GC.render.budget mỗi phân cảnh, hết cảnh là huỷ; máy quay = một transform CSS;
  * nhép miệng chỉ thay LỚP MIỆNG của người đang nói (không dựng lại cả nhân vật); âm thanh tổng hợp, không tải tệp.
+ * Giọng thu sẵn (v0.17): hỏi clip MỘT lần mỗi câu (đầu phân cảnh, ≤ 2 yêu cầu song song), không việc gì mỗi khung hình.
  * Lời thoại (v0.17): bố cục tính MỘT lần mỗi câu (+ khi đổi cỡ khung / máy quay), không tính mỗi khung hình; phông Be Vietnam Pro nhúng ở engine/fonts.js.
  */
 (function (GC) {
@@ -299,6 +305,9 @@
     return '#26211e';
   }
 
+  // khoá một câu thoại: cùng diễn viên + cảm xúc + kiểu bong bóng + chữ → cùng một giọng thu sẵn (Studio nhúng clip vào phim xuất ra theo khoá này)
+  function clipKey(line) { return [line.actor, line.state || 'normal', line.bubble || 'say', String(line.say || '').trim()].join('|'); }
+
   /* ============================================================ DOM */
   var INK = '#1f1a17';
   // MỘT phông cho mọi lời thoại: Be Vietnam Pro (nhúng sẵn ở engine/fonts.js, dấu tiếng Việt đúng ở mọi máy); chưa nạp thì dùng phông hệ thống
@@ -500,6 +509,7 @@
     GC.render.injectCSS(); injectCSS();
     var R = GC.render, A = GC.audio || null, insts = {}, els = {}, cast = {}, pos = {}, run = 0, timers = [], cam = null, ov = null, shk = null, flash = null, bub = null, plan = null, camState = null, acting = null;
     var dialog = DIALOGS.indexOf(opts.dialog) >= 0 ? opts.dialog : 'auto', lastSpot = null, fontsOk = false, fontsReady = warmFonts().then(function () { fontsOk = true; });
+    var lang = opts.lang, accent = opts.accent, clips = new Map();   // ngôn ngữ phim · giọng thu sẵn của phân cảnh đang diễn (khoá clipKey → Promise)
     var progress = function (t) { if (opts.onProgress) opts.onProgress(t); };
     var ro = typeof ResizeObserver === 'function' ? new ResizeObserver(function () { if (bub) bub.layout(false); }) : null;
     if (ro) ro.observe(box);
@@ -522,7 +532,41 @@
     }
     function wait(ms, r) { return new Promise(function (ok, no) { timers.push(setTimeout(function () { if (r === run) ok(); else no('stop'); }, ms)); }); }
     function sfx(name, o) { if (A && name) A.sfx(name, o); }
-    function voiceOf(id) { var a = cast[id]; return A && a ? A.voiceOf(a) : null; }
+    function voiceOf(id) { var a = cast[id]; return A && a ? A.voiceOf(a, { lang: lang, accent: accent }) : null; }
+    // giọng thu sẵn của một câu: hỏi opts.voiceClip MỘT lần (nhớ theo khoá), lỗi → null. p.settled = đã có kết quả (không chờ được nữa thì thôi)
+    function clipFor(line) {
+      if (typeof opts.voiceClip !== 'function' || !String(line.say || '').trim()) return null;
+      var k = clipKey(line), p = clips.get(k);
+      if (p) return p;
+      p = new Promise(function (ok) {
+        var v; try { v = opts.voiceClip(line, cast[line.actor]); } catch (e) { v = null; }
+        Promise.resolve(v).then(function (c) { ok(c || null); }, function () { ok(null); });
+      });
+      p.settled = false;
+      p.then(function () { p.settled = true; });
+      clips.set(k, p);
+      return p;
+    }
+    // đầu phân cảnh: hỏi trước giọng của mọi câu, song song ≤ 2 — tới lượt nói thì clip đã sẵn (câu nào speak() cần gấp thì tự hỏi, không chờ hàng đợi)
+    function prefetch(r) {
+      if (typeof opts.voiceClip !== 'function') return;
+      var q = plan.beats.filter(function (b) { return b.type === 'line' && String(b.say || '').trim(); }), busy = 0;
+      (function pump() {
+        while (busy < 2 && q.length && r === run) {
+          var p = clipFor(q.shift());
+          if (!p || p.settled) continue;
+          busy++;
+          p.then(function () { busy--; pump(); });
+        }
+      })();
+    }
+    // chờ clip tối đa clipWait ms (người xem không phải chờ mãi một giọng chậm): quá hạn → null → giọng trình duyệt
+    function gate(p, line, r) {
+      var ms = typeof opts.clipWait === 'function' ? opts.clipWait(line) : opts.clipWait;
+      ms = typeof ms === 'number' && ms >= 0 ? ms : 2500;
+      if (!p.settled) progress((plan.shotTitle || '') + ' · đang chờ giọng thu sẵn…');
+      return Promise.race([p, new Promise(function (ok) { timers.push(setTimeout(function () { ok(null); }, ms)); })]);
+    }
     function panOf(id) { return pos[id] ? Math.max(-0.8, Math.min(0.8, (pos[id].x - 320) / 320)) : 0; }
 
     /* ---- máy quay: toàn cảnh / hai người / cận người nói — một transform; kẹp để không lộ mép ngoài cảnh ---- */
@@ -709,10 +753,13 @@
       line.sfx.forEach(function (n, i) { timers.push(setTimeout(function () { if (r === run) sfx(n, { pan: panOf(id) }); }, 120 + i * 260)); });
       if (line.screen === 'flash') { flash.classList.remove('on'); void flash.offsetWidth; flash.classList.add('on'); }
       if (line.screen) { shk.classList.remove('shake'); void shk.offsetWidth; shk.classList.add('shake'); }
-      return wait(260, r).then(function () {
+      var cp = clipFor(line);   // có voiceClip thì hỏi giọng thu sẵn ngay (song song với bước vào cảnh), tới lúc nói đã sẵn
+      return wait(260, r).then(function () { return cp ? gate(cp, line, r) : null; }).then(function (clip) {
+        if (r !== run) return Promise.reject('stop');
         b.show(); sfx('pop', { gain: 0.5, pan: panOf(id) }); var t0 = Date.now();
         var n = String(line.say).split(/\s+/).filter(Boolean).length;
         var hooks = { onMouth: function (v) { if (r === run && !done) mouth(v); }, onWord: function (i) { if (r === run && !done) b.word(i); } };
+        if (clip) hooks.clip = clip;
         var talk = A ? A.say(line.say, voice, hooks) : fallbackSay(line, n, hooks, r);
         var cap = wait((line.estimate * 2.2 + 3) * 1000, r);   // giọng đọc treo (onend không về) cũng không làm kẹt phim
         return Promise.race([talk, cap]).then(function () { b.word(n); mouth(0); return wait(Math.max(380, (line.hold || 0) * 1000 - (Date.now() - t0)), r); });   // hold = khung hiện tối thiểu
@@ -823,11 +870,12 @@
       sfx('gong', { gain: 0.6 });
       return wait(ms || 1700, r);
     }
-    function stop() { run++; timers.forEach(clearTimeout); timers = []; if (acting) acting(); if (A) A.stopAll(); bub = null; if (ov) Array.prototype.forEach.call(ov.querySelectorAll('.gcp-bub,.gcp-cap'), function (b) { b.remove(); }); }
+    function stop() { run++; timers.forEach(clearTimeout); timers = []; clips = new Map(); if (acting) acting(); if (A) A.stopAll(); bub = null; if (ov) Array.prototype.forEach.call(ov.querySelectorAll('.gcp-bub,.gcp-cap'), function (b) { b.remove(); }); }
     function playShot(shot, r) {
       if (r !== run) return Promise.reject('stop');   // đã stop / show trong cùng tick: không dựng lại sân khấu, không bật nhạc
       if (!build(shot, true)) return Promise.resolve();
       plan.shotTitle = shot.title;
+      clips = new Map(); prefetch(r);
       if (A) { A.ambient(plan.ambient); A.music(plan.mood); }
       return wait(350, r).then(function () { return enterAll(r); }).then(function () { return wait(250, r); }).then(function () { return lines(r); }).then(function () { camera('wide'); return wait(900, r); });
     }
@@ -839,6 +887,8 @@
       dialog: function () { return dialog; },
       // đổi kiểu lời thoại giữa chừng (Studio, phim xuất ra): 'auto' | 'bubble' | 'caption'; câu đang hiện được bố trí lại ngay
       setDialog: function (m) { if (DIALOGS.indexOf(m) < 0) return false; dialog = m; if (bub) bub.layout(true); return true; },
+      // đổi ngôn ngữ phim giữa chừng (Studio): áp từ câu thoại kế tiếp
+      setLang: function (l, a) { lang = l; accent = a; },
       // diễn chuỗi: thẻ tiêu đề phân cảnh → nhân vật ra sân → lời thoại có dàn dựng; bỏ qua phân cảnh chưa sẵn sàng
       play: function (list, title) {
         stop();
@@ -861,5 +911,5 @@
     };
   }
 
-  GC.film = { readiness: readiness, issues: issues, still: still, spots: spots, actors: actors, scene: scene, direct: direct, player: player, injectCSS: injectCSS, solveLayout: solveLayout, chipColor: chipColor, contrast: contrast, dialogModes: DIALOGS.slice() };
+  GC.film = { clipKey: clipKey, readiness: readiness, issues: issues, still: still, spots: spots, actors: actors, scene: scene, direct: direct, player: player, injectCSS: injectCSS, solveLayout: solveLayout, chipColor: chipColor, contrast: contrast, dialogModes: DIALOGS.slice() };
 })(window.GenChibi);

@@ -145,6 +145,8 @@ const rejectAll = (fn, msg) => fn().then(() => no(true, msg + ': phải lỗi'),
   const cd = await w.cast({ lang: 'vi', accent: 'nam', actors: [{ id: 'ong-tu', role: 'ong-lao' }, { id: 'ong-sau', role: 'ong-lao' }] });
   no(cd.cast['ong-tu'].voice !== 'voice_abc123xyz' || cd.cast['ong-tu'].source !== 'design' || cd.cast['ong-sau'].voice === 'voice_abc123xyz', 'cast phải dùng giọng thiết kế cho vai đó (người thứ hai cùng vai lấy giọng khác): ' + JSON.stringify(cd));
   no((await w.cast({ lang: 'vi', accent: 'bac', actors: [{ id: 'ong-tu', role: 'ong-lao' }] })).cast['ong-tu'].source === 'design', 'giọng thiết kế giọng Nam không được dùng cho phim giọng Bắc');
+  no((await w.cast({ lang: 'vi', accent: 'bac', actors: [{ id: 'ong-tu', role: 'ong-lao', accent: 'nam' }] })).cast['ong-tu'].source !== 'design', 'nhân vật có giọng vùng riêng (Nam) trong phim giọng Bắc → giọng thiết kế giọng Nam');
+  no((await w.cast({ lang: 'vi', accent: 'bac', actors: [{ id: 'ong-tu', role: 'ong-lao', accent: 'hk' }] })).cast['ong-tu'].source === 'design', 'giọng vùng không thuộc ngôn ngữ phim phải bị bỏ');
   const rd = await w.line({ text: 'Con ơi, ông già rồi.', voice: 'voice_abc123xyz', role: 'ong-lao', state: 'cry', bubble: 'say' });
   no(rd.cached || c3[c3.length - 1].b.generation_config.speech_config[0].voice !== 'voice_abc123xyz' || c3[c3.length - 1].b.input[0].content[0].annotations[0].style !== 'slow, slightly raspy, wise, crying, sobbing', 'đọc bằng giọng thiết kế qua Interactions');
   p3 = [{ status: 400, json: { error: { code: 400, message: 'Voice prompt was blocked by safety policies.' } } }];
@@ -169,6 +171,8 @@ const rejectAll = (fn, msg) => fn().then(() => no(true, msg + ': phải lỗi'),
   // nhân vật lưu được giọng / vai / giọng vùng (tên lạ thì bỏ, không chặn cả nhân vật); tác phẩm lưu được ngôn ngữ + giọng vùng hợp lệ
   { const { MCP } = require(ROOT + '/server/mcp.js'), { Store } = require(ROOT + '/server/store.js'), { loadEngine } = require(ROOT + '/server/engine-node.js');
     const m = new MCP({ engine: loadEngine(ROOT), store: new Store(fs.mkdtempSync(path.join(os.tmpdir(), 'gc-vm-'))), version: 't', system: {} });
+    no(m.prepare({ id: 'ci-g3', name: 'G3', look: {}, voice: { ai: 'vi-vn-tutor-2' } }).voice.ai !== 'vi-vn-tutor-2' || m.prepare({ id: 'ci-g4', name: 'G4', look: {}, voice: { ai: 'voice_abc123xyz' } }).voice.ai !== 'voice_abc123xyz' ||
+      m.prepare({ id: 'ci-g5', name: 'G5', look: {}, voice: { ai: 'vi vn <x>' } }).voice, 'nhân vật lưu được giọng thư viện / giọng thiết kế (id đúng dạng), bỏ chữ tự do');
     const a1 = m.prepare({ id: 'ci-giong', name: 'Giọng', look: {}, voice: { pitch: 1.2, ai: 'Kore', role: 'ba-lao', accent: 'nam' } }), a2 = m.prepare({ id: 'ci-giong-2', name: 'Giọng 2', look: {}, voice: { ai: 'KhongCo', role: 'vai-la', accent: 'sao-hoa' } });
     no(!a1.voice || a1.voice.ai !== 'Kore' || a1.voice.pitch !== 1.2 || a1.voice.role !== 'ba-lao' || a1.voice.accent !== 'nam' || a2.voice, 'voice: giữ giọng / vai / giọng vùng hợp lệ, bỏ tên lạ: ' + JSON.stringify([a1.voice, a2.voice]));
     const wk = m.saveWorkChecked({ title: 'Phim tiếng Trung', lang: 'zh', accent: 'tw' });

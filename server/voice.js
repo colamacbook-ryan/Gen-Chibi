@@ -199,26 +199,28 @@ class Voice {
   }
   // chọn giọng AI cho cả dàn diễn viên một tác phẩm, mỗi người một giọng khi còn giọng. Thứ tự: người dùng chọn → giọng đã THIẾT KẾ cho vai
   // (+ ngôn ngữ + giọng vùng) → giọng THƯ VIỆN hợp vai (đúng ngôn ngữ, giới, tuổi, cao độ) → giọng DỰNG SẴN hợp vai. Không tốn lượt đọc.
-  // actors: [{ id, role, voice? }] → { lang, accent, cast: { id: { voice, source, label } } }
+  // actors: [{ id, role, voice?, accent? (giọng vùng riêng của nhân vật) }] → { lang, accent, cast: { id: { voice, source, label } } }
   async cast({ lang, accent, actors }) {
     const L = GV.lang(lang), ac = GV.accent(L, accent), c = this.config(), out = {}, taken = new Set();
     const code = GV.cast({ id: 'x' }, { lang: L, accent: ac }).libLang;
     const list = (Array.isArray(actors) ? actors : []).slice(0, 24).filter(a => a && typeof a.id === 'string' && a.id)
-      .map(a => ({ id: a.id.slice(0, 80), role: GV.ROLES[a.role] ? a.role : 'nam-tre', voice: this.validVoice(a.voice, c) }));
+      .map(a => ({ id: a.id.slice(0, 80), role: GV.ROLES[a.role] ? a.role : 'nam-tre', voice: this.validVoice(a.voice, c), accent: GV.accent(L, a.accent) === a.accent ? a.accent : ac }));
     let lib = [];
     try { lib = await this.library(code); } catch { lib = []; }   // mất mạng: vẫn cast được bằng giọng dựng sẵn
     const libById = new Map(lib.map(v => [v.id, v]));
     list.forEach(a => { if (a.voice) { out[a.id] = { voice: a.voice, source: 'chosen', label: (libById.get(a.voice) || {}).name || a.voice }; taken.add(a.voice); } });
     list.forEach(a => {
       if (out[a.id]) return;
-      const R = GV.ROLES[a.role], d = c.designs[a.role + '|' + L + '|' + ac], h = hashN(a.id);
+      const R = GV.ROLES[a.role], d = c.designs[a.role + '|' + L + '|' + a.accent], h = hashN(a.id);   // nhân vật có giọng vùng riêng → giọng thiết kế của vùng đó
       if (d && DESIGN_ID.test(d.voice) && !taken.has(d.voice) && c.badVoices.indexOf(d.voice) < 0) { out[a.id] = { voice: d.voice, source: 'design', label: R.label + ' (thiết kế)' }; taken.add(d.voice); return; }
-      if (R.ages) {   // vai người lớn: giọng bản ngữ của thư viện, chấm theo giới + tuổi + cao độ; lấy ngẫu nhiên ổn định trong 3 giọng tốt nhất
+      if (R.ages) {   // vai người lớn: giọng bản ngữ của thư viện, chấm theo giới + tuổi + cao độ + chất giọng (mô tả của Google)
         const kw = KIND_KW[R.kind] || KIND_KW.thuong;
         const sc = v => { const lo = R.ages[0], hi = R.ages[1], dist = v.age == null ? 15 : v.age < lo ? lo - v.age : v.age > hi ? v.age - hi : 0;
           return dist + (v.pitch && v.pitch !== R.prefPitch ? 6 : 0) + (kw[0].test(v.description) ? -3 : 0) + (kw[1] && kw[1].test(v.description) ? 5 : 0); };
         const pool = lib.filter(v => v.type === 'library' && v.gender === R.gender && !taken.has(v.id) && c.badVoices.indexOf(v.id) < 0)
-          .map(v => ({ v, s: sc(v) })).filter(x => x.s <= 12).sort((x, y) => x.s - y.s || (x.v.id < y.v.id ? -1 : 1)).slice(0, 3);
+          .map(v => ({ v, s: sc(v) })).filter(x => x.s <= 12).sort((x, y) => x.s - y.s || (x.v.id < y.v.id ? -1 : 1));
+        // đa dạng nhưng không đánh đổi độ hợp vai: chỉ xoay giữa các giọng sát điểm giọng tốt nhất (≤ 2 điểm), tối đa 3
+        if (pool.length) pool.splice(Math.min(3, pool.filter(x => x.s <= pool[0].s + 2).length));
         if (pool.length) { const v = pool[h % pool.length].v; out[a.id] = { voice: v.id, source: 'library', label: v.name + (v.age ? ' · ' + v.age + ' tuổi' : '') }; taken.add(v.id); return; }
       }
       const n = R.ai.length; let pick = '';

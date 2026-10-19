@@ -1,5 +1,5 @@
 // Kiểm thử trong trình duyệt (chạy cục bộ, cần Playwright): mọi lớp gắn vào đầu phải đi cùng đầu.
-// Dùng: node tools/test-browser.mjs   (tự dựng server tạm ở cổng 7496)
+// Dùng: node tools/test-browser.mjs   (tự dựng server tạm ở cổng 7496) · GC_ONLY=voice node tools/test-browser.mjs → chỉ nhóm giọng AI (cổng 7660)
 import { createRequire } from 'module';
 import { spawn, execFileSync } from 'child_process';
 import { mkdtempSync } from 'fs';
@@ -11,14 +11,17 @@ let pw; try { pw = require('playwright'); } catch { pw = require('/opt/node22/li
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 // server con do test dựng: tắt hết khi thoát — kể cả khi test sập giữa chừng (L-55: server sót lại khiến lần chạy sau dùng nhầm dữ liệu cũ)
 const kids = []; const kid = c => { kids.push(c); return c; };
+// GC_ONLY=voice node tools/test-browser.mjs → chỉ chạy nhóm "giọng AI" (lặp nhanh khi làm giọng); không đặt = chạy cả bộ như CI
+const ONLY = process.env.GC_ONLY || '';
 process.on('exit', () => kids.forEach(c => { try { c.kill(); } catch (e) { /* đã tắt */ } }));
 process.on('uncaughtException', e => { console.error(e); process.exit(1); });
+let fail = 0;
 const home = mkdtempSync(path.join(tmpdir(), 'gc-'));
+if (!ONLY) {
 const srv = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home, GC_PORT: '7496', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
 await new Promise(r => setTimeout(r, 1200));
 const b = await pw.chromium.launch();
 const p = await b.newPage();
-let fail = 0;
 try {
   await p.goto('http://localhost:7496/');
   await p.waitForFunction(() => window.GenChibi && window.GenChibi.render);
@@ -47,8 +50,9 @@ try {
   if (res.length) { fail = 1; res.slice(0, 20).forEach(x => console.log('  ✗', x)); }
   else console.log('  ✓ mọi lớp gắn vào đầu đi cùng đầu (mọi nhân vật × 5 biểu cảm × 6 khung hình)');
 } finally { await b.close(); srv.kill(); }
+}
 // Bản cài có token: Studio phải hiện màn đăng nhập (không lùi về chế độ xem thử), nhập đúng token thì vào được.
-{
+if (!ONLY) {
   const home2 = mkdtempSync(path.join(tmpdir(), 'gc-'));
   const srv2 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home2, GC_PORT: '7497', GC_NO_AUTOCHECK: '1', GC_API_TOKEN: 'tok-test-123' }, stdio: 'ignore' }));
   await new Promise(r => setTimeout(r, 1200));
@@ -69,7 +73,7 @@ try {
 }
 // Studio tách hai khu: Thư viện (thành phẩm, lấy về dùng) và Xưởng (tạo lập). Mọi trang mở không lỗi;
 // thư viện có thẻ theo nhóm + khu "Dùng" (tải ảnh, chép mã); đạo diễn diễn được trong cảnh.
-{
+if (!ONLY) {
   const home3 = mkdtempSync(path.join(tmpdir(), 'gc-'));
   const srv3 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home3, GC_PORT: '7498', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
   await new Promise(r => setTimeout(r, 1200));
@@ -127,7 +131,7 @@ try {
   finally { await b3.close(); srv3.kill(); }
 }
 // Giai đoạn ②: Xưởng › Tạo asset mới (chọn khung → tham số → soát → cổng → lưu) → Thư viện xếp theo dự án chủ đề
-{
+if (!ONLY) {
   const home4 = mkdtempSync(path.join(tmpdir(), 'gc-'));
   const srv4 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home4, GC_PORT: '7499', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
   await new Promise(r => setTimeout(r, 1200));
@@ -204,7 +208,7 @@ try {
   finally { await b4.close(); srv4.kill(); }
 }
 // Người dùng mới: màn chọn khu → "Mở dự án mẫu" một chạm → Thư viện có dự án đủ asset → Tạo tác sẵn sàng diễn cả phim
-{
+if (!ONLY) {
   const home5 = mkdtempSync(path.join(tmpdir(), 'gc-'));
   const srv5 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home5, GC_PORT: '7494', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
   await new Promise(r => setTimeout(r, 1200));
@@ -548,7 +552,7 @@ try {
 }
 // Biên đạo liên hoàn: trang "Tử Long 30 giây" xuất bằng tools/choreo-demo.js chạy độc lập (file://), không lỗi, phát thật,
 // khung vẽ rẻ (≤ 8 ms), nhân vật đổi góc nhìn + nét mặt khi diễn, tua được, âm thanh bật khi bấm xem
-{
+if (!ONLY) {
   const out = path.join(home, 'choreo.html');
   execFileSync(process.execPath, [path.join(ROOT, 'tools/choreo-demo.js'), 'tuLong30s', out], { stdio: 'ignore' });
   const b6 = await pw.chromium.launch(), q = await b6.newPage({ viewport: { width: 1280, height: 900 } }), errs = [];
@@ -579,7 +583,7 @@ try {
 }
 // Biên đạo trong phim (v0.15): phân cảnh "Đấu tập trước trận" của phim Tam Quốc diễn được thật — diễn viên lướt / văng,
 // hiệu ứng va chạm có chữ tượng thanh, người xem giật mình, xong màn đấu thì thôi điều khiển và dọn lớp hiệu ứng
-{
+if (!ONLY) {
   const R = (f) => 'file://' + path.join(ROOT, f), B = JSON.parse(require('fs').readFileSync(path.join(ROOT, 'studio/mau/tam-quoc.json'), 'utf8'));
   const shot = B.works[0].shots.find(s => s.id === 'canh-dau-tap');
   const page = path.join(home, 'duel.html');
@@ -625,7 +629,7 @@ try {
 // Diễn THẬT hai phim mẫu (Tam Quốc có các cảnh cận, Văn phòng vui) trong trình duyệt và ĐO từng câu thoại: hình chữ nhật của bong bóng
 // (không đuôi) so với hình chữ nhật của ĐẦU mọi diễn viên (hợp getBoundingClientRect các lớp mặt / tai / tóc mái / mũ ĐANG vẽ — không dùng số liệu
 // của chính bộ giải), đo hai lần cách nhau 1 s vì nhân vật vẫn cử động. Mỗi rào đã thử ngược: tắt bộ giải → test đỏ.
-{
+if (!ONLY) {
   const fs = require('fs');
   const home9 = mkdtempSync(path.join(tmpdir(), 'gc-'));
   const srv9 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home9, GC_PORT: '7495', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
@@ -920,5 +924,493 @@ try {
     if (errsAll.length) throw new Error('lỗi trang: ' + errsAll.slice(0, 3).join(' | '));
   } catch (e) { fail = 1; console.log('  ✗ lời thoại chuyên nghiệp:', e.message); }
   finally { await b9.close(); srv9.kill(); }
+}
+// Giọng AI theo vai (v0.17): Cài đặt AI (dán key → tự bật) · bảng bộ giọng vai (22 vai, vai trẻ em không thiết kế được) · ô ngôn ngữ phim lưu vào tác phẩm ·
+// Lồng tiếng AI (đủ câu, dừng đúng khi hết lượt) · bộ phát dùng clip và rơi về giọng máy khi clip lỗi · phim xuất có giọng AI nhúng, chạy file:// không gọi mạng ·
+// Hồ sơ nhân vật (vai · giọng vùng · giọng AI; cao độ / tốc độ chỉ ghi khi đã kéo). TUYỆT ĐỐI không gọi Google: mọi api/voice/* bị chặn và trả lời giả bằng page.route,
+// mọi địa chỉ ngoài máy bị chặn và đếm. GC_SHOTS=<thư mục> → chụp màn hình các màn chính.
+if (!ONLY || ONLY === 'voice') {
+  const fs = require('fs'), crypto = require('crypto'), GV = require('../engine/voices.js');
+  const home10 = mkdtempSync(path.join(tmpdir(), 'gc-')), PORT10 = 7660, URL10 = 'http://localhost:' + PORT10 + '/', SHOTS = process.env.GC_SHOTS || '';
+  const srv10 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home10, GC_PORT: String(PORT10), GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
+  await new Promise(r => setTimeout(r, 1200));
+  const b10 = await pw.chromium.launch({ args: ['--allow-file-access-from-files'] });
+  const ctx10 = await b10.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
+  const WORK = 'mau-ngay-dau-di-lam', HDR = { 'Content-Type': 'application/json', 'X-GC-Request': '1' };
+  // ---- giọng AI GIẢ: một "máy chủ Google" trong bộ nhớ ----
+  const wav = (sec, hz) => { const rate = 24000, n = Math.round(rate * sec), b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(rate, 24); b.writeUInt32LE(rate * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
+    for (let i = 0; i < n; i++) b.writeInt16LE(Math.round(9000 * Math.sin(2 * Math.PI * hz * i / rate) * Math.min(1, i / 600, (n - i) / 600)), 44 + i * 2); return b; };
+  const WAV = wav(0.6, 220);
+  const M = { good: 'AIzaSy-key-gia-0123456789abcdef', hasKey: false, off: false, keySource: '', today: 0, designs: {}, ids: new Set(), budget: Infinity, fresh: 0, calls: [], casts: [], puts: [], designCalls: [], failFn: null, clipFail: false, delay: 0, retryAt: new Date(Date.now() + 3600e3).toISOString(), leaks: [], workPosts: [] };
+  const cfgOf = () => ({ enabled: M.hasKey && !M.off, off: M.off, model: 'gemini-3.8-flash-tts', hasKey: M.hasKey, keySource: M.hasKey ? M.keySource : '', blocked: M.fresh >= M.budget ? [{ model: 'gemini-3.8-flash-tts', until: M.retryAt }] : [],
+    today: M.today, cached: M.ids.size, keyUrl: 'https://aistudio.google.com/apikey', roles: GV.roleList(), langs: GV.langList(), designs: M.designs });
+  const castOf = (lang, accent, actors) => {
+    const taken = {}, out = {};
+    actors.forEach(a => {
+      const d = M.designs[a.role + '|' + lang + '|' + accent];
+      if (a.voice) { out[a.id] = { voice: a.voice, source: 'chosen', label: a.voice + ' (đã chọn)' }; taken[a.voice] = 1; return; }
+      if (d) { out[a.id] = { voice: d.voice, source: 'design', label: d.voice + ' (thiết kế)' }; return; }
+      const c = GV.cast({ id: a.id, voice: { role: a.role } }, { lang, accent, taken }); taken[c.ai] = 1;
+      out[a.id] = { voice: c.ai, source: 'prebuilt', label: c.ai + ' (có sẵn)' };
+    });
+    return out;
+  };
+  const idOf = b => crypto.createHash('sha1').update(JSON.stringify([b.voice, b.role, b.lang, b.accent, b.state, b.bubble, b.text])).digest('hex');
+  await ctx10.route(/\/api\/voice(\/|\?|$)/, async route => {
+    const req = route.request(), u = new URL(req.url()), m = req.method(), p = u.pathname.replace(/^\/api\/voice/, '') || '/', body = req.postData() ? JSON.parse(req.postData()) : {};
+    const json = (status, o) => route.fulfill({ status, contentType: 'application/json; charset=utf-8', body: JSON.stringify(o) });
+    if (p === '/' && m === 'GET') return json(200, cfgOf());
+    if (p === '/' && m === 'PUT') {
+      M.puts.push(body);
+      if (typeof body.apiKey === 'string') {
+        if (body.apiKey !== M.good) return json(400, { error: 'Google từ chối key này — kiểm lại key (Google AI Studio › Get API key)' });
+        M.hasKey = true; M.keySource = 'voice'; M.off = false;
+        return json(200, { ...cfgOf(), models: ['gemini-3.8-flash-tts', 'gemini-2.5-flash-preview-tts'] });
+      }
+      if (typeof body.enabled === 'boolean') M.off = !body.enabled;
+      if (body.clearKey) { M.hasKey = false; M.keySource = ''; }
+      return json(200, cfgOf());
+    }
+    if (p === '/cast' && m === 'POST') { M.casts.push(body); return json(200, { cast: castOf(body.lang, body.accent, body.actors || []) }); }
+    if (p === '/library' && m === 'GET') {
+      const l = u.searchParams.get('lang');
+      return json(200, { voices: [{ id: 'lib-' + l + '-minh', name: 'Minh', gender: 'm', age: 35, pitch: 0.9, description: 'trầm, ấm', source: 'library' }, { id: 'lib-' + l + '-lan', name: 'Lan', gender: 'f', age: null, pitch: 1.1, description: 'trong, nhẹ', source: 'library' },
+        { id: 'Charon', name: 'Charon', gender: 'm', age: null, pitch: 1, description: 'trầm, rõ', source: 'prebuilt' }] });
+    }
+    if (p === '/design' && m === 'POST') {
+      M.designCalls.push(body);
+      if (['be-trai', 'be-gai', 'thieu-nien', 'thieu-nu'].includes(body.role)) return json(400, { error: 'Google chặn thiết kế giọng trẻ em (chính sách an toàn)' });
+      const voice = 'design-' + body.role, id = crypto.createHash('sha1').update('design' + voice).digest('hex');
+      M.designs[body.role + '|' + body.lang + '|' + body.accent] = { voice, at: new Date().toISOString() }; M.ids.add(id);
+      return json(200, { voice, preview: 'api/voice/clip/' + id + '.wav', role: body.role, lang: body.lang, accent: body.accent });
+    }
+    if (p === '/line' && m === 'POST') {
+      M.calls.push(body);
+      const id = idOf(body), st = M.failFn && M.failFn(body);
+      if (st) return json(st, { error: 'mock: lỗi giả ' + st });
+      if (M.ids.has(id)) return json(200, { id, cached: true, seconds: 0.6, voice: body.voice, url: 'api/voice/clip/' + id + '.wav' });
+      if (body.dry) return json(404, { error: 'Câu này chưa đọc bằng giọng AI' });
+      if (!M.hasKey || M.off) return json(409, { error: 'Giọng AI đang tắt (Cài đặt AI › Giọng AI)' });
+      if (M.fresh >= M.budget) return json(429, { error: 'Hết lượt đọc giọng hôm nay', retryAt: M.retryAt });
+      if (M.delay) await new Promise(r => setTimeout(r, M.delay));
+      M.fresh++; M.today++; M.ids.add(id);
+      return json(200, { id, cached: false, seconds: 0.6, voice: body.voice, url: 'api/voice/clip/' + id + '.wav' });
+    }
+    if (p.startsWith('/clip/') && m === 'GET') return M.clipFail ? json(500, { error: 'mock: clip hỏng' }) : route.fulfill({ status: 200, contentType: 'audio/wav', body: WAV });
+    return json(404, { error: 'mock: chưa có ' + m + ' ' + p });
+  });
+  // tác phẩm lưu ngôn ngữ: server thật (Gen đang hoàn thiện) có thể chưa lưu lang / accent → lớp phủ giữ hộ để UI kiểm được; thiếu thật thì in ghi chú bên dưới
+  const LANGMEM = {};
+  await ctx10.route(/\/api\/works(\/[a-z0-9-]+)?(\?.*)?$/, async route => {
+    const req = route.request(), body = req.method() === 'POST' && req.postData() ? JSON.parse(req.postData()) : null;
+    if (body && body.lang) { LANGMEM[body.id] = { lang: body.lang, accent: body.accent }; M.workPosts.push(body); }
+    const r = await route.fetch();
+    let j; try { j = await r.json(); } catch (e) { return route.fulfill({ response: r }); }
+    if (j && !Array.isArray(j) && j.id && LANGMEM[j.id] && !j.lang) Object.assign(j, LANGMEM[j.id]);
+    return route.fulfill({ response: r, json: j });
+  });
+  // mọi địa chỉ ngoài máy bị chặn (không bao giờ ra Google)
+  await ctx10.route(u => !/^(http:\/\/localhost:|file:|data:|blob:|about:)/.test(u.href), route => { M.leaks.push(route.request().url()); return route.abort(); });
+  const errs10 = [], pg = async (page, route, app) => {
+    app = app || 'tao-tac';
+    page.on('pageerror', e => errs10.push(e.message));
+    await page.goto(URL10 + app); await page.waitForFunction(() => window.GenChibi && /^v\d/.test(document.getElementById('verChip').textContent), null, { timeout: 8000 });
+    if (route) { await page.waitForSelector('.nav-item', { timeout: 8000 });   // go() đầu tiên ghi tuyến vào localStorage SAU khi verChip hiện — đợi nó xong rồi mới đặt tuyến
+      await page.evaluate(([k, r]) => localStorage.setItem(k, JSON.stringify(r)), ['gc-route-' + app, route]); await page.reload(); await page.waitForFunction(() => /^v\d/.test(document.getElementById('verChip').textContent), null, { timeout: 8000 }); }
+    return page;
+  };
+  // chờ một điều kiện phía Node (selector kiểu Playwright dùng được) — waitForFunction chỉ hiểu CSS thuần
+  const poll = async (fn, what, ms) => { const t = Date.now(); for (;;) { let v = null; try { v = await fn(); } catch (e) { /* chưa có */ } if (v) return v; if (Date.now() - t > (ms || 6000)) throw new Error('hết giờ chờ: ' + what); await q.waitForTimeout(80); } };
+  const SPY_A = `(() => { const A = window.GenChibi.audio; if (A.__spy) return; const orig = A.say; A.__spy = [];
+    A.say = function (text, voice, hooks) { const h = hooks || {}, c = h.clip;
+      A.__spy.push({ text, lang: voice && voice.lang, gender: voice && voice.gender, role: voice && voice.role, clip: c ? (typeof c === 'string' ? 'str:' + c.slice(0, 22) : 'buf:' + (c.byteLength || 0)) : null, t: Date.now() });
+      if (window.__realSay) return orig.apply(A, arguments);
+      return new Promise(r => setTimeout(r, 80)); }; })()`;
+  const SPY_T = `(() => { window.__toasts = []; new MutationObserver(() => { const t = document.getElementById('toast'); if (t && !t.hidden) window.__toasts.push(t.textContent); }).observe(document.getElementById('toast'), { childList: true, characterData: true, subtree: true, attributes: true }); })()`;
+  const spyOn = async page => { await page.evaluate(SPY_A); await page.evaluate(SPY_T); };
+  const shot = async (page, name, sel) => { if (!SHOTS) return; fs.mkdirSync(SHOTS, { recursive: true }); const o = { path: path.join(SHOTS, name + '.png') }; if (sel) await page.locator(sel).first().screenshot(o); else await page.screenshot(o); };
+  const toasts = page => page.evaluate(() => window.__toasts.slice());
+  let q = null;
+  try {
+    // ---- 0) dựng dữ liệu: bộ Văn phòng vui + một nhân vật CHƯA có giọng (thử thanh trượt theo vai) ----
+    const boot = await pg(await ctx10.newPage(), null);
+    await boot.evaluate(async ([H]) => {
+      const bn = await fetch('studio/mau/van-phong-vui.json').then(r => r.json());
+      let r = await fetch('api/projects/import', { method: 'POST', headers: H, body: JSON.stringify({ bundle: bn, overwrite: true }) }); if (!r.ok) throw new Error('nhập bộ mẫu ' + r.status);
+      const a = JSON.parse(JSON.stringify(window.GenChibi.ASSETS['gen.khung/ma-no-canh']));
+      Object.assign(a, { id: 'ci-giong', pack: 'local.my', name: 'Bà Tám', role: 'Hàng xóm', persona: 'bà lão hay nói', status: 'draft' }); delete a.key; delete a.voice;
+      r = await fetch('api/assets/local.my/ci-giong', { method: 'PUT', headers: H, body: JSON.stringify(a) }); if (!r.ok) throw new Error('lưu nhân vật thử ' + r.status);
+    }, [HDR]);
+    await boot.close();
+    const probe = await fetch(URL10 + 'api/works', { method: 'POST', headers: HDR, body: JSON.stringify({ id: WORK, lang: 'en', accent: 'uk' }) }).then(() => fetch(URL10 + 'api/works/' + WORK, { headers: HDR })).then(r => r.json());
+    const serverKeepsLang = probe.lang === 'en' && probe.accent === 'uk';
+    await fetch(URL10 + 'api/works', { method: 'POST', headers: HDR, body: JSON.stringify({ id: WORK, lang: 'vi', accent: 'bac' }) });
+    delete LANGMEM[WORK]; M.workPosts.length = 0;
+
+    // ---- 1) Cài đặt AI › Giọng AI: dán key sai → lỗi rõ; đúng → tự bật ----
+    q = await pg(await ctx10.newPage(), { page: 'ai' });
+    await q.waitForSelector('#voice-panel input[type="password"]', { timeout: 8000 });
+    const chip = () => q.textContent('#voice-panel .panel:first-child h3 .r');
+    if (!/Chưa có key/.test(await chip())) throw new Error('chưa có key mà panel báo: ' + await chip());
+    if (!/Gói miễn phí của Google rất ít lượt/.test(await q.textContent('#voice-panel'))) throw new Error('thiếu ghi chú gói miễn phí');
+    await q.fill('#voice-panel input[type="password"]', 'sai-key-xxxxxxxxxxxxxxxxxxxx'); await q.click('#voice-panel button:text-is("Kết nối")');
+    await q.waitForFunction(() => /Google từ chối key này/.test(document.querySelector('#voice-panel').textContent), null, { timeout: 5000 });
+    if (!/Chưa có key/.test(await chip())) throw new Error('key sai mà panel đổi trạng thái');
+    if (!M.puts.some(x => x.apiKey === 'sai-key-xxxxxxxxxxxxxxxxxxxx')) throw new Error('không gửi PUT api/voice { apiKey }');
+    await q.fill('#voice-panel input[type="password"]', M.good); await q.click('#voice-panel button:text-is("Kết nối")');
+    await q.waitForFunction(() => /Đã kết nối — 2 model đọc giọng/.test(document.querySelector('#voice-panel').textContent), null, { timeout: 5000 });
+    if (!/Đã bật/.test(await chip())) throw new Error('đúng key mà chưa Đã bật: ' + await chip());
+    const stText = await q.textContent('#voice-panel .kv');
+    if (!/key: riêng/.test(stText) || !/hôm nay 0 câu/.test(stText) || !/0 câu đã lưu/.test(stText)) throw new Error('dòng trạng thái thiếu: ' + stText.slice(0, 200));
+    if (await q.$eval('#voice-panel input[type="password"]', e => e.value) !== '') throw new Error('ô key không được xoá sau khi kết nối');
+    if ((await q.content()).indexOf(M.good) >= 0) throw new Error('key lộ ra DOM');
+
+    // ---- 2) bảng "Bộ giọng vai": đủ 22 vai, vai trẻ em không thiết kế được ----
+    await q.waitForFunction(() => document.querySelectorAll('#voice-panel table.roles td.id').length === 22, null, { timeout: 5000 });
+    const ids = await q.$$eval('#voice-panel table.roles td.id', es => es.map(e => e.textContent));
+    if (ids.join() !== GV.roleList().map(r => r.id).join()) throw new Error('bảng thiếu / lệch vai: ' + ids.join());
+    const kids10 = ['be-trai', 'be-gai', 'thieu-nien', 'thieu-nu'];
+    const row = id => `#voice-panel table.roles tr:has(td.id:text-is("${id}"))`;
+    for (const r of ids) {
+      const dis = await q.$eval(row(r) + ' button[aria-label^="Thiết kế giọng"]', e => e.disabled);
+      if (dis !== kids10.includes(r)) throw new Error('nút thiết kế của ' + r + ': disabled=' + dis);
+    }
+    const tip = await q.$eval(row('be-gai') + ' td:last-child span[title]', e => e.title);
+    if (!/Google không cho thiết kế giọng trẻ em/.test(tip)) throw new Error('thiếu tooltip vai trẻ em: ' + tip);
+    // giọng đang dùng: hỏi api/voice/cast với một diễn viên giả cho từng vai (22 lần), hiện tên giọng + nguồn
+    await q.waitForFunction(() => [...document.querySelectorAll('#voice-panel table.roles tr')].filter(r => r.querySelector('td.id') && /có sẵn/.test(r.children[3].textContent)).length === 22, null, { timeout: 8000 });
+    const one = M.casts.filter(c => c.actors.length === 1 && c.actors[0].id === c.actors[0].role);
+    if (one.length < 22 || !one.every(c => c.lang === 'vi' && c.accent === 'bac')) throw new Error('cast từng vai: ' + one.length);
+    const nCalls0 = M.calls.length, nDes0 = M.designCalls.length;
+    await q.click(row('vo-tuong') + ' button[aria-label^="Nghe giọng máy đọc"]'); await q.waitForTimeout(200);
+    if (M.calls.length !== nCalls0) throw new Error('▶ giọng máy đọc không được gọi giọng AI');
+    // ▶ AI: đọc câu mẫu đúng ngôn ngữ, tốn 1 lượt (ghi rõ trên tiêu đề cột + tooltip)
+    if (!/tốn 1 lượt/.test(await q.$eval(row('vo-tuong') + ' button[aria-label^="Nghe giọng AI"]', e => e.title))) throw new Error('▶ AI không ghi rõ tốn lượt');
+    await q.click(row('vo-tuong') + ' button[aria-label^="Nghe giọng AI"]');
+    await q.waitForTimeout(500);
+    const aiCall = M.calls[M.calls.length - 1];
+    if (M.calls.length !== nCalls0 + 1 || aiCall.role !== 'vo-tuong' || aiCall.lang !== 'vi' || aiCall.accent !== 'bac' || aiCall.text !== 'Xin chào, rất vui được gặp bạn.' || aiCall.dry) throw new Error('▶ AI gửi sai: ' + JSON.stringify(aiCall));
+    // thiết kế giọng: POST api/voice/design { role, lang, accent }; xong → "Thiết kế lại" + nguồn "thiết kế"
+    if (!/~25 s/.test(await q.textContent('#voice-panel table.roles th:last-child')) || !/tốn 1 lượt/.test(await q.textContent('#voice-panel table.roles th:last-child'))) throw new Error('cột thiết kế không ghi ~25 s + tốn lượt');
+    await q.click(row('vo-tuong') + ' button[aria-label^="Thiết kế giọng"]');
+    await poll(async () => /Thiết kế lại/.test(await q.textContent(row('vo-tuong') + ' td:last-child')), 'nút Thiết kế lại');
+    if (M.designCalls.length !== nDes0 + 1 || JSON.stringify(M.designCalls[nDes0]) !== JSON.stringify({ role: 'vo-tuong', lang: 'vi', accent: 'bac' })) throw new Error('thiết kế gửi sai: ' + JSON.stringify(M.designCalls));
+    await poll(async () => { const t = await q.textContent(row('vo-tuong') + ' td:nth-child(4)'); return /thiết kế/.test(t) && /design-vo-tuong/.test(t); }, 'giọng thiết kế hiện ở ô giọng đang dùng');
+    // đổi ngôn ngữ + giọng vùng: cast hỏi lại theo ngôn ngữ mới
+    await q.selectOption('#voice-panel select[aria-label="Ngôn ngữ bộ giọng"]', 'en'); await q.waitForTimeout(200);
+    if (await q.$$eval('#voice-panel select[aria-label="Ngôn ngữ bộ giọng"] option', os => os.map(o => o.value).join()) !== GV.langList().map(l => l.id).join()) throw new Error('bảng bộ giọng phải lấy ngôn ngữ từ langList()');
+    if (await q.$$eval('#voice-panel select[aria-label="Giọng vùng bộ giọng"] option', os => os.map(o => o.value).join()) !== GV.langList().find(l => l.id === 'en').accents.map(a => a.id).join()) throw new Error('giọng vùng tiếng Anh sai');
+    await q.selectOption('#voice-panel select[aria-label="Giọng vùng bộ giọng"]', 'uk');
+    await q.waitForFunction(() => [...document.querySelectorAll('#voice-panel table.roles tr')].filter(r => r.querySelector('td.id') && /có sẵn/.test(r.children[3].textContent)).length === 22, null, { timeout: 8000 });
+    if (!M.casts.some(c => c.lang === 'en' && c.accent === 'uk')) throw new Error('đổi ngôn ngữ mà cast không hỏi lại');
+    if (/thiết kế/.test(await q.textContent(row('vo-tuong') + ' td:nth-child(4)'))) throw new Error('giọng thiết kế tiếng Việt không được dính sang tiếng Anh');
+    await q.selectOption('#voice-panel select[aria-label="Ngôn ngữ bộ giọng"]', 'vi'); await q.waitForTimeout(300);
+    if (SHOTS) { await q.setViewportSize({ width: 1440, height: 1700 }); await q.locator('#voice-panel').scrollIntoViewIfNeeded(); }
+    await shot(q, 'panel-giong-ai', '#voice-panel');
+    if (SHOTS) await q.setViewportSize({ width: 1440, height: 900 });
+    // tắt / bật
+    await q.click('#voice-panel button:text-is("Tắt giọng AI")'); await q.waitForFunction(() => /Đã tắt/.test(document.querySelector('#voice-panel .panel h3 .r').textContent));
+    await q.click('#voice-panel button:text-is("Bật giọng AI")'); await q.waitForFunction(() => /Đã bật/.test(document.querySelector('#voice-panel .panel h3 .r').textContent));
+    if (JSON.stringify(M.puts.slice(-2)) !== JSON.stringify([{ enabled: false }, { enabled: true }])) throw new Error('tắt / bật gửi sai: ' + JSON.stringify(M.puts.slice(-2)));
+    // key Gemini của AI đạo diễn dùng chung: nói rõ "đã dùng được, không cần dán"
+    M.keySource = 'llm'; await q.reload(); await q.waitForSelector('#voice-panel .banner.acc', { timeout: 8000 });
+    if (!/Đã dùng được key Gemini của AI đạo diễn — không cần dán thêm/.test(await q.textContent('#voice-panel .banner.acc')) || !/dùng chung key AI đạo diễn/.test(await q.textContent('#voice-panel .kv'))) throw new Error('key dùng chung không được nói rõ');
+    M.keySource = 'voice';
+    await q.close();
+    console.log('  ✓ Cài đặt AI › Giọng AI: dán key sai → lỗi rõ, đúng → "Đã kết nối — 2 model" + Đã bật (key không lộ ra trang) · dòng trạng thái · key dùng chung nói rõ không cần dán · bảng 22 vai có ID, giọng đang dùng + nguồn, ▶ không tốn lượt, ▶ AI ghi rõ tốn 1 lượt, thiết kế → "Thiết kế lại", vai trẻ em mờ + tooltip · đổi ngôn ngữ hỏi lại cast · tắt / bật');
+
+    // ---- 3) Sân khấu final: ô ngôn ngữ phim lưu vào tác phẩm, áp ngay cho bộ phát ----
+    M.hasKey = true; M.keySource = 'voice'; M.off = false; M.ids.clear(); M.fresh = 0; M.budget = Infinity; M.calls.length = 0; M.casts.length = 0;
+    q = await pg(await ctx10.newPage(), { page: 'works', work: WORK });
+    await q.waitForSelector('select[aria-label="Ngôn ngữ phim"]', { timeout: 8000 }); await q.waitForSelector('.shot');
+    await spyOn(q);
+    const langOpts = await q.$$eval('select[aria-label="Ngôn ngữ phim"] option', os => os.map(o => o.value + '|' + o.textContent));
+    // danh sách lấy từ GC.voices.langList() (không giả định số ngôn ngữ: hiện vi · en · zh · yue) — thêm ngôn ngữ ở engine là ô chọn tự có
+    const want = GV.langList().flatMap(l => l.accents.map(a => l.id + '|' + a.id + '|Ngôn ngữ: ' + l.label + ' · ' + a.label));
+    if (want.length < 8 || langOpts.join(';') !== want.join(';')) throw new Error('ô ngôn ngữ phim: ' + langOpts.join(';') + ' ≠ ' + want.join(';'));
+    if (await q.$eval('select[aria-label="Ngôn ngữ phim"]', e => e.value) !== 'vi|bac') throw new Error('mặc định phải là tiếng Việt · giọng Bắc');
+    const voiceModes = await q.$$eval('select[aria-label="Giọng nhân vật"] option', os => os.map(o => o.value + '|' + o.textContent));
+    if (voiceModes.join(';') !== 'auto|Giọng: tự động;ai|Giọng: AI Google;tts|Giọng: máy đọc;blip|Giọng: blip kiểu game;off|Giọng: tắt') throw new Error('kiểu giọng: ' + voiceModes.join(';'));
+    await q.selectOption('select[aria-label="Ngôn ngữ phim"]', 'en|uk'); await q.waitForTimeout(400);
+    if (!M.workPosts.some(b => b.id === WORK && b.lang === 'en' && b.accent === 'uk')) throw new Error('chưa lưu ngôn ngữ vào tác phẩm: ' + JSON.stringify(M.workPosts));
+    // chọn "AI Google" khi mới tải: đang có key nên không báo thiếu key
+    await q.selectOption('select[aria-label="Giọng nhân vật"]', 'ai'); await q.waitForTimeout(300);
+    if ((await toasts(q)).some(t => /Chưa có key giọng AI/.test(t))) throw new Error('có key mà báo thiếu key');
+    if ((await q.evaluate(() => [localStorage.getItem('gc-audio'), GenChibi.audio.voiceMode]))[1] !== 'auto' || JSON.parse(await q.evaluate(() => localStorage.getItem('gc-audio'))).voice !== 'ai') throw new Error('kiểu "AI Google" phải nhớ là ai và ánh xạ sang auto của engine');
+    // diễn phân cảnh 1 bằng tiếng Anh: giọng trình duyệt dự phòng đúng en-US, clip AI gửi kèm, cast theo tiếng Anh
+    await q.click('button:text-is("Diễn thử") >> nth=0');
+    await q.waitForFunction(() => window.GenChibi.audio.__spy.length >= 4, null, { timeout: 60000 });
+    await q.click('button:text-is("Dừng")');
+    let spy = await q.evaluate(() => window.GenChibi.audio.__spy.slice());
+    if (!spy.slice(0, 4).every(s => s.lang === 'en-US')) throw new Error('giọng trình duyệt phải theo ngôn ngữ phim (en-US): ' + JSON.stringify(spy.map(s => s.lang)));
+    if (!spy.slice(0, 4).every(s => s.clip && /^buf:\d{3,}/.test(s.clip))) throw new Error('kiểu AI Google mà bộ phát không dùng clip: ' + JSON.stringify(spy.map(s => s.clip)));
+    const aiCalls = M.calls.filter(c => !c.dry);
+    if (aiCalls.length < 4 || !aiCalls.every(c => c.lang === 'en' && c.accent === 'uk' && c.voice && c.role && c.text)) throw new Error('lời gọi api/voice/line sai: ' + JSON.stringify(aiCalls.slice(0, 2)));
+    const cast0 = M.casts.find(c => c.actors.length > 1);   // (bỏ các cast một-diễn-viên còn sót của trang Cài đặt AI)
+    if (!cast0 || cast0.lang !== 'en' || cast0.accent !== 'uk' || cast0.actors.length < 3 || !cast0.actors.every(a => GV.ROLES[a.role] && a.gender === GV.ROLES[a.role].gender)) throw new Error('cast cả dàn diễn viên sai: ' + JSON.stringify(cast0));
+    const castVoices = Object.values(castOf('en', 'uk', cast0.actors)).map(c => c.voice);
+    if (new Set(castVoices).size !== castVoices.length) throw new Error('mỗi diễn viên phải một giọng khác nhau: ' + castVoices.join());
+    // mọi câu của cảnh đã hỏi MỘT lần, kể cả câu chưa tới lượt (hỏi trước đầu phân cảnh)
+    if (new Set(aiCalls.map(c => c.text)).size !== aiCalls.length) throw new Error('một câu hỏi server nhiều lần: ' + aiCalls.map(c => c.text).join(' | '));
+    // reload: ngôn ngữ đã lưu vẫn còn (server thật lưu hoặc lớp phủ của test)
+    await q.reload(); await q.waitForSelector('select[aria-label="Ngôn ngữ phim"]'); await q.waitForSelector('.shot');
+    if (await q.$eval('select[aria-label="Ngôn ngữ phim"]', e => e.value) !== 'en|uk') throw new Error('tải lại mất ngôn ngữ phim');
+    // tiếng Quảng Đông: lưu lang 'yue' + accent 'hk', có dòng gợi ý viết lời thoại bằng tiếng Quảng Đông (chữ phồn thể, 喺 / 咩 / 我哋); ngôn ngữ khác thì dòng chú thường
+    const noteOf = () => q.textContent('.usebar:has(select[aria-label="Ngôn ngữ phim"]) .note');
+    const noteVi = await noteOf();
+    await q.selectOption('select[aria-label="Ngôn ngữ phim"]', 'yue|hk'); await q.waitForTimeout(400);
+    if (!M.workPosts.some(b => b.id === WORK && b.lang === 'yue' && b.accent === 'hk')) throw new Error('chưa lưu yue / hk: ' + JSON.stringify(M.workPosts.slice(-2)));
+    if (!/Quảng Đông/.test(await noteOf()) || !/喺/.test(await noteOf()) || !/咩/.test(await noteOf()) || !/我哋/.test(await noteOf())) throw new Error('thiếu gợi ý tiếng Quảng Đông: ' + await noteOf());
+    await q.selectOption('select[aria-label="Ngôn ngữ phim"]', 'vi|bac'); await q.waitForTimeout(300);
+    if (await noteOf() !== noteVi) throw new Error('rời tiếng Quảng Đông mà gợi ý vẫn còn');
+    console.log('  ✓ Sân khấu final: ô "Ngôn ngữ" lấy từ langList() (Việt Bắc / Nam / Trung · Anh Mỹ / Anh · Trung phổ thông / Đài Loan · Quảng Đông) lưu vào tác phẩm, Quảng Đông có dòng gợi ý chữ phồn thể + khẩu ngữ' + (serverKeepsLang ? ' (server lưu lang + accent)' : ' — GHI CHÚ: server hiện CHƯA lưu lang / accent của tác phẩm, test dùng lớp phủ') + ' · áp ngay cho bộ phát (giọng trình duyệt en-US, cast + clip AI theo en/uk) · kiểu "Giọng: AI Google" ánh xạ sang auto của engine · cast cả dàn một lần, mỗi người một giọng · mỗi câu hỏi server một lần');
+
+    // ---- 4) bộ phát: clip lỗi / hết lượt → rơi về giọng máy, MỘT thông báo; kiểu tự động chỉ lấy clip ĐÃ đọc (dry, không tốn lượt) ----
+    const playN = async (n, ms) => { await q.evaluate(() => { window.GenChibi.audio.__spy.length = 0; window.__toasts.length = 0; }); await q.click('button:text-is("Diễn thử") >> nth=0'); await q.waitForFunction(k => window.GenChibi.audio.__spy.length >= k, n, { timeout: ms || 60000 }); await q.click('button:text-is("Dừng")'); return q.evaluate(() => window.GenChibi.audio.__spy.slice()); };
+    await q.reload(); await q.waitForSelector('.shot'); await spyOn(q);   // bộ nhớ clip sạch
+    M.ids.clear(); M.fresh = 0; M.budget = Infinity; M.calls.length = 0;
+    M.failFn = b => (/^Ơ/.test(b.text) || /^Đến sớm/.test(b.text)) ? 500 : 0;   // hai câu của cảnh 1 hỏng
+    await q.selectOption('select[aria-label="Giọng nhân vật"]', 'ai');
+    spy = await playN(4);
+    const noClip = spy.filter(s => !s.clip).map(s => s.text);
+    if (noClip.length !== 2 || !noClip.every(t => /^Ơ|^Đến sớm/.test(t)) || spy.filter(s => s.clip).length !== 2) throw new Error('clip lỗi phải rơi về giọng máy (đúng 2 câu), còn lại có clip: ' + JSON.stringify(spy.map(s => [s.text.slice(0, 8), s.clip])));
+    let tt = (await toasts(q)).filter(t => /Giọng AI lỗi/.test(t));
+    if (tt.length !== 1) throw new Error('clip lỗi phải báo ĐÚNG MỘT toast, thấy ' + tt.length);
+    M.failFn = null; M.clipFail = true; await q.reload(); await q.waitForSelector('.shot'); await spyOn(q);   // clip tải về hỏng (server báo có clip nhưng tải 500)
+    spy = await playN(4);
+    if (spy.some(s => s.clip)) throw new Error('tải clip hỏng mà vẫn đưa clip cho bộ phát: ' + JSON.stringify(spy.map(s => s.clip)));
+    M.clipFail = false;
+    // hết lượt: 2 câu đầu có giọng AI, rồi 429 → một toast có giờ thử lại, các câu sau giọng máy; sau 429 KHÔNG hỏi server thêm
+    await q.reload(); await q.waitForSelector('.shot'); await spyOn(q); M.ids.clear(); M.fresh = 0; M.budget = 2; M.calls.length = 0;
+    spy = await playN(4);
+    if (spy.filter(s => s.clip).length !== 2 || spy.filter(s => !s.clip).length !== 2) throw new Error('hết lượt: 2 câu có clip + 2 câu giọng máy, thấy ' + JSON.stringify(spy.map(s => !!s.clip)));
+    tt = (await toasts(q)).filter(t => /Hết lượt giọng AI/.test(t));
+    if (tt.length !== 1 || !/thử lại lúc \d{2}:\d{2}/.test(tt[0])) throw new Error('hết lượt: một toast kèm giờ thử lại, thấy ' + JSON.stringify(tt));
+    const non429 = M.calls.filter(c => !c.dry).length;
+    if (non429 > 4) throw new Error('hết lượt rồi vẫn hỏi server ' + non429 + ' lần');
+    // kiểu "tự động": chỉ clip ĐÃ đọc (dry) — 2 câu đã đọc ở trên có giọng AI, câu còn lại không; không bao giờ gọi đọc mới, không toast
+    await q.reload(); await q.waitForSelector('.shot'); await spyOn(q); M.calls.length = 0; M.budget = Infinity; M.fresh = 0;
+    await q.selectOption('select[aria-label="Giọng nhân vật"]', 'auto');
+    spy = await playN(4);
+    if (M.calls.length < 4 || !M.calls.every(c => c.dry === true)) throw new Error('kiểu tự động phải chỉ hỏi dry: ' + JSON.stringify(M.calls.map(c => !!c.dry)));
+    if (spy.filter(s => s.clip).length !== 2) throw new Error('kiểu tự động: đúng 2 câu đã đọc có clip, thấy ' + spy.filter(s => s.clip).length);
+    if ((await toasts(q)).length) throw new Error('kiểu tự động không được báo gì: ' + JSON.stringify(await toasts(q)));
+    // máy đọc / blip / tắt: không đụng tới giọng AI
+    await q.selectOption('select[aria-label="Giọng nhân vật"]', 'tts'); M.calls.length = 0; M.casts.length = 0;
+    spy = await playN(2);
+    if (M.calls.length || spy.some(s => s.clip)) throw new Error('kiểu máy đọc không được gọi giọng AI');
+    console.log('  ✓ Bộ phát: kiểu "AI Google" đọc từng câu bằng clip · clip lỗi / tải hỏng → giọng máy + đúng MỘT toast · hết lượt (429) → 2 câu AI rồi giọng máy, một toast có giờ thử lại, thôi hỏi server · kiểu "tự động" chỉ lấy clip đã đọc (dry), không tốn lượt, không toast · máy đọc không đụng tới giọng AI');
+
+    // ---- 5) Lồng tiếng AI: đủ câu · câu đã có thì nhanh · dừng đúng khi 429 (báo giờ thử lại + số câu đã xong) · 409 mở Cài đặt AI ----
+    const dubText = () => q.evaluate(() => [...document.querySelectorAll('.readybar')].map(e => e.textContent).filter(t => /Lồng tiếng AI \d/.test(t)).join('|'));
+    await q.reload(); await q.waitForSelector('.shot'); await spyOn(q); await q.selectOption('select[aria-label="Ngôn ngữ phim"]', 'vi|nam'); await q.waitForTimeout(300);
+    M.ids.clear(); M.fresh = 0; M.budget = Infinity; M.calls.length = 0; M.today = 0;
+    const dubB = 'button:text-is("Lồng tiếng AI")';
+    if (await q.$eval(dubB, e => e.disabled)) throw new Error('có key mà nút Lồng tiếng AI mờ');
+    await q.click(dubB);
+    await q.waitForFunction(() => [...document.querySelectorAll('.readybar b')].some(b => /^Lồng tiếng AI \d+\/15$/.test(b.textContent)), null, { timeout: 8000 });
+    await q.waitForFunction(() => /Xong 15\/15 câu/.test(document.body.textContent), null, { timeout: 30000 });
+    if (!/Xong 15\/15 câu \(15 mới · 0 có sẵn\)/.test(await dubText())) throw new Error('lồng tiếng đủ câu: ' + await dubText());
+    const dubCalls = M.calls.filter(c => !c.dry);
+    if (dubCalls.length !== 15 || new Set(dubCalls.map(c => c.text)).size !== 15 || !dubCalls.every(c => c.lang === 'vi' && c.accent === 'nam')) throw new Error('lồng tiếng phải đọc đủ 15 câu, đúng ngôn ngữ / giọng vùng: ' + dubCalls.length);
+    if (await q.$eval('.readybar span.meter[role="progressbar"]', e => e.parentElement.hidden || +e.getAttribute('aria-valuenow') !== 15 || +e.getAttribute('aria-valuemax') !== 15)) throw new Error('thanh tiến độ ẩn hoặc aria-valuenow / aria-valuemax sai');
+    await shot(q, 'san-khau-final', '.works > .stack:last-child > .panel:first-child');
+    // làm lại sau khi tải lại trang (bộ nhớ trình duyệt sạch): server báo cached → "15 có sẵn", nhanh, không tốn lượt
+    await q.reload(); await q.waitForSelector('.shot'); await spyOn(q); await q.selectOption('select[aria-label="Ngôn ngữ phim"]', 'vi|nam'); M.calls.length = 0; const fresh0 = M.fresh;
+    await q.click(dubB); await q.waitForFunction(() => /Xong 15\/15 câu/.test(document.body.textContent), null, { timeout: 30000 });
+    if (!/Xong 15\/15 câu \(0 mới · 15 có sẵn\)/.test(await dubText()) || M.fresh !== fresh0) throw new Error('lồng lại phải toàn câu có sẵn, không tốn lượt: ' + await dubText());
+    // hết lượt giữa chừng: dừng đúng chỗ — 4 câu xong, câu thứ 5 gặp 429 rồi KHÔNG hỏi thêm; báo giờ thử lại + số câu đã xong
+    await q.reload(); await q.waitForSelector('.shot'); await spyOn(q); await q.selectOption('select[aria-label="Ngôn ngữ phim"]', 'vi|nam'); M.ids.clear(); M.fresh = 0; M.budget = 4; M.calls.length = 0;
+    await q.click(dubB); await q.waitForFunction(() => /Dừng vì hết lượt/.test(document.body.textContent), null, { timeout: 30000 });
+    if (!/Dừng vì hết lượt — thử lại lúc \d{2}:\d{2}(?: \d{2}\/\d{2})? · đã lồng 4\/15 câu \(4 mới · 0 có sẵn\)/.test(await dubText()) || !/Lồng tiếng AI 4\/15/.test(await dubText())) throw new Error('báo hết lượt: ' + await dubText());
+    await q.waitForTimeout(500);
+    if (M.calls.filter(c => !c.dry).length !== 5) throw new Error('phải dừng ngay sau 429 (5 lời gọi), thấy ' + M.calls.filter(c => !c.dry).length);
+    if (!(await toasts(q)).some(t => /Hết lượt giọng AI — thử lại lúc/.test(t) && /Đã lồng 4\/15 câu/.test(t))) throw new Error('thiếu toast hết lượt');
+    if (await q.$eval(dubB, e => e.disabled)) throw new Error('hết lượt xong nút phải bấm lại được (lượt sau đọc tiếp)');
+    // còn lượt trở lại: đọc tiếp — 4 câu đã đọc là "có sẵn", 11 câu mới
+    M.budget = Infinity; await q.click(dubB); await q.waitForFunction(() => /Xong 15\/15 câu/.test(document.body.textContent), null, { timeout: 30000 });
+    if (!/Xong 15\/15 câu \(11 mới · 4 có sẵn\)/.test(await dubText())) throw new Error('đọc tiếp sau hết lượt: ' + await dubText());
+    // bấm dừng giữa chừng
+    await q.reload(); await q.waitForSelector('.shot'); await spyOn(q); await q.selectOption('select[aria-label="Ngôn ngữ phim"]', 'vi|nam'); M.ids.clear(); M.fresh = 0; M.calls.length = 0; M.delay = 150;
+    await q.click(dubB); await q.waitForFunction(() => /Lồng tiếng AI [1-9]\d?\/15/.test(document.body.textContent)); await q.click('button:text-is("Dừng lồng tiếng")');
+    await q.waitForFunction(() => /Đã dừng · đã lồng \d+\/15 câu/.test(document.body.textContent), null, { timeout: 15000 });
+    const nStop = M.calls.filter(c => !c.dry).length; await q.waitForTimeout(600); M.delay = 0;
+    if (nStop >= 15 || M.calls.filter(c => !c.dry).length !== nStop) throw new Error('dừng lồng tiếng mà vẫn đọc tiếp');
+    // 409 (key bị xoá / tắt giữa chừng): mở Cài đặt AI › Giọng AI, trỏ vào ô key
+    await q.reload(); await q.waitForSelector('.shot'); await spyOn(q); await q.selectOption('select[aria-label="Ngôn ngữ phim"]', 'vi|nam'); M.ids.clear(); M.fresh = 0;
+    await q.waitForFunction(() => { const b = [...document.querySelectorAll('button')].find(x => x.textContent === 'Lồng tiếng AI'); return b && !b.disabled; });
+    M.off = true; await q.click(dubB);
+    await q.waitForSelector('#voice-panel', { timeout: 15000 });
+    if ((await q.evaluate(() => JSON.parse(localStorage.getItem('gc-route-tao-tac')).page)) !== 'ai') throw new Error('409 phải mở Cài đặt AI');
+    await q.waitForFunction(() => document.activeElement && document.activeElement.type === 'password', null, { timeout: 5000 });
+    M.off = false;
+    // chưa có key: nút mờ kèm lời nhắc + nút dẫn tới Cài đặt AI
+    M.hasKey = false; await pg(q, { page: 'works', work: WORK }); await q.waitForSelector('.shot');
+    await q.waitForFunction(() => /Chưa có key Google/.test(document.body.textContent), null, { timeout: 5000 });
+    if (!(await q.$eval(dubB, e => e.disabled)) || !/Cần key Google/.test(await q.$eval(dubB, e => e.title))) throw new Error('chưa có key: nút Lồng tiếng AI phải mờ kèm lời nhắc');
+    // chọn "AI Google" khi chưa có key: MỘT toast nhắc dán key, rồi phim vẫn chạy bằng giọng máy (không clip, không gọi đọc)
+    await spyOn(q); M.calls.length = 0; await q.selectOption('select[aria-label="Giọng nhân vật"]', 'ai');
+    await poll(async () => (await toasts(q)).some(t => /Chưa có key giọng AI — dán key ở Cài đặt AI › Giọng AI/.test(t)), 'toast nhắc dán key');
+    spy = await playN(2);
+    if (spy.some(s => s.clip) || M.calls.some(c => !c.dry) || (await toasts(q)).filter(t => /Giọng AI chưa sẵn sàng/.test(t)).length !== 1) throw new Error('chưa có key: phải rơi về giọng máy, đúng một toast, không gọi đọc: ' + JSON.stringify(await toasts(q)));
+    await q.selectOption('select[aria-label="Giọng nhân vật"]', 'auto');
+    await q.click('button:text-is("Dán key ở Cài đặt AI ›")'); await q.waitForSelector('#voice-panel');
+    await q.waitForFunction(() => document.activeElement && document.activeElement.type === 'password', null, { timeout: 5000 });
+    M.hasKey = true;
+    console.log('  ✓ Lồng tiếng AI: thanh tiến độ "Lồng tiếng AI k/15" · đủ 15 câu đúng ngôn ngữ / giọng vùng · lồng lại toàn "có sẵn", không tốn lượt · hết lượt giữa chừng: dừng ngay sau 429 (4/15 xong), báo giờ thử lại, bấm lại đọc tiếp (11 mới + 4 có sẵn) · nút Dừng · 409 mở Cài đặt AI › Giọng AI trỏ vào ô key · chưa có key: nút mờ + lời nhắc');
+    await q.close();
+
+    // ---- 6) Hồ sơ nhân vật: vai · giọng vùng · giọng AI; cao độ / tốc độ chỉ ghi khi đã kéo ----
+    M.hasKey = true; M.ids.clear(); M.calls.length = 0; M.casts.length = 0;
+    const putBodies = [];
+    ctx10.on('request', r => { if (r.method() === 'PUT' && /\/api\/assets\//.test(r.url())) putBodies.push(JSON.parse(r.postData())); });
+    q = await pg(await ctx10.newPage(), { page: 'lib-characters', key: 'local.my/ci-giong' }, 'thu-vien');
+    await q.waitForSelector('.voicebox', { timeout: 8000 }); await spyOn(q);
+    const vb = '.voicebox ';
+    const guess = await q.evaluate(() => GenChibi.voices.guessRole(GenChibi.ASSETS['local.my/ci-giong']));
+    if (guess !== 'ba-lao') throw new Error('đoán vai "bà lão hay nói" phải ra bà lão, ra ' + guess);
+    const roleOpts = await q.$$eval(vb + 'select[aria-label="Vai giọng"] option', os => os.map(o => o.value + '|' + o.textContent));
+    if (roleOpts.length !== 23 || roleOpts[0] !== '|Tự đoán: Bà lão' || await q.$$eval(vb + 'select[aria-label="Vai giọng"] optgroup', gs => gs.map(g => g.label).join()) !== 'Trẻ em,Thiếu niên,Thanh niên,Trung niên,Cao tuổi') throw new Error('ô Vai giọng: ' + roleOpts.slice(0, 3).join(';') + ' (' + roleOpts.length + ')');
+    if (await q.$eval(vb + 'select[aria-label="Vai giọng"]', e => e.value) !== '') throw new Error('chưa chọn vai thì phải là "Tự đoán"');
+    if (await q.$$eval(vb + 'select[aria-label="Giọng vùng"] option', os => os.map(o => o.value).join()) !== ',bac,nam,trung' || (await q.$eval(vb + 'select[aria-label="Giọng vùng"] option', e => e.textContent)) !== 'Theo phim') throw new Error('ô Giọng vùng sai');
+    await q.waitForFunction(() => { const s = document.querySelector('.voicebox select[aria-label="Giọng AI"]'); return s && !s.hidden && s.options.length >= 4; }, null, { timeout: 5000 });
+    const aiOpts = await q.$$eval(vb + 'select[aria-label="Giọng AI"] option', os => os.map(o => o.value));
+    if (aiOpts[0] !== '' || !aiOpts.includes('lib-vi-minh') || !aiOpts.includes('Charon')) throw new Error('ô Giọng AI không lấy từ api/voice/library: ' + aiOpts.join());
+    const pitch0 = +await q.$eval(vb + 'input[aria-label="Cao độ giọng"]', e => e.value), rate0 = +await q.$eval(vb + 'input[aria-label="Tốc độ nói"]', e => e.value);
+    const def = r => q.evaluate(r => { const v = GenChibi.audio.voiceOf({ id: 'ci-giong', key: 'local.my/ci-giong', name: 'Bà Tám', voice: { role: r } }, { lang: 'vi' }); return [v.pitch, v.rate]; }, r);
+    const dBa = await def('ba-lao');
+    if (Math.abs(pitch0 - dBa[0]) > 0.026 || Math.abs(rate0 - dBa[1]) > 0.026) throw new Error('chưa lưu giọng: thanh trượt phải ở mặc định của vai đoán: ' + [pitch0, rate0] + ' vs ' + dBa);
+    // đổi vai → thanh trượt nhảy về mặc định của vai
+    await q.selectOption(vb + 'select[aria-label="Vai giọng"]', 'vo-tuong');
+    const dVT = await def('vo-tuong');
+    if (Math.abs(+await q.$eval(vb + 'input[aria-label="Cao độ giọng"]', e => e.value) - dVT[0]) > 0.026) throw new Error('đổi vai mà cao độ không nhảy về mặc định võ tướng: ' + dVT);
+    // Lưu khi CHƯA kéo: có role / accent / ai, KHÔNG có pitch / rate
+    await q.selectOption(vb + 'select[aria-label="Giọng vùng"]', 'trung'); await q.selectOption(vb + 'select[aria-label="Giọng AI"]', 'Charon');
+    await q.click(vb + 'button:text-is("Lưu giọng")'); await q.waitForFunction(() => /Đã lưu giọng của Bà Tám/.test(document.getElementById('toast').textContent), null, { timeout: 5000 });
+    const s1 = putBodies[putBodies.length - 1];
+    if (JSON.stringify(s1.voice) !== JSON.stringify({ role: 'vo-tuong', accent: 'trung', ai: 'Charon' })) throw new Error('lưu chưa kéo phải chỉ có role / accent / ai: ' + JSON.stringify(s1.voice));
+    // kéo cao độ → đổi vai: cao độ ĐÃ kéo giữ nguyên, tốc độ (chưa kéo) nhảy theo vai; Lưu ghi pitch, không ghi rate
+    await q.reload(); await q.waitForSelector('.voicebox'); await spyOn(q);
+    if (await q.$eval(vb + 'select[aria-label="Vai giọng"]', e => e.value) !== 'vo-tuong' || await q.$eval(vb + 'select[aria-label="Giọng vùng"]', e => e.value) !== 'trung') throw new Error('tải lại mất vai / giọng vùng đã lưu');
+    await q.$eval(vb + 'input[aria-label="Cao độ giọng"]', e => { e.value = '1.8'; e.dispatchEvent(new Event('input', { bubbles: true })); });
+    await q.selectOption(vb + 'select[aria-label="Vai giọng"]', 'quan-su');
+    if (+await q.$eval(vb + 'input[aria-label="Cao độ giọng"]', e => e.value) !== 1.8) throw new Error('đã kéo cao độ mà đổi vai làm nhảy');
+    const dQS = await def('quan-su');
+    if (Math.abs(+await q.$eval(vb + 'input[aria-label="Tốc độ nói"]', e => e.value) - dQS[1]) > 0.026) throw new Error('tốc độ chưa kéo phải nhảy theo vai quân sư');
+    await q.click(vb + 'button:text-is("Lưu giọng")'); await q.waitForFunction(() => /Đã lưu giọng/.test(document.getElementById('toast').textContent));
+    const s2 = putBodies[putBodies.length - 1];
+    if (s2.voice.pitch !== 1.8 || 'rate' in s2.voice || s2.voice.role !== 'quan-su' || s2.voice.accent !== 'trung' || s2.voice.ai !== 'Charon') throw new Error('lưu đã kéo cao độ: ' + JSON.stringify(s2.voice));
+    // ↺ theo vai: bỏ cao độ / tốc độ đã lưu
+    await q.reload(); await q.waitForSelector('.voicebox'); await q.click(vb + 'button:text-is("↺ theo vai")'); await q.click(vb + 'button:text-is("Lưu giọng")'); await q.waitForFunction(() => /Đã lưu giọng/.test(document.getElementById('toast').textContent));
+    const s3 = putBodies[putBodies.length - 1];
+    if ('pitch' in s3.voice || 'rate' in s3.voice || s3.voice.role !== 'quan-su') throw new Error('↺ theo vai phải bỏ pitch / rate: ' + JSON.stringify(s3.voice));
+    // nghe thử: giọng trình duyệt theo vai, không gọi server; ▶ Giọng AI: đúng 1 lời gọi, đúng ngôn ngữ
+    await q.reload(); await q.waitForSelector('.voicebox'); await spyOn(q); await q.evaluate(() => { window.__realSay = false; }); M.calls.length = 0;
+    await q.click(vb + 'button:text-is("▶ Nghe thử")'); await q.waitForTimeout(200);
+    const sp1 = await q.evaluate(() => GenChibi.audio.__spy.slice());
+    if (M.calls.length || sp1.length !== 1 || sp1[0].lang !== 'vi-VN' || sp1[0].role !== 'quan-su' || !/Bà Tám/.test(sp1[0].text)) throw new Error('▶ Nghe thử: ' + JSON.stringify(sp1) + ' · ' + M.calls.length + ' lời gọi');
+    await q.selectOption(vb + 'select[aria-label="Ngôn ngữ nghe thử"]', 'en'); await q.waitForTimeout(100);
+    if (await q.$$eval(vb + 'select[aria-label="Giọng vùng"] option', os => os.map(o => o.value).join()) !== ',' + GV.langList().find(l => l.id === 'en').accents.map(a => a.id).join()) throw new Error('đổi ngôn ngữ nghe thử mà giọng vùng không đổi theo');
+    if (await q.$$eval(vb + 'select[aria-label="Ngôn ngữ nghe thử"] option', os => os.map(o => o.value).join()) !== GV.langList().map(l => l.id).join()) throw new Error('ô ngôn ngữ nghe thử phải lấy từ langList()');
+    await q.click(vb + 'button:text-is("▶ Giọng AI")'); await q.waitForFunction(() => window.GenChibi.audio.__spy.length >= 2, null, { timeout: 5000 });
+    const sp2 = await q.evaluate(() => GenChibi.audio.__spy.slice()), c2 = M.calls[M.calls.length - 1];
+    if (M.calls.length !== 1 || c2.lang !== 'en' || c2.role !== 'quan-su' || c2.voice !== 'Charon' || !/^Hello, I am Bà Tám/.test(c2.text) || !sp2[1].clip || sp2[1].lang !== 'en-US') throw new Error('▶ Giọng AI: ' + JSON.stringify([c2, sp2[1]]));
+    await shot(q, 'ho-so-nhan-vat-giong', '.voicebox');
+    // chưa có key: ẩn ô Giọng AI + nút ▶ Giọng AI
+    M.hasKey = false; await q.reload(); await q.waitForSelector('.voicebox'); await q.waitForTimeout(400);
+    if (await q.$eval(vb + 'select[aria-label="Giọng AI"]', e => !e.hidden) || await q.$eval(vb + 'button:text-is("▶ Giọng AI")', e => !e.hidden)) throw new Error('chưa có key mà vẫn hiện giọng AI');
+    M.hasKey = true;
+    console.log('  ✓ Hồ sơ nhân vật › Giọng: "Tự đoán: Bà lão" mặc định (optgroup theo nhóm tuổi) · giọng vùng Theo phim / Bắc Nam Trung · ô Giọng AI từ api/voice/library (chỉ khi có key) · đổi vai → thanh trượt nhảy về mặc định của vai, trừ khi đã kéo · Lưu chỉ ghi role / accent / ai, KHÔNG ghi pitch / rate khi chưa kéo · ↺ theo vai bỏ giá trị đã lưu · ▶ Nghe thử không gọi server, ▶ Giọng AI đúng 1 lời gọi');
+    await q.close();
+
+    // ---- 7) phim xuất ra: nhúng clip AI ĐÃ có (dry), mở file:// không gọi mạng, giọng AI chỉ ở kiểu "tự động" ----
+    M.ids.clear(); M.fresh = 0; M.budget = Infinity; M.calls.length = 0;
+    q = await pg(await ctx10.newPage(), { page: 'works', work: WORK }); await q.waitForSelector('.shot'); await spyOn(q);
+    await q.selectOption('select[aria-label="Ngôn ngữ phim"]', 'en|us'); await q.waitForTimeout(300);
+    const exportFilm = async name => { const [dl] = await Promise.all([q.waitForEvent('download'), q.click('button:text-is("Phim (HTML)")')]); const f = path.join(home10, name); await dl.saveAs(f); return f; };
+    // chưa lồng tiếng câu nào: phim vẫn xuất được, 0/15 câu có giọng AI
+    let fp0 = await exportFilm('phim-0.html'), h0 = fs.readFileSync(fp0, 'utf8');
+    if (!/"voices":\{\}/.test(h0) || !/"lang":"en"/.test(h0) || !/"accent":"us"/.test(h0)) throw new Error('phim chưa lồng tiếng: DATA.voices phải rỗng, DATA.lang / accent phải theo tác phẩm');
+    if (!(await toasts(q)).some(t => /0\/15 câu có giọng AI/.test(t))) throw new Error('toast phim 0/15: ' + JSON.stringify(await toasts(q)));
+    await q.click(dubB); await q.waitForFunction(() => /Xong 15\/15 câu/.test(document.body.textContent), null, { timeout: 30000 });
+    M.calls.length = 0;
+    const fp = await exportFilm('phim-ai.html'), html = fs.readFileSync(fp, 'utf8');
+    if (M.calls.some(c => !c.dry)) throw new Error('xuất phim không được đọc mới: ' + JSON.stringify(M.calls.filter(c => !c.dry).length));
+    const dv = html.match(/var DATA = (\{.*?\});\nvar FILM/s), DATA = JSON.parse(dv[1]);
+    if (Object.keys(DATA.voices).length !== 15 || !Object.values(DATA.voices).every(v => /^data:audio\/wav;base64,UklGR/.test(v)) || DATA.lang !== 'en' || DATA.accent !== 'us') throw new Error('DATA.voices: ' + Object.keys(DATA.voices).length + ' clip, lang ' + DATA.lang);
+    if (!Object.keys(DATA.voices).every(k => /^[^|]+\|[a-z]+\|[a-z]+\|.+/.test(k))) throw new Error('khoá câu sai dạng: ' + Object.keys(DATA.voices)[0]);
+    if (html.indexOf('/* engine/voices.js */') < 0 || html.indexOf('/* engine/voices.js */') > html.indexOf('/* engine/audio.js */')) throw new Error('phim phải nhúng engine/voices.js TRƯỚC engine/audio.js');
+    if (!DATA.characters.every(c => c.voice && GV.ROLES[c.voice.role])) throw new Error('mọi nhân vật trong phim phải chốt vai giọng');
+    if (!(await toasts(q)).some(t => /15\/15 câu có giọng AI/.test(t) && /\((?:\d+(?:\.\d)?) (?:MB|KB)\)/.test(t))) throw new Error('toast phim thiếu "15/15 câu có giọng AI" + cỡ tệp: ' + JSON.stringify((await toasts(q)).slice(-2)));
+    // xuất khi trình duyệt chưa có clip nào trong bộ nhớ và server chỉ giữ MỘT PHẦN: câu thiếu bị bỏ qua, phim vẫn xuất
+    await q.reload(); await q.waitForSelector('.shot'); await spyOn(q); await q.selectOption('select[aria-label="Ngôn ngữ phim"]', 'en|us'); await q.waitForTimeout(300);
+    [...M.ids].slice(0, 6).forEach(i => M.ids.delete(i));
+    const fp2 = await exportFilm('phim-mot-phan.html'), D2 = JSON.parse(fs.readFileSync(fp2, 'utf8').match(/var DATA = (\{.*?\});\nvar FILM/s)[1]);
+    if (Object.keys(D2.voices).length !== 9 || !(await toasts(q)).some(t => /9\/15 câu có giọng AI \(câu còn lại dùng giọng máy đọc/.test(t))) throw new Error('xuất một phần: ' + Object.keys(D2.voices).length + ' clip');
+    await q.close();
+    // mở file:// — không một yêu cầu mạng; "tự động" dùng clip nhúng (data:), "máy đọc" bỏ qua clip; lời thoại chạy
+    const ff = await ctx10.newPage(), fe = []; ff.on('pageerror', e => fe.push(e.message)); ff.on('request', r => { if (!/^file:|^data:|^blob:/.test(r.url())) fe.push('gọi ra ngoài: ' + r.url()); });
+    await ff.goto('file://' + fp); await ff.waitForSelector('#voice');
+    if (!/có giọng AI/.test(await ff.$eval('#voice option', e => e.textContent))) throw new Error('phim có giọng AI mà ô giọng không nói');
+    await ff.evaluate(SPY_A); await ff.evaluate(() => { window.__realSay = true; }); await ff.click('#big');
+    await ff.waitForFunction(() => window.GenChibi.audio.__spy.length >= 3, null, { timeout: 60000 });
+    const fs1 = await ff.evaluate(() => ({ spy: window.GenChibi.audio.__spy.slice(), err: window.GenChibi.audio.info().clipError }));
+    if (!fs1.spy.slice(0, 3).every(s => s.clip && /^str:data:audio\/wav;base64/.test(s.clip)) || !fs1.spy.slice(0, 3).every(s => s.lang === 'en-US')) throw new Error('phim file://: kiểu tự động phải dùng clip nhúng + giọng en-US: ' + JSON.stringify(fs1.spy));
+    if (fs1.err) throw new Error('clip nhúng giải mã lỗi: ' + fs1.err);
+    await ff.click('#stop'); await ff.evaluate(() => { window.GenChibi.audio.__spy.length = 0; }); await ff.selectOption('#voice', 'tts'); await ff.click('#big');
+    await ff.waitForFunction(() => window.GenChibi.audio.__spy.length >= 2, null, { timeout: 60000 }); await ff.click('#stop');
+    if ((await ff.evaluate(() => window.GenChibi.audio.__spy.slice())).some(s => s.clip)) throw new Error('chọn máy đọc mà phim vẫn dùng clip AI');
+    if (fe.length) throw new Error('phim file:// lỗi: ' + fe.slice(0, 3).join(' | '));
+    await ff.close();
+    console.log('  ✓ Phim xuất ra: DATA.voices = 15 clip AI đã có (dry — không đọc mới, không tốn lượt) + DATA.lang / accent · engine/voices.js nhúng trước audio.js · chưa lồng tiếng → 0/15 vẫn xuất · server giữ một phần → 9/15, câu thiếu bị bỏ qua · toast "15/15 câu có giọng AI" + cỡ tệp · mở file://: không yêu cầu mạng, kiểu tự động phát clip nhúng (en-US), máy đọc bỏ qua clip');
+
+    // ---- 8) bộ phát thuần (không qua Studio): hỏi clip một lần mỗi câu từ đầu phân cảnh (≤ 2 song song), chờ ≤ 2,5 s, lỗi / quá hạn → giọng trình duyệt ----
+    q = await pg(await ctx10.newPage(), { page: 'works', work: WORK }); await q.waitForSelector('.shot'); await spyOn(q);
+    const unit = await q.evaluate(async ([WORK_]) => {
+      const GC = window.GenChibi, w = await fetch('api/works/' + WORK_).then(r => r.json()), shot = w.shots[0], nLines = shot.event.steps.length, out = {};
+      const box = document.createElement('div'); box.style.cssText = 'position:fixed;left:0;top:0;width:640px;z-index:99999'; document.body.appendChild(box);
+      const buf = new Uint8Array([1, 2, 3, 4]).buffer;
+      const run = async (voiceClip, need, opts) => {
+        const A = GC.audio; A.__spy.length = 0; const t0 = Date.now();
+        const P = GC.film.player(box, Object.assign({ voiceClip }, opts || {})); P.play([shot], 'T');
+        const t = Date.now(); while (A.__spy.length < need && Date.now() - t < 20000) await new Promise(r => setTimeout(r, 40));
+        const spy = A.__spy.slice(), at = Date.now() - t0; P.destroy(); await new Promise(r => setTimeout(r, 100)); return { spy, at };
+      };
+      // (a) clip có sẵn → hooks.clip; mỗi câu hỏi ĐÚNG một lần; ≤ 2 yêu cầu song song; lang / accent của tác phẩm vào giọng trình duyệt
+      let calls = [], live = 0, peak = 0;
+      const a = await run((line, asset) => { calls.push(line.say); live++; peak = Math.max(peak, live); return new Promise(r => setTimeout(() => { live--; r(buf); }, 250)); }, 1, { lang: 'zh', accent: 'tw' });
+      out.a = { clip: a.spy[0].clip, lang: a.spy[0].lang, calls: calls.length, uniq: new Set(calls).size, peak, nLines };
+      // (b) voiceClip ném lỗi / reject → giọng trình duyệt như cũ
+      const b = await run(() => Promise.reject(new Error('hỏng')), 1); out.b = { clip: b.spy[0].clip, lang: b.spy[0].lang };
+      const b2 = await run(() => { throw new Error('ném lỗi đồng bộ'); }, 1); out.b2 = { clip: b2.spy[0].clip };
+      // (c) quá hạn 2,5 s (mặc định) → bắt đầu nói bằng giọng trình duyệt, không chờ mãi
+      const c = await run(() => new Promise(r => setTimeout(() => r(buf), 8000)), 1); out.c = { clip: c.spy[0].clip, wait: c.at - b.at };
+      // (d) clipWait ngắn hơn / dài hơn theo opts
+      //     (clip hỏi từ đầu phân cảnh nên tới lượt nói thường đã về — chỉ câu CHƯA về mới phải chờ; hai ca dưới cho clip về rất muộn)
+      const d = await run(() => new Promise(r => setTimeout(() => r(buf), 7000)), 1, { clipWait: 300 }); out.d = { clip: d.spy[0].clip, wait: d.at - b.at };
+      const e = await run(() => new Promise(r => setTimeout(() => r(buf), 5000)), 1, { clipWait: () => 9000 }); out.e = { clip: e.spy[0].clip, wait: e.at - b.at };
+      // (f) trả thẳng (không Promise) + chuỗi data: URI
+      const f = await run(() => 'data:audio/wav;base64,AAAA', 1); out.f = { clip: f.spy[0].clip };
+      // (g) không có voiceClip: giọng trình duyệt như cũ, đúng ngôn ngữ
+      const g = await run(null, 1, { lang: 'en', accent: 'uk' }); out.g = { clip: g.spy[0].clip, lang: g.spy[0].lang };
+      // (h) khoá câu
+      out.key = GC.film.clipKey({ actor: 'x', state: 'rage', bubble: 'shout', say: ' Xin chào ' });
+      box.remove(); return out;
+    }, [WORK]);
+    if (unit.a.clip !== 'buf:4' || unit.a.lang !== 'zh-TW' && unit.a.lang !== 'zh-CN') throw new Error('(a) clip / ngôn ngữ: ' + JSON.stringify(unit.a));
+    if (unit.a.calls !== unit.a.nLines || unit.a.uniq !== unit.a.nLines || unit.a.peak > 2 || unit.a.peak < 2) throw new Error('(a) hỏi trước mọi câu một lần, ≤ 2 song song: ' + JSON.stringify(unit.a));
+    if (unit.b.clip || unit.b2.clip || unit.b.lang !== 'vi-VN') throw new Error('(b) lỗi phải rơi về giọng máy: ' + JSON.stringify([unit.b, unit.b2]));
+    if (unit.c.clip || unit.c.wait < 2000 || unit.c.wait > 3400) throw new Error('(c) chờ tối đa ~2,5 s rồi rơi về: ' + JSON.stringify(unit.c));
+    if (unit.d.clip || unit.d.wait > 1000 || unit.e.clip !== 'buf:4' || unit.e.wait < 1200) throw new Error('(d/e) clipWait theo opts (300 ms → rơi về ngay; hàm 9 s → chờ clip về): ' + JSON.stringify([unit.d, unit.e]));
+    if (!/^str:data:audio\/wav/.test(unit.f.clip)) throw new Error('(f) clip chuỗi: ' + JSON.stringify(unit.f));
+    if (unit.g.clip || unit.g.lang !== 'en-US') throw new Error('(g) không voiceClip: ' + JSON.stringify(unit.g));
+    if (unit.key !== 'x|rage|shout|Xin chào') throw new Error('khoá câu: ' + unit.key);
+    await q.close();
+    console.log('  ✓ Bộ phát (hợp đồng voiceClip): có clip → hooks.clip · mỗi câu hỏi đúng 1 lần, hỏi trước từ đầu phân cảnh, ≤ 2 song song · lỗi / ném lỗi / quá 2,5 s → giọng trình duyệt (clipWait chỉnh được) · lang / accent của tác phẩm vào giọng trình duyệt (zh-TW, en-US)');
+
+    if (M.leaks.length) throw new Error('có yêu cầu ra ngoài máy: ' + M.leaks.slice(0, 3).join(' | '));
+    if (errs10.length) throw new Error('lỗi trang: ' + errs10.slice(0, 3).join(' | '));
+  } catch (e) { fail = 1; console.log('  ✗ giọng AI theo vai:', e.message); if (errs10.length) console.log('    lỗi trang:', errs10.slice(0, 3).join(' | ')); if (q) { try { console.log('    trang đang mở:', q.url(), '·', (await q.evaluate(() => document.getElementById('view').innerText)).slice(0, 240).replace(/\n/g, ' / ')); } catch (e2) { /* trang đã đóng */ } } }
+  finally { await b10.close(); srv10.kill(); }
 }
 process.exit(fail);
