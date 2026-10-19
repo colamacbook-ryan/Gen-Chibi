@@ -153,7 +153,7 @@ const clone = o => JSON.parse(JSON.stringify(o));
     no(r.isError || /<script/i.test(r.content[1].resource.text) || r.structuredContent.sheet.cell.w !== 160 || r.structuredContent.fps > 30, 'render_action phải kẹp cell / fps (chuỗi lạ → mặc định)');
     const r2 = await m.callTool('render_action', { character: 'tq-trieu-van', action: 'thrust', cell: 1e7 });
     no(r2.structuredContent.sheet.cell.w !== 512, 'cell khổng lồ phải kẹp về 512');
-    console.log('   ✓ hoạt ảnh phủ trọn đòn (leap + ngã: ' + an.frames.length + ' khung ở ' + an.meta.fps + ' fps thay vì 30, khung cuối = ' + an.duration + ' s) · sprite sheet ' + ids.length + ' id không trùng, url(#) đều trỏ đúng · render_action kẹp cell / fps');
+    console.log('   ✓ hoạt ảnh phủ trọn đòn (leap + ngã: ' + an.frames.length + ' khung ở ' + an.meta.fps + ' fps thay vì 30, khung cuối = ' + an.duration + ' s) · sprite sheet ' + ids.length + ' id đều mang tiền tố khung, url(#) đều trỏ đúng · render_action kẹp cell / fps');
   }
 
   // ---------- 5. hợp đồng lỗi: MỌI lời gọi hỏng (mọi tool có thể thất bại) mở đầu [CODE] + structuredContent.error đủ trường

@@ -301,6 +301,32 @@ try {
     console.log('  ✓ Bộ chủ đề mẫu Tam Quốc một chạm: 7 tướng · 13 trang bị · 8 bối cảnh · dấu bộ mẫu Gen Labs (không xuất bán) → phim 6/6 phân cảnh sẵn sàng (có màn đấu)');
   } catch (e) { fail = 1; console.log('  ✗ dự án mẫu một chạm:', e.message); }
   try {
+    // hồi quy (review v0.16 #1): phim HTML xuất từ tác phẩm có đòn của gói động tác phải mang theo gói đó (DATA.motionPacks) —
+    // thiếu thì bộ phát không có đòn "combo / spin…", chương màn đấu bị loại (5/6) mà không báo lỗi
+    errs.length = 0;
+    await q.evaluate(() => localStorage.setItem('gc-route-tao-tac', JSON.stringify({ page: 'works', work: 'tq-vuon-dao-xich-bich' })));
+    await q.goto('http://localhost:7494/tao-tac'); await q.waitForSelector('#shot-canh-dau-tap');
+    const [fdl] = await Promise.all([q.waitForEvent('download'), q.click('button:text-is("Phim (HTML)")')]);
+    const fpath = path.join(home5, 'tam-quoc-phim.html'); await fdl.saveAs(fpath);
+    const fhtml = require('fs').readFileSync(fpath, 'utf8'), fm = fhtml.match(/var DATA = (.*);\nvar FILM/);
+    if (!fm) throw new Error('không tìm thấy DATA trong phim xuất ra');
+    const FD = JSON.parse(fm[1]);
+    if (!Array.isArray(FD.motionPacks) || !FD.motionPacks.some(x => x.id === 'tq-dong-tac' && x.actions && x.actions.combo)) throw new Error('DATA.motionPacks thiếu gói tq-dong-tac: ' + JSON.stringify(FD.motionPacks && FD.motionPacks.map(x => x.id)));
+    const ff = await b5.newPage({ viewport: { width: 1280, height: 900 } }), fe = [];
+    ff.on('pageerror', e => fe.push(e.message)); ff.on('requestfailed', r => fe.push('mạng: ' + r.url()));
+    await ff.goto('file://' + fpath); await ff.waitForTimeout(500);
+    const fr = await ff.evaluate(() => ({
+      chapters: document.querySelectorAll('#chapters li').length,
+      missing: GenChibi.film.readiness(FILM).filter(x => !x.ok).map(x => x.shot.id + ': ' + x.missing.join('+')),
+      warn: GenChibi.film.direct(FILM.shots.find(s => s.id === 'canh-dau-tap')).warnings
+    }));
+    await ff.close();
+    if (fr.chapters !== 6 || fr.missing.length || fr.warn.length) throw new Error('phim Tam Quốc xuất ra: ' + fr.chapters + '/6 chương, thiếu ' + JSON.stringify(fr.missing) + ', cảnh báo ' + JSON.stringify(fr.warn));
+    if (fe.length) throw new Error('phim xuất ra lỗi: ' + fe.slice(0, 3).join(' | '));
+    if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
+    console.log('  ✓ Phim HTML Tam Quốc: DATA.motionPacks có tq-dong-tac · mở file:// đủ 6/6 chương, màn đấu không thiếu đòn');
+  } catch (e) { fail = 1; console.log('  ✗ phim HTML Tam Quốc (gói động tác):', e.message); }
+  try {
     // v0.16 (Q9, ADR 0006): BẢNG BƯỚC — soạn kịch bản không cần AI. Ô chọn sinh từ lược đồ đạo diễn; ô Hành động chỉ có đòn người của hàng
     // làm được (needs); lỗi hiện cạnh hàng; lưu qua đúng đường lưu phân cảnh (server kiểm lại) → tải lại trang vẫn còn
     try {
@@ -335,6 +361,92 @@ try {
       if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
       console.log('  ✓ Bảng bước (không cần AI): 8 bước "Đấu tập"; ô action lọc theo người làm được (Gia Cát Lượng tay không: không có thrust); lỗi needs cạnh hàng; đổi đòn → lưu qua cổng → tải lại còn');
     } catch (e) { fail = 1; console.log('  ✗ bảng bước:', e.message); }
+    // Bảng bước — độ bền khi dùng thật (review v0.16): nền / kéo bôi chữ, cảnh báo đạo diễn không tính lại mỗi phím,
+    // tiêu điểm bàn phím, chặn đóng nhầm khi còn chữ chưa lưu, và đua giữa "đang lưu" với "sửa tiếp"
+    try {
+      errs.length = 0;
+      const route = () => q.evaluate(() => localStorage.setItem('gc-route-tao-tac', JSON.stringify({ page: 'works', work: 'tq-vuon-dao-xich-bich' })));
+      const fresh = async () => {   // trang mới + bảng bước mở sẵn; window.confirm do test điều khiển (ghi câu hỏi, trả lời theo window.__ans)
+        await route(); await q.goto('http://localhost:7494/tao-tac'); await q.waitForSelector('#shot-canh-dau-tap');
+        await q.evaluate(() => { window.__asked = []; window.__ans = false; window.confirm = m => { window.__asked.push(m); return window.__ans; }; });
+        await q.click('#shot-canh-dau-tap button:text-is("Bảng bước")'); await q.waitForSelector('.sheet table.stepgrid');
+      };
+      const active = () => q.evaluate(() => { const a = document.activeElement; return a ? { cell: a.getAttribute('data-cell'), chip: a.getAttribute('data-chip'), pressed: a.getAttribute('aria-pressed'), inSheet: !!a.closest('.sheet-back') } : null; });
+      const chipText = () => q.$$eval('.sheet .pad > .row.note .chip', e => e.map(x => x.textContent).join('|'));
+      // (1) kéo bôi chữ trong ô rồi nhả chuột ra nền KHÔNG đóng bảng; bấm thẳng vào nền thì đóng (bảng sạch)
+      await fresh();
+      const bb = await q.$eval('.sheet input[data-cell="0:say"]', e => { const r = e.getBoundingClientRect(); return { x: r.x + 10, y: r.y + r.height / 2 }; });
+      await q.mouse.move(bb.x, bb.y); await q.mouse.down(); await q.mouse.move(6, bb.y, { steps: 6 }); await q.mouse.up(); await q.waitForTimeout(150);
+      if (!(await q.$('.sheet'))) throw new Error('kéo bôi chữ rồi nhả ra nền làm đóng bảng bước');
+      await q.mouse.click(6, 450); await q.waitForTimeout(150);
+      if (await q.$('.sheet')) throw new Error('bấm vào nền không đóng bảng bước');
+      // (2) cảnh báo đạo diễn: tính lại khi CẤU TRÚC đổi, không tính lại và không nháy khi gõ lời thoại
+      await q.evaluate(() => { const F = GenChibi.film, o = F.direct; window.__direct = 0; F.direct = function () { window.__direct++; const p = o.apply(this, arguments); p.warnings = (p.warnings || []).concat(['CẢNH-BÁO-THỬ']); return p; }; });
+      await q.click('#shot-canh-dau-tap button:text-is("Bảng bước")'); await q.waitForSelector('.sheet table.stepgrid');
+      await q.waitForSelector('.sheet .note.warn', { timeout: 3000 });
+      const d0 = await q.evaluate(() => window.__direct);
+      await q.fill('.sheet input[data-cell="0:say"]', 'gõ dở một'); await q.keyboard.type(' hai ba');
+      if (!(await q.$('.sheet .note.warn'))) throw new Error('gõ lời thoại làm khung cảnh báo bị xoá (nháy)');
+      await q.waitForTimeout(800);
+      if ((await q.evaluate(() => window.__direct)) !== d0) throw new Error('gõ lời thoại làm tính lại cảnh báo đạo diễn (direct gọi lại)');
+      const a2 = await q.$eval('.sheet select[data-cell="2:action"]', x => x.value);
+      await q.selectOption('.sheet select[data-cell="2:action"]', a2 === 'thrust' ? 'sweep' : 'thrust');
+      await q.waitForFunction(n => window.__direct > n, d0, { timeout: 3000 });
+      // (3) tiêu điểm: chip hiệu ứng giữ tiêu điểm sau khi bật / tắt; xoá hàng thì tiêu điểm sang hàng kế (hết thì hàng trước)
+      await q.click('.sheet button[data-cell="0:more"]');
+      await q.click('.sheet .moregrid .fxchips button >> nth=0');
+      let fa = await active();
+      if (!fa || !/^0:fx:/.test(fa.chip || '') || fa.pressed !== 'true') throw new Error('chip fx mất tiêu điểm sau khi bật: ' + JSON.stringify(fa));
+      await q.keyboard.press('Space'); fa = await active();
+      if (!fa || !/^0:fx:/.test(fa.chip || '') || fa.pressed !== 'false') throw new Error('chip fx mất tiêu điểm sau khi tắt (bàn phím): ' + JSON.stringify(fa));
+      await q.click('.sheet button[aria-label="Xoá bước 3"]'); fa = await active();
+      if (!fa || fa.cell !== '2:say') throw new Error('xoá hàng giữa: tiêu điểm phải sang ô lời thoại hàng kế (2:say), đang ở ' + JSON.stringify(fa));
+      const nRows = await q.$$eval('.sheet tr[data-step]', e => e.length);
+      await q.click('.sheet button[aria-label="Xoá bước ' + nRows + '"]'); fa = await active();
+      if (!fa || fa.cell !== (nRows - 2) + ':say') throw new Error('xoá hàng cuối: tiêu điểm phải về hàng trước, đang ở ' + JSON.stringify(fa));
+      // (4) bảng đang sửa dở (bẩn): chặn đóng tab (beforeunload), Esc hỏi lại, Esc của bộ gõ (isComposing) không đóng, Tab xoay vòng trong bảng
+      const unload = () => q.evaluate(() => { const e = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(e); return e.defaultPrevented; });
+      if (!(await unload())) throw new Error('bảng bước còn thay đổi chưa lưu mà beforeunload không chặn');
+      await q.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', isComposing: true, bubbles: true })));
+      if (!(await q.$('.sheet')) || (await q.evaluate(() => window.__asked.length))) throw new Error('Esc đang gõ dở bộ gõ (isComposing) vẫn đóng / hỏi');
+      await q.focus('.sheet h3 button >> nth=0'); await q.keyboard.press('Shift+Tab');
+      if (!(await active() || {}).inSheet) throw new Error('Shift+Tab ở nút đầu bảng làm tiêu điểm thoát ra ngoài hộp thoại');
+      await q.keyboard.press('Escape');
+      if (!(await q.$('.sheet')) || !/chưa lưu/.test((await q.evaluate(() => window.__asked))[0] || '')) throw new Error('Esc khi còn thay đổi chưa lưu phải hỏi và (trả lời không) giữ bảng mở: ' + JSON.stringify(await q.evaluate(() => window.__asked)));
+      await q.evaluate(() => { window.__ans = true; }); await q.click('.sheet button:text-is("Đóng")');
+      if (await q.$('.sheet')) throw new Error('trả lời đồng ý mà bảng vẫn không đóng');
+      if (await unload()) throw new Error('đã đóng bảng mà beforeunload vẫn chặn (chưa gỡ)');
+      // (5) đua lưu: sửa tiếp trong lúc yêu cầu lưu còn bay → nút Lưu khoá (không gửi đôi), lưu xong vẫn "Chưa lưu", Esc vẫn hỏi, không mất chữ mới
+      await fresh();
+      const say0 = await q.$eval('.sheet input[data-cell="0:say"]', x => x.value);
+      let release; const gate = new Promise(r => { release = r; }); let posts = 0;
+      await q.route('**/api/works/*/shots', async rt => { if (rt.request().method() === 'POST') posts++; await gate; await rt.continue(); });
+      await q.fill('.sheet input[data-cell="0:say"]', say0 + ' [lưu-1]');
+      await q.click('.sheet button:text-is("Lưu bước")');
+      const saveBtn = () => q.$eval('.sheet h3 .btn.primary', x => ({ off: x.disabled, text: x.textContent }));
+      let sb = await saveBtn();
+      if (!sb.off) throw new Error('đang lưu mà nút Lưu chưa khoá: ' + JSON.stringify(sb));
+      await q.fill('.sheet input[data-cell="1:say"]', 'SỬA-TRONG-LÚC-LƯU');
+      sb = await saveBtn();
+      if (!sb.off) throw new Error('sửa trong lúc lưu làm nút Lưu bật lại (gửi đôi): ' + JSON.stringify(sb));
+      release();
+      await q.waitForFunction(() => document.querySelector('.sheet h3 .btn.primary').textContent === 'Lưu bước', null, { timeout: 5000 });
+      await q.unroute('**/api/works/*/shots');
+      if (posts !== 1) throw new Error('gửi lưu ' + posts + ' lần (cần đúng 1)');
+      const ch = await chipText();
+      if (/Đã lưu/.test(ch) || !/Chưa lưu/.test(ch)) throw new Error('sửa trong lúc lưu mà chip báo đã lưu (mất chữ âm thầm): ' + ch);
+      await q.keyboard.press('Escape');
+      if (!(await q.$('.sheet')) || !/chưa lưu/.test((await q.evaluate(() => window.__asked))[0] || '')) throw new Error('Esc sau khi lưu dở phải hỏi trước khi bỏ chữ mới');
+      const sw = await q.evaluate(() => fetch('api/works/tq-vuon-dao-xich-bich', { headers: { 'X-GC-Request': '1' } }).then(r => r.json()));
+      const st = sw.shots.find(x => x.id === 'canh-dau-tap').event.steps;
+      if (st[0].say !== say0 + ' [lưu-1]' || st[1].say === 'SỬA-TRONG-LÚC-LƯU') throw new Error('server giữ sai bản: bước 1 "' + st[0].say + '", bước 2 "' + st[1].say + '"');
+      await q.click('.sheet button:text-is("Lưu bước")');   // lưu lại phần sửa thêm → mới "Đã lưu"
+      await q.waitForFunction(() => /Đã lưu/.test(document.querySelector('.sheet .pad > .row.note').textContent), null, { timeout: 5000 });
+      await q.keyboard.press('Escape');
+      if (await q.$('.sheet') || (await q.evaluate(() => window.__asked.length)) !== 1) throw new Error('bảng sạch: Esc phải đóng ngay, không hỏi thêm');
+      if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
+      console.log('  ✓ Bảng bước bền: kéo bôi chữ ra nền không đóng · cảnh báo đạo diễn không tính lại khi gõ (có khi đổi đòn) · tiêu điểm giữ ở chip / sang hàng kế khi xoá · Esc / đóng tab hỏi khi chưa lưu · sửa trong lúc lưu không bị coi là đã lưu');
+    } catch (e) { fail = 1; console.log('  ✗ bảng bước (độ bền):', e.message); }
     // v0.16 (Q9): THƯ VIỆN › ĐỘNG TÁC — đòn khung + gói động tác; xem trước chạy thật; tải PNG sprite sheet / GIF / JSON timeline;
     // nhân vật không làm được đòn (needs) thì báo vì sao, không dựng; nhập gói hỏng → hiện lỗi 422, gói đúng → có nhóm mới
     try {
@@ -343,9 +455,14 @@ try {
       await q.goto('http://localhost:7494/thu-vien'); await q.waitForSelector('.libcard.act');
       const nFrame = await q.$$eval('[data-pack="gen.dong-tac"] .libcard.act', e => e.length), nTq = await q.$$eval('[data-pack="local.my/tq-dong-tac"] .libcard.act', e => e.length);
       if (nFrame < 16 || nTq < 1) throw new Error('danh sách: ' + nFrame + ' đòn khung, ' + nTq + ' đòn của gói tq-dong-tac');
-      await q.click('.libcard.act[data-action="thrust"]');
+      // Gia Cát Lượng (tay không) chọn đòn ai cũng làm được → rồi đổi sang đòn binh khí: báo vì sao + không dựng; trong ô chọn người, ai không làm được thì mờ kèm lý do
+      await q.click('.libcard.act[data-action="punch"]');
       await q.selectOption('.sticky select[aria-label="Nhân vật"]', 'local.my/tq-gia-cat-luong');
+      await q.click('.libcard.act[data-action="thrust"]');
       if (!/không làm được/.test(await q.textContent('.sticky .banner.bad')) || await q.$('.mstage')) throw new Error('người tay không chọn đòn binh khí: phải báo vì sao và không dựng');
+      const opts = await q.$$eval('.sticky select[aria-label="Nhân vật"] option', os => os.map(o => ({ v: o.value, off: o.disabled, t: o.textContent })));
+      const oG = opts.find(o => o.v === 'local.my/tq-gia-cat-luong'), oT = opts.find(o => o.v === 'local.my/tq-trieu-van');
+      if (!oG || !oG.off || !/cần binh khí/.test(oG.t) || !oT || oT.off) throw new Error('ô chọn người ra đòn "thrust": Gia Cát Lượng phải mờ + "cần binh khí", Triệu Vân chọn được: ' + JSON.stringify([oG, oT]));
       await q.selectOption('.sticky select[aria-label="Nhân vật"]', 'local.my/tq-trieu-van');
       const fr = new Set(); for (let k = 0; k < 10; k++) { await q.waitForTimeout(120); fr.add(await q.getAttribute('.mstage', 'data-frame')); }
       if (fr.size < 3) throw new Error('xem trước không chạy (khung: ' + [...fr].join(',') + ')');
@@ -355,6 +472,29 @@ try {
       if (gif.buf.slice(0, 6).toString() !== 'GIF89a' || gif.buf.length < 1024) throw new Error('GIF: ' + gif.name + ' ' + gif.buf.length + ' B');
       const meta = JSON.parse(js.buf.toString());
       if (meta.format !== 'gen-chibi.anim/1' || meta.frames.length !== meta.frameCount) throw new Error('JSON timeline: ' + JSON.stringify(meta).slice(0, 160));
+      // nhân vật của bộ mẫu Gen Labs: giấy phép là điều khoản bộ mẫu, KHÔNG phải "thuộc người tạo"; gói của bộ mẫu tải về mang dấu sample
+      if (!/Bộ mẫu Gen Labs — chỉ để xem, thử, quay phim; không bán lại, không phân phối/.test(meta.license) || /thuộc người tạo/.test(meta.license) || !meta.sample || meta.sample.owner !== 'Gen Labs') throw new Error('giấy phép JSON của nhân vật bộ mẫu: ' + JSON.stringify([meta.license, meta.sample]));
+      const [tqp] = await Promise.all([q.waitForEvent('download'), q.click('[data-pack="local.my/tq-dong-tac"] button:text-is("Tải gói (.json)")')]);
+      const tqj = JSON.parse(require('fs').readFileSync(await tqp.path(), 'utf8'));
+      if (!tqj.sample || tqj.sample.owner !== 'Gen Labs' || !/không bán lại/.test(tqj.sample.license) || tqj.key) throw new Error('tải gói bộ mẫu thiếu dấu sample: ' + JSON.stringify(tqj.sample));
+      // đòn của khung với nhân vật của khung (không thuộc bộ mẫu nào): giữ câu cũ
+      await q.click('.libcard.act[data-action="wave"]'); await q.selectOption('.sticky select[aria-label="Nhân vật"]', 'gen.khung/ma-no-canh');
+      const wv = JSON.parse((await grab('JSON')).buf.toString());
+      if (/Bộ mẫu/.test(wv.license) || wv.sample) throw new Error('nhân vật của khung bị ghi nhầm giấy phép bộ mẫu: ' + wv.license);
+      await q.click('.libcard.act[data-action="thrust"]'); await q.selectOption('.sticky select[aria-label="Nhân vật"]', 'local.my/tq-trieu-van');
+      // đòn dài: engine tự hạ fps cho đủ cả đòn (anim.fps < fps đã chọn) → Studio nói rõ, GIF / JSON / tên tệp theo fps thật; cắt cụt thì cảnh báo.
+      // (giả lập engine trả về fps đã hạ + cờ truncated để kiểm phần hiển thị của Studio — phần tính fps của engine do bài test engine kiểm)
+      await q.evaluate(() => { const C = GenChibi.choreo, o = C.animate; window.__animate0 = o; C.animate = function (tl, op) { const a = o.call(C, tl, { fps: Math.min(op.fps, 8) }); a.meta.requestedFps = op.fps; if (op.fps >= 24) a.meta.truncated = true; return a; }; });
+      await q.click('.sticky .seg button:text-is("24 fps")');
+      const fnote = await q.textContent('.sticky [data-note="fps"]');
+      if (!/tự hạ còn 8 fps/.test(fnote) || !/24/.test(fnote)) throw new Error('thiếu ghi chú tự hạ fps: ' + fnote);
+      if (!/bị cắt/.test(await q.textContent('.sticky [data-note="truncated"]'))) throw new Error('đòn bị cắt cụt mà không cảnh báo');
+      const g8 = await grab('GIF'), j8 = await grab('JSON'), m8 = JSON.parse(j8.buf.toString());
+      const dl8 = []; for (let i = 0; i < g8.buf.length - 6; i++) if (g8.buf[i] === 0x21 && g8.buf[i + 1] === 0xF9 && g8.buf[i + 2] === 4) dl8.push(g8.buf.readUInt16LE(i + 4));
+      if (g8.name !== 'tq-trieu-van-thrust-8fps.gif' || m8.fps !== 8 || dl8.length !== m8.frameCount || dl8[0] < 12 || dl8[0] > 13) throw new Error('GIF / JSON phải theo fps thật (8): ' + JSON.stringify([g8.name, m8.fps, dl8.slice(0, 3), dl8.length, m8.frameCount]));
+      await q.evaluate(() => { GenChibi.choreo.animate = window.__animate0; });
+      await q.click('.sticky .seg button:text-is("12 fps")');
+      if (await q.$('.sticky [data-note]')) throw new Error('đòn vừa khung mà vẫn hiện ghi chú / cảnh báo fps');
       // GIF giải mã được thật bằng bộ giải mã của trình duyệt: đủ khung, lặp vô hạn
       const dec = await q.evaluate(async b64 => {
         if (!('ImageDecoder' in window)) return null;
@@ -369,13 +509,40 @@ try {
       await imp(pf('hong.json', { id: 'ci-hong', name: 'Hỏng', actions: { zap: { label: 'Zap', clips: ['khongCo'] } } }));
       await q.waitForSelector('.motions .banner.bad');
       if (!/khongCo/.test(await q.textContent('.motions .banner.bad'))) throw new Error('gói hỏng: không hiện lỗi 422 chi tiết');
+      // gói nhập về thuộc dự án chọn ở ô "Nhập vào dự án" (mặc định dự án vừa dùng, TRỪ dự án mẫu); "Chưa xếp dự án" thì là gói chung
+      await q.evaluate(async () => {
+        const r = await fetch('api/projects', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify({ id: 'ci-du-an', name: 'Dự án CI' }) });
+        if (!r.ok) throw new Error('không tạo được dự án: ' + r.status);
+        localStorage.setItem('gc-last-project', 'mau-tam-quoc');
+      });
+      await q.reload(); await q.waitForSelector('.libcard.act');
+      const PICK = '#actions select[aria-label="Dự án chủ đề"]';
+      if ((await q.inputValue(PICK)) !== '') throw new Error('ô "Nhập vào dự án" không được mặc định là dự án MẪU (gói tự làm sẽ mang dấu mẫu): ' + await q.inputValue(PICK));
       await imp(pf('dung.json', { id: 'ci-chao', name: 'Chào CI', actions: { ciBow: { label: 'Chào rồi vẫy', clips: ['salute', 'wave'] } } }));
       await q.waitForSelector('[data-pack="local.my/ci-chao"] .libcard.act[data-action="ciBow"]', { timeout: 5000 });
+      await q.selectOption(PICK, '');
+      await imp(pf('chung.json', { id: 'ci-chung', name: 'Chung CI', actions: { ciNod: { label: 'Gật đầu chào', clips: ['wave', 'salute'] } } }));
+      await q.waitForSelector('[data-pack="local.my/ci-chung"] .libcard.act[data-action="ciNod"]', { timeout: 5000 });
+      await q.selectOption(PICK, 'ci-du-an');
+      await imp(pf('khac.json', { id: 'ci-khac', name: 'Khác CI', actions: { ciOther: { label: 'Chào dự án khác', clips: ['salute', 'wave'] } } }));
+      await q.waitForSelector('[data-pack="local.my/ci-khac"] .libcard.act[data-action="ciOther"]', { timeout: 5000 });
+      const pj = await q.evaluate(() => fetch('api/motion-packs', { headers: { 'X-GC-Request': '1' } }).then(r => r.json()).then(l => Object.fromEntries(l.map(x => [x.id, x.project || '']))));
+      if (pj['ci-chao'] !== '' || pj['ci-chung'] !== '' || pj['ci-khac'] !== 'ci-du-an') throw new Error('dự án của gói nhập: ' + JSON.stringify(pj));
+      if (!/Dự án · Dự án CI/.test(await q.textContent('[data-pack="local.my/ci-khac"] .packmeta')) || !/Chưa xếp dự án/.test(await q.textContent('[data-pack="local.my/ci-chung"] .packmeta'))) throw new Error('nhãn dự án của gói nhập sai');
+      // gói nhập dùng được trong Bảng bước: gói của dự án đúng dàn diễn viên + gói chung có mặt; gói của dự án khác thì không
+      await q.evaluate(() => localStorage.setItem('gc-route-tao-tac', JSON.stringify({ page: 'works', work: 'tq-vuon-dao-xich-bich' })));
+      await q.goto('http://localhost:7494/tao-tac'); await q.waitForSelector('#shot-canh-dau-tap');
+      await q.click('#shot-canh-dau-tap button:text-is("Bảng bước")'); await q.waitForSelector('.sheet table.stepgrid');
+      const sheetActs = await q.$$eval('.sheet select[data-cell="0:action"] option', o => o.map(x => x.value));
+      if (!sheetActs.includes('ciBow') || !sheetActs.includes('ciNod') || sheetActs.includes('ciOther')) throw new Error('Bảng bước thiếu / thừa đòn của gói nhập: ' + sheetActs.join(','));
+      await q.keyboard.press('Escape');
+      await q.evaluate(() => localStorage.setItem('gc-route-thu-vien', JSON.stringify({ page: 'lib-motions' })));
+      await q.goto('http://localhost:7494/thu-vien'); await q.waitForSelector('.libcard.act');
       const [pk] = await Promise.all([q.waitForEvent('download'), q.click('[data-pack="local.my/ci-chao"] button:text-is("Tải gói (.json)")')]);
       const pkj = JSON.parse(require('fs').readFileSync(await pk.path(), 'utf8'));
       if (pkj.id !== 'ci-chao' || !pkj.actions.ciBow || pkj.key) throw new Error('tải gói: ' + JSON.stringify(pkj).slice(0, 120));
       if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
-      console.log('  ✓ Thư viện › Động tác: ' + nFrame + ' đòn khung + gói tq-dong-tac · báo rõ người tay không · xem trước chạy · tải PNG sprite sheet, GIF ' + meta.frameCount + ' khung (giải mã được, lặp vô hạn), JSON gen-chibi.anim/1 · nhập gói: 422 hiện lỗi, gói đúng thêm nhóm');
+      console.log('  ✓ Thư viện › Động tác: ' + nFrame + ' đòn khung + gói tq-dong-tac · báo rõ người tay không · xem trước chạy · tải PNG sprite sheet, GIF ' + meta.frameCount + ' khung (giải mã được, lặp vô hạn), JSON gen-chibi.anim/1 · ô chọn người ra đòn mờ người không làm được · fps tự hạ + cảnh báo cắt cụt, GIF / JSON theo fps thật · giấy phép bộ mẫu trong JSON / gói tải về · nhập gói: 422 hiện lỗi, gói vào đúng dự án (hoặc gói chung) và dùng được trong Bảng bước');
     } catch (e) { fail = 1; console.log('  ✗ Thư viện › Động tác:', e.message); }
   } finally { await b5.close(); srv5.kill(); }
 }

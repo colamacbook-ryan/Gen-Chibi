@@ -3,6 +3,7 @@
  *
  * Dùng cho Thư viện › Động tác: xuất hoạt ảnh một đòn thành GIF lặp vô hạn, nền trong suốt.
  *   GenGif.encode({ width, height, frames: [RGBA Uint8ClampedArray…], fps | delays: [phần trăm giây…], loop: 0 }) → Uint8Array
+ *   GenGif.encodeAsync(cùng tham số, onProgress(i, n)) → Promise<Uint8Array> — nhả luồng giữa các khung
  * Các bước: (1) lượng tử hoá — một bảng màu chung ≤ 255 màu cho mọi khung (median cut trên lưới màu 15 bit) + 1 màu trong suốt;
  *           (2) mỗi khung → chỉ số màu (alpha < 128 = trong suốt); (3) nén LZW theo chuẩn GIF (mã 9…12 bit, khối con ≤ 255 byte).
  * Hình chibi là vector màu phẳng nên median cut không cần dither; mép bán trong suốt cắt theo ngưỡng alpha (GIF chỉ có 1 bit trong suốt).
@@ -120,7 +121,8 @@
   }
 
   /* ---------------------------------------------------------- 3. GHÉP TỆP GIF89a */
-  function encode(o) {
+  // begin → emit(từng khung) → finish; encode() chạy liền một mạch, encodeAsync() nhả luồng giữa các khung (trang không đơ khi khung lớn)
+  function begin(o) {
     var W = o.width | 0, H = o.height | 0, frames = o.frames || [];
     if (!(W > 0 && H > 0 && W < 65536 && H < 65536)) throw new Error('GIF: kích thước không hợp lệ');
     if (!frames.length) throw new Error('GIF: chưa có khung nào');
@@ -135,18 +137,40 @@
     out.bytes(Q.palette, 768);
     // lặp (NETSCAPE2.0): 0 = vô hạn
     out.push(0x21); out.push(0xFF); out.push(11); out.str('NETSCAPE2.0'); out.push(3); out.push(1); out.u16(o.loop == null ? 0 : o.loop); out.push(0);
-    frames.forEach(function (px, i) {
-      out.push(0x21); out.push(0xF9); out.push(4);
-      out.push(0x09);               // xử lý khung cũ: xoá về nền (2 << 2) · có màu trong suốt
-      out.u16(delays[i] || 10); out.push(TRANSPARENT); out.push(0);
-      out.push(0x2C); out.u16(0); out.u16(0); out.u16(W); out.u16(H); out.push(0);
-      lzw(indexFrame(px, Q.index), 8, out);
+    return { W: W, H: H, frames: frames, delays: delays, Q: Q, out: out };
+  }
+  function emit(S, i) {
+    var out = S.out;
+    out.push(0x21); out.push(0xF9); out.push(4);
+    out.push(0x09);               // xử lý khung cũ: xoá về nền (2 << 2) · có màu trong suốt
+    out.u16(S.delays[i] || 10); out.push(TRANSPARENT); out.push(0);
+    out.push(0x2C); out.u16(0); out.u16(0); out.u16(S.W); out.u16(S.H); out.push(0);
+    lzw(indexFrame(S.frames[i], S.Q.index), 8, out);
+  }
+  function finish(S) { S.out.push(0x3B); return S.out.out(); }
+  function encode(o) {
+    var S = begin(o);
+    for (var i = 0; i < S.frames.length; i++) emit(S, i);
+    return finish(S);
+  }
+  // onProgress(i, n) sau mỗi khung; mỗi khung một lượt setTimeout(0) để trình duyệt kịp vẽ / nhận thao tác
+  function encodeAsync(o, onProgress) {
+    return new Promise(function (resolve, reject) {
+      var S, i = 0;
+      function step() {
+        try {
+          if (i >= S.frames.length) { resolve(finish(S)); return; }
+          emit(S, i++);
+          if (onProgress) onProgress(i, S.frames.length);
+          setTimeout(step, 0);
+        } catch (e) { reject(e); }
+      }
+      try { S = begin(o); } catch (e) { reject(e); return; }
+      setTimeout(step, 0);   // nhả luồng một nhịp sau bước lượng tử hoá (nặng nhất)
     });
-    out.push(0x3B);
-    return out.out();
   }
 
-  var api = { encode: encode, quantize: quantize, TRANSPARENT: TRANSPARENT };
+  var api = { encode: encode, encodeAsync: encodeAsync, quantize: quantize, TRANSPARENT: TRANSPARENT };
   root.GenGif = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

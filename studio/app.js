@@ -1197,7 +1197,8 @@
     Promise.all(srcs.map(function (f) { return fetch(f).then(function (r) { if (!r.ok) throw new Error('Không tải được ' + f); return r.text(); }); }))
       .then(function (texts) {
         var pick = function (o, keys) { var r = {}; keys.forEach(function (k) { if (o[k] !== undefined) r[k] = o[k]; }); return r; };
-        data = { parts: data.parts, characters: data.characters.map(function (a) {
+        // motionPacks phải giữ lại ở đây: dựng lại `data` mà bỏ nó thì bộ phát không nạp gói nào và phim mất các chương dùng đòn của gói
+        data = { parts: data.parts, motionPacks: data.motionPacks, characters: data.characters.map(function (a) {
             // giọng chốt sẵn lúc xuất (nhân vật chưa lưu giọng thì lấy giọng Studio đang dùng — không xuất persona)
             var o = pick(a, ['id', 'pack', 'name', 'version', 'look', 'expressions', 'kind', 'voice', 'role']);
             if (!o.voice && GC.audio) o.voice = GC.audio.voiceOf(a);
@@ -1295,6 +1296,8 @@
   // cfg: { base: { title, description, scene, cast }, event, chars (diễn viên chọn được, đã xếp), save(shot) → Promise, close() }
   function stepSheet(cfg) {
     var C = GC.choreo, base = cfg.base, cast = base.cast.slice(), dirty = false, alive = true, warnTimer = 0, serverErrs = [];
+    // rev tăng mỗi lần sửa: lưu xong chỉ xoá "chưa lưu" khi trong lúc chờ không sửa thêm; saving khoá nút Lưu suốt lúc chờ (không gửi đôi)
+    var rev = 0, saving = false, downOnBack = false, warnSig = null, warnPend = null;
     var evTitle = (cfg.event && cfg.event.title) || base.title || 'Phân cảnh';
     var rows = cfg.event && Array.isArray(cfg.event.steps) ? clone(cfg.event.steps) : [];
     var scene = base.scene ? GC.getScene(base.scene, MY_PACK) : null;
@@ -1322,7 +1325,8 @@
       var cs = castAssets(), all = cs.length ? GC.director.validate(eventNow(), cs) : ['Chọn ít nhất một diễn viên cho phân cảnh.'];
       if (scene && cs.length > scene.spots.length) all.push('Bối cảnh "' + scene.name + '" chỉ mở ' + scene.spots.length + ' chỗ đứng — bớt diễn viên.');
       var byRow = rows.map(function () { return []; }), glob = [];
-      all.forEach(function (m) { var x = /^Cảnh (\d+): (.*)$/.exec(m); if (x && byRow[+x[1] - 1]) byRow[+x[1] - 1].push(x[2]); else glob.push(m); });
+      // bộ kiểm báo lỗi theo đường dẫn máy "steps[i].trường: …" (i từ 0): đặt lỗi cạnh đúng hàng, lỗi chung / không khớp thì để ở đầu bảng
+      all.forEach(function (m) { var x = /^steps\[(\d+)\](?:\.[A-Za-z]+)?: (.*)$/.exec(m); if (x && byRow[+x[1]]) byRow[+x[1]].push(x[2]); else glob.push(m); });
       return { total: all.length, rows: byRow, global: glob };
     }
     // ---- khung
@@ -1330,7 +1334,9 @@
     var table = h('table', { class: 'grid stepgrid' }), foot = h('div', { class: 'row note' });
     var addB = h('button', { class: 'btn sm', onclick: function () { addRow(); } }, '+ Thêm bước');
     var saveB = h('button', { class: 'btn sm primary', onclick: save }, 'Lưu bước');
-    var el = h('div', { class: 'sheet-back', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Bảng bước · ' + base.title, onclick: function (ev) { if (ev.target === el) close(); } },
+    var el = h('div', { class: 'sheet-back', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Bảng bước · ' + base.title, onmousedown: function (ev) { downOnBack = ev.target === el; },
+      // chỉ đóng khi nhấn xuống VÀ nhả đều ở nền: kéo bôi chữ trong ô rồi nhả ra ngoài thì "click" rơi vào nền nhưng không được đóng
+      onclick: function (ev) { var ok = downOnBack && ev.target === el; downOnBack = false; if (ok) close(); } },
       h('div', { class: 'panel sheet' },
         h('h3', null, 'Bảng bước', h('span', { class: 'note', style: 'text-transform:none;letter-spacing:0', text: base.title }),
           h('span', { class: 'r row', style: 'gap:6px' }, addB, saveB, h('button', { class: 'btn sm', onclick: function () { close(); } }, 'Đóng'))),
@@ -1339,9 +1345,25 @@
             h('span', { class: 'note', style: 'margin-left:auto', text: scene ? 'Bối cảnh: ' + scene.name + ' · ' + scene.spots.length + ' chỗ đứng' : 'Chưa chọn bối cảnh — chọn ở phân cảnh để dùng "Chỗ đứng".' })),
           h('div', { class: 'note', text: 'Soạn không cần AI: mỗi hàng một bước. Ô chọn lấy từ lược đồ đạo diễn; "Hành động" chỉ có đòn diễn viên của hàng làm được. Đòn đánh cần đối thủ; phản ứng là của đối thủ.' }),
           globBox, h('div', { class: 'scroll stepwrap' }, table), foot, warnBox)));
-    function onKey(ev) { if (ev.key === 'Escape' && alive) { ev.preventDefault(); close(); } }
+    // Esc đóng (bỏ qua Esc đang dùng để thoát bộ gõ tiếng Việt / IME); Tab xoay vòng trong hộp thoại (aria-modal)
+    function onKey(ev) {
+      if (!alive) return;
+      if (ev.key === 'Escape') { if (ev.isComposing || ev.keyCode === 229) return; ev.preventDefault(); close(); }
+      else if (ev.key === 'Tab') trap(ev);
+    }
+    function trap(ev) {
+      var f = Array.prototype.filter.call(el.querySelectorAll('button, input, select, textarea, [tabindex]:not([tabindex="-1"])'), function (x) { return !x.disabled && x.offsetParent !== null; });
+      if (!f.length) return;
+      var a = document.activeElement, first = f[0], last = f[f.length - 1];
+      if (!el.contains(a)) { ev.preventDefault(); first.focus(); }
+      else if (ev.shiftKey && a === first) { ev.preventDefault(); last.focus(); }
+      else if (!ev.shiftKey && a === last) { ev.preventDefault(); first.focus(); }
+    }
+    // đóng tab / tải lại khi còn thay đổi chưa lưu: trình duyệt hỏi lại (gỡ ở destroy)
+    function onUnload(ev) { if (alive && dirty) { ev.preventDefault(); ev.returnValue = ''; return ''; } }
     document.addEventListener('keydown', onKey);
-    function touch() { dirty = true; serverErrs = []; }
+    window.addEventListener('beforeunload', onUnload);
+    function touch() { dirty = true; rev++; serverErrs = []; }
     function set(i, k, v) {
       var r = rows[i];
       if (v === '' || v == null || (Array.isArray(v) && !v.length)) delete r[k]; else r[k] = v;
@@ -1415,7 +1437,7 @@
         if (!SCH[k]) return;
         var cur = (r[k] || []).slice(), chips = h('div', { class: 'fxchips' }), max = SCH[k].maxItems || 3;
         (SCH[k].items.enum || []).forEach(function (v) {
-          chips.appendChild(h('button', { 'aria-pressed': String(cur.indexOf(v) >= 0), onclick: function () {
+          chips.appendChild(h('button', { 'aria-pressed': String(cur.indexOf(v) >= 0), 'data-chip': i + ':' + k + ':' + v, onclick: function () {
             var j = cur.indexOf(v); if (j >= 0) cur.splice(j, 1); else if (cur.length < max) cur.push(v); else { toast('Tối đa ' + max + ' mục.'); return; }
             set(i, k, cur);
           } }, enumLabel(k, v)));
@@ -1436,7 +1458,9 @@
       });
     }
     function paint() {
-      var focus = document.activeElement && document.activeElement.getAttribute && document.activeElement.getAttribute('data-cell');
+      // vẽ lại cả bảng nên nhớ ô / chip đang giữ tiêu điểm để trả lại sau khi vẽ
+      var ae = document.activeElement, focus = null;
+      ['data-cell', 'data-chip'].forEach(function (a) { if (!focus && ae && ae.getAttribute && ae.getAttribute(a)) focus = [a, ae.getAttribute(a)]; });
       clear(table); idCells = []; errRows = [];
       var lt = h('tr', { class: 'letters' }, h('td'));
       COLS.forEach(function (c, j) { lt.appendChild(h('td', { text: String.fromCharCode(65 + j) })); });
@@ -1450,9 +1474,9 @@
         var tr = h('tr', { 'data-step': String(i) }, idc);
         COLS.forEach(function (c) { tr.appendChild(h('td', { class: 'c-' + c[0] }, cells[c[0]])); });
         tr.appendChild(h('td', { class: 'ops' },
-          h('button', { class: 'btn sm ic', disabled: i ? null : true, title: 'Lên', 'aria-label': 'Đưa bước ' + (i + 1) + ' lên', onclick: function () { move(i, -1); } }, '↑'),
-          h('button', { class: 'btn sm ic', disabled: i < rows.length - 1 ? null : true, title: 'Xuống', 'aria-label': 'Đưa bước ' + (i + 1) + ' xuống', onclick: function () { move(i, 1); } }, '↓'),
-          h('button', { class: 'btn sm ic danger', disabled: rows.length > 1 ? null : true, title: 'Xoá bước', 'aria-label': 'Xoá bước ' + (i + 1), onclick: function () { rows.splice(i, 1); opened = {}; touch(); paint(); } }, '✕')));
+          h('button', { class: 'btn sm ic', 'data-op': 'up', disabled: i ? null : true, title: 'Lên', 'aria-label': 'Đưa bước ' + (i + 1) + ' lên', onclick: function () { move(i, -1); } }, '↑'),
+          h('button', { class: 'btn sm ic', 'data-op': 'down', disabled: i < rows.length - 1 ? null : true, title: 'Xuống', 'aria-label': 'Đưa bước ' + (i + 1) + ' xuống', onclick: function () { move(i, 1); } }, '↓'),
+          h('button', { class: 'btn sm ic danger', disabled: rows.length > 1 ? null : true, title: 'Xoá bước', 'aria-label': 'Xoá bước ' + (i + 1), onclick: function () { rows.splice(i, 1); opened = {}; touch(); paint(); focusRow(Math.min(i, rows.length - 1)); } }, '✕')));
         table.appendChild(tr);
         if (opened[i]) table.appendChild(moreRow(r, i));
         var er = h('tr', { class: 'errrow', hidden: true }, h('td', { class: 'id' }), h('td', { colspan: SPAN - 1 }));
@@ -1460,10 +1484,17 @@
         idCells.push(idc); errRows.push(er);
       });
       addB.disabled = rows.length >= MAX;
-      if (focus) { var f = table.querySelector('[data-cell="' + focus + '"]'); if (f) f.focus(); }
+      if (focus) { var f = table.querySelector('[' + focus[0] + '="' + focus[1] + '"]'); if (f) f.focus(); }
       check();
     }
-    function move(i, d) { var x = rows.splice(i, 1)[0]; rows.splice(i + d, 0, x); opened = {}; touch(); paint(); }
+    // tiêu điểm về ô lời thoại của hàng j (sau khi xoá hàng: hàng kế, hết hàng kế thì hàng trước)
+    function focusRow(j) { var f = table.querySelector('[data-cell="' + j + ':say"]'); if (f) f.focus(); }
+    // sau khi đổi chỗ hàng: tiêu điểm theo hàng đó (nút cùng chiều; hết chỗ đi thì nút ngược chiều)
+    function move(i, d) {
+      var x = rows.splice(i, 1)[0]; rows.splice(i + d, 0, x); opened = {}; touch(); paint();
+      var j = i + d, f = [d < 0 ? 'up' : 'down', d < 0 ? 'down' : 'up'].map(function (o) { return table.querySelector('tr[data-step="' + j + '"] [data-op="' + o + '"]'); }).filter(function (b) { return b && !b.disabled; })[0];
+      if (f) f.focus();
+    }
     function addRow() {
       if (rows.length >= MAX) return;
       var last = rows[rows.length - 1], ids = SCH.actor.enum || [];
@@ -1490,15 +1521,23 @@
       foot.appendChild(h('span', { class: 'mono', text: rows.length + ' / ' + MAX + ' bước' }));
       foot.appendChild(E.total ? h('span', { class: 'chip bad', text: '✗ ' + E.total + ' lỗi' }) : h('span', { class: 'chip ok', text: '✓ Hợp lệ theo lược đồ đạo diễn' }));
       foot.appendChild(h('span', { class: dirty ? 'chip warn' : 'chip', text: dirty ? 'Chưa lưu' : 'Đã lưu' }));
-      saveB.disabled = !!E.total;
-      saveB.title = E.total ? 'Sửa ' + E.total + ' lỗi trước khi lưu' : 'Lưu phân cảnh (server kiểm lại bằng cùng cổng)';
-      clearTimeout(warnTimer);
-      clear(warnBox);
-      if (!E.total) warnTimer = setTimeout(warnings, 450);
+      saveB.disabled = !!E.total || saving;
+      saveB.title = saving ? 'Đang lưu…' : E.total ? 'Sửa ' + E.total + ' lỗi trước khi lưu' : 'Lưu phân cảnh (server kiểm lại bằng cùng cổng)';
+      // cảnh báo đạo diễn chỉ tính lại khi cấu trúc đổi (diễn viên / đòn / đối thủ / phản ứng / chỗ đứng / dàn / bối cảnh), không tính lại mỗi phím gõ lời thoại;
+      // không xoá khung cảnh báo giữa chừng (tránh nháy) — chỉ xoá khi kịch bản đang lỗi
+      if (E.total) { clearTimeout(warnTimer); warnSig = warnPend = null; clear(warnBox); return; }
+      var sig = structSig();
+      if (sig !== warnSig && sig !== warnPend) { clearTimeout(warnTimer); warnPend = sig; warnTimer = setTimeout(function () { warnings(sig); }, 450); }
+    }
+    function structSig() {
+      return JSON.stringify([scene ? scene.key : '', cast, rows.map(function (r) { return [r.actor, r.action, r.target, r.react, r.spot, r.to]; })]);
     }
     // cảnh báo của đạo diễn tự động (plan.warnings): đòn không dựng được… — dựng thử như lúc diễn, chỉ khi kịch bản đã hợp lệ
-    function warnings() {
-      if (!alive || !scene) return;
+    function warnings(sig) {
+      warnPend = null;
+      if (!alive) return;
+      warnSig = sig;
+      if (!scene) return;
       var plan = null, ws = [];
       try { plan = GC.film.direct({ scene: scene.key, cast: cast, event: eventNow() }); ws = (plan && plan.warnings) || []; }
       catch (e) { ws = ['dựng thử lỗi: ' + e.message]; }
@@ -1506,11 +1545,17 @@
       ws.forEach(function (w) { warnBox.appendChild(h('div', { class: 'note warn', text: '⚠ ' + w })); });
     }
     function save() {
-      if (errorsNow().total) { check(); return; }
-      saveB.disabled = true; saveB.textContent = 'Đang lưu…';
+      if (saving || errorsNow().total) { check(); return; }
+      var at = rev, n = rows.length;   // bản đang gửi = bản ở thời điểm bấm (cleanSteps chạy ngay bên dưới)
+      saving = true; saveB.disabled = true; saveB.textContent = 'Đang lưu…';
       cfg.save({ title: base.title, description: base.description, scene: base.scene, cast: cast.slice(), event: { title: evTitle, steps: cleanSteps() } })
-        .then(function () { if (!alive) return; dirty = false; serverErrs = []; toast('Đã lưu ' + rows.length + ' bước của "' + base.title + '".'); })
-        .catch(function (e) { if (!alive) return; serverErrs = (e && e.errors) || (e ? [e.message] : []); })
+        .then(function () {
+          saving = false;
+          if (!alive) return;
+          if (rev === at) { dirty = false; serverErrs = []; toast('Đã lưu ' + n + ' bước của "' + base.title + '".'); }
+          else toast('Đã lưu bản lúc bấm — bạn vừa sửa thêm, phần mới vẫn chưa lưu.');   // sửa trong lúc chờ: giữ "chưa lưu" (không mất chữ âm thầm)
+        })
+        .catch(function (e) { saving = false; if (!alive) return; serverErrs = (e && e.errors) || (e ? [e.message] : []); })
         .then(function () { if (!alive) return; saveB.textContent = 'Lưu bước'; check(); });
     }
     function close() {
@@ -1519,7 +1564,7 @@
       destroy();
       cfg.close();
     }
-    function destroy() { alive = false; clearTimeout(warnTimer); document.removeEventListener('keydown', onKey); el.remove(); }
+    function destroy() { alive = false; clearTimeout(warnTimer); document.removeEventListener('keydown', onKey); window.removeEventListener('beforeunload', onUnload); el.remove(); }
     paintCast(); paint();
     return { el: el, destroy: destroy };
   }
@@ -2038,14 +2083,26 @@
   // (khung cố định, nền trong suốt) nên tải về đúng như đang thấy. Ngân sách (L-42): một khung hình dựng sẵn, chỉ đổi DOM khi sang khung mới,
   // dừng khi rời trang / tab ẩn.
   var MANNEQUIN = 'gen.khung/ma-no-canh';
-  function motionPackOut(P) { var o = clone(P); ['pack', 'key', 'version', 'savedAt', 'note'].forEach(function (k) { delete o[k]; }); return o; }
+  // điều khoản của bộ mẫu Gen Labs (gói / hoạt ảnh xuất ra từ bộ mẫu mang dấu này — nhập lại vẫn bị chặn bán theo dấu nội dung)
+  var SAMPLE_TERMS = 'chỉ để xem, thử, quay phim; không bán lại, không phân phối';
+  // smp (tuỳ chọn): dấu bộ mẫu của dự án chứa gói → bản tải về ghi rõ sample { owner, license }
+  function motionPackOut(P, smp) {
+    var o = clone(P); ['pack', 'key', 'version', 'savedAt', 'note'].forEach(function (k) { delete o[k]; });
+    if (smp) o.sample = { owner: smp.owner || 'Gen Labs', license: 'Bộ mẫu — ' + SAMPLE_TERMS };
+    return o;
+  }
   PAGES['lib-motions'] = function (r) {
     crumbs([{ t: 'Động tác' }]);
     var C = GC.choreo;
     if (!C) { $('view').appendChild(h('div', { class: 'panel pad note lib-empty', text: 'Bản này chưa nạp bộ biên đạo (engine/choreo.js).' })); return; }
     var server = Store.mode === 'server';
+    // gói nhập về thuộc một dự án (mọi asset đều thuộc một dự án): mặc định dự án vừa dùng — trừ dự án MẪU (gói tự làm rơi vào bộ mẫu
+    // sẽ mang dấu mẫu, không bán được); để trống thì giữ dự án ghi trong tệp (nếu có)
+    var impProj = (function (v) { var P = Projects.list.filter(function (x) { return x.id === v; })[0]; return P && P.sample ? '' : v; })(lastProject());
     actions(h('span', { class: 'note', text: 'Đòn của bộ khung + gói động tác theo chủ đề — xem trước, tải hoạt ảnh.' }),
-      server ? h('button', { class: 'btn', title: 'Tệp gói động tác (.json, ' + C.MOTION.format + ') — đi qua cổng kiểm như mọi asset', onclick: pickPack }, 'Nhập gói động tác (.json)') : null);
+      server ? h('span', { class: 'note', text: 'Nhập vào dự án' }) : null,
+      server ? projectSelect(impProj, function (v) { impProj = v; }) : null,
+      server ? h('button', { class: 'btn', title: 'Tệp gói động tác (.json, ' + C.MOTION.format + ') — đi qua cổng kiểm như mọi asset. Gói thuộc dự án đang chọn ở ô bên cạnh', onclick: pickPack }, 'Nhập gói động tác (.json)') : null);
     var ids = Object.keys(C.ACTIONS);
     var u = { action: r.action && C.ACTIONS[r.action] ? r.action : ids[0], who: GC.ASSETS[r.who] ? r.who : MANNEQUIN, partner: MANNEQUIN, react: 'hit', fps: 12, cell: 256 };
     if (!GC.ASSETS[u.partner]) u.partner = (GC.assets()[0] || {}).key;
@@ -2062,7 +2119,9 @@
       C.packs().forEach(function (P) { out.push({ key: P.key, name: P.name || P.id, P: P }); });
       return out;
     }
-    function sampleOf(P) { var pj = P && P.project ? Projects.all().filter(function (x) { return x.id === P.project; })[0] : null; return pj && pj.sample ? pj.sample : null; }
+    // dấu "bộ mẫu" của dự án (Projects.sample: { owner, license }) — của gói, hoặc của nhân vật
+    function sampleOfProject(pid) { var pj = pid ? Projects.all().filter(function (x) { return x.id === pid; })[0] : null; return pj && pj.sample ? pj.sample : null; }
+    function sampleOf(P) { return P && P.project ? sampleOfProject(P.project) : null; }
     function paintList() {
       clear(body);
       groups().forEach(function (g) {
@@ -2084,7 +2143,7 @@
           h('span', { class: 'tag', text: g.key }),
           P ? (smp ? h('span', { class: 'chip', title: smp.license || '', text: 'Bộ mẫu ' + (smp.owner || 'Gen Labs') }) : h('span', { class: pub ? 'chip ok' : 'chip', text: pub ? 'Phát hành' : 'Nháp' })) : null,
           P && P.description ? h('span', { class: 'note', style: 'flex-basis:100%', text: P.description }) : null,
-          P ? h('button', { class: 'btn sm', style: 'margin-left:auto', title: smp ? 'Bản sao lưu của gói bộ mẫu — xem, sửa thử, làm phim; không bán lại' : 'Tải gói động tác (.json) — nhập lại được ở bản cài khác', onclick: function () { download(P.id + '.json', JSON.stringify(motionPackOut(P), null, 2), 'application/json'); } }, 'Tải gói (.json)') : null);
+          P ? h('button', { class: 'btn sm', style: 'margin-left:auto', title: smp ? 'Bản sao lưu của gói bộ mẫu — xem, sửa thử, làm phim; không bán lại' : 'Tải gói động tác (.json) — nhập lại được ở bản cài khác', onclick: function () { download(P.id + '.json', JSON.stringify(motionPackOut(P, smp), null, 2), 'application/json'); } }, 'Tải gói (.json)') : null);
         body.appendChild(h('div', { class: 'panel', 'data-pack': g.key }, head, meta, h('div', { class: 'pad' }, shown.length ? grid : h('div', { class: 'note', text: 'Gói chưa có đòn nào (chỉ có tư thế / màn diễn).' }))));
       });
       if (!body.children.length) body.appendChild(h('div', { class: 'panel pad note lib-empty', text: 'Không có đòn nào khớp "' + q + '".' }));
@@ -2113,12 +2172,15 @@
     function onVis() { if (document.hidden) stop(); else play(); }
     document.addEventListener('visibilitychange', onVis);
     onLeave(function () { playing = false; stop(); drop(); document.removeEventListener('visibilitychange', onVis); });
-    function charSelect(cur, label, onPick) {
+    // need (tuỳ chọn): đòn đang chọn — nhân vật không làm được thì ô chọn bị mờ kèm lý do (vẫn chọn được bằng giá trị đang có để báo vì sao)
+    function charSelect(cur, label, onPick, need) {
       var s = h('select', { 'aria-label': label, onchange: function () { onPick(s.value); } }), groupsOf = {};
       GC.assets().forEach(function (a) {
         var g = groupOf(a) === 'frame' ? 'Bộ khung' : a.pack === MY_PACK ? 'Dự án · ' + Projects.name(a.project || '') : ((GC.PACKS[a.pack] || {}).name || a.pack);
         if (!groupsOf[g]) { groupsOf[g] = h('optgroup', { label: g }); s.appendChild(groupsOf[g]); }
-        groupsOf[g].appendChild(h('option', { value: a.key, text: a.name + (C.hasWeapon(a) ? ' · có binh khí' : '') }));
+        var no = need && !C.canDo(a, need);
+        groupsOf[g].appendChild(h('option', { value: a.key, disabled: no ? true : null, title: no ? a.name + ' không làm được: đòn này cần ' + (C.MOTION.needs[need.needs] || need.needs) : null,
+          text: a.name + (no ? ' — cần ' + (need.needs === 'weapon' ? 'binh khí' : C.MOTION.needs[need.needs] || need.needs) : C.hasWeapon(a) ? ' · có binh khí' : '') }));
       });
       s.value = cur;
       return s;
@@ -2137,35 +2199,53 @@
       }));
     }
     function busy(btn, p) { var t = btn.textContent; btn.disabled = true; btn.textContent = 'Đang dựng…'; return p.catch(function (e) { toast('Không xuất được: ' + e.message); }).then(function () { btn.disabled = false; btn.textContent = t; }); }
+    // làm fn(i) lần lượt cho n khung, nhả luồng một nhịp sau mỗi khung (setTimeout 0) + báo tiến độ lên nút — khung 512 px không làm đơ trang
+    function eachFrame(n, fn, btn) {
+      return new Promise(function (res, rej) {
+        var i = 0;
+        (function step() {
+          try { if (i >= n) { res(); return; } fn(i++); btn.textContent = 'Đang dựng… ' + Math.round(100 * i / n) + '%'; setTimeout(step, 0); } catch (e) { rej(e); }
+        })();
+      });
+    }
     function savePNG(btn) {
       if (!anim) return;
-      var L = layout(), name = baseName();
+      var L = layout(), name = baseName(), n = anim.frames.length;   // chốt bản đang xem: chọn đòn khác giữa chừng không làm lệch tệp
       busy(btn, rasterFrames(L).then(function (imgs) {
         var c = document.createElement('canvas'); c.width = L.cols * L.cw; c.height = L.rows * L.ch;
         var ctx = c.getContext('2d');   // canvas mới = nền trong suốt
-        imgs.forEach(function (img, i) { ctx.drawImage(img, (i % L.cols) * L.cw, Math.floor(i / L.cols) * L.ch, L.cw, L.ch); });
-        return new Promise(function (res) { c.toBlob(res, 'image/png'); });
-      }).then(function (b) { downloadBlob(name + '.png', b); toast('Sprite sheet ' + L.cols + '×' + L.rows + ' ô ' + L.cw + '×' + L.ch + ' px · ' + anim.frames.length + ' khung — toạ độ từng khung trong tệp JSON.'); }));
+        return eachFrame(imgs.length, function (i) { ctx.drawImage(imgs[i], (i % L.cols) * L.cw, Math.floor(i / L.cols) * L.ch, L.cw, L.ch); }, btn)
+          .then(function () { return new Promise(function (res) { c.toBlob(res, 'image/png'); }); });
+      }).then(function (b) { downloadBlob(name + '.png', b); toast('Sprite sheet ' + L.cols + '×' + L.rows + ' ô ' + L.cw + '×' + L.ch + ' px · ' + n + ' khung — toạ độ từng khung trong tệp JSON.'); }));
     }
     function saveGIF(btn) {
       if (!anim) return;
       if (!window.GenGif) { toast('Thiếu bộ mã hoá GIF (studio/gif.js).'); return; }
-      var L = layout(), name = baseName();
+      var L = layout(), name = baseName(), fps = anim.fps;   // fps thật của khung (có thể đã tự hạ) — nhịp GIF theo đúng nó
       busy(btn, rasterFrames(L).then(function (imgs) {
         var c = document.createElement('canvas'); c.width = L.cw; c.height = L.ch;
-        var ctx = c.getContext('2d', { willReadFrequently: true });
-        var frames = imgs.map(function (img) { ctx.clearRect(0, 0, L.cw, L.ch); ctx.drawImage(img, 0, 0, L.cw, L.ch); return ctx.getImageData(0, 0, L.cw, L.ch).data; });
-        var bytes = window.GenGif.encode({ width: L.cw, height: L.ch, frames: frames, fps: anim.fps, loop: 0 });
-        downloadBlob(name + '.gif', new Blob([bytes], { type: 'image/gif' }));
-        toast('GIF ' + L.cw + '×' + L.ch + ' px · ' + frames.length + ' khung · ' + anim.fps + ' fps · lặp vô hạn, nền trong suốt (' + Math.round(bytes.length / 1024) + ' KB).');
+        var ctx = c.getContext('2d', { willReadFrequently: true }), frames = [];
+        return eachFrame(imgs.length, function (i) { ctx.clearRect(0, 0, L.cw, L.ch); ctx.drawImage(imgs[i], 0, 0, L.cw, L.ch); frames.push(ctx.getImageData(0, 0, L.cw, L.ch).data); }, btn)
+          .then(function () { btn.textContent = 'Đang mã hoá…'; return window.GenGif.encodeAsync({ width: L.cw, height: L.ch, frames: frames, fps: fps, loop: 0 }, function (i, tot) { btn.textContent = 'Đang mã hoá… ' + Math.round(100 * i / tot) + '%'; }); })
+          .then(function (bytes) {
+            downloadBlob(name + '.gif', new Blob([bytes], { type: 'image/gif' }));
+            toast('GIF ' + L.cw + '×' + L.ch + ' px · ' + frames.length + ' khung · ' + fps + ' fps · lặp vô hạn, nền trong suốt (' + Math.round(bytes.length / 1024) + ' KB).');
+          });
       }));
     }
     function saveSheetSVG() { if (!anim) return; var L = layout(); download(baseName() + '.svg', C.sheetSVG(anim, { cols: L.cols, cell: L.cw }).svg, 'image/svg+xml'); }
+    // giấy phép ghi trong JSON: nhân vật / gói thuộc bộ mẫu Gen Labs thì không "thuộc người tạo" — chỉ để xem, thử, quay phim
+    function sampleNow() {
+      var A = C.ACTIONS[u.action], who = GC.ASSETS[u.who], pa = A && A.attack ? GC.ASSETS[u.partner] : null;
+      return sampleOf(A ? C.PACKS[A.pack] : null) || sampleOfProject(who && who.pack === MY_PACK ? who.project : '') || sampleOfProject(pa && pa.pack === MY_PACK ? pa.project : '');
+    }
+    function licenseText(smp) { return '© 2026 Gen Labs — engine; ' + (smp ? 'Bộ mẫu ' + (smp.owner || 'Gen Labs') + ' — ' + SAMPLE_TERMS : 'nhân vật thuộc người tạo'); }
     function timeline() {
-      var L = layout(), name = baseName(), A = C.ACTIONS[u.action];
-      return Object.assign({}, anim.meta, {
+      var L = layout(), name = baseName(), A = C.ACTIONS[u.action], smp = sampleNow();
+      return Object.assign({}, anim.meta, smp ? { sample: { owner: smp.owner || 'Gen Labs', license: 'Bộ mẫu — ' + SAMPLE_TERMS } } : {}, {
+        fps: anim.fps,   // fps thật của các khung (engine có thể tự hạ để đủ cả đòn)
         character: u.who, partner: A && A.attack ? u.partner : null, pack: A ? A.pack : null,
-        generator: 'gen-chibi ' + String((Store.info || {}).version || ''), license: '© 2026 Gen Labs — engine; nhân vật thuộc người tạo',
+        generator: 'gen-chibi ' + String((Store.info || {}).version || ''), license: licenseText(smp),
         sheet: { png: name + '.png', svg: name + '.svg', gif: name + '.gif', cols: L.cols, rows: L.rows, cell: { w: L.cw, h: L.ch }, width: L.cols * L.cw, height: L.rows * L.ch },
         frames: anim.frames.map(function (f, i) { return { i: i, t: f.t, name: name + '-' + String(i).padStart(3, '0'), x: (i % L.cols) * L.cw, y: Math.floor(i / L.cols) * L.ch, w: L.cw, h: L.ch }; })
       });
@@ -2181,7 +2261,7 @@
       clock = h('span', { class: 'note mono' });
       playB = h('button', { class: 'btn sm', 'aria-label': 'Phát / dừng', onclick: function () { playing = !playing; playB.textContent = playing ? '❚❚ Dừng' : '▶ Phát'; play(); } }, playing ? '❚❚ Dừng' : '▶ Phát');
       var ctl = h('div', { class: 'row' },
-        h('label', { class: 'fld' }, h('span', { class: 'note', text: A.attack ? 'Người ra đòn' : 'Nhân vật' }), charSelect(u.who, 'Nhân vật', function (v) { u.who = v; route.who = v; remember(); paintInsp(); })),
+        h('label', { class: 'fld' }, h('span', { class: 'note', text: A.attack ? 'Người ra đòn' : 'Nhân vật' }), charSelect(u.who, 'Nhân vật', function (v) { u.who = v; route.who = v; remember(); paintInsp(); }, A.needs ? A : null)),
         A.attack ? h('label', { class: 'fld' }, h('span', { class: 'note', text: 'Đối thủ' }), charSelect(u.partner, 'Đối thủ', function (v) { u.partner = v; paintInsp(); })) : null,
         A.attack ? h('label', { class: 'fld' }, h('span', { class: 'note', text: 'Phản ứng của đối thủ' }), (function () {
           var s = h('select', { 'aria-label': 'Phản ứng', onchange: function () { u.react = s.value; paintInsp(); } });
@@ -2200,7 +2280,16 @@
         try { anim = C.animate(C.actionTimeline({ asset: who, action: u.action, partner: A.attack ? partner : undefined, react: A.attack ? u.react : undefined }), { fps: u.fps }); }
         catch (e) { err = 'Không dựng được đòn: ' + e.message; anim = null; }
       }
-      if (anim) info.textContent = (anim.frames.length + ' khung · ' + anim.duration.toFixed(2) + ' s' + (anim.meta.impactFrame != null ? ' · va chạm ở khung ' + (anim.meta.impactFrame + 1) : '') + ' · khung ôm ' + anim.box.w + '×' + anim.box.h).replace(/(\d)\.(\d)/g, '$1,$2');
+      var fpsBox = h('div', { class: 'stack', style: 'gap:6px' });
+      if (anim) {
+        info.textContent = (anim.frames.length + ' khung · ' + anim.fps + ' fps · ' + anim.duration.toFixed(2) + ' s' + (anim.meta.impactFrame != null ? ' · va chạm ở khung ' + (anim.meta.impactFrame + 1) : '') + ' · khung ôm ' + anim.box.w + '×' + anim.box.h).replace(/(\d)\.(\d)/g, '$1,$2');
+        // đòn dài hơn số khung cho phép: engine tự hạ fps cho đủ cả đòn (anim.fps < fps đã chọn) — nói rõ để người dùng không tưởng nhầm
+        var asked = anim.meta.requestedFps || u.fps, lastT = anim.frames[anim.frames.length - 1].t;
+        if (anim.fps < asked) fpsBox.appendChild(h('div', { class: 'note', 'data-note': 'fps', text: 'Đòn dài ' + anim.duration.toFixed(2).replace('.', ',') + ' s nên tự hạ còn ' + anim.fps + ' fps (bạn chọn ' + asked + ') để đủ cả đòn.' }));
+        // ngay cả ở fps thấp nhất vẫn không đủ khung: hoạt ảnh bị cắt cụt — báo, không để xuất ra một đòn thiếu đuôi mà không hay
+        if (anim.meta.truncated || lastT < anim.duration - 0.0005) fpsBox.appendChild(h('div', { class: 'banner warn', role: 'alert', 'data-note': 'truncated' },
+          h('span', { text: 'Đòn dài ' + anim.duration.toFixed(2).replace('.', ',') + ' s, quá giới hạn khung ngay cả ở ' + anim.fps + ' fps — hoạt ảnh chỉ tới giây ' + lastT.toFixed(2).replace('.', ',') + ', phần cuối bị cắt. Rút ngắn đòn (clip / nhịp) trong gói động tác.' })));
+      }
       var dl = function (label, title, fn) { var b = h('button', { class: 'btn sm', title: title, disabled: anim ? null : true, onclick: function () { fn(b); } }, label); return b; };
       code = codeBox([
         ['Mã tham chiếu', function () {
@@ -2218,13 +2307,13 @@
         dl('JSON', 'Metadata timeline (' + 'gen-chibi.anim/1' + ') + toạ độ từng khung trong sprite sheet', saveJSON));
       var packBar = h('div', { class: 'usebar' }, h('b', { text: 'Gói' }),
         P ? h('span', { class: 'note', text: P.name + ' · ' + (P.project ? Projects.name(P.project) : 'chưa xếp dự án') }) : h('span', { class: 'note', text: 'Đòn của bộ khung — có sẵn trong mọi bản cài và mọi phim xuất ra.' }),
-        P ? h('button', { class: 'btn sm', onclick: function () { download(P.id + '.json', JSON.stringify(motionPackOut(P), null, 2), 'application/json'); } }, 'Tải gói (.json)') : null);
+        P ? h('button', { class: 'btn sm', onclick: function () { download(P.id + '.json', JSON.stringify(motionPackOut(P, sampleOf(P)), null, 2), 'application/json'); } }, 'Tải gói (.json)') : null);
       insp.appendChild(h('div', { class: 'panel' }, h('h3', null, A.label, h('span', { class: 'r mono', text: u.action })),
         h('div', { class: 'pad stack' },
           h('div', { class: 'row' }, badgeEls(A), A.hint ? h('span', { class: 'note', text: A.hint }) : null),
           ctl, err ? h('div', { class: 'banner bad', role: 'alert' }, h('span', { text: err })) : stg,
           anim ? h('div', { class: 'row' }, playB, clock, h('span', { class: 'sp', style: 'flex:1' }), fseg) : h('div', { class: 'row' }, fseg),
-          info, h('div', { class: 'row' }, h('span', { class: 'note', text: 'Cỡ khung khi tải' }), csel), bar, packBar, code)));
+          info, fpsBox, h('div', { class: 'row' }, h('span', { class: 'note', text: 'Cỡ khung khi tải' }), csel), bar, packBar, code)));
       if (anim) { urls = anim.frames.map(function (f) { return URL.createObjectURL(new Blob([f.svg], { type: 'image/svg+xml' })); }); frame(0); play(); }
     }
     // ---- nhập gói động tác: server kiểm (cùng cổng với MCP / AI), 422 thì hiện đủ danh sách lỗi
@@ -2246,11 +2335,13 @@
     }
     function importPack(def) {
       if (!def || typeof def !== 'object' || Array.isArray(def)) { showErr('Gói động tác phải là một object JSON (' + C.MOTION.format + ').'); return; }
-      Store.api('POST', 'api/motion-packs', { pack: def, note: 'Nhập trong Studio' }).then(function (rec) {
+      // dự án chọn ở ô "Nhập vào dự án" thắng; để trống thì giữ dự án ghi trong tệp (không có thì gói chưa xếp dự án = gói chung)
+      var body = impProj ? Object.assign({}, def, { project: impProj }) : def;
+      Store.api('POST', 'api/motion-packs', { pack: body, note: 'Nhập trong Studio' }).then(function (rec) {
         var r0 = C.registerPack(MY_PACK, rec);
         if (r0.errors.length) throw Object.assign(new Error('Server đã lưu nhưng Studio không nạp được gói'), { errors: r0.errors });
         var first = Object.keys(r0.def.actions)[0];
-        toast('Đã nhập gói "' + r0.def.name + '": ' + Object.keys(r0.def.actions).length + ' đòn · ' + Object.keys(r0.def.clips).length + ' clip.');
+        toast('Đã nhập gói "' + r0.def.name + '" vào ' + (r0.def.project ? 'dự án ' + Projects.name(r0.def.project) : 'mục chưa xếp dự án (dùng chung)') + ': ' + Object.keys(r0.def.actions).length + ' đòn · ' + Object.keys(r0.def.clips).length + ' clip.');
         go(Object.assign({}, route, first ? { action: first } : {}));
       }).catch(function (e) { showErr(e.status === 422 ? 'Gói động tác chưa qua cổng kiểm' : e.message, e.errors || (e.status === 422 ? [e.message] : null)); });
     }
@@ -2990,7 +3081,7 @@
       function copyBtn(label, t) { return h('button', { class: 'btn sm', text: label, onclick: function () { navigator.clipboard.writeText(t).then(function () { toast('Đã sao chép'); }, function () { toast('Không sao chép được — chọn và copy tay'); }); } }); }
       box.appendChild(h('div', { class: 'panel' }, h('h3', null, 'Nối agent qua MCP', h('span', { class: 'r note', text: 'agent tự viết công thức và kịch bản, không tốn LLM API lõi' })),
         h('div', { class: 'pad stack' },
-          h('div', { class: 'note', text: 'Agent (Claude Code, Claude web/desktop, hoặc agent bất kỳ hỗ trợ MCP) gọi 31 tool: tra kho, kiểm, dựng SVG; tạo nhân vật / linh kiện / vật phẩm / bối cảnh; dự án chủ đề và gói dự án; tác phẩm (kịch bản, phân cảnh); kiểm và cập nhật phiên bản. Kết quả hiện ngay trong Studio.' }),
+          h('div', { class: 'note', text: 'Agent (Claude Code, Claude web/desktop, hoặc agent bất kỳ hỗ trợ MCP) gọi các tool của nhà xưởng (danh sách đầy đủ: lệnh genchibi agent tools): tra kho, kiểm, dựng SVG; tạo nhân vật / linh kiện / vật phẩm / bối cảnh; dự án chủ đề và gói dự án; tác phẩm (kịch bản, phân cảnh); kiểm và cập nhật phiên bản. Kết quả hiện ngay trong Studio.' }),
           h('div', { class: 'kv' },
             h('label', { text: 'Qua Internet' }),
             link ? h('div', { class: 'stack' },

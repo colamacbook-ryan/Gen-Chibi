@@ -359,6 +359,7 @@ table.stepgrid tr.morerow td { background: var(--raised); }
 .moregrid .fld.wide { grid-column: 1 / -1; }
 .banner.bad { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); background: color-mix(in srgb, var(--danger) 6%, var(--surface)); }
 .note.warn { color: var(--warn); }
+.banner.warn { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); background: color-mix(in srgb, var(--warn) 7%, var(--surface)); color: var(--fg); }
 /* v0.16 (Q9) — Thư viện › Động tác: thẻ đòn + xem trước hoạt ảnh (nền ô cờ = trong suốt) */
 .libgrid.acts { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
 .libcard.act .lb { border-top: 0; gap: 3px; padding: 8px 10px; align-content: start; }

@@ -43,7 +43,7 @@ Khung không bao giờ bị sửa — asset của bạn là bản sao của khun
 - **Bảng bước** (không cần AI): ở mỗi phân cảnh bấm **Bảng bước** → một bảng kiểu bảng tính, mỗi hàng một bước (`B01`…, tối đa 12): diễn viên, biểu cảm, lời thoại, nói với ai, chỗ đứng, **hành động**, đối thủ, phản ứng, thời gian giữ.
   - Mọi ô chọn lấy từ lược đồ đạo diễn — không gõ tay được tên sai. Ô **Hành động** chỉ liệt kê đòn diễn viên của hàng đó làm được (người tay không không thấy "Đâm thẳng"), có nhãn *đòn đánh* / *ném* / *cần binh khí*.
   - Chọn đòn đánh thì ô **Đối thủ** mới mở (tự gợi ý một người); có đối thủ thì mới chọn **Phản ứng**. Ô **thêm…** mở các trường phụ: máy quay, bong bóng, hoạt động, góc nhìn, hướng, tư thế, di chuyển, động tác tay, hiệu ứng (≤ 3), âm thanh (≤ 3).
-  - Lỗi hiện ngay cạnh hàng; **Lưu bước** khoá khi còn lỗi và đi qua đúng cổng kiểm như AI / MCP. Đóng bảng khi chưa lưu là bỏ thay đổi (có hỏi lại).
+  - Lỗi hiện ngay cạnh hàng; **Lưu bước** khoá khi còn lỗi và đi qua đúng cổng kiểm như AI / MCP. Đóng bảng khi chưa lưu là bỏ thay đổi (có hỏi lại; đóng tab / tải lại trang trình duyệt cũng hỏi). Sửa tiếp trong lúc đang lưu thì phần mới vẫn báo *Chưa lưu*. Bấm ra ngoài bảng đóng được, nhưng kéo bôi chữ rồi nhả chuột ra ngoài thì không đóng; **Esc** đóng bảng, **Tab** xoay vòng trong bảng.
 - **Tình trạng**: thanh "Sẵn sàng x/y phân cảnh" + danh sách cảnh còn thiếu gì — bấm để tới đúng phân cảnh.
 - **Sân khấu final**: ▶ Diễn toàn bộ — phim có **dàn dựng tự động**:
   - nhân vật **đi ra sân**, **đi tới chỗ mới** khi kịch bản đổi chỗ đứng, **bước tới** khi giận / thề / van xin và **lùi lại** khi sốc / hoảng;
@@ -77,7 +77,7 @@ Mỗi asset có một trong hai trạng thái:
 | **Phát hành** | Đủ chất lượng để **bán / chia sẻ**: vào *Gói bán* của dự án. Nhân vật phải có dấu nhận diện (cổng kiểm báo nếu thiếu) | Bạn bấm **Phát hành** ở khu *Dùng* của asset trong Thư viện (bấm **Về nháp** để rút lại) |
 
 Ở **Thư viện › Dự án chủ đề**, chọn một dự án:
-- **Gói sao lưu (JSON)** — mọi asset (cả nháp) + linh kiện / phông tự vẽ đang dùng + **tác phẩm**. Để sao lưu, chuyển máy.
+- **Gói sao lưu (JSON)** — mọi asset (cả nháp) + linh kiện / phông tự vẽ đang dùng + **tác phẩm** + gói động tác mà phim dùng (kể cả của dự án khác). Để sao lưu, chuyển máy.
 - **Gói bán · N asset phát hành** — chỉ asset **Phát hành**, **không** kèm tác phẩm. Nếu asset phát hành cần một thứ còn nháp (ví dụ nhân vật cầm vật phẩm nháp), gói vẫn kéo theo cho đủ và **báo cảnh báo** — phát hành nốt thứ đó trước khi bán.
 - **Nhập gói…** — mọi mục đi qua đúng cổng kiểm như khi tạo mới. Trùng id thì hỏi lưu đè — lưu đè tạo **phiên bản mới**, bản cũ vẫn trong lịch sử. Gói khai báo thư viện cần có (`requires.packs`); thiếu thì báo rõ.
 
@@ -90,14 +90,15 @@ Mã tham chiếu có dạng `<thư viện>/<id>`: khung chuẩn là `gen.khung/�
 
 ### Động tác — xem trước và tải hoạt ảnh một đòn
 **Thư viện › Động tác** liệt kê đòn của bộ khung và của từng **gói động tác** (theo dự án, có nhãn Nháp / Phát hành / Bộ mẫu).
-- Chọn một đòn → chọn **người ra đòn** (chỉ hiện nhân vật làm được; không làm được thì báo vì sao), **đối thủ** và **phản ứng** → xem trước ngay, dừng / chạy, 8 · 12 · 24 khung/giây.
+- Chọn một đòn → chọn **người ra đòn** (nhân vật không làm được bị mờ, ghi lý do — vd. *— cần binh khí* với đòn `thrust`; đang chọn sẵn một người không làm được thì báo vì sao và không dựng), **đối thủ** và **phản ứng** → xem trước ngay, dừng / chạy, 8 · 12 · 24 khung/giây.
+  - Đòn dài (vd. gói tự viết có clip nhiều giây) cần nhiều khung hơn mức cho phép (120) thì Studio **tự hạ fps** cho đủ cả đòn và ghi rõ *"tự hạ còn N fps"*; GIF / JSON theo đúng fps thật đó. Dài tới mức ngay cả 4 fps cũng không đủ thì hiện cảnh báo *bị cắt phần cuối* — rút ngắn clip.
 - **Tải hoạt ảnh**: **PNG sprite sheet**, **GIF** (lặp mãi, nền trong suốt), **SVG sheet** (vectơ), **JSON timeline** (`gen-chibi.anim/1`: fps, số khung, khung va chạm, toạ độ từng khung trong sheet). Chọn **Cỡ khung khi tải**. Khung cố định ôm trọn cả đòn nên các khung không giật cỡ — dùng thẳng cho game, web, sticker chat.
-- **Tải gói (.json)** / **Nhập gói động tác (.json)**: gói đi qua cổng kiểm (lỗi hiện đủ danh sách). Gói động tác cũng nằm trong gói sao lưu / gói bán của dự án; gói của bộ mẫu Gen Labs không xuất bán.
+- **Tải gói (.json)** / **Nhập gói động tác (.json)**: gói đi qua cổng kiểm (lỗi hiện đủ danh sách). Ô **Nhập vào dự án** (cạnh nút nhập; mặc định là dự án bạn vừa dùng) quyết định gói mới thuộc dự án nào — để *Chưa xếp dự án* thì giữ dự án ghi trong tệp, tệp không ghi thì gói là **gói chung**, dùng được với mọi dàn diễn viên. Gói động tác cũng nằm trong gói sao lưu / gói bán của dự án; gói của bộ mẫu Gen Labs không xuất bán (tệp tải về từ bộ mẫu mang dấu `sample`, JSON hoạt ảnh ghi giấy phép bộ mẫu: chỉ để xem, thử, quay phim).
 - Agent: cùng việc đó qua MCP `render_action` (xem `agent/workflows/animation.md`).
 
 ## 6. Cho agent AI (MCP) — agent của hãng nào cũng dùng được
 - Chạy **`genchibi agent connect`**: in sẵn cấu hình nối cho Claude Code, Claude app, Cursor, Gemini CLI, Codex CLI và lệnh `curl` (không in token ra màn hình).
-- Muốn agent "thuộc bài" từ đầu: **`genchibi agent skill claude`** (hoặc `cursor`, `gemini`, `codex`, `generic`) — cài hướng dẫn thành skill / `AGENTS.md` / `GEMINI.md`.
+- Muốn agent "thuộc bài" từ đầu: **`genchibi agent skill claude`** (hoặc `cursor`, `gemini`, `codex`, `generic`) — cài hướng dẫn thành skill / `AGENTS.md` / `GEMINI.md` vào thư mục bạn đang đứng (hoặc `--dir`). Đã có `AGENTS.md` / `GEMINI.md` của riêng bạn thì lệnh dừng lại, không ghi đè (thêm `--force` nếu muốn thay).
 - Dặn agent: **"gọi `start_here` trước"**. Agent sẽ nhận trạng thái Thư viện, 10 luật vàng, 9 chủ đề hướng dẫn (nhân vật, linh kiện, trang bị, cảnh, gói động tác, hoạt ảnh, phim, gói dự án, hệ thống), rồi làm theo từng bước có ví dụ chạy được.
 - 44 tool; agent đi qua **cùng cổng kiểm** với Studio. Lỗi trả về có mã (`[VALIDATION_FAILED]`, `NOT_FOUND`…) và chỉ đúng trường sai — agent tự sửa được.
 - Agent không có MCP client vẫn dùng được qua HTTP thuần (xem `agent/GUIDE.md` mục 1).
