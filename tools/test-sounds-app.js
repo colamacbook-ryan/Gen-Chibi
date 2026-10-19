@@ -1,5 +1,5 @@
 // gen-chibi — test 2n: thư viện âm thanh NỐI VÀO APP (v0.18): nạp engine · lược đồ / bộ kiểm đạo diễn theo thư viện · bộ phát tự gán theo dự án + không khí ·
-// gói động tác gọi tên âm · store · MCP 6 tool · lint khi lưu (save_shot / save_work) · HTTP /api/sound-packs · gói dự án (sao lưu / nhập / bán, tự đủ, chặn bán theo
+// gói động tác gọi tên âm · store · MCP 7 tool · lint khi lưu (save_shot / save_work) · HTTP /api/sound-packs · gói dự án (sao lưu / nhập / bán, tự đủ, chặn bán theo
 // nội dung) · bộ mẫu Tam Quốc · hướng dẫn agent một nguồn. Phần dữ liệu thuần của thư viện (cổng kiểm, tự gán, luật S1–S7) ở tools/test-sounds.js (2m).
 // Chạy: node tools/test-sounds-app.js (bash tools/test.sh gọi; GC_SOUNDS_PORT đổi cổng HTTP, mặc định 7812). Viết tách tệp để khỏi vướng nháy đơn trong node -e (L-56).
 // © 2026 Gen Labs — All rights reserved.
@@ -599,6 +599,10 @@ const sect = async f => { try { await f(); } catch (e) { if (!process.env.GC_KEE
     no(JSON.stringify(used.sort()) !== JSON.stringify(['ngua-hi', 'trong-tran', 'vo-ngua']), 'phân cảnh gán âm Tam Quốc (trống trận ở đấu tập, vó ngựa báo tin, ngựa hí ở Xích Bích): ' + used);
     const ver = (fs.readFileSync(path.join(ROOT, 'studio/app.js'), 'utf8').match(/id: 'mau-tam-quoc', file: 'tam-quoc', version: '([^']+)'/) || [])[1];
     no(TQB.sample.version !== ver || TQB.sample.version === '2026.10.19-giong', 'phiên bản bộ mẫu đã đổi (nút ⟳ Cập nhật Tam Quốc hiện) và khớp studio/app.js: ' + TQB.sample.version + ' / ' + ver);
+    // CNS-109 (a): preview_shot cho agent (không nghe được) thấy ÂM NÀO SẼ PHÁT ở từng bước — tự gán, ghi tay, bước im ([]), bước ra đòn — kèm dự án + không khí
+    const pvj = async shot => J(await m.callTool('preview_shot', { work: 'tq-vuon-dao-xich-bich', shot })), pv1 = await pvj('canh-1'), pv0 = await pvj('0'), pvd = await pvj('canh-dau-tap'), pv4 = await pvj('canh-4');
+    no(!pv1.ready || pv1.project !== 'mau-tam-quoc' || pv1.mood !== 'epic' || JSON.stringify(pv1.beats.map(b => b.sfx)) !== '[["sparkle"],[],["tu-va","chime"],[],[],["sparkle","party"]]' || JSON.stringify(pv0.beats) !== JSON.stringify(pv1.beats), 'preview_shot canh-1: project + mood + sfx từng bước (tự gán; [] = bước im; tù và ở bước im trước lời thề): ' + JSON.stringify(pv1.beats.map(b => b.sfx)));
+    no(pvd.mood !== 'tense' || pvd.beats.find(b => b.act === 'combo').sfx.join() !== 'trong-tran' || pvd.beats.find(b => b.act === 'thrust').sfx !== undefined || pv4.beats[0].sfx.join() !== 'vo-ngua', 'preview_shot: bước ra đòn mang sfx ghi tay (trống trận), đòn không âm thì bỏ trường; sfx ghi tay của bước thoại (vó ngựa)');
     console.log('   ✓ bộ mẫu Tam Quốc: kèm gói âm tq-am (7 âm), 3 phân cảnh gán âm, lintSoundTrack sạch, phiên bản mẫu ' + TQB.sample.version + ' khớp Studio');
   });
 

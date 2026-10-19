@@ -598,6 +598,37 @@ if (!ONLY) {
     } catch (e) { fail = 1; console.log('  ✗ Thư viện › Động tác:', e.message); }
   } finally { await b5.close(); srv5.kill(); }
 }
+// Bảng bước › Thêm… › Âm thanh (CNS-104 / CNS-109 d): chip lấy NHÃN tiếng Việt từ thư viện âm; danh sách âm theo dự án của TÁC PHẨM chứ không theo dàn diễn viên —
+// phim Tam Quốc có trống trận; phim của dự án KHÁC dùng cùng nhân vật Tam Quốc thì không được mời âm Tam Quốc (từng mời rồi bị luật S6 từ chối lúc lưu)
+if (!ONLY) {
+  const home5s = mkdtempSync(path.join(tmpdir(), 'gc-'));
+  const srv5s = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home5s, GC_PORT: '7573', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
+  await new Promise(r => setTimeout(r, 1200));
+  const b5s = await pw.chromium.launch(), q = await b5s.newPage({ viewport: { width: 1440, height: 900 } }), errs = [];
+  q.on('pageerror', e => errs.push(e.message));
+  try {
+    try {
+      const post = async (u, body) => { const r = await fetch('http://localhost:7573' + u, { method: 'POST', headers: { 'content-type': 'application/json', 'x-gc-request': '1' }, body: JSON.stringify(body) }); if (!r.ok) throw new Error(u + ' → ' + r.status + ' ' + (await r.text()).slice(0, 120)); return r.json(); };
+      await post('/api/projects/import', { bundle: JSON.parse(fs.readFileSync(path.join(ROOT, 'studio/mau/tam-quoc.json'), 'utf8')) });
+      await post('/api/projects', { id: 'cua-toi', name: 'Của tôi' }); await post('/api/works', { id: 'phim-toi', title: 'Phim của tôi', project: 'cua-toi' });
+      await post('/api/works/phim-toi/shots', { shot: { id: 'c1', title: 'C1', scene: 'gen.khung/san-khau-chuan', cast: ['local.my/tq-quan-vu'] } });
+      const chipsOf = async (work, shot) => {
+        await q.goto('http://localhost:7573/tao-tac'); await q.evaluate(w => localStorage.setItem('gc-route-tao-tac', JSON.stringify({ page: 'works', work: w })), work);
+        await q.goto('http://localhost:7573/tao-tac'); await q.waitForSelector('#shot-' + shot);
+        await q.click('#shot-' + shot + ' button:text-is("Bảng bước")'); await q.waitForSelector('.sheet table.stepgrid');
+        await q.click('.sheet button[data-cell="0:more"]');
+        const r = await q.$$eval('.sheet button[data-chip^="0:sfx:"]', bs => bs.map(b => [b.getAttribute('data-chip').split(':')[2], b.textContent]));
+        await q.keyboard.press('Escape'); return Object.fromEntries(r);
+      };
+      const tq = await chipsOf('tq-vuon-dao-xich-bich', 'canh-dau-tap'), mine = await chipsOf('phim-toi', 'c1');
+      const lab = await q.evaluate(ns => ns.map(n => (window.GenChibi.sounds.get(n) || {}).label), ['trong-tran', 'bonk']);
+      if (Object.keys(tq).length !== 69 || !lab[0] || tq['trong-tran'] !== lab[0] || tq['bonk'] !== lab[1] || lab[1] === 'bonk') throw new Error('phim Tam Quốc: ' + Object.keys(tq).length + ' chip, trống trận = "' + tq['trong-tran'] + '" (nhãn thư viện "' + lab[0] + '")');
+      if ('trong-tran' in mine || !('bonk' in mine) || Object.keys(mine).length !== 62) throw new Error('phim của dự án khác (dàn Tam Quốc) vẫn được mời âm Tam Quốc: ' + Object.keys(mine).length + ' chip, trong-tran: ' + ('trong-tran' in mine));
+      if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
+      console.log('  ✓ Bảng bước › Âm thanh: 69 chip nhãn tiếng Việt từ thư viện (phim Tam Quốc có trống trận) · phim của dự án khác dùng dàn Tam Quốc chỉ có 62 âm khung — dự án của TÁC PHẨM quyết');
+    } catch (e) { fail = 1; console.log('  ✗ Bảng bước › Âm thanh:', e.message); }
+  } finally { await b5s.close(); srv5s.kill(); }
+}
 // Biên đạo liên hoàn: trang "Tử Long 30 giây" xuất bằng tools/choreo-demo.js chạy độc lập (file://), không lỗi, phát thật,
 // khung vẽ rẻ (≤ 8 ms), nhân vật đổi góc nhìn + nét mặt khi diễn, tua được, âm thanh bật khi bấm xem
 if (!ONLY) {

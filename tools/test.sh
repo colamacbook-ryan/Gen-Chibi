@@ -601,7 +601,7 @@ echo "2k) giọng AI (Google Gemini TTS) với mạng giả: lưu đệm, đổi
 node tools/test-voice.js || exit 1
 echo "2m) thư viện âm thanh: cổng kiểm gói âm (từng luật một ca sai, không mã, ≤ 60 node) · trùng tên chỉ ra gói giữ tên · 17 tên cũ · tự gán = bảng cũ · luật ghép S1–S7 · gói Tam Quốc"
 node tools/test-sounds.js || exit 1
-echo "2n) thư viện âm thanh nối vào app: lược đồ / bộ kiểm đạo diễn · bộ phát tự gán theo dự án + không khí · gói động tác gọi tên âm · store + MCP 6 tool + HTTP · lint S1–S7 khi lưu · gói dự án (sao lưu / nhập / bán, chặn bán theo nội dung) · Tam Quốc · hướng dẫn agent một nguồn"
+echo "2n) thư viện âm thanh nối vào app: âm nào dùng được = một hàm (theo dự án của tác phẩm) · bộ phát tự gán theo dự án + không khí · gói động tác gọi tên âm · store + MCP 7 tool + HTTP (409 / force / DELETE) · kênh link / chatroom / import không lách cổng · rào theo phụ thuộc + nạp khoan dung · lint S1–S7 khi lưu (+ trần) · MA TRẬN lưu → xuất → nhập máy sạch (trần lưu = trần nhập, gói động tác, gói bán) · Tam Quốc · hướng dẫn agent + docs khớp RULES từng câu"
 node tools/test-sounds-app.js || exit 1
 echo "2l) âm thanh: dựng offline MỌI âm của thư viện (không vỡ / NaN, không câm, không gắt kéo dài, độ to ±7 dB, đúng thời lượng, node ≤ ngân sách) · limiter khi chồng · ghép mẫu · rò node · CPU sfx() · nạp gói / trùng tên trên trang · clip giọng trong say() — cần Playwright, không có thì bỏ qua phần trình duyệt"
 node tools/test-audio.mjs || exit 1
