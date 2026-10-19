@@ -5,7 +5,8 @@
    để còn chỗ cho cột Trợ lý AI bên phải). */
 .lc { container-type: inline-size; display: grid; gap: 12px; min-width: 0; align-content: start; }
 .lc-split { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 12px; align-items: start; }
-@container (max-width: 880px) { .lc-split { grid-template-columns: minmax(0, 1fr); } .lc-insp { position: static !important; max-height: none !important; } }
+.lc-split.slim { grid-template-columns: minmax(0, 1fr) 320px; }   /* phòng tác phẩm: bảng cần chỗ hơn Inspector */
+@container (max-width: 880px) { .lc-split, .lc-split.slim { grid-template-columns: minmax(0, 1fr); } .lc-insp { position: static !important; max-height: none !important; } }
 
 /* tab + thanh công cụ */
 .lc-tabs { margin: 0; }
@@ -117,6 +118,9 @@ button.tag:hover { background: var(--accent-soft); color: var(--fg); }
 .lc-st { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; white-space: nowrap; }
 .lc-st.ok { color: var(--ok); } .lc-st.bad { color: var(--danger); } .lc-st.warn { color: var(--warn); } .lc-st.idle { color: var(--fg2); }
 .lc-pack-row .acts { display: inline-flex; gap: 4px; }
+.lc-delbox:empty { display: none; }
+.lc-delbox { padding: 12px; border-top: 1px solid var(--line); }
+.acts .btn.danger[data-confirm="1"] { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, var(--surface)); }
 .lc-import textarea { min-height: 120px; font: 12px var(--font-mono); }
 
 /* Giọng */
