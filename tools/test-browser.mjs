@@ -93,7 +93,7 @@ if (!ONLY) {
     await q.waitForSelector('#gcLogin', { timeout: 5000 });
     const wrongMsg = await q.textContent('#gcLogin');
     await q.fill('#gcLogin input', 'tok-test-123'); await q.press('#gcLogin input', 'Enter');
-    await q.waitForFunction(() => /^v\d/.test(document.getElementById('verChip').textContent), null, { timeout: 5000 });
+    await q.waitForFunction(() => /^v\d/.test((document.getElementById('verChip') || {}).textContent), null, { timeout: 5000 });
     if (!/không đúng/.test(wrongMsg) || await q.$('#gcLogin')) throw new Error('luồng đăng nhập sai');
     console.log('  ✓ Studio đăng nhập bằng token (từ chối token sai, vào được với token đúng)');
   } catch (e) { fail = 1; console.log('  ✗ đăng nhập Studio:', e.message); }
@@ -111,7 +111,7 @@ if (!ONLY) {
   try {
     // "/" = màn chọn khu: 3 thẻ dẫn sang 3 ứng dụng độc lập
     await q.goto('http://localhost:7498/');
-    await q.waitForFunction(() => /^v\d/.test(document.getElementById('verChip').textContent), null, { timeout: 5000 });
+    await q.waitForFunction(() => /^v\d/.test((document.getElementById('verChip') || {}).textContent), null, { timeout: 5000 });
     await q.waitForSelector('.appcard', { timeout: 5000 });
     const hrefs = await q.$$eval('.appcard', els => els.map(e => e.getAttribute('href')));
     if (hrefs.join() !== '/xuong,/thu-vien,/tao-tac') throw new Error('màn chọn khu: ' + hrefs.join());
@@ -834,7 +834,7 @@ if (!ONLY || ONLY === 'bubble') {
   const mkPage = async (opts, work, W, dialog) => {
     const q = await b9.newPage(opts || { viewport: { width: 1320, height: 780 } }), errs = []; q.on('pageerror', e => errs.push(e.message));
     if (+process.env.GC_THROTTLE > 1) await (await q.context().newCDPSession(q)).send('Emulation.setCPUThrottlingRate', { rate: +process.env.GC_THROTTLE });   // giả lập máy yếu (tái hiện CNS-099)
-    await q.goto(URL9 + 'tao-tac'); await q.waitForFunction(() => window.GenChibi && window.GenChibi.film && /^v\d/.test(document.getElementById('verChip').textContent), null, { timeout: 8000 });
+    await q.goto(URL9 + 'tao-tac'); await q.waitForFunction(() => window.GenChibi && window.GenChibi.film && /^v\d/.test((document.getElementById('verChip') || {}).textContent), null, { timeout: 8000 });
     await q.waitForTimeout(500);
     await q.evaluate(LT);
     const shots = await q.evaluate(([w, W, d]) => window.__lt.setup(w, W, d), [work, W, dialog || null]);
@@ -876,7 +876,7 @@ if (!ONLY || ONLY === 'bubble') {
     if (!/SIL OPEN FONT LICENSE Version 1\.1/.test(fj) || (fj.match(/\[(500|700|800), "d09GMg/g) || []).length !== 3) throw new Error('engine/fonts.js thiếu toàn văn OFL hoặc không đủ 3 độ đậm');
     if (!/Be Vietnam Pro/.test(man) || !/OFL/.test(man) || !/github\.com\/google\/fonts/.test(man)) throw new Error('ASSET_MANIFEST.md chưa ghi phông Be Vietnam Pro + OFL + nguồn');
     // ---- nhập hai bộ mẫu ----
-    const boot = await b9.newPage(); await boot.goto(URL9 + 'tao-tac'); await boot.waitForFunction(() => window.GenChibi && /^v\d/.test(document.getElementById('verChip').textContent));
+    const boot = await b9.newPage(); await boot.goto(URL9 + 'tao-tac'); await boot.waitForFunction(() => window.GenChibi && /^v\d/.test((document.getElementById('verChip') || {}).textContent));
     await boot.evaluate(async () => { for (const f of ['tam-quoc', 'van-phong-vui']) {
       const bn = await fetch('studio/mau/' + f + '.json').then(r => r.json());
       const r = await fetch('api/projects/import', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify({ bundle: bn, overwrite: true }) });
@@ -1129,7 +1129,7 @@ if (!ONLY || ONLY === 'lib') {
     q = await ctx11.newPage(); q.on('pageerror', e => errs11.push(e.message)); q.on('dialog', d => d.accept());
     await q.goto(URL11 + 'VERSION');   // cùng nguồn gốc, chưa chạy Studio: đặt tuyến vào localStorage rồi mới mở (một lần nạp duy nhất)
     await q.evaluate(([r, pj]) => { localStorage.setItem('gc-route-thu-vien', JSON.stringify(r)); localStorage.setItem('gc-last-project', pj); localStorage.setItem('gc-dock', JSON.stringify({ open: false })); }, [route, PROJ]);   // dock đóng: đo bố cục bảng + inspector đủ rộng (dock mở kiểm riêng ở A1)
-    await q.goto(URL11 + 'thu-vien'); await q.waitForFunction(() => window.GenChibi && /^v\d/.test(document.getElementById('verChip').textContent), null, { timeout: 8000 });
+    await q.goto(URL11 + 'thu-vien'); await q.waitForFunction(() => window.GenChibi && /^v\d/.test((document.getElementById('verChip') || {}).textContent), null, { timeout: 8000 });
     await q.evaluate(SPY); await q.evaluate(SPY_T); return q;
   };
   const shot = async (name, scroll) => { if (!SHOTS) return; fs.mkdirSync(SHOTS, { recursive: true }); await q.evaluate(sc => { const t = document.getElementById('toast'); if (t) t.hidden = true; const v = document.getElementById('view'); if (typeof sc === 'string') { const e = document.querySelector(sc); if (e) e.scrollIntoView({ block: 'start' }); } else if (v) v.scrollTop = sc ? v.scrollHeight : 0; }, scroll || false); await q.waitForTimeout(300); await q.screenshot({ path: path.join(SHOTS, 'lib-' + name + (SCHEME === 'light' ? '-light' : '') + '.png') }); };
@@ -1143,7 +1143,7 @@ if (!ONLY || ONLY === 'lib') {
   try {
     // ---- 0) dựng dữ liệu: bộ mẫu Tam Quốc vào thư viện (nhân vật có vai giọng + tác phẩm); gói âm tq-am do máy chủ giả trả ----
     const boot = await ctx11.newPage(); boot.on('pageerror', e => errs11.push(e.message));
-    await boot.goto(URL11 + 'thu-vien'); await boot.waitForFunction(() => /^v\d/.test(document.getElementById('verChip').textContent), null, { timeout: 8000 });
+    await boot.goto(URL11 + 'thu-vien'); await boot.waitForFunction(() => /^v\d/.test((document.getElementById('verChip') || {}).textContent), null, { timeout: 8000 });
     await boot.evaluate(async () => {
       const b = await fetch('studio/mau/tam-quoc.json').then(r => r.json());
       const r = await fetch('api/projects/import', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify({ bundle: b, overwrite: true }) });
@@ -1422,7 +1422,7 @@ if (!ONLY || ONLY === 'lib') {
     const openRoom = async (work, tabName) => {
       q = await ctx11.newPage(); q.on('pageerror', e => errs11.push(e.message)); q.on('dialog', d => d.accept());
       await q.goto(URL11 + 'VERSION'); await q.evaluate(([pj]) => { localStorage.setItem('gc-last-project', pj); localStorage.setItem('gc-dock', JSON.stringify({ open: false })); }, [PROJ]);
-      await q.goto(URL11 + 'tao-tac#/tac-pham/' + work + '/' + (tabName || 'voice')); await q.waitForFunction(() => window.GenChibi && /^v\d/.test(document.getElementById('verChip').textContent), null, { timeout: 8000 });
+      await q.goto(URL11 + 'tao-tac#/tac-pham/' + work + '/' + (tabName || 'voice')); await q.waitForFunction(() => window.GenChibi && /^v\d/.test((document.getElementById('verChip') || {}).textContent), null, { timeout: 8000 });
       await q.waitForSelector('#wpanel-voice:not([hidden])', { timeout: 8000 }); await q.evaluate(SPY); await q.evaluate(SPY_T); return q;
     };
     await openRoom(WORK);
@@ -1568,9 +1568,9 @@ if (!ONLY || ONLY === 'voice') {
   const errs10 = [], pg = async (page, route, app) => {
     app = app || 'tao-tac';
     page.on('pageerror', e => errs10.push(e.message));
-    await page.goto(URL10 + app); await page.waitForFunction(() => window.GenChibi && /^v\d/.test(document.getElementById('verChip').textContent), null, { timeout: 8000 });
+    await page.goto(URL10 + app); await page.waitForFunction(() => window.GenChibi && /^v\d/.test((document.getElementById('verChip') || {}).textContent), null, { timeout: 8000 });
     if (route) { await page.waitForSelector('.nav-item', { timeout: 8000 });   // go() đầu tiên ghi tuyến vào localStorage SAU khi verChip hiện — đợi nó xong rồi mới đặt tuyến
-      await page.evaluate(([k, r]) => localStorage.setItem(k, JSON.stringify(r)), ['gc-route-' + app, route]); await page.goto(URL10 + app); await page.waitForFunction(() => /^v\d/.test(document.getElementById('verChip').textContent), null, { timeout: 8000 }); }
+      await page.evaluate(([k, r]) => localStorage.setItem(k, JSON.stringify(r)), ['gc-route-' + app, route]); await page.goto(URL10 + app); await page.waitForFunction(() => /^v\d/.test((document.getElementById('verChip') || {}).textContent), null, { timeout: 8000 }); }
     return page;
   };
   // chờ một điều kiện phía Node (selector kiểu Playwright dùng được) — waitForFunction chỉ hiểu CSS thuần
@@ -2290,7 +2290,7 @@ if (!ONLY || ONLY === 'dock') {
   const U11 = 'http://localhost:7570/', H11 = { 'Content-Type': 'application/json', 'X-GC-Request': '1' };
   const b11 = await pw.chromium.launch();
   const errs11 = [];
-  const open11 = async (ctx, url, vw) => { const pg = await ctx.newPage(); pg.on('pageerror', e => errs11.push(e.message)); await pg.goto(url); await pg.waitForFunction(() => window.GenChibi && /^v\d/.test(document.getElementById('verChip').textContent) && window.GCDock && window.GCDock.state().ready !== undefined, null, { timeout: 8000 }); await pg.waitForSelector('#dock .dock-ctx .path', { timeout: 8000 }); return pg; };
+  const open11 = async (ctx, url, vw) => { const pg = await ctx.newPage(); pg.on('pageerror', e => errs11.push(e.message)); await pg.goto(url); await pg.waitForFunction(() => window.GenChibi && /^v\d/.test((document.getElementById('verChip') || {}).textContent) && window.GCDock && window.GCDock.state().ready !== undefined, null, { timeout: 8000 }); await pg.waitForSelector('#dock .dock-ctx .path', { timeout: 8000 }); return pg; };
   const ask = async (pg, text) => { await pg.fill('#dock textarea.dock-ta', text); await pg.click('#dock button.send'); await pg.waitForFunction(() => !document.querySelector('#dock .msg.busy') && !window.GCDock.state().busy, null, { timeout: 8000 }); };
   let ctx11 = null, q = null, durS1 = '';
   try {
@@ -2631,7 +2631,7 @@ if (!ONLY || ONLY === 'oauth') {
     if (!/không chuyển hướng/.test(bad) || landed.length || new URL(q.url()).origin !== B) throw new Error('redirect_uri lệch: phải hiện trang lỗi, không chuyển hướng');
     console.log('  ✓ Callback do chủ thêm (GC_OAUTH_REDIRECTS) → ghi rõ domain + "bạn đã thêm"; redirect_uri lệch → trang lỗi, KHÔNG chuyển hướng');
     // ---- Cài đặt › Kết nối agent
-    await q.goto(B + '/xuong'); await q.waitForFunction(() => /^v\d/.test(document.getElementById('verChip').textContent), null, { timeout: 8000 });
+    await q.goto(B + '/xuong'); await q.waitForFunction(() => /^v\d/.test((document.getElementById('verChip') || {}).textContent), null, { timeout: 8000 });
     await q.click('.nav-item:has-text("Kết nối agent")'); await q.waitForSelector('#connectUrl');
     if ((await q.textContent('#connectUrl')) !== H + '/mcp') throw new Error('địa chỉ MCP sai: ' + await q.textContent('#connectUrl'));
     const pageTxt = await q.textContent('#connectBox');
@@ -2669,7 +2669,7 @@ if (!ONLY || ONLY === 'oauth') {
     console.log('  ✓ Công tắc "Cho phép agent tự đăng ký": tắt → 403, bật lại → 201');
     // ---- chưa đặt GC_PUBLIC_URL: báo cần đặt, không hiện địa chỉ
     const q14 = await ctx.newPage(); q14.on('pageerror', e => errs13.push(e.message));
-    await q14.goto('http://127.0.0.1:7665/xuong'); await q14.waitForFunction(() => /^v\d/.test(document.getElementById('verChip').textContent), null, { timeout: 8000 });
+    await q14.goto('http://127.0.0.1:7665/xuong'); await q14.waitForFunction(() => /^v\d/.test((document.getElementById('verChip') || {}).textContent), null, { timeout: 8000 });
     await q14.click('.nav-item:has-text("Kết nối agent")'); await q14.waitForSelector('#connectBox .chip');
     const off14 = await q14.textContent('#connectBox');
     if (!/Chưa bật/.test(off14) || !/GC_PUBLIC_URL/.test(off14) || await q14.$('#connectUrl')) throw new Error('thiếu GC_PUBLIC_URL: phải báo cần đặt + không có địa chỉ MCP: ' + off14.slice(0, 200));
