@@ -49,6 +49,8 @@ ln -s releases/v0.1.0 "$HOME_DIR/current"; cp "$HOME_DIR/current/launcher.js" "$
 GC_HOME="$HOME_DIR" GC_PORT=$PORT GC_FEED_URL="http://127.0.0.1:$FPORT/latest.json" GC_NO_AUTOCHECK=1 GC_HEALTH_WINDOW_MS=6000 \
   node "$HOME_DIR/launcher.js" > "$W/launcher.log" 2>&1 & LPID=$!
 waitver 0.1.0 && ok "cài v0.1.0 chạy" || bad "v0.1.0 không chạy"
+# người dùng Docker tự thêm service (cổng đăng nhập, Caddy…) vào docker-compose.override.yml — genchibi / update không bao giờ đụng file này (v0.19)
+printf 'services:\n  login:\n    image: example/login\n  caddy:\n    image: caddy:2\n' > "$HOME_DIR/docker-compose.override.yml"; cp "$HOME_DIR/docker-compose.override.yml" "$W/override.orig"
 
 echo "1) cập nhật thành công"
 feed 0.1.1
@@ -94,6 +96,14 @@ mcpcall update_app | grep -q 'restart\\": true' && ok "update_app nhận lệnh"
 waitver 0.1.3 && ok "đang chạy v0.1.3 (do agent yêu cầu)" || bad "không lên v0.1.3"
 sleep 7; mcpcall get_app_version '{"check":false}' | grep -q 'current\\": \\"v0.1.3' && ok "get_app_version xác nhận v0.1.3 sau cửa sổ sức khoẻ" || bad "xác nhận sai"
 mcpcall rollback_app | grep -q 'ROLLBACK' && ok "rollback_app đòi xác nhận" || bad "rollback_app không đòi xác nhận"
+
+echo "6) docker-compose.override.yml: update / rollback / sync_compose không xoá, không ghi đè"
+cmp -s "$HOME_DIR/docker-compose.override.yml" "$W/override.orig" && ok "sau cập nhật + rollback tự động + rollback thủ công + agent cập nhật: override còn nguyên từng byte" || bad "docker-compose.override.yml bị đổi / mất sau khi update"
+CD="$W/compose"; mkdir -p "$CD/current"; echo "# compose bản mới" > "$CD/current/docker-compose.yml"; echo "# compose bản cũ" > "$CD/docker-compose.yml"; cp "$W/override.orig" "$CD/docker-compose.override.yml"
+( cd "$CD"; MODE=docker; eval "$(sed -n '/^sync_compose() {/,/^}/p' "$ROOT/cli/genchibi")"; sync_compose )
+cmp -s "$CD/docker-compose.yml" "$CD/current/docker-compose.yml" && ok "sync_compose vẫn chép docker-compose.yml của bản mới (hành vi cũ không đổi)" || bad "sync_compose không chép docker-compose.yml"
+cmp -s "$CD/docker-compose.override.yml" "$W/override.orig" && ok "sync_compose không đụng docker-compose.override.yml" || bad "sync_compose làm đổi docker-compose.override.yml"
+grep -n 'override' "$ROOT/cli/genchibi" | grep -vE '^[0-9]+:[[:space:]]*#' | grep -q 'rm \|cp \|mv \|>' && bad "cli/genchibi có lệnh ghi / xoá liên quan override" || ok "cli/genchibi không có lệnh nào ghi / xoá docker-compose.override.yml"
 
 echo; echo "Kết quả: $pass đạt, $failn trượt"
 [ $failn -eq 0 ] || { echo "--- launcher.log ---"; tail -40 "$W/launcher.log"; exit 1; }
