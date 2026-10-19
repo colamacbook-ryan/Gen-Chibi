@@ -9,8 +9,10 @@ const { Updater, RESTART_CODE } = require('./updater');
 const { Secrets } = require('./secrets');
 const { AI } = require('./ai');
 const { Voice, VOICES, GV } = require('./voice');
-const { MCP, TOOLS: MCP_TOOLS, cleanContext, cleanAnchors } = require('./mcp');   // chỉ dẫn + bộ tool theo khu của dock nằm trong mcp.js (một nguồn)
+const { MCP, TOOLS: MCP_TOOLS, cleanContext, cleanAnchors, scopeCtx } = require('./mcp');   // chỉ dẫn + bộ tool theo khu của dock nằm trong mcp.js (một nguồn)
 const Agent = require('./agent.js');
+const { OAuth, SCOPES: OAUTH_SCOPES, SCOPE_INFO: OAUTH_SCOPE_INFO } = require('./oauth');
+const { consentPage, errorPage } = require('./oauth-page');
 const { Store, KEY, CHAT_KINDS, readJSON, writeJSON } = require('./store');
 const { loadEngine } = require('./engine-node');
 
@@ -43,7 +45,7 @@ const SETTINGS = path.join(DATA, 'settings.json');
 fs.mkdirSync(DATA, { recursive: true });
 
 function log(...a) { console.log(new Date().toISOString(), ...a); }
-function settings() { return Object.assign({ autoUpdate: process.env.GC_AUTO_UPDATE !== '0', checkHours: 6 }, readJSON(SETTINGS, {})); }
+function settings() { return Object.assign({ autoUpdate: process.env.GC_AUTO_UPDATE !== '0', checkHours: 6, oauthRegister: true }, readJSON(SETTINGS, {})); }   // oauthRegister: cho agent tự đăng ký OAuth (v0.19; chỉ có tác dụng khi có GC_PUBLIC_URL)
 
 const store = new Store(DATA);
 const engine = loadEngine(APP);
@@ -52,15 +54,19 @@ const secrets = new Secrets(DATA);
 const ai = new AI({ dataDir: DATA, secrets, engine });
 const voice = new Voice({ dataDir: DATA, secrets });   // giọng AI (Google Gemini TTS) — dùng chung kho bí mật với AI đạo diễn
 const mcp = new MCP({ engine, store, version: VERSION, system: { updater, restartSoon }, voice });
+// OAuth 2.1 cho MCP từ xa (v0.19): mọi URL dựng từ GC_PUBLIC_URL — thiếu hoặc không phải gốc (có đường dẫn) thì OAuth tắt, /mcp vẫn 401 như cũ
+const oauth = new OAuth({ dir: DATA, publicUrl: PUBLIC_URL, accessTtl: process.env.GC_OAUTH_ACCESS_TTL, redirects: String(process.env.GC_OAUTH_REDIRECTS || '').split(',').map(x => x.trim()).filter(Boolean) });
+if (PUBLIC_URL && !oauth.enabled) log('[oauth] GC_PUBLIC_URL phải là gốc, vd https://chibi.example.com (không đường dẫn) — OAuth đang TẮT');
+setInterval(() => oauth.flush(), 30000).unref();   // lastUsedAt ghi đĩa trễ
 
 /* ---------------------------------------------------------------- tiện ích HTTP */
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.md': 'text/markdown; charset=utf-8' };
-function send(res, code, body, type) {
+function send(res, code, body, type, extra) {
   const buf = Buffer.isBuffer(body) ? body : Buffer.from(typeof body === 'string' ? body : JSON.stringify(body));
-  res.writeHead(code, {
+  res.writeHead(code, Object.assign({
     'Content-Type': type || 'application/json; charset=utf-8', 'Content-Length': buf.length,
     'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY'
-  });
+  }, extra));
   res.end(buf);
 }
 function fail(res, code, message) { send(res, code, { error: message }); }
@@ -75,6 +81,30 @@ function body(req, limit = 1024 * 1024) {
     req.on('error', reject);
   });
 }
+
+// thân của /oauth/token | /oauth/revoke | /oauth/register: form-urlencoded (Claude gửi dạng này) hoặc JSON; trần 32 KB, đối tượng không có prototype
+function oauthBody(req) {
+  return new Promise((resolve, reject) => {
+    const ct = String(req.headers['content-type'] || '').toLowerCase(), chunks = []; let n = 0;
+    req.on('data', c => { n += c.length; if (n > 32 * 1024) { reject(Object.assign(new Error('thân yêu cầu quá lớn (tối đa 32 KB)'), { code: 413 })); req.destroy(); } else chunks.push(c); });
+    req.on('error', reject);
+    req.on('end', () => {
+      const raw = Buffer.concat(chunks).toString('utf8');
+      if (/^application\/x-www-form-urlencoded\b/.test(ct)) { const o = Object.create(null); for (const [k, v] of new URLSearchParams(raw)) if (!(k in o)) o[k] = v; return resolve(o); }
+      if (/^application\/json\b/.test(ct)) {
+        let j; try { j = raw ? JSON.parse(raw) : {}; } catch (e) { return reject(Object.assign(new Error('JSON không hợp lệ'), { code: 400 })); }
+        return j && typeof j === 'object' && !Array.isArray(j) ? resolve(j) : reject(Object.assign(new Error('thân phải là đối tượng JSON'), { code: 400 }));
+      }
+      reject(Object.assign(new Error('Content-Type phải là application/x-www-form-urlencoded hoặc application/json'), { code: 415 }));
+    });
+  });
+}
+// IP khách để giới hạn tốc độ: sau Cloudflare / Caddy thì địa chỉ socket luôn là proxy → ưu tiên header proxy đặt (cf-connecting-ip, x-real-ip, mục CUỐI của x-forwarded-for = do proxy gần nhất ghi)
+function clientIp(req) {
+  const h = req.headers;
+  return String(h['cf-connecting-ip'] || h['x-real-ip'] || String(h['x-forwarded-for'] || '').split(',').pop().trim() || req.socket.remoteAddress || '?').slice(0, 64);
+}
+function bearerOf(req) { return String(req.headers.authorization || '').replace(/^Bearer\s+/i, '') || String(req.headers['x-gc-token'] || ''); }
 
 /* ---------------------------------------------------------------- tệp tĩnh */
 const STATIC_ROOTS = ['engine', 'kinds', 'studio'];
@@ -92,7 +122,7 @@ function serveStatic(req, res, urlPath) {
 }
 
 /* ---------------------------------------------------------------- định tuyến */
-function restartSoon() { setTimeout(() => { log('[server] thoát để launcher khởi động lại'); process.exit(RESTART_CODE); }, 400); }
+function restartSoon() { setTimeout(() => { log('[server] thoát để launcher khởi động lại'); oauth.flush(); process.exit(RESTART_CODE); }, 400); }
 // Origin (nếu có) phải trỏ về chính máy chủ này. Lớp chặn chính là header X-GC-Request (trang khác không gửi được nếu không qua preflight CORS, mà máy chủ
 // không trả CORS); đây là lớp thứ hai nên chấp nhận các cách mở hợp lệ: trùng Host · trùng tên mà proxy báo (X-Forwarded-Host) hoặc GC_PUBLIC_URL ·
 // cùng là máy cục bộ (localhost / 127.0.0.1 / [::1]) và cùng cổng. Origin hỏng → chặn (không ném lỗi 500).
@@ -171,6 +201,43 @@ async function dockTurn(b) {
   }
   return out;
 }
+/* ---------------------------------------------------------------- OAuth 2.1 (v0.19) */
+// Cho agent tự đăng ký: công tắc của chủ (Cài đặt › Kết nối agent), mặc định BẬT
+const registerOn = () => settings().oauthRegister !== false;
+function oauthView() {
+  return { enabled: oauth.enabled, configured: !!PUBLIC_URL, publicUrl: oauth.publicUrl, mcpUrl: oauth.enabled ? oauth.resource : null, register: registerOn(), tokenSet: !!API_TOKEN,
+    scopes: OAUTH_SCOPES.map(id => Object.assign({ id }, OAUTH_SCOPE_INFO[id])), redirects: oauth.redirects, accessTtl: oauth.accessTtl, clients: oauth.list() };
+}
+// /.well-known/oauth-* và /oauth/*. Trả true nếu đã trả lời. Tắt (thiếu GC_PUBLIC_URL) → 404 để /mcp 401 trơn như cũ
+async function oauthRoute(req, res, url, p, m) {
+  if (!oauth.enabled) { fail(res, 404, 'OAuth chưa bật — đặt GC_PUBLIC_URL=https://<tên-miền> trong .env'); return true; }
+  const wk = /^\/\.well-known\/(oauth-protected-resource|oauth-authorization-server)(\/mcp)?$/.exec(p);
+  if (wk) {   // RFC 9728 (cả dạng có hậu tố /mcp chèn sau host) + RFC 8414
+    if (m !== 'GET' && m !== 'HEAD') { send(res, 405, { error: 'chỉ GET' }, null, { Allow: 'GET, HEAD' }); return true; }
+    send(res, 200, wk[1] === 'oauth-protected-resource' ? oauth.protectedResource() : oauth.authServer(registerOn())); return true;
+  }
+  const ip = clientIp(req), slow = (key, max, sec) => { const w = oauth.limit(key + ip, max, sec); if (w) send(res, 429, { error: 'temporarily_unavailable', error_description: 'quá nhiều yêu cầu — thử lại sau ' + w + ' giây' }, null, { 'Retry-After': String(w) }); return !!w; };
+  const oerr = (e) => send(res, e.code >= 400 && e.code < 600 ? e.code : 400, { error: 'invalid_request', error_description: e.message });
+  if (p === '/oauth/authorize') {
+    if (m !== 'GET') { send(res, 405, { error: 'chỉ GET' }, null, { Allow: 'GET' }); return true; }
+    if (slow('auth:', 60, 60)) return true;
+    const r = oauth.authorize(url.searchParams);
+    if (r.page) { const e = errorPage(r.page); send(res, 400, e.html, 'text/html; charset=utf-8', { 'Content-Security-Policy': e.csp }); return true; }
+    if (r.redirect) { res.writeHead(302, { Location: r.redirect, 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' }); res.end(); return true; }
+    const pg = consentPage(r.view, { needToken: !!API_TOKEN, publicHost: new URL(oauth.publicUrl).host });
+    send(res, 200, pg.html, 'text/html; charset=utf-8', { 'Content-Security-Policy': pg.csp }); return true;
+  }
+  if (p === '/oauth/register' || p === '/oauth/token' || p === '/oauth/revoke') {
+    if (m !== 'POST') { send(res, 405, { error: 'chỉ POST' }, null, { Allow: 'POST' }); return true; }
+    if (p === '/oauth/register' ? slow('reg:', 20, 600) : slow('tok:', 60, 60)) return true;
+    if (p === '/oauth/register' && !registerOn()) { send(res, 403, { error: 'access_denied', error_description: 'chủ máy đã tắt "cho phép agent tự đăng ký" (Studio › Hệ thống › Kết nối agent)' }); return true; }
+    let f; try { f = await oauthBody(req); } catch (e) { oerr(e); return true; }
+    const r = p === '/oauth/register' ? oauth.register(f) : p === '/oauth/token' ? oauth.token(f) : oauth.revoke(f);
+    send(res, r.status, r.body, null, { 'Cache-Control': 'no-store', Pragma: 'no-cache' }); return true;   // token trả về: không bao giờ vào log
+  }
+  fail(res, 404, 'không có đường OAuth này'); return true;
+}
+
 async function route(req, res) {
   const url = new URL(req.url, 'http://local');
   let p = url.pathname;
@@ -193,11 +260,20 @@ async function route(req, res) {
   // header chuyển tiếp: thấy nó mà chưa có token thì từ chối hết — không bao giờ để app mở ra Internet không khoá.
   const viaProxy = !!(req.headers['x-forwarded-for'] || req.headers.forwarded || req.headers['cf-connecting-ip'] || req.headers['x-real-ip']);
   if (!API_TOKEN && viaProxy && !viaLink) return fail(res, 403, 'đang đi qua tunnel/proxy: phải đặt GC_API_TOKEN trước khi mở ra ngoài');
+
+  // ---- OAuth (v0.19): khám phá + đăng ký + token + thu hồi là đường MÁY (công khai, bảo vệ bằng PKCE / token — không cần cookie hay phiên Studio); authorize là trang cho chủ
+  if (p.startsWith('/oauth/') || p.startsWith('/.well-known/oauth-')) { const done = await oauthRoute(req, res, url, p, m); if (done) return; }
+
   // Đã đặt token: mọi /api (trừ health) và /mcp đều cần token, bất kể Host hay địa chỉ. Studio đăng nhập bằng token.
-  if (API_TOKEN && !viaLink && (p === '/mcp' || (p.startsWith('/api/') && p !== '/api/health'))) {
-    const auth = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '') || String(req.headers['x-gc-token'] || '');
-    if (!tokenOk(auth)) return fail(res, 401, 'cần token của bản cài');
+  // /mcp còn nhận access token OAuth (Authorization: Bearer): phạm vi → kênh SẴN CÓ (scopeCtx). Không có / sai token → 401 + WWW-Authenticate trỏ metadata để agent tự khám phá.
+  let mcpCtx = { viaLink }, oauthGrant = null;
+  if (p === '/mcp' && !viaLink) {
+    const b = bearerOf(req), owner = !!API_TOKEN && tokenOk(b);
+    oauthGrant = !owner && oauth.enabled ? oauth.verify(b) : null;   // token OAuth hợp lệ luôn được áp phạm vi của nó — kể cả khi không đặt GC_API_TOKEN (quyền ít hơn quyền chủ máy cục bộ)
+    if (oauthGrant) mcpCtx = scopeCtx(oauthGrant.scope);
+    else if (API_TOKEN && !owner) return send(res, 401, { error: 'cần token của bản cài' + (oauth.enabled ? ' hoặc kết nối OAuth (xem WWW-Authenticate)' : '') }, null, oauth.enabled ? { 'WWW-Authenticate': 'Bearer resource_metadata="' + oauth.metaUrl + '"' } : undefined);
   }
+  if (API_TOKEN && !viaLink && p.startsWith('/api/') && p !== '/api/health' && !tokenOk(bearerOf(req))) return fail(res, 401, 'cần token của bản cài');
 
   // ---- MCP (Streamable HTTP, trả JSON). Chống CSRF: bắt buộc Content-Type JSON (trang khác gửi kiểu này phải qua preflight, server không cho)
   if (p === '/mcp') {
@@ -206,16 +282,17 @@ async function route(req, res) {
       if (url.searchParams.has('guide')) { const md = Agent.guide(url.searchParams.get('guide') || 'guide'); return md == null ? fail(res, 404, 'chủ đề lạ: ' + Agent.topics().map(t => t.id).join(', ')) : send(res, 200, md, 'text/markdown; charset=utf-8'); }
       const out = Agent.toolsExport(MCP_TOOLS, url.searchParams.get('tools') || 'openai'); return out ? send(res, 200, out) : fail(res, 400, 'tools: openai | gemini | mcp');
     }
-    if (m !== 'POST') return send(res, 405, { error: 'MCP: chỉ nhận POST (GET ?guide=<chủ đề> hoặc ?tools=openai|gemini|mcp cho agent không có MCP client)' });
-    if (!originOK(req)) return fail(res, 403, 'Origin không được phép');
+    if (m !== 'POST') return send(res, 405, { error: 'MCP: chỉ nhận POST (GET ?guide=<chủ đề> hoặc ?tools=openai|gemini|mcp cho agent không có MCP client)' }, null, { Allow: 'POST' });
+    // Origin chỉ chống CSRF cho request mang quyền "có sẵn" (cục bộ không token, hoặc token chủ máy do trình duyệt tự gắn); access token OAuth là Bearer tường minh → backend của agent gọi (không có Origin hoặc claude.ai) không bị chặn
+    if (!oauthGrant && !originOK(req)) return fail(res, 403, 'Origin không được phép');
     if (!/^application\/json\b/i.test(String(req.headers['content-type'] || ''))) return fail(res, 415, 'MCP cần Content-Type: application/json');
     const msg = await body(req, 2 * 1024 * 1024);
     if (Array.isArray(msg)) {
       if (msg.length > 20) return fail(res, 413, 'MCP: một lô JSON-RPC tối đa 20 lời gọi');   // lô lớn × lời gọi nặng = chặn server lâu (CNS-061)
-      const out = (await Promise.all(msg.map(x => mcp.handle(x, { viaLink })))).filter(Boolean);
+      const out = (await Promise.all(msg.map(x => mcp.handle(x, mcpCtx)))).filter(Boolean);
       return out.length ? send(res, 200, out) : send(res, 202, '');
     }
-    const r = await mcp.handle(msg, { viaLink });
+    const r = await mcp.handle(msg, mcpCtx);
     return r ? send(res, 200, r) : send(res, 202, '');
   }
 
@@ -228,12 +305,13 @@ async function route(req, res) {
   }
 
   if (p === '/api/health') return send(res, 200, { ok: true, version: VERSION });
-  if (p === '/api/info') return send(res, 200, { version: VERSION, repo: REPO, home: HOME, port: PORT, settings: settings(), mcp: { http: '/mcp', stdio: 'genchibi mcp', link: PUBLIC_URL && MCP_KEY ? PUBLIC_URL + '/mcp/' + MCP_KEY : null } });
+  if (p === '/api/info') return send(res, 200, { version: VERSION, repo: REPO, home: HOME, port: PORT, settings: settings(), mcp: { http: '/mcp', stdio: 'genchibi mcp', link: PUBLIC_URL && MCP_KEY ? PUBLIC_URL + '/mcp/' + MCP_KEY : null, oauth: oauth.enabled ? oauth.resource : null } });
   if (p === '/api/settings' && m === 'PUT') {
     const b = await body(req);
     const s = settings();
     if (typeof b.autoUpdate === 'boolean') s.autoUpdate = b.autoUpdate;
     if (Number.isFinite(b.checkHours) && b.checkHours >= 1 && b.checkHours <= 168) s.checkHours = Math.round(b.checkHours);
+    if (typeof b.oauthRegister === 'boolean') s.oauthRegister = b.oauthRegister;
     writeJSON(SETTINGS, s);
     scheduleChecks();
     return send(res, 200, s);
@@ -256,6 +334,19 @@ async function route(req, res) {
     try { const r = updater.rollback(); send(res, 200, r); restartSoon(); return; }
     catch (e) { return fail(res, 400, e.message); }
   }
+
+  // ---- kết nối agent (OAuth, v0.19): chủ máy duyệt + quản lý. Đã qua cổng /api: token chủ máy (hoặc cục bộ không token) + X-GC-Request + originOK — KHÔNG tin cổng đăng nhập ngoài app
+  if (p === '/api/oauth' && m === 'GET') return send(res, 200, oauthView());
+  if (p === '/api/oauth/approve' && m === 'POST') {
+    if (!oauth.enabled) return fail(res, 404, 'OAuth chưa bật — đặt GC_PUBLIC_URL');
+    const b = await body(req, 8 * 1024), r = oauth.approve(b.request, b.decision, typeof b.scope === 'string' ? b.scope : '');
+    if (!r.redirect) return fail(res, r.status || 400, r.error);
+    log('[oauth] chủ máy ' + (b.decision === 'approve' ? 'đã cấp phép (' + b.scope + ')' : 'đã từ chối') + ' một kết nối agent');
+    return send(res, 200, { redirect: r.redirect });
+  }
+  const ocm = p.match(/^\/api\/oauth\/clients\/([A-Za-z0-9_-]{1,128})(\/revoke)?$/);
+  if (ocm && !ocm[2] && m === 'PUT') { const b = await body(req, 4 * 1024); return oauth.setScope(ocm[1], b.scope) ? send(res, 200, oauthView()) : fail(res, 400, 'client không có hoặc phạm vi không hợp lệ'); }
+  if (ocm && ocm[2] && m === 'POST') { if (!oauth.revokeClient(ocm[1])) return fail(res, 404, 'không có client này'); log('[oauth] chủ máy thu hồi một kết nối agent'); return send(res, 200, oauthView()); }
 
   // ---- core AI (LLM qua API chuẩn OpenAI; key mã hoá, không trả về trình duyệt)
   if (p === '/api/ai' && m === 'GET') return send(res, 200, Object.assign(ai.publicConfig(), { zones: mcp.zoneInfo() }));   // zones: nhãn / vai / lời giới thiệu theo khu cho dock (một nguồn: mcp ZONES)
@@ -477,4 +568,4 @@ server.listen(PORT, HOST, () => {
   scheduleChecks();
   if (process.env.GC_NO_AUTOCHECK !== '1') setTimeout(autoCheck, 15000);
 });
-process.on('SIGTERM', () => server.close(() => process.exit(0)));
+process.on('SIGTERM', () => server.close(() => { oauth.flush(); process.exit(0); }));

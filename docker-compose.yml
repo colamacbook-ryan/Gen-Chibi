@@ -21,6 +21,8 @@ services:
       GC_ALLOWED_HOSTS: ${GC_ALLOWED_HOSTS:-}
       GC_MCP_KEY: ${GC_MCP_KEY:-}
       GC_PUBLIC_URL: ${GC_PUBLIC_URL:-}
+      GC_OAUTH_REDIRECTS: ${GC_OAUTH_REDIRECTS:-}
+      GC_OAUTH_ACCESS_TTL: ${GC_OAUTH_ACCESS_TTL:-}
       GC_REPO: ${GC_REPO:-colamacbook-ryan/Gen-Chibi}
       GC_GITHUB_TOKEN: ${GC_GITHUB_TOKEN:-}
       # mạng công ty có proxy: đặt trong .env
@@ -40,7 +42,7 @@ services:
       start_period: 10s
 
   # MCP ra Internet qua Cloudflare Tunnel — bật bằng `genchibi expose` (đặt COMPOSE_PROFILES trong .env).
-  # Tunnel có tên: chỉ chuyển đường /mcp (xem tunnel/config.yml do genchibi sinh).
+  # Tunnel có tên: chỉ chuyển đường /mcp + OAuth (xem tunnel/config.yml do genchibi sinh).
   tunnel:
     image: cloudflare/cloudflared:2026.9.3
     profiles: ["tunnel"]
