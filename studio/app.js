@@ -2077,8 +2077,8 @@
     actions(h('button', { class: 'btn primary', onclick: function () { nTitle.focus(); } }, '+ Tác phẩm mới'));
     var table = h('table', { class: 'grid worklist' }), foot = h('div', { class: 'row note' }), box = h('div', { class: 'panel scroll' }, table);
     $('view').appendChild(h('div', { class: 'stack' },
-      h('div', { class: 'row toolbar' }, search, projF, stF, h('span', { class: 'note', id: 'workCount' }), h('span', { class: 'sp' }),
-        h('span', { class: 'note', text: 'Tác phẩm mới' }), nTitle, projectSelect(nProj, function (v) { nProj = v; }), h('button', { class: 'btn primary', onclick: create }, 'Tạo')), box, foot));
+      h('div', { class: 'row toolbar' }, search, projF, stF, h('span', { class: 'note', id: 'workCount' })),
+      h('div', { class: 'row toolbar newwork' }, h('span', { class: 'note', text: 'Tác phẩm mới:' }), nTitle, projectSelect(nProj, function (v) { nProj = v; }), h('button', { class: 'btn primary', onclick: create }, 'Tạo tác phẩm')), box, foot));
     function fillProj() {
       clear(projF);
       projF.appendChild(h('option', { value: '*', text: 'Mọi dự án' }));
@@ -2838,7 +2838,7 @@
         if (!part.length) return;
         var row = h('div', { class: 'libgrid' });
         part.forEach(function (x) {
-          row.appendChild(h('button', anc({ class: 'libcard', 'aria-pressed': String(sel && x.key === sel.key), title: x.key, onclick: function () { sel = x; paint(); paintInsp(); } }, cfg.anchor + ':' + x.key, x.name),
+          row.appendChild(h('button', anc({ class: 'libcard', 'aria-pressed': String(sel && x.key === sel.key), title: x.key, onclick: function () { sel = x; paint(); paintInsp(); } }, cfg.anchor ? cfg.anchor + ':' + x.key : null, x.name),
             h('div', { class: 'im' }, h('img', { src: cfg.thumb(x), alt: x.name, loading: 'lazy' })),
             h('div', { class: 'lb' }, h('b', { text: x.name }), h('span', { class: 'note', text: cfg.sub(x) }))));
         });

@@ -1465,7 +1465,7 @@ if (!ONLY || ONLY === 'voice') {
     await q.close(); M.hasKey = false; M.ids.clear();
     q = await pg(await ctx10.newPage(), { page: 'works', work: WORK }); await q.waitForSelector('.shot'); await spyOn(q); await q.waitForFunction(() => /Chưa có key Google/.test(document.body.textContent), null, { timeout: 5000 });
     dx = await dlOf(() => q.click(EXP));
-    if (Object.keys(dx.voices).length !== 0 || await q.$(BOX)) throw new Error('chưa có key: xuất như cũ, không hộp');
+    if (Object.keys(dx.voices).length !== 0 || await q.$(BOX)) throw new Error('chưa có key: xuất như cũ, không hộp · ' + JSON.stringify({ voices: Object.keys(dx.voices).length, box: !!(await q.$(BOX)), hasKey: M.hasKey, ids: M.ids.size, cfg: await q.evaluate(() => JSON.stringify(window.GCDock && window.GCDock.state())) }));
     M.hasKey = true; M.ids.clear();
     await q.close();
     console.log('  ✓ Xuất phim thiếu giọng AI: bấm Phim (HTML) khi còn câu chưa có clip + Giọng AI sẵn sàng → hộp "Còn 15/15 câu chưa có giọng AI — câu thiếu sẽ đọc bằng giọng máy / blip" với đúng 3 nút (focus nút đầu, chưa tốn lượt) · Huỷ: đóng, không tải · Xuất luôn: tải ngay (DATA.voiceTotal) · Lồng tiếng rồi xuất: lồng đủ 15 câu rồi tự tải · hết lượt giữa chừng vẫn xuất phần đã có · Dừng lồng tiếng thì KHÔNG xuất · đang lồng tiếng chỉ nhắc chờ · đủ giọng / chưa có key: xuất thẳng, không hộp');
@@ -1689,7 +1689,7 @@ if (!ONLY || ONLY === 'voice') {
     if (!/đọc giọng chung của ngôn ngữ/.test(await regionLine())) throw new Error('dòng giọng vùng phải nói vai chưa thiết kế đọc giọng chung: ' + await regionLine());
     // đã có một vai thiết kế (bên server) → 1/3, chỉ còn 2 vai phải thiết kế
     M.designs['vo-tuong|vi|nam'] = { voice: 'design-vo-tuong', at: new Date().toISOString() };
-    await q.reload(); await q.waitForSelector('.shot'); await spyOn(q); await poll(async () => /^giọng vùng có ở 1\/3 vai \(đã thiết kế\)/.test(await regionLine()), 'đếm 1/3');
+    await q.reload(); await q.waitForSelector('.shot'); await spyOn(q); await poll(async () => /^giọng vùng có ở 1\/3 vai \(đã thiết kế\)/.test(await regionLine()), 'đếm 1/3').catch(async e => { throw new Error(e.message + ' · dòng hiện: «' + await regionLine() + '» · url ' + q.url()); });
     // bấm nút → hộp xác nhận TRONG TRANG (không window.confirm): ghi số vai ≈ số lượt Google + ~25 s mỗi vai; chưa tốn gì
     await q.click(regB); await q.waitForSelector(cf);
     let cfT = await q.textContent(cf);
@@ -1924,6 +1924,12 @@ if (!ONLY || ONLY === 'dock') {
     if (!/Ý tưởng hay/.test(await q.textContent('#dock .dock-log'))) throw new Error('sau tải lại không thấy lại luồng (server giữ)');
     // luồng của asset khác hẳn: sang Thư viện mở nhân vật → luồng riêng, trống
     const th = await fetch(U11 + 'api/chats/work/' + WID, { headers: H11 }).then(r => r.json()); if (th.messages.length !== 2) throw new Error('luồng trên server: ' + th.messages.length);
+    // × bỏ ngữ cảnh: AI chỉ biết khu (payload không có đối tượng, chỉ dẫn không có tác phẩm), luồng về luồng của khu; "Gắn lại" trả lại
+    const p5 = []; q.on('request', r => { if (/\/api\/ai\/agent$/.test(r.url()) && r.method() === 'POST') p5.push(JSON.parse(r.postData())); });
+    await q.click('#dock .dock-ctx .x'); await q.waitForSelector('#dock .dock-ctx button:text-is("Gắn lại")');
+    LLM.steps = []; LLM.reply = 'Tôi chỉ biết bạn đang ở khu Tạo tác.'; await ask(q, 'Chào bạn');
+    if (p5[0].context.zone !== 'tao-tac' || p5[0].context.object || p5[0].context.page || /TÁC PHẨM ĐANG MỞ/.test(LLM.last.system) || !LLM.last.tools.includes('save_shot')) throw new Error('bỏ ngữ cảnh: ' + JSON.stringify(p5[0].context));
+    await q.click('#dock .dock-ctx button:text-is("Gắn lại")'); await q.waitForFunction(() => /Từ vườn đào/.test(document.querySelector('#dock .dock-ctx .path').textContent));
     await q.goto(U11 + 'tao-tac#/tac-pham/' + WID + '/review'); await q.waitForSelector('.roomtabs'); await q.waitForTimeout(400);
     if (await q.getAttribute('#wtab-review', 'aria-selected') !== 'true') throw new Error('deep link tab review không mở đúng tab');
     await q.close();

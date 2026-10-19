@@ -476,9 +476,11 @@ table.worklist th:nth-child(n+4):nth-child(-n+6) { text-align: right; }
 table.worklist a.rowlink { color: var(--fg); text-decoration: none; }
 table.worklist a.rowlink:hover b { color: var(--accent); text-decoration: underline; }
 table.worklist td.empty { padding: 28px; text-align: center; color: var(--fg2); }
-table.worklist td.id { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+table.worklist td.id { max-width: 128px; overflow: hidden; text-overflow: ellipsis; }
+table.worklist td, table.worklist th { padding: 6px 8px; }
 table.worklist td:nth-child(2) { min-width: 200px; }
-table.worklist .tag { max-width: 200px; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+table.worklist .tag { max-width: 150px; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+.toolbar.newwork { padding: 6px 8px; border: 1px dashed var(--line-strong); border-radius: 6px; background: var(--raised); }
 .toolbar { gap: 8px; } .toolbar .sp { flex: 1; }
 .room { display: grid; gap: 12px; align-content: start; min-width: 0; }
 .room > [role="tabpanel"][hidden] { display: none; }
