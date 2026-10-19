@@ -326,8 +326,11 @@ if (!ONLY) {
     await q.evaluate(() => localStorage.setItem('gc-route-thu-vien', JSON.stringify({ page: 'projects', project: 'mau-tam-quoc' })));
     await q.goto('http://localhost:7494/thu-vien'); await q.waitForSelector('button:has-text("Cập nhật Tam Quốc")', { timeout: 6000 });
     // hộp xác nhận "Cập nhật…?": trang này đã tự chấp nhận mọi hộp thoại (q.on('dialog') ở trên)
-    await q.click('button:has-text("⟳ Cập nhật Tam Quốc")'); await q.waitForURL(/\/thu-vien$/); await q.waitForTimeout(800);
-    if (await q.$('button:has-text("⟳ Cập nhật Tam Quốc")')) throw new Error('cập nhật xong vẫn còn mời cập nhật');
+    // nhập đè cả bộ (dựng thử gói động tác, kiểm luật âm) mất vài giây khi máy bận: chờ tới 20 s cho nút biến mất thay vì 0,8 s cố định
+    const tUp = Date.now(); await q.click('button:has-text("⟳ Cập nhật Tam Quốc")'); await q.waitForURL(/\/thu-vien$/);
+    await q.waitForFunction(() => ![...document.querySelectorAll('button')].some(b => /⟳ Cập nhật Tam Quốc/.test(b.textContent)), null, { timeout: 20000 }).catch(() => {});
+    if (await q.$('button:has-text("⟳ Cập nhật Tam Quốc")')) throw new Error('cập nhật xong vẫn còn mời cập nhật (sau ' + ((Date.now() - tUp) / 1000).toFixed(1) + ' s)');
+    console.log('    (cập nhật bộ mẫu Tam Quốc xong sau ' + ((Date.now() - tUp) / 1000).toFixed(1) + ' s)');
     await q.evaluate(() => localStorage.setItem('gc-route-tao-tac', JSON.stringify({ page: 'works', work: 'tq-vuon-dao-xich-bich' })));
     await q.goto('http://localhost:7494/tao-tac'); await q.waitForSelector('.readybar');
     if (!/Sẵn sàng diễn cả 6 phân cảnh/.test(await q.textContent('.readybar'))) throw new Error('cập nhật bộ mẫu chưa có phân cảnh mới: ' + await q.textContent('.readybar'));
