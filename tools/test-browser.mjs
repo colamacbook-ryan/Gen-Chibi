@@ -991,7 +991,7 @@ if (!ONLY || ONLY === 'lib') {
   const WAV = wav(0.6, 220), tomorrow = () => { const d = new Date(); d.setHours(24, 0, 0, 0); return d.toISOString(); };
   // ---- "máy chủ" giả: giọng AI Google + gói âm ----
   const M = { hasKey: false, off: false, today: 3, fresh: 0, budget: Infinity, designs: {}, ids: new Set(), haveRoles: {}, dry404: false, lines: [], casts: [], designCalls: [], leaks: [],
-    packs: [TQ], sound404: false, soundPosts: [], dailyCap: 200 };
+    packs: [TQ], sound404: false, soundPosts: [], dailyCap: 200, soundDels: [], delMode: '' };
   const cfgOf = () => ({ enabled: M.hasKey && !M.off, off: M.off, model: 'gemini-3.8-flash-tts', hasKey: M.hasKey, keySource: M.hasKey ? 'voice' : '', blocked: [], today: M.today, cached: M.ids.size, keyUrl: 'https://aistudio.google.com/apikey',
     roles: GV.roleList(), langs: GV.langList(), designs: M.designs, dailyCap: M.dailyCap, bad: [] });
   // giọng AI mà "server" chọn cho một vai: đã thiết kế → giọng thiết kế; tiếng Việt → giọng dựng sẵn; ngôn ngữ khác → giọng thư viện theo mã vùng (en-US ≠ en-GB)
@@ -1039,6 +1039,18 @@ if (!ONLY || ONLY === 'lib') {
     if (c.errors.length) return json(422, { error: 'Gói âm chưa đạt: ' + c.errors[0], errors: c.errors });
     const rec = Object.assign({}, pk, { version: 1 }); M.packs = M.packs.filter(x => x.id !== rec.id).concat(rec);
     return json(200, Object.assign({}, rec, { warnings: [] }));
+  });
+  // gỡ gói âm: DELETE api/sound-packs/<id>[?force=1] — delMode: '' = gỡ được · '404' / '405' = máy chủ chưa có đường này · 'conflict' = 409 kèm conflicts[] (còn chỗ gọi âm của gói) trừ khi ?force=1
+  await ctx11.route(/\/api\/sound-packs\/[a-z0-9-]+(\?.*)?$/, async route => {
+    const req = route.request(), u = new URL(req.url()), id = u.pathname.split('/').pop(), force = u.searchParams.get('force') === '1';
+    const json = (status, o) => route.fulfill({ status, contentType: 'application/json; charset=utf-8', body: JSON.stringify(o) });
+    M.soundDels.push({ id, force, method: req.method() });
+    if (M.delMode === '404') return json(404, { error: 'không tìm thấy' });
+    if (M.delMode === '405') return json(405, { error: 'phương thức không được hỗ trợ' });
+    const deps = ['tác phẩm tq-vuon-dao-xich-bich › phân cảnh 2 › bước 3: gọi âm "vi-du-coc"', 'gói động tác tq-dong-tac › clip bonk: gọi âm "vi-du-coc"'];
+    if (M.delMode === 'conflict' && !force) return json(409, { error: 'Gói âm "' + id + '" còn được gọi ở 2 chỗ', errors: deps, conflicts: deps });
+    M.packs = M.packs.filter(x => x.id !== id);
+    return json(200, { deleted: true, id, sounds: 1, warnings: M.delMode === 'conflict' ? deps.map(d => 'đã làm hỏng — ' + d) : [] });
   });
   // tác phẩm Tam Quốc có giọng đã chốt cho 2 nhân vật (work.voices) — server thật chốt khi Lồng tiếng / cast
   await ctx11.route(new RegExp('/api/works/' + WORK + '$'), async route => {
@@ -1209,12 +1221,37 @@ if (!ONLY || ONLY === 'lib') {
     must(await q.evaluate(() => window.GenChibi.sounds.has('vi-du-coc')), 'gói nhập xong chưa nạp vào GC.sounds'); must(/Đã nhập gói/.test((await toasts()).join('|')), 'thiếu thông báo nhập gói');
     await tab('sounds'); await waitRows(71); await tab('packs');
     must(/Phát hành|Nháp/.test(await q.textContent('tr[data-pack="vi-du-am"]')), 'hàng gói mới thiếu trạng thái');
-    await shot('sounds-goi'); await q.close();
+    await shot('sounds-goi');
+    // Gỡ gói (CNS-106): chỉ gói của người dùng (gói khung + bộ mẫu không có nút); bấm 2 lần; 404 / 405 → "máy chủ chưa hỗ trợ"; 409 → danh sách phụ thuộc + "Vẫn gỡ" (gửi ?force=1)
+    must(!(await q.$('tr[data-pack="gen.am"] button[aria-label^="Gỡ gói"]')) && !(await q.$('tr[data-pack="tq-am"] button[aria-label^="Gỡ gói"]')), 'gói khung / gói mẫu không được có nút Gỡ gói');
+    const delB = 'tr[data-pack="vi-du-am"] button[aria-label="Gỡ gói vi-du-am"]';
+    must(!!(await q.$(delB)), 'gói của người dùng phải có nút Gỡ gói');
+    for (const code of ['404', '405']) {   // máy chủ chưa có DELETE
+      M.delMode = code; M.soundDels.length = 0;
+      await q.click(delB); must(M.soundDels.length === 0 && /Bấm lần nữa/.test(await q.textContent(delB)), 'lần bấm 1 chỉ xác nhận, chưa gọi máy chủ');
+      await q.click(delB); await pollq(async () => /Máy chủ chưa hỗ trợ gỡ gói/.test(await q.textContent('#lsDelBox')), 'báo máy chủ chưa hỗ trợ (' + code + ')');
+      must(M.soundDels.length === 1 && M.soundDels[0].method === 'DELETE' && !M.soundDels[0].force && !!(await q.$('tr[data-pack="vi-du-am"]')) && await q.evaluate(() => window.GenChibi.sounds.has('vi-du-coc')), 'chưa gỡ được thì gói vẫn còn');
+      must(!(await q.$eval(delB, e => e.disabled)) && /Gỡ gói/.test(await q.textContent(delB)), 'sau lỗi nút Gỡ gói bấm lại được');
+    }
+    M.delMode = 'conflict'; M.soundDels.length = 0;   // 409 + danh sách phụ thuộc → "Vẫn gỡ"
+    await q.click(delB); await q.click(delB); await q.waitForSelector('#lsDelForce', { timeout: 5000 });
+    const deps = await q.$$eval('#lsDelBox li', es => es.map(e => e.textContent));
+    must(deps.length === 2 && /tq-vuon-dao-xich-bich/.test(deps[0]) && /gói động tác tq-dong-tac/.test(deps[1]) && /còn được gọi ở 2 chỗ/.test(await q.textContent('#lsDelBox')), 'danh sách phụ thuộc: ' + deps.join(' | '));
+    must(M.soundDels.length === 1 && !M.soundDels[0].force && !!(await q.$('tr[data-pack="vi-du-am"]')), 'chưa bấm "Vẫn gỡ" thì chưa gửi force, gói vẫn còn');
+    await q.click('#lsDelForce'); await q.waitForFunction(() => !document.querySelector('tr[data-pack="vi-du-am"]'), null, { timeout: 5000 });
+    must(M.soundDels.length === 2 && M.soundDels[1].force === true, '"Vẫn gỡ" phải gửi ?force=1: ' + JSON.stringify(M.soundDels));
+    must(!(await q.evaluate(() => window.GenChibi.sounds.has('vi-du-coc') || window.GenChibi.sounds.packs().some(p => p.id === 'vi-du-am'))), 'gỡ xong phải bỏ khỏi GC.sounds');
+    await pollq(async () => /đã làm hỏng/.test(await q.textContent('#lsDelBox')) && (await toasts()).some(t => /Đã gỡ gói “Gói ví dụ/.test(t) || /Đã gỡ gói/.test(t)), 'sau khi gỡ cưỡng bức: toast + cảnh báo');
+    M.delMode = '';   // gỡ thường (không còn phụ thuộc): nhập lại gói rồi gỡ bằng 2 lần bấm, không gửi force
+    await q.fill('#lsImport', JSON.stringify(SND.EXAMPLE)); await q.click('#lsImportGo'); await q.waitForSelector(delB);
+    M.soundDels.length = 0; await q.click(delB); await q.click(delB); await q.waitForFunction(() => !document.querySelector('tr[data-pack="vi-du-am"]'), null, { timeout: 5000 });
+    must(M.soundDels.length === 1 && !M.soundDels[0].force && M.soundDels[0].id === 'vi-du-am', 'gỡ thường: một lời gọi DELETE, không force: ' + JSON.stringify(M.soundDels));
+    await q.close();
     M.sound404 = true; await open({ page: 'lib-sounds', tab: 'packs' }); await q.waitForSelector('tr[data-pack]');
     must((await q.$$('tr[data-pack]')).length === 1 && await q.$eval('#lsImportGo', e => e.disabled) && /chưa có api\/sound-packs/.test(await q.textContent('.lc-import')), 'máy chủ không có api/sound-packs: chỉ còn gói trong engine, nút nhập khoá');
     await q.fill('#lsImport', JSON.stringify(SND.EXAMPLE)); await q.click('#lsCheck'); await q.waitForSelector('.lc-import .lc-msg.ok');   // vẫn kiểm được gói
     M.sound404 = false; M.packs = [TQ]; await q.close();
-    console.log('  ✓ Thư viện › Âm thanh › Gói âm: bảng gói (ID, dự án, phiên bản, số âm) · tải gói JSON · nhập: lỗi cổng kiểm hiện kèm path (cục bộ + máy chủ), trùng tên âm bị chặn, nhập đúng thì nạp ngay · endpoint 404 → chỉ gói trong engine, nút nhập khoá');
+    console.log('  ✓ Thư viện › Âm thanh › Gói âm: bảng gói (ID, dự án, phiên bản, số âm) · tải gói JSON · nhập: lỗi cổng kiểm hiện kèm path (cục bộ + máy chủ), trùng tên âm bị chặn, nhập đúng thì nạp ngay · endpoint 404 → chỉ gói trong engine, nút nhập khoá · Gỡ gói (chỉ gói của người dùng, bấm 2 lần; 404 / 405 → "Máy chủ chưa hỗ trợ"; 409 → danh sách phụ thuộc + "Vẫn gỡ" gửi ?force=1; gỡ xong bỏ khỏi GC.sounds)');
 
     /* ================= B. THƯ VIỆN › GIỌNG ================= */
     // B1) chưa có key: vẫn xem + nghe giọng máy, có lời nhắc và lối tới Cài đặt AI

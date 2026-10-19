@@ -117,6 +117,7 @@ button.tag:hover { background: var(--accent-soft); color: var(--fg); }
 .lc-st { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; white-space: nowrap; }
 .lc-st.ok { color: var(--ok); } .lc-st.bad { color: var(--danger); } .lc-st.warn { color: var(--warn); } .lc-st.idle { color: var(--fg2); }
 .lc-pack-row .acts { display: inline-flex; gap: 4px; }
+.acts .btn.danger[data-confirm="1"] { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, var(--surface)); }
 .lc-import textarea { min-height: 120px; font: 12px var(--font-mono); }
 
 /* Giọng */

@@ -67,8 +67,8 @@
       return fetch(url, { method: method, headers: this.headers(), body: body ? JSON.stringify(body) : undefined })
         .then(function (r) {
           if (r.status === 401) { self.login(); throw new Error('Cần đăng nhập bằng token'); }
-          // lỗi cổng kiểm (422) mang theo danh sách lỗi chi tiết để trang hiện đủ, không chỉ câu tóm tắt
-          return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw Object.assign(new Error(j.error || ('Lỗi ' + r.status)), { status: r.status, errors: j.errors || null, retryAt: j.retryAt || null, cap: j.cap === true }); return j; });   // cap: 429 do chạm trần câu / ngày của máy (Cài đặt AI), khác hết lượt của Google
+          // lỗi cổng kiểm (422) mang theo danh sách lỗi chi tiết để trang hiện đủ, không chỉ câu tóm tắt; 409 mang theo conflicts[] (các chỗ còn phụ thuộc, vd. gỡ gói âm còn được gọi)
+          return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw Object.assign(new Error(j.error || ('Lỗi ' + r.status)), { status: r.status, errors: j.errors || null, conflicts: Array.isArray(j.conflicts) ? j.conflicts : null, retryAt: j.retryAt || null, cap: j.cap === true }); return j; });   // cap: 429 do chạm trần câu / ngày của máy (Cài đặt AI), khác hết lượt của Google
         });
     },
     login: function (wrong) {
@@ -3649,7 +3649,7 @@
     actions(h('span', { class: 'note', text: 'Hiệu ứng âm thanh dạng dữ liệu (' + S.FORMAT + ') — nghe, lọc, chép vào kịch bản.' }));
     var TABS = ['sounds', 'rules', 'packs'], canWav = typeof A.renderWav === 'function';
     var st = { tab: TABS.indexOf(r.tab) >= 0 ? r.tab : 'sounds', q: '', cat: '', tag: '', pack: S.packs().some(function (p) { return p.id === r.pack; }) ? r.pack : '', proj: '', sel: S.has(r.sound) ? r.sound : '' };
-    var net = { server: false, stored: {} }, alive = true, host = h('div', { class: 'lc' }), tabsEl = h('div'), body = h('div', { class: 'lc-body' });
+    var net = { server: false, stored: {} }, alive = true, packNote = null, host = h('div', { class: 'lc' }), tabsEl = h('div'), body = h('div', { class: 'lc-body' });
     host.appendChild(tabsEl); host.appendChild(body); $('view').appendChild(host);
     onLeave(function () { alive = false; document.removeEventListener('keydown', onSlash); });
     function remember() { route.tab = st.tab; route.sound = st.sel || undefined; try { localStorage.setItem(routeKey(APP), JSON.stringify(route)); } catch (e) { /* bỏ qua */ } }
@@ -3860,6 +3860,7 @@
     function paintPacks(box) {
       var impProj = (function (v) { var P = Projects.list.filter(function (x) { return x.id === v; })[0]; return P && P.sample ? '' : v; })(lastProject());
       var sampleOf = function (pid) { var pj = pid ? Projects.all().filter(function (x) { return x.id === pid; })[0] : null; return pj && pj.sample ? pj.sample : null; };
+      var delBox = h('div', { class: 'stack', style: 'gap:6px', id: 'lsDelBox' });   // kết quả gỡ gói: lỗi / danh sách phụ thuộc + "Vẫn gỡ" / cảnh báo
       var tbl = h('table', { class: 'grid', 'aria-label': 'Gói âm' }), th = h('tr');
       ['ID gói', 'Tên', 'Dự án', 'Phiên bản', 'Số âm', 'Trạng thái', 'Nguồn', ''].forEach(function (t) { th.appendChild(h('th', { text: t })); });
       tbl.appendChild(h('thead', null, th));
@@ -3868,12 +3869,50 @@
         var smp = p.status === 'published' ? sampleOf(p.project) : null, act = h('span', { class: 'acts' },   // dấu "bộ mẫu" chỉ cho gói phát hành của dự án mẫu (gói người dùng nhập vào đó vẫn là nháp của họ)
 
           lcBtn(null, 'Xem âm', { label: 'Xem âm của gói ' + p.id, fn: function () { st.tab = 'sounds'; st.pack = p.id; st.cat = ''; remember(); paintTabs(); paintTab(); } }),
-          p.frame ? null : lcBtn('down', 'Tải JSON', { label: 'Tải gói ' + p.id, fn: function () { download(p.id + '.json', JSON.stringify(S.pack(p.id), null, 2), 'application/json'); } }));
+          p.frame ? null : lcBtn('down', 'Tải JSON', { label: 'Tải gói ' + p.id, fn: function () { download(p.id + '.json', JSON.stringify(S.pack(p.id), null, 2), 'application/json'); } }),
+          // Gỡ gói: chỉ gói của người dùng đã lưu trên máy (không phải gói khung / bộ mẫu); bấm 2 lần mới gỡ
+          Store.mode === 'server' && !p.frame && !smp && net.stored[p.id] ? lcBtn(null, 'Gỡ gói', { cls: 'danger', label: 'Gỡ gói ' + p.id, title: 'Gỡ gói này khỏi thư viện — bấm 2 lần để xác nhận', fn: function (b) { askRemove(p, b); } }) : null);
         tb.appendChild(h('tr', { 'data-pack': p.id }, h('td', { class: 'id', text: p.id }), h('td', null, p.frame ? 'Bộ âm chuẩn (khung)' : p.name),
           h('td', { text: p.project ? Projects.name(p.project) : p.frame ? 'mọi dự án' : 'dùng chung' }), h('td', { class: 'v', text: 'v' + p.version }), h('td', { class: 'v', text: String(p.count) }),
           h('td', null, smp ? h('span', { class: 'chip', title: smp.license || '', text: 'Bộ mẫu ' + (smp.owner || 'Gen Labs') }) : p.frame ? h('span', { class: 'chip', text: 'Khung' }) : p.status === 'published' ? h('span', { class: 'chip ok', text: 'Phát hành' }) : h('span', { class: 'chip', text: 'Nháp' })),
           h('td', { class: 'note', text: p.frame ? 'trong engine' : net.stored[p.id] ? 'đã lưu trên máy' : 'nạp trong phiên' }), h('td', { class: 'nw' }, act)));
       });
+      // gỡ gói: DELETE api/sound-packs/<id>. 409 = còn chỗ gọi âm của gói (conflicts[]) → hiện danh sách + "Vẫn gỡ" (gửi ?force=1); 404 / 405 = máy chủ chưa có đường này
+      function delMsg(kind, head, list, extra) {
+        clear(delBox);
+        delBox.appendChild(h('p', { class: 'lc-msg ' + kind, role: kind === 'bad' ? 'alert' : 'status', text: head }));
+        if (list && list.length) delBox.appendChild(h('ul', { class: 'errs', style: 'margin:0 0 0 16px' }, list.map(function (m) { return h('li', { text: '✗ ' + m }); })));
+        if (extra) delBox.appendChild(extra);
+      }
+      if (packNote) { delMsg(packNote.kind, packNote.head, packNote.list); packNote = null; }   // lời nhắn sau khi gỡ (vẽ lại tab xong mới hiện)
+      function removePack(p, force, btn) {
+        Store.api('DELETE', 'api/sound-packs/' + encodeURIComponent(p.id) + (force ? '?force=1' : '')).then(function (r) {
+          S.unregisterPack(p.id); delete net.stored[p.id]; if (st.pack === p.id) st.pack = '';
+          var warns = r && Array.isArray(r.warnings) ? r.warnings : [];
+          toast('Đã gỡ gói “' + p.name + '” (' + p.count + ' âm).');
+          if (!alive) return;
+          if (warns.length) packNote = { kind: 'warn', head: 'Đã gỡ gói “' + p.name + '”, nhưng:', list: warns.slice(0, 30) };
+          renderNav(); paintTabs(); paintTab();
+        }).catch(function (e) {
+          if (!alive) return;
+          if (btn) { btn.disabled = false; btn.lastChild.textContent = 'Gỡ gói'; }
+          if (e.status === 409) {
+            var list = e.conflicts || e.errors || [], more = list.length > 30 ? list.length - 30 : 0;
+            delMsg('bad', 'Gói “' + p.name + '” còn được gọi ở ' + list.length + ' chỗ — gỡ sẽ làm hỏng:', more ? list.slice(0, 30).concat(['… và ' + more + ' chỗ khác']) : list,
+              h('div', { class: 'row' }, h('button', { class: 'btn danger', type: 'button', id: 'lsDelForce', onclick: function () { clear(delBox); if (btn) btn.disabled = true; removePack(p, true, btn); } }, 'Vẫn gỡ'),
+                h('button', { class: 'btn', type: 'button', onclick: function () { clear(delBox); } }, 'Giữ gói'), h('span', { class: 'note', text: 'Các chỗ đó sẽ báo lỗi S6 / bị bỏ âm lúc nạp.' })));
+          } else if (e.status === 404 || e.status === 405) delMsg('warn', 'Máy chủ chưa hỗ trợ gỡ gói (DELETE api/sound-packs/' + p.id + ') — cập nhật gen-chibi rồi thử lại.');
+          else delMsg('bad', 'Không gỡ được gói “' + p.name + '”: ' + e.message);
+        });
+      }
+      function askRemove(p, b) {
+        if (b.getAttribute('data-confirm') !== '1') {   // bấm 2 lần: lần đầu chỉ báo trước (tự huỷ sau 5 giây)
+          clear(delBox); b.setAttribute('data-confirm', '1'); b.lastChild.textContent = 'Bấm lần nữa để gỡ';
+          setTimeout(function () { if (b.isConnected && b.getAttribute('data-confirm') === '1') { b.removeAttribute('data-confirm'); b.lastChild.textContent = 'Gỡ gói'; } }, 5000);
+          return;
+        }
+        b.disabled = true; b.removeAttribute('data-confirm'); b.lastChild.textContent = 'Đang gỡ…'; removePack(p, false, b);
+      }
       // nhập gói
       var ta = h('textarea', { class: 'code', id: 'lsImport', rows: '7', spellcheck: 'false', 'aria-label': 'JSON của gói âm', placeholder: '{ "format": "' + S.FORMAT + '", "id": "ten-goi", "name": "…", "sounds": { … } }' });
       var res = h('div', { class: 'stack', style: 'gap:6px' });
@@ -3928,7 +3967,7 @@
       }
       var note = net.server ? null : h('p', { class: 'lc-msg', text: Store.mode === 'server' ? 'Máy chủ này chưa có api/sound-packs — chỉ xem được gói có sẵn trong engine; vẫn kiểm gói được nhưng chưa lưu được.' : 'Bản xem thử không có máy chủ: kiểm được gói nhưng không lưu được. Cài bản máy chủ để nhập gói.' });
       box.appendChild(h('div', { class: 'stack' },
-        h('div', { class: 'panel' }, h('h3', null, 'Gói âm', h('span', { class: 'r note', text: S.packs().length + ' gói · tên âm là chung toàn thư viện' })), h('div', { class: 'scroll' }, tbl)),
+        h('div', { class: 'panel' }, h('h3', null, 'Gói âm', h('span', { class: 'r note', text: S.packs().length + ' gói · tên âm là chung toàn thư viện' })), h('div', { class: 'scroll' }, tbl), delBox),
         h('div', { class: 'panel lc-import' }, h('h3', null, 'Nhập gói âm', h('span', { class: 'r note', text: 'qua cổng kiểm như MCP / AI — gói không chứa mã' })),
           h('div', { class: 'pad stack' }, note,
             h('div', { class: 'row' }, lcBtn('up', 'Chọn tệp .json', { label: 'Chọn tệp gói âm', fn: pickFile }), h('span', { class: 'note', text: 'hoặc dán JSON vào ô dưới' }), h('span', { class: 'sp', style: 'flex:1' }),
