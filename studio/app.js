@@ -104,7 +104,12 @@
             (scenes || []).forEach(function (d) { var r2 = GC.registerScene(MY_PACK, d); if (r2.errors.length) console.warn('bỏ cảnh', d.id, r2.errors); });
             return self.api('GET', 'api/assets');
           })
-          .then(function (list) { (list || []).forEach(regStored); return self.api('GET', 'api/motion-packs').catch(function () { return []; }); })
+          .then(function (list) { (list || []).forEach(regStored); return self.api('GET', 'api/sound-packs').catch(function () { return []; }); })
+          .then(function (snd) {
+            // gói âm (v0.18): nạp trước gói động tác — sự kiện của gói động tác có thể gọi tên âm của gói; engine kiểm lại qua cổng như mọi gói
+            (snd || []).forEach(function (d) { var r4 = GC.sounds && GC.sounds.registerPack(d); if (r4 && r4.errors.length) console.warn('bỏ gói âm', d.id, r4.errors); });
+            return self.api('GET', 'api/motion-packs').catch(function () { return []; });
+          })
           .then(function (packs) {
             // gói động tác (v0.16): sau nhân vật — màn diễn trong gói trỏ tới nhân vật của bộ
             (packs || []).forEach(function (d) { var r3 = GC.choreo && GC.choreo.registerPack(MY_PACK, d); if (r3 && r3.errors.length) console.warn('bỏ gói động tác', d.id, r3.errors); });
@@ -153,7 +158,7 @@
   var NAV = [
     ['fab', 'Xưởng', 'tạo asset từ khung', [['create', 'Tạo asset mới'], ['characters', 'Bàn chỉnh nhân vật'], ['items', 'Bàn chỉnh vật phẩm'], ['scenes', 'Bàn chỉnh bối cảnh'], ['workshop', 'Trợ lý AI tạo asset']]],
     ['fab', 'Khung chuẩn', 'quy cách · kiểm (Gen Labs giữ)', [['khung', 'Bộ khung chuẩn'], ['library', 'Kho linh kiện & phông'], ['poses', 'Khung tư thế & hoạt động'], ['states', 'Khung biểu cảm & động tác'], ['gates', 'Cổng kiểm & hiệu năng']]],
-    ['lib', 'Thư viện', 'theo dự án chủ đề · lấy về dùng', [['projects', 'Dự án chủ đề'], ['lib-characters', 'Nhân vật'], ['lib-items', 'Vật phẩm'], ['lib-scenes', 'Bối cảnh'], ['lib-motions', 'Động tác']]],
+    ['lib', 'Thư viện', 'theo dự án chủ đề · lấy về dùng', [['projects', 'Dự án chủ đề'], ['lib-characters', 'Nhân vật'], ['lib-items', 'Vật phẩm'], ['lib-scenes', 'Bối cảnh'], ['lib-motions', 'Động tác'], ['lib-sounds', 'Âm thanh'], ['lib-voices', 'Giọng']]],
     ['make', 'Tạo tác', 'làm phim / truyện với AI', [['works', 'Tác phẩm']]],
     ['sys', 'Hệ thống', '', [['ai', 'Cài đặt AI'], ['update', 'Cập nhật']]]
   ];
@@ -191,7 +196,8 @@
     // số đếm Thư viện không tính đồ của khung (khung thuộc Xưởng)
     var lib = function (arr) { return arr.filter(function (x) { return groupOf(x) !== 'frame'; }).length; };
     var COUNT = { 'lib-characters': function () { return lib(GC.assets()); }, 'lib-items': function () { return lib(GC.items()); }, 'lib-scenes': function () { return lib(GC.scenes()); }, projects: function () { return Projects.all().length; },
-      'lib-motions': function () { return GC.choreo ? Object.keys(GC.choreo.ACTIONS).length : 0; } };
+      'lib-motions': function () { return GC.choreo ? Object.keys(GC.choreo.ACTIONS).length : 0; },
+      'lib-sounds': function () { return GC.sounds ? GC.sounds.names().length : 0; }, 'lib-voices': function () { return GC.voices ? GC.voices.roleList().length : 0; } };
     // chuyển ứng dụng: 3 lớp, lớp đang mở nổi bật; các lớp khác là liên kết sang ứng dụng riêng
     var sw = h('div', { class: 'appswitch' });
     APPS.forEach(function (a) {
@@ -1555,6 +1561,15 @@
   function workLang(W) { var l = GC.voices.lang(W && W.lang); return { lang: l, accent: GC.voices.accent(l, W && W.accent) }; }
   // thẻ <html lang> của phim xuất theo ngôn ngữ phim (trình đọc màn hình + phông chữ + gợi ý dịch của trình duyệt): vi · en · zh-CN (phổ thông) · zh-TW (Đài Loan) · zh-HK (Quảng Đông)
   function htmlLang(L) { return L.lang === 'en' ? 'en' : L.lang === 'zh' ? (L.accent === 'tw' ? 'zh-TW' : 'zh-CN') : L.lang === 'yue' ? 'zh-HK' : 'vi'; }
+  // gói âm (không phải khung) mà tác phẩm cần: thuộc dự án của tác phẩm, hoặc có âm được gọi tên trong lời thoại / gói động tác đi kèm
+  function filmSoundPacks(W, motionPacks) {
+    var S = GC.sounds; if (!S) return [];
+    var names = {}, want = {};
+    W.shots.forEach(function (s) { ((s.event && s.event.steps) || []).forEach(function (st) { (st.sfx || []).forEach(function (n) { names[n] = 1; }); }); });
+    (motionPacks || []).forEach(function (m) { Object.keys(m.clips || {}).forEach(function (k) { (m.clips[k].events || []).forEach(function (q) { [].concat(q[1].sfx || []).forEach(function (n) { names[n] = 1; }); }); }); });
+    Object.keys(names).forEach(function (n) { var d = S.get(n); if (d && d.pack !== S.FRAME) want[d.pack] = 1; });
+    return S.packs().filter(function (p) { return !p.frame && (want[p.id] || (W.project && p.project === W.project)); }).map(function (p) { return S.pack(p.id); });
+  }
   // pre (tuỳ chọn) = kết quả filmVoices đã hỏi (hộp "thiếu giọng AI" ở Sân khấu final) — khỏi hỏi lại
   function exportFilm(W, pre) {
     var L = workLang(W), chars = [], scenes = [];
@@ -1564,6 +1579,8 @@
     var used = {}; W.shots.forEach(function (s) { ((s.event && s.event.steps) || []).forEach(function (st) { if (st.action) used[st.action] = 1; }); });
     data.motionPacks = GC.choreo ? GC.choreo.packs().filter(function (p) { return Object.keys(p.actions).some(function (k) { return used[k]; }); })
       .map(function (p) { var o = clone(p); ['pack', 'key', 'version', 'savedAt', 'note'].forEach(function (k) { delete o[k]; }); return o; }) : [];
+    // gói âm phim dùng (v0.18): gói của dự án tác phẩm + gói gọi tên trong step.sfx / sự kiện của gói động tác đi theo — mở file:// vẫn nghe đúng; bộ chuẩn gen.am nằm sẵn trong engine/sounds.js
+    data.soundPacks = filmSoundPacks(W, data.motionPacks); data.project = W.project || '';
     var srcs = Array.prototype.map.call(document.scripts, function (x) { return x.getAttribute('src') || ''; }).filter(function (x) { return /^(engine|kinds)\//.test(x); });
     if (srcs.indexOf('engine/player.js') < 0) { toast('Thiếu engine/player.js'); return; }
     toast('Đang đóng gói phim…');
@@ -1573,7 +1590,7 @@
         var texts = res[0], vo = res[1];
         var pick = function (o, keys) { var r = {}; keys.forEach(function (k) { if (o[k] !== undefined) r[k] = o[k]; }); return r; };
         // motionPacks phải giữ lại ở đây: dựng lại `data` mà bỏ nó thì bộ phát không nạp gói nào và phim mất các chương dùng đòn của gói
-        data = { parts: data.parts, motionPacks: data.motionPacks, characters: data.characters.map(function (a) {
+        data = { parts: data.parts, motionPacks: data.motionPacks, soundPacks: data.soundPacks, project: data.project, characters: data.characters.map(function (a) {
             // giọng chốt sẵn lúc xuất (nhân vật chưa lưu giọng thì lấy giọng Studio đang dùng — không xuất persona; vai giọng luôn chốt, vì phim không có persona để đoán lại)
             var o = pick(a, ['id', 'pack', 'name', 'version', 'look', 'expressions', 'kind', 'voice', 'role']);
             if (GC.audio) { var vv = GC.audio.voiceOf(a, L); o.voice = Object.assign({}, o.voice || vv); if (!o.voice.role && vv.role) o.voice.role = vv.role; }
@@ -1625,6 +1642,7 @@
     '  DATA.items.forEach(function (x) { GC.registerItem("local.my", x); });',
     '  DATA.scenes.forEach(function (x) { GC.registerScene("local.my", x); });',
     '  DATA.characters.forEach(function (a) { GC.registerAsset(a.pack, a); });',
+    '  (DATA.soundPacks || []).forEach(function (p) { if (GC.sounds) GC.sounds.registerPack(p); });',   // gói âm TRƯỚC gói động tác (sự kiện gọi tên âm)
     '  (DATA.motionPacks || []).forEach(function (m) { GC.choreo.registerPack("local.my", m); });',
     '  var rs = GC.film.readiness(FILM), ready = rs.filter(function (x) { return x.ok; }).map(function (x) { return x.shot; });',
     // giọng AI nhúng sẵn (DATA.voices: khoá câu → data: URI) chỉ dùng khi chọn "tự động"; chọn máy đọc / blip / tắt thì bỏ qua. Không gọi mạng.
@@ -1636,6 +1654,7 @@
     '    voiceClip: function (line) { return $("voice").value === "auto" && aiN ? VO[GC.film.clipKey(line)] || null : null; },',
     // phim có giọng AI + đang ở "tự động": câu thiếu clip chỉ đọc bằng giọng máy hạng tốt, không thì blip (không để robot lẫn với giọng AI); chọn "máy đọc" thì đọc như cũ
     '    needGood: function () { return $("voice").value === "auto" && aiN > 0; } });',
+    '  if (DATA.project) player.setProject(DATA.project);',   // dự án của tác phẩm → chọn gói âm (assets xuất ra không mang project)
     '  $("dialog").value = player.dialog(); $("dialog").onchange = function () { player.setDialog($("dialog").value); };',
     '  player.show(ready[0] || FILM.shots[0]);',
     '  function play(from) { $("big").hidden = true; player.play(ready.slice(from || 0), FILM.title); }',
@@ -1668,6 +1687,7 @@
     var M = { view: VIEW_LABEL, camera: CAMERA_LABEL, bubble: BUBBLE_LABEL, facing: FACING_LABEL }[k];
     if (M && M[v]) return M[v];
     if (k === 'react' && GC.choreo && GC.choreo.REACTS[v]) return GC.choreo.REACTS[v].label;
+    if (k === 'sfx' && GC.sounds && GC.sounds.has(v)) return GC.sounds.get(v).label;   // âm thanh: nhãn của thư viện âm
     return v;
   }
   // huy hiệu của một đòn: đòn đánh / ném / cần binh khí / nhắm đầu (dùng ở bảng bước và Thư viện › Động tác)
@@ -1989,6 +2009,7 @@
     // "Đã có clip" = đã thấy ít nhất 1 clip (câu đầu đã lồng thì có ngay từ câu đầu) — không hỏi trước cả tác phẩm để nút Diễn vẫn mở âm thanh ngay trong cú bấm. Chọn hẳn "máy đọc" thì không bật.
     function needGood() { var pref = AudioPref.get().voice || 'auto'; return (pref === 'auto' || pref === 'ai') && !!W && AiVoice.on() && AiVoice.ready() && AiVoice.hasClips(W, workLang(W)); }
     var player = GC.film.player(stage, { onProgress: function (t) { prog.textContent = t; }, dialog: StagePref.get().dialog, voiceClip: voiceClip, needGood: needGood, clipWait: function () { return AudioPref.get().voice === 'ai' ? 10000 : 2500; } });
+    player.setProject(function () { return W && W.project || ''; });   // gói âm theo dự án của tác phẩm đang mở (v0.18)
     var onCast = function () { if (alive) paintDub(); };   // kết quả cast mới (dàn vượt 48 người → dòng báo ở Lồng tiếng)
     AiVoice.onCast = onCast;
     onLeave(function () { alive = false; player.destroy(); if (AiVoice.onCast === onCast) AiVoice.onCast = null; });   // phản hồi đến sau khi rời trang thì bỏ qua (không dựng diễn viên mồ côi)
@@ -2946,6 +2967,983 @@
     paintList(); paintInsp();
   };
 
+  /* ============================================================ THƯ VIỆN › ÂM THANH + GIỌNG (v0.18)
+   * Hai trang Data Console (STD-07) đặt cạnh Thư viện › Động tác: bảng kiểu Excel (ID hàng, chữ cột, sắp xếp, ô tìm không dấu, footer) + Inspector 400 px.
+   *   Âm thanh: tab Âm (62 âm khung + gói, nghe ngay trên hàng) · Luật ghép (S1–S7 từ GC.sounds.RULES, công thức RECIPES, kiểm thử chuỗi bước) · Gói âm (tải / nhập).
+   *   Giọng:    tab Bộ giọng vai (22 vai × 4 ngôn ngữ, giọng máy + giọng AI) · Giọng của tác phẩm (nhân vật → vai → giọng chốt work.voices).
+   * Một khối liền mạch: mọi thứ dùng chung nằm ngay đây (tiền tố lc = dùng chung, ls = âm, lv = giọng). CSS ở studio/lib-audio.css.
+   * Không innerHTML với dữ liệu: mọi chữ qua h() / textContent. Nơi này là nơi XEM / NGHE; dán key + trần câu vẫn ở Cài đặt AI (voiceSettings). */
+  var LC_NS = 'http://www.w3.org/2000/svg';
+  var LC_ICON = {   // Lucide-style, nét 1,5, 16 px (STD-07 §8) — dựng bằng DOM, không chuỗi HTML
+    play: ['M4.8 2.9v10.2L13 8z'], down: ['M8 2.5v7.3M4.9 7l3.1 3.1L11.1 7M3 13.2h10'], up: ['M8 10.5V3.2M4.9 6.3 8 3.2l3.1 3.1M3 13.2h10'],
+    copy: ['M6 5.5h6.5a1 1 0 0 1 1 1V13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6.5a1 1 0 0 1 1-1z', 'M10.5 5.5V3.9a1 1 0 0 0-1-1H3.5a1 1 0 0 0-1 1V10a1 1 0 0 0 1 1H5'],
+    ok: ['M3.5 8.5l3 3 6-6.5'], no: ['M4 4l8 8M12 4l-8 8'], warn: ['M8 2.5l6 10.5H2z', 'M8 6.5v3M8 11.3v.1']
+  };
+  function lcIcon(name) {
+    var s = document.createElementNS(LC_NS, 'svg'), d = LC_ICON[name] || [], i, p;
+    s.setAttribute('viewBox', '0 0 16 16'); s.setAttribute('width', '14'); s.setAttribute('height', '14');
+    s.setAttribute('aria-hidden', 'true'); s.setAttribute('focusable', 'false'); s.setAttribute('class', 'lc-i' + (name === 'play' ? ' fill' : ''));
+    for (i = 0; i < d.length; i++) { p = document.createElementNS(LC_NS, 'path'); p.setAttribute('d', d[i]); s.appendChild(p); }
+    return s;
+  }
+  // nhãn trạng thái: luôn có biểu tượng + chữ (không chỉ màu): kind ok | bad | warn | idle
+  function lcState(kind, text, title) { return h('span', { class: 'lc-st ' + kind, title: title || null }, lcIcon(kind === 'ok' ? 'ok' : kind === 'bad' ? 'no' : kind === 'warn' ? 'warn' : 'ok'), text); }
+  function lcBtn(icon, text, o) {
+    o = o || {};
+    var b = h('button', { class: 'btn sm lc-ic ' + (o.cls || ''), type: 'button', title: o.title || null, 'aria-label': o.label || null, disabled: o.disabled ? true : null, onclick: function (ev) { if (o.fn) o.fn(b, ev); } });
+    if (icon) b.appendChild(lcIcon(icon));
+    if (text) b.appendChild(document.createTextNode(text));
+    return b;
+  }
+  function lcPlay(label, fn) { var b = h('button', { class: 'btn lc-play lc-ic', type: 'button', title: label, 'aria-label': label, onclick: function (ev) { fn(b, ev); } }); b.appendChild(lcIcon('play')); return b; }
+  function vn(n, d) { return Number(n).toFixed(d == null ? 2 : d).replace('.', ','); }
+  function lcFold(t) { t = String(t == null ? '' : t).toLowerCase(); if (t.normalize) t = t.normalize('NFD').replace(/[̀-ͯ]/g, ''); return t.replace(/đ/g, 'd'); }
+  // `mã` và **đậm** trong chữ markdown của GC.sounds.guide() → DOM (không HTML)
+  function lcMd(s) {
+    var f = document.createDocumentFragment();
+    String(s).split(/(`[^`]+`|\*\*[^*]+\*\*)/).forEach(function (p) {
+      if (!p) return;
+      if (p.charAt(0) === '`') f.appendChild(h('code', { class: 'lc-code', text: p.slice(1, -1) }));
+      else if (p.slice(0, 2) === '**') f.appendChild(h('b', { text: p.slice(2, -2) }));
+      else f.appendChild(document.createTextNode(p));
+    });
+    return f;
+  }
+  function lcTabs(items, cur, onPick) {   // items: [[id, nhãn, đếm]]
+    var bar = h('div', { class: 'tabs lc-tabs', role: 'tablist' });
+    items.forEach(function (t) {
+      bar.appendChild(h('button', { type: 'button', role: 'tab', 'aria-selected': String(cur === t[0]), 'data-tab': t[0], onclick: function () { onPick(t[0]); } }, t[1], t[2] === '' || t[2] == null ? null : h('span', { class: 'n', text: String(t[2]) })));
+    });
+    return bar;
+  }
+
+  // Lưới Data Console (STD-07 §5): dải chữ cột A B C… + header cột (sắp xếp bấm được) + cột đóng băng + ID hàng mono + hàng chọn + footer.
+  // o: { id (tiền tố id DOM), label, cols: [{ t (tên), w (px), frozen, cls, cell(row) → Node | chữ, v(row) → khoá sắp xếp, tip(row) }], group(row) → nhãn nhóm,
+  //      onSelect(row | null), onAct(row) (Space / Enter), foot(view) → [Node | chữ] }. Bàn phím: ↑ ↓ (hoặc J K) · Home · End · Space · Enter khi bảng đang focus.
+  function lcGrid(o) {
+    var rows = [], view = [], selId = '', sk = -1, sd = 1, left = 0, total = 0, trs = {};
+    var table = h('table', { class: 'lc-t', role: 'grid', 'aria-label': o.label, tabindex: '0' }), colg = h('colgroup'), lt = h('tr', { class: 'letters', 'aria-hidden': 'true' }), hd = h('tr'), tb = h('tbody');
+    var foot = h('div', { class: 'lc-foot' }), scroll = h('div', { class: 'lc-scroll' }, table), el = h('div', { class: 'lc-grid' }, scroll, foot);
+    o.cols.forEach(function (c, i) {
+      c.left = c.frozen ? left : null; if (c.frozen) left += c.w;
+      total += c.w;
+      colg.appendChild(h('col', { style: 'width:' + c.w + 'px' }));
+      var fz = c.frozen ? 'fz' : null, ls = c.frozen ? 'left:' + c.left + 'px' : null;
+      lt.appendChild(h('th', { class: fz, style: ls, text: String.fromCharCode(65 + i) }));
+      var th = h('th', { scope: 'col', class: fz, style: ls, 'data-col': String(i) });
+      if (c.v) th.appendChild(h('button', { type: 'button', class: 'lc-th', onclick: function () { sortBy(i); } }, c.t, h('span', { class: 'sort', 'aria-hidden': 'true' })));
+      else th.textContent = c.t;
+      hd.appendChild(th);
+    });
+    table.style.minWidth = total + 'px'; table.style.width = '100%';
+    table.appendChild(colg); table.appendChild(h('thead', null, lt, hd)); table.appendChild(tb);
+    function idx(id) { for (var i = 0; i < view.length; i++) if (view[i].id === id) return i; return -1; }
+    function sortBy(i) {
+      if (sk === i) { if (sd === 1) sd = -1; else { sk = -1; sd = 1; } } else { sk = i; sd = 1; }
+      Array.prototype.forEach.call(hd.children, function (th, k) {
+        th.removeAttribute('aria-sort');
+        var s = th.querySelector('.sort'); if (s) s.textContent = k === sk ? (sd === 1 ? '▲' : '▼') : '';
+        if (k === sk) th.setAttribute('aria-sort', sd === 1 ? 'ascending' : 'descending');
+      });
+      build(); paintBody();
+    }
+    function build() {
+      view = rows.slice();
+      if (sk >= 0) {
+        var f = o.cols[sk].v;
+        view.sort(function (a, b) { var x = f(a), y = f(b); return (typeof x === 'string' ? x.localeCompare(y, 'vi') : x - y) * sd; });
+      }
+    }
+    function paintBody() {
+      clear(tb); trs = {};
+      var lastG = null;
+      view.forEach(function (row, i) {
+        var g = sk < 0 && o.group ? o.group(row) : null;
+        if (g && g !== lastG) tb.appendChild(h('tr', { class: 'grp', role: 'row' }, h('td', { colspan: String(o.cols.length), role: 'gridcell', text: g })));
+        if (g) lastG = g;
+        var tr = h('tr', { id: o.id + '-' + i, role: 'row', 'aria-selected': String(row.id === selId), 'data-id': row.id, onclick: function (ev) {
+          pick(row.id, false);
+          if (!ev.target.closest || !ev.target.closest('button, a, input, select')) table.focus({ preventScroll: true });
+        } });
+        o.cols.forEach(function (c) {
+          var td = h('td', { role: 'gridcell', class: [c.cls, c.frozen ? 'fz' : ''].join(' ').trim() || null, style: c.frozen ? 'left:' + c.left + 'px' : null, title: c.tip ? c.tip(row) : null });
+          add(td, c.cell(row));
+          tr.appendChild(td);
+        });
+        trs[row.id] = tr; tb.appendChild(tr);
+      });
+      if (!view.length) tb.appendChild(h('tr', null, h('td', { colspan: String(o.cols.length), class: 'lc-empty', text: o.empty || 'Không có hàng nào khớp bộ lọc.' })));
+      clear(foot); add(foot, o.foot ? o.foot(view) : view.length + ' hàng');
+      var cur = trs[selId]; if (cur) table.setAttribute('aria-activedescendant', cur.id); else table.removeAttribute('aria-activedescendant');
+    }
+    function pick(id, scrollTo) {
+      if (id === selId && trs[id]) { if (scrollTo) trs[id].scrollIntoView({ block: 'nearest' }); return; }
+      if (trs[selId]) trs[selId].setAttribute('aria-selected', 'false');
+      selId = id;
+      var tr = trs[id];
+      if (tr) { tr.setAttribute('aria-selected', 'true'); table.setAttribute('aria-activedescendant', tr.id); if (scrollTo) tr.scrollIntoView({ block: 'nearest' }); }
+      if (o.onSelect) o.onSelect(view[idx(id)] || null);
+    }
+    table.addEventListener('keydown', function (ev) {
+      var t = ev.target, k = ev.key, n = view.length;
+      if (!n || ev.ctrlKey || ev.metaKey || ev.altKey || /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName)) return;
+      var i = idx(selId), to = k === 'ArrowDown' || k === 'j' ? i + 1 : k === 'ArrowUp' || k === 'k' ? i - 1 : k === 'Home' ? 0 : k === 'End' ? n - 1 : k === 'PageDown' ? i + 8 : k === 'PageUp' ? i - 8 : null;
+      if (to !== null) { ev.preventDefault(); if (t !== table) table.focus({ preventScroll: true }); pick(view[Math.max(0, Math.min(n - 1, to))].id, true); return; }
+      if ((k === ' ' || k === 'Enter') && t === table && o.onAct && i >= 0) { ev.preventDefault(); o.onAct(view[i]); }
+    });
+    return {
+      el: el, table: table,
+      // thay toàn bộ hàng; giữ hàng đang chọn nếu còn, không thì chọn hàng đầu (inspector luôn có gì để hiện)
+      set: function (rs, want) {
+        rows = rs; build();
+        if (want && idx(want) >= 0) selId = want;
+        else if (idx(selId) < 0) selId = view.length ? view[0].id : '';
+        paintBody();
+        if (o.onSelect) o.onSelect(view[idx(selId)] || null);
+      },
+      select: function (id) { pick(id, true); }, cur: function () { return view[idx(selId)] || null; }, rows: function () { return view; },
+      rowEl: function (id) { return trs[id] || null; }, focus: function () { table.focus({ preventScroll: true }); }
+    };
+  }
+
+  /* ---------------------------------------------------------------- ÂM THANH */
+  // gói âm đã lưu trên máy (GET api/sound-packs) → GC.sounds; endpoint chưa có / lỗi → chỉ còn gói trong engine (net.server = false: không nhập được gói)
+  function lsLoadPacks() {
+    var S = GC.sounds;
+    if (!S || Store.mode !== 'server') return Promise.resolve({ server: false, stored: {} });
+    return Store.api('GET', 'api/sound-packs').then(function (l) {
+      var stored = {};
+      (Array.isArray(l) ? l : []).forEach(function (d) {
+        if (!d || typeof d.id !== 'string') return;
+        stored[d.id] = true;
+        var cur = S.packs().filter(function (p) { return p.id === d.id; })[0];
+        if (cur && cur.version === d.version) return;   // đã nạp lúc mở Studio
+        var r0 = S.registerPack(d); if (r0.errors.length) console.warn('bỏ gói âm', d.id, r0.errors);
+      });
+      return { server: true, stored: stored };
+    }).catch(function () { return { server: false, stored: {} }; });
+  }
+  function lsSig() { return GC.sounds.packs().map(function (p) { return p.id + '@' + p.version + ':' + p.count; }).join(','); }
+  // dòng "cảnh tự gán" gọn cho một ô bảng: state:shock · fx:stars,tears · activity:attack · mood:epic
+  function lsCueText(c) {
+    if (!c) return '';
+    var out = [];
+    ['state', 'fx', 'activity', 'event'].forEach(function (k) { if (c[k] && c[k].length) out.push(k + ':' + c[k].join(',')); });
+    if (c.mood && c.mood.length) out.push('mood:' + c.mood.join(','));
+    return out.join(' · ');
+  }
+  // nhân vật đầu tiên của dự án (hoặc bất kỳ) để ví dụ JSON chạy được ngay
+  function lsActor(project) {
+    var all = GC.assets().filter(function (a) { return groupOf(a) !== 'frame'; }), a = all.filter(function (x) { return project && x.project === project; })[0] || all[0];
+    return a ? a.id : 'ma-no-canh';
+  }
+  // MỘT bước kịch bản dùng âm này: âm NHẤN để ở bước không có lời (S3), âm thường đi kèm lời; state lấy từ cue nếu có
+  function lsStep(x) {
+    var st = { actor: lsActor(x.project), state: x.cue && x.cue.state && x.cue.state[0] ? x.cue.state[0] : 'normal' };
+    if (x.accent) st.hold = 0.8; else st.say = '…';
+    st.sfx = [x.name];
+    return st;
+  }
+  // các dòng "n. …" của mục "Quy trình ghép" trong GC.sounds.guide() — cùng văn bản agent đọc (một nguồn, không chép tay)
+  function lsGuideSteps(md) {
+    var out = [], on = false;
+    String(md).split('\n').forEach(function (l) {
+      if (/^## /.test(l)) on = /^## Quy trình ghép/.test(l);
+      else if (on && /^\d+\.\s/.test(l)) out.push(l.replace(/^\d+\.\s*/, ''));
+    });
+    return out;
+  }
+  // công thức ghép → các bước kịch bản (mỗi âm một bước; hold = khoảng tới âm kế)
+  function lsRecipeSteps(rc, actor) {
+    return rc.seq.map(function (x, i) {
+      var nxt = rc.seq[i + 1], hold = nxt ? Math.max(0.4, Math.round((nxt[0] - x[0]) * 100) / 100) : 0.8;
+      return { actor: actor, state: 'normal', hold: hold, sfx: [x[1]] };
+    });
+  }
+  // thời gian (s) → "1,2 s"
+  function lsSec(t) { return String(Math.round(t * 100) / 100).replace('.', ',') + ' s'; }
+
+  PAGES['lib-sounds'] = function (r) {
+    crumbs([{ t: 'Âm thanh' }]);
+    var S = GC.sounds, A = GC.audio;
+    if (!S || !A) { $('view').appendChild(h('div', { class: 'panel pad note lib-empty', text: 'Bản này chưa nạp thư viện âm (engine/sounds.js).' })); return; }
+    actions(h('span', { class: 'note', text: 'Hiệu ứng âm thanh dạng dữ liệu (' + S.FORMAT + ') — nghe, lọc, chép vào kịch bản.' }));
+    var TABS = ['sounds', 'rules', 'packs'], canWav = typeof A.renderWav === 'function';
+    var st = { tab: TABS.indexOf(r.tab) >= 0 ? r.tab : 'sounds', q: '', cat: '', tag: '', pack: S.packs().some(function (p) { return p.id === r.pack; }) ? r.pack : '', proj: '', sel: S.has(r.sound) ? r.sound : '' };
+    var net = { server: false, stored: {} }, alive = true, host = h('div', { class: 'lc' }), tabsEl = h('div'), body = h('div', { class: 'lc-body' });
+    host.appendChild(tabsEl); host.appendChild(body); $('view').appendChild(host);
+    onLeave(function () { alive = false; document.removeEventListener('keydown', onSlash); });
+    function remember() { route.tab = st.tab; route.sound = st.sel || undefined; try { localStorage.setItem(routeKey(APP), JSON.stringify(route)); } catch (e) { /* bỏ qua */ } }
+    // phím "/" = nhảy vào ô tìm (như STD-07 §10), chỉ khi không đang gõ ở ô khác
+    function onSlash(ev) {
+      if (ev.key !== '/' || ev.ctrlKey || ev.metaKey || ev.altKey || /^(INPUT|SELECT|TEXTAREA)$/.test((ev.target || {}).tagName || '') || st.tab !== 'sounds') return;
+      var q = $('lsQ'); if (q) { ev.preventDefault(); q.focus(); q.select(); }
+    }
+    document.addEventListener('keydown', onSlash);
+    function paintTabs() {
+      clear(tabsEl).appendChild(lcTabs([['sounds', 'Âm', S.names().length], ['rules', 'Luật ghép', S.RULES.list.length], ['packs', 'Gói âm', S.packs().length]], st.tab, function (t) { st.tab = t; remember(); paintTabs(); paintTab(); }));
+    }
+    function paintTab() { clear(body); (st.tab === 'rules' ? paintRules : st.tab === 'packs' ? paintPacks : paintSounds)(body); }
+    function play(name, btn) {
+      var x = S.info(name); if (!x) return;
+      A.unlock(); A.sfx(name);
+      if (btn) { btn.setAttribute('data-playing', 'true'); setTimeout(function () { btn.removeAttribute('data-playing'); }, Math.max(250, x.dur * 1000)); }
+    }
+    // WAV dựng offline (không cần unlock) → tải về; nút khoá trong lúc dựng
+    function wav(what, name, btn) {
+      if (!canWav) return;
+      btn.disabled = true;
+      A.renderWav(what).then(function (buf) { downloadBlob(name + '.wav', new Blob([buf], { type: 'audio/wav' })); toast('Đã dựng ' + name + '.wav · ' + Math.round(buf.byteLength / 1024) + ' KB.'); })
+        .catch(function (e) { toast('Không dựng được WAV: ' + e.message); }).then(function () { btn.disabled = false; });
+    }
+    function packName(p) { return p.frame ? 'Khung' : p.name; }
+    function openSound(name) { st.tab = 'sounds'; st.cat = ''; st.tag = ''; st.q = ''; st.pack = ''; st.proj = ''; st.sel = name; remember(); paintTabs(); paintTab(); }
+
+    /* ---- tab Âm ---- */
+    function paintSounds(box) {
+      var allTags = {};
+      S.list().forEach(function (x) { x.tags.forEach(function (t) { allTags[t] = (allTags[t] || 0) + 1; }); });
+      var q = h('input', { type: 'search', class: 'lc-q', id: 'lsQ', placeholder: 'Tìm không dấu…  ( / )', title: 'Tìm không dấu theo tên, nhãn, thẻ, câu “dùng khi”. Phím / để nhảy vào đây, ↓ để xuống bảng.', 'aria-label': 'Tìm âm', value: st.q, oninput: function () { st.q = q.value.trim(); refresh(); },
+        onkeydown: function (ev) { if (ev.key === 'Escape') { q.value = ''; st.q = ''; refresh(); grid.focus(); } else if (ev.key === 'ArrowDown') { ev.preventDefault(); grid.focus(); } } });
+      var dl = h('datalist', { id: 'lsTags' });
+      Object.keys(allTags).sort(function (a, b) { return a.localeCompare(b, 'vi'); }).forEach(function (t) { dl.appendChild(h('option', { value: t, label: allTags[t] + ' âm' })); });
+      function setTag(v) {
+        var f = lcFold(v).trim(), hit = '';
+        Object.keys(allTags).forEach(function (t) { if (!hit && lcFold(t) === f) hit = t; });
+        if (v && !hit) toast('Không có thẻ “' + v + '” trong thư viện.');
+        st.tag = hit; tagIn.value = hit; refresh();
+      }
+      var tagIn = h('input', { type: 'text', list: 'lsTags', placeholder: 'Thẻ…', 'aria-label': 'Lọc theo thẻ', style: 'width:132px', value: st.tag, onchange: function () { setTag(tagIn.value); }, onkeydown: function (ev) { if (ev.key === 'Enter') setTag(tagIn.value); } });
+      var packSel = h('select', { 'aria-label': 'Lọc theo gói', onchange: function () { st.pack = packSel.value; refresh(); } });
+      packSel.appendChild(h('option', { value: '', text: 'Mọi gói' }));
+      S.packs().forEach(function (p) { packSel.appendChild(h('option', { value: p.id, text: packName(p) + ' · ' + p.count })); });
+      packSel.value = st.pack;
+      var projSel = h('select', { 'aria-label': 'Lọc theo dự án', title: 'Chỉ hiện âm mà dự án này dùng được (khung + gói dùng chung + gói của dự án) — luật S6', onchange: function () { st.proj = projSel.value; refresh(); } });
+      projSel.appendChild(h('option', { value: '', text: 'Mọi dự án' })); projSel.appendChild(h('option', { value: '-', text: 'Không dự án (khung + gói chung)' }));
+      var pids = [];
+      S.packs().forEach(function (p) { if (p.project && pids.indexOf(p.project) < 0) pids.push(p.project); });
+      Projects.all().forEach(function (p) { if (pids.indexOf(p.id) < 0) pids.push(p.id); });
+      pids.forEach(function (id) { projSel.appendChild(h('option', { value: id, text: Projects.name(id) })); });
+      projSel.value = st.proj;
+      var count = h('span', { class: 'note lc-count' }), clearB = h('span', { class: 'lc-chipx', hidden: true });
+      var chips = h('div', { class: 'fxchips lc-cats', role: 'group', 'aria-label': 'Lọc theo nhóm âm' }), chipEls = {};
+      [['', 'Tất cả']].concat(S.CATS).forEach(function (c) {
+        var n = h('span', { class: 'n' }), b = h('button', { type: 'button', 'data-cat': c[0], onclick: function () { st.cat = st.cat === c[0] ? '' : c[0]; refresh(); } }, c[1], n);
+        chipEls[c[0]] = { b: b, n: n }; chips.appendChild(b);
+      });
+      var insp = h('aside', { class: 'lc-insp', 'aria-label': 'Chi tiết âm' });
+      var grid = lcGrid({
+        id: 'ls', label: 'Thư viện âm thanh', empty: 'Không có âm nào khớp bộ lọc.',
+        cols: [
+          { t: 'Nghe', w: 56, frozen: true, cell: function (x) { var b = lcPlay('Nghe ' + x.name, function (btn) { play(x.name, btn); }); b.setAttribute('data-play', x.name); return b; } },
+          { t: 'ID âm', w: 132, frozen: true, cls: 'id', v: function (x) { return x.name; }, cell: function (x) { return x.name; }, tip: function (x) { return x.name; } },
+          { t: 'Nhãn', w: 196, v: function (x) { return x.label; }, cell: function (x) { return x.label; }, tip: function (x) { return x.label; } },
+          { t: 'Nhóm', w: 132, v: function (x) { return x.catLabel; }, cell: function (x) { return [x.catLabel, x.accent ? h('span', { class: 'tag acc', title: 'Âm NHẤN: mỗi bước tối đa 1 (S1)', text: 'nhấn' }) : null]; } },
+          { t: 'Giây', w: 56, cls: 'num', v: function (x) { return x.dur; }, cell: function (x) { return vn(x.dur); } },
+          { t: 'Dùng khi', w: 300, cls: 'mut', v: function (x) { return x.use; }, cell: function (x) { return x.use; }, tip: function (x) { return x.use; } },
+          { t: 'Thẻ', w: 190, cell: function (x) { return x.tags.map(function (t) { return h('span', { class: 'tag', text: t }); }); }, tip: function (x) { return x.tags.join(', '); } },
+          { t: 'Gói', w: 124, v: function (x) { return x.pack; }, cell: function (x) { var p = S.packs().filter(function (k) { return k.id === x.pack; })[0]; return p ? packName(p) : x.pack; } },
+          { t: 'Dự án', w: 124, v: function (x) { return x.project; }, cell: function (x) { return x.project ? Projects.name(x.project) : '—'; } },
+          { t: 'Cảnh tự gán (cue)', w: 230, cls: 'mono mut', v: function (x) { return lsCueText(x.cue); }, cell: function (x) { return lsCueText(x.cue) || '—'; }, tip: function (x) { return lsCueText(x.cue); } }
+        ],
+        group: function (x) { return x.catLabel + (x.accent ? ' · âm nhấn' : ''); },
+        onSelect: function (x) { st.sel = x ? x.name : ''; remember(); inspect(x); },
+        onAct: function (x) { play(x.name, grid.el.querySelector('[data-play="' + x.name + '"]')); },
+        foot: function (v) {
+          var sum = 0, cs = {}; v.forEach(function (x) { sum += x.dur; cs[x.cat] = 1; });
+          return [v.length + ' âm · ' + Object.keys(cs).length + ' nhóm · Σ ' + vn(sum, 1) + ' s', h('span', { class: 'sp' }), '↑↓ chọn · Space nghe · / tìm'];
+        }
+      });
+      box.appendChild(dl);
+      box.appendChild(h('div', { class: 'stack', style: 'gap:8px' },
+        h('div', { class: 'lc-bar' }, q, tagIn, packSel, projSel, clearB, h('span', { class: 'sp' }), count), chips,
+        h('div', { class: 'lc-split' }, grid.el, insp)));
+      var base = [];
+      function refresh() {
+        var o = {};
+        if (st.q) o.q = st.q; if (st.tag) o.tag = st.tag; if (st.pack) o.pack = st.pack; if (st.proj) o.project = st.proj === '-' ? '' : st.proj;
+        base = S.list(o);
+        var cnt = {}; base.forEach(function (x) { cnt[x.cat] = (cnt[x.cat] || 0) + 1; });
+        Object.keys(chipEls).forEach(function (k) { chipEls[k].n.textContent = String(k ? cnt[k] || 0 : base.length); chipEls[k].b.setAttribute('aria-pressed', String(st.cat === k)); });
+        var rows = (st.cat ? base.filter(function (x) { return x.cat === st.cat; }) : base).map(function (x) { x.id = x.name; return x; });
+        count.textContent = rows.length + ' / ' + S.names().length + ' âm';
+        clear(clearB);
+        var act = [st.tag ? 'thẻ: ' + st.tag : '', st.pack ? 'gói: ' + st.pack : ''].filter(Boolean);
+        clearB.hidden = !act.length;
+        if (act.length) { clearB.appendChild(document.createTextNode(act.join(' · '))); clearB.appendChild(h('button', { type: 'button', 'aria-label': 'Bỏ lọc thẻ / gói', title: 'Bỏ lọc thẻ / gói', onclick: function () { st.tag = ''; st.pack = ''; tagIn.value = ''; packSel.value = ''; refresh(); } }, '×')); }
+        grid.set(rows, st.sel);
+      }
+
+      /* Inspector 400 px: nhãn · nghe / tải WAV / chép · cue · JSON một bước + gọi MCP */
+      function inspect(row) {
+        clear(insp);
+        var x = row && S.info(row.name);
+        if (!x) { insp.appendChild(h('div', { class: 'panel pad note', text: 'Chọn một âm trong bảng để xem chi tiết.' })); return; }
+        var P = S.packs().filter(function (p) { return p.id === x.pack; })[0] || {}, step = lsStep(x);
+        var hear = h('button', { class: 'btn primary lc-ic', type: 'button', id: 'lsHear', 'aria-label': 'Nghe ' + x.name, onclick: function () { play(x.name, hear); } }, lcIcon('play'), 'Nghe');
+        var acts = h('div', { class: 'row' }, hear,
+          canWav ? lcBtn('down', 'Tải WAV', { title: 'Dựng offline 44,1 kHz stereo rồi tải ' + x.name + '.wav', label: 'Tải WAV ' + x.name, fn: function (b) { wav(x.name, x.name, b); } }) : null,
+          lcBtn('copy', 'Chép tên', { title: 'Chép tên âm để đặt vào step.sfx', label: 'Chép tên ' + x.name, fn: function () { copyText(x.name, 'tên âm “' + x.name + '”'); } }));
+        var tags = h('div', { class: 'row', style: 'gap:2px' }, x.tags.map(function (t) {
+          return h('button', { type: 'button', class: 'tag', title: 'Lọc theo thẻ “' + t + '”', onclick: function () { st.tag = t; tagIn.value = t; refresh(); } }, t);
+        }));
+        var cueEls = [];
+        ['state', 'fx', 'activity', 'event'].forEach(function (k) {
+          if (x.cue && x.cue[k] && x.cue[k].length) cueEls.push(h('div', { class: 'lc-cue' }, h('span', { class: 'k', text: k }), x.cue[k].map(function (v) { return h('span', { class: 'tag', text: v }); })));
+        });
+        var kv = h('dl', { class: 'lc-kv' },
+          h('dt', { text: 'Nhóm' }), h('dd', null, x.catLabel, ' ', x.accent ? h('span', { class: 'tag acc', text: 'âm nhấn' }) : null),
+          h('dt', { text: 'Thời lượng' }), h('dd', { text: vn(x.dur) + ' s · độ to ' + vn(x.level) + ' · ' + x.nodes + ' node' }),
+          h('dt', { text: 'Gói' }), h('dd', null, packName(P), ' ', h('span', { class: 'tag', text: x.pack }), P.version ? h('span', { class: 'note mono', text: ' v' + P.version }) : null),
+          h('dt', { text: 'Dự án' }), h('dd', { text: x.project ? Projects.name(x.project) : 'Dùng chung mọi dự án' }));
+        var code = codeBox([
+          ['Bước kịch bản (JSON)', function () { return JSON.stringify(step, null, 2); }],
+          ['Gọi MCP', function () { return mcpCall('lint_sound_track', { project: x.project || '', steps: [step] }) + '\n\n// Tra cứu / lấy công thức:\nlist_sounds ' + JSON.stringify({ q: x.name }) + '\nget_sound_pack ' + JSON.stringify({ id: x.pack, names: [x.name] }); }]
+        ]);
+        var notes = [];
+        if (x.accent) notes.push('Âm NHẤN: mỗi bước tối đa 1 âm nhấn, để ở bước không có lời hoặc trước câu thoại (S1, S3).');
+        if (x.hitAt != null) notes.push('Điểm va ở ' + lsSec(x.hitAt) + ' sau khi bắt đầu — đặt ở bước TRƯỚC khung trúng đòn.');
+        if (x.dur > S.RULES.long.dur) notes.push('Âm dài (' + vn(x.dur) + ' s) chỉ ở bước đầu / cuối cảnh (S7).');
+        insp.appendChild(h('div', { class: 'panel' }, h('h3', null, h('span', { text: x.label }), h('span', { class: 'r mono', text: x.name })),
+          h('div', { class: 'pad stack' }, acts, kv,
+            h('div', null, h('div', { class: 'lc-sec', text: 'Dùng khi' }), h('p', { class: 'lc-use', text: x.use })),
+            h('div', null, h('div', { class: 'lc-sec', text: 'Thẻ' }), tags),
+            h('div', null, h('div', { class: 'lc-sec', text: 'Cảnh tự gán (cue)' }),
+              cueEls.length ? h('div', { class: 'stack', style: 'gap:4px' }, cueEls, x.cue && x.cue.mood ? h('p', { class: 'lc-hint', text: 'Chỉ khi không khí cảnh là: ' + x.cue.mood.join(' · ') }) : null)
+                : h('p', { class: 'lc-hint', text: 'Không tự gán — chỉ phát khi đặt tay vào step.sfx.' })),
+            h('div', null, h('div', { class: 'lc-sec', text: 'Dùng trong kịch bản' }), code),
+            notes.length ? h('div', { class: 'stack', style: 'gap:4px' }, notes.map(function (n) { return h('p', { class: 'lc-hint warn', text: n }); })) : null,
+            P.frame || !P.id ? null : h('div', { class: 'usebar' }, h('b', { text: 'Gói' }), h('span', { class: 'note', text: packName(P) + ' · ' + P.count + ' âm' }),
+              lcBtn('down', 'Tải gói (.json)', { label: 'Tải gói ' + P.id, fn: function () { download(P.id + '.json', JSON.stringify(S.pack(P.id), null, 2), 'application/json'); } })))));
+      }
+      refresh();
+      if (!st.sel) grid.focus();
+    }
+
+    /* ---- tab Luật ghép: S1–S7 + quy trình + công thức mẫu + kiểm thử (mọi chữ lấy từ GC.sounds — một nguồn với agent) ---- */
+    function paintRules(box) {
+      var R = S.RULES, steps = lsGuideSteps(S.guide());
+      var lim = [
+        '≤ ' + R.maxPerStep + ' âm mỗi bước', '≤ ' + R.maxAccent + ' âm nhấn mỗi bước', '≤ ' + R.density.max + ' âm / ' + R.density.window + ' s', 'cùng âm ≤ ' + R.repeat.max + ' bước liền',
+        'âm dài > ' + R.long.dur + ' s chỉ ở đầu / cuối cảnh', 'tự gán ≤ ' + R.autoMax + ' âm mỗi bước'];
+      var flow = h('div', { class: 'panel' }, h('h3', null, 'Quy trình ghép', h('span', { class: 'r note', text: 'cùng văn bản agent đọc (get_sound_spec / guide)' })),
+        h('div', { class: 'pad stack' }, h('ol', { class: 'lc-steps' }, steps.map(function (s) { return h('li', null, lcMd(s)); })),
+          h('div', { class: 'row', style: 'gap:4px' }, h('span', { class: 'note', text: 'Ngưỡng:' }), lim.map(function (t) { return h('span', { class: 'tag', text: t }); }))));
+      var rules = h('div', { class: 'panel' }, h('h3', null, 'Bảy luật S1–S7', h('span', { class: 'r note mono', text: 'GC.sounds.RULES · lintSoundTrack · save_shot / save_work chạy cùng bộ luật' })),
+        h('table', { class: 'lc-rules', 'aria-label': 'Bảy luật ghép âm' }, h('thead', null, h('tr', null, h('th', { text: 'Mã' }), h('th', { text: 'Mức' }), h('th', { text: 'Luật' }))),
+          h('tbody', null, R.list.map(function (x) {
+            return h('tr', { 'data-rule': x.code }, h('td', { class: 'code', text: x.code }), h('td', { class: 'lv' }, x.level === 'error' ? lcState('bad', 'Lỗi — chặn lưu') : lcState('warn', 'Cảnh báo')), h('td', { text: x.rule }));
+          }))));
+      var recs = h('div', { class: 'panel' }, h('h3', null, 'Công thức ghép mẫu', h('span', { class: 'r note', text: S.RECIPES.length + ' công thức · đà → va → hậu quả' })),
+        h('div', { class: 'lc-recipes' }, S.RECIPES.map(function (rc) {
+          var seq = h('div', { class: 'seq' });
+          rc.seq.forEach(function (x, i) {
+            if (i) seq.appendChild(h('span', { class: 'arrow', 'aria-hidden': 'true', text: '→' }));
+            seq.appendChild(h('span', { class: 't', text: lsSec(x[0]) }));
+            seq.appendChild(h('button', { type: 'button', class: 'tag', title: 'Mở “' + x[1] + '” trong bảng Âm', onclick: function () { openSound(x[1]); } }, x[1]));
+          });
+          var hearB = h('button', { class: 'btn sm primary lc-ic', type: 'button', 'data-recipe': rc.id, 'aria-label': 'Nghe chuỗi ' + rc.id, onclick: function () {
+            A.unlock(); rc.seq.forEach(function (x) { A.sfx(x[1], { delay: x[0] }); });
+            var end = rc.seq[rc.seq.length - 1][0] + ((S.info(rc.seq[rc.seq.length - 1][1]) || {}).dur || 0.5);
+            hearB.setAttribute('data-playing', 'true'); setTimeout(function () { hearB.removeAttribute('data-playing'); }, end * 1000 + 200);
+          } }, lcIcon('play'), 'Nghe chuỗi');
+          return h('div', { class: 'lc-recipe', 'data-id': rc.id }, h('div', null, h('b', { text: rc.label }), h('p', { class: 'lc-hint', text: rc.note })), seq,
+            h('div', { class: 'acts' }, hearB,
+              canWav ? lcBtn('down', 'Tải WAV', { label: 'Tải WAV chuỗi ' + rc.id, fn: function (b) { wav(rc.seq.map(function (x) { return [x[0], x[1]]; }), rc.id, b); } }) : null,
+              lcBtn('copy', 'Chép các bước', { title: 'Chép mảng bước kịch bản (mỗi âm một bước)', label: 'Chép các bước ' + rc.id, fn: function () { copyText(JSON.stringify(lsRecipeSteps(rc, lsActor('')), null, 2), 'các bước của “' + rc.id + '”'); } })));
+        })));
+      // kiểm thử chuỗi bước bằng đúng bộ luật của server
+      var ta = h('textarea', { class: 'code', id: 'lsLintIn', rows: '9', spellcheck: 'false', 'aria-label': 'Các bước kịch bản (JSON) để kiểm luật ghép' });
+      ta.value = JSON.stringify(lsRecipeSteps(S.RECIPES[0], lsActor('')), null, 2);
+      var lp = h('select', { 'aria-label': 'Dự án để tra gói âm' }), out = h('div', { class: 'stack', role: 'status', 'aria-live': 'polite' });
+      lp.appendChild(h('option', { value: '', text: 'Không dự án (khung + gói chung)' }));
+      var pj = []; S.packs().forEach(function (p) { if (p.project && pj.indexOf(p.project) < 0) pj.push(p.project); });
+      Projects.all().forEach(function (p) { if (pj.indexOf(p.id) < 0) pj.push(p.id); });
+      pj.forEach(function (id) { lp.appendChild(h('option', { value: id, text: Projects.name(id) })); });
+      function lint() {
+        clear(out);
+        var steps2;
+        try { steps2 = JSON.parse(ta.value); } catch (e) { out.appendChild(h('p', { class: 'lc-msg bad', role: 'alert', text: 'Không phải JSON: ' + e.message })); return; }
+        if (!Array.isArray(steps2)) steps2 = steps2 && Array.isArray(steps2.steps) ? steps2.steps : [steps2];
+        var iss = S.lintSoundTrack(steps2, { project: lp.value }), er = iss.filter(function (i) { return i.level === 'error'; }).length, wn = iss.length - er;
+        out.appendChild(h('p', { class: 'lc-msg ' + (er ? 'bad' : wn ? 'warn' : 'ok'), 'data-lint': er + '/' + wn, text: er + ' lỗi · ' + wn + ' cảnh báo' + (iss.length ? '' : ' — chuỗi này qua cả bảy luật.') }));
+        if (iss.length) out.appendChild(h('ul', { class: 'lc-issues' }, iss.map(function (i) {
+          return h('li', null, h('span', { class: 'code', text: i.code }), i.level === 'error' ? lcState('bad', 'Lỗi') : lcState('warn', 'Cảnh báo'), h('span', null, h('span', { class: 'p', text: (i.path || '') + (i.path ? ' ' : '') }), i.msg));
+        })));
+      }
+      var lintP = h('div', { class: 'panel lc-lint' }, h('h3', null, 'Thử kiểm luật', h('span', { class: 'r note', text: 'dán các bước (steps) — kết quả như lint_sound_track' })),
+        h('div', { class: 'pad stack' }, ta, h('div', { class: 'row' }, lp, h('button', { class: 'btn primary', type: 'button', id: 'lsLintGo', onclick: lint }, 'Kiểm S1–S7'),
+          h('span', { class: 'note', text: 'Lỗi (S1, S6) chặn lưu phân cảnh; cảnh báo (S2–S5, S7) chỉ nhắc.' })), out));
+      box.appendChild(h('div', { class: 'stack' }, flow, rules, recs, lintP));
+    }
+
+    /* ---- tab Gói âm: danh sách · tải JSON · nhập (kiểm cổng, lỗi kèm path) ---- */
+    function paintPacks(box) {
+      var impProj = (function (v) { var P = Projects.list.filter(function (x) { return x.id === v; })[0]; return P && P.sample ? '' : v; })(lastProject());
+      var sampleOf = function (pid) { var pj = pid ? Projects.all().filter(function (x) { return x.id === pid; })[0] : null; return pj && pj.sample ? pj.sample : null; };
+      var tbl = h('table', { class: 'grid', 'aria-label': 'Gói âm' }), th = h('tr');
+      ['ID gói', 'Tên', 'Dự án', 'Phiên bản', 'Số âm', 'Trạng thái', 'Nguồn', ''].forEach(function (t) { th.appendChild(h('th', { text: t })); });
+      tbl.appendChild(h('thead', null, th));
+      var tb = h('tbody'); tbl.appendChild(tb);
+      S.packs().forEach(function (p) {
+        var smp = p.status === 'published' ? sampleOf(p.project) : null, act = h('span', { class: 'acts' },   // dấu "bộ mẫu" chỉ cho gói phát hành của dự án mẫu (gói người dùng nhập vào đó vẫn là nháp của họ)
+
+          lcBtn(null, 'Xem âm', { label: 'Xem âm của gói ' + p.id, fn: function () { st.tab = 'sounds'; st.pack = p.id; st.cat = ''; remember(); paintTabs(); paintTab(); } }),
+          p.frame ? null : lcBtn('down', 'Tải JSON', { label: 'Tải gói ' + p.id, fn: function () { download(p.id + '.json', JSON.stringify(S.pack(p.id), null, 2), 'application/json'); } }));
+        tb.appendChild(h('tr', { 'data-pack': p.id }, h('td', { class: 'id', text: p.id }), h('td', null, p.frame ? 'Bộ âm chuẩn (khung)' : p.name),
+          h('td', { text: p.project ? Projects.name(p.project) : p.frame ? 'mọi dự án' : 'dùng chung' }), h('td', { class: 'v', text: 'v' + p.version }), h('td', { class: 'v', text: String(p.count) }),
+          h('td', null, smp ? h('span', { class: 'chip', title: smp.license || '', text: 'Bộ mẫu ' + (smp.owner || 'Gen Labs') }) : p.frame ? h('span', { class: 'chip', text: 'Khung' }) : p.status === 'published' ? h('span', { class: 'chip ok', text: 'Phát hành' }) : h('span', { class: 'chip', text: 'Nháp' })),
+          h('td', { class: 'note', text: p.frame ? 'trong engine' : net.stored[p.id] ? 'đã lưu trên máy' : 'nạp trong phiên' }), h('td', { class: 'nw' }, act)));
+      });
+      // nhập gói
+      var ta = h('textarea', { class: 'code', id: 'lsImport', rows: '7', spellcheck: 'false', 'aria-label': 'JSON của gói âm', placeholder: '{ "format": "' + S.FORMAT + '", "id": "ten-goi", "name": "…", "sounds": { … } }' });
+      var res = h('div', { class: 'stack', style: 'gap:6px' });
+      function say(kind, head, list) {
+        clear(res);
+        res.appendChild(h('p', { class: 'lc-msg ' + kind, role: kind === 'bad' ? 'alert' : 'status', text: head }));
+        if (list && list.length) res.appendChild(h('ul', { class: 'errs', style: 'margin:0' }, list.slice(0, 30).map(function (m) { return h('li', { text: '✗ ' + m }); })));
+      }
+      function parse() {
+        var d;
+        try { d = JSON.parse(ta.value); } catch (e) { say('bad', 'Không phải JSON: ' + e.message); return null; }
+        if (!d || typeof d !== 'object' || Array.isArray(d)) { say('bad', 'Gói âm phải là một object JSON (' + S.FORMAT + ').'); return null; }
+        return d;
+      }
+      // cổng kiểm + tên âm không trùng gói khác (tên âm là chung toàn thư viện) — cùng luật server chạy
+      function check(d) {
+        var c = S.validateSoundPack(d), errs = c.errors.slice();
+        if (!errs.length) Object.keys(c.def.sounds).forEach(function (nm) { var o = S.get(nm); if (o && o.pack !== c.def.id) errs.push('sounds.' + nm + ': trùng tên âm của gói "' + o.pack + '" — tên âm là chung toàn thư viện, đổi tên'); });
+        return { errors: errs, def: errs.length ? null : c.def };
+      }
+      function onlyCheck() {
+        var d = parse(); if (!d) return;
+        var c = check(d);
+        if (c.errors.length) { say('bad', 'Gói chưa qua cổng kiểm — ' + c.errors.length + ' lỗi', c.errors); return; }
+        var names = Object.keys(c.def.sounds);
+        say('ok', 'Gói hợp lệ: “' + c.def.name + '” — ' + names.length + ' âm (' + names.slice(0, 6).join(', ') + (names.length > 6 ? '…' : '') + '). Chưa lưu gì.');
+      }
+      var impB = h('button', { class: 'btn primary', type: 'button', id: 'lsImportGo', disabled: net.server ? null : true, title: net.server ? 'Kiểm rồi lưu vào thư viện (có phiên bản)' : 'Cần bản cài có máy chủ hỗ trợ gói âm (api/sound-packs)', onclick: function () {
+        var d = parse(); if (!d) return;
+        var c = check(d);
+        if (c.errors.length) { say('bad', 'Gói chưa qua cổng kiểm — ' + c.errors.length + ' lỗi', c.errors); return; }
+        var body2 = impProj ? Object.assign({}, d, { project: impProj }) : d;
+        impB.disabled = true;
+        Store.api('POST', 'api/sound-packs', { pack: body2, note: 'Nhập trong Studio' }).then(function (rec) {
+          var warns = Array.isArray(rec.warnings) ? rec.warnings : []; rec = clone(rec); delete rec.warnings;   // warnings không phải khoá của gói
+          var r1 = S.registerPack(rec);
+          if (r1.errors.length) throw Object.assign(new Error('Server đã lưu nhưng Studio không nạp được gói'), { errors: r1.errors });
+          net.stored[r1.def.id] = true;
+          toast('Đã nhập gói “' + r1.def.name + '” (' + Object.keys(r1.def.sounds).length + ' âm).');
+          paintTabs(); paintTab();
+          if (warns.length) say('warn', 'Đã lưu, nhưng có cảnh báo:', warns);
+        }).catch(function (e) { say('bad', e.status === 422 ? 'Gói chưa qua cổng kiểm của máy chủ' : e.status === 404 ? 'Máy chủ này chưa hỗ trợ gói âm (api/sound-packs)' : e.message, e.errors || (e.status === 422 ? [e.message] : null)); impB.disabled = !net.server; });
+      } }, 'Nhập vào thư viện');
+      function pickFile() {
+        var inp = h('input', { type: 'file', accept: '.json,application/json', style: 'display:none', onchange: function () {
+          var f = inp.files && inp.files[0]; inp.remove();
+          if (!f) return;
+          if (f.size > S.BUDGET.bytes * 2) { say('bad', 'Tệp quá lớn (gói âm tối đa ' + Math.round(S.BUDGET.bytes / 1000) + ' KB).'); return; }
+          f.text().then(function (t) { ta.value = t; onlyCheck(); });
+        } });
+        document.body.appendChild(inp); inp.click();
+      }
+      var note = net.server ? null : h('p', { class: 'lc-msg', text: Store.mode === 'server' ? 'Máy chủ này chưa có api/sound-packs — chỉ xem được gói có sẵn trong engine; vẫn kiểm gói được nhưng chưa lưu được.' : 'Bản xem thử không có máy chủ: kiểm được gói nhưng không lưu được. Cài bản máy chủ để nhập gói.' });
+      box.appendChild(h('div', { class: 'stack' },
+        h('div', { class: 'panel' }, h('h3', null, 'Gói âm', h('span', { class: 'r note', text: S.packs().length + ' gói · tên âm là chung toàn thư viện' })), h('div', { class: 'scroll' }, tbl)),
+        h('div', { class: 'panel lc-import' }, h('h3', null, 'Nhập gói âm', h('span', { class: 'r note', text: 'qua cổng kiểm như MCP / AI — gói không chứa mã' })),
+          h('div', { class: 'pad stack' }, note,
+            h('div', { class: 'row' }, lcBtn('up', 'Chọn tệp .json', { label: 'Chọn tệp gói âm', fn: pickFile }), h('span', { class: 'note', text: 'hoặc dán JSON vào ô dưới' }), h('span', { class: 'sp', style: 'flex:1' }),
+              net.server ? h('span', { class: 'note', text: 'Nhập vào dự án' }) : null, net.server ? projectSelect(impProj, function (v) { impProj = v; }) : null),
+            ta, h('div', { class: 'row' }, h('button', { class: 'btn', type: 'button', id: 'lsCheck', onclick: onlyCheck }, 'Kiểm gói (không lưu)'), impB), res))));
+    }
+
+    paintTabs(); paintTab();
+    lsLoadPacks().then(function (n) {
+      if (!alive) return;
+      var before = lsSig(), was = net.server; net = n;
+      if (lsSig() !== before || was !== n.server) { paintTabs(); paintTab(); }   // gói đã lưu mới nạp xong / đổi trạng thái máy chủ → vẽ lại, giữ nguyên bộ lọc (nằm trong st)
+    });
+  };
+
+  /* ---------------------------------------------------------------- GIỌNG */
+  // Câu mẫu nghe thử theo VAI × NGÔN NGỮ — SỬA Ở ĐÂY (một chỗ duy nhất). Đổi chữ thì clip AI đã đọc không còn khớp: nghe lại tốn 1 lượt.
+  // Mỗi câu ≤ 240 ký tự (trần của server). Tiếng Quảng Đông (yue) viết chữ phồn thể + khẩu ngữ (喺 / 咩 / 我哋) — model đọc theo chữ. Thiếu câu → VOICE_SAMPLE.
+  var VOICE_LINES = {
+    vi: {
+      'be-trai': 'Mẹ ơi, mẹ ơi! Con bắt được con dế to lắm này!', 'be-gai': 'Anh ơi, chờ em với! Em cũng muốn đi hái hoa nữa!',
+      'thieu-nien': 'Cho em đi theo với! Em hứa sẽ không làm vướng chân ai đâu.', 'thieu-nu': 'Hôm nay trời đẹp quá, mình rủ nhau ra bờ sông đi!',
+      'nam-tre': 'Chào bạn, mình là người mới đến. Rất mong được chỉ giáo.', 'nu-tre': 'Cảm ơn anh đã giúp, em không biết phải nói sao cho phải.',
+      'hiep-khach': 'Kiếm trong tay, lòng không sợ. Ai muốn qua cầu, phải qua ta trước.', 'nu-tuong': 'Toàn quân nghe lệnh! Giữ vững thành, không lùi nửa bước!',
+      'tieu-thu': 'Hoa rơi nước chảy, xuân đã qua rồi, biết gửi tình về đâu.', 'nam-trung-nien': 'Việc đã đến nước này, ta phải bình tĩnh mà tính cho kỹ.',
+      'nu-trung-nien': 'Cơm nước xong hết rồi, con ngồi xuống ăn đi kẻo nguội.', 'vo-tuong': 'Ta là đại tướng của nước này! Kẻ nào dám tiến thêm một bước, chém!',
+      'quan-su': 'Binh pháp có câu: biết người biết ta, trăm trận trăm thắng.', 'vua-chua': 'Trẫm tin ở các khanh. Giang sơn này, trông cậy cả vào các người.',
+      'hoang-hau': 'Bệ hạ đừng lo, thiếp đã sắp xếp mọi việc trong cung chu toàn.', 'phan-dien': 'Hà hà… ngươi tưởng ta không biết kế của ngươi sao?',
+      'nu-phan-dien': 'Ngoan ngoãn nghe lời, ta sẽ để ngươi sống thêm vài ngày.', 'hai-huoc': 'Ối trời ơi! Đại ca ơi, em quên mang tiền rồi, hi hi!',
+      'nu-hai-huoc': 'Trời ơi, mặt anh kìa! Em cười không nổi nữa, ha ha ha!', 'ong-lao': 'Con à, đời người như chén trà, đắng rồi mới thấy ngọt.',
+      'ba-lao': 'Lại đây với bà nào, bà kể con nghe chuyện ngày xưa.', 'ke-chuyen': 'Ngày xửa ngày xưa, ở một vùng đất xa xôi, có một người anh hùng.'
+    },
+    en: {
+      'be-trai': 'Mom, mom! Look, I caught a huge cricket!', 'be-gai': 'Wait for me, brother! I want to pick flowers too!',
+      'thieu-nien': 'Let me come along! I promise I won\'t get in the way.', 'thieu-nu': 'The weather is so nice today, let\'s go down to the river!',
+      'nam-tre': 'Hi, I\'m new around here. I\'d really appreciate your advice.', 'nu-tre': 'Thank you so much for helping me. I don\'t know how to repay you.',
+      'hiep-khach': 'Sword in hand, heart without fear. Whoever wants to cross this bridge must pass me first.', 'nu-tuong': 'All troops, hear my order! Hold the wall, not one step back!',
+      'tieu-thu': 'Petals fall and waters flow, spring has gone. Where can I send my heart?', 'nam-trung-nien': 'It has come to this. We must stay calm and plan carefully.',
+      'nu-trung-nien': 'Dinner is ready. Sit down and eat before it gets cold.', 'vo-tuong': 'I am the general of this kingdom! Anyone who takes one more step dies!',
+      'quan-su': 'As the art of war says: know your enemy and know yourself, and you will win every battle.', 'vua-chua': 'I put my trust in you all. This realm depends on every one of you.',
+      'hoang-hau': 'Do not worry, Your Majesty. I have arranged everything in the palace.', 'phan-dien': 'Heh heh... did you really think I didn\'t know your plan?',
+      'nu-phan-dien': 'Be obedient, and I may let you live a few more days.', 'hai-huoc': 'Oh no! Boss, I forgot my wallet, hee hee!',
+      'nu-hai-huoc': 'Oh my gosh, look at your face! I can\'t stop laughing, ha ha ha!', 'ong-lao': 'My child, life is like a cup of tea: bitter first, then sweet.',
+      'ba-lao': 'Come sit with grandma, and I\'ll tell you stories from long ago.', 'ke-chuyen': 'Once upon a time, in a land far away, there lived a hero.'
+    },
+    zh: {
+      'be-trai': '妈妈，妈妈！我抓到一只好大的蟋蟀！', 'be-gai': '哥哥等等我！我也想去采花！', 'thieu-nien': '带我一起去吧！我保证不会拖后腿的。', 'thieu-nu': '今天天气真好，我们一起去河边玩吧！',
+      'nam-tre': '你好，我是新来的，请多多指教。', 'nu-tre': '谢谢你帮我，我真不知道该怎么感谢你。', 'hiep-khach': '剑在手，心无惧。想过此桥，先过我这一关。', 'nu-tuong': '全军听令！死守城池，不得后退半步！',
+      'tieu-thu': '花落水流春去也，我这一腔心事，该寄往何处？', 'nam-trung-nien': '事已至此，我们必须冷静，仔细谋划。', 'nu-trung-nien': '饭菜都做好了，快坐下吃吧，别凉了。', 'vo-tuong': '吾乃本国大将军！谁敢再上前一步，格杀勿论！',
+      'quan-su': '兵法有云：知己知彼，百战不殆。', 'vua-chua': '朕信得过各位爱卿。这万里江山，全靠你们了。', 'hoang-hau': '陛下放心，后宫诸事，臣妾都已安排妥当。', 'phan-dien': '哈哈……你以为我不知道你的计策吗？',
+      'nu-phan-dien': '乖乖听话，我就让你多活几天。', 'hai-huoc': '哎呀妈呀！大哥，我忘带钱了，嘿嘿！', 'nu-hai-huoc': '天哪，你看你那张脸！我笑得停不下来了，哈哈哈！', 'ong-lao': '孩子，人生就像一杯茶，先苦后甘。',
+      'ba-lao': '过来，坐到奶奶身边，奶奶给你讲讲从前的故事。', 'ke-chuyen': '很久很久以前，在一个遥远的地方，住着一位英雄。'
+    },
+    yue: {
+      'be-trai': '媽咪媽咪！我捉到一隻好大隻嘅蟋蟀呀！', 'be-gai': '哥哥等埋我啦！我都想去摘花呀！', 'thieu-nien': '帶埋我去啦！我保證唔會阻手阻腳。', 'thieu-nu': '今日天氣咁好，我哋一齊去河邊玩啦！',
+      'nam-tre': '你好，我係新嚟嘅，請多多指教。', 'nu-tre': '多謝你幫我，我真係唔知點樣報答你。', 'hiep-khach': '劍喺手，心無懼。想過呢道橋，先過我呢關。', 'nu-tuong': '全軍聽令！死守城池，唔准退後半步！',
+      'tieu-thu': '花落水流春去也，我呢啲心事，應該寄去邊度？', 'nam-trung-nien': '事已至此，我哋一定要冷靜，仔細諗清楚。', 'nu-trung-nien': '飯菜煮好喇，快啲坐低食啦，凍咗就唔好食喇。', 'vo-tuong': '本將軍喺此！邊個再前進一步，格殺勿論！',
+      'quan-su': '兵法有云：知己知彼，百戰百勝。', 'vua-chua': '朕信得過各位愛卿。呢個江山，就靠你哋喇。', 'hoang-hau': '陛下放心，後宮嘅事，臣妾都安排妥當喇。', 'phan-dien': '哈哈……你以為我唔知你嘅計謀咩？',
+      'nu-phan-dien': '乖乖聽話，我就畀你多活幾日。', 'hai-huoc': '哎呀！大佬，我唔記得帶錢呀，嘿嘿！', 'nu-hai-huoc': '我嘅天呀，睇下你張面！我笑到停唔到呀，哈哈哈！', 'ong-lao': '乖仔，人生好似一杯茶，先苦後甜。',
+      'ba-lao': '嚟，坐喺嫲嫲身邊，嫲嫲講啲以前嘅故事畀你聽。', 'ke-chuyen': '好耐好耐以前，喺一個好遠嘅地方，住咗一位英雄。'
+    }
+  };
+  function lvLine(lang, role) { var L = VOICE_LINES[lang] || {}; return L[role] || VOICE_SAMPLE[lang] || VOICE_SAMPLE.vi; }
+
+  // bộ nhớ của trang Giọng: cast đã biết (lang|giọng vùng|vai → { voice, source, label }) + lời gọi đang bay
+  var LV = { cv: {}, cp: {} };
+  // giọng AI mà server sẽ chọn cho MỘT vai (api/voice/cast với một diễn viên mang id = vai — cùng cách bảng "Bộ giọng vai" ở Cài đặt AI): không tốn lượt
+  function lvCast(role, lang, accent) {
+    var k = lang + '|' + accent + '|' + role;
+    if (LV.cv[k]) return Promise.resolve(LV.cv[k]);
+    if (LV.cp[k]) return LV.cp[k];
+    LV.cp[k] = Store.api('POST', 'api/voice/cast', { lang: lang, accent: accent, actors: [{ id: role, role: role, gender: GC.voices.ROLES[role].gender }] }).then(function (r) {
+      var c = r && r.cast && r.cast[role]; delete LV.cp[k];
+      if (!c || !c.voice) throw new Error('Server không chọn được giọng cho vai này');
+      LV.cv[k] = c; return c;
+    }, function (e) { delete LV.cp[k]; throw e; });
+    return LV.cp[k];
+  }
+  function lvReset() { LV.cv = {}; LV.cp = {}; AiVoice.casts = {}; AiVoice.libs = {}; }   // sau khi thiết kế giọng / đổi key: cast tính lại
+  function lvErr(e) { return e && e.status === 429 ? AiVoice.quotaText(e) : (e && e.message) || 'Lỗi giọng AI'; }
+  function lvOffWhy() {
+    if (Store.mode !== 'server') return 'Bản xem thử không có máy chủ — chỉ nghe được giọng máy.';
+    var c = AiVoice.cfg;
+    return !c ? 'Không đọc được trạng thái giọng AI.' : !c.hasKey ? 'Chưa có key Google — dán ở Cài đặt AI › Giọng AI.' : 'Giọng AI đang tắt — bật ở Cài đặt AI › Giọng AI.';
+  }
+  function lvReady() { return AiVoice.on() && AiVoice.ready(); }
+  // clip mẫu ĐÃ CÓ (dry: không gọi Google, không tốn lượt). Server: 404 hoặc { found: false } khi chưa đọc → { found: false }
+  function lvLookup(p) {
+    var hit = AiVoice.clips.get(AiVoice.keyOf(p));
+    if (hit) return Promise.resolve({ found: true, buf: hit });
+    return Store.api('POST', 'api/voice/line', Object.assign({}, p, { dry: true })).then(function (r) { return r && r.url ? { found: true, url: r.url } : { found: false }; }, function (e) { if (e.status === 404) return { found: false }; throw e; });
+  }
+  function lvBuf(p, res) { return res.buf ? Promise.resolve(res.buf) : AiVoice.download(res.url).then(function (buf) { AiVoice.keep(AiVoice.keyOf(p), buf); return buf; }); }
+  function lvSpeak(g, buf) { GC.audio.unlock(); return AiVoice.speak(g.p.text, buf, g.machine()); }
+
+  // Nút giọng AI của MỘT dòng (hàng bảng hoặc Inspector). getP() → { p: tham số api/voice/line, machine(): giọng máy dự phòng } | null (chưa có giọng để đọc).
+  // Trạng thái: off (chưa sẵn sàng) · nop (chưa có giọng) · wait (đang kiểm clip đã có) · have (▶ AI — miễn phí) · none ("Đọc mẫu bằng AI (1 lượt)", bấm 2 lần) · busy.
+  // o: { who (tên cho aria-label), full (nhãn đầy đủ trong Inspector), nopWhy, onSpend() }
+  function lvAiCtl(getP, o) {
+    o = o || {};
+    var c = { el: h('span', { class: 'lv-pair' }), note: h('p', { class: 'lc-hint warn', role: 'status', hidden: true }), phase: 'idle', res: null, arm: 0, btn: null }, seq = 0, armT = 0;
+    function who() { return o.who ? ' — ' + o.who : ''; }
+    function say(t) { c.note.textContent = t || ''; c.note.hidden = !t; }
+    c.paint = function () {
+      clear(c.el);
+      var g = lvReady() ? getP() : null, ph = !lvReady() ? 'off' : !g ? 'nop' : c.phase, b;
+      if (ph === 'off' || ph === 'nop') {
+        b = h('button', { class: 'btn lv-ai lc-ic', type: 'button', disabled: true, 'data-ai': ph, 'aria-label': 'Nghe giọng AI' + who(), title: ph === 'off' ? lvOffWhy() : (o.nopWhy || 'Chưa có giọng AI cho dòng này') }, lcIcon('play'), o.full ? 'Nghe giọng AI' : 'AI');
+      } else if (ph === 'none' || ph === 'busy') {
+        var armed = c.arm === 1 && ph === 'none';
+        b = h('button', { class: 'btn lv-ai cost lc-ic', type: 'button', 'data-ai': 'read', 'data-confirm': armed ? '1' : null, disabled: ph === 'busy' ? true : null, onclick: c.click,
+          'aria-label': 'Đọc mẫu bằng AI (1 lượt)' + who(), title: armed ? 'Bấm lần nữa để đọc — tốn 1 lượt Google' : 'Chưa có clip mẫu. Đọc mới tốn 1 lượt Google (câu đã đọc rồi thì không tốn lại).' },
+          ph === 'busy' ? 'Đang đọc…' : armed ? (o.full ? 'Bấm lần nữa — tốn 1 lượt' : 'Chắc chắn?') : o.full ? 'Đọc mẫu bằng AI (1 lượt)' : 'AI · 1 lượt');
+      } else {
+        b = h('button', { class: 'btn lv-ai lc-ic', type: 'button', 'data-ai': ph === 'have' ? 'play' : 'check', disabled: ph === 'wait' ? true : null, onclick: c.click, 'aria-label': 'Nghe giọng AI' + who(),
+          title: ph === 'have' ? 'Clip mẫu đã có — nghe miễn phí' : 'Nghe clip mẫu giọng AI nếu đã có (miễn phí)' }, lcIcon('play'), o.full ? 'Nghe giọng AI' : 'AI');
+      }
+      c.el.appendChild(b); c.btn = b;
+    };
+    function spend(g) {
+      var my = ++seq; c.phase = 'busy'; c.paint(); say('');
+      AiVoice.get(g.p, false, true).then(function (x) {
+        if (my !== seq) return;
+        c.res = { found: true, buf: x.buf }; c.phase = 'have'; c.paint(); lvSpeak(g, x.buf);
+        if (o.onSpend) o.onSpend(x);
+      }).catch(function (e) { if (my !== seq) return; c.phase = 'none'; c.paint(); say(lvErr(e)); toast(lvErr(e) + '.'); });
+    }
+    c.click = function () {
+      var g = getP(); if (!lvReady() || !g) return;
+      GC.audio.unlock();   // phải gọi trong cú bấm
+      if (c.phase === 'none') {   // đọc mới tốn lượt: xác nhận 2 bước (tự huỷ sau 5 giây)
+        if (c.arm !== 1) { c.arm = 1; clearTimeout(armT); armT = setTimeout(function () { c.arm = 0; c.paint(); say(''); }, 5000); c.paint(); say('Đọc mới tốn 1 lượt Google. Bấm lần nữa để đọc — hoặc đợi 5 giây để huỷ.'); return; }
+        clearTimeout(armT); c.arm = 0; spend(g); return;
+      }
+      var my = ++seq; c.phase = 'wait'; c.paint(); say('');
+      lvLookup(g.p).then(function (res) {
+        if (my !== seq) return;
+        if (!res.found) { c.phase = 'none'; c.paint(); return; }
+        return lvBuf(g.p, res).then(function (buf) { if (my !== seq) return; c.res = { found: true, buf: buf }; c.phase = 'have'; c.paint(); lvSpeak(g, buf); });
+      }).catch(function (e) { if (my !== seq) return; c.phase = 'idle'; c.paint(); say(lvErr(e)); });
+    };
+    // kiểm clip mẫu đã có (dry) để nút hiện đúng ▶ AI hay "Đọc AI · 1 lượt"
+    c.check = function () {
+      var g = lvReady() ? getP() : null;
+      if (!g) { seq++; c.phase = 'idle'; c.paint(); return Promise.resolve(); }
+      var my = ++seq; c.phase = 'wait'; c.paint();
+      return lvLookup(g.p).then(function (res) { if (my !== seq) return; c.res = res; c.phase = res.found ? 'have' : 'none'; c.paint(); }, function (e) { if (my !== seq) return; c.phase = 'idle'; c.paint(); say(lvErr(e)); });
+    };
+    c.stop = function () { seq++; clearTimeout(armT); };
+    c.paint();
+    return c;
+  }
+
+  PAGES['lib-voices'] = function (r) {
+    crumbs([{ t: 'Giọng' }]);
+    var V = GC.voices, A = GC.audio, server = Store.mode === 'server';
+    if (!V || !A) { $('view').appendChild(h('div', { class: 'panel pad note lib-empty', text: 'Bản này chưa nạp bộ giọng (engine/voices.js).' })); return; }
+    actions(h('span', { class: 'note', text: V.roleList().length + ' vai × ' + V.langList().length + ' ngôn ngữ — xem, nghe giọng máy / giọng AI, thiết kế giọng.' }),
+      server ? h('button', { class: 'btn', type: 'button', onclick: function () { go({ page: 'ai', focus: 'voice' }); } }, 'Cài đặt AI › Giọng AI ›') : null);
+    var pf = VoicePref.get(), alive = true, gen = 0;
+    var st = { tab: r.tab === 'works' ? 'works' : 'roles', lang: pf.lang, accent: pf.accent, proj: r.project != null ? String(r.project) : lastProject(), q: '', age: '', kind: '', sel: V.ROLES[r.role] ? r.role : '', work: r.work || '' };
+    if (st.proj && !Projects.all().some(function (p) { return p.id === st.proj; })) st.proj = '';
+    var host = h('div', { class: 'lc' }), banner = h('div'), tabsEl = h('div'), body = h('div', { class: 'lc-body' });
+    host.appendChild(banner); host.appendChild(tabsEl); host.appendChild(body); $('view').appendChild(host);
+    function onSlash(ev) {
+      if (ev.key !== '/' || ev.ctrlKey || ev.metaKey || ev.altKey || /^(INPUT|SELECT|TEXTAREA)$/.test((ev.target || {}).tagName || '')) return;
+      var q = $('lvQ'); if (q) { ev.preventDefault(); q.focus(); q.select(); }
+    }
+    document.addEventListener('keydown', onSlash);
+    onLeave(function () { alive = false; gen++; A.hush(); document.removeEventListener('keydown', onSlash); });
+    function remember() { route.tab = st.tab; route.role = st.sel || undefined; try { localStorage.setItem(routeKey(APP), JSON.stringify(route)); } catch (e) { /* bỏ qua */ } }
+    function ck(role) { return st.lang + '|' + st.accent + '|' + role; }
+    function accLabel(l, a) { return (V.LANGS[l].accents.filter(function (x) { return x[0] === a; })[0] || [a, a])[1]; }
+    function langInfo() { return V.LANGS[st.lang].label + ' · ' + accLabel(st.lang, st.accent); }
+
+    // lời nhắc trạng thái giọng AI — chưa có key thì vẫn xem / nghe giọng máy
+    function paintBanner() {
+      clear(banner);
+      var c = AiVoice.cfg;
+      if (lvReady()) {
+        var cap = typeof c.dailyCap === 'number' && c.dailyCap > 0 ? ' / ' + c.dailyCap : '';
+        banner.appendChild(h('div', { class: 'banner lv-banner ok', 'data-state': 'ready' }, lcState('ok', 'Giọng AI sẵn sàng'), h('span', { class: 'note mono', text: 'hôm nay ' + (c.today || 0) + cap + ' câu · ' + (c.cached || 0) + ' câu đã lưu' }),
+          h('span', { class: 'sp' }), h('span', { class: 'note', text: 'Clip mẫu đã có thì nghe miễn phí; đọc mới và thiết kế giọng tốn lượt Google (báo trước, bấm 2 lần).' })));
+        return;
+      }
+      var head = !server ? 'Bản xem thử' : !c ? 'Chưa đọc được trạng thái giọng AI' : !c.hasKey ? 'Chưa có key Google' : 'Giọng AI đang tắt';
+      var tail = !server ? 'không có máy chủ — vẫn xem và nghe được giọng máy (miễn phí, giọng dự phòng của trình duyệt). Giọng AI cần bản cài.'
+        : 'vẫn xem và nghe được giọng máy (miễn phí, giọng dự phòng của trình duyệt). ' + (c && c.hasKey ? 'Bật lại để nghe giọng AI.' : 'Muốn nghe giọng AI: dán key Google (miễn phí, dán là chạy).');
+      banner.appendChild(h('div', { class: 'banner lv-banner acc', 'data-state': 'off', role: 'status' }, lcState('warn', head), h('span', { class: 'note', text: tail }), h('span', { class: 'sp' }),
+        server ? h('button', { class: 'btn sm', type: 'button', id: 'lvKey', onclick: function () { go({ page: 'ai', focus: 'voice' }); } }, c && c.hasKey ? 'Bật ở Cài đặt AI › Giọng AI' : 'Dán key ở Cài đặt AI › Giọng AI') : null));
+    }
+    function paintTabs() {
+      clear(tabsEl).appendChild(lcTabs([['roles', 'Bộ giọng vai', V.roleList().length], ['works', 'Giọng của dự án / tác phẩm', '']], st.tab, function (t) { st.tab = t; remember(); paintTabs(); paintTab(); }));
+    }
+    function paintTab() { gen++; A.hush(); clear(body); (st.tab === 'works' ? paintWorks : paintRoles)(body); }
+    function usersOf(role) {   // nhân vật (trong dự án đang chọn) đang dùng vai này
+      return GC.assets().filter(function (a) { return groupOf(a) !== 'frame' && (!st.proj || a.project === st.proj) && AiVoice.roleOf(a) === role; });
+    }
+    function projSelect(onPick) {
+      var s = h('select', { 'aria-label': 'Dự án (để biết nhân vật nào dùng vai)', title: 'Dự án dùng để liệt kê nhân vật theo vai', onchange: function () { st.proj = s.value; onPick(); } });
+      s.appendChild(h('option', { value: '', text: 'Mọi dự án' }));
+      Projects.all().forEach(function (p) { s.appendChild(h('option', { value: p.id, text: Projects.name(p.id) })); });
+      s.value = st.proj; return s;
+    }
+    // một dòng nhân vật trong danh sách "đang dùng vai này"
+    function charItem(a, explicit) {
+      return h('li', null, h('button', { type: 'button', 'data-char': a.key, title: 'Mở hồ sơ ' + a.name, onclick: function () { go({ page: 'lib-characters', key: a.key }); } },
+        h('span', { class: 'dot', style: '--own:' + ownOf(a) }), h('span', { text: a.name }), h('span', { class: 'note mono', text: a.id }), h('span', { class: 'sp', style: 'flex:1' }),
+        h('span', { class: explicit ? 'chip ok' : 'chip', title: explicit ? 'Đã chọn vai này trong hồ sơ nhân vật' : 'Chưa chọn vai — Studio đoán từ vai trò / tính cách / tên', text: explicit ? 'đã chọn' : 'đoán' })));
+    }
+
+    /* ---- tab Bộ giọng vai: 22 vai ---- */
+    function paintRoles(box) {
+      var tg = gen, pumpN = 0, ctls = {}, castEls = {}, rows = V.roleList().map(function (ro) {
+        var R = V.ROLES[ro.id];
+        return { id: ro.id, label: ro.label, age: ro.age, ageLabel: ro.ageLabel, gender: ro.gender, kind: ro.kind, kindLabel: ro.kindLabel, style: R.style, can: V.canDesign(ro.id), R: R };
+      });
+      function machine(x) { return A.voiceOf({ id: x.id, voice: { role: x.id } }, { lang: st.lang, accent: st.accent }); }
+      function paramsOf(x, voice) { return { p: { text: lvLine(st.lang, x.id), voice: voice, role: x.id, lang: st.lang, accent: st.accent, state: 'normal', bubble: 'say' }, machine: function () { return machine(x); } }; }
+      function ctlOf(x, full) {
+        var k = (full ? 'i:' : '') + x.id;
+        if (!ctls[k]) ctls[k] = lvAiCtl(function () { var c = LV.cv[ck(x.id)]; return c ? paramsOf(x, c.voice) : null; },
+          { who: x.label, full: !!full, nopWhy: 'Đang chọn giọng AI cho vai này…', onSpend: function () { var m = ctls[x.id]; if (m) m.check(); AiVoice.load(true).then(function () { if (alive) paintBanner(); }); } });
+        return ctls[k];
+      }
+      function speakMachine(x) { A.unlock(); A.say(lvLine(st.lang, x.id), machine(x)); }
+      function fillCast(s, id) {
+        clear(s);
+        if (!lvReady()) { s.appendChild(h('span', { class: 'chip', title: lvOffWhy(), text: 'giọng máy' })); return; }
+        var c = LV.cv[ck(id)];
+        if (!c) { s.appendChild(h('span', { class: 'muted', text: '…' })); return; }
+        var sc = SRC_CHIP[c.source] || ['', 'chip'];
+        s.appendChild(h('span', { class: 'mono', title: c.label || '', text: c.voice })); if (sc[0]) s.appendChild(h('span', { class: sc[1], style: 'margin-left:6px', text: sc[0] }));
+      }
+      function designedAt(id) { var d = (AiVoice.cfg && AiVoice.cfg.designs) || {}; return d[id + '|' + st.lang + '|' + st.accent] || null; }
+      var insp = h('aside', { class: 'lc-insp', 'aria-label': 'Chi tiết vai giọng' });
+      var q = h('input', { type: 'search', id: 'lvQ', class: 'lc-q', placeholder: 'Tìm không dấu…  ( / )', title: 'Tìm không dấu theo vai, tuổi, văn / võ, phong cách, tên nhân vật. Phím / để nhảy vào đây, ↓ để xuống bảng.', 'aria-label': 'Tìm vai', value: st.q, oninput: function () { st.q = q.value.trim(); refresh(); },
+        onkeydown: function (ev) { if (ev.key === 'Escape') { q.value = ''; st.q = ''; refresh(); grid.focus(); } else if (ev.key === 'ArrowDown') { ev.preventDefault(); grid.focus(); } } });
+      var langSel = h('select', { 'aria-label': 'Ngôn ngữ', id: 'lvLang', onchange: function () { st.lang = langSel.value; st.accent = V.accent(st.lang, ''); VoicePref.set(st.lang, st.accent); fillAccent(); resetRows(); } });
+      V.langList().forEach(function (l) { langSel.appendChild(h('option', { value: l.id, text: l.label })); });
+      var accSel = h('select', { 'aria-label': 'Giọng vùng', id: 'lvAccent', onchange: function () { st.accent = accSel.value; VoicePref.set(st.lang, st.accent); resetRows(); } });
+      function fillAccent() { clear(accSel); V.LANGS[st.lang].accents.forEach(function (a) { accSel.appendChild(h('option', { value: a[0], text: a[1] })); }); accSel.value = st.accent; }
+      langSel.value = st.lang; fillAccent();
+      var kindSel = h('select', { 'aria-label': 'Lọc theo kiểu vai (văn / võ …)', onchange: function () { st.kind = kindSel.value; refresh(); } });
+      kindSel.appendChild(h('option', { value: '', text: 'Mọi kiểu (văn / võ…)' }));
+      Object.keys(V.KINDS).forEach(function (k) { kindSel.appendChild(h('option', { value: k, text: V.KINDS[k] })); });
+      kindSel.value = st.kind;
+      var chips = h('div', { class: 'fxchips lc-cats', role: 'group', 'aria-label': 'Lọc theo nhóm tuổi' }), chipEls = {};
+      [['', 'Tất cả']].concat(V.AGES).forEach(function (c) {
+        var n = h('span', { class: 'n' }), b = h('button', { type: 'button', 'data-age': c[0], onclick: function () { st.age = st.age === c[0] ? '' : c[0]; refresh(); } }, c[1], n);
+        chipEls[c[0]] = { b: b, n: n }; chips.appendChild(b);
+      });
+      var count = h('span', { class: 'note lc-count' });
+      var grid = lcGrid({
+        id: 'lv', label: 'Bộ giọng vai', empty: 'Không có vai nào khớp bộ lọc.',
+        cols: [
+          { t: 'Nghe', w: 120, frozen: true, cell: function (x) {
+            var m = lcPlay('Nghe giọng máy — ' + x.label, function () { speakMachine(x); }); m.setAttribute('data-machine', x.id); m.title = 'Giọng máy (trình duyệt, miễn phí): ' + lvLine(st.lang, x.id);
+            return h('span', { class: 'lv-pair' }, m, ctlOf(x).el);
+          } },
+          { t: 'ID vai', w: 124, frozen: true, cls: 'id', v: function (x) { return x.id; }, cell: function (x) { return x.id; } },
+          { t: 'Vai', w: 148, v: function (x) { return x.label; }, cell: function (x) { return x.label; } },
+          { t: 'Nhóm tuổi', w: 92, v: function (x) { return V.AGES.map(function (a) { return a[0]; }).indexOf(x.age); }, cell: function (x) { return x.ageLabel; } },
+          { t: 'Giới', w: 54, v: function (x) { return x.gender; }, cell: function (x) { return x.gender === 'f' ? 'Nữ' : 'Nam'; } },
+          { t: 'Văn / võ / …', w: 108, v: function (x) { return x.kindLabel; }, cell: function (x) { return x.kindLabel; } },
+          { t: 'Thiết kế được?', w: 122, v: function (x) { return x.can ? 0 : 1; }, cell: function (x) {
+            return x.can ? lcState('ok', 'Được', 'Có thể thiết kế giọng riêng cho vai này (tốn 1 lượt Google)') : lcState('bad', 'Google chặn', 'Google không cho thiết kế giọng trẻ em / vị thành niên (chính sách an toàn)');
+          } },
+          { t: 'Phong cách nói', w: 220, cls: 'mono mut', v: function (x) { return x.style; }, cell: function (x) { return x.style; }, tip: function (x) { return x.style; } },
+          { t: 'Giọng AI (cast)', w: 180, cell: function (x) { var s = h('span'); castEls[x.id] = s; fillCast(s, x.id); return s; } },
+          { t: 'Nhân vật dùng vai', w: 210, cls: 'mut', cell: function (x) { var u = usersOf(x.id).map(function (a) { return a.name; }); return u.length ? u.slice(0, 3).join(', ') + (u.length > 3 ? ' +' + (u.length - 3) : '') : '—'; },
+            tip: function (x) { return usersOf(x.id).map(function (a) { return a.name; }).join(', '); } },
+          { t: 'Câu mẫu', w: 340, cls: 'mut', cell: function (x) { return lvLine(st.lang, x.id); }, tip: function (x) { return lvLine(st.lang, x.id); } }
+        ],
+        group: function (x) { return x.ageLabel; },
+        onSelect: function (x) { st.sel = x ? x.id : ''; remember(); inspect(x); if (x && lvReady()) ensureCast(x); },
+        onAct: function (x) { speakMachine(x); },
+        foot: function (v) {
+          var d = 0, kids = 0; v.forEach(function (x) { if (x.can) d++; else kids++; });
+          return [v.length + ' vai · ' + d + ' thiết kế được · ' + kids + ' bị Google chặn · ' + langInfo(), h('span', { class: 'sp' }), '↑↓ chọn · Space nghe giọng máy · / tìm'];
+        }
+      });
+      box.appendChild(h('div', { class: 'stack', style: 'gap:8px' },
+        h('div', { class: 'lc-bar' }, langSel, accSel, projSelect(function () { resetRows(); }), kindSel, q, h('span', { class: 'sp' }), count), chips,
+        h('div', { class: 'lc-split' }, grid.el, insp)));
+      function refresh() {
+        var f = lcFold(st.q), base = rows.filter(function (x) {
+          if (st.kind && x.kind !== st.kind) return false;
+          if (!f) return true;
+          return lcFold([x.id, x.label, x.ageLabel, x.kindLabel, x.gender === 'f' ? 'nu' : 'nam', x.style].concat(usersOf(x.id).map(function (a) { return a.name; })).join(' | ')).indexOf(f) >= 0;
+        });
+        var cnt = {}; base.forEach(function (x) { cnt[x.age] = (cnt[x.age] || 0) + 1; });
+        Object.keys(chipEls).forEach(function (k) { chipEls[k].n.textContent = String(k ? cnt[k] || 0 : base.length); chipEls[k].b.setAttribute('aria-pressed', String(st.age === k)); });
+        var shown = st.age ? base.filter(function (x) { return x.age === st.age; }) : base;
+        count.textContent = shown.length + ' / ' + rows.length + ' vai';
+        grid.set(shown, st.sel);
+        pumpAi();
+      }
+      // đổi ngôn ngữ / giọng vùng / dự án: câu mẫu + cast + clip đều khác → dựng lại nút, hỏi lại cast
+      function resetRows() { Object.keys(ctls).forEach(function (k) { ctls[k].stop(); }); ctls = {}; castEls = {}; refresh(); }
+      function ensureCast(x) {
+        if (LV.cv[ck(x.id)]) return;
+        var key = ck(x.id);
+        lvCast(x.id, st.lang, st.accent).then(function () { if (!alive || tg !== gen || key !== ck(x.id)) return; if (castEls[x.id]) fillCast(castEls[x.id], x.id); var c = ctls[x.id]; if (c) c.check(); if (st.sel === x.id) inspect(grid.cur()); }).catch(function () { /* hàng vẫn nghe được giọng máy */ });
+      }
+      // hỏi giọng AI + clip mẫu có sẵn của các hàng đang hiện (≤ 4 lời gọi cùng lúc; kết quả của lần vẽ cũ bị bỏ)
+      function pumpAi() {
+        if (!lvReady()) return;
+        var g = ++pumpN, todo = grid.rows().filter(function (x) { return !ctls[x.id] || ctls[x.id].phase === 'idle'; }), busy = 0;   // chỉ hàng chưa kiểm clip (gõ tìm không hỏi lại)
+        (function next() {
+          while (busy < 4 && todo.length && g === pumpN && tg === gen && alive) {
+            (function (x) {
+              busy++;
+              var key = ck(x.id);
+              lvCast(x.id, st.lang, st.accent).then(function () {
+                if (g !== pumpN || tg !== gen || !alive || key !== ck(x.id)) return;
+                if (castEls[x.id]) fillCast(castEls[x.id], x.id);
+                if (st.sel === x.id) inspect(grid.cur());
+                return ctlOf(x).check();
+              }).catch(function () { /* lỗi cast: để nguyên "…" */ }).then(function () { busy--; next(); });
+            })(todo.shift());
+          }
+        })();
+      }
+
+      /* Inspector 400 px: mô tả vai · giọng AI sẽ dùng (cast) · giọng đã thiết kế · thiết kế · nhân vật dùng vai */
+      function inspect(x) {
+        clear(insp);
+        if (!x) { insp.appendChild(h('div', { class: 'panel pad note', text: 'Chọn một vai trong bảng.' })); return; }
+        var R = x.R, c = LV.cv[ck(x.id)], d = lvReady() ? designedAt(x.id) : null, ready = lvReady(), sample = lvLine(st.lang, x.id), mv = machine(x), ictl = ctlOf(x, true);
+        var mBtn = h('button', { class: 'btn primary lc-ic', type: 'button', id: 'lvHear', 'aria-label': 'Nghe giọng máy — ' + x.label, onclick: function () { speakMachine(x); } }, lcIcon('play'), 'Nghe giọng máy');
+        // giọng AI sẽ được chọn cho vai ở ngôn ngữ + vùng đang chọn
+        var castEl = h('div', { 'data-cast': x.id });
+        if (!ready) castEl.appendChild(h('p', { class: 'lc-hint', text: 'Chưa dùng giọng AI — phim đọc bằng giọng máy: ' + (mv.gender === 'f' ? 'nữ' : 'nam') + ' · cao độ ' + vn(mv.pitch) + ' · tốc độ ' + vn(mv.rate) + ' · ' + mv.lang + '.' }));
+        else if (!c) castEl.appendChild(h('p', { class: 'lc-hint', text: 'Đang hỏi máy chủ chọn giọng…' }));
+        else { var sc = SRC_CHIP[c.source] || ['', 'chip']; castEl.appendChild(h('div', { class: 'row' }, h('b', { class: 'mono', text: c.voice }), sc[0] ? h('span', { class: sc[1], text: sc[0] }) : null)); if (c.label && c.label !== c.voice) castEl.appendChild(h('p', { class: 'lc-hint', text: c.label })); }
+        // giọng đã thiết kế riêng cho vai + ngôn ngữ + vùng này
+        var desEl = h('div');
+        if (!ready) desEl.appendChild(h('p', { class: 'lc-hint', text: 'Cần giọng AI sẵn sàng để xem giọng đã thiết kế.' }));
+        else if (d) {
+          desEl.appendChild(h('div', { class: 'row' }, h('b', { class: 'mono', text: d.voice }), lcState('ok', 'đã thiết kế'), d.at ? h('span', { class: 'note', text: fmtTime(d.at) }) : null,
+            d.preview ? lcBtn('play', 'Nghe mẫu thiết kế', { label: 'Nghe mẫu thiết kế — ' + x.label, fn: function () { A.unlock(); AiVoice.download(d.preview).then(function (buf) { AiVoice.speak(sample, buf, mv); }).catch(function (e) { toast(e.message); }); } }) : null));
+        } else desEl.appendChild(h('p', { class: 'lc-hint', text: 'Chưa thiết kế riêng cho ' + langInfo() + ' — đang dùng giọng thư viện / dựng sẵn ở trên.' }));
+        // thiết kế giọng: tốn 1 lượt, ~25 s, chỉ chủ máy; vai trẻ em bị Google chặn
+        var kid = !x.can, why = kid ? 'Google không cho thiết kế giọng trẻ em / vị thành niên (chính sách an toàn) — vai này dùng giọng trẻ trung có sẵn.' : !ready ? lvOffWhy() : '';
+        var desLabel = d ? 'Thiết kế lại giọng cho vai này' : 'Thiết kế giọng cho vai này', desB = h('button', { class: 'btn lc-ic', type: 'button', id: 'lvDesign', disabled: why ? true : null, 'data-confirm': null,
+          title: why || 'Thiết kế giọng riêng cho vai này trên project Google của chủ máy: ~25 giây, tốn 1 lượt (≈ $0,013 khi trả phí). Kết quả được nhớ — mọi phim dùng vai này đều dùng giọng đó.',
+          onclick: function () { design(x, desB, desLabel, sample, mv); } }, desLabel);
+        var chars = usersOf(x.id), pn = st.proj ? Projects.name(st.proj) : 'mọi dự án';
+        var kv = h('dl', { class: 'lc-kv' },
+          h('dt', { text: 'Vai' }), h('dd', { text: x.ageLabel + ' · ' + (x.gender === 'f' ? 'Nữ' : 'Nam') + ' · ' + x.kindLabel }),
+          h('dt', { text: 'Phong cách nói' }), h('dd', { class: 'mono', text: R.style }),
+          h('dt', { text: 'Chân dung' }), h('dd', { class: R.design ? 'mono' : null, style: R.design ? 'font-size:12px' : null, text: R.design || '— (vai trẻ em: không thiết kế được)' }),
+          h('dt', { text: 'Tuổi hợp vai' }), h('dd', { text: R.ages ? R.ages[0] + '–' + R.ages[1] + ' tuổi · cao độ ưa ' + R.prefPitch : 'giọng trẻ trung có sẵn' }),
+          h('dt', { text: 'Giọng dựng sẵn' }), h('dd', { class: 'mono', style: 'font-size:12px', text: R.ai.join(' · ') }));
+        insp.appendChild(h('div', { class: 'panel' }, h('h3', null, h('span', { text: x.label }), h('span', { class: 'r mono', text: x.id })),
+          h('div', { class: 'pad stack' },
+            h('div', null, h('div', { class: 'lc-sec', text: 'Câu mẫu · ' + langInfo() }), h('p', { class: 'lv-line', lang: V.LANGS[st.lang].bcp, text: sample }), h('div', { class: 'row', style: 'margin-top:8px' }, mBtn, ictl.el), ictl.note),
+            kv,
+            h('div', null, h('div', { class: 'lc-sec', text: 'Giọng AI sẽ dùng cho vai này' }), castEl),
+            h('div', null, h('div', { class: 'lc-sec', text: 'Giọng đã thiết kế' }), desEl),
+            h('div', null, desB, why ? h('p', { class: 'lc-hint', 'data-why': 'design', style: 'margin-top:4px', text: why }) : h('p', { class: 'lc-hint', style: 'margin-top:4px', text: 'Tốn 1 lượt Google, ~25 giây, chỉ chủ máy (bấm 2 lần để xác nhận).' }), h('p', { class: 'lc-hint warn', id: 'lvDesignNote', hidden: true })),
+            h('div', null, h('div', { class: 'lc-sec', text: 'Nhân vật đang dùng vai này · ' + pn + ' · ' + chars.length }),
+              chars.length ? h('ul', { class: 'lv-chars' }, chars.map(function (a) { return charItem(a, !!(a.voice && a.voice.role)); })) : h('p', { class: 'lc-hint', text: 'Chưa có nhân vật nào trong ' + pn + ' dùng vai này.' })))));
+        if (ictl.phase === 'idle' && ready && c) ictl.check();
+      }
+      function design(x, btn, label, sample, mv) {
+        var note = $('lvDesignNote');
+        function say(t) { if (note) { note.textContent = t || ''; note.hidden = !t; } }
+        if (btn.getAttribute('data-confirm') !== '1') {
+          btn.setAttribute('data-confirm', '1'); btn.textContent = 'Bấm lần nữa — tốn 1 lượt, ~25 giây'; say('');
+          setTimeout(function () { if (btn.isConnected && btn.getAttribute('data-confirm') === '1') { btn.removeAttribute('data-confirm'); btn.textContent = label; } }, 6000);
+          return;
+        }
+        btn.removeAttribute('data-confirm'); btn.disabled = true; btn.textContent = 'Đang thiết kế… ~25 s'; say('');
+        var key = x.id + '|' + st.lang + '|' + st.accent;
+        Store.api('POST', 'api/voice/design', { role: x.id, lang: st.lang, accent: st.accent }).then(function (res) {
+          var cfg = AiVoice.cfg; if (cfg) { cfg.designs = cfg.designs || {}; cfg.designs[key] = { voice: res.voice, at: new Date().toISOString(), preview: res.preview || null }; }
+          lvReset();   // phim dùng ngay giọng mới
+          toast('Đã thiết kế giọng cho ' + x.label + (res.preview ? ' — đang nghe thử.' : '.'));
+          if (alive) { resetRows(); }
+          return res.preview ? AiVoice.download(res.preview).then(function (buf) { A.unlock(); AiVoice.speak(sample, buf, mv); }) : null;
+        }).catch(function (e) {
+          var t = lvErr(e); toast(t + '.');
+          if (alive && btn.isConnected) { btn.disabled = false; btn.textContent = label; var n2 = $('lvDesignNote'); if (n2) { n2.textContent = t; n2.hidden = false; } }
+        });
+      }
+      refresh();
+    }
+
+    /* ---- tab Giọng của tác phẩm: nhân vật → vai → giọng chốt (work.voices) ---- */
+    function paintWorks(box) {
+      var W = null, wl = [], ctls = {}, rows = [], L = { lang: st.lang, accent: st.accent }, tg = gen;
+      var workSel = h('select', { id: 'lvWork', 'aria-label': 'Tác phẩm', onchange: function () { st.work = workSel.value; route.work = st.work || undefined; remember(); openWork(st.work); } });
+      workSel.appendChild(h('option', { value: '', text: '— Theo dự án (không chọn tác phẩm) —' }));
+      var insp = h('aside', { class: 'lc-insp', 'aria-label': 'Chi tiết nhân vật' }), langNote = h('span', { class: 'note' }), castB = h('button', { class: 'btn', type: 'button', id: 'lvCastAll', onclick: castAll, disabled: true,
+        title: 'Server chọn giọng cho cả dàn của tác phẩm và CHỐT vào tác phẩm (miễn phí — không đọc câu nào)' }, 'Chốt giọng cả dàn (miễn phí)');
+      var count = h('span', { class: 'note lc-count' }), projEl = projSelect(function () { if (!W) build(); });
+      function sampleOf(x) { return lvLine(L.lang, x.role); }
+      function machine(x) { return A.voiceOf(x.a, { lang: L.lang, accent: x.accent }); }
+      function ctlOf(x, full) {
+        var k = (full ? 'i:' : '') + x.id;
+        if (!ctls[k]) ctls[k] = lvAiCtl(function () {
+          return x.voice ? { p: { text: sampleOf(x), voice: x.voice, role: x.role, lang: L.lang, accent: x.accent, state: 'normal', bubble: 'say' }, machine: function () { return machine(x); } } : null;
+        }, { who: x.a.name, full: !!full, nopWhy: 'Chưa chốt giọng AI cho nhân vật này — bấm “Chốt giọng cả dàn” hoặc Lồng tiếng ở Tạo tác.', onSpend: function () { var m = ctls[x.id]; if (m) m.check(); AiVoice.load(true).then(function () { if (alive) paintBanner(); }); } });
+        return ctls[k];
+      }
+      function speakMachine(x) { A.unlock(); A.say(sampleOf(x), machine(x)); }
+      function build() {
+        Object.keys(ctls).forEach(function (k) { ctls[k].stop(); }); ctls = {};
+        L = W ? workLang(W) : { lang: st.lang, accent: st.accent };
+        var actors = W ? (GC.film && GC.film.actors ? AiVoice.actorsOf(W) : []) : GC.assets().filter(function (a) { return groupOf(a) !== 'frame' && (!st.proj || a.project === st.proj); });
+        var chot = (W && W.voices && W.voices[L.lang + '|' + L.accent]) || {};
+        rows = actors.map(function (a) {
+          var own = a.voice && typeof a.voice.ai === 'string' ? a.voice.ai : '', ch = typeof chot[a.id] === 'string' ? chot[a.id] : '';
+          return { id: a.id, a: a, role: AiVoice.roleOf(a), explicit: !!(a.voice && a.voice.role), accent: AiVoice.accentOf(a, L.lang, L.accent), chot: ch, own: own, voice: ch || own, src: ch ? 'chot' : own ? 'tay' : 'chua' };
+        });
+        langNote.textContent = (W ? 'Ngôn ngữ phim: ' : 'Ngôn ngữ đang chọn (đổi ở tab Bộ giọng vai): ') + V.LANGS[L.lang].label + ' · ' + accLabel(L.lang, L.accent);
+        castB.disabled = !(W && server && rows.length); projEl.hidden = !!W;
+        grid.set(rows, st.sel && rows.some(function (x) { return x.id === st.sel; }) ? st.sel : '');
+        rows.forEach(function (x) { if (x.voice) ctlOf(x).check(); });
+      }
+      var SRC = { chot: ['Đã chốt', 'chip ok', 'Giọng đã CHỐT trong tác phẩm (work.voices) — Studio, MCP và phim xuất cùng một giọng'], tay: ['Chọn tay', 'chip warn', 'Giọng chọn tay trên hồ sơ nhân vật (chưa chốt vào tác phẩm)'], chua: ['Chưa chốt', 'chip', 'Chưa có giọng AI — Lồng tiếng ở Tạo tác hoặc “Chốt giọng cả dàn” sẽ chọn và chốt'] };
+      var grid = lcGrid({
+        id: 'lw', label: 'Giọng của tác phẩm', empty: W ? 'Tác phẩm này chưa có nhân vật nào trong các phân cảnh.' : 'Dự án này chưa có nhân vật.',
+        cols: [
+          { t: 'Nghe', w: 120, frozen: true, cell: function (x) {
+            var m = lcPlay('Nghe giọng máy — ' + x.a.name, function () { speakMachine(x); }); m.setAttribute('data-machine', x.id);
+            return h('span', { class: 'lv-pair' }, m, ctlOf(x).el);
+          } },
+          { t: 'ID nhân vật', w: 150, frozen: true, cls: 'id', v: function (x) { return x.id; }, cell: function (x) { return x.id; }, tip: function (x) { return x.id; } },
+          { t: 'Nhân vật', w: 128, v: function (x) { return x.a.name; }, cell: function (x) { return h('span', { class: 'lv-who', style: '--own:' + ownOf(x.a) }, h('span', { class: 'dot' }), x.a.name); } },
+          { t: 'Vai giọng', w: 156, v: function (x) { return V.ROLES[x.role].label; }, cell: function (x) { return [V.ROLES[x.role].label, x.explicit ? null : h('span', { class: 'chip', style: 'margin-left:6px', title: 'Chưa chọn vai trong hồ sơ nhân vật — Studio đoán từ vai trò / tính cách / tên', text: 'đoán' })]; } },
+          { t: 'Giọng chốt', w: 118, cls: 'mono', v: function (x) { return x.voice; }, cell: function (x) { return x.voice || '—'; } },
+          { t: 'Nguồn', w: 100, v: function (x) { return x.src; }, cell: function (x) { return h('span', { class: SRC[x.src][1], title: SRC[x.src][2], text: SRC[x.src][0] }); } },
+          { t: 'Giọng vùng', w: 120, v: function (x) { return x.accent; }, cell: function (x) { return accLabel(L.lang, x.accent); } },
+          { t: 'Câu mẫu', w: 340, cls: 'mut', cell: sampleOf, tip: sampleOf }
+        ],
+        onSelect: function (x) { st.sel = x ? x.id : st.sel; inspect(x); },
+        onAct: function (x) { speakMachine(x); },
+        foot: function (v) {
+          var n = 0; v.forEach(function (x) { if (x.chot) n++; });
+          return [v.length + ' nhân vật · ' + n + ' đã chốt giọng' + (W ? ' · ' + W.title : st.proj ? ' · dự án ' + Projects.name(st.proj) : ''), h('span', { class: 'sp' }), '↑↓ chọn · Space nghe giọng máy'];
+        }
+      });
+      function inspect(x) {
+        clear(insp);
+        if (!x) { insp.appendChild(h('div', { class: 'panel pad note', text: W ? 'Tác phẩm chưa có nhân vật.' : 'Chọn một nhân vật trong bảng.' })); return; }
+        var ictl = ctlOf(x, true), sample = sampleOf(x), R = V.ROLES[x.role];
+        var mBtn = h('button', { class: 'btn primary lc-ic', type: 'button', 'aria-label': 'Nghe giọng máy — ' + x.a.name, onclick: function () { speakMachine(x); } }, lcIcon('play'), 'Nghe giọng máy');
+        insp.appendChild(h('div', { class: 'panel' }, h('h3', null, h('span', { text: x.a.name }), h('span', { class: 'r mono', text: x.id })),
+          h('div', { class: 'pad stack' },
+            h('dl', { class: 'lc-kv' }, h('dt', { text: 'Vai giọng' }), h('dd', null, R.label, ' ', h('span', { class: x.explicit ? 'chip ok' : 'chip', text: x.explicit ? 'đã chọn' : 'đoán' })),
+              h('dt', { text: 'Phong cách' }), h('dd', { class: 'mono', text: R.style }), h('dt', { text: 'Giọng vùng' }), h('dd', { text: accLabel(L.lang, x.accent) }),
+              h('dt', { text: 'Giọng chốt' }), h('dd', null, x.voice ? h('b', { class: 'mono', text: x.voice }) : h('span', { class: 'muted', text: 'chưa chốt' }), ' ', h('span', { class: SRC[x.src][1], title: SRC[x.src][2], text: SRC[x.src][0] })),
+              h('dt', { text: 'work.voices' }), h('dd', { class: 'note', text: W ? 'khoá ' + L.lang + '|' + L.accent + ' của “' + W.title + '”' : 'chưa chọn tác phẩm' })),
+            h('div', null, h('div', { class: 'lc-sec', text: 'Câu mẫu · ' + V.LANGS[L.lang].label }), h('p', { class: 'lv-line', lang: V.LANGS[L.lang].bcp, text: sample }), h('div', { class: 'row', style: 'margin-top:8px' }, mBtn, ictl.el), ictl.note),
+            h('div', { class: 'usebar' }, h('b', { text: 'Hồ sơ' }), h('span', { class: 'note', text: x.a.faction || x.a.role || '' }),
+              h('button', { class: 'btn sm', type: 'button', onclick: function () { go({ page: 'lib-characters', key: x.a.key }); } }, 'Mở hồ sơ nhân vật ›')))));
+      }
+      function castAll() {
+        if (!W) return;
+        castB.disabled = true; castB.textContent = 'Đang chốt…';
+        AiVoice.castOf(W, L.lang, L.accent).then(function (cast) { toast('Đã chốt giọng cho ' + Object.keys(cast || {}).length + ' nhân vật của “' + W.title + '”.'); return openWork(W.id); })
+          .catch(function (e) { toast(lvErr(e) + '.'); }).then(function () { castB.textContent = 'Chốt giọng cả dàn (miễn phí)'; castB.disabled = !(W && server && rows.length); });
+      }
+      function openWork(id) {
+        if (!id) { W = null; build(); return Promise.resolve(); }
+        return Store.api('GET', 'api/works/' + id).then(function (w) { if (!alive || tg !== gen) return; W = w; build(); }).catch(function (e) { toast(e.message); });
+      }
+      box.appendChild(h('div', { class: 'stack', style: 'gap:8px' },
+        h('div', { class: 'lc-bar' }, h('label', { class: 'note', for: 'lvWork', text: 'Tác phẩm' }), workSel, projEl, castB, h('span', { class: 'sp' }), count), h('div', { class: 'row' }, langNote),
+        h('div', { class: 'lc-split' }, grid.el, insp)));
+      build();
+      if (server) {
+        Store.api('GET', 'api/works').then(function (l) {
+          if (!alive || tg !== gen) return;
+          wl = Array.isArray(l) ? l : [];
+          wl.forEach(function (w) { workSel.appendChild(h('option', { value: w.id, text: w.title + (w.project ? ' · ' + Projects.name(w.project) : '') })); });
+          if (st.work && wl.some(function (w) { return w.id === st.work; })) { workSel.value = st.work; openWork(st.work); }
+          else st.work = '';
+        }).catch(function () { /* chưa có danh sách tác phẩm: vẫn xem theo dự án */ });
+      }
+    }
+
+    function aiSig() { var c = AiVoice.cfg; return lvReady() + '|' + (c ? JSON.stringify(c.designs || {}) : ''); }
+    (server && AiVoice.on() && !AiVoice.cfg ? AiVoice.load() : Promise.resolve()).then(function () {
+      if (!alive) return;
+      paintBanner(); paintTabs(); paintTab();
+      var s0 = aiSig();
+      if (server && AiVoice.on()) AiVoice.load(true).then(function () { if (!alive) return; paintBanner(); if (aiSig() !== s0) paintTab(); });   // key đổi ở nơi khác → vẽ lại bảng
+    });
+  };
+
   /* ============================================================ DỰ ÁN CHỦ ĐỀ (giai đoạn ②) */
   // Mỗi asset của người dùng gắn một dự án (trường project = slug). Bản server: api/projects; bản trình duyệt: localStorage.
   var Projects = {
@@ -3080,7 +4078,7 @@
   // dự án mẫu đi kèm bản cài: nhập qua đúng cổng như mọi gói (studio/mau/<file>.json)
   var SAMPLES = [
     { id: 'mau-van-phong-vui', file: 'van-phong-vui', short: '✨ Văn phòng vui (mẫu)', button: '✨ Mở dự án mẫu "Văn phòng vui"', note: '3 nhân vật · 2 bối cảnh · phim 4 phân cảnh — xem trọn luồng trong 10 giây, sửa và xuất thử thoải mái.' },
-    { id: 'mau-tam-quoc', file: 'tam-quoc', version: '2026.10.19-giong', short: '🏯 Tam Quốc (bộ chủ đề)', button: '🏯 Mở bộ chủ đề mẫu "Tam Quốc"', note: '7 tướng · 13 trang bị · 8 bối cảnh · phim 6 phân cảnh (có màn đấu) — một bộ thư viện trọn vẹn dựng từ khung, đã Phát hành: xem Gói bán trông thế nào.' }
+    { id: 'mau-tam-quoc', file: 'tam-quoc', version: '2026.10.19-am', short: '🏯 Tam Quốc (bộ chủ đề)', button: '🏯 Mở bộ chủ đề mẫu "Tam Quốc"', note: '7 tướng · 13 trang bị · 8 bối cảnh · phim 6 phân cảnh (có màn đấu) · gói âm Tam Quốc (trống trận, tù và…) — một bộ thư viện trọn vẹn dựng từ khung, đã Phát hành: xem Gói bán trông thế nào.' }
   ];
   function samplesLeft() { return SAMPLES.filter(function (S) { return !Projects.all().some(function (p) { return p.id === S.id; }); }); }
   // bộ mẫu đã nhập từ bản cũ (thiếu phân cảnh / asset mới) — bản cài tự cập nhật mã nhưng không tự đụng dữ liệu của người dùng
@@ -3111,7 +4109,7 @@
         }
         if (x.status >= 400) throw new Error(x.j.error || ('Lỗi ' + x.status));
         var r = x.j, c = r.counts;
-        var msg = 'Đã nhập ' + c.characters + ' nhân vật · ' + c.items + ' vật phẩm · ' + c.scenes + ' bối cảnh' + (c.motionPacks ? ' · ' + c.motionPacks + ' gói động tác' : '') + ' · ' + c.works + ' tác phẩm (' + c.shots + ' phân cảnh)';
+        var msg = 'Đã nhập ' + c.characters + ' nhân vật · ' + c.items + ' vật phẩm · ' + c.scenes + ' bối cảnh' + (c.soundPacks ? ' · ' + c.soundPacks + ' gói âm' : '') + (c.motionPacks ? ' · ' + c.motionPacks + ' gói động tác' : '') + ' · ' + c.works + ' tác phẩm (' + c.shots + ' phân cảnh)';
         if (r.errors.length) window.alert(msg + '\n\n' + r.errors.length + ' mục không qua cổng kiểm:\n' + r.errors.slice(0, 10).map(function (e) { return '• ' + e.kind + ' ' + e.id + ': ' + e.error; }).join('\n'));
         try { localStorage.setItem('gc-route-thu-vien', JSON.stringify({ page: 'projects', project: r.project })); localStorage.setItem('gc-last-project', r.project); localStorage.setItem('gc-toast', msg); } catch (e) { /* bỏ qua */ }
         if (APP && APP.id === 'thu-vien') location.reload(); else location.href = appURL('thu-vien');
@@ -3136,6 +4134,7 @@
     var pick = function (list) { return inProject(list, P.id).filter(function (x) { return !sale || GC.statusOf(x.status) === 'published'; }); };
     var b = bundleOf(pick(GC.assets()), pick(GC.items()), pick(GC.scenes()));
     b.motionPacks = GC.choreo ? pick(GC.choreo.packs()).map(function (p) { var o = clone(p); ['pack', 'key', 'version', 'savedAt', 'note'].forEach(function (k) { delete o[k]; }); return o; }) : [];
+    b.soundPacks = GC.sounds ? GC.sounds.packs().filter(function (p) { return !p.frame && p.project === P.id && (!sale || p.status === 'published'); }).map(function (p) { return GC.sounds.pack(p.id); }) : [];
     var warnings = sale ? b.items.filter(function (x) { return GC.statusOf(x.status) !== 'published'; }).map(function (x) { return 'vật phẩm ' + x.id + ' còn nháp nhưng asset phát hành cần nó — phát hành nó trước khi bán'; }) : [];
     return Object.assign({ format: 'gen-chibi.project/1', kind: sale ? 'sale' : 'backup', license: '© 2026 Gen Labs — engine; asset thuộc người tạo', project: { id: P.id, name: P.name, description: P.description || '' }, warnings: warnings },
       b, { exportedAt: new Date().toISOString() });

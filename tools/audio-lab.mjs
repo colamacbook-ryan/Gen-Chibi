@@ -1,12 +1,13 @@
 #!/usr/bin/env node
-// Phòng thí nghiệm âm thanh — "tai máy" cho engine/audio.js. © 2026 Gen Labs — All rights reserved.
+// Phòng thí nghiệm âm thanh — "tai máy" cho thư viện âm (engine/sounds.js + engine/audio.js). © 2026 Gen Labs — All rights reserved.
 //
-// Dựng từng hiệu ứng (bản mới, và bản cũ nếu có --old) qua OfflineAudioContext trong Chromium không đầu (tools/audio-render.mjs),
-// ghi WAV 16-bit + chỉ số khách quan; hiệu chuẩn độ to (--write sửa `level` trong engine/audio.js); nhờ Gemini nghe và chấm theo
+// Dựng từng hiệu ứng (bản mới — mọi âm của bộ chuẩn gen.am + gói kinds/sound/*.json; bản cũ nếu có --old: tệp audio.js tự chứa của
+// v0.17, chỉ 17 tên cũ) qua OfflineAudioContext trong Chromium không đầu (tools/audio-render.mjs), ghi WAV 16-bit + chỉ số khách quan;
+// hiệu chuẩn độ to (--write sửa `level` của từng âm: dòng đầu của âm trong engine/sounds.js, hoặc trong tệp gói JSON); nhờ Gemini nghe và chấm theo
 // một thang cố định (kết quả đệm theo SHA-1 của WAV — nghe lại cùng âm thanh không tốn thêm lượt gọi); sinh trang A/B tự chứa
 // (WAV nhúng base64 + nút phát + nhận xét giám khảo) để người nghe thật so cũ / mới.
 //
-//   node tools/audio-lab.mjs render    [--old FILE] [--out DIR] [--only a,b] [--seed N]
+//   node tools/audio-lab.mjs render    [--old FILE] [--out DIR] [--only a,b] [--seed N]       (--only nhận cả tên âm của gói kinds/sound/*.json)
 //   node tools/audio-lab.mjs calibrate [--target -20] [--cap -2.5] [--write]       hiệu chuẩn `level` theo trung bình (RMS có cổng, RMS A-trọng số, LUFS) và trần đỉnh
 //   node tools/audio-lab.mjs ab        [--only a,b] [--model m1,m2]                 Gemini so cũ với mới trong MỘT yêu cầu (thứ tự A/B ngẫu nhiên theo tên + model)
 //   node tools/audio-lab.mjs judge     [--set new|old] [--only a,b] [--model m]     Gemini chấm một clip riêng: giống ý định? chất lượng? lỗi?
@@ -24,6 +25,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { spawnSync } from 'child_process';
+import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
 import { openRenderer, measure, wavBytes } from './audio-render.mjs';
 
@@ -31,8 +33,22 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const argv = process.argv.slice(2), cmd = argv[0];
 const opt = (k, d) => { const i = argv.indexOf('--' + k); return i >= 0 ? (argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[i + 1] : true) : d; };
 const OUT = path.resolve(opt('out', process.env.GC_AUDIO_LAB || 'audio-lab-out'));
-const AUDIO_JS = path.join(ROOT, 'engine/audio.js');
-const NAMES = ['pop', 'whoosh', 'step', 'sting', 'hit', 'boing', 'sparkle', 'rumble', 'drip', 'sad', 'snore', 'party', 'hmm', 'gong', 'chime', 'swish', 'tick'];
+const AUDIO_JS = path.join(ROOT, 'engine/audio.js'), SOUNDS_JS = path.join(ROOT, 'engine/sounds.js'), PACK_DIR = path.join(ROOT, 'kinds/sound');
+// thư viện: bộ chuẩn (dữ liệu trong engine/sounds.js) + mọi gói JSON ở kinds/sound/ — mã nguồn dựng = sounds.js + audio.js
+const LIB = (() => {
+  const S = createRequire(import.meta.url)(SOUNDS_JS), packs = {};
+  for (const f of fs.existsSync(PACK_DIR) ? fs.readdirSync(PACK_DIR).filter(x => x.endsWith('.json')) : []) {
+    const file = path.join(PACK_DIR, f), p = JSON.parse(fs.readFileSync(file, 'utf8')), r = S.registerPack(p);
+    if (r.errors.length) throw new Error(f + ': ' + r.errors.slice(0, 3).join('; '));
+    packs[p.id] = { file, json: JSON.stringify(p), names: Object.keys(p.sounds) };
+  }
+  return { S, packs };
+})();
+const LEGACY = LIB.S.LEGACY;                                                  // 17 tên cũ — bản cũ (--old) chỉ có chừng này
+const NAMES = LIB.S.names();
+const newSrc = () => fs.readFileSync(SOUNDS_JS, 'utf8') + '\n' + fs.readFileSync(AUDIO_JS, 'utf8');
+// nạp các gói JSON vào trang dựng trước khi phát (setup của audio-render)
+const PACK_SETUP = '(A) => { const S = window.GenChibi.sounds; [' + Object.values(LIB.packs).map(p => p.json).join(',') + '].forEach(p => { const r = S.registerPack(p); if (r.errors.length) throw new Error(r.errors[0]); }); }';
 const ONLY = String(opt('only', '')).split(',').filter(Boolean);
 const names = ONLY.length ? NAMES.filter(n => ONLY.includes(n)) : NAMES;
 const COMBAT = ['hit', 'swish', 'whoosh', 'rumble', 'sting', 'gong'];       // 6 tiếng dùng nhiều nhất trong màn đấu → so cũ / mới
@@ -70,7 +86,7 @@ const seed = +opt('seed', 1);
 async function renderSet(R, src, set, list, volume = 1) {
   const res = {};
   for (const n of list) {
-    const r = await R.render(src, n, { volume, seed, secs: 4.5 });
+    const r = await R.render(src, n, { volume, seed, secs: 4.5, setup: set === 'new' ? PACK_SETUP : undefined });
     const m = measure(r.l, r.r, r.sr);
     const wav = wavBytes(r.l, r.r, r.sr, Math.max(0.25, m.dur60 + 0.12));       // cắt đuôi im lặng
     fs.writeFileSync(path.join(dir(set), n + '.wav'), wav);
@@ -94,10 +110,10 @@ async function cmdRender() {
   const R = await openRenderer();
   try {
     const metrics = readJSON(path.join(OUT, 'metrics.json'), {});
-    metrics.new = { ...(metrics.new || {}), ...await renderSet(R, fs.readFileSync(AUDIO_JS, 'utf8'), 'new', names) };
+    metrics.new = { ...(metrics.new || {}), ...await renderSet(R, newSrc(), 'new', names) };
     table('NEW', metrics.new);
     if (oldSrcFile) {
-      metrics.old = { ...(metrics.old || {}), ...await renderSet(R, fs.readFileSync(oldSrcFile, 'utf8'), 'old', names) };
+      metrics.old = { ...(metrics.old || {}), ...await renderSet(R, fs.readFileSync(oldSrcFile, 'utf8'), 'old', names.filter(n => LEGACY.includes(n))) };
       table('OLD', metrics.old);
     }
     // bản cũ khớp độ to: so công bằng (tiếng to hơn luôn "nghe hay hơn"). Cùng thước đo với hiệu chuẩn; không đẩy đỉnh quá −1 dBFS.
@@ -115,30 +131,45 @@ async function cmdRender() {
 }
 
 /* --------------------------------------------------------------- calibrate */
+// `level` của một âm nằm ở dòng đầu của âm: engine/sounds.js (bộ chuẩn: `  'ten': { label: …, level: 1.2,`) hoặc tệp gói JSON (`"ten": { … "level": 1.2`)
+const reEsc = s => s.replace(/[-]/g, '\\-');
+const levelRe = (n, json) => json ? new RegExp('("' + reEsc(n) + '": \\{[\\s\\S]*?"level": )([0-9.]+)') : new RegExp("(\\n      '?" + reEsc(n) + "'?: \\{[^\\n]*?level: )([0-9.]+)");
 async function cmdCalibrate() {
   const target = +opt('target', -20), cap = +opt('cap', -2.5), write = !!opt('write', false);
-  let src = fs.readFileSync(AUDIO_JS, 'utf8');
+  const owner = n => Object.keys(LIB.packs).find(id => LIB.packs[id].names.includes(n)) || null;
+  const text = { sounds: fs.readFileSync(SOUNDS_JS, 'utf8') };
+  for (const id of Object.keys(LIB.packs)) text[id] = fs.readFileSync(LIB.packs[id].file, 'utf8');
+  const where = n => owner(n) || 'sounds', getLevel = n => +levelRe(n, owner(n)).exec(text[where(n)])[2];
+  const setLevel = (n, v) => { text[where(n)] = text[where(n)].replace(levelRe(n, owner(n)), '$1' + v); };
+  const list = names;
   const R = await openRenderer();
   try {
     for (let it = 1; it <= 8; it++) {
       let worst = 0; const M = {}; const next = {};
-      for (const n of NAMES) {
-        const r = await R.render(src, n, { volume: 1, seed, secs: 4.5 }), m = measure(r.l, r.r, r.sr); M[n] = m;
-        const cur = +new RegExp('\\n    ' + n + ': \\{ dur: [0-9.]+, level: ([0-9.]+)').exec(src)[1];
+      // gói JSON đọc lại từ chữ đang sửa (level mới) mỗi vòng
+      const setup = '(A) => { const S = window.GenChibi.sounds; [' + Object.keys(LIB.packs).map(id => text[id]).join(',') + '].forEach(p => S.registerPack(p)); }';
+      const src = text.sounds + '\n' + fs.readFileSync(AUDIO_JS, 'utf8');
+      for (const n of list) {
+        const r = await R.render(src, n, { volume: 1, seed, secs: 4.5, setup }), m = measure(r.l, r.r, r.sr); M[n] = m;
+        const cur = getLevel(n);
         // đỉnh sau limiter ≥ −2 dBFS nghĩa là limiter đang làm việc → đỉnh thật cao hơn đo được: hạ thêm
         const peakAdj = m.peakDb > -2 ? m.peakDb + 4 : m.peakDb;
         const loud = (m.activeRmsDb + m.activeRmsA + m.lufs) / 3;    // RMS có cổng · RMS có cổng A-trọng số (loa nhỏ) · LUFS xấp xỉ: cân cả tiếng ngắn / dài, trầm / sáng
         const scale = Math.min(Math.pow(10, (target - loud) / 20), Math.pow(10, (cap - peakAdj) / 20));
         worst = Math.max(worst, Math.abs(20 * Math.log10(scale)));
-        next[n] = Math.max(0.05, Math.min(6, +(cur * Math.pow(scale, 0.85)).toFixed(2)));
+        next[n] = Math.max(0.05, Math.min(2, +(cur * Math.pow(scale, 0.85)).toFixed(2)));    // 0.05…2 = khoảng cổng kiểm cho phép
       }
       console.log('vòng ' + it + ': lệch lớn nhất ' + worst.toFixed(1) + ' dB');
       table('vòng ' + it, M);
       if (worst < 0.6) break;
-      for (const n of NAMES) src = src.replace(new RegExp('(\\n    ' + n + ': \\{ dur: [0-9.]+, level: )[0-9.]+'), '$1' + next[n]);
+      for (const n of list) setLevel(n, next[n]);
     }
-    console.log('level đề xuất: ' + NAMES.map(n => n + '=' + new RegExp('\\n    ' + n + ': \\{ dur: [0-9.]+, level: ([0-9.]+)').exec(src)[1]).join(' '));
-    if (write) { fs.writeFileSync(AUDIO_JS, src); console.log('đã ghi level vào engine/audio.js'); }
+    console.log('level đề xuất: ' + list.map(n => n + '=' + getLevel(n)).join(' '));
+    if (write) {
+      fs.writeFileSync(SOUNDS_JS, text.sounds);
+      for (const id of Object.keys(LIB.packs)) fs.writeFileSync(LIB.packs[id].file, text[id]);
+      console.log('đã ghi level vào engine/sounds.js + ' + Object.keys(LIB.packs).map(id => path.relative(ROOT, LIB.packs[id].file)).join(', '));
+    }
   } finally { await R.close(); }
 }
 
@@ -197,9 +228,11 @@ const SCORE = { type: 'object', properties: {
   heard: { type: 'string' }, match: { type: 'integer' }, quality: { type: 'integer' }, artifacts: { type: 'array', items: { type: 'string' } }, improve: { type: 'string' } },
   required: ['heard', 'match', 'quality', 'artifacts', 'improve'] };
 const RUBRIC_V = 'r2';
+// âm mới (không có trong INTENT) — mô tả ý định bằng nhãn + "dùng khi" của thư viện (tiếng Việt; model đọc được)
+const intentOf = n => INTENT[n] || (LIB.S.get(n) ? 'a cartoon sound effect: ' + LIB.S.get(n).label + ' — ' + LIB.S.get(n).use : n);
 function rubric(name) {
   return 'You are a strict audio QA judge for a cartoon-comedy 2D game (think polished casual-game SFX, not a synthesizer demo). Listen to the clip.\n' +
-    'Intended sound: ' + INTENT[name] + '.\n' +
+    'Intended sound: ' + intentOf(name) + '.\n' +
     'Answer in JSON with: heard (one sentence: what does it actually sound like?), match (integer 1-10: how well it matches the intended sound), ' +
     'quality (integer 1-10: cartoon game SFX production standard — punch, clarity, character, polish; a plain beep or toy-like tone is low), ' +
     'artifacts (array of short strings: clicks, harshness, muddiness, thinness, too long, too short, beepy, robotic... [] if none), ' +
@@ -235,7 +268,7 @@ const AB = { type: 'object', properties: {
 async function cmdAB() {
   ensureProxyEnv();
   const res = readJSON(path.join(OUT, 'ab.json'), {}); let calls = 0;
-  const list = ONLY.length ? names : opt('all', false) ? NAMES : COMBAT, flip = !!opt('flip', false), newIn = opt('new-in', null);   // --flip: đảo thứ tự A/B · --new-in A|B: ép bản mới vào vị trí (giám khảo thiên về A: mới thắng ở B là bằng chứng mạnh); lưu như "phiếu" riêng
+  const list = ONLY.length ? names.filter(n => LEGACY.includes(n)) : opt('all', false) ? LEGACY : COMBAT, flip = !!opt('flip', false), newIn = opt('new-in', null);   // --flip: đảo thứ tự A/B · --new-in A|B: ép bản mới vào vị trí (giám khảo thiên về A: mới thắng ở B là bằng chứng mạnh); lưu như "phiếu" riêng
   for (const model0 of MODELS) {
     const model = newIn ? model0 + '/newIn' + newIn : flip ? model0 + '/flip' : model0;
     res[model] = res[model] || {};
@@ -317,7 +350,7 @@ function cmdPage() {
   const met = (set, n) => { const m = (M[set] || {})[n]; return m ? 'đỉnh ' + m.peakDb + ' dB · to ' + m.activeRmsDb + ' dB · dài ' + m.dur60 + ' s · độ sáng ' + m.centroid + ' Hz' : ''; };
   const W_ = { new: 'MỚI hay hơn', old: 'CŨ hay hơn', tie: 'ngang nhau', 'không rõ': 'không rõ' };
   const label = r => String(r).replace(/^(new|old)/, m => W_[m]);
-  const cards = NAMES.map(n => {
+  const cards = LEGACY.map(n => {    // so cũ / mới: chỉ 17 tên cũ mới có bản cũ
     const c = consensus(AB_, n), runs = [];
     for (const key of Object.keys(AB_)) { const e = AB_[key][n]; if (e) runs.push('<li class="' + (e.stale ? 'stale' : '') + '"><b>' + esc(key.replace('gemini-', '')) + '</b> · ' + esc(runTxt(e)) + (e.stale ? ' <i>(bản thiết kế cũ hơn)</i>' : '') + '<br><span class="hd">cũ: “' + esc(e.old.heard) + '” · mới: “' + esc(e.new.heard) + '”</span></li>'); }
     const cls = /^new/.test(c.result) ? 'win' : /^old/.test(c.result) ? 'lose' : 'mix';

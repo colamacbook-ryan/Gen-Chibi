@@ -1,0 +1,38 @@
+{
+  "format": "gen-chibi.sound/1",
+  "id": "am-vi-du-agent",
+  "name": "Âm của dự án ví dụ",
+  "project": "vi-du-agent",
+  "status": "draft",
+  "description": "Ví dụ gói âm: tiếng cốc đầu gỗ + lò xo rung, và một chuỗi mộc cầm đi lên.",
+  "sounds": {
+    "coc-dau-go": {
+      "label": "Cốc đầu “CỐC—oing”",
+      "cat": "hai",
+      "tags": ["cốc", "gõ", "hài"],
+      "use": "Ví dụ: cú cốc vào đầu — gỗ “tóc” rồi lò xo rung ngắn; hợp bước có hành động cốc đầu.",
+      "dur": 0.6,
+      "level": 0.8,
+      "rev": 0.1,
+      "vary": 0.04,
+      "cue": { "event": ["impact"], "mood": ["comic"] },
+      "layers": [
+        { "k": "modes", "hz": 900, "list": [[1, 1, 0.08], [2.4, 0.5, 0.04]], "peak": 0.7 },
+        { "k": "fm", "at": 0.01, "hz": 700, "to": 320, "glide": 0.3, "ratio": 1, "index": 1.5, "index1": 0.2, "dur": 0.5, "peak": 0.4, "hold": 0.05, "vib": 11, "vibc": 80, "vibc1": 10 }
+      ]
+    },
+    "len-thang": {
+      "label": "Mộc cầm đi lên “ting-ting-ting-ting”",
+      "cat": "nhac-cu",
+      "tags": ["mộc cầm", "leo", "nảy ý"],
+      "use": "Ví dụ: chuỗi mộc cầm đi lên — vui, leo trèo, nảy ra ý tưởng (âm NHẤN: mỗi bước tối đa một).",
+      "dur": 0.7,
+      "level": 0.8,
+      "rev": 0.15,
+      "vary": 0.01,
+      "layers": [
+        { "k": "mallet", "inst": "xylo", "notes": [[0, 523.25], [0.06, 659.26], [0.12, 783.99], [0.18, 1046.5]], "decay": 0.3, "peak": 0.5 }
+      ]
+    }
+  }
+}

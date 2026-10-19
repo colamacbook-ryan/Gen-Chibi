@@ -17,7 +17,7 @@ Muốn thấy một **bộ chủ đề trọn vẹn** (thứ gen-chibi sinh ra �
 | Khu | Địa chỉ | Làm gì |
 |---|---|---|
 | **Xưởng** (hổ phách) | `/xuong` | Bộ khung chuẩn (không chủ đề), **Tạo asset mới** từ khung, bàn chỉnh, Trợ lý AI tạo asset |
-| **Thư viện** (xanh dương) | `/thu-vien` | Asset đã qua cổng kiểm, **xếp theo dự án chủ đề** — xem, tải ảnh / sprite, chép mã, tải / nhập gói dự án |
+| **Thư viện** (xanh dương) | `/thu-vien` | Asset đã qua cổng kiểm, **xếp theo dự án chủ đề** — xem, tải ảnh / sprite, chép mã, tải / nhập gói dự án; thêm **Động tác**, **Âm thanh**, **Giọng** (bảng, nghe ngay) |
 | **Tạo tác** (xanh lá) | `/tao-tac` | **Tác phẩm**: chat với AI đạo diễn, kịch bản, phân cảnh, cảnh thành phẩm, sân khấu final, xuất phim |
 
 Dòng chảy một chiều: **Xưởng → Thư viện → Tạo tác**. Thanh chuyển khu luôn ở góc trên bên trái.
@@ -113,11 +113,47 @@ Mã tham chiếu có dạng `<thư viện>/<id>`: khung chuẩn là `gen.khung/�
 - **Tải gói (.json)** / **Nhập gói động tác (.json)**: gói đi qua cổng kiểm (lỗi hiện đủ danh sách). Ô **Nhập vào dự án** (cạnh nút nhập; mặc định là dự án bạn vừa dùng) quyết định gói mới thuộc dự án nào — để *Chưa xếp dự án* thì giữ dự án ghi trong tệp, tệp không ghi thì gói là **gói chung**, dùng được với mọi dàn diễn viên. Gói động tác cũng nằm trong gói sao lưu / gói bán của dự án; gói của bộ mẫu Gen Labs không xuất bán (tệp tải về từ bộ mẫu mang dấu `sample`, JSON hoạt ảnh ghi giấy phép bộ mẫu: chỉ để xem, thử, quay phim).
 - Agent: cùng việc đó qua MCP `render_action` (xem `agent/workflows/animation.md`).
 
+### Âm thanh — thư viện hiệu ứng kiểu hoạt hình, dùng lại được
+Âm thanh trong phim là một **thư viện** (không phải tệp âm thanh): mỗi âm là một **công thức tổng hợp** bằng code — khoa trương như phim hoạt hình (BONK, BOING, ZIP, WHAM, SPLAT, TA-DA…): nhảy cao độ lớn, có nốt nhạc, đuôi rung, hơi "đồ chơi". Nhẹ, không bản quyền bên thứ ba, chạy cả khi mở phim HTML bằng `file://`.
+- **Bộ chuẩn** (62 âm, 8 nhóm: *Va chạm & đánh · Di chuyển · Hài hước · Cảm xúc & nhấn · Phép & năng lượng · Thiên nhiên · Đồ vật & chuông · Nhạc cụ hiệu ứng*) có sẵn ở mọi dự án. 17 tên âm cũ (pop, whoosh, step, sting, hit, boing…) vẫn dùng được, chỉ là nghe khác — kịch bản cũ không phải sửa gì.
+- **Gói âm của dự án**: mỗi dự án chủ đề thêm âm riêng (bộ mẫu Tam Quốc: *trống trận, tù và, vó ngựa, kiếm cổ, mưa tên, ngựa hí, bắn tên*). Âm của dự án nào chỉ dùng trong dự án đó. Gói âm **đi theo gói dự án** (sao lưu, nhập, gói bán) và **theo phim HTML xuất ra**.
+- Mỗi âm có nhãn, thẻ, thời lượng và câu **"dùng khi"**. **Thư viện › Âm thanh** (mô tả ngay dưới): lọc theo nhóm / thẻ / chữ / dự án, **▶ nghe thử**, **tải WAV** (cả một âm lẫn một "công thức ghép" nhiều âm) để dùng ở nơi khác.
+- **Gán âm vào phim**: hầu hết bước **không cần chọn gì** — bộ phát tự gán tối đa 2 âm theo biểu cảm / hiệu ứng / hoạt động (gói của dự án thắng bộ chuẩn; cảnh hùng tráng hay hài có thể đổi lựa chọn). Chỉ chọn tay ở Bảng bước (**thêm… › Âm thanh**, tối đa 3 âm) khi muốn **nhấn** một khoảnh khắc; chọn `[]` (không âm nào) để bước im. **Đòn đánh** cứ để nguyên — âm va chạm tự phát đúng điểm đánh.
+- **Luật ghép** (Studio và agent đều kiểm bằng cùng một bộ luật, ở `engine/sounds.js`): **lỗi** thì không lưu được, **cảnh báo** thì vẫn lưu và được báo lại.
+  | Luật | Mức | Nội dung |
+  |---|---|---|
+  | **S1** | lỗi | Mỗi bước tối đa 3 âm, trong đó tối đa 1 âm **nhấn** (nhóm *Cảm xúc & nhấn*, *Nhạc cụ hiệu ứng*) — hai cú nhấn cùng lúc triệt tiêu nhau |
+  | **S2** | cảnh báo | Không quá 4 âm trong 2 giây phim (kể cả âm tự gán và tiếng bật bong bóng) — dày hơn là "ồn" |
+  | **S3** | cảnh báo | Âm nhấn không đè câu thoại: đặt ở bước không lời, hoặc chọn âm ngắn |
+  | **S4** | cảnh báo | Âm va chạm (nhóm *Va chạm & đánh*) để đòn đánh tự phát; đặt tay chỉ khi bước có cú va thấy được |
+  | **S5** | cảnh báo | Cùng một âm không quá 3 bước liền |
+  | **S6** | lỗi | Âm phải có trong thư viện của dự án — tên lạ hoặc âm của dự án khác là lỗi, kèm gợi ý tên gần nhất |
+  | **S7** | cảnh báo | Âm dài hơn 2 giây (gong, trống trận…) chỉ ở bước đầu / cuối cảnh |
+- **Công thức ghép mẫu** (đà → va → hậu quả, mỗi bước một âm): *rón rén → giẫm vỏ chuối → trượt ngã → bẹp → thất bại* (`tiptoe → slip → slide-down → splat → sad`) · *lấy đà → WHAM → ngã → chim bay vòng* · *loé ý tưởng → chạy biến* · *tích lực → biến hình → ta-da* · *bóp còi → ba-dum-tss*. Danh sách đầy đủ trong Thư viện › Âm thanh.
+- **Thêm âm của riêng bạn**: nhờ agent (MCP `get_sound_spec` → `validate_sound_pack` → `save_sound_pack`, xem `agent/workflows/sound.md`) hoặc nhập gói `gen-chibi.sound/1` (.json). Gói đi qua cổng kiểm: chỉ nhận số + chuỗi trong danh sách cho phép (không mã), tối đa 60 node Web Audio mỗi âm. Tên âm là **chung toàn thư viện** — trùng tên thì báo rõ gói nào đang giữ tên. Bạn nghe thử rồi mới giữ: agent không nghe được, chỉ kiểm bằng cổng.
+
+#### Thư viện › Âm thanh — bảng, luật ghép, gói
+Bảng kiểu Data Console (desktop): mỗi hàng một âm — **ID âm** (tên dùng trong `step.sfx`), nhãn, nhóm, thời lượng, **"dùng khi"**, thẻ, gói (*Khung* / tên gói), dự án, **cảnh tự gán (cue)**. Bảng có **3 tab**:
+- **Âm** — 8 nhóm bấm lọc (có số đếm), ô **tìm không dấu** (tên, nhãn, thẻ, câu "dùng khi": `dau` ra cả "đầu"), lọc **thẻ** / **gói** / **dự án** (chỉ hiện âm dự án đó dùng được — chính là luật S6), bấm tiêu đề cột để sắp xếp.
+  - **▶ nghe ngay trên hàng**; bàn phím: `↑` `↓` (hoặc `J` `K`) đổi hàng, `Space` nghe hàng đang chọn, `/` nhảy vào ô tìm, `Esc` xoá ô tìm.
+  - **Inspector bên phải** (400 px): nghe, **Tải WAV**, **Chép tên**, "dùng khi", thẻ (bấm để lọc), cảnh tự gán, và hộp **Dùng trong kịch bản**: *Bước kịch bản (JSON)* — một bước `{ actor, state, say | hold, sfx: ["tên"] }` chép dán được ngay (âm **nhấn** để ở bước không lời) — và *Gọi MCP* (`lint_sound_track` kèm `project` + cách tra `list_sounds` / `get_sound_pack`).
+- **Luật ghép** — nơi duy nhất trong Studio nói **cách ghép âm**, lấy thẳng từ engine (`GC.sounds.RULES`, `RECIPES`, `guide()`) nên luôn khớp với agent: **quy trình 5 bước**, **bảy luật S1–S7** (mức *Lỗi* chặn lưu / *Cảnh báo* chỉ nhắc), **công thức ghép mẫu** — mỗi công thức có **▶ Nghe chuỗi**, **Tải WAV**, **Chép các bước** (mảng bước kịch bản) — và ô **Thử kiểm luật**: dán các bước JSON, chọn dự án, bấm **Kiểm S1–S7** để thấy lỗi / cảnh báo kèm vị trí, như `lint_sound_track`.
+- **Gói âm** — danh sách gói (ID, tên, dự án, phiên bản, số âm, trạng thái), **Tải JSON** (gói người dùng / bộ mẫu), **Xem âm** của gói. **Nhập gói**: chọn tệp `.json` hoặc dán JSON → **Kiểm gói (không lưu)** → **Nhập vào thư viện** (chọn dự án). Lỗi cổng kiểm hiện **kèm đường dẫn** (vd. `sounds.am-hong.layers[0].hz: ngoài khoảng…`); trùng tên âm với gói khác bị chặn ngay. Bản xem thử không có máy chủ thì chỉ kiểm được, chưa lưu được.
+
+**Quy trình ghép âm cho người và agent** (cùng một bộ luật): ① để trống `sfx` ở phần lớn các bước — bộ phát tự gán ≤ 2 âm theo cue; ② chỉ đặt `sfx` khi muốn **nhấn** (≤ 3 âm, ≤ 1 âm nhấn, âm nhấn ở bước không lời); ③ cú va dùng `action`, không đặt tay; ④ hài: "đà → va → hậu quả" mỗi bước một âm (xem công thức); ⑤ kiểm S1–S7 (tab Luật ghép hoặc `lint_sound_track`) trước khi lưu. Agent: `list_sounds` → `get_sound_spec` → `lint_sound_track` (xem `agent/workflows/sound.md`).
+
+### Giọng — xem, nghe, thiết kế giọng theo vai
+**Thư viện › Giọng** là nơi **xem và nghe** bộ giọng; dán key và trần câu / ngày vẫn ở *Cài đặt AI › Giọng AI*. Thanh trên cùng chọn **ngôn ngữ + giọng vùng** (tiếng Việt Bắc / Nam / Trung · tiếng Anh Mỹ / Anh · tiếng Trung phổ thông / Đài Loan · tiếng Quảng Đông Hồng Kông), **dự án** (để biết nhân vật nào dùng vai), kiểu vai và ô tìm không dấu.
+- **Bộ giọng vai**: 22 vai — ID vai, vai, nhóm tuổi, giới, văn / võ / quyền quý / hài…, **phong cách nói**, **thiết kế được?** (4 vai trẻ em: *Google chặn* theo chính sách an toàn), giọng AI sẽ dùng (cast), nhân vật trong dự án dùng vai đó, **câu mẫu** theo vai × ngôn ngữ (vd. ông lão: "Con à, đời người như chén trà…"; sửa ở hằng `VOICE_LINES` trong `studio/app.js`).
+  - Mỗi hàng có **▶** *giọng máy* (trình duyệt, miễn phí) và **AI**: nếu clip mẫu **đã có** thì nghe ngay, **không tốn lượt**; chưa có thì nút thành **"Đọc AI · 1 lượt"** — bấm **2 lần** để xác nhận (lần đầu chỉ báo trước tốn lượt). Hết lượt thì hiện **giờ thử lại**.
+  - **Inspector**: mô tả vai (phong cách nói, chân dung gửi Google, tuổi hợp vai, giọng dựng sẵn), câu mẫu + nghe, **giọng AI sẽ được chọn** ở ngôn ngữ / vùng đang chọn, **giọng đã thiết kế** (nếu có, nghe mẫu), nút **Thiết kế giọng cho vai này** (tốn 1 lượt, ~25 giây, bấm 2 lần; vai trẻ em mờ kèm lý do) và danh sách **nhân vật trong dự án đang dùng vai** (bấm để mở hồ sơ; *đã chọn* / *đoán*).
+- **Giọng của dự án / tác phẩm**: chọn một tác phẩm → bảng **nhân vật → vai → giọng chốt** (`work.voices`) với nguồn (*Đã chốt* / *Chọn tay* / *Chưa chốt*), ▶ giọng máy và AI dùng đúng giọng đã chốt; **Chốt giọng cả dàn (miễn phí)** nhờ máy chủ chọn giọng cho cả dàn và chốt vào tác phẩm (không đọc câu nào). Không chọn tác phẩm thì xem nhân vật theo dự án.
+- **Chưa có key Google**: vẫn xem và nghe được giọng máy; trang nhắc và có nút tới *Cài đặt AI › Giọng AI*. Bản xem thử (không máy chủ) chỉ có giọng máy.
 ## 6. Cho agent AI (MCP) — agent của hãng nào cũng dùng được
 - Chạy **`genchibi agent connect`**: in sẵn cấu hình nối cho Claude Code, Claude app, Cursor, Gemini CLI, Codex CLI và lệnh `curl` (không in token ra màn hình).
 - Muốn agent "thuộc bài" từ đầu: **`genchibi agent skill claude`** (hoặc `cursor`, `gemini`, `codex`, `generic`) — cài hướng dẫn thành skill / `AGENTS.md` / `GEMINI.md` vào thư mục bạn đang đứng (hoặc `--dir`). Đã có `AGENTS.md` / `GEMINI.md` của riêng bạn thì lệnh dừng lại, không ghi đè (thêm `--force` nếu muốn thay).
-- Dặn agent: **"gọi `start_here` trước"**. Agent sẽ nhận trạng thái Thư viện, 10 luật vàng, 9 chủ đề hướng dẫn (nhân vật, linh kiện, trang bị, cảnh, gói động tác, hoạt ảnh, phim, gói dự án, hệ thống), rồi làm theo từng bước có ví dụ chạy được.
-- 46 tool; agent đi qua **cùng cổng kiểm** với Studio. Lỗi trả về có mã (`[VALIDATION_FAILED]`, `NOT_FOUND`…) và chỉ đúng trường sai — agent tự sửa được.
+- Dặn agent: **"gọi `start_here` trước"**. Agent sẽ nhận trạng thái Thư viện, 11 luật vàng, 10 chủ đề hướng dẫn (nhân vật, linh kiện, trang bị, cảnh, gói động tác, âm thanh, hoạt ảnh, phim, gói dự án, hệ thống), rồi làm theo từng bước có ví dụ chạy được.
+- 52 tool; agent đi qua **cùng cổng kiểm** với Studio. Lỗi trả về có mã (`[VALIDATION_FAILED]`, `NOT_FOUND`…) và chỉ đúng trường sai — agent tự sửa được.
 - Agent không có MCP client vẫn dùng được qua HTTP thuần (xem `agent/GUIDE.md` mục 1).
 
 ## Câu hỏi thường gặp

@@ -8,12 +8,12 @@
 
 ## Export / import
 - `export_project` with `{ "id": "<project>" }` → a backup bundle `gen-chibi.project/1`: characters, items, scenes,
-  the parts they use, motion packs, works — self-contained: assets and motion packs that the works use are pulled
+  the parts they use, motion packs, sound packs, works — self-contained: assets, motion packs and sound packs that the works use are pulled
   in even when they belong to another project.
 - `export_project` with `{ "id", "sale": true }` → a **sale bundle**: only `published` assets, no works.
   Blocked (`FORBIDDEN`) when the project is a sample or uses sample content. Sample content is recognised by
   its drawing / motion data (each clip with its poses resolved), so changing ids or names does not help; the
-  licence covers the rest. Never copy sample parts or motion packs into something sold (golden rule 8).
+  licence covers the rest. Never copy sample parts, motion packs or sound packs into something sold (golden rule 8).
 - `import_project` with `{ "bundle": <bundle> }` — every item passes the same gates as creating it.
   `CONFLICT` lists clashing ids; repeat with `"overwrite": true` only if the owner agrees.
 

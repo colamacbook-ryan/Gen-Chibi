@@ -6,10 +6,13 @@
  *
  *   GC.film.readiness(work)      → [{ shot, index, ok, missing: [...] }]   phân cảnh nào diễn được, thiếu gì
  *   GC.film.still(shot)          → chuỗi SVG ảnh tĩnh của phân cảnh (bối cảnh + diễn viên ở chỗ đứng)
- *   GC.film.direct(shot)         → KẾ HOẠCH DÀN DỰNG (thuần dữ liệu, chạy cả trong Node): ai ra sân từ đâu, ai đi tới đâu,
- *                                   ai nói với ai, quay mặt, cử chỉ, bong bóng, máy quay, hiệu ứng màn hình, âm thanh, khẩu hình
- *   GC.film.player(el, opts)     → { show(shot), play(shots, title), stop(), destroy(), setDialog(mode), dialog(), setLang(lang, accent), plan() }
+ *   GC.film.direct(shot, {project}) → KẾ HOẠCH DÀN DỰNG (thuần dữ liệu, chạy cả trong Node): ai ra sân từ đâu, ai đi tới đâu,
+ *                                   ai nói với ai, quay mặt, cử chỉ, bong bóng, máy quay, hiệu ứng màn hình, âm thanh, khẩu hình.
+ *                                   Âm tự gán lấy từ thư viện âm (GC.sounds.cueFor theo state / fx / activity + không khí plan.mood + dự án plan.project):
+ *                                   dự án = opts.project > shot.project > dự án của bối cảnh / diễn viên; thiếu engine/sounds.js thì bảng cứng cũ (SFX_STATE / SFX_FX / SFX_ACT)
+ *   GC.film.player(el, opts)     → { show(shot), play(shots, title), stop(), destroy(), setDialog(mode), dialog(), setLang(lang, accent), setProject(p), plan() }
  *                                   opts.onProgress(text), opts.onEnd(), opts.dialog = 'auto' | 'bubble' | 'caption'
+ *                                   opts.project (chuỗi | hàm → chuỗi) / setProject(p) = dự án của tác phẩm → chọn gói âm (S6): âm tự gán + âm sự kiện (trúng đòn / đỡ / hụt / bước chân / chuyển máy)
  *                                   opts.lang / opts.accent = ngôn ngữ phim (vi | en | zh) + giọng vùng → giọng trình duyệt đúng ngôn ngữ theo vai (engine/voices.js)
  *                                   opts.voiceClip(line, asset) → Promise<clip>|clip|null: giọng thu sẵn (vd. giọng AI) cho một câu; clip = ArrayBuffer / URL / data: URI
  *                                     như GC.audio.say. Bộ phát hỏi TRƯỚC khi nói (chờ tối đa opts.clipWait ms — số hoặc hàm (line) → ms, mặc định 2500); có clip thì phát clip,
@@ -82,6 +85,7 @@
   var SHOUT = { rage: 1, shock: 1, panic: 1, vow: 1 };
   var THINK = { think: 1, sleep: 1 };
   var KEEP = { sleep: 1, cry: 1, injured: 1, exhausted: 1, dizzy: 1 };   // trạng thái người nghe giữ nguyên (không "tỉnh lại" giữa chừng)
+  // BẢNG CỨNG CŨ (v0.17) — chỉ còn là DỰ PHÒNG khi chưa nạp engine/sounds.js; có thư viện âm thì GC.sounds.cueFor quyết (cue của từng âm, theo dự án + không khí)
   var SFX_STATE = { shock: ['sting'], panic: ['sting'], rage: ['rumble'], proud: ['sparkle'], smug: ['sparkle'], vow: ['whoosh'], cry: ['sad'], sleep: ['snore'],
     think: ['hmm'], unsure: ['hmm'], greedy: ['chime'], dizzy: ['boing'], beg: ['drip'], exhausted: ['sad'], injured: ['hit'] };
   var SFX_FX = { exclaim: 'sting', confetti: 'party', sparkles: 'sparkle', vein: 'rumble', fire: 'rumble', sweat: 'drip', sweatMany: 'drip', tears: 'sad', zzz: 'snore',
@@ -118,14 +122,26 @@
     return d < -4 ? 'left45' : d > 4 ? 'right45' : 'front';
   }
 
-  function direct(shot) {
+  // dự án của phân cảnh để chọn gói âm: người gọi chỉ định > shot.project > dự án của bối cảnh > dự án của diễn viên đầu tiên có dự án (phim xuất mang project của tác phẩm)
+  function projectOf(shot, o) {
+    if (o && typeof o.project === 'string') return o.project;
+    if (shot && typeof shot.project === 'string') return shot.project;
+    var sc = scene(shot), a = actors(shot).filter(function (x) { return x.project; })[0];
+    return (sc && sc.project) || (a && a.project) || '';
+  }
+  // âm tự gán cho một bước: thư viện âm (cue của từng âm; gói dự án thắng khung; điều kiện mood) — không có thư viện thì bảng cứng cũ
+  function autoSfx(s, mood, project) {
+    if (GC.sounds) return GC.sounds.cueFor({ state: s.state, fx: s.fx, activity: s.activity, mood: mood, project: project });
+    return uniq((SFX_STATE[s.state] || []).concat((s.fx || []).map(function (f) { return SFX_FX[f]; }), [SFX_ACT[s.activity]])).slice(0, 2);
+  }
+  function direct(shot, o) {
     var sc = scene(shot), ev = shot && shot.event;
     if (!sc || !ev) return null;
     var budget = GC.render ? GC.render.budget : 8;
     var list = actors(shot).slice(0, budget), ids = list.map(function (a) { return a.id; });
     var home = spots(shot, sc, ids), cur = {}, state = {}, steps = (ev.steps || []).filter(function (s) { return ids.indexOf(s.actor) >= 0; });
     var sky = sc.layers && sc.layers.sky && GC.getPart && GC.getPart('sky', sc.layers.sky.part);
-    var plan = { scene: sc, mood: moodOf(steps), ambient: { time: sc.time || 'day', weather: sc.weather || 'clear', indoor: !!(sky && sky.outdoor === false) }, cast: [], beats: [], warnings: [] };
+    var plan = { scene: sc, mood: moodOf(steps), project: projectOf(shot, o), ambient: { time: sc.time || 'day', weather: sc.weather || 'clear', indoor: !!(sky && sky.outdoor === false) }, cast: [], beats: [], warnings: [] };
     // ra sân: ai đứng nửa trái vào từ trái, nửa phải vào từ phải; so le để không ùa vào cùng lúc
     list.forEach(function (a, i) {
       var to = home[a.id];
@@ -184,7 +200,7 @@
       line.camera = cam; line.camOn = cam === 'two' && to ? [me, to] : [me];
       line.punch = line.bubble === 'shout';
       line.screen = s.state === 'shock' ? 'flash' : s.state === 'rage' || s.state === 'panic' ? 'shake' : null;
-      line.sfx = s.sfx ? s.sfx.slice(0, 3) : uniq((SFX_STATE[s.state] || []).concat((s.fx || []).map(function (f) { return SFX_FX[f]; }), [SFX_ACT[s.activity]])).slice(0, 2);
+      line.sfx = s.sfx ? s.sfx.slice(0, 3) : autoSfx(s, plan.mood, plan.project);
       // khẩu hình: miệng ngậm (giữ nét cười / mím của cảm xúc) ↔ mở nhỏ ↔ mở to (hét / cười lớn)
       var mouth = base.mouth;
       line.mouths = { closed: CLOSED[mouth] ? mouth : 'flat', small: 'oSmall', big: line.bubble === 'shout' ? 'shout' : mouth === 'laugh' ? 'laugh' : 'oBig' };
@@ -199,7 +215,8 @@
       if (ac) {
         // hành động (biên đạo): dựng sẵn ở đây (thuần dữ liệu) để biết ai đứng đâu sau màn đấu — câu sau quay mặt đúng chỗ
         var tg = ac.attack && s.target && s.target !== me && ids.indexOf(s.target) >= 0 ? s.target : null;
-        var beat = { type: 'act', i: i, actor: me, action: s.action, label: ac.label, target: tg, react: tg ? (own(RE, s.react) ? s.react : 'hit') : null };
+        var beat = { type: 'act', i: i, actor: me, action: s.action, label: ac.label, target: tg, react: tg ? (own(RE, s.react) ? s.react : 'hit') : null,
+          sfx: silent && s.sfx ? s.sfx.slice(0, 3) : [] };   // bước ra đòn KHÔNG lời: sfx ghi tay phát lúc vào màn (bước có lời thì line.sfx đã phát ở speak) — chỗ hợp để đặt âm nhấn (S3)
         if (silent && line.move) beat.move = line.move;
         var Pa = { asset: byId[me], x: sx(cur[me]), y: row[me].y, k: row[me].k }, tl = null;
         var walls = ids.filter(function (id) { return id !== me && id !== tg; }).map(function (id) { return sx(cur[id]); });   // người đứng xem: không lộn / văng đè lên
@@ -534,6 +551,21 @@
     }
     function wait(ms, r) { return new Promise(function (ok, no) { timers.push(setTimeout(function () { if (r === run) ok(); else no('stop'); }, ms)); }); }
     function sfx(name, o) { if (A && name) A.sfx(name, o); }
+    // dự án của tác phẩm (chọn gói âm): opts.project / setProject — chuỗi hoặc hàm; thiếu thì direct() tự suy từ bối cảnh / diễn viên
+    var projectOpt = opts.project;
+    function curProject() { var p = typeof projectOpt === 'function' ? projectOpt() : projectOpt; return typeof p === 'string' ? p : undefined; }
+    // âm của một SỰ KIỆN bộ phát (impact · miss · block · enter · cut) theo thư viện âm của dự án + không khí cảnh; thiếu thư viện → tên cũ
+    function evSfx(event, dflt) {
+      var S = GC.sounds, n = S && S.cueFor({ event: event, mood: plan && plan.mood, project: plan && plan.project, max: 1 })[0];
+      return n || dflt;
+    }
+    // âm mặc định của đòn (trúng "hit", hụt "swish") → âm sự kiện của thư viện (trúng → impact, bị đỡ → block, né → miss); tên riêng của gói động tác giữ nguyên
+    function strikeSfx(n, e, beat) {
+      var hit = (e.hitstop > 0 || e.hit) && !e.miss;
+      if (n === 'hit' && hit) return evSfx(beat.react === 'block' ? 'block' : 'impact', n);
+      if (n === 'swish' && e.miss) return evSfx('miss', n);
+      return n;
+    }
     function voiceOf(id) { var a = cast[id]; return A && a ? A.voiceOf(a, { lang: lang, accent: accent }) : null; }
     // giọng thu sẵn của một câu: hỏi opts.voiceClip MỘT lần (nhớ theo khoá), lỗi → null. p.settled = đã có kết quả (không chờ được nữa thì thôi)
     function clipFor(line) {
@@ -600,8 +632,8 @@
       act(id, 'normal', { activity: gait, view: dx < 0 ? 'left90' : 'right90' });
       els[id].style.transitionDuration = secs.toFixed(2) + 's';
       place(id, to);
-      var steps = Math.floor(secs / (gait === 'run' ? 0.21 : 0.32));
-      for (var i = 0; i < steps; i++) (function (i) { timers.push(setTimeout(function () { if (r === run) sfx('step', { gain: gait === 'run' ? 0.55 : 0.35, pan: panOf(id) }); }, i * (gait === 'run' ? 210 : 320))); })(i);
+      var steps = Math.floor(secs / (gait === 'run' ? 0.21 : 0.32)), stepSfx = evSfx('enter', 'step');
+      for (var i = 0; i < steps; i++) (function (i) { timers.push(setTimeout(function () { if (r === run) sfx(stepSfx, { gain: gait === 'run' ? 0.55 : 0.35, pan: panOf(id) }); }, i * (gait === 'run' ? 210 : 320))); })(i);
       return wait(secs * 1000 + 60, r).then(function () { els[id].style.transitionDuration = '0s'; });
     }
     function lipSync(id, line, dir) {
@@ -700,7 +732,7 @@
       clearBox();
       var sc = scene(shot);
       if (!sc) { box.appendChild(el('div', 'gcp-empty', shot ? 'Phân cảnh "' + shot.title + '" chưa có bối cảnh.' : 'Chưa có phân cảnh.')); return null; }
-      plan = direct(shot) || { scene: sc, cast: actors(shot).slice(0, R.budget).map(function (a) { return { id: a.id, key: a.key, name: a.name, home: 'center', color: colorOf(a) }; }), beats: [] };
+      plan = direct(shot, { project: curProject() }) || { scene: sc, cast: actors(shot).slice(0, R.budget).map(function (a) { return { id: a.id, key: a.key, name: a.name, home: 'center', color: colorOf(a) }; }), beats: [] };
       shk = el('div', 'gcp-shk'); cam = el('div', 'gcp-cam'); ov = el('div', 'gcp-ov'); ov.setAttribute('aria-live', 'polite'); flash = el('div', 'gcp-flash');
       shk.appendChild(cam); box.appendChild(shk); box.appendChild(flash); box.appendChild(ov);
       cam.appendChild(img('bg', GC.sceneSvg(sc, { part: 'back' }), sc.name));
@@ -748,7 +780,7 @@
         nudged = true;
         var p0 = pos[id], e = els[id];
         e.style.transitionDuration = '.34s'; place(id, { x: p0.x + line.nudge, y: p0.y, k: p0.k, spot: p0.spot });
-        sfx('step', { gain: 0.4, pan: panOf(id) });
+        sfx(evSfx('enter', 'step'), { gain: 0.4, pan: panOf(id) });
         timers.push(setTimeout(function () { e.style.transitionDuration = '0s'; }, 360));
       }
       Object.keys(line.listen).forEach(function (o) { var L = line.listen[o]; act(o, L.state, Object.assign({ view: line.face[o] }, L.motion ? { motion: L.motion } : {})); });
@@ -784,6 +816,7 @@
     function perform(beat, r) {
       var C = GC.choreo, ids = [beat.actor].concat(beat.target ? [beat.target] : []);
       if (!C || ids.some(function (id) { return !insts[id] || !insts[id].drive; })) return Promise.resolve();
+      (beat.sfx || []).forEach(function (n, i) { timers.push(setTimeout(function () { if (r === run) sfx(n, { pan: panOf(beat.actor) }); }, 120 + i * 260)); });
       var tl = beat.tl;
       // đứng lệch chỗ so với lúc đạo diễn tính (vd. tua giữa chừng) → dựng lại cho khớp vị trí thật
       if (!tl || Math.abs(pos[beat.actor].x - beat.from[0]) > 2 || (beat.target && Math.abs(pos[beat.target].x - beat.from[1]) > 2)) {
@@ -807,7 +840,7 @@
           fired[e.i] = 1;
           if (e.rt < rr - 0.25) return;   // tab ẩn rồi hiện lại: bỏ sự kiện đã quá giờ, không nổ dồn một lúc
           var pan = e.x != null ? Math.max(-0.8, Math.min(0.8, (e.x - 320) / 320)) : panOf(beat.actor);
-          if (e.sfx) [].concat(e.sfx).forEach(function (n) { sfx(n, { gain: e.gain != null ? e.gain : 0.8, pan: pan }); });
+          if (e.sfx) [].concat(e.sfx).forEach(function (n) { sfx(strikeSfx(n, e, beat), { gain: e.gain != null ? e.gain : 0.8, pan: pan }); });
           if (e.shake) { shk.classList.remove('shake'); void shk.offsetWidth; shk.classList.add('shake'); }
           if ((e.hitstop > 0 || e.hit) && !e.miss) {
             camera(beat.target ? 'two' : 'close', ids, true);
@@ -860,7 +893,7 @@
         if (line.type === 'act') { progress((plan.shotTitle || '') + ' · ' + line.label); lastCam = 'two'; return go.then(function () { return perform(line, r); }).then(next); }
         return go.then(function () {
           camera(line.camera, line.camOn, line.punch);
-          if (line.camera !== 'wide' && line.camera !== lastCam) sfx('whoosh', { gain: 0.18 });
+          if (line.camera !== 'wide' && line.camera !== lastCam) sfx(evSfx('cut', 'whoosh'), { gain: 0.18 });
           lastCam = line.camera;
           return wait(line.camera === 'wide' ? 150 : 420, r);
         }).then(function () { return speak(line, r); }).then(next);
@@ -892,6 +925,8 @@
       setDialog: function (m) { if (DIALOGS.indexOf(m) < 0) return false; dialog = m; if (bub) bub.layout(true); return true; },
       // đổi ngôn ngữ phim giữa chừng (Studio): áp từ câu thoại kế tiếp
       setLang: function (l, a) { lang = l; accent = a; },
+      // dự án của tác phẩm đang diễn (chọn gói âm): chuỗi hoặc hàm → chuỗi; áp từ phân cảnh kế tiếp
+      setProject: function (p) { projectOpt = p; },
       // diễn chuỗi: thẻ tiêu đề phân cảnh → nhân vật ra sân → lời thoại có dàn dựng; bỏ qua phân cảnh chưa sẵn sàng
       play: function (list, title) {
         stop();
@@ -914,5 +949,5 @@
     };
   }
 
-  GC.film = { clipKey: clipKey, readiness: readiness, issues: issues, still: still, spots: spots, actors: actors, scene: scene, direct: direct, player: player, injectCSS: injectCSS, solveLayout: solveLayout, chipColor: chipColor, contrast: contrast, dialogModes: DIALOGS.slice() };
+  GC.film = { moodOf: moodOf, clipKey: clipKey, readiness: readiness, issues: issues, still: still, spots: spots, actors: actors, scene: scene, direct: direct, player: player, injectCSS: injectCSS, solveLayout: solveLayout, chipColor: chipColor, contrast: contrast, dialogModes: DIALOGS.slice() };
 })(window.GenChibi);

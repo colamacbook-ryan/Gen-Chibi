@@ -196,7 +196,7 @@ const works = [{
       { actor: 'truong-phi', state: 'proud', spot: 'right', activity: 'drink', say: 'Rượu ngon đã bày, hoa đào đang nở rộ!' },
       { actor: 'luu-bi', state: 'normal', spot: 'left', to: 'truong-phi', say: 'Tam đệ chớ vội uống — việc lớn trước đã.' },
       { actor: 'luu-bi', state: 'vow', spot: 'center', activity: 'salute', to: 'quan-vu', say: 'Không cầu sinh cùng ngày cùng tháng cùng năm…' },
-      { actor: 'quan-vu', state: 'vow', spot: 'midLeft', to: 'luu-bi', say: '…chỉ nguyện chết cùng ngày cùng tháng cùng năm!' },
+      { actor: 'quan-vu', state: 'vow', spot: 'midLeft', to: 'luu-bi', sfx: [], say: '…chỉ nguyện chết cùng ngày cùng tháng cùng năm!' },   // sfx: [] — tù và đã vang ở lời thề của Lưu Bị (tự gán), không lặp
       { actor: 'truong-phi', state: 'proud', spot: 'midRight', activity: 'cheer', fx: ['confetti'], to: 'luu-bi', say: 'Uống! Hôm nay phải say mới về!' }]),
     shot('canh-2', 'Lần thứ ba tới Long Trung', 'Trời tuyết, Trương Phi hết kiên nhẫn.', 'tuyet-son', ['truong-phi', 'quan-vu', 'luu-bi'], [
       { actor: 'truong-phi', state: 'rage', spot: 'midRight', fx: ['steam'], to: 'luu-bi', say: 'Để đệ đốt cái lều cỏ này cho hắn dậy!' },
@@ -210,7 +210,7 @@ const works = [{
       { actor: 'gia-cat-luong', state: 'think', to: 'luu-bi', say: 'Thiên hạ… sẽ chia làm ba.' },
       { actor: 'gia-cat-luong', state: 'smug', to: 'luu-bi', say: 'Kế đã sẵn trong lòng — Lượng xin theo chúa công.', hold: 2.6 }]),
     shot('canh-4', 'Doanh trại bàn kế', 'Tin dữ tới, Khổng Minh vẫn ung dung.', 'doanh-trai', ['linh-que', 'trieu-van', 'gia-cat-luong'], [
-      { actor: 'linh-que', state: 'panic', spot: 'left', fx: ['exclaim'], to: 'gia-cat-luong', say: 'Báo! Báo! Tào quân tám mươi vạn!' },
+      { actor: 'linh-que', state: 'panic', spot: 'left', fx: ['exclaim'], to: 'gia-cat-luong', sfx: ['vo-ngua'], say: 'Báo! Báo! Tào quân tám mươi vạn!' },   // lính phi ngựa về báo tin
       { actor: 'gia-cat-luong', state: 'normal', spot: 'center', to: 'linh-que', say: 'Đừng hoảng. Ngồi xuống uống ngụm trà đã.' },
       { actor: 'trieu-van', state: 'vow', spot: 'right', activity: 'salute', to: 'gia-cat-luong', say: 'Có Tử Long ở đây, quân sư cứ yên tâm!' },
       { actor: 'gia-cat-luong', state: 'smug', to: 'trieu-van', say: 'Chỉ cần chờ một trận gió đông.' },
@@ -219,7 +219,7 @@ const works = [{
       { actor: 'truong-phi', state: 'rage', spot: 'midRight', to: 'trieu-van', say: 'Tử Long! Trước trận đấu với ta vài hiệp cho nóng người!' },
       { actor: 'trieu-van', state: 'vow', spot: 'midLeft', to: 'truong-phi', say: 'Tử Long xin lĩnh giáo!' },
       { actor: 'trieu-van', state: 'rage', action: 'thrust', target: 'truong-phi', react: 'block', say: 'Xem thương!' },
-      { actor: 'truong-phi', state: 'rage', action: 'combo', target: 'trieu-van', react: 'dodge', say: '' },
+      { actor: 'truong-phi', state: 'rage', action: 'combo', target: 'trieu-van', react: 'dodge', sfx: ['trong-tran'], say: '' },   // bước ra đòn không lời: trống trận làm nền cho hiệp đấu (S3 — âm nhấn không đè thoại)
       { actor: 'linh-que', state: 'shock', spot: 'left', fx: ['sweat'], to: 'trieu-van', say: 'Oa… nhanh quá, nhìn không kịp!' },
       { actor: 'trieu-van', state: 'vow', action: 'leap', target: 'truong-phi', react: 'fall', say: '' },
       { actor: 'truong-phi', state: 'proud', to: 'trieu-van', say: 'Hay! Hôm nay ta nhường đệ một hiệp!' },
@@ -229,7 +229,7 @@ const works = [{
       { actor: 'tao-thao', state: 'proud', spot: 'midLeft', to: 'gia-cat-luong', say: 'Gió tây bắc thổi — lửa sao tới được ta? Ha ha!' },
       { actor: 'gia-cat-luong', state: 'normal', spot: 'midRight', to: 'tao-thao', say: 'Thừa tướng… nhìn lá cờ kìa.' },
       { actor: 'tao-thao', state: 'shock', fx: ['sweat'], to: 'gia-cat-luong', say: 'Gió… gió đông?!' },
-      { actor: 'tao-thao', state: 'panic', spot: 'left', say: 'Rút! Rút mau!!!' },
+      { actor: 'tao-thao', state: 'panic', spot: 'left', sfx: ['ngua-hi'], say: 'Rút! Rút mau!!!' },   // chiến mã hí vang, quân Tào tháo chạy
       { actor: 'gia-cat-luong', state: 'proud', to: 'tao-thao', say: 'Vạn sự đã nằm trong tính toán.', hold: 2.8 }])
   ]
 }];
@@ -238,10 +238,12 @@ const works = [{
 const bundle = {
   format: 'gen-chibi.project/1', kind: 'sample', license: LICENSE,
   // version: đổi mỗi khi nội dung bộ mẫu đổi — Studio thấy máy đang giữ bản cũ thì mời "Cập nhật bộ mẫu" (khớp SAMPLES trong studio/app.js)
-  sample: { owner: 'Gen Labs', license: '© 2026 Gen Labs — bộ mẫu trưng bày: xem, sửa thử, làm phim; không bán lại, không phân phối', version: '2026.10.19-giong' },
-  project: { id: 'mau-tam-quoc', name: 'Tam Quốc (bộ chủ đề mẫu)', description: 'Bộ chủ đề trọn vẹn dựng từ khung: 7 tướng, 13 trang bị, 8 bối cảnh, 28 linh kiện nhân vật, 27 phông — và phim 6 phân cảnh có dàn dựng, giọng nói, âm thanh, một màn đấu võ. Bộ mẫu của Gen Labs: xem gói bán trông thế nào (xem trước), không xuất bán.' },
+  sample: { owner: 'Gen Labs', license: '© 2026 Gen Labs — bộ mẫu trưng bày: xem, sửa thử, làm phim; không bán lại, không phân phối', version: '2026.10.19-am' },
+  project: { id: 'mau-tam-quoc', name: 'Tam Quốc (bộ chủ đề mẫu)', description: 'Bộ chủ đề trọn vẹn dựng từ khung: 7 tướng, 13 trang bị, 8 bối cảnh, 28 linh kiện nhân vật, 27 phông — và phim 6 phân cảnh có dàn dựng, giọng nói, âm thanh (gói âm Tam Quốc: trống trận, tù và, vó ngựa…), một màn đấu võ. Bộ mẫu của Gen Labs: xem gói bán trông thế nào (xem trước), không xuất bán.' },
   requires: { packs: [] }, parts: parts.concat(sceneryParts), items, scenes, characters, works,
   // gói động tác của bộ (v0.16, Q10): đòn thương / kiếm kiểu Tử Long + màn "Tử Long 30 giây" — dữ liệu, qua cổng như mọi asset
+  // gói âm của bộ (v0.18): trống trận, tù và, vó ngựa, kiếm cổ… — dữ liệu, qua cổng như mọi asset; kinds/sound/tq-am.json là nguồn (project mau-tam-quoc)
+  soundPacks: [JSON.parse(fs.readFileSync(path.join(APP, 'kinds/sound/tq-am.json'), 'utf8'))],
   motionPacks: [require('./dong-tac.js')(require(path.join(APP, 'server/engine-node.js')).loadEngine(APP))]
 };
 const out = process.argv[2] ? path.resolve(process.argv[2]) : path.join(APP, 'studio/mau/tam-quoc.json');   // tham số: ghi ra chỗ khác (test so khớp)

@@ -4,7 +4,7 @@
 A motion pack is pure JSON data (`gen-chibi.motion/1`); the gate rejects anything outside the vocabulary.
 
 ## Steps
-1. `get_motion_spec` — joints, channels and ranges, eases, strike points, fx / sfx / music names, budgets,
+1. `get_motion_spec` — joints, channels and ranges, eases, strike points, fx / sfx (= the sound library, see topic `sound`) / music names, budgets,
    the framework pose names you can build on, and a complete example.
 2. `list_actions` — action ids already taken (framework + other packs). **Action ids are global**: pick new ones.
    `list_motion_packs` / `get_motion_pack` with `{ "key" }` — read an existing pack to learn from or to edit (save it again with the same `id`).
@@ -35,7 +35,7 @@ A motion pack is pure JSON data (`gen-chibi.motion/1`); the gate rejects anythin
 - `keys: [[t, pose, ease?, extra?]]` — `t` seconds (ascending, ≤ 12), `pose` = pose id or inline pose,
   `ease` from the spec (`snap` for strikes, `out` / `io` for settles), `extra`: `{ ez, spin, dir, view, face, hide }`.
 - `travel: [[t, dx, ease?]]` — root movement forward (+) or back (−) in world units.
-- `events: [[t, { … }]]` — sound (`sfx`, `gain`), effects (`fx`, `at`, `size`, `text`, `color`), impact
+- `events: [[t, { … }]]` — sound (`sfx`: any name from `list_sounds` visible to the pack's project; the sound pack must be saved first; `gain`), effects (`fx`, `at`, `size`, `text`, `color`), impact
   (`hit: true` and/or `hitstop` ≤ 0.4), camera shake / flash, speed lines (`lines`), afterimages (`ghosts`).
 
 ## Attack actions (`attack: true`)

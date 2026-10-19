@@ -4,9 +4,10 @@
 
 **Bắt đầu nhanh:** mở Studio → **✨ Mở dự án mẫu "Văn phòng vui"** → Tạo tác → ▶ Diễn toàn bộ → *Phim (HTML)*. Xem một bộ chủ đề trọn vẹn: **🏯 Mở bộ chủ đề mẫu "Tam Quốc"** (7 tướng · 13 trang bị · 8 bối cảnh · phim 6 phân cảnh có dàn dựng, giọng nói, âm thanh, màn đấu võ — dựng hoàn toàn từ khung; bộ mẫu Gen Labs, không xuất bán). Hướng dẫn đầy đủ: [`docs/HUONG-DAN.md`](docs/HUONG-DAN.md).
 
-- **Studio** — **3 ứng dụng độc lập** `/xuong` · `/thu-vien` · `/tao-tac` (desktop, kiểu Data Console), theo dòng chảy: **Xưởng** — bộ khung chuẩn + **Tạo asset mới** (chọn khung → tham số → soát → cổng kiểm → lưu), bàn chỉnh, linh kiện, khung tư thế & biểu cảm, cổng kiểm; **Thư viện** — asset đã qua cổng xếp theo **dự án chủ đề**, tải ảnh / sprite 8 hướng, chép mã, **Nháp / Phát hành**, **Gói sao lưu** (cả tác phẩm) và **Gói bán** (chỉ asset phát hành), nhập gói qua cổng kiểm; **Tạo tác** — **Tác phẩm**: chat với AI đạo diễn, kịch bản, phân cảnh, bảng tình trạng, cảnh thành phẩm, sân khấu final diễn cả chuỗi, **xuất phim HTML độc lập + storyboard**; AI thiếu nhân vật / bối cảnh thì tự vào Xưởng tạo (đúng dự án).
+- **Studio** — **3 ứng dụng độc lập** `/xuong` · `/thu-vien` · `/tao-tac` (desktop, kiểu Data Console), theo dòng chảy: **Xưởng** — bộ khung chuẩn + **Tạo asset mới** (chọn khung → tham số → soát → cổng kiểm → lưu), bàn chỉnh, linh kiện, khung tư thế & biểu cảm, cổng kiểm; **Thư viện** — asset đã qua cổng xếp theo **dự án chủ đề**, tải ảnh / sprite 8 hướng, chép mã, **Nháp / Phát hành**, **Gói sao lưu** (cả tác phẩm) và **Gói bán** (chỉ asset phát hành), nhập gói qua cổng kiểm; **Động tác**, **Âm thanh** (bảng 62 + gói, ▶ nghe trên hàng, luật ghép S1–S7, nhập / tải gói) và **Giọng** (22 vai × 4 ngôn ngữ, giọng máy + giọng AI, thiết kế giọng, giọng chốt theo tác phẩm); **Tạo tác** — **Tác phẩm**: chat với AI đạo diễn, kịch bản, phân cảnh, bảng tình trạng, cảnh thành phẩm, sân khấu final diễn cả chuỗi, **xuất phim HTML độc lập + storyboard**; AI thiếu nhân vật / bối cảnh thì tự vào Xưởng tạo (đúng dự án).
+- **Thư viện âm thanh** (v0.18): 62 âm hiệu ứng kiểu hoạt hình khoa trương (BONK, BOING, ZIP, WHAM, SPLAT, TA-DA…) + gói âm riêng từng dự án (Tam Quốc: trống trận, tù và, vó ngựa…) — công thức tổng hợp dạng dữ liệu `gen-chibi.sound/1`, không có tệp âm thanh; bộ phát tự gán âm theo cảnh, 7 luật ghép S1–S7 kiểm ở Studio lẫn MCP; nghe thử ngay trong **Studio › Thư viện › Âm thanh** (bảng Data Console, tab *Luật ghép* và *Gói âm*), tải WAV; đi theo gói dự án và phim xuất. Xem `docs/HUONG-DAN.md` › Âm thanh · Giọng.
 - **AI đạo diễn**: LLM viết kịch bản / lời thoại trong từ vựng đóng của kho; server kiểm và bắt model sửa nếu sai.
-- **MCP server**: agent mọi hãng nối thẳng vào để tạo nhân vật, trang bị, cảnh, gói động tác, làm phim, xuất hoạt ảnh — không tốn LLM API lõi; hướng dẫn agent một nguồn (`agent/`), bootstrap `genchibi agent`.
+- **MCP server**: agent mọi hãng nối thẳng vào để tạo nhân vật, trang bị, cảnh, gói động tác, gói âm, làm phim, xuất hoạt ảnh — không tốn LLM API lõi; hướng dẫn agent một nguồn (`agent/`), bootstrap `genchibi agent`.
 - **Tự cập nhật** từ GitHub Releases: kiểm SHA-256, sao lưu dữ liệu trước khi đổi, tự chạy lại bản cũ nếu bản mới lỗi.
 
 ## Cài đặt (một lệnh)
@@ -69,13 +70,14 @@ Mọi ví dụ được CI chạy thật qua cổng: test "agent từ số 0" đ
 Không có MCP client: `POST /mcp` JSON-RPC bằng curl, `GET /mcp?guide=<chủ đề>`, `GET /mcp?tools=openai|gemini`.
 Lỗi có mã ổn định: `[VALIDATION_FAILED]`, `NOT_FOUND`… kèm `structuredContent.error.details[].path`.
 
-46 tool, theo nhóm:
+52 tool, theo nhóm:
 - **Mở đầu:** `start_here`, `get_guide`
 - **Nhân vật:** `get_catalog` · `list/get/validate/save/render_character`
 - **Linh kiện:** `get_part_spec` · `preview_part` · `save_part`
 - **Trang bị:** `list/validate/save/render_item`
 - **Cảnh:** `list/validate/save/render_scene`
 - **Gói động tác:** `list_actions` · `list_motion_packs` · `get_motion_pack` · `get_motion_spec` · `validate/save_motion_pack` · `render_action` (sprite sheet / khung / timeline)
+- **Thư viện âm thanh:** `list_sounds` · `get_sound_spec` · `get_sound_pack` · `validate_sound_pack` · `save_sound_pack` · `lint_sound_track` (7 luật ghép âm S1–S7)
 - **Phim:** `get_director_schema` · `validate_event` · `save_event` · `list_events` · `list/get/save_work` · `save_shot` · `preview_shot` · `render_voice` (đọc thoại bằng giọng AI Google theo vai + ngôn ngữ + giọng vùng — chủ máy dán key là chạy) · `design_voice` (thiết kế giọng cho một vai: ông lão, bà lão, võ tướng…)
 - **Dự án & bộ mẫu:** `list/save_project` · `export/import_project` · `list_samples` · `install_sample`
 - **Hệ thống:** `get_app_version` · `update_app` · `rollback_app`
