@@ -1,5 +1,41 @@
 # Changelog
 
+## v0.20.0 — English first: the Studio, installer, CLI and agent contract in English, switchable to Vietnamese at install time or any time after
+Ryan: "ngoài ra hệ thống này tôi cần thêm giao diện tiếng Anh để cho người châu âu sử dụng , nên là trên github hay quá trình cài đặt tốt nhất dùng tiếng anh làm chủ đạo và có thể chuyển sang tiếng việt trong quá trình cài đặt hoặc quá trình sử dụng" (ADR 0007).
+*(In English: "I also need an English interface so European users can use this system — on GitHub and during installation, English should lead, with the option to switch to Vietnamese during installation or while using it.")*
+- **English by default** in:
+  - GitHub (`README.md`; Vietnamese in `README.vi.md`) and the user guide (`docs/USER-GUIDE.md`, `docs/FRAME-SPEC.md`, `docs/PART-WORKFLOW.md`; the Vietnamese originals stay and link both ways);
+  - the installer, the `genchibi` CLI and its help, operator logs and startup errors;
+  - the Studio, server messages, the agent *Authorize* page and the exported HTML film player;
+  - the agent contract: every MCP tool description, agent instruction and error, built-in frame data and catalogue returned to agents, and the `agent/examples`. This closes the language half of CNS-067 (the Gemini schema half stays open).
+- **New work follows your language**: a work created in the English Studio gets English dialogue, English AI voices and an English film (`work.lang = en`); a work an agent creates follows the machine's default language. Works made before v0.20 have no `lang` and stay Vietnamese. Default names of new assets (*New item*, `new-character`…) follow the interface language.
+- **Switch to Vietnamese when you want**:
+  - **at install time** with `--lang vi` / `GC_LANG=vi`, or by answering the one bilingual question the installer asks in an interactive terminal (`Language / Ngôn ngữ: [1] English [2] Tiếng Việt`, Enter = English; no question without a terminal, so CI and pipes stay English);
+  - **for the whole machine** with `genchibi lang vi|en` or *System › Language* in the Studio — both change the same setting, and `genchibi lang` shows it;
+  - **per person** with the **EN | VI** switch in the Studio sidebar. The switch redraws in place without reloading or losing what you are editing, and is remembered per browser.
+  - In the Studio the order is: your browser choice > the machine default > English. Pages the server builds on its own (the *Authorize* page) follow your browser's `Accept-Language`, then the machine default.
+- **Upgrading from v0.19 or earlier keeps Vietnamese**: an install that already has data stays in Vietnamese on its first start of v0.20, and running the installer again without choosing a language keeps it. Only new installs start in English.
+- **Your content is not translated**: character names, scripts and dialogue stay as written, including names that happen to match a built-in word (a character called *Nam* stays *Nam*). The *Three Kingdoms* and *Fun Office* samples keep their Vietnamese films. The AI assistant answers in your interface language.
+- **How it works** (gettext style, one source for Studio, server and player — `engine/i18n.js`, no new dependency):
+  - every existing Vietnamese string is the message id, and `locales/en/*.json` hold the English (~3,000 distinct strings, plus ~120 CLI and installer lines), so Vietnamese mode is unchanged to the letter;
+  - context keys (`pt`, like gettext's `pgettext`) cover words with two English meanings, e.g. *Updates* / *Updated*, *Approved* / *Passed*;
+  - sentences built at run time are matched back to their templates in linear time with a fixed budget per sentence, so no input can stall the server;
+  - plural forms are supported.
+- **Release notes now reach GitHub and the in-app update check**: the release workflow compared the whole heading line, so recent releases showed only "Phát hành vX". `tools/release-notes.sh` (shared by CI and tests) takes the `## vX.Y.Z — …` section, and `tools/test.sh` fails if the current VERSION has none.
+- **Layout fix found while translating**: the page header no longer lets buttons slide under the *AI assistant* toggle, and banner text is no longer squeezed into a one-word column. Both bugs existed since v0.18 with the dock open; longer English text made them obvious.
+- **Security review before release** (fixed, each with a test): translating an error built from a very long id sent over MCP could block the server for seconds (now under 10 ms) · numeric ids keep their exact text (`007` no longer becomes `7`) · errors on the agent endpoints (`/mcp`, OAuth metadata, registration, token) are always English · OAuth `error_description` is plain ASCII (RFC 6749) · `settings.json` is read once per change instead of twice per request.
+- **Tests** (`tools/test.sh` 895 ✓ — v0.19.1 had 679; browser suite 79 ✓ — was 70):
+  - `tools/i18n-scan.mjs` (every message id used has an English string, no unused keys, no unwrapped Vietnamese text in UI code);
+  - `tools/test-i18n.mjs` (core, context keys, plural, server language negotiation, upgrade rule);
+  - `tools/test-i18n-server.mjs` (server and MCP in English, agent endpoints English on a Vietnamese machine, run-time template matching under 50 ms for hostile input, a new work's language from the Studio / the AI assistant / an agent, frame data an agent copies stays free of Vietnamese, user names are never translated);
+  - `tools/test-lang.sh` (installer + CLI in both languages, upgrade and reinstall keep the language, bash 3.2-safe);
+  - browser group `GC_ONLY=i18n`:
+    - no Vietnamese text on 35 pages and tabs in English mode, including values the system pre-fills in forms, except user content;
+    - no overlapping header controls and no squeezed banner text at 1366 px with the dock open;
+    - the switch works and is remembered, errors come in the user's language, user names that match built-in words are not translated, and the exported film works in English.
+  - Existing tests run in Vietnamese mode so they keep their meaning.
+- English terms (ADR 0007): Workshop · Library · Create · Works · Shot · Scene · Draft / Needs changes / Approved · Published · motion pack · sound pack · mixing rules · voice role · accent · AI dub · AI assistant · AI director · Pin & Spotlight · Agent connections.
+
 ## v0.19.1 — Chip "Giọng AI x/y" đếm đúng số câu đã lồng
 Ryan: "làm tiếp đi, sửa luôn CNS-146 rồi phát hành".
 - **Sửa CNS-146**: chip "Giọng AI x/y" ở đầu phòng làm phim và trong bảng Tạo tác báo thiếu. Phim mẫu Tam Quốc có 24/31 câu giọng AI mà chip báo 12/31, còn hộp xuất phim báo đúng "còn 7/31". Gốc: server đếm theo **bước thô** của kịch bản, trong khi Studio lồng tiếng và phim xuất đọc theo **beat của đạo diễn** (đạo diễn tự đổi cảm xúc / kiểu bong bóng của câu nên khoá clip khác; 13/31 câu của bộ mẫu Tam Quốc thuộc loại này).
