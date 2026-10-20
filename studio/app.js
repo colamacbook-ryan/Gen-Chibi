@@ -1290,7 +1290,7 @@
   var VoicePref = {
     get: function () {
       var p; try { p = JSON.parse(localStorage.getItem('gc-voice') || '{}') || {}; } catch (e) { p = {}; }
-      var l = GC.voices.lang(p.lang);
+      var l = GC.voices.lang(p.lang || I18N.lang());   // chưa chọn → ngôn ngữ giao diện (CNS-151)
       return { lang: l, accent: GC.voices.accent(l, p.accent) };
     },
     set: function (lang, accent) { try { localStorage.setItem('gc-voice', JSON.stringify({ lang: lang, accent: accent })); } catch (e) { /* bỏ qua */ } }
@@ -2171,7 +2171,8 @@
     var nTitle = h('input', { type: 'text', 'aria-label': _t('Tên tác phẩm mới'), placeholder: _t('Tên tác phẩm mới'), maxlength: 80, style: 'width:200px', onkeydown: function (ev) { if (ev.key === 'Enter') create(); } });
     function create() {
       if (!nTitle.value.trim()) { nTitle.focus(); return; }
-      Store.api('POST', 'api/works', { title: nTitle.value.trim(), project: nProj }).then(function (w) { nTitle.value = ''; if (nProj) setLastProject(nProj); openWork(w.id, 'script'); }).catch(function (e) { toast(e.message); });
+      // lang: lời thoại của tác phẩm mới = ngôn ngữ giao diện đang dùng (CNS-151; đổi sau ở tab Giọng & âm thanh)
+      Store.api('POST', 'api/works', { title: nTitle.value.trim(), project: nProj, lang: I18N.lang() }).then(function (w) { nTitle.value = ''; if (nProj) setLastProject(nProj); openWork(w.id, 'script'); }).catch(function (e) { toast(e.message); });
     }
     actions(h('button', { class: 'btn primary', onclick: function () { nTitle.focus(); } }, _t('+ Tác phẩm mới')));
     var table = h('table', { class: 'grid worklist' }), foot = h('div', { class: 'row note' }), box = h('div', { class: 'panel scroll' }, table);

@@ -2824,6 +2824,8 @@ if (!ONLY || ONLY === 'i18n') {
     for (const w of ['>▶ Play<', '>■ Stop<', 'aria-label="Character voices"', '>Voice: auto<', 'Made with gen-chibi', 'I.setLang("en")']) if (!fh.includes(w)) throw new Error('phim xuất ra (en) thiếu ' + JSON.stringify(w));
     if (!/I\.add\("en", \{[^]*"Đã dừng":"Stopped"/.test(fh)) throw new Error('phim xuất ra (en) không mang bảng player');
     if (/>▶ Xem<|>■ Dừng</.test(fh)) throw new Error('phim xuất ra (en) còn nút tiếng Việt');
+    // <html lang> theo ngôn ngữ PHIM (work.lang), không theo giao diện: tác phẩm Tam Quốc không có lang (trước v0.20) = tiếng Việt dù xuất ở giao diện en (CNS-151)
+    if (!/<html lang="vi">/.test(fh)) throw new Error('phim xuất ra: <html lang> phải theo ngôn ngữ phim (vi), có ' + (/<html lang="[^"]*">/.exec(fh) || ['?'])[0]);
     const pf = await ctxE.newPage(); await pf.goto('file://' + fp16); await pf.waitForFunction(() => window.GenChibi && window.GenChibi.film);
     const fl = await pf.evaluate(() => [document.getElementById('play').textContent, window.GenChibi.i18n.lang(), window.GenChibi.i18n.t('Đã dừng')]);
     if (fl.join('|') !== '▶ Play|en|Stopped') throw new Error('phim mở bằng file:// ở chế độ en: ' + fl.join('|'));
@@ -2832,6 +2834,22 @@ if (!ONLY || ONLY === 'i18n') {
     if (uniq.length) throw new Error('chế độ en còn ' + uniq.length + ' lỗi (chữ tiếng Việt chưa dịch / bố cục chồng lấn) trên giao diện:\n      ' + uniq.slice(0, 60).join('\n      '));
     if (pendingSeen.size) console.log('  ! ' + pendingSeen.size + ' câu động của engine (core.js, cổng kiểm) còn tiếng Việt — chờ builder engine: ' + [...pendingSeen].slice(0, 4).map(x => JSON.stringify(x.slice(0, 40))).join(', ') + (pendingSeen.size > 4 ? '…' : ''));
     console.log('  ✓ Chế độ en: không còn chữ tiếng Việt trên ' + (nPages + 6) + ' trang / tab (Xưởng, Thư viện mọi mục, Tạo tác + 5 tab phòng làm phim, Hệ thống, dock Trợ lý AI) + phim HTML xuất ra (nút, bảng player, mở file://) — trừ nội dung người dùng (' + USER.length + ' chuỗi của bộ mẫu)');
+    // 7) CNS-151: ô nghe thử giọng (Thư viện › Giọng) khi trình duyệt chưa chọn ngôn ngữ nghe thử → theo ngôn ngữ giao diện, không mặc định tiếng Việt
+    await qe.evaluate(() => { localStorage.removeItem('gc-voice'); localStorage.setItem('gc-route-thu-vien', JSON.stringify({ page: 'lib-voices' })); });
+    await qe.goto(U + 'thu-vien?lang=en'); await ready(qe); await qe.waitForSelector('#lvLang');
+    const lv7 = await qe.evaluate(() => document.querySelector('#lvLang').value + '/' + document.querySelector('#lvAccent').value);
+    if (lv7 !== 'en/us') throw new Error('Thư viện › Giọng (en, chưa chọn): ngôn ngữ nghe thử = ' + lv7 + ' (cần en/us)');
+    console.log('  ✓ Chế độ en: ô nghe thử giọng chưa chọn → ' + lv7 + ' (theo ngôn ngữ giao diện)');
+    // 8) CNS-151: Studio tạo tác phẩm gửi lang = ngôn ngữ giao diện — máy đặt mặc định vi, người dùng ở giao diện en → tác phẩm en (lời thoại, giọng, AI đạo diễn)
+    await put('vi');
+    await qe.evaluate(() => localStorage.setItem('gc-route-tao-tac', JSON.stringify({ page: 'works' })));   // danh sách tác phẩm (bước 5 để lại tuyến phòng làm phim)
+    await qe.goto('about:blank'); await qe.goto(U + 'tao-tac?lang=en'); await ready(qe); await qe.waitForSelector('.newwork input[type=text]');
+    await qe.fill('.newwork input[type=text]', 'My first film');
+    const [rq8] = await Promise.all([qe.waitForRequest(r => r.method() === 'POST' && /\/api\/works$/.test(r.url())), qe.click('.newwork button:text-is("Create work")')]);
+    const sent8 = JSON.parse(rq8.postData() || '{}'), w8 = await (await rq8.response()).json();
+    await put('en');
+    if (sent8.lang !== 'en' || w8.lang !== 'en' || (w8.stats || {}).lang !== 'en') throw new Error('Studio en tạo tác phẩm trên máy vi: gửi lang=' + sent8.lang + ', lưu lang=' + w8.lang + ' (cần en)');
+    console.log('  ✓ Studio (giao diện en, máy mặc định vi) tạo "My first film": gửi lang en → tác phẩm lang en');
     await ctxE.close();
     if (errs16.length) throw new Error('lỗi trang: ' + errs16.slice(0, 3).join(' | '));
   } catch (e) { fail = 1; console.log('  ✗ i18n (ngôn ngữ giao diện):', e.message); }

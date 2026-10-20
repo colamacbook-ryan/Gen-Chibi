@@ -86,7 +86,7 @@ const updater = new Updater({ home: HOME, version: VERSION, repo: REPO, feedUrl:
 const secrets = new Secrets(DATA);
 const ai = new AI({ dataDir: DATA, secrets, engine });
 const voice = new Voice({ dataDir: DATA, secrets });   // giọng AI (Google Gemini TTS) — dùng chung kho bí mật với AI đạo diễn
-const mcp = new MCP({ engine, store, version: VERSION, system: { updater, restartSoon }, voice });
+const mcp = new MCP({ engine, store, version: VERSION, system: { updater, restartSoon }, voice, uiLang: () => settings().uiLang });   // uiLang: lời thoại mặc định của tác phẩm agent tạo qua MCP (/mcp luôn 'en' ở tầng HTTP) — CNS-151
 // OAuth 2.1 cho MCP từ xa (v0.19): mọi URL dựng từ GC_PUBLIC_URL — thiếu hoặc không phải gốc (có đường dẫn) thì OAuth tắt, /mcp vẫn 401 như cũ
 const oauth = new OAuth({ dir: DATA, publicUrl: PUBLIC_URL, warn: log, accessTtl: process.env.GC_OAUTH_ACCESS_TTL, redirects: String(process.env.GC_OAUTH_REDIRECTS || '').split(',').map(x => x.trim()).filter(Boolean) });
 if (PUBLIC_URL && !oauth.enabled) log('[oauth] OAuth đang TẮT: ' + oauth.why);

@@ -48,7 +48,7 @@ const EXAMPLE_SCENERY = {
 const INSTRUCTIONS = [
   'gen-chibi is a factory of chibi assets made from code: characters, items, scenes, motion packs (poses + animated actions), sound packs (cartoon sound effects) and films. You write JSON; the system checks it (gates), renders and stores it.',
   'FIRST call start_here (current state, golden rules, topics). Then call get_guide with the topic of your job: character, part, item, scene, motion-pack, sound, animation, film, project-bundle, system. Each guide is a numbered procedure with a runnable JSON example.',
-  'Never invent vocabulary — read it from get_catalog, get_part_spec, get_motion_spec, get_sound_spec / list_sounds, get_director_schema. Validate, fix, then save. Put "project" on everything you create. New assets are drafts. Write names and labels in the language of the user / project (ask if unclear; follow the work\'s lang or the user\'s interface language) — Vietnamese always with full diacritics; dialogue (`say`) is written in the work\'s language (get_work › lang: vi | en | zh | yue — default vi; Cantonese = colloquial Cantonese in Traditional characters).',
+  'Never invent vocabulary — read it from get_catalog, get_part_spec, get_motion_spec, get_sound_spec / list_sounds, get_director_schema. Validate, fix, then save. Put "project" on everything you create. New assets are drafts. Write names and labels in the language of the user / project (ask if unclear; follow the work\'s lang or the user\'s interface language) — Vietnamese always with full diacritics; dialogue (`say`) is written in the work\'s language (get_work › lang: vi | en | zh | yue — default: the machine\'s interface language when the work is created; works without lang (made before v0.20) are Vietnamese; Cantonese = colloquial Cantonese in Traditional characters).',
   'Failed calls start with [CODE] and carry structuredContent.error {code, message, details: [{path, message}], hint}. Fix exactly those paths and retry at most 3 times, then report to the owner.'
 ].join('\n');
 
@@ -92,7 +92,7 @@ const TOOLS = [
   { name: 'save_project', title: 'Create / edit a theme project', description: 'Creates or renames a theme project (slug id, name, description). Never deletes assets.', inputSchema: obj({ id: { type: 'string', description: 'slug: lowercase letters, digits, hyphens' }, name: { type: 'string' }, description: { type: 'string' } }, ['id', 'name']) },
   { name: 'list_works', title: 'List works', description: 'The works (films / stories) in progress in the Create area: id, title, theme project, number of shots, number of shots that already have dialogue.', inputSchema: obj({}), annotations: { readOnlyHint: true } },
   { name: 'get_work', title: 'Get a work', description: 'A whole work: script, the list of shots (description, scene, cast, dialogue / acting) and review (status + the owner\'s notes per shot — read them to fix accordingly).', inputSchema: obj({ id: { type: 'string' } }, ['id']), annotations: { readOnlyHint: true } },
-  { name: 'save_work', title: 'Save a work', description: 'Creates or edits the shared part of a work: title, project (theme project), logline (one sentence), script (overall script, prose), lang (dialogue language vi | en | zh | yue (Cantonese) — default vi) + accent (bac / nam / trung · us / uk · pt / tw · hk). Does not touch shots (but changing project re-checks the sounds of every shot against the new project\'s sound packs — S6). Omit id to create a new work.', inputSchema: obj({ id: { type: 'string' }, title: { type: 'string' }, project: { type: 'string' }, logline: { type: 'string' }, script: { type: 'string' }, lang: { type: 'string', enum: Object.keys(GV.LANGS) }, accent: { type: 'string' }, review: { type: 'object', description: 'Per-shot review: { shots: { <shot id>: { status: draft | fix | ok, notes: [{ text, step? }] } }, note? } — MACHINES READ / ADD, NEVER REPLACE THE OWNER: agents and the assistant only set draft / fix and ADD notes (the server stamps the author "by"); never set "ok" (Approved is set by the owner in the Studio only), never delete / edit existing notes, never write the general note, never send review: null. To add a note: send notes = the existing notes (same id + text) + the new note (no id) — or omit notes to keep them. Read with get_work › review.' } }) },
+  { name: 'save_work', title: 'Save a work', description: 'Creates or edits the shared part of a work: title, project (theme project), logline (one sentence), script (overall script, prose), lang (dialogue language vi | en | zh | yue (Cantonese) — default: the machine\'s interface language when the work is created; works without lang (made before v0.20) are Vietnamese) + accent (bac / nam / trung · us / uk · pt / tw · hk). Does not touch shots (but changing project re-checks the sounds of every shot against the new project\'s sound packs — S6). Omit id to create a new work.', inputSchema: obj({ id: { type: 'string' }, title: { type: 'string' }, project: { type: 'string' }, logline: { type: 'string' }, script: { type: 'string' }, lang: { type: 'string', enum: Object.keys(GV.LANGS) }, accent: { type: 'string' }, review: { type: 'object', description: 'Per-shot review: { shots: { <shot id>: { status: draft | fix | ok, notes: [{ text, step? }] } }, note? } — MACHINES READ / ADD, NEVER REPLACE THE OWNER: agents and the assistant only set draft / fix and ADD notes (the server stamps the author "by"); never set "ok" (Approved is set by the owner in the Studio only), never delete / edit existing notes, never write the general note, never send review: null. To add a note: send notes = the existing notes (same id + text) + the new note (no id) — or omit notes to keep them. Read with get_work › review.' } }) },
   { name: 'save_shot', title: 'Save a shot', description: 'Adds / edits / removes one shot of a work. Dialogue with step.sfx runs the mixing rules ' + SRANGE + ' (lint_sound_track): errors (' + SR.levels.error + ') → rejected with paths, warnings (' + SR.levels.warn + ') → returned in warnings. shot = { id? (empty = add new), title, description (shot description), scene (scene key in the Library, see list_scenes), cast (≤ 8 characters: id or key, see list_characters), event? (dialogue + acting per get_director_schema; the engine sets event.scene = scene) }. position = insert position (0 = first). remove = true removes the shot. If a character / scene is missing, create it in the Workshop first (save_character / save_scene with the work\'s project).', inputSchema: obj({ work: { type: 'string' }, shot: { type: 'object' }, position: { type: 'integer' }, remove: { type: 'boolean' } }, ['work', 'shot']) },
   { name: 'export_project', title: 'Export a project bundle', description: 'The JSON bundle of a theme project (gen-chibi.project/1): characters, items, scenes, the custom parts / backdrops in use, motion packs, sound packs, works. Use it to back up, move to another machine, or sell / share a themed asset set.', inputSchema: obj({ id: { type: 'string', description: 'project id (list_projects)' }, sale: { type: 'boolean', description: 'true = SALE BUNDLE: only assets with status published, no works' } }, ['id']), annotations: { readOnlyHint: true } },
   { name: 'import_project', title: 'Import a project bundle', description: 'Imports a gen-chibi.project/1 bundle into the Library. Every part, item, scene, character, motion pack, sound pack and work goes through the same gates as when created. Duplicate ids are reported as a list; overwrite = true saves over them as new versions (the old version stays in the history). Sound / motion packs that belong to another project are never moved to this project; an existing shared pack stays shared. Channel: through an MCP link or the AI chatroom you can only write packs of the imported project ITSELF — overwriting a shared pack / another project\'s pack is rejected per item (same gate as save_sound_pack).', inputSchema: obj({ bundle: { type: 'object' }, overwrite: { type: 'boolean' } }, ['bundle']) },
@@ -236,8 +236,10 @@ function slugOf(s) {
 
 class MCP {
   // system (tuỳ chọn): { updater, restartSoon } — để agent tự kiểm và cập nhật phiên bản; smokeMs: hạn chót dựng thử gói động tác (test hạ xuống)
-  constructor({ engine, store, version, system, smokeMs, voice }) {
+  // uiLang (tuỳ chọn): hàm trả NGÔN NGỮ MẶC ĐỊNH CỦA MÁY (main.js: settings().uiLang) — lời thoại mặc định của tác phẩm agent tạo qua MCP (newWorkLang). Thiếu → 'en' (ADR 0007)
+  constructor({ engine, store, version, system, smokeMs, voice, uiLang }) {
     this.voice = voice || null;   // server/voice.js (giọng AI) — chỉ có ở bản chạy server
+    this.uiLang = typeof uiLang === 'function' ? uiLang : () => uiLang;
     this.GC = engine;
     this.smokeMs = smokeMs || 4000;
     this.store = store;
@@ -1188,7 +1190,7 @@ class MCP {
       works.forEach(w => step('works', w.id, () => {
         // lang / accent / voices (giọng đã chốt của dàn) đi theo gói — L-61 (CNS-083)
         const rec = this.saveWorkChecked(Object.assign({ id: String(w.id || ''), title: w.title, project: pid, logline: w.logline || '', script: w.script || '' },
-          w.lang !== undefined ? { lang: w.lang } : {}, w.accent !== undefined ? { accent: w.accent } : {}, w.voices !== undefined ? { voices: w.voices } : {}));
+          w.lang !== undefined ? { lang: w.lang } : {}, w.accent !== undefined ? { accent: w.accent } : {}, w.voices !== undefined ? { voices: w.voices } : {}), { keepLang: true });   // gói không có lang = tiếng Việt (trước v0.20): không gán mặc định mới
         const cur = S.getWork(rec.id), oldShots = {};
         (cur.shots || []).forEach(x => { oldShots[x.id] = x; });
         const mem = Object.assign(cur, { shots: [], chat: [] });   // nhập = thay trọn phân cảnh; lịch sử chat cũ không còn khớp → bỏ
@@ -1242,6 +1244,14 @@ class MCP {
     }
     return r;
   }
+  // ngôn ngữ LỜI THOẠI của tác phẩm mới khi người gọi không truyền lang (CNS-151):
+  //   agent (MCP: token / link / stdio) → MẶC ĐỊNH CỦA MÁY (this.uiLang = settings.uiLang): tầng HTTP của /mcp luôn 'en' (hợp đồng agent, CNS-067)
+  //     nhưng máy tiếng Việt mà agent làm phim thì phim vẫn tiếng Việt;
+  //   chủ (Studio, POST /api/works — Studio gửi lang tường minh) / AI trong dock → ngôn ngữ giao diện của yêu cầu (X-GC-Lang → Accept-Language → mặc định của máy)
+  newWorkLang(by) {
+    const L = by === 'agent' ? MSG.norm(this.uiLang()) : MSG.reqLang();
+    return Object.prototype.hasOwnProperty.call(GV.LANGS, L) ? L : 'en';
+  }
   saveWorkChecked(args, opts) {
     const GC = this.GC, errs = [];
     const plain = (t, n) => String(t == null ? '' : t).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '').slice(0, n);
@@ -1254,6 +1264,9 @@ class MCP {
       let id = args.id ? String(args.id) : slugOf(title) || 'tac-pham', n = 2;
       if (!args.id) { const base = id; while (this.store.getWork(id)) id = base + '-' + n++; }
       w = { id, title, project: '', logline: '', script: '', shots: [], chat: [], kind: 'work', createdAt: new Date().toISOString() };
+      // tác phẩm MỚI mà người gọi không nói lang → ghi lang mặc định (CNS-151); giọng vùng không ghi = giọng đầu của ngôn ngữ (GV.accent).
+      // Sửa tác phẩm có sẵn không bao giờ gán lang mới (tác phẩm trước v0.20 không có lang = tiếng Việt, GV.lang). Gói nhập giữ lang của gói (opts.keepLang)
+      if (args.lang === undefined && !(opts && opts.keepLang)) w.lang = this.newWorkLang(opts && opts.by);
     }
     if (args.title !== undefined && plain(args.title, 80).trim()) w.title = plain(args.title, 80).trim();
     if (args.project !== undefined) {
