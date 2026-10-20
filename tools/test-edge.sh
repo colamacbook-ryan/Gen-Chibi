@@ -19,7 +19,7 @@ skp() { echo "  - bỏ qua: $1"; skip=$((skip+1)); }
 sha() { node -e 'console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync(process.argv[1])).digest("hex"))' "$1"; }
 mode() { node -e 'console.log((require("fs").statSync(process.argv[1]).mode & 0o777).toString(8))' "$1"; }
 # các hàm compose của CLI, chạy trong thư mục cài giả (CLI thật cd vào thư mục cài rồi mới gọi)
-CLI_FUNCS="$(sed -n -e '/^EDGE_MARK=/p' -e '/^compose_override() {/,/^}/p' -e '/^compose_files() {/,/^}/p' -e '/^compose() {/,/^}/p' \
+CLI_FUNCS="$(sed -n -e '/^EDGE_MARK=/p' -e '/^DOCKER_VIA=/p' -e '/^dk_pick() {/,/^}/p' -e '/^dk() {/,/^}/p' -e '/^compose_override() {/,/^}/p' -e '/^compose_files() {/,/^}/p' -e '/^compose() {/,/^}/p' \
   -e '/^sync_compose() {/,/^}/p' -e '/^edge_prepare() {/,/^}/p' -e '/^port_busy() {/,/^}/p' "$ROOT/cli/genchibi")"
 HAVE_COMPOSE=""; docker compose version >/dev/null 2>&1 && HAVE_COMPOSE=1
 
@@ -122,6 +122,19 @@ if [ -z "$P80$P443" ]; then
     && ok "--caddy-off: gỡ đúng container gen-chibi-edge, bỏ dấu, giữ dữ liệu edge (chứng chỉ)" || bad "--caddy-off: $out | $(cat "$W/docker.log")"
   : > "$W/docker.log"; gc stop >/dev/null 2>&1 || true
   grep -q 'compose -f docker-compose.yml -f docker-compose.override.yml stop' "$W/docker.log" && ok "sau khi tắt: stop không còn tệp edge" || bad "stop sau khi tắt: $(cat "$W/docker.log")"
+  # genchibi online caddy <tên-miền> (v0.21 P4): bật edge nếu chưa → chờ admin socket của Caddy → mới gọi API (app không chạy ở đây → báo rõ)
+  : > "$W/docker.log"; out="$(GC_EDGE_WAIT=1 gc online caddy chibi.example.com 2>&1)" && rc=0 || rc=$?
+  [ $rc = 1 ] && [ -f "$C/edge/caddy.enabled" ] && grep -q 'docker-compose.edge.yml .*up -d' "$W/docker.log" && grep -q 'did not start' <<< "$out" && ! grep -q 'Go online · caddy' <<< "$out" \
+    && ok "online caddy <tên-miền>: tự bật edge (compose -f … edge … up -d); Caddy không lên → dừng trước khi gọi API" || bad "online caddy (không socket) ($rc): $out | $(cat "$W/docker.log")"
+  node -e 'require("net").createServer().listen(process.argv[1])' "$C/edge/run/caddy-admin.sock" & LPIDS="$!"
+  for i in $(seq 1 20); do [ -S "$C/edge/run/caddy-admin.sock" ] && break; sleep 0.1; done
+  out="$(GC_EDGE_WAIT=2 gc online caddy chibi.example.com 2>&1)" && rc=0 || rc=$?
+  [ $rc = 1 ] && grep -q 'already on' <<< "$out" && grep -q 'Go online · caddy · chibi.example.com' <<< "$out" && grep -q 'does not answer' <<< "$out" \
+    && ok "online caddy: edge đã bật + admin socket có → gửi POST /api/online/caddy (app dừng → 'does not answer … genchibi start')" || bad "online caddy (có socket) ($rc): $out"
+  kill $LPIDS 2>/dev/null || true; LPIDS=""; rm -f "$C/edge/run/caddy-admin.sock"
+  out="$(gc online caddy 'bad domain' 2>&1)" && rc=0 || rc=$?
+  [ $rc = 2 ] && grep -q 'Invalid domain' <<< "$out" && ok "online caddy tên miền sai → thoát 2" || bad "online caddy tên sai ($rc): $out"
+  gc online --caddy-off >/dev/null 2>&1 || true
 else
   skp "cổng 80/443 trên máy này đang bận — không thử nhánh bật"
 fi

@@ -9,6 +9,7 @@
 #   4e) đăng nhập chủ máy + bảng truy cập v0.21 (tools/test-auth-owner.mjs)
 #   4f) Go online — edge, Caddy, Cloudflare API giả, wizard (tools/test-online.mjs)
 #   4g) cổng ingress của cloudflared + Go online link tạm đầu-cuối (tools/test-ingress.mjs)
+#   4h) genchibi online qua CLI: server thật + Cloudflare API giả + cloudflared giả, token không vào argv / env / log (tools/test-online-cli.mjs)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -765,6 +766,10 @@ node tools/test-online.mjs || exit 1
 echo "4g) cổng ingress của cloudflared (v0.21, sửa bảo mật B) + Go online link tạm từ đầu tới cuối: kẻ lạ chiếm cổng trước app → không spawn · kiểm định kỳ · /ready đúng tiến trình · đột biến · launcher + app + online-config + cloudflared giả"
 for P in 7811 7813 7815 7821 7823 7825 7831 7833; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done
 node tools/test-ingress.mjs || exit 1
+
+echo "4h) genchibi online (v0.21 P4): server + launcher thật, Cloudflare API giả, cloudflared giả — token trên dòng lệnh bị từ chối · không terminal + CNAME có sẵn → dừng, không đè · --token-stdin tới bậc mật khẩu (mã thoát 3 + mã setup) → password + recheck → xong · đổi địa chỉ cần --yes · proxy · WAF làm tay · nhiều tên miền · off dọn Cloudflare · có terminal hỏi ẩn · token không trong argv / env / log (shim + /proc) · đột biến curl -d · link tạm · máy kế thừa"
+for P in 7841 7843 7851 7853 7855 7861 7863; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done
+node tools/test-online-cli.mjs || exit 1
 
 echo "5) tự cập nhật"
 bash tools/test-update.sh

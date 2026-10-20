@@ -21,7 +21,8 @@ _en() {
     st_releases) F="  installed: %s· in use %s" ;;
     st_mcp_named) F="  MCP to the Internet: %s (genchibi link shows the connect link)" ;;
     st_mcp_quick) F="  MCP to the Internet: temporary tunnel %s (genchibi link)" ;;
-    st_mcp_off) F="  MCP to the Internet: off (genchibi expose <domain> to open)" ;;
+    st_mcp_off) F="  Online: off — this machine only (genchibi online --help: domain + HTTPS + MCP in one step)" ;;
+    st_online) F="  Online: %s (mode %s · genchibi online shows each step)" ;;
     upd_checking) F="Checking for a new version…" ;;
     upd_nocheck) F="Could not check (is the app running?)" ;;
     upd_failed) F="Update failed; still running the current version." ;;
@@ -97,7 +98,7 @@ _en() {
     lang_restart) F="Restarting the app so the Studio default follows…" ;;
     lang_norun) F="The app is not running — the new default applies at the next start (genchibi start)." ;;
     lang_note) F="This is the default for the CLI and for everyone who opens the Studio. Each user can still switch language in the Studio (language switch); that choice is remembered in their browser." ;;
-    expose_moved) F="Note: genchibi expose is replaced by genchibi online (Studio › System › Go online) — it still works in this version." ;;
+    expose_moved) F="Note: genchibi expose is replaced by genchibi online (genchibi online --help, or Studio › System › Go online: Cloudflare with an API token, no browser login). This version still runs the old expose (cloudflared login) for machines that use it; it goes away in v0.22." ;;
     caddy_native) F="genchibi online --caddy needs Docker mode: Caddy publishes ports 80/443 (below 1024). Native mode: use the Cloudflare path instead (Studio › System › Go online › Cloudflare)." ;;
     caddy_busy) F="Port(s) %s already in use on this machine — Caddy was NOT turned on (the app keeps running). Stop the service holding them, or use the Cloudflare path (Studio › System › Go online › Cloudflare, no open ports needed)." ;;
     caddy_old) F="The running version has no edge Caddy yet (needs v0.21 or newer) — run genchibi update first." ;;
@@ -105,7 +106,76 @@ _en() {
     caddy_already) F="Edge Caddy was already on — making sure it is running." ;;
     caddy_off) F="Edge Caddy is off: ports 80/443 released. Certificates are kept in %s/edge (turn it on again: genchibi online --caddy)." ;;
     caddy_not_on) F="Edge Caddy is not on — nothing to do." ;;
-    online_help) F="genchibi online --caddy       publish ports 80/443 with the edge Caddy (Docker; path A: your domain's A record → this machine)\ngenchibi online --caddy-off   stop the edge Caddy and release 80/443 (certificates are kept)\nEverything else (domain, Cloudflare, temporary link): Studio › System › Go online" ;;
+    caddy_on_flow) F="Edge Caddy is on: ports 80 and 443 go to container gen-chibi-edge." ;;
+    on_help) F="genchibi online                         show the Go online status (mode, address, each step ✓/✗, edge)\ngenchibi online caddy <domain>          path A (beta, Docker): your domain's A record → this machine's IP; turns on the edge Caddy (ports 80/443), gets HTTPS\ngenchibi online cloudflare [<domain>]   path B (beta): Cloudflare Tunnel with an API token (asked hidden; without a terminal: GC_CF_TOKEN) — chibi.example.com or example.com (+ --sub name)\ngenchibi online proxy <domain>          you already run a reverse proxy: prints the config to paste, then checks from outside\ngenchibi online quick                   temporary *.trycloudflare.com link (changes on every restart)\ngenchibi online recheck [--waf-done]    check again / continue after you fixed a step\ngenchibi online off                     go offline (with GC_CF_TOKEN set: also removes the tunnel / DNS / WAF rule the app created)\ngenchibi online migrate                 move GC_PUBLIC_URL / GC_ALLOWED_HOSTS from .env into Go online\ngenchibi online --caddy | --caddy-off   only publish / release ports 80/443 (edge Caddy)\nOptions: --yes (confirm an address change) · --overwrite-dns (replace an existing DNS record) · --token-stdin (read the API token from stdin)\nThe API token is never accepted on the command line. Exit code 3 = online, waiting for the owner password (setup code printed)." ;;
+    on_down) F="The app does not answer at %s — start it: genchibi start" ;;
+    on_auth) F="The app refused the owner token (HTTP %s) — check GC_API_TOKEN in %s/.env (or data/owner-token)." ;;
+    on_err) F="✗ %s (HTTP %s)" ;;
+    on_title) F="Go online · mode %s%s" ;;
+    on_url) F="  Public address: %s" ;;
+    on_url_none) F="  Public address: none (this machine only)" ;;
+    on_url_pending) F="  Temporary address being checked: %s" ;;
+    on_flow) F="  Last run: %s · %s" ;;
+    on_w_busy) F="running" ;;
+    on_w_done) F="finished" ;;
+    on_w_stopped) F="stopped (see the step marked ✗ / …)" ;;
+    on_w_on) F="on" ;;
+    on_w_off) F="off" ;;
+    on_w_ready) F="connected" ;;
+    on_w_starting) F="starting" ;;
+    on_w_new) F="a new address" ;;
+    on_edge) F="  Edge: Caddy %s · tunnel %s%s" ;;
+    on_legacy_note) F="  This machine goes online through .env (GC_PUBLIC_URL / GC_ALLOWED_HOSTS, read-only here) — move it: genchibi online migrate" ;;
+    on_hint) F="  Commands: genchibi online caddy <domain> | cloudflare <domain> | proxy <domain> | quick | recheck | off   (genchibi online --help)" ;;
+    on_fix) F="      → %s" ;;
+    on_wait_caddy) F="Waiting for the edge Caddy to start…" ;;
+    on_caddy_nostart) F="The edge Caddy did not start (no admin socket in edge/run after 60 s) — see: docker logs gen-chibi-edge" ;;
+    on_start) F="Go online · %s · %s — each step below (Ctrl-C only stops watching; the app carries on — genchibi online shows where it is)" ;;
+    on_done) F="✓ Online: %s" ;;
+    on_done_studio) F="  Studio: %s (sign in with the owner password)" ;;
+    on_done_mcp) F="  MCP:    %s/mcp — claude.ai: Customize › Connectors › Add custom connector › paste it › Connect › Authorize (Studio › System › Agent connections lists it)" ;;
+    on_pw_wait) F="Almost done: %s answers. Last step — set the owner password: open %s/setup and enter the setup code %s, then run: genchibi online recheck" ;;
+    on_pw_wait_nocode) F="Almost done: %s answers. Last step — set the owner password at %s/setup with the setup code (genchibi status prints it), then run: genchibi online recheck" ;;
+    on_timeout) F="Still waiting after %s minutes — the step keeps its state; check again later: genchibi online recheck" ;;
+    on_failed) F="✗ Stopped at: %s. Fix it as shown above, then: genchibi online recheck" ;;
+    on_url_change) F="This changes the public address (%s → %s): %s connected agent(s) will be signed out and must connect again." ;;
+    on_url_ask) F="Continue? [y/N] " ;;
+    on_url_stop) F="Nothing changed. To confirm without a terminal, add --yes." ;;
+    on_legacy) F="This machine goes online through .env (GC_PUBLIC_URL / GC_ALLOWED_HOSTS set before v0.21). Go online does not mix the two: move those settings first with genchibi online migrate, then run this command again." ;;
+    on_migrate_old) F="The running version has no migrate step yet — update first: genchibi update" ;;
+    on_migrated) F="The .env settings now live in Go online (you can remove GC_PUBLIC_URL / GC_ALLOWED_HOSTS from .env later)." ;;
+    on_proxy_snip) F="Paste one of these into your proxy — machine routes (MCP, OAuth) go straight to the app, people may go through your own login:" ;;
+    on_off_done) F="Offline: no public address any more (this machine only)." ;;
+    on_off_caddy) F="The edge Caddy still holds ports 80/443 — release them: genchibi online --caddy-off" ;;
+    cf_tok_link) F="Create a Cloudflare API token (permissions pre-filled: Account › Cloudflare Tunnel › Edit, Zone › DNS › Edit, Zone › Zone › Read, optional Zone › WAF › Edit; set a short TTL):\n  %s" ;;
+    cf_tok_ask) F="Cloudflare API token (hidden while typing): " ;;
+    cf_tok_none) F="No Cloudflare API token. In a terminal the command asks for it (hidden); without a terminal set GC_CF_TOKEN in the environment — never on the command line." ;;
+    cf_tok_bad) F="The API token looks wrong (too short or unexpected characters) — copy it again from dash.cloudflare.com." ;;
+    cf_tok_argv) F="The API token is not accepted on the command line (other users could read it in the process list, and it stays in shell history). Paste it when asked, or set GC_CF_TOKEN." ;;
+    cf_choices) F="The token sees several domains — pick one:" ;;
+    cf_choice_row) F="  %s) %s" ;;
+    cf_choice_ask) F="Number: " ;;
+    cf_choice_stop) F="No domain picked. Run again with one of them: genchibi online cloudflare <domain>" ;;
+    cf_cname_ask) F="Replace those DNS records with a CNAME to the tunnel? [y/N] " ;;
+    cf_cname_stop) F="Nothing replaced. Pick another name (genchibi online cloudflare other.%s), or confirm in a terminal, or add --overwrite-dns." ;;
+    cf_waf_ask) F="Have you created that rule in Cloudflare? [y/N] " ;;
+    cf_waf_stop) F="Create the rule shown above in Cloudflare, then run: genchibi online recheck --waf-done" ;;
+    cf_retry_zone) F="Trying %s as the domain (sub-name %s)…" ;;
+    sn_domain) F="Domain / DNS" ;;
+    sn_edge) F="Edge Caddy" ;;
+    sn_port) F="Ports 80/443" ;;
+    sn_cert) F="HTTPS certificate" ;;
+    sn_public) F="Public address" ;;
+    sn_mcp) F="MCP from the Internet" ;;
+    sn_password) F="Owner password" ;;
+    sn_owner) F="Owner" ;;
+    sn_token) F="API token" ;;
+    sn_zone) F="Domain + sub-name" ;;
+    sn_tunnel) F="Tunnel" ;;
+    sn_waf) F="WAF rule" ;;
+    sn_config) F="Proxy config" ;;
+    sn_local) F="This machine" ;;
+    sn_remote) F="Cloudflare cleanup" ;;
   esac
 }
 _vi() {
@@ -121,7 +191,8 @@ _vi() {
     st_releases) F="  bản cài: %s· đang dùng %s" ;;
     st_mcp_named) F="  MCP ra ngoài: %s (genchibi link để xem link nối)" ;;
     st_mcp_quick) F="  MCP ra ngoài: tunnel tạm %s (genchibi link)" ;;
-    st_mcp_off) F="  MCP ra ngoài: tắt (genchibi expose <tên-miền> để mở)" ;;
+    st_mcp_off) F="  Ra Internet: tắt — chỉ máy này (genchibi online --help: tên miền + HTTPS + MCP một bước)" ;;
+    st_online) F="  Ra Internet: %s (chế độ %s · genchibi online xem từng bậc)" ;;
     upd_checking) F="Kiểm tra phiên bản…" ;;
     upd_nocheck) F="Không kiểm tra được (app có đang chạy?)" ;;
     upd_failed) F="Cập nhật thất bại; vẫn chạy bản hiện tại." ;;
@@ -197,7 +268,7 @@ _vi() {
     lang_restart) F="Khởi động lại app để giao diện mặc định đổi theo…" ;;
     lang_norun) F="App đang không chạy — mặc định mới có hiệu lực ở lần chạy tới (genchibi start)." ;;
     lang_note) F="Đây là mặc định cho CLI và cho mọi người mở Studio. Mỗi người vẫn đổi ngôn ngữ riêng trong Studio được (nút chuyển ngôn ngữ); lựa chọn đó được nhớ trong trình duyệt của họ." ;;
-    expose_moved) F="Lưu ý: genchibi expose đã được thay bằng genchibi online (Studio › Hệ thống › Go online) — bản này vẫn chạy được." ;;
+    expose_moved) F="Lưu ý: genchibi expose đã được thay bằng genchibi online (genchibi online --help, hoặc Studio › Hệ thống › Go online: Cloudflare bằng API token, không cần đăng nhập trình duyệt). Bản này vẫn chạy expose cũ (cloudflared login) cho máy đang dùng nó; bỏ ở v0.22." ;;
     caddy_native) F="genchibi online --caddy cần chế độ Docker: Caddy mở cổng 80/443 (dưới 1024). Chế độ native: dùng đường Cloudflare (Studio › Hệ thống › Go online › Cloudflare)." ;;
     caddy_busy) F="Cổng %s trên máy này đang bị chiếm — CHƯA bật Caddy (app vẫn chạy). Dừng dịch vụ đang giữ cổng, hoặc dùng đường Cloudflare (Studio › Hệ thống › Go online › Cloudflare, không cần mở cổng)." ;;
     caddy_old) F="Bản đang chạy chưa có edge Caddy (cần v0.21 trở lên) — chạy genchibi update trước." ;;
@@ -205,7 +276,76 @@ _vi() {
     caddy_already) F="Edge Caddy đã bật từ trước — kiểm cho chắc nó đang chạy." ;;
     caddy_off) F="Đã tắt edge Caddy: trả cổng 80/443. Chứng chỉ vẫn giữ trong %s/edge (bật lại: genchibi online --caddy)." ;;
     caddy_not_on) F="Edge Caddy chưa bật — không có gì để tắt." ;;
-    online_help) F="genchibi online --caddy       mở cổng 80/443 bằng edge Caddy (Docker; đường A: bản ghi A của tên miền → máy này)\ngenchibi online --caddy-off   tắt edge Caddy, trả cổng 80/443 (giữ chứng chỉ)\nPhần còn lại (tên miền, Cloudflare, link tạm): Studio › Hệ thống › Go online" ;;
+    caddy_on_flow) F="Đã bật edge Caddy: cổng 80 và 443 vào container gen-chibi-edge." ;;
+    on_help) F="genchibi online                         xem trạng thái Go online (chế độ, địa chỉ, từng bậc ✓/✗, edge)\ngenchibi online caddy <tên-miền>        đường A (beta, Docker): bản ghi A của tên miền → IP máy này; bật edge Caddy (cổng 80/443), lấy HTTPS\ngenchibi online cloudflare [<tên-miền>] đường B (beta): Cloudflare Tunnel bằng API token (hỏi ẩn; không có terminal: GC_CF_TOKEN) — chibi.example.com hoặc example.com (+ --sub tên)\ngenchibi online proxy <tên-miền>        đã có reverse proxy riêng: in đoạn cấu hình để dán, rồi kiểm từ ngoài vào\ngenchibi online quick                   link tạm *.trycloudflare.com (đổi mỗi lần khởi động)\ngenchibi online recheck [--waf-done]    kiểm lại / đi tiếp sau khi đã sửa một bậc\ngenchibi online off                     thôi ra Internet (có GC_CF_TOKEN: dọn cả tunnel / DNS / luật WAF app đã tạo)\ngenchibi online migrate                 chuyển GC_PUBLIC_URL / GC_ALLOWED_HOSTS từ .env sang Go online\ngenchibi online --caddy | --caddy-off   chỉ mở / trả cổng 80/443 (edge Caddy)\nTuỳ chọn: --yes (xác nhận đổi địa chỉ) · --overwrite-dns (thay bản ghi DNS có sẵn) · --token-stdin (đọc API token từ stdin)\nKhông bao giờ nhận API token trên dòng lệnh. Mã thoát 3 = đã ra Internet, chờ đặt mật khẩu chủ (có in mã setup)." ;;
+    on_down) F="App không trả lời ở %s — chạy: genchibi start" ;;
+    on_auth) F="App từ chối token chủ (HTTP %s) — kiểm GC_API_TOKEN trong %s/.env (hoặc data/owner-token)." ;;
+    on_err) F="✗ %s (HTTP %s)" ;;
+    on_title) F="Go online · chế độ %s%s" ;;
+    on_url) F="  Địa chỉ công khai: %s" ;;
+    on_url_none) F="  Địa chỉ công khai: không có (chỉ máy này)" ;;
+    on_url_pending) F="  Địa chỉ tạm đang kiểm: %s" ;;
+    on_flow) F="  Lần chạy gần nhất: %s · %s" ;;
+    on_w_busy) F="đang chạy" ;;
+    on_w_done) F="xong" ;;
+    on_w_stopped) F="đang dừng (xem bậc ✗ / …)" ;;
+    on_w_on) F="bật" ;;
+    on_w_off) F="tắt" ;;
+    on_w_ready) F="đã kết nối" ;;
+    on_w_starting) F="đang khởi động" ;;
+    on_w_new) F="địa chỉ mới" ;;
+    on_edge) F="  Edge: Caddy %s · tunnel %s%s" ;;
+    on_legacy_note) F="  Máy này ra Internet bằng .env (GC_PUBLIC_URL / GC_ALLOWED_HOSTS, ở đây chỉ đọc) — chuyển: genchibi online migrate" ;;
+    on_hint) F="  Lệnh: genchibi online caddy <tên-miền> | cloudflare <tên-miền> | proxy <tên-miền> | quick | recheck | off   (genchibi online --help)" ;;
+    on_fix) F="      → %s" ;;
+    on_wait_caddy) F="Chờ edge Caddy khởi động…" ;;
+    on_caddy_nostart) F="Edge Caddy không lên (sau 60 giây chưa có admin socket trong edge/run) — xem: docker logs gen-chibi-edge" ;;
+    on_start) F="Go online · %s · %s — từng bậc ở dưới (Ctrl-C chỉ thôi theo dõi; app vẫn làm tiếp — genchibi online cho biết tới đâu)" ;;
+    on_done) F="✓ Đã ra Internet: %s" ;;
+    on_done_studio) F="  Studio: %s (đăng nhập bằng mật khẩu chủ)" ;;
+    on_done_mcp) F="  MCP:    %s/mcp — claude.ai: Customize › Connectors › Add custom connector › dán vào › Connect › Authorize (Studio › Hệ thống › Kết nối agent có danh sách)" ;;
+    on_pw_wait) F="Sắp xong: %s đã trả lời. Bước cuối — đặt mật khẩu chủ: mở %s/setup, nhập mã setup %s, rồi chạy: genchibi online recheck" ;;
+    on_pw_wait_nocode) F="Sắp xong: %s đã trả lời. Bước cuối — đặt mật khẩu chủ ở %s/setup bằng mã setup (genchibi status in mã), rồi chạy: genchibi online recheck" ;;
+    on_timeout) F="Đã chờ %s phút mà chưa xong — bậc vẫn giữ trạng thái; kiểm lại sau: genchibi online recheck" ;;
+    on_failed) F="✗ Dừng ở: %s. Sửa theo hướng dẫn ở trên rồi chạy: genchibi online recheck" ;;
+    on_url_change) F="Lệnh này đổi địa chỉ công khai (%s → %s): %s agent đang nối sẽ bị đăng xuất và phải nối lại." ;;
+    on_url_ask) F="Tiếp tục? [c/K] " ;;
+    on_url_stop) F="Không đổi gì. Xác nhận khi không có terminal: thêm --yes." ;;
+    on_legacy) F="Máy này ra Internet bằng .env (GC_PUBLIC_URL / GC_ALLOWED_HOSTS đặt trước v0.21). Go online không trộn hai cách: chuyển các giá trị đó trước bằng genchibi online migrate, rồi chạy lại lệnh này." ;;
+    on_migrate_old) F="Bản đang chạy chưa có bước di chuyển — cập nhật trước: genchibi update" ;;
+    on_migrated) F="Cấu hình .env đã chuyển sang Go online (sau này có thể xoá GC_PUBLIC_URL / GC_ALLOWED_HOSTS khỏi .env)." ;;
+    on_proxy_snip) F="Dán một trong hai đoạn này vào proxy của bạn — đường máy (MCP, OAuth) đi thẳng vào app, đường người có thể qua đăng nhập riêng của bạn:" ;;
+    on_off_done) F="Đã thôi ra Internet: không còn địa chỉ công khai (chỉ máy này)." ;;
+    on_off_caddy) F="Edge Caddy vẫn giữ cổng 80/443 — trả cổng: genchibi online --caddy-off" ;;
+    cf_tok_link) F="Tạo API token Cloudflare (quyền điền sẵn: Account › Cloudflare Tunnel › Edit, Zone › DNS › Edit, Zone › Zone › Read, tuỳ chọn Zone › WAF › Edit; đặt TTL ngắn):\n  %s" ;;
+    cf_tok_ask) F="API token Cloudflare (ẩn khi gõ): " ;;
+    cf_tok_none) F="Chưa có API token Cloudflare. Có terminal thì lệnh hỏi (ẩn); không có terminal thì đặt GC_CF_TOKEN trong môi trường — không bao giờ trên dòng lệnh." ;;
+    cf_tok_bad) F="API token có vẻ sai (quá ngắn hoặc có ký tự lạ) — chép lại từ dash.cloudflare.com." ;;
+    cf_tok_argv) F="Không nhận API token trên dòng lệnh (người khác đọc được trong danh sách tiến trình, và nó nằm lại trong lịch sử shell). Dán khi được hỏi, hoặc đặt GC_CF_TOKEN." ;;
+    cf_choices) F="Token thấy nhiều tên miền — chọn một:" ;;
+    cf_choice_row) F="  %s) %s" ;;
+    cf_choice_ask) F="Số: " ;;
+    cf_choice_stop) F="Chưa chọn tên miền. Chạy lại với một tên: genchibi online cloudflare <tên-miền>" ;;
+    cf_cname_ask) F="Thay các bản ghi DNS đó bằng CNAME tới tunnel? [c/K] " ;;
+    cf_cname_stop) F="Không thay gì. Chọn tên khác (genchibi online cloudflare ten-khac.%s), hoặc xác nhận trong terminal, hoặc thêm --overwrite-dns." ;;
+    cf_waf_ask) F="Bạn đã tạo luật đó trong Cloudflare chưa? [c/K] " ;;
+    cf_waf_stop) F="Tạo luật ở trên trong Cloudflare, rồi chạy: genchibi online recheck --waf-done" ;;
+    cf_retry_zone) F="Thử %s làm tên miền (tên con %s)…" ;;
+    sn_domain) F="Tên miền / DNS" ;;
+    sn_edge) F="Edge Caddy" ;;
+    sn_port) F="Cổng 80/443" ;;
+    sn_cert) F="Chứng chỉ HTTPS" ;;
+    sn_public) F="Địa chỉ công khai" ;;
+    sn_mcp) F="MCP từ Internet" ;;
+    sn_password) F="Mật khẩu chủ" ;;
+    sn_owner) F="Chủ máy" ;;
+    sn_token) F="API token" ;;
+    sn_zone) F="Tên miền + tên con" ;;
+    sn_tunnel) F="Tunnel" ;;
+    sn_waf) F="Luật WAF" ;;
+    sn_config) F="Cấu hình proxy" ;;
+    sn_local) F="Máy này" ;;
+    sn_remote) F="Dọn Cloudflare" ;;
   esac
 }
 _t() { F=""; if [ "$UI" = vi ]; then _vi "$1"; fi; if [ -z "$F" ]; then _en "$1"; fi; if [ -z "$F" ]; then F="$1"; fi; }
@@ -260,10 +400,31 @@ compose_files() { # in các cặp "-f tệp", mỗi phần một dòng
   if [ -n "$ov" ]; then printf '%s\n' -f "$ov"; fi
   return 0
 }
+# docker: thẳng · qua nhóm docker (sg docker -c) · sudo docker — máy trình cài vừa cài Docker + usermod -aG docker mà phiên đăng nhập này chưa
+# nhận nhóm mới (CNS-174): mọi lệnh vẫn chạy ngay, đăng xuất / vào lại thì đi thẳng. GC_DOCKER_VIA = direct | sg | sudo (trình cài đặt);
+# trống → dò một lần: docker thẳng được → direct; user có tên trong nhóm docker (/etc/group) → sg (không hỏi mật khẩu nhóm); sudo không hỏi mật khẩu → sudo.
+DOCKER_VIA="${GC_DOCKER_VIA:-}"
+dk_pick() {
+  [ -z "$DOCKER_VIA" ] || return 0
+  DOCKER_VIA=direct
+  docker info >/dev/null 2>&1 && return 0
+  local g; g=" $(id -nG "$(id -un 2>/dev/null)" 2>/dev/null) "   # nhóm trong /etc/group (kể cả nhóm phiên này chưa nhận) — không dùng grep -q sau ống (pipefail)
+  if command -v sg >/dev/null 2>&1 && case "$g" in *" docker "*) true ;; *) false ;; esac && sg docker -c 'docker info' >/dev/null 2>&1 </dev/null; then DOCKER_VIA=sg
+  elif command -v sudo >/dev/null 2>&1 && sudo -n docker info >/dev/null 2>&1 </dev/null; then DOCKER_VIA=sudo; fi
+  return 0
+}
+dk() { # dk <đối số docker…> — stdin / stdout đi thẳng (cầu MCP stdio, mật khẩu qua stdin)
+  dk_pick
+  case "$DOCKER_VIA" in
+    sg) local q="docker" x; for x in ${1+"$@"}; do q="$q $(printf '%q' "$x")"; done; sg docker -c "$q" ;;
+    sudo) sudo docker ${1+"$@"} ;;
+    *) docker ${1+"$@"} ;;
+  esac
+}
 compose() { # compose <lệnh docker compose…> — chạy trong thư mục cài (đã cd)
   local a=() l
   while IFS= read -r l; do a+=("$l"); done < <(compose_files)
-  docker compose "${a[@]}" ${1+"$@"}
+  dk compose "${a[@]}" ${1+"$@"}
 }
 guard_exposure() {
   # đóng khi nghi ngờ: mở ra ngoài máy này mà không có token thì không chạy
@@ -296,9 +457,10 @@ status() {
   local sc; sc="$(setup_code)"; [ -z "$sc" ] || m st_setup "$sc" "$(setup_until)"
   m st_releases "$(cd releases 2>/dev/null && ls | tr '\n' ' ')" "$(basename "$(readlink current)")"
   case "${GC_TUNNEL:-}" in
-    named) m st_mcp_named "${GC_PUBLIC_URL:-?}" ;;
+    named) m st_mcp_named "${GC_PUBLIC_URL:-?}" ;;   # máy còn dùng genchibi expose cũ (bỏ ở v0.22)
     quick) m st_mcp_quick "$(quick_url)" ;;
-    *) m st_mcp_off ;;
+    *) if [ -n "$h" ]; then oapi GET /api/online; fi
+       if [ "$OCODE" = 200 ] && [ "$(jv mode)" != off ] && [ -n "$(jv publicUrl)" ]; then m st_online "$(jv publicUrl)" "$(jv mode)"; else m st_mcp_off; fi ;;
   esac
 }
 update() {
@@ -338,7 +500,7 @@ uninstall() {
 }
 mcp() {
   # cầu stdio cho agent (Claude Code, Claude Desktop…)
-  if [ "$MODE" = docker ]; then a=(); while IFS= read -r l; do a+=("$l"); done < <(compose_files); exec docker compose "${a[@]}" exec -T app node /install/current/server/mcp-stdio.js
+  if [ "$MODE" = docker ]; then compose exec -T app node /install/current/server/mcp-stdio.js
   else GC_HOME="$HOME_DIR" GC_PORT="$PORT" exec node "$HOME_DIR/current/server/mcp-stdio.js"; fi   # GC_HOME: cầu đọc data/owner-token khi .env trống (CNS-197)
 }
 logs() { if [ "$MODE" = docker ]; then compose logs -f --tail 200; else tail -n 200 -f "$LOG"; fi; }
@@ -420,7 +582,7 @@ port_busy() { # port_busy <cổng> → 0 khi có tiến trình đang nghe trên 
   if [ "${n:-0}" -ge 1 ]; then [ "$n" -gt 1 ]; return; fi
   (echo > "/dev/tcp/127.0.0.1/$1") 2>/dev/null
 }
-online_caddy() {
+online_caddy() { # online_caddy [flow] — flow: gọi từ `genchibi online caddy <tên-miền>` (không bảo "làm tiếp ở Studio")
   [ "$MODE" = docker ] || { m caddy_native >&2; exit 1; }
   sync_compose
   { [ -f docker-compose.edge.yml ] && [ -f edge/Caddyfile.base ]; } || { m caddy_old >&2; exit 1; }
@@ -434,7 +596,7 @@ online_caddy() {
   fi
   edge_prepare
   compose up -d --quiet-pull 2>&1 | grep -vE "Creating|Created|Starting|Network|Container .* (Running|Waiting)" || true
-  m caddy_on
+  if [ "${1:-}" = flow ]; then m caddy_on_flow; else m caddy_on; fi
 }
 online_caddy_off() {
   [ "$MODE" = docker ] || { m caddy_native >&2; exit 1; }
@@ -443,12 +605,369 @@ online_caddy_off() {
   rm -f "$EDGE_MARK"
   m caddy_off "$HOME_DIR"
 }
+# ---------------------------------------------------------------- genchibi online: Go online từ dòng lệnh (v0.21 §2) — CÙNG API /api/online/* với Studio
+# Mọi lời gọi mang token chủ qua stdin của curl (-K -); thân lệnh (kể cả API token Cloudflare) cũng đi qua stdin (dòng `data = "…"` của cấu hình curl),
+# không bao giờ nằm trong argv / biến môi trường của tiến trình con / log. JSON đọc bằng awk thuần (máy Docker có thể không có node / jq).
+# Mã thoát: 0 xong · 1 lỗi / dừng ở một bậc · 2 sai cách dùng · 3 đã ra Internet, chỉ còn chờ chủ đặt mật khẩu (mã setup in kèm).
+NL='
+'
+tty_ok() { { : < /dev/tty; } 2>/dev/null; }   # có người ngồi trước terminal (kể cả curl | bash); setsid / CI thì không
+ask_yn() { # ask_yn "câu hỏi" → 0 khi trả lời có (y / c / yes / có); không terminal → không
+  local a=""; tty_ok || return 1
+  read -r -p "$1" a < /dev/tty || return 1
+  case "$a" in y|Y|yes|YES|Yes|c|C|co|có|Có) return 0 ;; *) return 1 ;; esac
+}
+jflat() { # JSON (stdin) → mỗi giá trị một dòng "đường<TAB>giá trị" (vd flow.steps.0.id), chuỗi đã bỏ thoát; \n trong chuỗi → \036, \t / \r → khoảng trắng
+  awk '
+  function ws() { while (i <= n) { c = substr(s, i, 1); if (c == " " || c == "\t" || c == "\n" || c == "\r") i++; else break } }
+  function str(   r, ch, e) {
+    i++; r = ""
+    while (i <= n) {
+      ch = substr(s, i, 1)
+      if (ch == "\"") { i++; return r }
+      if (ch == "\\") {
+        e = substr(s, i + 1, 1); i += 2
+        if (e == "u") { i += 4; r = r "?" } else if (e == "n") r = r "\036"; else if (e == "t" || e == "r" || e == "b" || e == "f") r = r " "; else r = r e
+        continue
+      }
+      if (match(substr(s, i, 512), /^[^"\\]+/)) { r = r substr(s, i, RLENGTH); i += RLENGTH } else { r = r ch; i++ }
+    }
+    bad = 1; return r
+  }
+  function val(p,   ch, k, idx) {
+    ws(); if (i > n) { bad = 1; return }
+    ch = substr(s, i, 1)
+    if (ch == "{") {
+      i++; ws()
+      if (substr(s, i, 1) == "}") { i++; print p "\t{}"; return }
+      while (i <= n) {
+        ws(); if (substr(s, i, 1) != "\"") { bad = 1; return }
+        k = str(); ws(); if (substr(s, i, 1) != ":") { bad = 1; return }
+        i++; val(p == "" ? k : p "." k); if (bad) return
+        ws(); ch = substr(s, i, 1); i++
+        if (ch == "}") return
+        if (ch != ",") { bad = 1; return }
+      }
+      bad = 1; return
+    }
+    if (ch == "[") {
+      i++; ws()
+      if (substr(s, i, 1) == "]") { i++; print p "\t[]"; return }
+      for (idx = 0; i <= n; idx++) {
+        val(p == "" ? idx : p "." idx); if (bad) return
+        ws(); ch = substr(s, i, 1); i++
+        if (ch == "]") return
+        if (ch != ",") { bad = 1; return }
+      }
+      bad = 1; return
+    }
+    if (ch == "\"") { k = str(); print p "\t" k; return }
+    if (match(substr(s, i, 64), /^[-+0-9.eEa-z]+/)) { print p "\t" substr(s, i, RLENGTH); i += RLENGTH; return }
+    bad = 1
+  }
+  { s = s $0 "\n" }
+  END { n = length(s); i = 1; bad = 0; val(""); if (bad) exit 1 }'
+}
+J=""   # bảng phẳng của phản hồi gần nhất
+jv() { printf '%s\n' "$J" | awk -F '\t' -v k="$1" '$1 == k { sub(/^[^\t]*\t/, ""); gsub(/\036/, " "); if ($0 != "null") print; exit }'; }   # null → rỗng
+jv_raw() { printf '%s\n' "$J" | awk -F '\t' -v k="$1" '$1 == k { sub(/^[^\t]*\t/, ""); gsub(/\036/, "\n"); print; exit }'; }   # giữ xuống dòng (đoạn cấu hình proxy)
+jsteps() { # các bậc của luồng: mỗi dòng "id<TAB>state<TAB>detail<TAB>fix<TAB>manual"
+  printf '%s\n' "$J" | awk -F '\t' '
+    match($1, /^flow\.steps\.[0-9]+\./) { k = substr($1, RSTART, RLENGTH); f = substr($1, RLENGTH + 1); v = $0; sub(/^[^\t]*\t/, "", v); gsub(/\036/, " ", v)
+      if (!(k in seen)) { seen[k] = 1; order[++n] = k } a[k, f] = v }
+    END { for (j = 1; j <= n; j++) { k = order[j]; d = a[k, "detail"]; x = a[k, "fix"]; if (d == "null") d = ""; if (x == "null") x = ""
+      print a[k, "id"] "\t" a[k, "state"] "\t" d "\t" x "\t" a[k, "manual"] } }'
+}
+OCODE=""; OBODY=""
+oapi() { # oapi PHƯƠNG_THỨC ĐƯỜNG [JSON] → OCODE (000 = app không trả lời), OBODY, J. Token chủ + thân lệnh đi qua stdin của curl (-K -)
+  local r
+  r="$( { auth_cfg; if [ -n "${3:-}" ]; then printf 'data = "%s"\n' "$(cfg_esc "$3")"; fi; } | curl -sS -m 30 -K - -X "$1" -H 'X-GC-Request: 1' -H "X-GC-Lang: $UI" -H 'Content-Type: application/json' -w '\n%{http_code}' "$URL$2" 2>/dev/null)" || true
+  OCODE="$(printf '%s\n' "$r" | tail -n 1)"; OBODY="$(printf '%s\n' "$r" | sed '$d')"
+  case "$OCODE" in [1-5][0-9][0-9]) ;; *) OCODE=000 ;; esac
+  J="$(printf '%s\n' "$OBODY" | jflat 2>/dev/null)" || J=""
+}
+opost() { # opost ĐƯỜNG [JSON] — 429 (trần tần suất của app) → đợi rồi gửi lại, tối đa 5 lần
+  local n=0 b="${2:-}"; [ -n "$b" ] || b='{}'
+  while :; do
+    oapi POST "$1" "$b"
+    [ "$OCODE" = 429 ] && [ $n -lt 5 ] || return 0
+    n=$((n + 1)); sleep "${GC_ONLINE_RETRY:-3}"
+  done
+}
+online_err() { # in lỗi của phản hồi gần nhất (đã theo ngôn ngữ CLI) → luôn trả 1
+  case "$OCODE" in
+    000) m on_down "$URL" >&2 ;;
+    401|403) m on_auth "$OCODE" "$HOME_DIR" >&2 ;;
+    *) m on_err "$(jv error)" "$OCODE" >&2 ;;
+  esac
+  return 1
+}
+sname() { # tên hiển thị của một bậc
+  case "$1" in
+    domain) mn sn_domain ;; edge) mn sn_edge ;; port) mn sn_port ;; cert) mn sn_cert ;; public) mn sn_public ;; mcp) mn sn_mcp ;; password) mn sn_password ;;
+    owner) mn sn_owner ;; token) mn sn_token ;; zone) mn sn_zone ;; tunnel) mn sn_tunnel ;; waf) mn sn_waf ;; config) mn sn_config ;; local) mn sn_local ;; remote) mn sn_remote ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+srow() { # srow "id<TAB>state<TAB>detail<TAB>fix…" — một hàng của bảng bậc (✓ / ✗ / … / ·), cách sửa dưới hàng ✗
+  local id st det fix sym rest
+  id="${1%%	*}"; rest="${1#*	}"; st="${rest%%	*}"; rest="${rest#*	}"; det="${rest%%	*}"; rest="${rest#*	}"; fix="${rest%%	*}"
+  case "$st" in ok) sym="✓" ;; fail) sym="✗" ;; running) sym="…" ;; *) sym="·" ;; esac
+  printf '  %s %-24s %s\n' "$sym" "$(sname "$id")" "$det"
+  if [ "$st" = fail ] && [ -n "$fix" ]; then m on_fix "$fix"; fi
+}
+FIRST_ID=""; FIRST_ST=""; FIRST_MANUAL=""
+first_open() { # bậc làm luồng dừng (J) → FIRST_*: bậc ✗ đầu tiên; không có thì bậc đang chờ (…); không có nữa thì bậc chưa chạy (·) đầu tiên
+  # (bậc "·" đứng TRƯỚC bậc ✗ là bậc đã trả về chờ chạy lại — vd publicUrl tạm bị trả về — không phải chỗ dừng)
+  local l rest st pf="" pr="" pp=""
+  FIRST_ID=""; FIRST_ST=""; FIRST_MANUAL=""
+  while IFS= read -r l; do
+    [ -n "$l" ] || continue
+    rest="${l#*	}"; st="${rest%%	*}"
+    case "$st" in ok) ;; fail) [ -n "$pf" ] || pf="$l" ;; running) [ -n "$pr" ] || pr="$l" ;; *) [ -n "$pp" ] || pp="$l" ;; esac
+  done <<EOF
+$(jsteps)
+EOF
+  l="${pf:-${pr:-$pp}}"; [ -n "$l" ] || return 0
+  rest="${l#*	}"; FIRST_ID="${l%%	*}"; FIRST_ST="${rest%%	*}"; FIRST_MANUAL="${l##*	}"
+  return 0
+}
+# online_follow — theo dõi luồng vừa gửi: hỏi GET /api/online, in mỗi thay đổi của từng bậc. Bậc đang chờ (chứng chỉ, connector…) khi app đã trả lời xong
+# → gửi "Kiểm lại" (POST /recheck) tới khi xong hoặc hết GC_ONLINE_TIMEOUT giây (mặc định 900).
+# Trả: 0 xong · 1 lỗi · 3 chờ mật khẩu chủ · 4 CNAME có sẵn cần xác nhận · 5 WAF phải làm tay · 6 token thấy nhiều tên miền (chọn)
+online_follow() {
+  local shown="$NL" l key end idle=0
+  FIRST_ID=""
+  end=$(( $(date +%s) + ${GC_ONLINE_TIMEOUT:-900} ))
+  while :; do
+    oapi GET /api/online
+    [ "$OCODE" = 200 ] || { online_err; return 1; }
+    while IFS= read -r l; do
+      [ -n "$l" ] || continue
+      key="$(printf '%s' "$l" | cut -f1-3)"
+      case "$shown" in *"$NL$key$NL"*) ;; *) shown="$shown$key$NL"; srow "$l" ;; esac
+    done <<EOF
+$(jsteps)
+EOF
+    if [ "$(jv busy)" = true ]; then sleep "${GC_ONLINE_POLL:-2}"; continue; fi
+    [ "$(jv flow.done)" = true ] && return 0
+    first_open
+    case "$FIRST_ST" in
+      fail)
+        [ "$(jv flow.needs)" = confirm ] && return 4
+        [ "$FIRST_ID" = waf ] && [ "$FIRST_MANUAL" = true ] && return 5
+        [ "$FIRST_ID" = token ] && [ -n "$(jv flow.choices.0)" ] && return 6
+        return 1 ;;
+      running)
+        [ "$FIRST_ID" = password ] && return 3 ;;
+      *) # không bậc nào ✗ / đang chờ mà luồng chưa xong (bất thường): kiểm lại một lần, không lặp (trần tần suất của app)
+        idle=$((idle + 1)); [ "$idle" -le 1 ] || { m on_failed "$(sname "${FIRST_ID:-?}")" >&2; FIRST_ID=""; return 1; } ;;
+    esac
+    [ "$(date +%s)" -lt "$end" ] || { m on_timeout "$(( ${GC_ONLINE_TIMEOUT:-900} / 60 ))" >&2; return 1; }
+    sleep "${GC_ONLINE_RETRY:-3}"
+    opost /api/online/recheck '{}'
+    case "$OCODE" in 2??) ;; *) online_err; return 1 ;; esac
+  done
+}
+YES=""; OVERWRITE=""; TOKSTDIN=""; WAFDONE=""; CFSUB=""
+online_send() { # online_send ĐƯỜNG "khoá":giá-trị,… — bắt đầu một luồng; 409 needs=urlChange → hỏi (có terminal) / --yes; needs=legacy → hướng dẫn di chuyển
+  local inner="$2" sep=""
+  [ -z "$inner" ] || sep=","
+  opost "$1" "{$inner}"
+  if [ "$OCODE" = 409 ] && [ "$(jv needs)" = urlChange ]; then
+    local to; to="$(jv to)"; case "$to" in ''|null) to="$(mn on_w_new)" ;; esac
+    m on_url_change "$(jv from)" "$to" "$(jv revokes)"
+    if [ -n "$YES" ] || ask_yn "$(mn on_url_ask)"; then opost "$1" "{$inner$sep\"confirmUrlChange\":true}"
+    else m on_url_stop >&2; return 1; fi
+  fi
+  if [ "$OCODE" = 409 ] && [ "$(jv needs)" = legacy ]; then m on_legacy >&2; return 1; fi
+  case "$OCODE" in 2??) return 0 ;; *) online_err; return 1 ;; esac
+}
+online_done() { # in kết quả sau khi luồng xong / chỉ còn mật khẩu; $1 = mã của online_follow → mã thoát
+  local rc="$1" u code
+  u="$(jv flow.url)"; [ -n "$u" ] || u="$(jv publicUrl)"
+  case "$rc" in
+    0)
+      if [ "$(jv flow.mode)" = off ]; then m on_off_done; [ -f "$EDGE_MARK" ] && m on_off_caddy; return 0; fi
+      m on_done "$u"; m on_done_studio "$u"; m on_done_mcp "$u"; return 0 ;;
+    3)
+      code="$(setup_code)"
+      if [ -n "$code" ]; then m on_pw_wait "$u" "$u" "$code"; else m on_pw_wait_nocode "$u" "$u"; fi
+      return 3 ;;
+    1) [ -z "$FIRST_ID" ] || m on_failed "$(sname "$FIRST_ID")" >&2 ;;
+  esac
+  return "$rc"
+}
+cf_token() { # API token Cloudflare → CFTOK (biến shell, không export): --token-stdin · GC_CF_TOKEN (rồi xoá khỏi môi trường) · hỏi ẩn trên terminal
+  CFTOK=""
+  if [ -n "$TOKSTDIN" ]; then IFS= read -r CFTOK || true
+  elif [ -n "${GC_CF_TOKEN:-}" ]; then CFTOK="$GC_CF_TOKEN"
+  elif tty_ok; then
+    oapi GET /api/online; [ -z "$(jv cloudflare.tokenLink)" ] || m cf_tok_link "$(jv cloudflare.tokenLink)"
+    read -r -s -p "$(mn cf_tok_ask)" CFTOK < /dev/tty || true; printf '\n' >&2
+  fi
+  unset GC_CF_TOKEN   # tiến trình con (curl, awk…) không thừa hưởng
+  CFTOK="${CFTOK%$'\r'}"
+  [ -n "$CFTOK" ] || { m cf_tok_none >&2; return 1; }
+  case "$CFTOK" in *[!A-Za-z0-9_.-]*) m cf_tok_bad >&2; CFTOK=""; return 1 ;; esac
+  [ "${#CFTOK}" -ge 20 ] || { m cf_tok_bad >&2; CFTOK=""; return 1; }
+}
+online_status() {
+  oapi GET /api/online
+  [ "$OCODE" = 200 ] || { online_err; return 1; }
+  local md dom u pend fm
+  md="$(jv mode)"; dom="$(jv domain)"; u="$(jv publicUrl)"; pend="$(jv publicUrlPending)"
+  m on_title "$md" "${dom:+ · $dom}"
+  if [ -n "$u" ]; then m on_url "$u"; else m on_url_none; fi
+  [ -z "$pend" ] || m on_url_pending "$pend"
+  fm="$(jv flow.mode)"
+  if [ -n "$fm" ]; then
+    if [ "$(jv busy)" = true ]; then m on_flow "$fm" "$(mn on_w_busy)"
+    elif [ "$(jv flow.done)" = true ]; then m on_flow "$fm" "$(mn on_w_done) $(jv flow.doneAt)"
+    else m on_flow "$fm" "$(mn on_w_stopped)"; fi
+    while IFS= read -r l; do [ -z "$l" ] || srow "$l"; done <<EOF
+$(jsteps)
+EOF
+  fi
+  local cad tun es=""
+  if [ "$(jv edge.caddyEnabled)" = true ]; then cad="$(mn on_w_on)"; else cad="$(mn on_w_off)"; fi
+  tun="$(jv edge.intent)"
+  if [ -n "$(jv edge.status.tunnel)" ] && [ "$tun" != off ]; then
+    if [ -n "$(jv edge.status.error)" ]; then es=" · $(jv edge.status.error)"
+    elif [ "$(jv edge.status.ready)" = true ]; then es=" · $(mn on_w_ready)"
+    elif [ "$(jv edge.status.running)" = true ]; then es=" · $(mn on_w_starting)"; fi
+  fi
+  m on_edge "$cad" "${tun:-off}" "$es"
+  [ "$(jv legacy.active)" = true ] && m on_legacy_note
+  m on_hint
+  return 0
+}
+online_go_caddy() { # genchibi online caddy <tên-miền>: bật edge Caddy nếu chưa (kiểm cổng 80/443, bật container) → POST /api/online/caddy → theo dõi
+  local d="$1"
+  [ "$MODE" = docker ] || { m caddy_native >&2; return 1; }
+  valid_host "$d" || { m bad_domain "$d" >&2; return 2; }
+  online_caddy flow
+  local i; for i in $(seq 1 "${GC_EDGE_WAIT:-60}"); do [ -S edge/run/caddy-admin.sock ] && break; [ "$i" = 1 ] && m on_wait_caddy; sleep 1; done
+  [ -S edge/run/caddy-admin.sock ] || { m on_caddy_nostart >&2; return 1; }
+  m on_start "caddy" "$d"
+  online_send /api/online/caddy "\"domain\":\"$d\"" || return 1
+  online_follow && a=0 || a=$?; online_done "$a"
+}
+online_go_cloudflare() { # genchibi online cloudflare [<tên-miền> | <tên-con.tên-miền>] [--sub tên] [--overwrite-dns] [--token-stdin] [--yes]
+  local d="${1:-}" zone="" sub="" alt="" rc
+  if [ -n "$d" ]; then
+    valid_host "$d" || { m bad_domain "$d" >&2; return 2; }
+    if [ -n "$CFSUB" ]; then zone="$d"; sub="$CFSUB"
+    elif [[ "${d#*.}" == *.* ]]; then zone="${d#*.}"; sub="${d%%.*}"; alt="$d"   # chibi.example.com → zone example.com, tên con chibi (không thấy zone đó → thử cả tên là zone)
+    else zone="$d"; sub="chibi"; fi
+  fi
+  cf_token || return 1
+  m on_start "cloudflare" "${sub:+$sub.}${zone:-?}"
+  while :; do
+    online_send /api/online/cloudflare "\"token\":\"$CFTOK\"${zone:+,\"zone\":\"$zone\"}${sub:+,\"sub\":\"$sub\"}" || return 1
+    online_follow && rc=0 || rc=$?
+    case "$rc" in
+      4) # CNAME / bản ghi có sẵn: không tự đè
+        if [ -n "$OVERWRITE" ] || ask_yn "$(mn cf_cname_ask)"; then
+          opost /api/online/cloudflare/confirm '{"overwriteCname":true}'
+          case "$OCODE" in 2??) ;; *) online_err; return 1 ;; esac
+          online_follow && rc=0 || rc=$?
+        else m cf_cname_stop "$zone" >&2; return 1; fi ;;
+      6) # token thấy nhiều tên miền, chưa chọn
+        local i=0 c pick=""
+        m cf_choices
+        while c="$(jv "flow.choices.$i")"; [ -n "$c" ]; do i=$((i + 1)); m cf_choice_row "$i" "$c"; done
+        if tty_ok; then read -r -p "$(mn cf_choice_ask)" pick < /dev/tty || pick=""; fi
+        case "$pick" in ''|*[!0-9]*) m cf_choice_stop >&2; return 1 ;; esac
+        zone="$(jv "flow.choices.$((pick - 1))")"; [ -n "$zone" ] || { m cf_choice_stop >&2; return 1; }
+        sub="${CFSUB:-chibi}"; YES=1; sleep 2; continue ;;
+      1)
+        if [ -n "$alt" ] && [ "$FIRST_ID" = token ]; then zone="$alt"; sub="${CFSUB:-chibi}"; alt=""; m cf_retry_zone "$zone" "$sub"; YES=1; sleep 2; continue; fi ;;
+    esac
+    break
+  done
+  [ "$rc" != 5 ] || { online_waf && rc=0 || rc=$?; }
+  CFTOK=""
+  online_done "$rc"
+}
+online_waf() { # WAF phải làm tay (token không có quyền WAF): cách sửa (biểu thức luật) đã in ở hàng ✗; có terminal → hỏi "đã làm chưa" rồi Kiểm lại
+  local rc
+  while :; do
+    if [ -n "$WAFDONE" ] || ask_yn "$(mn cf_waf_ask)"; then
+      WAFDONE=""
+      opost /api/online/recheck '{"confirmManual":"waf"}'
+      case "$OCODE" in 2??) ;; *) online_err; return 1 ;; esac
+      online_follow && rc=0 || rc=$?
+      [ "$rc" = 5 ] && continue
+      return "$rc"
+    fi
+    m cf_waf_stop >&2; return 1
+  done
+}
+online_go_proxy() {
+  local d="$1"
+  valid_host "$d" || { m bad_domain "$d" >&2; return 2; }
+  m on_start "proxy" "$d"
+  online_send /api/online/proxy "\"domain\":\"$d\"" || return 1
+  if [ -n "$(jv snippets.caddy)" ]; then
+    m on_proxy_snip; printf '\n# Caddy\n%s\n\n# nginx\n%s\n\n' "$(jv_raw snippets.caddy)" "$(jv_raw snippets.nginx)"
+  fi
+  online_follow && a=0 || a=$?; online_done "$a"
+}
+valid_host() { [[ "$1" =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,63}$ ]] && [ "${#1}" -le 253 ]; }
+online_usage() { m on_help; }
 online_cmd() {
-  case "${1:-}" in
-    --caddy) online_caddy ;;
-    --caddy-off) online_caddy_off ;;
-    ""|-h|--help) m online_help ;;
-    *) m bad_opt "$1" >&2; m online_help >&2; exit 1 ;;
+  local sub="${1:-}" pos="" a
+  [ $# -eq 0 ] || shift
+  case "$sub" in
+    --caddy) online_caddy; return ;;
+    --caddy-off) online_caddy_off; return ;;
+    -h|--help|help) online_usage; return 0 ;;
+    ""|status) online_status; return ;;
+  esac
+  while [ $# -gt 0 ]; do
+    a="$1"; shift
+    case "$a" in
+      --yes|-y) YES=1 ;;
+      --overwrite-dns) OVERWRITE=1 ;;
+      --token-stdin) TOKSTDIN=1 ;;
+      --waf-done) WAFDONE=1 ;;
+      --sub) CFSUB="${1:-}"; [ $# -eq 0 ] || shift
+        [[ "$CFSUB" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]] || { m bad_opt "--sub $CFSUB" >&2; return 2; } ;;
+      --token|--token=*|--api-token|--api-token=*) m cf_tok_argv >&2; return 2 ;;
+      -*) m bad_opt "$a" >&2; online_usage >&2; return 2 ;;
+      *) if [ -z "$pos" ]; then pos="$a"
+         elif [[ "$a" =~ ^[A-Za-z0-9_.-]{20,}$ ]]; then m cf_tok_argv >&2; return 2   # trông như token: từ chối, không dùng
+         else m bad_opt "$a" >&2; return 2; fi ;;
+    esac
+  done
+  case "$sub" in
+    caddy) [ -n "$pos" ] || { online_usage >&2; return 2; }; online_go_caddy "$pos" ;;
+    cloudflare|cf) online_go_cloudflare "$pos" ;;
+    proxy) [ -n "$pos" ] || { online_usage >&2; return 2; }; online_go_proxy "$pos" ;;
+    quick)
+      [ -z "$pos" ] || { m bad_opt "$pos" >&2; return 2; }
+      m on_start "quick" "*.trycloudflare.com"
+      online_send /api/online/quick "" || return 1
+      online_follow && a=0 || a=$?; online_done "$a" ;;
+    recheck)
+      opost /api/online/recheck "$([ -n "$WAFDONE" ] && printf '{"confirmManual":"waf"}' || printf '{}')"
+      case "$OCODE" in 2??) ;; *) online_err; return 1 ;; esac
+      WAFDONE=""; online_follow && a=0 || a=$?
+      [ "$a" != 5 ] || { online_waf && a=0 || a=$?; }
+      online_done "$a" ;;
+    off)
+      local body='{}'
+      if [ -n "$TOKSTDIN" ] || [ -n "${GC_CF_TOKEN:-}" ]; then cf_token || return 1; body="{\"token\":\"$CFTOK\"}"; fi   # có token → app dọn cả tunnel / DNS / WAF đã tạo ở Cloudflare
+      unset GC_CF_TOKEN
+      opost /api/online/off "$body"; CFTOK=""; body=""
+      case "$OCODE" in 2??) ;; *) online_err; return 1 ;; esac
+      online_follow && a=0 || a=$?; online_done "$a" ;;
+    migrate)
+      opost /api/online/migrate '{}'
+      if [ "$OCODE" = 404 ]; then m on_migrate_old >&2; return 1; fi
+      case "$OCODE" in 2??) m on_migrated; online_status ;; *) online_err; return 1 ;; esac ;;
+    *) m bad_opt "$sub" >&2; online_usage >&2; return 2 ;;
   esac
 }
 set_env() { # set_env KHOÁ GIÁ_TRỊ — sửa hoặc thêm dòng trong .env
@@ -519,11 +1038,11 @@ ensure_keys() {
 CFH() { if [ "$MODE" = docker ]; then echo /work; else echo "$TDIR"; fi; }   # thư mục nhà của cloudflared
 cf() { # chạy cloudflared cho các bước thiết lập
   mkdir -p "$TDIR/.cloudflared"; chmod 700 "$TDIR"
-  if [ "$MODE" = docker ]; then docker run --rm -i -u "$(id -u):$(id -g)" -e HOME=/work -v "$TDIR:/work" "$CF_IMAGE" ${1+"$@"}
+  if [ "$MODE" = docker ]; then dk run --rm -i -u "$(id -u):$(id -g)" -e HOME=/work -v "$TDIR:/work" "$CF_IMAGE" ${1+"$@"}
   else HOME="$TDIR" cloudflared --no-autoupdate ${1+"$@"}; fi
 }
 need_cf() {
-  if [ "$MODE" = docker ]; then docker image inspect "$CF_IMAGE" >/dev/null 2>&1 || docker pull -q "$CF_IMAGE" >/dev/null || { m cf_pull_fail "$CF_IMAGE" >&2; exit 1; }
+  if [ "$MODE" = docker ]; then dk image inspect "$CF_IMAGE" >/dev/null 2>&1 || dk pull -q "$CF_IMAGE" >/dev/null || { m cf_pull_fail "$CF_IMAGE" >&2; exit 1; }
   elif ! command -v cloudflared >/dev/null; then
     m cf_need >&2
     exit 1
@@ -776,7 +1295,7 @@ Nối agent vào gen-chibi (MCP, giao thức 2025-06-18). Sau khi nối, dặn a
 
 Địa chỉ
   Trên máy này   $u${hdr:+   (header: $hdr)}
-  Qua Internet   ${link:-chưa mở — genchibi expose <tên-miền> | --quick}
+  Qua Internet   ${link:-chưa mở — genchibi online --help (OAuth: <địa-chỉ>/mcp)}
   stdio          genchibi mcp
 
 Claude Code      claude mcp add -s user --transport http gen-chibi $target$cc_hdr
@@ -799,7 +1318,7 @@ Connect an agent to gen-chibi (MCP, protocol 2025-06-18). After connecting, tell
 
 Address
   This machine   $u${hdr:+   (header: $hdr)}
-  Internet       ${link:-not open — genchibi expose <domain> | --quick}
+  Internet       ${link:-not open — genchibi online --help (OAuth: <address>/mcp)}
   stdio          genchibi mcp
 
 Claude Code      claude mcp add -s user --transport http gen-chibi $target$cc_hdr
@@ -850,8 +1369,8 @@ genchibi — quản lý gen-chibi ($HOME_DIR, chế độ $MODE)
   logs                              xem log
   backup | restore <tệp>            sao lưu / khôi phục dữ liệu
   mcp                               cầu MCP (stdio) cho agent: claude mcp add gen-chibi -- genchibi mcp
-  online --caddy | --caddy-off      bật / tắt edge Caddy (cổng 80/443, Docker); phần còn lại: Studio › Hệ thống › Go online
-  expose <tên-miền> | --quick       (cũ, thay bằng online) mở MCP ra Internet qua Cloudflare Tunnel (--off, --rotate)
+  online [caddy|cloudflare|proxy|quick|recheck|off]   ra Internet một bước: tên miền + HTTPS + MCP (genchibi online --help)
+  expose <tên-miền> | --quick       (cũ, thay bằng online, bỏ ở v0.22) MCP qua Cloudflare Tunnel bằng cloudflared login
   link [--check]                    in link MCP + lệnh nối agent
   agent connect|guide|tools|skill   bootstrap cho agent mọi hãng: cấu hình nối, hướng dẫn, schema tool, cài skill
   token [giá-trị|--clear]           đặt token GitHub (repo private) cho tự cập nhật; bỏ trống = nhập ẩn
@@ -867,8 +1386,8 @@ genchibi — manage gen-chibi ($HOME_DIR, mode $MODE)
   logs                              show logs
   backup | restore <file>           back up / restore data
   mcp                               MCP bridge (stdio) for agents: claude mcp add gen-chibi -- genchibi mcp
-  online --caddy | --caddy-off      turn the edge Caddy on / off (ports 80/443, Docker); the rest: Studio › System › Go online
-  expose <domain> | --quick         (legacy, replaced by online) open MCP via Cloudflare Tunnel (--off, --rotate)
+  online [caddy|cloudflare|proxy|quick|recheck|off]   go online in one step: domain + HTTPS + MCP (genchibi online --help)
+  expose <domain> | --quick         (legacy, replaced by online, removed in v0.22) MCP via Cloudflare Tunnel with cloudflared login
   link [--check]                    print the MCP link + agent connect commands
   agent connect|guide|tools|skill   bootstrap for agents of any vendor: connect config, guide, tool schema, skill install
   token [value|--clear]             set the GitHub token (private repo) for auto-update; empty = hidden prompt
@@ -885,7 +1404,7 @@ case "${1:-help}" in
   logs) logs ;; backup) backup ;; restore) shift; restore "${1:-}" ;; uninstall) uninstall ;;
   mcp) mcp ;; open) open_ui ;; version) status ;; password) password_cmd ;;
   expose) shift; expose ${1+"$@"} ;; link) shift; link_cmd ${1+"$@"} ;;
-  online) shift; online_cmd "${1:-}" ;;
+  online) shift; online_cmd ${1+"$@"}; exit $? ;;
   token|github-token) shift; token_cmd "${1:-}" ;;
   lang|language) shift; lang_cmd "${1:-}" ;;
   agent) shift; agent_cmd ${1+"$@"} ;;

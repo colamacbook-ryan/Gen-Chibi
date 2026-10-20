@@ -173,19 +173,29 @@ Bảng kiểu Data Console (desktop): mỗi hàng một âm — **ID âm** (tên
 - **Giọng của tác phẩm → phòng làm phim**: Thư viện không chốt giọng cho tác phẩm (đó là việc của Tạo tác). Ở đây có cột **Nhân vật dùng vai** (nhân vật trong dự án đang lọc dùng vai đó) và nút **Chốt giọng cho tác phẩm › phòng làm phim** ở đầu trang: dự án có đúng một tác phẩm thì mở thẳng tab *Giọng & âm thanh* của nó, nhiều hơn thì tới danh sách tác phẩm của dự án.
 - **Chưa có key Google**: vẫn xem và nghe được giọng máy; trang nhắc và có nút tới *Cài đặt AI › Giọng AI*. Bản xem thử (không máy chủ) chỉ có giọng máy.
 ## 6. Cho agent AI (MCP) — agent của hãng nào cũng dùng được
-- Chạy **`genchibi agent connect`**: in sẵn cấu hình nối cho Claude Code, Claude app, Cursor, Gemini CLI, Codex CLI và lệnh `curl` (không in token ra màn hình).
+- Chạy **`genchibi agent connect`**: in sẵn cấu hình nối cho Claude Code, Claude app, Cursor, Gemini CLI, Codex CLI và lệnh `curl` (không in token ra màn hình). Từ v0.21 bản cài nào cũng có token chủ, nên agent trên máy này dùng HTTP phải gửi `Authorization: Bearer` — agent đã nối trước v0.21 mà không có token thì nối lại bằng các cấu hình này; `genchibi mcp` (stdio) tự đọc token.
 - Muốn agent "thuộc bài" từ đầu: **`genchibi agent skill claude`** (hoặc `cursor`, `gemini`, `codex`, `generic`) — cài hướng dẫn thành skill / `AGENTS.md` / `GEMINI.md` vào thư mục bạn đang đứng (hoặc `--dir`). Đã có `AGENTS.md` / `GEMINI.md` của riêng bạn thì lệnh dừng lại, không ghi đè (thêm `--force` nếu muốn thay).
 - Dặn agent: **"gọi `start_here` trước"**. Agent sẽ nhận trạng thái Thư viện, 11 luật vàng, 10 chủ đề hướng dẫn (nhân vật, linh kiện, trang bị, cảnh, gói động tác, âm thanh, hoạt ảnh, phim, gói dự án, hệ thống), rồi làm theo từng bước có ví dụ chạy được.
 - 53 tool; agent đi qua **cùng cổng kiểm** với Studio. Lỗi trả về có mã (`[VALIDATION_FAILED]`, `NOT_FOUND`…) và chỉ đúng trường sai — agent tự sửa được.
 - Agent không có MCP client vẫn dùng được qua HTTP thuần (xem `agent/GUIDE.md` mục 1).
 
+### Ra Internet: tên miền, HTTPS và MCP một bước (beta, v0.21)
+Đưa app lên `https://tên-miền` (Studio, sau mật khẩu chủ) và `https://tên-miền/mcp` (cho agent) mà không sửa `.env`, Caddyfile hay DNS bằng tay. Mở **Studio › Hệ thống › Go online**, hoặc dùng `genchibi online` trên máy chủ — hai nơi chạy cùng các bậc và hiện từng bậc ✓ / ✗ kèm cách sửa.
+
+1. **Chọn đường.** *VPS có IP công khai* (đường A): tạo bản ghi A `tên-miền → IP máy`, mở cổng 80 và 443, rồi `genchibi online caddy tên-miền` (Docker; edge Caddy lấy chứng chỉ HTTPS). *Máy nhà, sau router, hoặc 80/443 bận* (đường B): tên miền phải ở Cloudflare; tạo API token bằng link điền sẵn mà app đưa (Account › Cloudflare Tunnel › Edit, Zone › DNS › Edit, Zone › Zone › Read, tuỳ chọn Zone › WAF › Edit; TTL ngắn), rồi `genchibi online cloudflare tên-miền` và dán token khi được hỏi (ẩn; không có terminal: `GC_CF_TOKEN`, không bao giờ là đối số). *Đã có reverse proxy riêng:* `genchibi online proxy tên-miền` in đoạn cấu hình để dán. *Chỉ thử:* `genchibi online quick` cho link tạm `*.trycloudflare.com`.
+2. **Theo dõi từng bậc.** Tên miền / DNS, edge, cổng, chứng chỉ, địa chỉ công khai, **MCP từ Internet** (thử bằng agent `Claude-User` của claude.ai, nên Cloudflare chặn bot sẽ lộ ra ở đây), mật khẩu chủ. Bậc ✗ in cách sửa; sửa xong chạy `genchibi online recheck` (hoặc bấm *Kiểm lại*).
+3. **Mật khẩu chủ.** Trên VPS mới, bậc cuối chờ mật khẩu: mở `https://tên-miền/setup`, nhập mã setup (dòng cuối của trình cài; `genchibi status` in lại), đặt mật khẩu, rồi `genchibi online recheck`.
+4. **Xong:** lệnh in `https://tên-miền` và `https://tên-miền/mcp`. Đọc tiếp bên dưới để nối claude.ai.
+
+Làm hết lúc cài cũng được: `--domain tên-miền` (đường A) hoặc `--domain tên-miền --cloudflare` (đường B) — xem [README › Ra Internet](../README.vi.md#ra-internet-tên-miền-https-mcp-một-bước). Thôi ra Internet: `genchibi online off` (có `GC_CF_TOKEN` thì app dọn cả tunnel, bản ghi DNS và luật WAF nó đã tạo). Máy cấu hình tay trước v0.21 (`GC_PUBLIC_URL` / `GC_ALLOWED_HOSTS` trong `.env`) vẫn chạy; `genchibi online migrate` chuyển sang Go online.
+
 ### Nối claude.ai bằng một địa chỉ `https://tên-miền/mcp` (OAuth, từ v0.19)
 Agent tự tìm cách đăng nhập, tự đăng ký, còn bạn chỉ cần bấm **Cấp phép** một lần trên trang web của app. Không phải chép khoá hay dán token vào agent.
 
-1. **Đặt địa chỉ công khai.** Trong `.env` của bản cài, ghi `GC_PUBLIC_URL=https://tên-miền`: đúng địa chỉ mở được từ Internet, không có `/` ở cuối, không ghi cổng. Thêm `GC_API_TOKEN` (bắt buộc khi mở ra ngoài) và `GC_ALLOWED_HOSTS=tên-miền`, rồi chạy `genchibi restart`. Nếu dùng `genchibi expose tên-miền`, lệnh tự đặt cả ba và tự mở đúng các đường cần thiết qua Cloudflare Tunnel. Bản cài đã chạy `expose` trước v0.19 thì **chạy lại `genchibi expose tên-miền` một lần** để tunnel mở thêm các đường OAuth.
+1. **Ra Internet trước** (mục ở trên): Go online đặt địa chỉ công khai và kiểm các đường máy từ ngoài vào. Máy còn cấu hình tay trong `.env` (`GC_PUBLIC_URL` đúng địa chỉ Internet, không `/` ở cuối, không cổng; `GC_ALLOWED_HOSTS`) vẫn chạy.
 2. **Tự đặt proxy (Caddy, nginx…) thì mở các đường cho máy**, xem *Đứng sau proxy và trang đăng nhập riêng* bên dưới.
 3. **Thêm connector trên claude.ai:** vào *Customize › Connectors › Add custom connector*, dán `https://tên-miền/mcp`, bấm **Add**, rồi bấm **Connect**. Để trống *Advanced settings*: không nhập Client ID / Secret, app tự đăng ký.
-4. **Cấp phép.** Trình duyệt mở trang **Cấp phép kết nối agent** của app. Xem tên agent và **địa chỉ nó sẽ quay về** (phải là `claude.ai` hoặc `claude.com`), chọn mức quyền, rồi bấm **Cấp phép**. Trình duyệt này đã đăng nhập Studio thì trang tự dùng token đó; nếu chưa, dán token chủ máy (`GC_API_TOKEN`) vào ô trên trang.
+4. **Cấp phép.** Trình duyệt mở trang **Cấp phép kết nối agent** của app. Xem tên agent và **địa chỉ nó sẽ quay về** (phải là `claude.ai` hoặc `claude.com`), chọn mức quyền, rồi bấm **Cấp phép**. Trình duyệt này đã đăng nhập Studio (mật khẩu chủ) thì trang dùng phiên đó; chưa thì trang mời đăng nhập (máy dùng token chủ vẫn dùng token được).
 5. **Mở một phiên mới** trên claude.ai hoặc Claude Code: tool gen-chibi sẽ xuất hiện. Phiên đang mở không tự nạp connector mới.
 
 | Mức quyền | Agent làm được |
@@ -222,7 +232,7 @@ tên-miền {
 ```
 
 - **Mạng:** dùng cổng 443. Tên miền phải có bản ghi A (IPv4 công khai). Không chuyển hướng `tên-miền` ↔ `www.tên-miền`, vì chuyển hướng làm rơi header `Authorization`.
-- **Cloudflare:** *Bot Fight Mode*, *Block AI bots* và *AI Crawl Control* trả 403 cho agent `Claude-User`. Tạo một luật WAF **Skip** cho dải IP của Anthropic `160.79.104.0/21`, hoặc tắt các tính năng đó cho các đường máy ở trên.
+- **Cloudflare:** *Bot Fight Mode*, *Block AI bots* và *AI Crawl Control* trả 403 cho agent `Claude-User`. Đường B của Go online tự tạo luật WAF **Skip** cho các đường máy khi token có quyền *Zone › WAF › Edit* (không có thì in luật để bạn thêm); Bot Fight Mode gói Free không skip được bằng luật — hãy tắt nó. Tự cấu hình: tạo luật Skip cho dải IP của Anthropic `160.79.104.0/21`, hoặc tắt các tính năng đó cho các đường máy ở trên.
 - **Cloudflare + giới hạn tốc độ:** app giới hạn đăng ký / thử sai theo IP khách. Mặc định chỉ đọc mục cuối của `X-Forwarded-For` (và chỉ khi kết nối tới app đến từ loopback hoặc mạng riêng). Đứng sau Cloudflare thì thêm `GC_CLIENT_IP_HEADER=cf-connecting-ip` vào `.env` (hoặc `x-real-ip`) để app thấy IP thật của khách thay vì IP của proxy.
 - **Tự thêm service vào Docker** (Caddy, trang đăng nhập…): ghi vào `docker-compose.override.yml` cạnh `docker-compose.yml`. Docker Compose tự gộp hai file, còn `genchibi update` không bao giờ đụng tới file override.
 
@@ -234,7 +244,7 @@ tên-miền {
 - **Thêm connector trên claude.ai báo lỗi, hoặc không thấy trang Cấp phép?** Kiểm theo thứ tự:
   1. `curl -i -X POST https://tên-miền/mcp -H 'Content-Type: application/json' -d '{}'` phải trả **401** kèm `WWW-Authenticate: Bearer resource_metadata="…"`. Nếu ra trang đăng nhập, 302 hay 403 thì proxy hoặc Cloudflare đang chặn (xem *Đứng sau proxy*).
   2. `curl https://tên-miền/.well-known/oauth-authorization-server` phải trả JSON có `issuer` đúng `https://tên-miền`.
-  3. `GC_PUBLIC_URL` phải khớp **từng chữ** với địa chỉ đã dán vào claude.ai.
+  3. Địa chỉ công khai (`genchibi online` in ra; `GC_PUBLIC_URL` ở máy cấu hình tay) phải khớp **từng chữ** với địa chỉ đã dán vào claude.ai.
 
   Nếu đổi địa chỉ, xoá connector rồi thêm lại, vì claude.ai nhớ kết quả dò khoảng 5 phút.
 - **Có trang đăng nhập riêng trước app (do agent khác dựng) thì cập nhật có mất không?** Không mất, miễn là trang đó nằm **ngoài** thư mục cài: Caddyfile, service riêng, hoặc `docker-compose.override.yml`. Sẽ mất nếu nó được ghi vào `docker-compose.yml` hay sửa file trong `current/`: mỗi lần cập nhật hoặc khởi động, genchibi chép lại `docker-compose.yml` gốc, còn bản mới được giải nén vào thư mục riêng.

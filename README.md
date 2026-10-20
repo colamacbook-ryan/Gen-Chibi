@@ -19,9 +19,10 @@
 curl -fsSL https://raw.githubusercontent.com/colamacbook-ryan/Gen-Chibi/main/install.sh | bash
 ```
 
-- Needs **Docker** running (macOS: Docker Desktop) or **Node ≥ 18** (`--native`).
+- Runs in **Docker**; on Linux the installer installs Docker itself when it is missing (get.docker.com) and keeps going in the same session even before your login picks up the `docker` group (log out and back in later to use `genchibi` without sudo). macOS: Docker Desktop, or **Node ≥ 18** with `--native`.
 - Installs to `~/gen-chibi` by default, port `7480`, reachable from this machine only. Open **http://localhost:7480**.
-- Options: `--dir <folder>` · `--port <port>` · `--native` · `--version vX.Y.Z` · `--lang en|vi`.
+- **First sign-in:** the Studio asks for the owner password, also on this machine. The installer's last line prints a one-time **setup code**; easier: run `genchibi open`, which opens the setup page with the code filled in. Choose a password of at least 12 characters (a memorable phrase works well); the browser remembers this device for 30 days. Forgot it: `genchibi password` on the server.
+- Options: `--dir <folder>` · `--port <port>` · `--native` · `--version vX.Y.Z` · `--lang en|vi` · `--domain <name>` · `--cloudflare` (see [Go online](#go-online-domain-https-mcp-in-one-step)).
 
 ## Language
 
@@ -49,8 +50,46 @@ genchibi backup | restore <file>
 genchibi mcp               # MCP stdio bridge for agents
 genchibi token             # set the GitHub token (private repo), hidden input
 genchibi lang [en|vi]      # show / set the language (CLI + Studio default)
-genchibi open | uninstall
+genchibi open              # open the Studio (first time: the owner-password setup page, code filled in)
+genchibi password          # set / reset the owner password
+genchibi online …          # go online: domain + HTTPS + MCP (see below)
+genchibi agent connect     # connect configs for agents (never prints the token)
+genchibi uninstall
 ```
+
+## Go online (domain, HTTPS, MCP) in one step
+
+**Beta** — both paths are tested against simulated Cloudflare / DNS / Caddy, not yet on a real VPS or a real Cloudflare account.
+
+You do exactly **one** thing outside the app — point an A record at the machine (**path A**), **or** create one Cloudflare API token (**path B**) — and within a few minutes you get `https://your-domain` (the Studio, behind the owner password) and `https://your-domain/mcp` that claude.ai can connect to. No `.env`, Caddyfile, DNS or dashboard editing by hand.
+
+| Machine | You do | Command / where to click |
+|---|---|---|
+| **VPS with a public IP** (path A) | Create an A record `chibi.example.com → the machine's IP` | at install: `curl -fsSL https://raw.githubusercontent.com/colamacbook-ryan/Gen-Chibi/main/install.sh \| bash -s -- --domain chibi.example.com` · later: `genchibi online caddy chibi.example.com` |
+| **Home machine / behind a router / ports 80-443 busy** (path B) | Create a Cloudflare API token | at install: `… \| bash -s -- --domain chibi.example.com --cloudflare` · later: `genchibi online cloudflare chibi.example.com`, or **Studio › System › Go online › Cloudflare** |
+| **You already run a reverse proxy** | Keep it | `genchibi online proxy chibi.example.com` (prints the config to paste, then checks from outside) |
+| (trial) | nothing | `genchibi online quick` — a temporary `*.trycloudflare.com` link that changes on every restart (not for long-term OAuth) |
+
+**Prerequisites (checked by the app, shown as ✓ / ✗ with the fix):**
+- Path A: the machine has a public IP; ports **80 and 443** are open in the provider's firewall (security group) and in `ufw`; no other service holds 80/443; Docker mode (the edge Caddy runs in its own container `gen-chibi-edge`).
+- Path B: the domain is on Cloudflare (Cloudflare nameservers, zone `active`, full setup); the account can use Cloudflare Tunnel (you may have to enable Zero Trust on the free plan once).
+- Both: Cloudflare's *Bot Fight Mode* / *Block AI bots* can block claude.ai — the "MCP from the Internet" step tests with the `Claude-User` agent and tells you what to switch off.
+
+**The Cloudflare API token (path B):** *Studio › System › Go online* and `genchibi online cloudflare` show a link that opens Cloudflare's token page with the permissions filled in. The token needs **Account › Cloudflare Tunnel › Edit**, **Zone › DNS › Edit**, **Zone › Zone › Read**, and optionally **Zone › WAF › Edit** (then the app adds the Skip rule that lets claude.ai through; without it the app shows the rule to add by hand). Set a short **TTL** (a day is plenty): the app deletes the token from memory when it is done (it keeps it, encrypted, only if you ask), and the running tunnel does not need it. The token is **never** accepted on the command line: in a terminal it is asked for hidden; without a terminal set `GC_CF_TOKEN` in the environment (or pipe it to `--token-stdin`).
+
+**Step by step, as you watch:** `genchibi online` prints every step (domain / DNS, edge, ports, certificate, public address, MCP from the Internet, owner password) with ✓ / ✗ and the fix for a ✗, then `https://your-domain` and `https://your-domain/mcp`. On a fresh VPS the last step is the owner password: open `https://your-domain/setup`, enter the setup code (printed by the installer and by `genchibi status`), then `genchibi online recheck`.
+
+```
+genchibi online                         # status: mode, address, each step, edge
+genchibi online caddy <domain>          # path A (Docker): turns on the edge Caddy (ports 80/443), HTTPS
+genchibi online cloudflare <domain>     # path B: chibi.example.com, or example.com (+ --sub name; default chibi)
+genchibi online proxy <domain> | quick  # your own proxy | temporary link
+genchibi online recheck [--waf-done]    # continue after fixing a step
+genchibi online off                     # go offline (with GC_CF_TOKEN: also removes the tunnel / DNS / WAF rule the app made)
+genchibi online migrate                 # machines set up by hand in .env (GC_PUBLIC_URL / GC_ALLOWED_HOSTS) before v0.21
+```
+
+Changing the public address signs out agents connected through OAuth (they must connect again); the command asks first (`--yes` without a terminal). Exit code `3` means "online, waiting for the owner password". `genchibi expose` (the v0.20 way, with a browser login to Cloudflare) still works in this version and is removed in v0.22.
 
 ## Core frame (Workshop)
 Every asset is built from one **theme-neutral core frame** (like the greybox of game development):
@@ -84,6 +123,8 @@ genchibi agent skill claude            # install the guide as a skill (cursor | 
 genchibi agent guide film              # read one guide topic · genchibi agent tools --format openai  (function-calling schema)
 ```
 
+Every install has an **owner token** since v0.21 (`GC_API_TOKEN` in `.env`, or `data/owner-token`), so agents on this machine that talk HTTP need the `Authorization: Bearer` header — `genchibi agent connect` prints configs that say where to read it; agents connected before v0.21 without a token must reconnect this way. `genchibi mcp` (stdio) reads the token itself.
+
 Once connected, an agent **calls `start_here` first**, then `get_guide` for the job at hand. The guidance lives in **one source**:
 [`agent/GUIDE.md`](agent/GUIDE.md) + `agent/workflows/*.md` + `agent/examples/*.json`. Written in English, model-neutral.
 Every example is run for real through the gates in CI: the "agent from zero" test walks the whole flow using only the guide, over plain JSON-RPC.
@@ -105,16 +146,16 @@ Errors carry stable codes: `[VALIDATION_FAILED]`, `NOT_FOUND`… plus `structure
 Creating a part: `get_part_spec` → draw (safe SVG, colour tokens) → `preview_part` (inspection bench) → `save_part`. The AI assistant in the Studio (the right-hand dock in every area; in Create it is the AI director) uses exactly this tool set — every write path goes through one gate (see `docs/PART-WORKFLOW.md` section 6).
 
 ### Connect claude.ai with `https://your-domain/mcp` — OAuth, just click Authorize (v0.19)
-The app is its own OAuth 2.1 authorization server, with RFC 9728 / 8414 discovery, dynamic client registration (DCR), PKCE S256 and expiring tokens stored as hashes. To connect: set `GC_PUBLIC_URL=https://your-domain`, open claude.ai *Customize › Connectors › Add custom connector*, paste `https://your-domain/mcp` and click **Connect**. The app's **Authorize** page appears so you can pick a permission level (`mcp:read` · `mcp:write` · `mcp:owner`), confirmed with the owner token. Manage and revoke in **Studio › System › Agent connections**. If you use a proxy or your own login page, the machine routes (`/mcp`, `/.well-known/oauth-*`, `/oauth/register|token|revoke`) must go straight to the app. A sample Caddy config is in `docs/Caddyfile.oauth.example`; Cloudflare handling and common errors are in `docs/USER-GUIDE.md` › section 6. Installs that ran `genchibi expose` before v0.19 should run that command once more.
+The app is its own OAuth 2.1 authorization server, with RFC 9728 / 8414 discovery, dynamic client registration (DCR), PKCE S256 and expiring tokens stored as hashes. To connect: go online first ([above](#go-online-domain-https-mcp-in-one-step) — it sets the public address), open claude.ai *Customize › Connectors › Add custom connector*, paste `https://your-domain/mcp` and click **Connect**. The app's **Authorize** page appears so you can pick a permission level (`mcp:read` · `mcp:write` · `mcp:owner`); it uses your Studio sign-in (owner password), or asks you to sign in. Manage and revoke in **Studio › System › Agent connections**. If you use your own proxy or login page, the machine routes (`/mcp`, `/.well-known/oauth-*`, `/oauth/register|token|revoke`) must go straight to the app — `genchibi online proxy <domain>` prints that config. A sample Caddy config is in `docs/Caddyfile.oauth.example`; Cloudflare handling and common errors are in `docs/USER-GUIDE.md` › section 6.
 
-### Expose MCP to the Internet — one command, one link
-You need a domain whose DNS is managed by Cloudflare (the free plan is enough).
+### Legacy: `genchibi expose` — replaced by `genchibi online`, removed in v0.22
+Machines that already use it keep working in this version. New setups: use [Go online](#go-online-domain-https-mcp-in-one-step) (no browser login to Cloudflare, the Studio goes online too, behind the owner password).
 
 ```bash
 genchibi expose chibi.example.com   # the first time, opens a browser once to log in to Cloudflare
 ```
 
-The command does everything: creates a Cloudflare Tunnel, points DNS, **lets only `/mcp` and the OAuth routes through** (the Studio stays on your machine), generates a key, turns on the token for the Studio, restarts, tests a call over the Internet, then prints the **MCP link**:
+The command creates a Cloudflare Tunnel, points DNS, **lets only `/mcp` and the OAuth routes through** (the Studio stays on your machine), generates a key, restarts, tests a call over the Internet, then prints the **MCP link**:
 
 ```
 https://chibi.example.com/mcp/<key>
@@ -127,7 +168,7 @@ An agent pastes the link and is connected — no header needed:
 
 The link grants MCP access only (it cannot open the Studio or settings). Other commands: `genchibi link` (print the link again) · `genchibi link --check` · `genchibi expose --rotate` (change the key; the old link stops working immediately) · `genchibi expose --off` · `genchibi expose --quick` (temporary `*.trycloudflare.com` link, no account needed, changes on every restart). Docker: the tunnel runs as the `gen-chibi-tunnel` container and comes back up with the app. Node: needs `cloudflared` in PATH.
 
-Manual exposure (another tunnel, LAN): set `GC_API_TOKEN` and `GC_ALLOWED_HOSTS` in `.env`. With a token, every `/api` and `/mcp` call needs `Authorization: Bearer <token>`; without a token, the server refuses every request that comes through a tunnel / proxy.
+Your own tunnel or proxy, LAN: use `genchibi online proxy <domain>` (or set `GC_BIND` and `GC_ALLOWED_HOSTS` in `.env` for a LAN). Since v0.21 the app never trusts a request because a proxy header is missing: the Studio always needs the owner password (sign-in), and scripts calling `/api` or `/mcp` send `Authorization: Bearer <owner token>`.
 
 ### Agents update the app themselves
 MCP tools `get_app_version` (running version, latest version on GitHub, release notes), `update_app` (downloads the new version, checks SHA-256, backs up, restarts; if the new version fails, it returns to the old one automatically), `rollback_app` (needs `confirm: "ROLLBACK"`).

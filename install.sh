@@ -6,6 +6,8 @@
 #   curl -fsSL https://raw.githubusercontent.com/colamacbook-ryan/Gen-Chibi/main/install.sh | bash -s -- --lang vi
 # Options: --dir <folder> (default ~/gen-chibi) · --port <port> (7480) · --native (run with Node, no Docker)
 #          --version vX.Y.Z (default: latest) · --lang en|vi (default en; or GC_LANG=vi)
+#          --domain <name> (go online: path A — the domain's A record → this machine, edge Caddy + HTTPS, Docker)
+#          --domain <name> --cloudflare (path B — Cloudflare Tunnel with an API token: asked hidden in a terminal, otherwise GC_CF_TOKEN; never an argument)
 # Private repo: set GC_GITHUB_TOKEN=<fine-grained token, Contents: Read-only> (see README). The token goes into .env and is never printed.
 # © 2026 Gen Labs — All rights reserved.
 set -euo pipefail
@@ -15,7 +17,7 @@ DIR="${GC_DIR:-$HOME/gen-chibi}"
 PORT="${GC_PORT:-7480}"
 MODE=""
 WANT=""
-LANG_ARG=""; HAS_LANG_ARG=""; BADOPT=""; HELP=""
+LANG_ARG=""; HAS_LANG_ARG=""; BADOPT=""; HELP=""; DOMAIN=""; CF=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --dir) DIR="$2"; shift 2 ;;
@@ -25,6 +27,9 @@ while [ $# -gt 0 ]; do
     --version) WANT="$2"; shift 2 ;;
     --lang) LANG_ARG="${2:-}"; HAS_LANG_ARG=1; if [ $# -gt 1 ]; then shift 2; else shift; fi ;;
     --lang=*) LANG_ARG="${1#--lang=}"; HAS_LANG_ARG=1; shift ;;
+    --domain) DOMAIN="${2:-}"; if [ $# -gt 1 ]; then shift 2; else shift; fi ;;
+    --domain=*) DOMAIN="${1#--domain=}"; shift ;;
+    --cloudflare) CF=1; shift ;;
     -h|--help) HELP=1; shift ;;
     *) [ -n "$BADOPT" ] || BADOPT="$1"; shift ;;
   esac
@@ -36,7 +41,7 @@ B=$'\033[1m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; N=$'\033[0m'
 # Hai bảng câu chữ _en / _vi (chuỗi printf, %s = đối số). bash 3.2: không mảng kết hợp; "$@" viết ${1+"$@"} (rỗng dưới set -u).
 _en() {
   case "$1" in
-    usage) F="gen-chibi installer (Linux, macOS)\n  curl -fsSL https://raw.githubusercontent.com/colamacbook-ryan/Gen-Chibi/main/install.sh | bash\n  curl -fsSL https://raw.githubusercontent.com/colamacbook-ryan/Gen-Chibi/main/install.sh | bash -s -- --lang vi\nOptions: --dir <folder> (default ~/gen-chibi) · --port <port> (7480) · --native (run with Node, no Docker)\n         --docker · --version vX.Y.Z (default: latest) · --lang en|vi (default en; or GC_LANG=vi)\nPrivate repo: set GC_GITHUB_TOKEN=<fine-grained token, Contents: Read-only> (see README). The token goes into .env and is never printed." ;;
+    usage) F="gen-chibi installer (Linux, macOS)\n  curl -fsSL https://raw.githubusercontent.com/colamacbook-ryan/Gen-Chibi/main/install.sh | bash\n  curl -fsSL https://raw.githubusercontent.com/colamacbook-ryan/Gen-Chibi/main/install.sh | bash -s -- --lang vi\n  curl -fsSL https://raw.githubusercontent.com/colamacbook-ryan/Gen-Chibi/main/install.sh | bash -s -- --domain chibi.example.com [--cloudflare]\nOptions: --dir <folder> (default ~/gen-chibi) · --port <port> (7480) · --native (run with Node, no Docker)\n         --docker · --version vX.Y.Z (default: latest) · --lang en|vi (default en; or GC_LANG=vi)\n         --domain <name>: go online after installing (beta) — path A: point the domain's A record at this machine (Docker, ports 80/443 open)\n         --domain <name> --cloudflare: path B (beta) — Cloudflare Tunnel; the API token is asked hidden, or read from GC_CF_TOKEN (never an argument)\nPrivate repo: set GC_GITHUB_TOKEN=<fine-grained token, Contents: Read-only> (see README). The token goes into .env and is never printed." ;;
     bad_opt) F="Unknown option: %s" ;;
     os_unsupported) F="Unsupported operating system %s (Linux, macOS)." ;;
     need_curl) F="curl is required." ;;
@@ -71,17 +76,35 @@ _en() {
     starting) F="Starting…" ;;
     running) F="✓ gen-chibi %s is running" ;;
     sum_studio) F="  Studio:    %s%s%s" ;;
-    sum_cmds) F="  Commands:  genchibi start|stop|status|update|logs|backup|restore|mcp|expose|link|lang|uninstall" ;;
+    sum_cmds) F="  Commands:  genchibi start|stop|status|update|logs|backup|restore|mcp|online|open|password|lang|uninstall" ;;
     sum_mcp) F="  MCP:       claude mcp add gen-chibi -- %s mcp" ;;
-    sum_mcp_net) F="  MCP over the Internet: genchibi expose <domain>  (prints the link for agents)" ;;
+    sum_mcp_net) F="  Go online (domain + HTTPS + MCP): genchibi online --help, or Studio › System › Go online" ;;
     sum_update) F="  Auto-update: on (turn off in Studio › System › Updates)" ;;
     sum_lang) F="  Language:  English (Vietnamese: genchibi lang vi, or the language switch in the Studio)" ;;
     no_answer) F="gen-chibi is not answering on port %s yet. See: genchibi logs" ;;
+    dom_bad) F="Invalid domain: %s (a name like chibi.example.com — no IP, no port, no *)" ;;
+    cf_need_domain) F="--cloudflare goes with --domain <name>, e.g. --domain chibi.example.com --cloudflare" ;;
+    cf_tok_none) F="--cloudflare needs a Cloudflare API token: in a terminal the installer asks for it (hidden); without a terminal set GC_CF_TOKEN in the environment — never as an argument." ;;
+    cf_tok_bad) F="GC_CF_TOKEN looks wrong (too short or unexpected characters) — copy the token again from dash.cloudflare.com." ;;
+    docker_group) F="Docker is installed, but this login session is not in the docker group yet — continuing with %s. Log out and back in to use genchibi without sudo." ;;
+    dns_check) F="Checking that %s points to this machine…" ;;
+    dns_ok) F="%s → %s (this machine)" ;;
+    dns_wrong) F="%s does not point to this machine yet (now: %s). Create this record at your DNS provider:  A  %s  →  %s" ;;
+    dns_none) F="none" ;;
+    dns_noip) F="Could not find this machine's public IP — the app checks DNS in the next step" ;;
+    dns_wait) F="Waiting up to %s minutes for the record (checked every %s s; Ctrl-C stops — later: genchibi online caddy %s)" ;;
+    dns_gave_up) F="%s still does not point to %s. gen-chibi is installed and running; once the A record is in place run: genchibi online caddy %s" ;;
+    caddy_native) F="--domain without --cloudflare needs Docker mode (Caddy on ports 80/443). Use --cloudflare, or later: genchibi online cloudflare %s" ;;
+    online_go) F="Going online: %s" ;;
+    online_fail) F="Going online did not finish — gen-chibi is installed and running. Fix the step marked ✗ above, then: genchibi online recheck" ;;
+    sum_online) F="  Online:    %s%s%s  ·  MCP: %s/mcp" ;;
+    sum_setup) F="Setup code: %s%s%s (one-time, 1 hour) — open %s/setup and choose the owner password%s" ;;
+    sum_setup_local) F=" (on this machine: genchibi open)" ;;
   esac
 }
 _vi() {
   case "$1" in
-    usage) F="Trình cài gen-chibi (Linux, macOS)\n  curl -fsSL https://raw.githubusercontent.com/colamacbook-ryan/Gen-Chibi/main/install.sh | bash\n  curl -fsSL https://raw.githubusercontent.com/colamacbook-ryan/Gen-Chibi/main/install.sh | bash -s -- --lang vi\nTuỳ chọn: --dir <thư mục> (mặc định ~/gen-chibi) · --port <cổng> (7480) · --native (chạy bằng Node, không Docker)\n          --docker · --version vX.Y.Z (mặc định bản mới nhất) · --lang en|vi (mặc định en; hoặc GC_LANG=vi)\nRepo private: đặt GC_GITHUB_TOKEN=<fine-grained token, Contents: Read-only> (xem README). Token được ghi vào .env, không in ra." ;;
+    usage) F="Trình cài gen-chibi (Linux, macOS)\n  curl -fsSL https://raw.githubusercontent.com/colamacbook-ryan/Gen-Chibi/main/install.sh | bash\n  curl -fsSL https://raw.githubusercontent.com/colamacbook-ryan/Gen-Chibi/main/install.sh | bash -s -- --lang vi\n  curl -fsSL https://raw.githubusercontent.com/colamacbook-ryan/Gen-Chibi/main/install.sh | bash -s -- --domain chibi.example.com [--cloudflare]\nTuỳ chọn: --dir <thư mục> (mặc định ~/gen-chibi) · --port <cổng> (7480) · --native (chạy bằng Node, không Docker)\n          --docker · --version vX.Y.Z (mặc định bản mới nhất) · --lang en|vi (mặc định en; hoặc GC_LANG=vi)\n          --domain <tên>: ra Internet ngay sau khi cài (beta) — đường A: trỏ bản ghi A của tên miền về máy này (Docker, mở cổng 80/443)\n          --domain <tên> --cloudflare: đường B (beta) — Cloudflare Tunnel; API token được hỏi ẩn, hoặc đọc GC_CF_TOKEN (không bao giờ là đối số)\nRepo private: đặt GC_GITHUB_TOKEN=<fine-grained token, Contents: Read-only> (xem README). Token được ghi vào .env, không in ra." ;;
     bad_opt) F="Tuỳ chọn lạ: %s" ;;
     os_unsupported) F="Chưa hỗ trợ hệ điều hành %s (Linux, macOS)." ;;
     need_curl) F="Cần curl." ;;
@@ -116,12 +139,30 @@ _vi() {
     starting) F="Khởi động…" ;;
     running) F="✓ gen-chibi %s đang chạy" ;;
     sum_studio) F="  Studio:  %s%s%s" ;;
-    sum_cmds) F="  Lệnh:    genchibi start|stop|status|update|logs|backup|restore|mcp|expose|link|lang|uninstall" ;;
+    sum_cmds) F="  Lệnh:    genchibi start|stop|status|update|logs|backup|restore|mcp|online|open|password|lang|uninstall" ;;
     sum_mcp) F="  MCP:     claude mcp add gen-chibi -- %s mcp" ;;
-    sum_mcp_net) F="  MCP qua Internet: genchibi expose <tên-miền>  (in ra link cho agent)" ;;
+    sum_mcp_net) F="  Ra Internet (tên miền + HTTPS + MCP): genchibi online --help, hoặc Studio › Hệ thống › Go online" ;;
     sum_update) F="  Tự cập nhật: bật (tắt trong Studio › Hệ thống › Cập nhật)" ;;
     sum_lang) F="  Ngôn ngữ: Tiếng Việt (English: genchibi lang en, hoặc nút chuyển ngôn ngữ trong Studio)" ;;
     no_answer) F="Chưa thấy gen-chibi trả lời ở cổng %s. Xem: genchibi logs" ;;
+    dom_bad) F="Tên miền không hợp lệ: %s (dạng chibi.example.com — không IP, không cổng, không *)" ;;
+    cf_need_domain) F="--cloudflare đi cùng --domain <tên>, vd --domain chibi.example.com --cloudflare" ;;
+    cf_tok_none) F="--cloudflare cần API token Cloudflare: có terminal thì trình cài hỏi (ẩn); không có terminal thì đặt GC_CF_TOKEN trong môi trường — không bao giờ là đối số." ;;
+    cf_tok_bad) F="GC_CF_TOKEN có vẻ sai (quá ngắn hoặc ký tự lạ) — chép lại token từ dash.cloudflare.com." ;;
+    docker_group) F="Đã cài Docker nhưng phiên đăng nhập này chưa vào nhóm docker — tiếp tục bằng %s. Đăng xuất rồi vào lại để dùng genchibi không cần sudo." ;;
+    dns_check) F="Kiểm %s đã trỏ về máy này chưa…" ;;
+    dns_ok) F="%s → %s (máy này)" ;;
+    dns_wrong) F="%s chưa trỏ về máy này (hiện: %s). Tạo bản ghi này ở nơi quản lý DNS:  A  %s  →  %s" ;;
+    dns_none) F="chưa có" ;;
+    dns_noip) F="Không tìm được IP công khai của máy — app sẽ kiểm DNS ở bước sau" ;;
+    dns_wait) F="Chờ bản ghi tối đa %s phút (kiểm mỗi %s giây; Ctrl-C để dừng — sau đó: genchibi online caddy %s)" ;;
+    dns_gave_up) F="%s vẫn chưa trỏ về %s. gen-chibi đã cài và đang chạy; trỏ xong bản ghi A thì chạy: genchibi online caddy %s" ;;
+    caddy_native) F="--domain không kèm --cloudflare cần chế độ Docker (Caddy giữ cổng 80/443). Dùng --cloudflare, hoặc sau này: genchibi online cloudflare %s" ;;
+    online_go) F="Đưa lên Internet: %s" ;;
+    online_fail) F="Chưa ra Internet xong — gen-chibi đã cài và đang chạy. Sửa bậc ✗ ở trên rồi chạy: genchibi online recheck" ;;
+    sum_online) F="  Online:  %s%s%s  ·  MCP: %s/mcp" ;;
+    sum_setup) F="Mã setup: %s%s%s (dùng một lần, 1 giờ) — mở %s/setup và đặt mật khẩu chủ%s" ;;
+    sum_setup_local) F=" (trên máy này: genchibi open)" ;;
   esac
 }
 UI=en
@@ -172,6 +213,22 @@ else
 fi
 [ -z "$HELP" ] || { say usage; exit 0; }
 [ -z "$BADOPT" ] || { say bad_opt "$BADOPT" >&2; exit 2; }
+# --domain / --cloudflare (v0.21 §3.6): kiểm trước khi đụng tới đĩa. Token Cloudflare: GC_CF_TOKEN đọc một lần rồi xoá khỏi môi trường (tiến trình con —
+# curl, Docker, get.docker.com — không thừa hưởng); không có thì hỏi ẩn ở bước Go online (cần terminal) — không terminal thì dừng NGAY, chưa cài gì.
+if [ -n "$DOMAIN" ]; then
+  [[ "$DOMAIN" =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,63}$ ]] && [ "${#DOMAIN}" -le 253 ] || { say dom_bad "$DOMAIN" >&2; exit 2; }
+  DOMAIN="$(printf '%s' "$DOMAIN" | tr 'A-Z' 'a-z')"
+fi
+CFTOK=""
+if [ -n "$CF" ]; then
+  [ -n "$DOMAIN" ] || { say cf_need_domain >&2; exit 2; }
+  CFTOK="${GC_CF_TOKEN:-}"
+  if [ -n "$CFTOK" ]; then
+    case "$CFTOK" in *[!A-Za-z0-9_.-]*) say cf_tok_bad >&2; exit 2 ;; esac
+    [ "${#CFTOK}" -ge 20 ] || { say cf_tok_bad >&2; exit 2; }
+  elif ! can_ask; then say cf_tok_none >&2; exit 2; fi
+fi
+unset GC_CF_TOKEN
 
 OS="$(uname -s)"; ARCH="$(uname -m)"
 case "$OS" in Linux|Darwin) ;; *) die os_unsupported "$OS" ;; esac
@@ -187,19 +244,40 @@ if [ -n "$KEPT" ]; then ok lang_kept; else ok lang_ok; fi
 # ---------- chọn cách chạy
 node_ok() { command -v node >/dev/null && [ "$(node -p 'process.versions.node.split(".")[0]')" -ge 18 ]; }
 docker_ok() { command -v docker >/dev/null && docker info >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; }
+# Docker dùng được trong PHIÊN NÀY không (CNS-174): thẳng · qua nhóm docker bằng sg (user đã có tên trong nhóm — vừa usermod — nhưng phiên đăng nhập chưa nhận;
+# chỉ thử sg khi /etc/group đã ghi tên, để sg không hỏi mật khẩu nhóm) · sudo không hỏi mật khẩu (vừa nhập cho get.docker.com). → DOCKER_VIA = "" | sg | sudo
+DOCKER_VIA=""
+docker_access() {
+  DOCKER_VIA=""
+  docker_ok && return 0
+  command -v docker >/dev/null || return 1
+  local g; g=" $(id -nG "$(id -un 2>/dev/null)" 2>/dev/null) "
+  case "$g" in *" docker "*)
+    if command -v sg >/dev/null && sg docker -c 'docker info >/dev/null 2>&1 && docker compose version >/dev/null 2>&1' </dev/null >/dev/null 2>&1; then DOCKER_VIA=sg; return 0; fi ;;
+  esac
+  if [ "$(id -u)" != 0 ] && command -v sudo >/dev/null && sudo -n docker info </dev/null >/dev/null 2>&1 && sudo -n docker compose version </dev/null >/dev/null 2>&1; then DOCKER_VIA=sudo; return 0; fi
+  return 1
+}
+DOCKER_SH="https://get.docker.com"
+[ "${GC_TEST:-}" != 1 ] || DOCKER_SH="${GC_TEST_DOCKER_SH:-$DOCKER_SH}"   # CHỈ cho kiểm thử (tools/test-lang.sh): script cài Docker giả
 if [ -z "$MODE" ]; then
-  if docker_ok; then MODE="docker"
+  if docker_access; then MODE="docker"
   elif [ "$OS" = "Linux" ] && [ "$(id -u)" = "0" -o -n "$(command -v sudo)" ]; then
     step docker_installing
     SUDO=""; [ "$(id -u)" = "0" ] || SUDO="sudo"
-    curl -fsSL https://get.docker.com | $SUDO sh >/dev/null && $SUDO usermod -aG docker "$USER" 2>/dev/null || true
-    docker_ok && MODE="docker" || { node_ok && MODE="native" || die docker_fail; }
+    curl -fsSL "$DOCKER_SH" | $SUDO sh >/dev/null && $SUDO usermod -aG docker "$(id -un)" 2>/dev/null || true
+    docker_access && MODE="docker" || { node_ok && MODE="native" || die docker_fail; }
   elif node_ok; then MODE="native"; warn native_fallback
   else die need_runtime
   fi
+elif [ "$MODE" = docker ]; then docker_access || true
 fi
 [ "$MODE" = "native" ] && ! node_ok && die native_need_node
 ok mode_ok "$MODE"
+if [ -n "$DOCKER_VIA" ]; then
+  if [ "$DOCKER_VIA" = sg ]; then warn docker_group "sg docker"; else warn docker_group "sudo docker"; fi
+  export GC_DOCKER_VIA="$DOCKER_VIA"   # genchibi (start, online…) trong phiên này dùng cùng đường
+fi
 
 # ---------- tải bản phát hành
 mkdir -p "$DIR/releases" "$DIR/data" "$DIR/backups" "$DIR/logs"
@@ -322,6 +400,64 @@ sed "s#__GC_HOME__#$DIR#" "$DIR/current/cli/genchibi" > "$BIN/genchibi"; chmod +
 ok cli_ok "$BIN"
 case ":$PATH:" in *":$BIN:"*) ;; *) warn path_hint "$BIN" "$(basename "${SHELL:-bash}")" ;; esac
 
+# ---------- Go online (--domain [--cloudflare]) — v0.21 §2 / §3.6: cùng lệnh genchibi online (API /api/online/*) mà owner dùng sau này
+dns_a() { # IPv4 hiện tại của $1, cách nhau dấu cách (resolver của máy; app kiểm lại ở nameserver có thẩm quyền)
+  if [ "${GC_TEST:-}" = 1 ] && [ -n "${GC_TEST_DNS_A+x}" ]; then printf '%s' "$GC_TEST_DNS_A" | tr ',' ' '; return 0; fi
+  local r=""
+  if command -v getent >/dev/null; then r="$(getent ahostsv4 "$1" 2>/dev/null | awk '{ print $1 }' | sort -u | tr '\n' ' ')"
+  elif command -v dig >/dev/null; then r="$(dig +short A "$1" 2>/dev/null | grep -E '^[0-9.]+$' | tr '\n' ' ')"
+  elif command -v host >/dev/null; then r="$(host -t A "$1" 2>/dev/null | awk '/has address/ { print $NF }' | tr '\n' ' ')"
+  elif command -v nslookup >/dev/null; then r="$(nslookup "$1" 2>/dev/null | awk '/^Name:/ { n = 1 } n && /^Address/ { print $NF }' | tr '\n' ' ')"; fi
+  printf '%s' "${r% }"
+}
+public_ip() { # IPv4 ra Internet của máy (đi thẳng, không qua proxy công ty — như app: https://1.1.1.1/cdn-cgi/trace)
+  if [ "${GC_TEST:-}" = 1 ] && [ -n "${GC_TEST_PUBLIC_IP+x}" ]; then printf '%s' "$GC_TEST_PUBLIC_IP"; return 0; fi
+  curl -fsS --noproxy '*' -m 6 https://1.1.1.1/cdn-cgi/trace 2>/dev/null | sed -n 's/^ip=\([0-9.]*\)$/\1/p' | head -n 1
+}
+go_online() { # 0 đã ra Internet (xong, hoặc chỉ còn chờ mật khẩu chủ — VPS mới luôn dừng ở đây, mã setup in ở dòng cuối) · khác: chưa xong (app vẫn chạy)
+  local ip a waited=0 limit poll rc
+  if [ -z "$CF" ]; then
+    step dns_check "$DOMAIN"
+    ip="$(public_ip)"
+    if [ -z "$ip" ]; then warn dns_noip
+    else
+      limit=$(( ${GC_DNS_WAIT:-10} * 60 )); poll="${GC_DNS_POLL:-15}"
+      a="$(dns_a "$DOMAIN")"
+      while :; do
+        case " $a " in *" $ip "*) ok dns_ok "$DOMAIN" "$ip"; break ;; esac
+        if [ "$waited" = 0 ]; then
+          warn dns_wrong "$DOMAIN" "${a:-$(_t dns_none; printf '%s' "$F")}" "$DOMAIN" "$ip"
+          [ "$limit" -gt 0 ] && say dns_wait "${GC_DNS_WAIT:-10}" "$poll" "$DOMAIN"
+        fi
+        if [ "$waited" -ge "$limit" ]; then warn dns_gave_up "$DOMAIN" "$ip" "$DOMAIN"; return 1; fi
+        sleep "$poll"; waited=$((waited + poll)); a="$(dns_a "$DOMAIN")"
+      done
+    fi
+    [ "$MODE" = docker ] || { warn caddy_native "$DOMAIN"; return 1; }
+    step online_go "https://$DOMAIN"
+    "$BIN/genchibi" online caddy "$DOMAIN" --yes && rc=0 || rc=$?
+  else
+    step online_go "https://$DOMAIN"
+    if [ -n "$CFTOK" ]; then printf '%s\n' "$CFTOK" | "$BIN/genchibi" online cloudflare "$DOMAIN" --token-stdin --yes && rc=0 || rc=$?
+    else "$BIN/genchibi" online cloudflare "$DOMAIN" --yes && rc=0 || rc=$?; fi   # hỏi token ẩn trên terminal
+    CFTOK=""
+  fi
+  case "$rc" in 0|3) ONLINE="https://$DOMAIN"; BASE="$ONLINE"; return 0 ;; esac
+  warn online_fail; return "$rc"
+}
+finish_lines() { # dòng cuối: địa chỉ online (nếu có) + MÃ SETUP khi chưa có mật khẩu chủ (server ghi data/setup-code.txt lúc khởi động)
+  local c="" e="" i
+  [ -z "$ONLINE" ] || say sum_online "$B" "$ONLINE" "$N" "$ONLINE"
+  case "$(curl -fsS -m 5 "http://127.0.0.1:$PORT/api/auth/state" 2>/dev/null || true)" in *'"password":false'*) ;; *) return 0 ;; esac   # đã có mật khẩu chủ
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    if [ -r "$DIR/data/setup-code.txt" ]; then c="$(sed -n '1p' "$DIR/data/setup-code.txt" | tr -d ' \r')"; break; fi
+    sleep 0.5
+  done
+  case "$c" in [0-9A-Z][0-9A-Z][0-9A-Z][0-9A-Z][0-9A-Z]-[0-9A-Z][0-9A-Z][0-9A-Z][0-9A-Z][0-9A-Z]) ;; *) return 0 ;; esac
+  if [ "$BASE" = "http://localhost:$PORT" ]; then _t sum_setup_local; e="$F"; fi
+  printf '\n'; say sum_setup "$B" "$c" "$N" "$BASE" "$e"
+}
+
 # ---------- chạy
 step starting
 "$BIN/genchibi" start >/dev/null
@@ -339,7 +475,10 @@ for i in $(seq 1 60); do
     say sum_mcp_net
     say sum_update
     say sum_lang
-    exit 0
+    RC=0; ONLINE=""; BASE="http://localhost:$PORT"
+    if [ -n "$DOMAIN" ]; then go_online && RC=0 || RC=$?; fi
+    finish_lines
+    exit "$RC"
   fi
   sleep 1
 done
