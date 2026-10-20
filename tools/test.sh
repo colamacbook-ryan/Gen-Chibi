@@ -355,6 +355,55 @@ const fr = m.saveAssetChecked({ pack: "gen.khung", id: "ma-no-canh", name: "Sử
 no(fr.pack !== "local.my" || m.GC.ASSETS["gen.khung/ma-no-canh"].name !== "Ma-nơ-canh", "lưu vào khung phải thành bản sao trong Của tôi, khung giữ nguyên");
 console.log("   ✓ dự án mẫu qua cổng 100% (3 nhân vật · 1 item · 2 cảnh · phim 4 cảnh) · nhập trùng → 409 · lưu đè · xuất lại đủ · gói hỏng / asset lạ bị chặn");
 ' || exit 1
+echo "2e2) dự án mẫu bản tiếng Anh (Q23): Fun Office không còn chữ Việt · lang en · cùng khung với Văn phòng vui · cài cạnh nhau · MCP gợi ý theo ngôn ngữ máy"
+node -e '
+const fs = require("fs"), os = require("os"), path = require("path");
+const { loadEngine } = require("./server/engine-node.js"); const { MCP } = require("./server/mcp.js"); const { Store } = require("./server/store.js");
+const no = (c, msg) => { if (c) { console.log("   ✗", msg); process.exit(1); } };
+const rd = f => JSON.parse(fs.readFileSync("studio/mau/" + f + ".json", "utf8")), vi = rd("van-phong-vui"), en = rd("fun-office");
+const VI = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ]/;
+const strs = (o, p, out) => { if (typeof o === "string") out.push([p, o]); else if (o && typeof o === "object") Object.keys(o).forEach(k => strs(o[k], p + "." + k, out)); return out; };
+const left = strs(en, "", []).filter(([, s]) => VI.test(s));
+no(left.length, "Fun Office còn chữ tiếng Việt: " + left.slice(0, 5).map(x => x.join(" = ")).join(" · "));
+no(!en.works.length || en.works.some(w => w.lang !== "en"), "mọi tác phẩm của Fun Office phải có lang \"en\"");
+// cùng câu chuyện, cùng dàn dựng: bỏ chữ + id thì hai gói giống hệt (trừ lang)
+const shape = b => JSON.stringify(b, (k, v) => k === "lang" ? undefined : typeof v === "string" ? (/^(state|spot|activity|time|weather|type|rarity|slot|eyes|brows|status|format)$/.test(k) ? v : "S") : v) + JSON.stringify(b.characters.map(a => a.voice));
+no(shape(vi) !== shape(en), "Fun Office phải cùng khung (nhân vật, cảnh, phân cảnh, bước, dàn dựng, thời lượng) với Văn phòng vui");
+const says = b => b.works[0].shots.map(s => s.event.steps.map(x => x.say)).flat();
+no(says(en).some(s => !s || s.length > 60), "câu thoại tiếng Anh rỗng hoặc dài quá bong bóng (≤ 60): " + says(en).filter(s => !s || s.length > 60));
+// id riêng: hai bản cài cạnh nhau — không trùng id dự án / nhân vật / vật phẩm / cảnh / tác phẩm
+const ids = b => [b.project.id].concat(b.characters.map(x => "c:" + x.id), b.items.map(x => "i:" + x.id), b.scenes.map(x => "s:" + x.id), b.works.map(x => "w:" + x.id));
+const both = ids(vi).filter(x => ids(en).includes(x));
+no(both.length, "Fun Office trùng id với Văn phòng vui: " + both);
+const home = fs.mkdtempSync(path.join(os.tmpdir(), "gc-fo-"));
+const mk = L => new MCP({ engine: loadEngine("."), store: new Store(path.join(home, L || "x")), version: "t", system: {}, uiLang: L });
+const J = r => r.structuredContent || JSON.parse(r.content[0].text);
+(async () => {
+  // MCP: gợi ý bộ mẫu cho máy mới theo ngôn ngữ mặc định của máy (settings.uiLang; thiếu = en)
+  for (const [L, want] of [["en", "mau-fun-office"], ["vi", "mau-van-phong-vui"], [undefined, "mau-fun-office"], ["zh", "mau-fun-office"]]) {
+    const st = J(await mk(L).callTool("start_here", {})), hint = st.next_steps.find(x => /install_sample/.test(x)) || "";
+    no(hint.indexOf("\"" + want + "\"") < 0, "start_here trên máy " + L + " phải gợi ý " + want + ": " + hint);
+  }
+  const m = mk("en"), arr = j => Array.isArray(j) ? j : j.samples || j.items || j.result || [];
+  const ls = J(await m.callTool("list_samples", {})), S = id => arr(ls).find(x => x.id === id) || {};
+  no(S("mau-fun-office").lang !== "en" || S("mau-van-phong-vui").lang !== "vi" || S("mau-fun-office").installed, "list_samples phải có Fun Office (lang en, chưa cài) và Văn phòng vui (lang vi): " + JSON.stringify(ls).slice(0, 300));
+  // cài cả hai qua đúng cổng (install_sample = importProject) — không 409, không lỗi, đủ mục
+  for (const id of ["mau-van-phong-vui", "mau-fun-office"]) { const r = await m.callTool("install_sample", { id }, {}); no(r.isError, "cài " + id + ": " + r.content[0].text.slice(0, 300)); }
+  const pj = m.store.listProjects().map(p => p.id);
+  no(!pj.includes("mau-fun-office") || !pj.includes("mau-van-phong-vui"), "hai bộ văn phòng phải cài cạnh nhau: " + pj);
+  const ex = m.exportProject("mau-fun-office");
+  no(ex.characters.length !== 3 || ex.items.length !== 1 || ex.scenes.length !== 2 || ex.works.length !== 1 || ex.works[0].shots.length !== 4, "Fun Office xuất lại thiếu mục");
+  no(m.exportProject("mau-van-phong-vui").characters.map(a => a.name).sort().join() !== "Anh Ba,Bé Na,Sếp Tư", "cài Fun Office làm hỏng Văn phòng vui");
+  // đạo diễn tự động dàn dựng bản tiếng Anh y như bản Việt (bong bóng, máy quay, cảm xúc từng câu) — lời Anh không đổi nhịp phim
+  const dir = wid => m.store.getWork(wid).shots.map(s => m.GC.film.direct(s).beats.filter(b => b.type === "line").map(b => [b.bubble, b.camera, b.state, b.actor.replace(/^(mau|fo)-/, "")].join("/")).join(",")).join(" | ");
+  const dVi = dir("mau-ngay-dau-di-lam").replace(/be-na/g, "nana").replace(/sep-tu/g, "boss-ted").replace(/anh-ba/g, "barry");
+  no(dir("fo-first-day") !== dVi, "Fun Office phải được đạo diễn như Văn phòng vui:\n      " + dir("fo-first-day") + "\n      " + dVi);
+  const w = m.store.getWork("fo-first-day");
+  no(!w || w.lang !== "en" || w.project !== "mau-fun-office" || w.shots.length !== 4 || m.store.getWork("mau-ngay-dau-di-lam").lang, "tác phẩm Fun Office phải giữ lang en (Văn phòng vui giữ không lang = vi): " + (w && w.lang));
+  no(!(arr(J(await m.callTool("list_samples", {}))).find(x => x.id === "mau-fun-office") || {}).installed, "list_samples: Fun Office đã cài");
+  console.log("   ✓ Fun Office: " + strs(en, "", []).length + " chuỗi không dấu tiếng Việt · " + says(en).length + " câu thoại · lang en · cùng khung Văn phòng vui · id riêng → cài cạnh nhau qua install_sample · start_here gợi ý mau-fun-office (máy en / chưa đặt / zh), mau-van-phong-vui (máy vi)");
+})().catch(e => { console.log("   ✗", e.stack); process.exit(1); });
+' || exit 1
 echo "2f) linh kiện dữ liệu ngang linh kiện code + bộ chủ đề Tam Quốc dựng từ khung"
 node -e '
 const fs = require("fs"), os = require("os"), path = require("path"), cp = require("child_process");
@@ -482,10 +531,10 @@ const ctx = { window: {}, console }; vm.createContext(ctx);
 ["engine/core.js", "engine/sounds.js", "engine/choreo.js", "kinds/character/gen.core.js", "kinds/khung/gen.khung.js", "kinds/character/gen.choreo.js", "engine/player.js"].forEach(f => vm.runInContext(fs.readFileSync(f, "utf8"), ctx, { filename: f }));
 const GC = ctx.window.GenChibi, no = (c, msg) => { if (c) { console.log("   ✗", msg); process.exit(1); } };
 const m = new MCP({ engine: GC, store: new Store(fs.mkdtempSync(path.join(os.tmpdir(), "gc-p-"))), version: "t", system: {} });
-for (const f of ["van-phong-vui", "tam-quoc"]) no(m.importProject(JSON.parse(fs.readFileSync("studio/mau/" + f + ".json", "utf8")), {}).errors.length, f + " không qua cổng");
+for (const f of ["van-phong-vui", "fun-office", "tam-quoc"]) no(m.importProject(JSON.parse(fs.readFileSync("studio/mau/" + f + ".json", "utf8")), {}).errors.length, f + " không qua cổng");
 no(!GC.LIB.motions.talk || !GC.LIB.motions.nod, "thiếu động tác talk / nod");
 let lines = 0, moves = 0, talks = 0, shouts = 0, thinks = 0, closes = 0, twos = 0, nudges = 0;
-for (const wid of ["mau-ngay-dau-di-lam", "tq-vuon-dao-xich-bich"]) for (const s of m.store.getWork(wid).shots) {
+for (const wid of ["mau-ngay-dau-di-lam", "fo-first-day", "tq-vuon-dao-xich-bich"]) for (const s of m.store.getWork(wid).shots) {
   const p = GC.film.direct(s), ids = p.cast.map(c => c.id);
   no(!p || !p.mood || !p.ambient || !p.ambient.weather, s.title + ": thiếu mood / ambient");
   const ent = p.beats.filter(b => b.type === "enter");

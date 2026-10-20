@@ -9,8 +9,10 @@
 1. Open gen-chibi (default `http://localhost:7480`).
 2. On the **Choose a workspace** screen, click **✨ Open the sample project "Fun Office"**.
 3. You land in the **Library**: 3 characters, 1 item and 2 scenes from the sample project.
-4. Open **Create** → the works table → click the row *Ngày đầu đi làm* (First day at work, 4 shots) to enter its **film room** → **Review** tab → **▶ Whole film**.
+4. Open **Create** → the works table → click the row *First Day at Work* (4 shots) to enter its **film room** → **Review** tab → **▶ Whole film**.
 5. Go to the **Publish** tab → **Film (HTML)** to download the film — open the file in any browser to watch it, and send it to your viewers.
+
+The sample's dialogue is in English. The same story with Vietnamese dialogue (*Văn phòng vui*) is one click away in **Library › Theme projects** → **✨ Fun Office — Vietnamese edition**; both can be installed side by side.
 
 To see a **complete theme set** (what gen-chibi is built to sell): click **🏯 Open the sample theme set "Three Kingdoms"** — 7 generals (Peking-opera masks, weapons, 8 directions, their own voices), 13 pieces of equipment, 8 scenes and the film *Từ vườn đào tới Xích Bích* (From the Peach Garden to Red Cliffs: 6 shots with staging, voices, sound and a fight scene). This is a **Gen Labs sample set**: view it, try edits, make films freely, but it **cannot be exported as a sale bundle** — to sell, build your own set in a separate project.
 

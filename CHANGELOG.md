@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.21.2 — "Fun Office" in English: the one-click sample for English users is now an English film
+Ryan: "Q23 làm bản tiếng Anh" *(In English: "Q23: make the English version")*.
+- **New sample `Fun Office`** (`studio/mau/fun-office.json`, project `mau-fun-office`): the same story, staging and timing as *Văn phòng vui*, with English names (Nana, Boss Ted, Barry), English dialogue and an English film (`lang: en`, English voices) — work *First Day at Work*.
+- **The Studio offers the sample in your interface language**: English → *Fun Office*, Vietnamese → *Văn phòng vui* (Quick start, empty library). The other edition stays one click away in *Library › Theme projects*; both install side by side. *Three Kingdoms* stays Vietnamese (ADR 0007).
+- **Agents**: `start_here` suggests the sample in the machine's language; `list_samples` reports each sample's `lang`.
+- **Test fix**: a browser check of the "out of AI voice quota" message failed when the retry time fell on the next day (date written `21-10`).
+- **Tests**: `tools/test.sh` checks the English sample has no Vietnamese text, keeps the same staging as the Vietnamese one, and installs next to it without id clashes; the browser i18n group opens *Fun Office* in one click and plays its exported English film.
+
 ## v0.21.1 — The Studio footer shows only Gen Labs, no personal contact details
 Ryan: "Q26 đổi thành Gen Labs" *(In English: "Q26: change it to Gen Labs")*.
 - **Changed**: the Studio sidebar footer on every install showed the author's name and personal phone number. It now reads only "© 2026 Gen Labs — All rights reserved". `LICENSE`, `README` and the user guide keep their author line as before.

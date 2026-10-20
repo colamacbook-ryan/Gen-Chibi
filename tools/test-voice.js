@@ -182,8 +182,8 @@ const rejectAll = (fn, msg) => fn().then(() => no(true, msg + ': phải lỗi'),
     no(!we || we.code !== 422 || !/accent/.test(we.message), 'giọng vùng không thuộc ngôn ngữ phim phải 422');
     we = null; try { m.saveWorkChecked({ id: wk.id, lang: 'fr' }); } catch (x) { we = x; } no(!we || we.code !== 422, 'ngôn ngữ lạ phải 422');
     // bộ mẫu: nhân vật mang vai giọng chọn sẵn (máy đoán "Lính quèn" thành võ tướng, "Bé Na" thành nam) — cài qua cổng vẫn giữ
-    for (const id of ['mau-tam-quoc', 'mau-van-phong-vui']) { const r = await m.callTool('install_sample', { id }, {}); no(r.isError, 'cài bộ mẫu ' + id); }
-    for (const [k, role] of [['tq-linh-que', 'hai-huoc'], ['tq-trieu-van', 'hiep-khach'], ['tq-tao-thao', 'phan-dien'], ['mau-be-na', 'nu-tre']]) {
+    for (const id of ['mau-tam-quoc', 'mau-van-phong-vui', 'mau-fun-office']) { const r = await m.callTool('install_sample', { id }, {}); no(r.isError, 'cài bộ mẫu ' + id); }
+    for (const [k, role] of [['tq-linh-que', 'hai-huoc'], ['tq-trieu-van', 'hiep-khach'], ['tq-tao-thao', 'phan-dien'], ['mau-be-na', 'nu-tre'], ['fo-nana', 'nu-tre'], ['fo-boss-ted', 'nam-trung-nien'], ['fo-barry', 'hai-huoc']]) {
       const a = m.findAsset(k); no(!a || !a.voice || a.voice.role !== role, 'bộ mẫu: ' + k + ' phải có vai giọng ' + role + ': ' + JSON.stringify(a && a.voice)); } }
 
   // ---- cổng cortex v0.17 (CNS-082…094): lỗi thật, trần ngày, giọng hỏng có hạn, giọng chốt theo tác phẩm, kênh chi tiêu ----
@@ -306,7 +306,17 @@ const rejectAll = (fn, msg) => fn().then(() => no(true, msg + ': phải lỗi'),
     t0.say = String(t0.say).trim() + ' (sửa lời)';
     m.saveShotChecked({ work: W, shot: sh });
     s0 = m.workStats(st.getWork(W)); no(s0.voiceDone >= s0.voiceTotal || s0.voiceDone < L.length - 1, 'CNS-146: sửa lời một câu → chip không còn đủ (cache không giữ số cũ): ' + JSON.stringify(s0));
-    console.log('   ✓ CNS-146: chip "Giọng AI x/y" của server = số câu Studio lồng / phim xuất đọc (' + L.length + ' câu, ' + changed + ' câu đạo diễn đổi cảm xúc / bong bóng) · nửa → ' + half.length + ' · đủ → đủ · bảng tác phẩm cùng số · sửa lời → tính lại'); }
+    console.log('   ✓ CNS-146: chip "Giọng AI x/y" của server = số câu Studio lồng / phim xuất đọc (' + L.length + ' câu, ' + changed + ' câu đạo diễn đổi cảm xúc / bong bóng) · nửa → ' + half.length + ' · đủ → đủ · bảng tác phẩm cùng số · sửa lời → tính lại');
+    // Q23: bộ mẫu tiếng Anh Fun Office — dàn chốt giọng ở khoá en|<giọng vùng>, đếm câu theo đạo diễn như mọi tác phẩm, lồng đủ → chip đủ
+    const rf = await m.callTool('install_sample', { id: 'mau-fun-office' }, {}); no(rf.isError, 'Q23: cài Fun Office');
+    const FO = 'fo-first-day', cf = await m.castWork(FO, {}); m.sync();
+    const wf = st.getWork(FO), kf = 'en|' + GV.accent('en', wf.accent), pf = (wf.voices || {})[kf] || {}, Lf = m.GC.film.lines(wf);
+    no(wf.lang !== 'en' || cf.lang !== undefined && cf.lang !== 'en' || ['fo-nana', 'fo-boss-ted', 'fo-barry'].some(i => !pf[i]), 'Q23: Fun Office chốt giọng tiếng Anh cho cả dàn (' + kf + '): ' + JSON.stringify(wf.voices));
+    let sf = m.workStats(wf);
+    no(Lf.length !== 15 || sf.voiceTotal !== 15 || sf.voiceDone !== 0, 'Q23: Fun Office 15 câu thoại, chưa lồng 0/15: ' + Lf.length + ' ' + JSON.stringify(sf));
+    for (const l of Lf) await x.line({ text: l.line.say, voice: pf[l.line.actor], role: GV.roleOf(l.actor), state: l.line.state || 'normal', bubble: l.line.bubble || 'say' });
+    sf = m.workStats(st.getWork(FO)); no(sf.voiceDone !== 15 || sf.voiceTotal !== 15, 'Q23: Fun Office lồng đủ → 15/15: ' + JSON.stringify(sf));
+    console.log('   ✓ Q23 Fun Office (tiếng Anh): dàn 3 vai chốt giọng ' + kf + ' · ' + Lf.length + ' câu theo đạo diễn · chip 0/15 → 15/15'); }
   // ---- giọng trình duyệt dự phòng (CNS-091): đúng ngôn ngữ + giọng vùng + giới, không đọc chéo Quảng Đông / phổ thông ----
   { const vm = require('vm'), spoken = [];
     const voices = [['Microsoft Xiaoxiao Online (Natural)', 'zh-CN'], ['Microsoft Yunxi Online (Natural)', 'zh-CN'], ['Microsoft HsiaoChen Online (Natural)', 'zh-TW'], ['Microsoft YunJhe Online (Natural)', 'zh-TW'],

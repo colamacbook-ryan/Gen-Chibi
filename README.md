@@ -37,7 +37,7 @@ English is the default everywhere: installer, CLI and Studio. Vietnamese can be 
   The choice is saved as `GC_LANG=en|vi` in the install's `.env`; running the installer again keeps the language in use unless you choose again (it does not ask, and never changes the Studio default on its own).
 - **Later, for the whole install:** `genchibi lang` shows both the CLI language and the Studio default; `genchibi lang vi` (or `en`) writes `GC_LANG` to `.env` and switches the Studio default right away, so the CLI and the Studio default switch together.
 - **Per user, in the Studio:** the language switch in the Studio changes the interface for you only and is remembered per server + browser; the Studio default (*System › Language*) stays the default for everyone else. `GC_LANG` is only the starting value or a deliberate override (`--lang`, `genchibi lang`).
-- Your own content — character names, scripts, dialogue — is never translated. The *Tam Quốc* sample keeps its Vietnamese content.
+- Your own content — character names, scripts, dialogue — is never translated. The *Tam Quốc* sample keeps its Vietnamese content; the *Fun Office* sample is offered in the interface language (English, or its Vietnamese edition *Văn phòng vui*).
 - Upgrading from v0.19 or earlier: an install that already has data keeps Vietnamese (set once on the first start of v0.20) — by auto-update or by running the installer again without `--lang`; the CLI follows. Only new installs start in English. Switch any time with `genchibi lang en|vi` or the Studio switch. The Studio switch also has a page: *System › Language*.
 
 ## Commands

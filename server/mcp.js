@@ -869,7 +869,7 @@ class MCP {
     if (this.bootWarnings.length) st.warnings = this.bootWarnings.slice();   // gói đã lưu nạp khoan dung lúc khởi động (bỏ riêng chỗ sai) — chủ máy nên xem
     const next = [];
     if (!pj.some(p => !p.sample)) next.push('save_project — create the project you will work in (every asset you make belongs to it)');
-    if (!pj.length) next.push('install_sample with id "' + (this.samples()[0] || { id: 'mau-van-phong-vui' }).id + '" — optional: a ready-made project to learn from');
+    if (!pj.length) next.push('install_sample with id "' + this.firstSample().id + '" — optional: a ready-made project to learn from');
     next.push('get_guide with topic "guide" (once), then the topic of your job');
     return { app: 'gen-chibi', version: this.version, protocol: 'MCP ' + PROTOCOLS[0], instructions: 'Read the golden rules below; follow get_guide procedures literally.',
       rules: Agent.rules(), topics: Agent.topics(), state: st, next_steps: next,
@@ -909,10 +909,18 @@ class MCP {
       let b; try { b = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')); } catch { return null; }
       if (!b || !b.project) return null;
       const P = pj.find(p => p.id === b.project.id), v = b.sample && b.sample.version;
-      return { id: b.project.id, name: b.project.name, file: f, path: path.join(dir, f), kind: b.kind || 'project', version: v || null, installed: !!P,
+      // lang: ngôn ngữ lời thoại của bộ mẫu (tác phẩm đầu; gói không ghi lang = tiếng Việt, như mọi tác phẩm trước v0.20)
+      const w0 = Array.isArray(b.works) && b.works[0], lang = w0 ? GV.lang(w0.lang || 'vi') : null;
+      return { id: b.project.id, name: b.project.name, file: f, path: path.join(dir, f), kind: b.kind || 'project', lang, version: v || null, installed: !!P,
         update: !!(P && v && (!P.sample || P.sample.version !== v)), sale: false };
     }).filter(Boolean).map(x => Object.assign({}, x, { path: undefined, _path: x.path }))
       .map(x => Object.defineProperty(x, 'path', { value: x._path, enumerable: false })).map(x => { delete x._path; return x; });
+  }
+  // bộ mẫu một chạm gợi ý cho người mới: dự án mẫu (không phải bộ chủ đề) đúng NGÔN NGỮ MẶC ĐỊNH CỦA MÁY (settings.uiLang; thiếu → en, ADR 0007):
+  // máy tiếng Anh → Fun Office, máy tiếng Việt → Văn phòng vui; không có bản đúng tiếng → dự án mẫu đầu tiên
+  firstSample() {
+    const L = MSG.norm(this.uiLang()) || 'en', all = this.samples(), proj = all.filter(x => x.kind === 'project');
+    return proj.find(x => x.lang === L) || proj.find(x => x.lang === 'en') || proj[0] || all[0] || { id: 'mau-fun-office' };
   }
   // gói động tác: cổng dữ liệu (choreo.checkPack) → không trùng id hành động / màn diễn → nạp → DỰNG THỬ mọi hành động trên ma-nơ-canh khung
   // (đòn đánh: đấu với một ma-nơ-canh; một mình: diễn tại chỗ) — dựng hỏng thì gỡ ra, trả lại bản cũ, báo lỗi

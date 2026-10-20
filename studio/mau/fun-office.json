@@ -1,0 +1,425 @@
+{
+ "format": "gen-chibi.project/1",
+ "license": "© 2026 Gen Labs — sample project bundled with gen-chibi",
+ "project": {
+  "id": "mau-fun-office",
+  "name": "Fun Office (sample)",
+  "description": "Sample project: 3 characters, 1 item, 2 scenes and a 4-shot film — built entirely from the standard frame set. Watch it, edit it, export a test copy as often as you like."
+ },
+ "parts": [],
+ "items": [
+  {
+   "id": "fo-report-folder",
+   "name": "Report folder",
+   "type": "offhand",
+   "rarity": "rare",
+   "equip": {
+    "slot": "heldL",
+    "part": "gen.khung/khoi-hop",
+    "palette": {
+     "wood": "#c8a46a"
+    }
+   },
+   "stats": {
+    "int": 12,
+    "def": 3
+   },
+   "description": "Three hundred pages of the Q3 report. Heavier than it looks.",
+   "status": "draft"
+  }
+ ],
+ "scenes": [
+  {
+   "id": "fo-office",
+   "name": "Office",
+   "description": "A cozy workroom: cream walls, wooden floor, meeting table, potted plant.",
+   "layers": {
+    "sky": "gen.khung/khung-tuong",
+    "ground": "gen.khung/khung-nen"
+   },
+   "deco": [
+    {
+     "part": "gen.khung/khoi-ban",
+     "x": 320,
+     "y": 286,
+     "scale": 0.9
+    },
+    {
+     "part": "gen.khung/khoi-hop",
+     "x": 92,
+     "y": 290
+    },
+    {
+     "part": "gen.khung/khoi-cay",
+     "x": 578,
+     "y": 296,
+     "scale": 0.8
+    }
+   ],
+   "palette": {
+    "wall": "#efe3cf",
+    "ground": "#d9c6a5",
+    "wood": "#9c7650",
+    "woodDark": "#6e5136",
+    "leaf": "#6fa86b",
+    "stone": "#c9bfae",
+    "light": "#fff6e0"
+   },
+   "time": "day",
+   "weather": "clear",
+   "status": "draft"
+  },
+  {
+   "id": "fo-rooftop",
+   "name": "Rooftop at sunset",
+   "description": "The rooftop of the office building, evening sky, a gentle breeze.",
+   "layers": {
+    "sky": "gen.khung/khung-troi",
+    "far": "gen.khung/khung-chan-troi",
+    "mid": {
+     "part": "gen.khung/khung-nha",
+     "dx": 40
+    },
+    "ground": "gen.khung/khung-nen",
+    "front": "gen.khung/khung-tien-canh"
+   },
+   "deco": [
+    {
+     "part": "gen.khung/khoi-co",
+     "x": 560,
+     "y": 276,
+     "scale": 0.7
+    },
+    {
+     "part": "gen.khung/khoi-tru",
+     "x": 70,
+     "y": 296,
+     "scale": 0.8
+    }
+   ],
+   "palette": {
+    "sky": "#9fc4e8",
+    "skyLow": "#f6c99a",
+    "ground": "#cdbfa8",
+    "hill": "#9fb08a",
+    "hillFar": "#b7c2c9",
+    "roof": "#b5655a",
+    "wall": "#e9dfcf"
+   },
+   "time": "dusk",
+   "weather": "leaves",
+   "status": "draft"
+  }
+ ],
+ "characters": [
+  {
+   "id": "fo-nana",
+   "name": "Nana",
+   "role": "New hire",
+   "persona": "Eager, always early, panics easily but never gives up.",
+   "look": {
+    "eyes": "round",
+    "brows": "normal",
+    "parts": {
+     "hat": "gen.khung/khoi-mu",
+     "outfit": "gen.khung/khoi-ao",
+     "shoes": "gen.khung/khoi-giay"
+    },
+    "params": {},
+    "palette": {
+     "hat": "#e05a5a",
+     "accent": "#f3d27a",
+     "robe": "#f2c14e",
+     "trim": "#c9772c",
+     "boots": "#8a5a3c",
+     "skin": "#f1d9c4",
+     "skinShade": "#dfbea3"
+    }
+   },
+   "identity": {
+    "p1": "Red cap, yellow shirt",
+    "must": [
+     "hat:khoi-mu"
+    ],
+    "source": "sample project"
+   },
+   "status": "draft",
+   "voice": {
+    "role": "nu-tre",
+    "pitch": 1.55,
+    "rate": 1.12
+   }
+  },
+  {
+   "id": "fo-boss-ted",
+   "name": "Boss Ted",
+   "role": "Department head",
+   "persona": "Strict, says little, counts every minute — but secretly kind.",
+   "look": {
+    "eyes": "calm",
+    "brows": "bushy",
+    "parts": {
+     "outfit": "gen.khung/khoi-ao",
+     "back": "gen.khung/khoi-choang",
+     "shoes": "gen.khung/khoi-giay"
+    },
+    "params": {},
+    "palette": {
+     "robe": "#4f6d8f",
+     "trim": "#d9d2c3",
+     "cape": "#2f3f55",
+     "boots": "#2b2b2b",
+     "skin": "#e8cdb5",
+     "skinShade": "#d2b296"
+    }
+   },
+   "identity": {
+    "p1": "Navy shirt, cape",
+    "must": [
+     "back:khoi-choang"
+    ],
+    "source": "sample project"
+   },
+   "status": "draft",
+   "voice": {
+    "role": "nam-trung-nien",
+    "pitch": 0.68,
+    "rate": 0.86
+   }
+  },
+  {
+   "id": "fo-barry",
+   "name": "Barry",
+   "role": "Coworker",
+   "persona": "A cheeky joker in dark glasses who loves passing his work to the new kid.",
+   "look": {
+    "eyes": "narrow",
+    "brows": "thin",
+    "parts": {
+     "mask": "gen.khung/khoi-mat-na",
+     "outfit": "gen.khung/khoi-ao"
+    },
+    "params": {},
+    "equip": {
+     "heldL": "local.my/fo-report-folder"
+    },
+    "palette": {
+     "accent": "#262626",
+     "robe": "#7bb662",
+     "trim": "#4d7a3a",
+     "skin": "#e3c2a2",
+     "skinShade": "#cba486"
+    }
+   },
+   "identity": {
+    "p1": "Dark glasses, green shirt",
+    "must": [
+     "mask:khoi-mat-na"
+    ],
+    "source": "sample project"
+   },
+   "status": "draft",
+   "voice": {
+    "role": "hai-huoc",
+    "pitch": 1.05,
+    "rate": 1.15
+   }
+  }
+ ],
+ "works": [
+  {
+   "id": "fo-first-day",
+   "title": "First Day at Work",
+   "lang": "en",
+   "logline": "Nana's first day at work: picky Boss Ted and Barry's mountain of paperwork.",
+   "script": "Nana arrives at 7 am, but Boss Ted still says she is late. Barry dumps a 300-page report on her. Nana grinds away all day and finishes it. At sunset on the rooftop, Boss Ted praises Nana — and the whole team bursts out laughing.",
+   "shots": [
+    {
+     "id": "shot-1",
+     "title": "The first morning",
+     "description": "Nana greets the boss with a big smile; the boss checks the clock.",
+     "scene": "local.my/fo-office",
+     "cast": [
+      "local.my/fo-nana",
+      "local.my/fo-boss-ted"
+     ],
+     "event": {
+      "title": "The first morning",
+      "steps": [
+       {
+        "actor": "fo-nana",
+        "state": "proud",
+        "spot": "left",
+        "activity": "wave",
+        "to": "fo-boss-ted",
+        "say": "Good morning, boss! I'm Nana, the new hire!"
+       },
+       {
+        "actor": "fo-boss-ted",
+        "state": "smug",
+        "spot": "midRight",
+        "to": "fo-nana",
+        "say": "Hm. The clock says 8:01."
+       },
+       {
+        "actor": "fo-nana",
+        "state": "shock",
+        "spot": "midLeft",
+        "fx": [
+         "sweat"
+        ],
+        "to": "fo-boss-ted",
+        "sfx": [],
+        "say": "But… I've been here since 7, boss!"
+       },
+       {
+        "actor": "fo-boss-ted",
+        "state": "think",
+        "to": "fo-nana",
+        "say": "Early, huh… I'll count it as on time.",
+        "hold": 2.6
+       }
+      ]
+     }
+    },
+    {
+     "id": "shot-2",
+     "title": "Mountain of paperwork",
+     "description": "Barry dumps a 300-page report on Nana.",
+     "scene": "local.my/fo-office",
+     "cast": [
+      "local.my/fo-boss-ted",
+      "local.my/fo-barry",
+      "local.my/fo-nana"
+     ],
+     "event": {
+      "title": "Mountain of paperwork",
+      "steps": [
+       {
+        "actor": "fo-boss-ted",
+        "state": "work",
+        "spot": "center",
+        "activity": "point",
+        "to": "fo-barry",
+        "say": "Barry, give Nana the Q3 report."
+       },
+       {
+        "actor": "fo-barry",
+        "state": "lazy",
+        "spot": "right",
+        "to": "fo-boss-ted",
+        "say": "Sure, boss… I'll bring it over."
+       },
+       {
+        "actor": "fo-barry",
+        "state": "smug",
+        "spot": "midLeft",
+        "to": "fo-nana",
+        "say": "Here, it's light… only three hundred pages."
+       },
+       {
+        "actor": "fo-nana",
+        "state": "panic",
+        "spot": "left",
+        "fx": [
+         "exclaim"
+        ],
+        "to": "fo-barry",
+        "sfx": [],
+        "say": "THREE HUNDRED PAGES?!"
+       },
+       {
+        "actor": "fo-barry",
+        "state": "smug",
+        "spot": "right",
+        "activity": "wave",
+        "to": "fo-nana",
+        "say": "Good luck, kiddo~"
+       }
+      ]
+     }
+    },
+    {
+     "id": "shot-3",
+     "title": "Full speed",
+     "description": "Nana grinds through the report all day.",
+     "scene": "local.my/fo-office",
+     "cast": [
+      "local.my/fo-nana"
+     ],
+     "event": {
+      "title": "Full speed",
+      "steps": [
+       {
+        "actor": "fo-nana",
+        "state": "vow",
+        "spot": "center",
+        "activity": "write",
+        "say": "No problem! Nana can do this!"
+       },
+       {
+        "actor": "fo-nana",
+        "state": "exhausted",
+        "fx": [
+         "sweatMany"
+        ],
+        "say": "Page… two hundred ninety-nine…"
+       },
+       {
+        "actor": "fo-nana",
+        "state": "proud",
+        "activity": "cheer",
+        "fx": [
+         "confetti"
+        ],
+        "say": "DONE!!!"
+       }
+      ]
+     }
+    },
+    {
+     "id": "shot-4",
+     "title": "Sunset on the rooftop",
+     "description": "The boss praises Nana; Barry butts in.",
+     "scene": "local.my/fo-rooftop",
+     "cast": [
+      "local.my/fo-boss-ted",
+      "local.my/fo-nana",
+      "local.my/fo-barry"
+     ],
+     "event": {
+      "title": "Sunset",
+      "steps": [
+       {
+        "actor": "fo-boss-ted",
+        "state": "proud",
+        "spot": "midRight",
+        "to": "fo-nana",
+        "say": "Great work, Nana. Come in early tomorrow… like today."
+       },
+       {
+        "actor": "fo-nana",
+        "state": "proud",
+        "spot": "midLeft",
+        "activity": "salute",
+        "to": "fo-boss-ted",
+        "say": "Yes, boss! I'll come at 6!"
+       },
+       {
+        "actor": "fo-barry",
+        "state": "shock",
+        "spot": "left",
+        "fx": [
+         "sweat"
+        ],
+        "to": "fo-nana",
+        "sfx": [],
+        "say": "Don't, the door is still locked at 6!"
+       }
+      ]
+     }
+    }
+   ]
+  }
+ ]
+}

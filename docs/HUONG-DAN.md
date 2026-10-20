@@ -12,6 +12,8 @@
 4. Mở **Tạo tác** → bảng tác phẩm → bấm hàng *Ngày đầu đi làm* (4 phân cảnh) để vào **phòng làm phim** của nó → tab **Xem & duyệt** → **▶ Cả phim**.
 5. Sang tab **Xuất bản** → **Phim (HTML)** để tải phim về — mở tệp bằng trình duyệt bất kỳ là xem, gửi cho người xem.
 
+Lời thoại của dự án mẫu là tiếng Việt. Bản tiếng Anh cùng câu chuyện (*Fun Office*) mở một chạm ở **Thư viện › Dự án chủ đề** → **✨ Fun Office (mẫu tiếng Anh)**; hai bản cài cạnh nhau được.
+
 Muốn thấy một **bộ chủ đề trọn vẹn** (thứ gen-chibi sinh ra để bán): bấm **🏯 Mở bộ chủ đề mẫu "Tam Quốc"** — 7 tướng (mặt nạ kinh kịch, binh khí, 8 hướng, giọng riêng), 13 trang bị, 8 bối cảnh và phim *Từ vườn đào tới Xích Bích* (6 phân cảnh có dàn dựng, giọng nói, âm thanh, một màn đấu võ). Đây là **bộ mẫu của Gen Labs**: xem, sửa thử, làm phim thoải mái, nhưng **không xuất gói bán** — muốn bán thì dựng bộ của bạn trong một dự án riêng.
 
 ## Ba khu — ba ứng dụng riêng

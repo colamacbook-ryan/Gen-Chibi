@@ -991,13 +991,13 @@ if (!ONLY || ONLY === 'bubble') {
     if (!/Be Vietnam Pro/.test(man) || !/OFL/.test(man) || !/github\.com\/google\/fonts/.test(man)) throw new Error('ASSET_MANIFEST.md chưa ghi phông Be Vietnam Pro + OFL + nguồn');
     // ---- nhập hai bộ mẫu ----
     const boot = await b9.newPage(); await boot.goto(URL9 + 'tao-tac'); await boot.waitForFunction(() => window.GenChibi && /^v\d/.test((document.getElementById('verChip') || {}).textContent));
-    await boot.evaluate(async () => { for (const f of ['tam-quoc', 'van-phong-vui']) {
+    await boot.evaluate(async () => { for (const f of ['tam-quoc', 'van-phong-vui', 'fun-office']) {
       const bn = await fetch('studio/mau/' + f + '.json').then(r => r.json());
       const r = await fetch('api/projects/import', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify({ bundle: bn, overwrite: true }) });
       if (!r.ok) throw new Error('nhập ' + f + ' ' + r.status);
     } });
     await boot.close();
-    const TQ = 'tq-vuon-dao-xich-bich', VP = 'mau-ngay-dau-di-lam';
+    const TQ = 'tq-vuon-dao-xich-bich', VP = 'mau-ngay-dau-di-lam', FO = 'fo-first-day';
     // ---- 1) bộ giải thuần số: chạy với hình chữ nhật giả (nhanh, xác định) ----
     const up = await b9.newPage(); await up.goto(URL9 + 'tao-tac'); await up.waitForFunction(() => window.GenChibi && window.GenChibi.film && window.GenChibi.film.solveLayout);
     const unit = await up.evaluate(() => {
@@ -1059,19 +1059,21 @@ if (!ONLY || ONLY === 'bubble') {
       }),
       job(async () => { const q = await mkPage(null, VP, 1280); await q.evaluate(SLOW_FRAMES); const r = await playShot(q, 'canh-2'); await q.close(); return { lines: r.lines, errs: q.errs }; })
     ]);
-    for (const r of [rTQ, rVP, rCap, rBub, r640, r360, rMut, rSlow]) if (r.err) throw r.err;
-    [rTQ, rVP, rCap, rBub, r640, r360, rMut, rSlow].forEach(r => errsAll.push(...r.errs));
+    // Q23: bản tiếng Anh (Fun Office) — câu tiếng Anh dài hơn câu Việt vẫn phải vừa bong bóng / phụ đề sạch như bản Việt (chạy sau lượt song song: giữ ≤ 8 trang cùng lúc)
+    const rFO = await job(async () => { const q = await mkPage(null, FO, 1280); const out = []; let calls = 0; for (const s of q.shots) { const r = await playShot(q, s); out.push(...r.lines); calls += r.calls; } await q.close(); return { lines: out, calls, errs: q.errs }; });
+    for (const r of [rTQ, rVP, rCap, rBub, r640, r360, rMut, rSlow, rFO]) if (r.err) throw r.err;
+    [rTQ, rVP, rCap, rBub, r640, r360, rMut, rSlow, rFO].forEach(r => errsAll.push(...r.errs));
     // Tam Quốc + Văn phòng vui, chế độ tự động: mọi câu sạch
-    const film = [...rTQ.lines, ...rVP.lines];
-    if (film.length < 40) throw new Error('chỉ đo được ' + film.length + ' câu thoại (cần ≥ 40: Tam Quốc 31 + Văn phòng vui 15)');
+    const film = [...rTQ.lines, ...rVP.lines, ...rFO.lines];
+    if (film.length < 55 || rFO.lines.length < 15) throw new Error('chỉ đo được ' + film.length + ' câu thoại, Fun Office ' + rFO.lines.length + ' (cần ≥ 55: Tam Quốc 31 + Văn phòng vui 15 + Fun Office 15)');
     const badFilm = film.flatMap(L => judge(L));
     if (badFilm.length) throw new Error(badFilm.length + ' lỗi trình bày, ví dụ: ' + badFilm.slice(0, 4).join(' | '));
     const nB = film.filter(L => L.ms[0].mode === 'bubble').length, nC = film.length - nB;
-    const calls = (rTQ.calls + rVP.calls) / film.length;
+    const calls = (rTQ.calls + rVP.calls + rFO.calls) / film.length;
     if (calls > 3) throw new Error('bố cục chạy ' + calls.toFixed(1) + ' lần mỗi câu (> 3) — nghi tính lại theo khung hình');
     const tqClose = rTQ.lines.filter(L => L.shot === 'canh-dau-tap').length;
     if (tqClose < 5) throw new Error('thiếu câu thoại ở cảnh cận "Đấu tập trước trận" (' + tqClose + ')');
-    console.log('  ✓ Lời thoại hai phim mẫu (' + film.length + ' câu, đo 2 lần mỗi câu): bong bóng ' + nB + ' · phụ đề ' + nC + ' · mở khi sân khấu đứng yên, hiện ≥ 380 ms, không bong bóng rỗng · đè đầu 0 px² · trong lề an toàn ≥ 2% · chữ ≥ 85% đậm & tương phản ≥ 4,5:1 · bong bóng ≤ 38% khung · đuôi không cắt đầu / không đâm lõi mặt · Be Vietnam Pro đã nạp · bố cục ' + calls.toFixed(1) + ' lần/câu');
+    console.log('  ✓ Lời thoại ba phim mẫu (Fun Office tiếng Anh, ' + film.length + ' câu, đo 2 lần mỗi câu): bong bóng ' + nB + ' · phụ đề ' + nC + ' · mở khi sân khấu đứng yên, hiện ≥ 380 ms, không bong bóng rỗng · đè đầu 0 px² · trong lề an toàn ≥ 2% · chữ ≥ 85% đậm & tương phản ≥ 4,5:1 · bong bóng ≤ 38% khung · đuôi không cắt đầu / không đâm lõi mặt · Be Vietnam Pro đã nạp · bố cục ' + calls.toFixed(1) + ' lần/câu');
     // phụ đề ép buộc: cũng không đè đầu, trong lề
     const badCap = rCap.lines.flatMap(L => judge(L, { mode: 'caption' }));
     if (badCap.length || rCap.lines.length < 5) throw new Error('phụ đề ép buộc: ' + (badCap.slice(0, 3).join(' | ') || 'chỉ ' + rCap.lines.length + ' câu'));
@@ -1966,7 +1968,7 @@ if (!ONLY || ONLY === 'voice') {
     // hết lượt giữa chừng: dừng đúng chỗ — 4 câu xong, câu thứ 5 gặp 429 rồi KHÔNG hỏi thêm; báo giờ thử lại + số câu đã xong
     await q.reload(); await q.waitForSelector('.shot'); await spyOn(q); await q.selectOption('select[aria-label="Ngôn ngữ phim"]', 'vi|nam'); M.ids.clear(); M.fresh = 0; M.budget = 4; M.calls.length = 0;
     await q.click(dubB); await q.waitForFunction(() => /Hết lượt hôm nay/.test(document.body.textContent), null, { timeout: 30000 });
-    if (!/Hết lượt hôm nay — thử lại lúc \d{2}:\d{2}(?: \d{2}\/\d{2})? · đã lồng 4\/15 câu \(4 mới · 0 có sẵn\)/.test(await dubText()) || !/Lồng tiếng AI 4\/15/.test(await dubText())) throw new Error('báo hết lượt: ' + await dubText());
+    if (!/Hết lượt hôm nay — thử lại lúc \d{2}:\d{2}(?: \d{2}[\/.-]\d{2})? · đã lồng 4\/15 câu \(4 mới · 0 có sẵn\)/.test(await dubText()) || !/Lồng tiếng AI 4\/15/.test(await dubText())) throw new Error('báo hết lượt: ' + await dubText());
     await q.waitForTimeout(500);
     if (M.calls.filter(c => !c.dry).length !== 5) throw new Error('phải dừng ngay sau 429 (5 lời gọi), thấy ' + M.calls.filter(c => !c.dry).length);
     if (!(await toasts(q)).some(t => /^Hết lượt hôm nay — thử lại lúc/.test(t) && /Đã lồng 4\/15 câu/.test(t))) throw new Error('thiếu toast hết lượt');
@@ -3119,6 +3121,26 @@ if (!ONLY || ONLY === 'i18n') {
     if (await q2.evaluate(() => localStorage.getItem('gc-lang'))) throw new Error('?lang= không được ghi đè lựa chọn đã lưu');
     await put('en');
     console.log('  ✓ Mặc định của máy (PUT api/settings uiLang, /api/info): trình duyệt mới theo máy; ?lang= thắng mà không lưu');
+    // 4b) Q23: dự án mẫu một chạm theo NGÔN NGỮ GIAO DIỆN — en mời Fun Office (bản tiếng Anh) trước, vi mời Văn phòng vui trước;
+    //     Bắt đầu nhanh / thư viện trống chỉ mời bản đúng tiếng (+ Tam Quốc); bản tiếng kia vẫn ở thanh Dự án chủ đề, xếp sau
+    const q4 = await (await b16.newContext({ viewport: { width: 1500, height: 950 } })).newPage(); q4.on('pageerror', e => errs16.push(e.message));
+    const demoBtns = async () => q4.$$eval('ol.qsteps ~ .row > button', els => els.map(e => e.textContent.trim()));
+    const projBtns = async () => q4.$$eval('.pagehead .actions button', els => els.map(e => e.textContent.trim()));
+    const SAMPLE_UI = {
+      en: { quick: ['✨ Open the sample project "Fun Office"', '🏯 Open the sample theme set "Three Kingdoms"'], bar: ['✨ Fun Office (sample)', '🏯 Three Kingdoms sample', '✨ Fun Office — Vietnamese edition'] },
+      vi: { quick: ['✨ Mở dự án mẫu "Văn phòng vui"', '🏯 Mở bộ chủ đề mẫu "Tam Quốc"'], bar: ['✨ Văn phòng vui (mẫu)', '🏯 Tam Quốc (bộ chủ đề)', '✨ Fun Office (mẫu tiếng Anh)'] } };
+    for (const L of ['en', 'vi']) {
+      await q4.goto(U + '?lang=' + L); await ready(q4); await q4.waitForSelector('ol.qsteps');
+      const qb = await demoBtns();
+      if (JSON.stringify(qb) !== JSON.stringify(SAMPLE_UI[L].quick)) throw new Error('Bắt đầu nhanh (' + L + '): mời bộ mẫu sai thứ tự / sai bản: ' + JSON.stringify(qb));
+      await q4.evaluate(() => localStorage.setItem('gc-route-thu-vien', JSON.stringify({ page: 'projects' })));
+      await q4.goto(U + 'thu-vien?lang=' + L); await ready(q4); await q4.waitForSelector('.lib-empty');
+      const bar = (await projBtns()).filter(t => /^(✨|🏯)/.test(t)), empty = await q4.$$eval('.lib-empty .row > button', els => els.map(e => [e.textContent.trim(), e.classList.contains('primary')]));
+      if (JSON.stringify(bar) !== JSON.stringify(SAMPLE_UI[L].bar)) throw new Error('Dự án chủ đề (' + L + '): thanh bộ mẫu ' + JSON.stringify(bar));
+      if (!empty.length || empty[0][0] !== SAMPLE_UI[L].quick[0] || !empty[0][1] || empty.some(x => /Vietnamese edition|mẫu tiếng Anh/.test(x[0]))) throw new Error('thư viện trống (' + L + '): nút chính phải là ' + SAMPLE_UI[L].quick[0] + ': ' + JSON.stringify(empty));
+    }
+    await q4.context().close();
+    console.log('  ✓ Q23 bộ mẫu theo ngôn ngữ giao diện: en mời "Fun Office" trước, vi mời "Văn phòng vui" trước (Bắt đầu nhanh, nút chính thư viện trống); Tam Quốc ở cả hai; bản tiếng kia xếp sau ở Dự án chủ đề');
     // 5) QUÉT CHỮ VIỆT ở chế độ en (INT-18c): mọi trang chính + 5 tab phòng làm phim + dock — không còn ký tự có dấu tiếng Việt,
     //    trừ nội dung người dùng: input / textarea / [data-user-content] / [lang="vi"] và mọi chuỗi có trong dữ liệu người dùng (bộ mẫu Tam Quốc: tên tướng, lời thoại…)
     const H = { 'Content-Type': 'application/json', 'X-GC-Request': '1' };
@@ -3283,6 +3305,43 @@ if (!ONLY || ONLY === 'i18n') {
     const badN = names.filter(x => !x[2]);
     if (badN.length) throw new Error('CNS-158 — tên người dùng bị dịch / nhãn khung không dịch: ' + badN.map(x => x[0] + ': "' + x[1] + '"').join(' · '));
     console.log('  ✓ CNS-158: tên người dùng không bị dịch dù trùng msgid — "Nam" (vai "Đạt"), vật phẩm "Đạt" ở Xưởng + Thư viện (thẻ, hồ sơ, nhãn neo); nhãn khung vẫn dịch ("' + rowF.split('|')[0] + '", "Long weapon frame")');
+    // 10) Q23: một chạm "Fun Office" ở giao diện en → nhập qua cổng như mọi gói; rồi một chạm bản Việt ở vi → hai bộ cài cạnh nhau;
+    //     phòng làm phim + thẻ dự án Fun Office ở chế độ en không còn chữ Việt; phim HTML xuất ra là phim tiếng Anh (<html lang="en">, lời thoại Anh) và diễn được
+    await qe.goto(U + '?lang=en'); await ready(qe); await qe.waitForSelector('ol.qsteps');
+    await qe.click('ol.qsteps ~ .row > button:has-text("Open the sample project")'); await qe.waitForURL(/\/thu-vien/, { timeout: 8000 });
+    await qe.waitForSelector('.libcard.proj[title="mau-fun-office"]', { timeout: 8000 });
+    const foCard = await qe.textContent('.libcard.proj[title="mau-fun-office"]');
+    if (!/Fun Office \(sample\)/.test(foCard)) throw new Error('thẻ dự án Fun Office (en): ' + foCard);
+    await qe.click('.libcard.proj[title="mau-fun-office"]'); await qe.waitForTimeout(600);
+    const foFound = [...await scanEn(qe, 'Dự án chủ đề › Fun Office')];
+    const foW = await (await fetch(U + 'api/works/fo-first-day')).json();
+    if (foW.lang !== 'en' || foW.shots.length !== 4) throw new Error('tác phẩm Fun Office sau một chạm: lang ' + foW.lang + ', ' + (foW.shots || []).length + ' phân cảnh');
+    await qe.goto(U + 'tao-tac?lang=en#/tac-pham/fo-first-day/script'); await ready(qe); await qe.waitForSelector('#wtab-script');
+    for (const t of ['script', 'shots', 'review', 'voice', 'publish']) { await qe.click('#wtab-' + t); await qe.waitForTimeout(600); foFound.push(...await scanEn(qe, 'Fun Office › phòng làm phim › ' + t)); }
+    if (foFound.length) throw new Error('Fun Office ở chế độ en còn chữ Việt:\n      ' + [...new Set(foFound)].slice(0, 20).join('\n      '));
+    const [fdl10] = await Promise.all([qe.waitForEvent('download'), qe.click('button:text-is("Film (HTML)")')]);
+    const fp10 = path.join(home16, 'fun-office.html'); await fdl10.saveAs(fp10);
+    const fh10 = fs.readFileSync(fp10, 'utf8');
+    if (!/<html lang="en">/.test(fh10)) throw new Error('phim Fun Office: <html lang> phải là en (ngôn ngữ phim), có ' + (/<html lang="[^"]*">/.exec(fh10) || ['?'])[0]);
+    for (const w of ['THREE HUNDRED PAGES?!', 'the door is still locked at 6', '>▶ Play<']) if (!fh10.includes(w)) throw new Error('phim Fun Office thiếu ' + JSON.stringify(w));
+    if (/BA TRĂM TRANG|Chào sếp ạ|Ngày đầu đi làm/.test(fh10)) throw new Error('phim Fun Office lẫn nội dung bản Việt');
+    const pf10 = await ctxE.newPage(), pe10 = []; pf10.on('pageerror', e => pe10.push(e.message));
+    await pf10.goto('file://' + fp10); await pf10.waitForFunction(() => window.GenChibi && window.GenChibi.film);
+    const rd10 = await pf10.evaluate(() => [document.querySelectorAll('#chapters li').length, GenChibi.film.readiness(FILM).filter(x => !x.ok).length, window.GenChibi.i18n.lang()]);
+    await pf10.click('#chapters li:nth-child(1) button');   // diễn thật chương 1: câu đầu tiên hiện lên (bong bóng / phụ đề) bằng tiếng Anh
+    await pf10.waitForSelector('.gcp-bub.on, .gcp-cap.on', { timeout: 30000 });
+    const st10 = (await pf10.textContent('.gcp-bub.on, .gcp-cap.on')).trim();
+    await pf10.click('#stop'); await pf10.close();
+    if (pe10.length || rd10.join() !== '4,0,en' || !/Good morning, boss!/.test(st10)) throw new Error('phim Fun Office mở bằng file:// ' + JSON.stringify([rd10, st10]) + ' ' + pe10.slice(0, 2).join(' | '));
+    // bản Việt cài SAU lượt quét (nội dung Việt của nó hiện ở ô chọn cảnh / diễn viên của mọi tác phẩm — là nội dung người dùng)
+    await qe.goto(U + '?lang=vi'); await ready(qe); await qe.waitForSelector('ol.qsteps');
+    const viLeft = await qe.$$eval('ol.qsteps ~ .row > button', els => els.map(e => e.textContent.trim()));
+    if (viLeft[0] !== '✨ Mở dự án mẫu "Văn phòng vui"') throw new Error('vi sau khi cài Fun Office: phải còn mời Văn phòng vui: ' + JSON.stringify(viLeft));
+    await qe.click('ol.qsteps ~ .row > button:has-text("Văn phòng vui")'); await qe.waitForURL(/\/thu-vien/, { timeout: 8000 });
+    await qe.waitForSelector('.libcard.proj[title="mau-van-phong-vui"]', { timeout: 8000 });
+    const pj10 = (await (await fetch(U + 'api/projects')).json()).map(p => p.id), ch10 = (await (await fetch(U + 'api/assets')).json()).map(a => a.id);
+    if (!pj10.includes('mau-fun-office') || !pj10.includes('mau-van-phong-vui') || !['fo-nana', 'fo-boss-ted', 'fo-barry', 'mau-be-na', 'mau-sep-tu', 'mau-anh-ba'].every(i => ch10.includes(i))) throw new Error('hai bộ văn phòng phải cài cạnh nhau: ' + pj10 + ' / ' + ch10.filter(i => /^(fo|mau)-/.test(i)));
+    console.log('  ✓ Q23: một chạm "Fun Office" (en) + "Văn phòng vui" (vi) → hai bộ cài cạnh nhau qua cổng nhập · thẻ dự án + 5 tab phòng làm phim Fun Office (en) không chữ Việt · phim xuất <html lang="en">, lời thoại Anh, mở file:// 4 chương sẵn sàng, diễn câu đầu "' + st10.slice(0, 40) + '"');
     await ctxE.close();
     if (errs16.length) throw new Error('lỗi trang: ' + errs16.slice(0, 3).join(' | '));
   } catch (e) { fail = 1; console.log('  ✗ i18n (ngôn ngữ giao diện):', e.message); }
