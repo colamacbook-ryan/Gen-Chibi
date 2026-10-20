@@ -2281,7 +2281,7 @@ if (!ONLY || ONLY === 'dock') {
   const mock11 = http11.createServer((req, res) => {
     let b = ''; req.on('data', d => b += d).on('end', () => {
       const body = JSON.parse(b), done = body.messages.filter(m => m.role === 'tool').length;
-      const cm = body.messages.find(m => m.role === 'user' && /^DỮ LIỆU GIAO DIỆN/.test(m.content));   // tin dữ liệu giao diện (JSON) — tách khỏi chỉ dẫn hệ thống (CNS-118)
+      const cm = body.messages.find(m => m.role === 'user' && /^UI DATA/.test(m.content));   // tin dữ liệu giao diện (JSON, nhãn tiếng Anh cho AI — CNS-067) — tách khỏi chỉ dẫn hệ thống (CNS-118)
       LLM.last = { system: body.messages[0].content, tools: body.tools.map(t => t.function.name), messages: body.messages, ctxText: cm ? cm.content : '', ctx: cm ? JSON.parse(cm.content.slice(cm.content.indexOf('\n') + 1)) : null }; LLM.calls++;
       const msg = done < LLM.steps.length
         ? { role: 'assistant', content: '', tool_calls: [{ id: 'c' + done, type: 'function', function: { name: LLM.steps[done][0], arguments: JSON.stringify(LLM.steps[done][1]) } }] }
@@ -2311,9 +2311,10 @@ if (!ONLY || ONLY === 'dock') {
     q = await open11(ctx11, U11 + 'xuong');
     const posts = []; q.on('request', r => { if (/\/api\/ai\/agent$/.test(r.url()) && r.method() === 'POST') posts.push(JSON.parse(r.postData())); });
     if (await q.$('.nav-item:has-text("Trợ lý AI tạo asset")')) throw new Error('còn trang chat riêng "Trợ lý AI tạo asset"');
-    const zones = [['xuong', 'Bàn chỉnh nhân vật', 'Xưởng', 'xuong', 'save_part', 'save_shot'], ['xuong', 'Bộ khung chuẩn', 'Bộ khung', 'khung', 'save_motion_pack', 'save_shot'],
-      ['thu-vien', 'Nhân vật', 'Thư viện', 'thu-vien', 'list_characters', 'save_part'], ['tao-tac', 'Tác phẩm', 'Tạo tác', 'tao-tac', 'save_shot', null]];
-    for (const [app, nav, label, zone, has, hasnt] of zones) {
+    // cột cuối: zone_label trong tin UI DATA gửi AI (tiếng Anh, mọi ngôn ngữ giao diện — v0.20 CNS-067)
+    const zones = [['xuong', 'Bàn chỉnh nhân vật', 'Xưởng', 'xuong', 'save_part', 'save_shot', 'Workshop'], ['xuong', 'Bộ khung chuẩn', 'Bộ khung', 'khung', 'save_motion_pack', 'save_shot', 'Core frame'],
+      ['thu-vien', 'Nhân vật', 'Thư viện', 'thu-vien', 'list_characters', 'save_part', 'Library'], ['tao-tac', 'Tác phẩm', 'Tạo tác', 'tao-tac', 'save_shot', null, 'Create']];
+    for (const [app, nav, label, zone, has, hasnt, labelEn] of zones) {
       if (!new RegExp('/' + app + '$').test(new URL(q.url()).pathname)) { await q.goto(U11 + app); await q.waitForSelector('#dock .dock-ctx .path'); }
       await q.click('.nav-item:text-is("' + nav + '")', { timeout: 5000 }).catch(async () => q.click('.nav-item:has-text("' + nav + '")')); await q.waitForTimeout(350);
       if (!(await q.isVisible('#dock .dock-head')) || !/Trợ lý AI/.test(await q.textContent('#dock .dock-head'))) throw new Error('khu ' + label + ': dock không hiện');
@@ -2322,7 +2323,7 @@ if (!ONLY || ONLY === 'dock') {
       LLM.steps = []; LLM.reply = 'Chào từ ' + label; await ask(q, 'Xin chào ở ' + label);
       const c = posts[posts.length - 1].context;
       if (c.zone !== zone || !LLM.last.tools.includes(has) || (hasnt && LLM.last.tools.includes(hasnt)) || LLM.last.tools.includes('update_app')) throw new Error('khu ' + label + ': context ' + JSON.stringify(c) + ' tools ' + LLM.last.tools.length);
-      if (!LLM.last.ctx || LLM.last.ctx.zone_label !== label || /khu .*› trang/.test(LLM.last.system)) throw new Error('dữ liệu giao diện không nói khu ' + label + ': ' + LLM.last.ctxText.slice(0, 120));
+      if (!LLM.last.ctx || LLM.last.ctx.zone_label !== labelEn || /zone_label|› page/.test(LLM.last.system)) throw new Error('dữ liệu giao diện không nói khu ' + label + ': ' + LLM.last.ctxText.slice(0, 120));
     }
     // liên kết cũ tới trang chat riêng → mở dock
     await q.evaluate(() => { localStorage.setItem('gc-route-xuong', JSON.stringify({ page: 'workshop' })); localStorage.setItem('gc-dock', JSON.stringify({ open: false, w: 380 })); });
@@ -2463,7 +2464,7 @@ if (!ONLY || ONLY === 'dock') {
     const tabs = await q.$$eval('.roomtabs button', es => es.map(e => e.textContent.replace(/[\d\/·\s]+đề xuất|\s*\d+(\/\d+)?$/g, '').trim())); if (tabs.join() !== 'Kịch bản,Phân cảnh,Xem & duyệt,Giọng & âm thanh,Xuất bản') throw new Error('tab phòng: ' + tabs.join());
     LLM.steps = []; LLM.reply = 'Ý tưởng hay cho phim này.'; await ask(q, 'Đề xuất thêm một cảnh về cầu Trường Bản');
     if (!/Ý tưởng hay/.test(await q.textContent('#dock .dock-log'))) throw new Error('chưa thấy trả lời');
-    if (!/TÁC PHẨM ĐANG MỞ: id tq-vuon/.test(LLM.last.system) || !LLM.last.ctx.work || !/Từ vườn đào tới Xích Bích/.test(LLM.last.ctx.work.title) || /Từ vườn đào/.test(LLM.last.system)) throw new Error('Tạo tác: quy trình ở chỉ dẫn, hiện trạng tác phẩm ở tin dữ liệu');
+    if (!/OPEN WORK: id tq-vuon/.test(LLM.last.system) || !LLM.last.ctx.work || !/Từ vườn đào tới Xích Bích/.test(LLM.last.ctx.work.title) || /Từ vườn đào/.test(LLM.last.system)) throw new Error('Tạo tác: quy trình ở chỉ dẫn, hiện trạng tác phẩm ở tin dữ liệu');
     await q.click('.crumbs a:text-is("Tác phẩm")'); await q.waitForSelector('table.worklist'); 
     await q.waitForTimeout(500); if (/Ý tưởng hay|cầu Trường Bản/.test(await q.textContent('#dock .dock-log'))) throw new Error('rời tác phẩm mà dock vẫn hiện luồng của tác phẩm');
     await q.goBack(); await q.waitForSelector('.roomtabs'); await q.waitForTimeout(500);
@@ -2476,7 +2477,7 @@ if (!ONLY || ONLY === 'dock') {
     const p5 = []; q.on('request', r => { if (/\/api\/ai\/agent$/.test(r.url()) && r.method() === 'POST') p5.push(JSON.parse(r.postData())); });
     await q.click('#dock .dock-ctx .x'); await q.waitForSelector('#dock .dock-ctx button:text-is("Gắn lại")');
     LLM.steps = []; LLM.reply = 'Tôi chỉ biết bạn đang ở khu Tạo tác.'; await ask(q, 'Chào bạn');
-    if (p5[0].context.zone !== 'tao-tac' || p5[0].context.object || p5[0].context.page || /TÁC PHẨM ĐANG MỞ/.test(LLM.last.system) || LLM.last.ctx.work || LLM.last.ctx.object || !LLM.last.tools.includes('save_shot')) throw new Error('bỏ ngữ cảnh: ' + JSON.stringify(p5[0].context));
+    if (p5[0].context.zone !== 'tao-tac' || p5[0].context.object || p5[0].context.page || /OPEN WORK/.test(LLM.last.system) || LLM.last.ctx.work || LLM.last.ctx.object || !LLM.last.tools.includes('save_shot')) throw new Error('bỏ ngữ cảnh: ' + JSON.stringify(p5[0].context));
     await q.click('#dock .dock-ctx button:text-is("Gắn lại")'); await q.waitForFunction(() => /Từ vườn đào/.test(document.querySelector('#dock .dock-ctx .path').textContent));
     await q.goto(U11 + 'tao-tac#/tac-pham/' + WID + '/review'); await q.waitForSelector('.roomtabs'); await q.waitForTimeout(400);
     if (await q.getAttribute('#wtab-review', 'aria-selected') !== 'true') throw new Error('deep link tab review không mở đúng tab');
@@ -2593,7 +2594,8 @@ if (!ONLY || ONLY === 'oauth') {
     await q.goto(B + '/oauth/authorize?' + k1.q);
     await q.waitForSelector('#ok');
     const t0 = await q.textContent('main');
-    if (!/Cấp phép kết nối agent/.test(t0) || !/claude\.ai/.test(await q.textContent('#cb')) || !/tên miền quen/.test(await q.textContent('#cc'))) throw new Error('trang thiếu tiêu đề / tên miền callback / nhãn "quen": ' + t0.slice(0, 200));
+    // trang Cấp phép theo Accept-Language của trình duyệt (Playwright mặc định en-US → tiếng Anh; bản vi: tools/test-i18n-server.mjs)
+    if (!/Authorize agent connection/.test(t0) || !/claude\.ai/.test(await q.textContent('#cb')) || !/known domain/.test(await q.textContent('#cc'))) throw new Error('trang thiếu tiêu đề / tên miền callback / nhãn "quen": ' + t0.slice(0, 200));
     if (await q.$('main img') || !/<img src=x/.test(await q.textContent('#cn'))) throw new Error('tên agent phải hiện nguyên chữ, không dựng thẻ');
     if (!(await q.isVisible('#tk')) || (await q.inputValue('#tki')) !== '') throw new Error('có GC_API_TOKEN mà chưa đăng nhập: phải hiện ô nhập token chủ máy');
     if ((await q.$$('#sc input[type=radio]')).length !== 3 || (await q.inputValue('#sc input:checked')) !== 'mcp:write') throw new Error('3 mức quyền, mặc định mcp:write');
@@ -2607,7 +2609,7 @@ if (!ONLY || ONLY === 'oauth') {
     if (/\sstyle\s*=/.test(await q.content())) throw new Error('trang Cấp phép còn style inline (CSP chặn)');
     await q.fill('#tki', 'token-sai'); await q.click('#ok');
     await q.waitForFunction(() => !document.getElementById('er').hidden);
-    if (!/token chủ máy/.test(await q.textContent('#er')) || landed.length) throw new Error('token sai: phải báo lỗi và KHÔNG quay về agent');
+    if (!/owner token/.test(await q.textContent('#er')) || landed.length) throw new Error('token sai: phải báo lỗi và KHÔNG quay về agent');
     console.log('  ✓ Token chủ sai → báo lỗi, không cấp, không quay về agent');
     await q.fill('#tki', TOK); await q.check('#sc input[value="mcp:read"]'); await q.click('#ok');
     await q.waitForFunction(() => location.protocol === 'https:', null, { timeout: 8000 });
@@ -2630,10 +2632,10 @@ if (!ONLY || ONLY === 'oauth') {
     landed.length = 0;
     const c3 = await reg(B, 'Agent lạ', ALT), k3 = mkq(c3, ALT);
     await q.goto(B + '/oauth/authorize?' + k3.q); await q.waitForSelector('#ok');
-    if (await q.isVisible('#warn') || !/bạn đã thêm/.test(await q.textContent('#cc')) || !/agent\.example\.org/.test(await q.textContent('#cb'))) throw new Error('callback do chủ thêm (GC_OAUTH_REDIRECTS): phải ghi rõ "bạn đã thêm" + domain: ' + await q.textContent('#cc'));
+    if (await q.isVisible('#warn') || !/added by you/.test(await q.textContent('#cc')) || !/agent\.example\.org/.test(await q.textContent('#cb'))) throw new Error('callback do chủ thêm (GC_OAUTH_REDIRECTS): phải ghi rõ "bạn đã thêm" + domain: ' + await q.textContent('#cc'));
     await q.goto(B + '/oauth/authorize?' + mkq(c3, ALT).q.replace(encodeURIComponent(ALT), encodeURIComponent('https://evil.example/cb')));
     const bad = await q.textContent('main');
-    if (!/không chuyển hướng/.test(bad) || landed.length || new URL(q.url()).origin !== B) throw new Error('redirect_uri lệch: phải hiện trang lỗi, không chuyển hướng');
+    if (!/no redirect/.test(bad) || landed.length || new URL(q.url()).origin !== B) throw new Error('redirect_uri lệch: phải hiện trang lỗi, không chuyển hướng');
     console.log('  ✓ Callback do chủ thêm (GC_OAUTH_REDIRECTS) → ghi rõ domain + "bạn đã thêm"; redirect_uri lệch → trang lỗi, KHÔNG chuyển hướng');
     // ---- Cài đặt › Kết nối agent
     await q.goto(B + '/xuong'); await q.waitForFunction(() => /^v\d/.test((document.getElementById('verChip') || {}).textContent), null, { timeout: 8000 });
@@ -2762,8 +2764,7 @@ if (!ONLY || ONLY === 'i18n') {
     const USER = [...userStr].sort((a, b) => b.length - a.length);
     // câu ĐỘNG do engine ghép (core.js — cổng kiểm có số đếm): chưa dịch được bằng tra bảng nguyên câu; builder engine chuyển sang mẫu {n}.
     // Đếm riêng và in cảnh báo — KHÔNG làm đỏ test; xoá dần danh sách này khi engine đã dịch (mục tiêu: rỗng).
-    const PENDING = ['^Dấu nhận diện bắt buộc \\(\\d+\\)$', '^Dựng đủ \\d+ trạng thái$', '^Dựng đủ \\d+ hoạt động \\(tư thế × di chuyển × động tác\\)$', '^Bản vẽ nghiêng 45°: \\d+/\\d+ linh kiện$',
-      '^thiếu: [a-z]+:', '^\\d+ phông$', '^\\d+ chỗ đứng$', '^\\d+/\\d+ đạo cụ · \\d+/\\d+ hạt · diễn viên ≤ \\d+$'];
+    const PENDING = [];   // v0.20: câu động của cổng kiểm đã thành mẫu (labelId / detailId) và Studio dịch theo mẫu — danh sách rỗng: còn chữ Việt là ĐỎ
     const pendingSeen = new Set();
     const scanEn = async (q, where) => (await q.evaluate(([USER, where, PENDING]) => {
       const VI = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ]/;

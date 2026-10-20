@@ -16,6 +16,8 @@ const { consentPage, errorPage } = require('./oauth-page');
 const { Store, KEY, CHAT_KINDS, readJSON, writeJSON } = require('./store');
 const { loadEngine } = require('./engine-node');
 const L10N = require('./i18n');   // ngôn ngữ (ADR 0007): langOf(req) + tr(lang, msgid) — builder sau dịch câu server qua đây
+const VI = (msgid, vars) => L10N.tr('vi', msgid, vars);   // câu tiếng Việt dựng từ MẪU (msgid có {x}): localize() khớp ngược sang ngôn ngữ người gọi; công cụ quét thấy msgid
+const MSG = require('./i18n-msg');   // câu ghép động (khớp ngược mẫu {x}) + ngôn ngữ của yêu cầu đang chạy (AsyncLocalStorage) — v0.20
 
 const APP = path.resolve(__dirname, '..');                       // thư mục phiên bản đang chạy
 const HOME = process.env.GC_HOME || (path.basename(path.dirname(APP)) === 'releases' ? path.resolve(APP, '..', '..') : path.join(APP, '.home'));
@@ -88,18 +90,11 @@ setInterval(() => oauth.flush(), 30000).unref();   // lastUsedAt ghi đĩa trễ
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.md': 'text/markdown; charset=utf-8' };
 // ngôn ngữ của người gọi: header X-GC-Lang (Studio) → Accept-Language → mặc định của máy
 function langOf(req) { return L10N.langOf(req, settings().uiLang); }
-// câu lỗi JSON ({ error, errors[] }) dịch theo người gọi nếu bảng có ĐÚNG câu đó (msgid); câu ghép động chưa có khoá thì giữ nguyên —
-// builder dịch server chuyển dần sang tr(langOf(req), 'mẫu {x}', { x }) ngay tại chỗ ném lỗi
+// câu do server sinh trong JSON — error, message, errors[] (chuỗi | { error }), warnings[], conflicts[] — dịch theo người gọi (ADR 0007, v0.20):
+// khớp nguyên văn → khớp ngược MẪU có placeholder (câu ghép động: engine/i18n-msg.js) → giữ nguyên. Trường dữ liệu khác không đụng
 function localize(res, body) {
-  if (!res.req || !body || typeof body !== 'object' || Buffer.isBuffer(body) || Array.isArray(body)) return body;
-  const hasErr = typeof body.error === 'string', hasList = Array.isArray(body.errors) && body.errors.some(x => typeof x === 'string');
-  if (!hasErr && !hasList) return body;
-  const lang = langOf(res.req);
-  if (lang === L10N.I18N.SOURCE) return body;
-  const out = Object.assign({}, body);
-  if (hasErr) out.error = L10N.label(lang, body.error);
-  if (hasList) out.errors = body.errors.map(x => typeof x === 'string' ? L10N.label(lang, x) : x);
-  return out;
+  if (!res.req) return body;
+  return MSG.localizeBody(langOf(res.req), body);   // khớp nguyên văn → khớp ngược MẪU (câu ghép động) → giữ nguyên; trường dữ liệu khác không đụng
 }
 // cấu hình AI cho Studio: chữ người đọc (nhãn nhà cung cấp, nhãn / vai / lời giới thiệu của từng khu ở dock) theo ngôn ngữ người gọi
 function aiView(lang, c) {
@@ -122,7 +117,7 @@ function fail(res, code, message) { send(res, code, { error: message }); }
 function body(req, limit = 1024 * 1024) {
   return new Promise((resolve, reject) => {
     const chunks = []; let n = 0;
-    req.on('data', c => { n += c.length; if (n > limit) { reject(Object.assign(new Error('dữ liệu gửi lên quá lớn (tối đa ' + Math.round(limit / 1048576 * 10) / 10 + ' MB)'), { code: 413 })); req.destroy(); } else chunks.push(c); });
+    req.on('data', c => { n += c.length; if (n > limit) { reject(Object.assign(new Error(VI('dữ liệu gửi lên quá lớn (tối đa {n} MB)', { n: Math.round(limit / 1048576 * 10) / 10 })), { code: 413 })); req.destroy(); } else chunks.push(c); });
     req.on('end', () => {
       if (!n) return resolve({});
       try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); } catch { reject(Object.assign(new Error('JSON không hợp lệ'), { code: 400 })); }
@@ -186,8 +181,8 @@ function originOK(req) {
 // câu báo khi chặn: nói rõ trang mở ở đâu và máy chủ nhận địa chỉ nào để người dùng tự sửa (chuỗi đã cắt ngắn, chỉ là chữ)
 function originMsg(req) {
   const cut = x => String(x || '?').replace(/[^\x20-\x7e]/g, '').slice(0, 120);
-  return 'yêu cầu từ nguồn lạ bị chặn: trang đang mở ở ' + cut(req.headers.origin) + ' nhưng máy chủ nhận địa chỉ ' + cut(req.headers.host) +
-    ' — mở Studio bằng đúng địa chỉ máy chủ (vd. http://127.0.0.1:' + PORT + '), hoặc cập nhật bằng lệnh: genchibi update';
+  return VI('yêu cầu từ nguồn lạ bị chặn: trang đang mở ở {origin} nhưng máy chủ nhận địa chỉ {host} — mở Studio bằng đúng địa chỉ máy chủ (vd. http://127.0.0.1:{port}), hoặc cập nhật bằng lệnh: genchibi update',
+    { origin: cut(req.headers.origin), host: cut(req.headers.host), port: PORT });
 }
 
 // KHOÁ LƯỢT AI (CNS-120): mỗi lượt giữ khoá của LUỒNG (`<loại>-<id>`: một lượt mỗi luồng) VÀ khoá của TÁC PHẨM nó có thể ghi (`work:<id>`; lượt ở khu Tạo tác không gắn tác phẩm có thể
@@ -327,13 +322,13 @@ async function route(req, res) {
     const b = bearerOf(req), owner = !!API_TOKEN && tokenOk(b);
     oauthGrant = !owner && oauth.enabled ? oauth.verify(b) : null;   // token OAuth hợp lệ luôn được áp phạm vi của nó — kể cả khi không đặt GC_API_TOKEN (quyền ít hơn quyền chủ máy cục bộ)
     if (oauthGrant) mcpCtx = scopeCtx(oauthGrant.scope);
-    else if (API_TOKEN && !owner) return send(res, 401, { error: 'cần token của bản cài' + (oauth.enabled ? ' hoặc kết nối OAuth (xem WWW-Authenticate)' : '') }, null, oauth.enabled ? { 'WWW-Authenticate': 'Bearer resource_metadata="' + oauth.metaUrl + '"' } : undefined);
+    else if (API_TOKEN && !owner) return send(res, 401, { error: oauth.enabled ? VI('cần token của bản cài hoặc kết nối OAuth (xem WWW-Authenticate)') : 'cần token của bản cài' }, null, oauth.enabled ? { 'WWW-Authenticate': 'Bearer resource_metadata="' + oauth.metaUrl + '"' } : undefined);
   }
   if (API_TOKEN && !viaLink && p.startsWith('/api/') && p !== '/api/health' && !tokenOk(bearerOf(req))) {
     // approve là đường /api duy nhất tunnel mở ra Internet → chỗ thử token chủ máy. Token ĐÚNG không bao giờ bị trần; chỉ đếm (theo IP) và chặn các lần SAI
     if (p === '/api/oauth/approve' && oauth.enabled && !isDirectLocal(req.headers, req.socket.remoteAddress)) {
       const ip = clientIp(req.headers, req.socket.remoteAddress, IP_HEADER), w = oauth.gate('approve', ip);
-      if (w) return send(res, 429, { error: 'quá nhiều lần sai token — thử lại sau ' + w + ' giây' }, null, { 'Retry-After': String(w) });
+      if (w) return send(res, 429, { error: VI('quá nhiều lần sai token — thử lại sau {n} giây', { n: w }) }, null, { 'Retry-After': String(w) });
       oauth.tick('approve', ip);
     }
     return fail(res, 401, 'cần token của bản cài');
@@ -343,7 +338,7 @@ async function route(req, res) {
   if (p === '/mcp') {
     // GET cho agent KHÔNG có MCP client (trung lập model, INT-05): ?guide=<chủ đề> → markdown · ?tools=openai|gemini|mcp → schema tool
     if (m === 'GET' && (url.searchParams.has('guide') || url.searchParams.has('tools'))) {
-      if (url.searchParams.has('guide')) { const md = Agent.guide(url.searchParams.get('guide') || 'guide'); return md == null ? fail(res, 404, 'chủ đề lạ: ' + Agent.topics().map(t => t.id).join(', ')) : send(res, 200, md, 'text/markdown; charset=utf-8'); }
+      if (url.searchParams.has('guide')) { const md = Agent.guide(url.searchParams.get('guide') || 'guide'); return md == null ? fail(res, 404, VI('chủ đề lạ: {ids}', { ids: Agent.topics().map(t => t.id).join(', ') })) : send(res, 200, md, 'text/markdown; charset=utf-8'); }
       const out = Agent.toolsExport(MCP_TOOLS, url.searchParams.get('tools') || 'openai'); return out ? send(res, 200, out) : fail(res, 400, 'tools: openai | gemini | mcp');
     }
     if (m !== 'POST') return send(res, 405, { error: 'MCP: chỉ nhận POST (GET ?guide=<chủ đề> hoặc ?tools=openai|gemini|mcp cho agent không có MCP client)' }, null, { Allow: 'POST' });
@@ -386,7 +381,7 @@ async function route(req, res) {
   if (p === '/api/update' && m === 'GET') return send(res, 200, Object.assign(updater.status(), { settings: settings() }));
   if (p === '/api/update/check' && m === 'POST') {
     try { return send(res, 200, Object.assign(await updater.check(), { settings: settings() })); }
-    catch (e) { updater.state.error = e.message; updater.state.lastCheck = new Date().toISOString(); return fail(res, 502, 'Không kiểm tra được phiên bản: ' + e.message); }
+    catch (e) { updater.state.error = e.message; updater.state.lastCheck = new Date().toISOString(); return fail(res, 502, VI('Không kiểm tra được phiên bản: {error}', { error: e.message })); }
   }
   if (p === '/api/update/apply' && m === 'POST') {
     const b = await body(req);
@@ -417,7 +412,7 @@ async function route(req, res) {
   if (p === '/api/ai' && m === 'GET') return send(res, 200, aiView(langOf(req), Object.assign(ai.publicConfig(), { zones: mcp.zoneInfo() })));   // zones: nhãn / vai / lời giới thiệu theo khu cho dock (một nguồn: mcp ZONES)
   if (p === '/api/ai' && m === 'PUT') return send(res, 200, aiView(langOf(req), ai.setConfig(await body(req))));
   if (p === '/api/ai/models' && m === 'GET') {
-    try { return send(res, 200, await ai.models()); } catch (e) { return fail(res, e.code || 502, 'Không lấy được danh sách model: ' + e.message); }
+    try { return send(res, 200, await ai.models()); } catch (e) { return fail(res, e.code || 502, VI('Không lấy được danh sách model: {error}', { error: e.message })); }
   }
   if (p === '/api/ai/bench' && m === 'GET') return send(res, 200, ai.bench());
   // ---- giọng AI (Google Gemini TTS): bật / key / model quét lúc chạy; đọc một câu → clip WAV lưu đệm theo nội dung
@@ -607,7 +602,8 @@ async function route(req, res) {
 }
 
 const server = http.createServer((req, res) => {
-  route(req, res).catch(e => { log('[server] lỗi', e.message); if (!res.headersSent) fail(res, e.code && e.code >= 400 && e.code < 600 ? e.code : 500, e.message); });
+  MSG.run(langOf(req), () => route(req, res)).catch(e => {   // ngôn ngữ của yêu cầu cho trang Cấp phép, nhãn khu / nhà cung cấp / giọng, tên phân cảnh mặc định…
+    log('[server] lỗi', e.message); if (!res.headersSent) fail(res, e.code && e.code >= 400 && e.code < 600 ? e.code : 500, e.message); });
 });
 
 /* ---------------------------------------------------------------- tự kiểm tra phiên bản */

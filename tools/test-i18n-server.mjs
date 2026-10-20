@@ -31,7 +31,8 @@ const MAIN = readFileSync(ROOT + '/server/main.js', 'utf8');
 const HOOKED = /MSG\.run\(/.test(MAIN) && /MSG\.localizeBody\(/.test(MAIN);
 let fail = 0, pass = 0, pend = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('   ✓', m); } else { fail = 1; console.log('   ✗', m); } };
-const okH = (c, m) => { if (c || HOOKED) return ok(c, m); pend++; console.log('   … chờ hook main.js:', m); };
+const okH = ok;   // v0.20: hook main.js đã gộp (MSG.run + MSG.localizeBody) — mọi ca kiểm nghiêm, không còn "chờ hook"
+ok(HOOKED, 'main.js có hook i18n: mỗi yêu cầu chạy trong MSG.run(langOf(req)) + localize qua MSG.localizeBody');
 const cut = (s, n) => JSON.stringify(String(s)).slice(0, n || 160);
 
 /* ---------------------------------------------------------------- các hàm kiểm (dùng lại ở rào ngược (g)) */

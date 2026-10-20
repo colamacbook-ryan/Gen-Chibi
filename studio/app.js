@@ -8,6 +8,10 @@
   // NGÔN NGỮ (ADR 0007, engine/i18n.js): msgid = chuỗi tiếng Việt hiện có. _t = câu giao diện · _l = nhãn DỮ LIỆU (engine / người dùng:
   // có bản dịch thì dịch, không thì giữ nguyên, không ghi "thiếu") · N_ = đánh dấu chuỗi ở bảng hằng cấp module — dịch lúc HIỂN THỊ bằng _t().
   var I18N = GC.i18n, _t = I18N.t, _pt = I18N.pt, _l = I18N.label, N_ = I18N.N;   // _pt(ngữ cảnh, msgid): một chữ Việt, hai nghĩa tiếng Anh
+  // mục cổng kiểm của engine: câu có số đếm trả kèm labelId / detailId (mẫu {n}) → dịch theo mẫu; câu tĩnh → nhãn dữ liệu (v0.20)
+  function gL(g) { return g.labelId ? _l(g.labelId, g.labelVars) : _l(g.label); }
+  function gD(g) { return g.detailId ? _l(g.detailId, g.detailVars) : _l(g.detail || ''); }
+  N_('Cảnh đã đổi sau khi duyệt — cần xem lại.');   // msgid ghi chú hệ thống (server/mcp.js reviewTouched) — hiển thị bằng _l(n.text)
   // 8 hướng (2.5D): tên góc → nhãn. Thứ tự = GC.VIEW_ORDER. Sprite 8 hướng đi vòng theo chiều kim đồng hồ từ chính diện.
   var VIEW_LABEL = { front: N_('Chính diện'), left: N_('3/4 trái'), right: N_('3/4 phải'), left45: N_('45° trái'), right45: N_('45° phải'), left90: N_('90° trái'), right90: N_('90° phải'),
     left135: N_('135° trái'), right135: N_('135° phải'), back: N_('Sau lưng') };
@@ -567,8 +571,8 @@
       clear(gateBox);
       var t = h('table', { class: 'grid' });
       GC.gate(w, { poses: true }).forEach(function (g) {
-        t.appendChild(h('tr', null, h('td', { text: _l(g.label) }), h('td', { class: g.ok ? 'ok' : 'bad', style: 'font-weight:600', text: g.ok ? _pt('cổng kiểm', 'Đạt') : _t('Không đạt') })));
-        if (!g.ok) t.appendChild(h('tr', null, h('td', { colspan: '2', class: 'note', text: _l(g.detail) })));
+        t.appendChild(h('tr', null, h('td', { text: gL(g) }), h('td', { class: g.ok ? 'ok' : 'bad', style: 'font-weight:600', text: g.ok ? _pt('cổng kiểm', 'Đạt') : _t('Không đạt') })));
+        if (!g.ok) t.appendChild(h('tr', null, h('td', { colspan: '2', class: 'note', text: gD(g) })));
       });
       gateBox.appendChild(t);
     }
@@ -2706,7 +2710,7 @@
         var notes = h('div', { class: 'notes' });
         (rv.notes || []).forEach(function (n) {
           notes.appendChild(h('div', { class: 'note-row' }, n.step ? h('button', { class: 'tag', title: _t('Ghim bước {step} vào Trợ lý AI', { step: n.step }), onclick: function () { if (window.GCDock) window.GCDock.pin('step:' + W.id + '/' + s.id + '/' + n.step, _t('Bước {step} · {title}', { step: n.step, title: s.title })); } }, 'B' + String(n.step).padStart(2, '0')) : h('span', { class: 'tag', text: _t('cảnh') }),
-            h('span', { class: 'tx', text: n.text }),
+            h('span', { class: 'tx', text: n.by === 'system' ? _l(n.text) : n.text }),   // ghi chú do hệ thống tự thêm (cảnh đổi sau khi duyệt) dịch theo giao diện; ghi chú người viết giữ nguyên
             h('button', { class: 'btn sm ic', 'aria-label': _t('Xoá ghi chú: {slice}', { slice: n.text.slice(0, 40) }), title: _t('Xoá ghi chú'), onclick: function () { saveReviewShot(s.id, { notes: cleanNotes((rv.notes || []).filter(function (x) { return x.id !== n.id; })) }); } }, '✕')));
         });
         var nIn = h('input', { type: 'text', maxlength: 400, 'aria-label': _t('Ghi chú duyệt cho {title}', { title: s.title }), placeholder: _t('Ghi chú: sửa gì ở cảnh này…'), value: nd.text, oninput: function () { nd.text = nIn.value; }, onkeydown: function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); addNote(); } } });
@@ -4861,8 +4865,8 @@
       var gl = h('ul', { class: 'gates' });
       (errs.length ? errs.map(function (e) { return { ok: false, label: e }; }) : gates).forEach(function (g) {
         var soft = !g.ok && blocking.indexOf(g) < 0 && !errs.length;   // không chặn bản nháp (vd. dấu nhận diện) — cần khi chuyển duyệt
-        gl.appendChild(h('li', { class: g.ok ? (g.info ? 'info' : 'ok') : soft ? 'warn' : 'bad' }, h('b', { text: g.ok ? (g.info ? 'ℹ' : '✓') : soft ? '⚠' : '✗' }), ' ' + _l(g.label),
-          g.detail ? h('span', { class: 'note', text: ' — ' + _l(g.detail) }) : null, soft ? h('span', { class: 'note', text: _t(' (cần khi chuyển duyệt, nháp vẫn lưu được)') }) : null));
+        gl.appendChild(h('li', { class: g.ok ? (g.info ? 'info' : 'ok') : soft ? 'warn' : 'bad' }, h('b', { text: g.ok ? (g.info ? 'ℹ' : '✓') : soft ? '⚠' : '✗' }), ' ' + gL(g),
+          g.detail ? h('span', { class: 'note', text: ' — ' + gD(g) }) : null, soft ? h('span', { class: 'note', text: _t(' (cần khi chuyển duyệt, nháp vẫn lưu được)') }) : null));
       });
       var saveB = h('button', { class: 'btn primary', disabled: blocking.length ? '' : null, onclick: function () { save(saveB); } }, _t('Lưu vào Thư viện · {name}', { name: Projects.name(u.project) }));
       var after = h('div', { class: 'row' });
@@ -4981,7 +4985,7 @@
         var cast = castRows.filter(function (x) { return x.id && d.spots.indexOf(x.spot) >= 0; }).map(function (x) { var m = { asset: GC.getAsset(x.id, MY_PACK), spot: x.spot }; if (x.activity) m.activity = x.activity; return m; })
           .filter(function (m, i, a) { return m.asset && a.findIndex(function (y) { return y.spot === m.spot; }) === i; });
         try { img.src = svgURL(GC.sceneSvg(d, { cast: cast })); } catch (e) { errBox.appendChild(h('li', { text: e.message })); }
-        gateBox.appendChild(h('table', { class: 'grid' }, GC.sceneGate(d).map(function (g) { return h('tr', null, h('td', { text: g.ok ? (g.info ? 'ℹ' : '✓') : '✗' }), h('td', { text: _l(g.label) }), h('td', { class: 'note', text: g.detail || '' })); })));
+        gateBox.appendChild(h('table', { class: 'grid' }, GC.sceneGate(d).map(function (g) { return h('tr', null, h('td', { text: g.ok ? (g.info ? 'ℹ' : '✓') : '✗' }), h('td', { text: gL(g) }), h('td', { class: 'note', text: gD(g) })); })));
       }, 60);
     }
     function sceneryOpts(slot, cur, optional) {
@@ -5310,12 +5314,12 @@
     crumbs([{ t: _t('Cổng kiểm & hiệu năng') }]);
     var t = h('table', { class: 'grid' });
     var all = GC.assets();
-    var head = GC.gate(all[0], { poses: true }).map(function (g) { return _l(g.label); });
+    var head = GC.gate(all[0], { poses: true }).map(function (g) { return gL(g); });
     t.appendChild(h('tr', null, h('th', { text: _pt('cột', 'Nhân vật') }), head.map(function (x) { return h('th', { text: x }); }), h('th', { text: _t('Xuất') })));
     all.forEach(function (a) {
       var gs = GC.gate(a, { poses: true }), ok = gs.every(function (g) { return g.ok; });
       t.appendChild(h('tr', null, h('td', null, h('span', { class: 'mono note', text: (a.code || '') + ' ' }), _l(a.name)),
-        gs.map(function (g) { return h('td', { class: g.ok ? 'ok' : 'bad', title: _l(g.detail || ''), style: 'font-weight:600', text: g.ok ? _pt('cổng kiểm', 'Đạt') : _t('Không đạt') }); }),
+        gs.map(function (g) { return h('td', { class: g.ok ? 'ok' : 'bad', title: gD(g), style: 'font-weight:600', text: g.ok ? _pt('cổng kiểm', 'Đạt') : _t('Không đạt') }); }),
         h('td', { class: ok ? 'ok' : 'bad', style: 'font-weight:600', text: ok ? _t('Được xuất') : _t('Chặn') })));
     });
     var res = h('div', { class: 'note' });
