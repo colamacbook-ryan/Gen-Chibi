@@ -111,6 +111,10 @@ console.log('(a) msgid server / engine có bản en · mẫu khớp ngược đ�
   const rows = [].concat(...GC.assets().map(a => GC.gate(a)), ...GC.scenes().map(sc => GC.sceneGate(sc)), ...GC.items().map(it => GC.itemGate(it))).filter(g => g.labelId || g.detailId);
   const diff = rows.filter(g => (g.labelId && L10N.tr('en', g.labelId, g.labelVars) !== MSG.en(g.label)) || (g.detailId && L10N.tr('en', g.detailId, g.detailVars) !== MSG.en(g.detail)));
   ok(rows.length >= 3 && !diff.length, 'cổng kiểm (' + rows.length + ' dòng có labelId / detailId): t(msgid, vars) = dịch ngược câu đã ghép' + (diff.length ? ' — lệch: ' + diff.slice(0, 3).map(g => g.id + ' ' + cut(g.label, 60)).join(' · ') : ''));
+  // mẫu khớp ngược chỉ lấy từ bảng server*/engine* — mẫu ngắn của giao diện ("{replace} mới"…) không được nuốt câu server (lỗi thật khi gộp với rel-v020)
+  const foreign = [...compiled].filter(k => !Object.entries(tables).some(([f, d]) => /^(server|engine)[\w-]*\.json$/.test(f) && Object.prototype.hasOwnProperty.call(d, k)));
+  const note = 'review.shots.c1.notes[0]: ghi chú n1 đã có — kênh ai không được sửa, chỉ thêm ghi chú mới';
+  ok(!foreign.length && MSG.en(note) === 'review.shots.c1.notes[0]: ' + L10N.tr('en', 'ghi chú {id} đã có — kênh {by} không được sửa, chỉ thêm ghi chú mới', { id: 'n1', by: 'ai' }), 'mẫu khớp ngược chỉ từ bảng server / engine (' + compiled.size + ' mẫu); "path: câu" không bị mẫu ngắn của giao diện nuốt' + (foreign.length ? ' — mẫu lạ: ' + foreign.slice(0, 3).join(' · ') : ''));
   const lists = ['Item chưa đạt: type: chọn weapon | offhand; rarity: chọn common | rare; equip.part "undefined" không có trong bộ phận ufo (xem get_catalog › slots)'];
   ok(lists.every(s => !VI_RE.test(MSG.en(s))), 'danh sách lỗi nối "; " (path: câu; path: câu mẫu) dịch đủ từng mục: ' + cut(MSG.en(lists[0]), 200));
 }

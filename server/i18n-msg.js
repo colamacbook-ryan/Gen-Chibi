@@ -13,6 +13,7 @@
 //   srcLang(lang)   lang hợp lệ → ngôn ngữ của yêu cầu đang chạy → 'vi' (msgid nguồn) — cho DỮ LIỆU trả Studio qua main.js: không có ngữ cảnh thì giữ
 //                   tiếng Việt để main.js dịch ở rìa (localize / aiView theo langOf(req)) — không bao giờ ra tiếng Anh cố định cho người dùng chế độ vi
 'use strict';
+const fs = require('fs');
 const path = require('path');
 const { AsyncLocalStorage } = require('async_hooks');
 const L10N = require('./i18n');
@@ -22,7 +23,14 @@ const APP = path.resolve(__dirname, '..');
 const VI = L10N.I18N.SOURCE;   // 'vi' — tr(VI, mẫu, biến): điền biến, KHÔNG dịch
 // nạp bảng NGAY khi module được require (mô tả tool MCP dựng lúc nạp mcp.js — trước dòng L10N.load của main.js); load() chỉ chạy một lần
 L10N.load(APP);
-(function () { const all = L10N.readLocales(APP); Object.keys(all).forEach(l => M.add(l, all[l])); })();
+// MẪU khớp ngược chỉ lấy từ bảng của server / engine (server*.json, engine*.json): mẫu ngắn của giao diện ("{replace} mới", "{n} lỗi"…)
+// dành cho t(msgid, vars) trong Studio — đem khớp ngược câu server thì nuốt nhầm cả câu. Bảng nào cũng vẫn dùng cho khớp NGUYÊN VĂN (L10N.load)
+const MSG_TABLES = /^(server|engine)[\w-]*\.json$/;
+(function () {
+  const root = path.join(APP, 'locales');
+  Object.keys(L10N.readLocales(APP)).forEach(l => fs.readdirSync(path.join(root, l)).filter(f => MSG_TABLES.test(f)).sort()
+    .forEach(f => M.add(l, JSON.parse(fs.readFileSync(path.join(root, l, f), 'utf8')))));
+})();
 
 const store = new AsyncLocalStorage();
 function run(lang, fn) { return store.run({ lang: L10N.norm(lang) || L10N.I18N.DEFAULT }, fn); }
