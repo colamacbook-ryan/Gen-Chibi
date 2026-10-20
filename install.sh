@@ -79,6 +79,7 @@ _en() {
     sum_cmds) F="  Commands:  genchibi start|stop|status|update|logs|backup|restore|mcp|online|open|password|lang|uninstall" ;;
     sum_mcp) F="  MCP:       claude mcp add gen-chibi -- %s mcp" ;;
     sum_mcp_net) F="  Go online (domain + HTTPS + MCP): genchibi online --help, or Studio › System › Go online" ;;
+    root_uid) F="Running as root: the containers run as user %s:%s (not root) — %s now belongs to that user" ;;
     sum_update) F="  Auto-update: on (turn off in Studio › System › Updates)" ;;
     sum_lang) F="  Language:  English (Vietnamese: genchibi lang vi, or the language switch in the Studio)" ;;
     no_answer) F="gen-chibi is not answering on port %s yet. See: genchibi logs" ;;
@@ -100,6 +101,8 @@ _en() {
     sum_online) F="  Online:    %s%s%s  ·  MCP: %s/mcp" ;;
     sum_setup) F="Setup code: %s%s%s (one-time, 1 hour) — open %s/setup and choose the owner password%s" ;;
     sum_setup_local) F=" (on this machine: genchibi open)" ;;
+    sum_online_wait) F="  Online (temporary — waiting for the owner password): %s%s%s  ·  MCP: %s/mcp" ;;
+    sum_setup_online) F=" — once it is set the app finishes going online by itself (or on the server: genchibi password)" ;;
   esac
 }
 _vi() {
@@ -141,7 +144,8 @@ _vi() {
     sum_studio) F="  Studio:  %s%s%s" ;;
     sum_cmds) F="  Lệnh:    genchibi start|stop|status|update|logs|backup|restore|mcp|online|open|password|lang|uninstall" ;;
     sum_mcp) F="  MCP:     claude mcp add gen-chibi -- %s mcp" ;;
-    sum_mcp_net) F="  Ra Internet (tên miền + HTTPS + MCP): genchibi online --help, hoặc Studio › Hệ thống › Go online" ;;
+    sum_mcp_net) F="  Ra Internet (tên miền + HTTPS + MCP): genchibi online --help, hoặc Studio › Hệ thống › Lên mạng" ;;
+    root_uid) F="Đang chạy bằng root: container chạy bằng user %s:%s (không phải root) — %s giờ thuộc user đó" ;;
     sum_update) F="  Tự cập nhật: bật (tắt trong Studio › Hệ thống › Cập nhật)" ;;
     sum_lang) F="  Ngôn ngữ: Tiếng Việt (English: genchibi lang en, hoặc nút chuyển ngôn ngữ trong Studio)" ;;
     no_answer) F="Chưa thấy gen-chibi trả lời ở cổng %s. Xem: genchibi logs" ;;
@@ -163,6 +167,8 @@ _vi() {
     sum_online) F="  Online:  %s%s%s  ·  MCP: %s/mcp" ;;
     sum_setup) F="Mã setup: %s%s%s (dùng một lần, 1 giờ) — mở %s/setup và đặt mật khẩu chủ%s" ;;
     sum_setup_local) F=" (trên máy này: genchibi open)" ;;
+    sum_online_wait) F="  Online (tạm — chờ mật khẩu chủ): %s%s%s  ·  MCP: %s/mcp" ;;
+    sum_setup_online) F=" — đặt xong là app tự hoàn tất lên mạng (hoặc trên máy chủ: genchibi password)" ;;
   esac
 }
 UI=en
@@ -349,6 +355,14 @@ env_put() { # env_put KHOÁ BIẾN_CHỨA_GIÁ_TRỊ
     index($0, k "=") == 1 { print k "=" v; d = 1; next } { print } END { if (!d) print k "=" v }' "$DIR/.env" > "$tmp" && cat "$tmp" > "$DIR/.env"; rm -f "$tmp"
 }
 
+# ---------- user của container (Docker): trình cài chạy bằng root → KHÔNG cho container chạy root (GC_UID=0 = app + edge Caddy là root trong container).
+# Dùng uid của người gọi sudo (SUDO_USER) nếu có, không thì 1000:1000; thư mục cài chown cho user đó (bind mount data/ edge/ run/ phải ghi được).
+CUID="$(id -u)"; CGID="$(id -g)"; AS_ROOT=""
+if [ "$CUID" = 0 ] && [ "$MODE" = docker ]; then
+  AS_ROOT=1; CUID=1000; CGID=1000
+  if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ] && id -u "$SUDO_USER" >/dev/null 2>&1 && [ "$(id -u "$SUDO_USER")" != 0 ]; then CUID="$(id -u "$SUDO_USER")"; CGID="$(id -g "$SUDO_USER")"; fi
+fi
+
 # ---------- .env (sinh một lần; không có bí mật mặc định)
 if [ ! -f "$DIR/.env" ]; then
   KEY="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
@@ -361,8 +375,8 @@ GC_PORT=$PORT
 GC_BIND=127.0.0.1
 GC_MASTER_KEY=$KEY
 GC_AUTO_UPDATE=1
-GC_UID=$(id -u)
-GC_GID=$(id -g)
+GC_UID=$CUID
+GC_GID=$CGID
 GC_REPO=$REPO
 # Interface language (CLI + initial Studio default): en | vi — change with: genchibi lang vi|en (empty = follow the Studio default)
 GC_LANG=$ENV_LANG
@@ -391,7 +405,16 @@ else
   [ -z "$TOKEN" ] || { env_put GC_GITHUB_TOKEN TOKEN; chmod 600 "$DIR/.env"; ok env_token; }
   # ngôn ngữ: CHỈ ghi khi người cài chọn rõ lần này. .env cũ (trước v0.20) chưa có GC_LANG → không ghi gì: server giữ ngôn ngữ đang dùng (CNS-152)
   if [ -n "$LANG_SET" ]; then env_put GC_LANG UI; fi
+  # bản cài cũ do root cài (GC_UID=0) → đổi sang user thường (chown ở dưới)
+  if [ -n "$AS_ROOT" ] && grep -q '^GC_UID=0$' "$DIR/.env"; then env_put GC_UID CUID; env_put GC_GID CGID; fi
+  # móc kiểm thử không bao giờ nằm trong .env (review bảo mật 🟡7): CLI nạp .env bằng set -a → app / launcher sẽ thấy
+  if grep -q '^[[:space:]]*\(export[[:space:]]\{1,\}\)\{0,1\}GC_TEST' "$DIR/.env"; then tmp="$(mktemp)"; grep -v '^[[:space:]]*\(export[[:space:]]\{1,\}\)\{0,1\}GC_TEST' "$DIR/.env" > "$tmp"; cat "$tmp" > "$DIR/.env"; rm -f "$tmp"; fi
   ok env_kept
+fi
+if [ -n "$AS_ROOT" ]; then
+  # GC_UID trong .env (có thể đã có từ trước, khác 0) là user container dùng — chown theo đúng nó
+  CUID="$(sed -n 's/^GC_UID=\([0-9]*\)$/\1/p' "$DIR/.env" | tail -1)"; CGID="$(sed -n 's/^GC_GID=\([0-9]*\)$/\1/p' "$DIR/.env" | tail -1)"
+  chown -R "${CUID:-1000}:${CGID:-1000}" "$DIR"; warn root_uid "${CUID:-1000}" "${CGID:-1000}" "$DIR"
 fi
 
 # ---------- CLI
@@ -442,19 +465,21 @@ go_online() { # 0 đã ra Internet (xong, hoặc chỉ còn chờ mật khẩu c
     else "$BIN/genchibi" online cloudflare "$DOMAIN" --yes && rc=0 || rc=$?; fi   # hỏi token ẩn trên terminal
     CFTOK=""
   fi
-  case "$rc" in 0|3) ONLINE="https://$DOMAIN"; BASE="$ONLINE"; return 0 ;; esac
+  case "$rc" in 0|3) ONLINE="https://$DOMAIN"; BASE="$ONLINE"; [ "$rc" = 3 ] && ONLINE_WAIT=1; return 0 ;; esac
   warn online_fail; return "$rc"
 }
 finish_lines() { # dòng cuối: địa chỉ online (nếu có) + MÃ SETUP khi chưa có mật khẩu chủ (server ghi data/setup-code.txt lúc khởi động)
   local c="" e="" i
-  [ -z "$ONLINE" ] || say sum_online "$B" "$ONLINE" "$N" "$ONLINE"
-  case "$(curl -fsS -m 5 "http://127.0.0.1:$PORT/api/auth/state" 2>/dev/null || true)" in *'"password":false'*) ;; *) return 0 ;; esac   # đã có mật khẩu chủ
+  # chưa có mật khẩu chủ: luồng Go online dừng ở bậc cuối, địa chỉ chỉ đang bật TẠM (CNS-209) — nói rõ, rồi dòng cuối = mã setup
+  local nopw=""; case "$(curl -fsS -m 5 "http://127.0.0.1:$PORT/api/auth/state" 2>/dev/null || true)" in *'"password":false'*) nopw=1 ;; esac
+  if [ -n "$ONLINE" ]; then if [ -n "$ONLINE_WAIT" ] && [ -n "$nopw" ]; then say sum_online_wait "$B" "$ONLINE" "$N" "$ONLINE"; else say sum_online "$B" "$ONLINE" "$N" "$ONLINE"; fi; fi
+  [ -n "$nopw" ] || return 0   # đã có mật khẩu chủ
   for i in 1 2 3 4 5 6 7 8 9 10; do
     if [ -r "$DIR/data/setup-code.txt" ]; then c="$(sed -n '1p' "$DIR/data/setup-code.txt" | tr -d ' \r')"; break; fi
     sleep 0.5
   done
   case "$c" in [0-9A-Z][0-9A-Z][0-9A-Z][0-9A-Z][0-9A-Z]-[0-9A-Z][0-9A-Z][0-9A-Z][0-9A-Z][0-9A-Z]) ;; *) return 0 ;; esac
-  if [ "$BASE" = "http://localhost:$PORT" ]; then _t sum_setup_local; e="$F"; fi
+  if [ "$BASE" = "http://localhost:$PORT" ]; then _t sum_setup_local; e="$F"; elif [ -n "$ONLINE_WAIT" ]; then _t sum_setup_online; e="$F"; fi
   printf '\n'; say sum_setup "$B" "$c" "$N" "$BASE" "$e"
 }
 
@@ -475,7 +500,7 @@ for i in $(seq 1 60); do
     say sum_mcp_net
     say sum_update
     say sum_lang
-    RC=0; ONLINE=""; BASE="http://localhost:$PORT"
+    RC=0; ONLINE=""; ONLINE_WAIT=""; BASE="http://localhost:$PORT"
     if [ -n "$DOMAIN" ]; then go_online && RC=0 || RC=$?; fi
     finish_lines
     exit "$RC"

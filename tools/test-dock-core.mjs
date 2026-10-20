@@ -217,5 +217,20 @@ try {
     ok(size <= 200 * 1024 && n >= 30 && n < 40, 'tệp luồng ' + size + ' B ≤ 204 800 (trần đo trên tệp có thụt lề); còn ' + n + ' / 40 tin, tin cũ nhất rơi trước');
     ok(store.getChat('khu', 'xuong').messages[0].content[0] !== '0', 'tin cũ nhất (số 0) là tin rơi trước');
   }
+  /* ---------------------------------------------------------------- review bảo mật 🟡9: lượt AI chạy nền — bộ nhớ có trần (server/turns.js) */
+  {
+    const { createTurns } = require(ROOT + '/server/turns.js');
+    let t = 1e6; const T = createTurns({ keepMs: 60e3, maxRunning: 2, maxDone: 3, now: () => t });
+    const ids = []; for (let i = 0; i < 5; i++) { ids.push(T.add(Promise.resolve({ n: i }))); await new Promise(r => setImmediate(r)); t += 10; }
+    await new Promise(r => setTimeout(r, 5));
+    ok(T.size() === 3 && !T.get(ids[0]) && !T.get(ids[1]) && T.get(ids[4]).status === 'done' && T.get(ids[4]).result.n === 4, 'lượt xong giữ tối đa maxDone (3 / 5): bỏ lượt xong CŨ NHẤT, lượt mới nhất còn kết quả');
+    let rel; const p1 = new Promise(r => { rel = r; }), a1 = T.add(p1), a2 = T.add(new Promise(() => {})), a3 = T.add(Promise.resolve(1));
+    ok(a1 && a2 && a3 === null && T.running() === 2, 'tối đa maxRunning lượt đang chạy: lượt thứ ba → null (main.js trả 429)');
+    rel('x'); await new Promise(r => setTimeout(r, 5));
+    t += 61e3;
+    ok(!T.get(a1) && T.get(a2).status === 'running' && T.size() === 1, 'lượt xong quá keepMs bị bỏ; lượt đang chạy không bao giờ bị bỏ');
+    const big = createTurns({ maxDone: 200 }); for (let i = 0; i < 260; i++) { big.add(Promise.resolve(i)); await new Promise(r => setImmediate(r)); }
+    ok(big.size() === 200, 'mặc định server: 260 lượt xong → giữ đúng 200 (' + big.size() + ')');
+  }
 } catch (e) { fail = 1; console.log('   ✗', e.stack || e.message); }
 process.exit(fail);

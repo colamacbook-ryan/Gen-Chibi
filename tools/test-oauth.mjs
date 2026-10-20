@@ -70,7 +70,7 @@ const initWith = (base, tok, headers) => rpc(base, 'initialize', { protocolVersi
 
 // ---------------------------------------------------------------- server tạm
 // GC_OAUTH_RATE=50: nhân trần TOÀN CỤC để bộ test nhiều lời gọi không chạm trần (trần mặc định được thử riêng ở máy `caps`)
-const main = spawnServer(P.main, { GC_API_TOKEN: OWNER, GC_PUBLIC_URL: H, GC_MCP_KEY: KEY, GC_ALLOWED_HOSTS: 'chibi.example.test', GC_OAUTH_RATE: '50' });
+const main = spawnServer(P.main, { GC_API_TOKEN: OWNER, GC_PUBLIC_URL: H, GC_MCP_KEY: KEY, GC_ALLOWED_HOSTS: 'chibi.example.test', GC_TEST: '1', GC_OAUTH_RATE: '50' });
 const off = spawnServer(P.off, { GC_API_TOKEN: OWNER });                                   // không GC_PUBLIC_URL → OAuth tắt
 const open = spawnServer(P.open, { GC_PUBLIC_URL: H, GC_API_TOKEN: '' });                     // không GC_API_TOKEN → v0.21: server tự sinh data/owner-token, máy mình KHÔNG được miễn
 const ttl = spawnServer(P.ttl, { GC_API_TOKEN: OWNER, GC_PUBLIC_URL: H, GC_OAUTH_ACCESS_TTL: '2', GC_OAUTH_REDIRECTS: 'https://agent.example.org/cb' });   // access token sống 2 giây; callback thêm

@@ -32,7 +32,7 @@ genchibi update            # kiểm tra và cập nhật ngay
 genchibi logs
 genchibi backup | restore <tệp>
 genchibi mcp               # cầu MCP stdio cho agent
-genchibi token             # đặt token GitHub (repo private), nhập ẩn
+genchibi token             # đặt token GitHub (repo private), nhập ẩn — KHÔNG phải token chủ (token chủ là GC_API_TOKEN trong .env, hoặc data/owner-token)
 genchibi lang [en|vi]      # xem / đặt ngôn ngữ (CLI + giao diện mặc định của Studio)
 genchibi open              # mở Studio (lần đầu: trang đặt mật khẩu chủ, mã điền sẵn)
 genchibi password          # đặt / đặt lại mật khẩu chủ
@@ -43,25 +43,25 @@ genchibi uninstall
 
 ## Ra Internet (tên miền, HTTPS, MCP) một bước
 
-**Beta** — cả hai đường đã kiểm với Cloudflare / DNS / Caddy giả lập, chưa chạy trên VPS thật hay tài khoản Cloudflare thật.
+**Beta** — đường A đã kiểm với Caddy thật (TLS nội bộ) trong Docker và DNS giả lập; đường B với Cloudflare API giả lập; link tạm với `cloudflared` giả lập. Chưa đường nào chạy trên VPS thật, với Let's Encrypt hay tài khoản Cloudflare thật.
 
-Bạn làm **đúng một** việc ngoài app — trỏ bản ghi A về máy (**đường A**), **hoặc** tạo một API token Cloudflare (**đường B**) — và trong vài phút có `https://tên-miền` (Studio, sau mật khẩu chủ) và `https://tên-miền/mcp` mà claude.ai nối được. Không sửa `.env`, Caddyfile, DNS hay dashboard bằng tay.
+Bạn làm **đúng một** việc ngoài app — trỏ bản ghi A về máy (**đường A**), **hoặc** tạo một API token Cloudflare (**đường B**) — và trong vài phút có `https://tên-miền` (Studio, sau mật khẩu chủ) và `https://tên-miền/mcp` mà claude.ai nối được. Không sửa `.env`, Caddyfile, DNS hay dashboard bằng tay — trừ hai ngoại lệ ở đường B, mỗi cái là một bậc có hướng dẫn cụ thể: token không có quyền WAF thì bạn tự thêm một luật Skip (app in sẵn biểu thức), và gói Free không skip được *Bot Fight Mode* bằng luật nên bạn tắt nó trong dashboard.
 
 | Máy | Bạn làm | Lệnh / nơi bấm |
 |---|---|---|
 | **VPS có IP công khai** (đường A) | Tạo bản ghi A `chibi.example.com → IP máy` | lúc cài: `curl -fsSL https://raw.githubusercontent.com/colamacbook-ryan/Gen-Chibi/main/install.sh \| bash -s -- --domain chibi.example.com` · sau này: `genchibi online caddy chibi.example.com` |
-| **Máy nhà / sau router / cổng 80-443 bận** (đường B) | Tạo API token Cloudflare | lúc cài: `… \| bash -s -- --domain chibi.example.com --cloudflare` · sau này: `genchibi online cloudflare chibi.example.com`, hoặc **Studio › Hệ thống › Go online › Cloudflare** |
+| **Máy nhà / sau router / cổng 80-443 bận** (đường B) | Tạo API token Cloudflare | lúc cài: `… \| bash -s -- --domain chibi.example.com --cloudflare` · sau này: `genchibi online cloudflare chibi.example.com`, hoặc **Studio › Hệ thống › Lên mạng › Cloudflare** |
 | **Đã có reverse proxy riêng** | Giữ proxy | `genchibi online proxy chibi.example.com` (in đoạn cấu hình để dán, rồi kiểm từ ngoài vào) |
-| (thử) | không | `genchibi online quick` — link tạm `*.trycloudflare.com`, đổi mỗi lần khởi động (không dùng OAuth lâu dài) |
+| (thử, **beta**) | không | `genchibi online quick` — link tạm `*.trycloudflare.com`, đổi mỗi lần khởi động (không dùng OAuth lâu dài) |
 
 **Điều kiện tiên quyết (app kiểm, hiện ✓ / ✗ kèm cách sửa):**
 - Đường A: máy có IP công khai; cổng **80 và 443** mở ở tường lửa nhà cung cấp (security group) và `ufw`; không dịch vụ nào khác giữ 80/443; chế độ Docker (edge Caddy chạy ở container riêng `gen-chibi-edge`).
 - Đường B: tên miền ở Cloudflare (nameserver Cloudflare, zone `active`, kiểu full); tài khoản dùng được Cloudflare Tunnel (có thể phải bật Zero Trust gói Free một lần).
 - Cả hai: *Bot Fight Mode* / *Block AI bots* của Cloudflare có thể chặn claude.ai — bậc "MCP từ Internet" thử bằng agent `Claude-User` và nói cần tắt gì.
 
-**API token Cloudflare (đường B):** *Studio › Hệ thống › Go online* và `genchibi online cloudflare` có link mở trang tạo token của Cloudflare với quyền điền sẵn. Token cần **Account › Cloudflare Tunnel › Edit**, **Zone › DNS › Edit**, **Zone › Zone › Read**, tuỳ chọn **Zone › WAF › Edit** (khi có, app tự thêm luật Skip cho claude.ai đi qua; không có thì app in luật để bạn thêm tay). Đặt **TTL** ngắn (một ngày là đủ): xong việc app xoá token khỏi bộ nhớ (chỉ giữ, có mã hoá, khi bạn yêu cầu), tunnel đang chạy không cần nó. **Không bao giờ** nhận token trên dòng lệnh: có terminal thì hỏi ẩn; không có terminal thì đặt `GC_CF_TOKEN` trong môi trường (hoặc đưa vào `--token-stdin` qua ống).
+**API token Cloudflare (đường B):** *Studio › Hệ thống › Lên mạng* và `genchibi online cloudflare` có link mở trang tạo token của Cloudflare với quyền điền sẵn. Token cần **Account › Cloudflare Tunnel › Edit**, **Zone › DNS › Edit**, **Zone › Zone › Read**, tuỳ chọn **Zone › WAF › Edit** (khi có, app tự thêm luật Skip cho claude.ai đi qua; không có thì app in luật để bạn thêm tay). Đặt **TTL** ngắn (một ngày là đủ): xong việc app xoá token khỏi bộ nhớ (chỉ giữ, có mã hoá, khi bạn yêu cầu), tunnel đang chạy không cần nó. **Không bao giờ** nhận token trên dòng lệnh: có terminal thì hỏi ẩn; không có terminal thì đặt `GC_CF_TOKEN` trong môi trường (hoặc đưa vào `--token-stdin` qua ống).
 
-**Từng bậc, nhìn thấy:** `genchibi online` in mỗi bậc (tên miền / DNS, edge, cổng, chứng chỉ, địa chỉ công khai, MCP từ Internet, mật khẩu chủ) với ✓ / ✗ và cách sửa khi ✗, rồi in `https://tên-miền` và `https://tên-miền/mcp`. Trên VPS mới, bậc cuối là mật khẩu chủ: mở `https://tên-miền/setup`, nhập mã setup (trình cài và `genchibi status` in mã), rồi `genchibi online recheck`.
+**Từng bậc, nhìn thấy:** `genchibi online` in mỗi bậc (tên miền / DNS, edge, cổng, chứng chỉ, địa chỉ công khai, MCP từ Internet, mật khẩu chủ) với ✓ / ✗ và cách sửa khi ✗, rồi in `https://tên-miền` và `https://tên-miền/mcp`. Trên VPS mới, bậc cuối là mật khẩu chủ: mở `https://tên-miền/setup` và nhập mã setup (trình cài và `genchibi status` in mã), hoặc chạy `genchibi password` trên máy chủ. Tới lúc đó địa chỉ chỉ đang bật *tạm* (`genchibi status` ghi "Ra Internet (tạm — chờ mật khẩu chủ)"); đặt xong mật khẩu là app tự hoàn tất lên mạng — không cần kiểm lại.
 
 ```
 genchibi online                         # trạng thái: chế độ, địa chỉ, từng bậc, edge
@@ -74,6 +74,10 @@ genchibi online migrate                 # máy cấu hình tay trong .env (GC_PU
 ```
 
 Đổi địa chỉ công khai sẽ đăng xuất các agent nối bằng OAuth (phải nối lại); lệnh hỏi trước (`--yes` khi không có terminal). Mã thoát `3` nghĩa là "đã ra Internet, chờ đặt mật khẩu chủ". `genchibi expose` (cách của v0.20, đăng nhập Cloudflare bằng trình duyệt) vẫn chạy ở bản này và bỏ ở v0.22.
+
+**Bản sao lưu chứa mật khẩu và phiên; khôi phục thì Go online tắt.** `genchibi backup` lưu `data/`, nay gồm cả mật khẩu chủ (đã băm), các phiên Studio / thiết bị đã nhớ và cấu hình lên mạng. `genchibi restore <tệp>` giữ mật khẩu của bản sao lưu nhưng đăng xuất mọi phiên và thiết bị, và đưa Go online về **tắt** (không địa chỉ công khai, tunnel dừng, mã bản cài mới — bản sao lưu từ máy khác không bao giờ chiếm tên miền hay tunnel của máy đó). Khôi phục xong thì chạy lại Go online.
+
+**Máy đã có trang đăng nhập riêng đứng trước app** (vd proxy đưa người dùng tới `/login` của riêng nó): app nay có mật khẩu chủ và trang `/login`, `/setup` riêng. Trong proxy, chỉ chặn đường của người và để `/login`, `/setup`, `/oauth/authorize` của app đi tới app phía sau lớp đăng nhập của bạn (đường máy — `/mcp`, `/.well-known/…`, `/oauth/register|token|revoke` — vẫn phải để trống như trước). Đoạn mẫu `genchibi online proxy` in ra chỉ chỗ đặt lớp đăng nhập của bạn.
 
 ## Ngôn ngữ
 

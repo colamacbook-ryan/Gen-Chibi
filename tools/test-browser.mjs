@@ -67,10 +67,12 @@ function loginGoto(pg) {
   pg.goto = async (url, ...rest) => { const m = /^(http:\/\/(?:localhost|127\.0\.0\.1):\d+)(\/|$)/.exec(String(url)); if (m) await ensureSession(pg.context(), m[1]); return g(url, ...rest); };
   return pg;
 }
+// CSP của Studio (v0.21, review bảo mật 🟡5): MỌI trang của bộ test ghi lại vi phạm Content-Security-Policy (console) — cuối bộ còn vi phạm nào là trượt
+const CSP_VIOL = [];
 { const launch = pw.chromium.launch.bind(pw.chromium);
   pw.chromium.launch = async (...a) => {
     const b = await launch(...a), np = b.newPage.bind(b), nc = b.newContext.bind(b), vi = LEGACY_VI, auto = AUTO_LOGIN;
-    const wrap = pg => { autoTab(pg); return auto ? loginGoto(pg) : pg; };
+    const wrap = pg => { autoTab(pg); pg.on('console', m => { const t = m.text(); if (/Content Security Policy/i.test(t)) CSP_VIOL.push(pg.url().slice(0, 80) + ' · ' + t.slice(0, 200)); }); return auto ? loginGoto(pg) : pg; };
     b.newPage = async (...x) => { const pg = await np(...x); if (vi) await pg.addInitScript(viInit); return wrap(pg); };
     b.newContext = async (...x) => { const c = await nc(...x), cp = c.newPage.bind(c); if (vi) await c.addInitScript(viInit); c.newPage = async (...y) => wrap(await cp(...y)); return c; };
     return b;
@@ -92,6 +94,12 @@ const p = await b.newPage();
 try {
   await p.goto('http://localhost:7496/');
   await p.waitForFunction(() => window.GenChibi && window.GenChibi.render);
+  // CSP thật sự có hiệu lực (đột biến: bỏ header → script chèn vào chạy được): script inline chèn vào trang bị chặn; vi phạm CỐ Ý này không tính vào kiểm cuối bộ
+  { const n0 = CSP_VIOL.length;
+    const ran = await p.evaluate(async () => { const sc = document.createElement('script'); sc.textContent = 'window.__gcCspProbe = 1'; document.head.appendChild(sc); await new Promise(r => setTimeout(r, 100)); return window.__gcCspProbe === 1; });
+    await p.waitForTimeout(200); const caught = CSP_VIOL.length - n0; CSP_VIOL.splice(n0);
+    if (ran || caught < 1) { fail = 1; console.log('  ✗ CSP Studio: script inline chèn vào trang phải bị chặn (chạy: ' + ran + ', vi phạm ghi nhận: ' + caught + ')'); }
+    else console.log('  ✓ CSP Studio: script inline chèn vào trang bị chặn (script-src \'self\')'); }
   const res = await p.evaluate(async () => {
     const GC = window.GenChibi, out = [];
     const host = document.createElement('div'); host.style.cssText = 'width:300px;height:330px'; document.body.appendChild(host);
@@ -2897,6 +2905,8 @@ if (!ONLY || ONLY === 'online') {
     if (sDom.state !== 'ok' || cmd !== 'genchibi online --caddy' || !(await q.$('#olSteps tr[data-step="edge"] button'))) throw new Error('Caddy: domain ✓ rồi edge ✗ với lệnh host + nút chép: ' + JSON.stringify([sDom, sEdge, cmd]));
     const ids = await q.$$eval('#olSteps td.id', els => els.map(e => e.textContent).join(','));
     if (ids !== 'GO-01,GO-02,GO-03,GO-04,GO-05,GO-06,GO-07' || !(await q.$('#olSteps tr.letters')) || !/1 /.test(await q.textContent('#olFoot'))) throw new Error('lưới bậc Data Console (ID hàng, chữ cột, chân lưới): ' + ids);
+    // CNS-211: máy còn Offline (luồng dừng ở ✗, chưa có gì ra ngoài) → không có nút Go offline
+    if (await q.$('#olOffBtn')) throw new Error('CNS-211: đang Offline (Caddy dừng ở bậc edge) mà vẫn hiện nút Go offline');
     await screen(q, '02-caddy-edge-chua-bat');
     console.log('  ✓ Caddy: Tên miền ✓ → Edge ✗ "chưa publish 80/443", cách sửa = một lệnh host (genchibi online --caddy) + nút chép; lưới GO-01…07, chữ cột, chân lưới');
     // ---- 3) Cloudflare: token chỉ ở ô password → choices (2 tên miền) → CNAME đã có → hỏi đè → Xong
@@ -2961,6 +2971,10 @@ if (!ONLY || ONLY === 'online') {
     await q.click('.olpath[data-path="cloudflare"]'); await q.fill('#olToken', CF_TOK); await q.fill('#olZone', 'example.com'); await q.click('#olGo');
     await q.waitForSelector('#olWafDone', { timeout: 30000 }); await idle(q);
     if (!/Skip/.test((await step(q, 'waf')).text) || !(await q.$('#olSteps tr[data-step="waf"] button:not(#olWafDone)'))) throw new Error('bậc WAF làm tay: cách sửa + nút chép biểu thức');
+    // CNS-208a: cột "Tôi đã làm" có tiêu đề + chữ cột như mọi cột (Data Console)
+    const actCol = await q.evaluate(() => { const t = document.getElementById('olSteps'), L = [...t.querySelectorAll('tr.letters td')].map(x => x.textContent), H = [...t.querySelectorAll('tr th')].map(x => x.textContent); return { L, H }; });
+    if (actCol.L[actCol.L.length - 1] !== 'F' || actCol.H[actCol.H.length - 1] !== 'Thao tác' || actCol.L.length !== actCol.H.length) throw new Error('CNS-208a: cột thao tác của lưới bậc phải có tiêu đề + chữ cột: ' + JSON.stringify(actCol));
+    if (!(await q.$('#olOffBtn'))) throw new Error('CNS-211: luồng Cloudflare dừng ở WAF nhưng tunnel đã tạo (tunnel bật, cần dọn) → nút Go offline phải còn');
     await screen(q, '11-waf-lam-tay');
     await gap(); await q.click('#olWafDone');
     await q.waitForSelector('#olDone', { timeout: 30000 }); await idle(q);
@@ -2980,7 +2994,11 @@ if (!ONLY || ONLY === 'online') {
     const nS = (await q.$$('#acSessGrid tr[data-session]')).length, cur = await q.$$eval('#acSessGrid tr[data-current]', t => t.length);
     if (nS < 3 || cur !== 1 || !(await q.$('#acDevGrid tr[data-device]')) || !(await q.$('#acAlertGrid tr[data-alert]'))) throw new Error('Tài khoản chủ: lưới phiên (' + nS + ', hiện tại ' + cur + ') / thiết bị / cảnh báo');
     const tokTxt = await q.textContent('#acToken');
-    if (!/genchibi token/.test(tokTxt) || tokTxt.includes(TEST_TOKEN) || (await q.content()).includes(TEST_TOKEN)) throw new Error('dòng token chủ: chỉ nói cách xem, không hiện token');
+    // CNS-200: `genchibi token` đặt token GitHub — không được chỉ chủ tới đó; chỉ đúng chỗ token chủ nằm + lệnh in sẵn cấu hình nối agent
+    if (/genchibi token/.test(tokTxt) || !/GC_API_TOKEN/.test(tokTxt) || !/data\/owner-token/.test(tokTxt) || !/genchibi agent connect/.test(tokTxt) || tokTxt.includes(TEST_TOKEN) || (await q.content()).includes(TEST_TOKEN)) throw new Error('dòng token chủ: GC_API_TOKEN trong .env / data/owner-token + genchibi agent connect, không "genchibi token", không hiện token: ' + tokTxt);
+    // CNS-208b: cột thu hồi của lưới thiết bị có tiêu đề + chữ cột
+    const devCol = await q.evaluate(() => { const t = document.getElementById('acDevGrid'), L = [...t.querySelectorAll('tr.letters td')].map(x => x.textContent), H = [...t.querySelectorAll('tr th')].map(x => x.textContent); return { L, H }; });
+    if (devCol.L[devCol.L.length - 1] !== 'E' || devCol.H[devCol.H.length - 1] !== 'Thu hồi') throw new Error('CNS-208b: cột thu hồi của lưới thiết bị phải có tiêu đề + chữ cột: ' + JSON.stringify(devCol));
     await screen(q, '12-tai-khoan-chu');
     await q.click('#acAck'); await q.waitForSelector('#acAlertGrid', { state: 'detached', timeout: 8000 });
     const sid1 = await q.$$eval('#acSessGrid tr[data-session]:not([data-current])', t => t.map(x => x.getAttribute('data-session')));
@@ -3028,6 +3046,9 @@ if (!ONLY || ONLY === 'online') {
     const qurl = await q.textContent('#olDoneStudio'), edgeOk = await q.$eval('#olDone', e => /✓/.test(e.textContent));
     const est = JSON.parse(fs.readFileSync(path.join(homeL, 'run', 'edge-status.json'), 'utf8'));
     if (!/^https:\/\/fake-\d+\.trycloudflare\.com$/.test(qurl) || !edgeOk || est.ready !== true || est.url !== qurl) throw new Error('link tạm qua launcher: ' + qurl + ' ' + JSON.stringify(est));
+    // CNS-208c: bậc tunnel của link tạm mang nhãn của nó (không có CNAME nào)
+    const qLbl = await q.$eval('#olSteps tr[data-step="tunnel"] td:nth-child(2) b', e => e.textContent);
+    if (/CNAME/.test(qLbl) || !/Tunnel tạm/.test(qLbl)) throw new Error('CNS-208c: nhãn bậc tunnel của link tạm: ' + qLbl);
     await screen(q, '14-link-tam-xong');
     await gap(); await q.click('#olOffBtn');
     if (await q.$('#olOffToken')) throw new Error('Go offline link tạm không cần token Cloudflare');
@@ -3267,4 +3288,8 @@ if (!ONLY || ONLY === 'i18n') {
   } catch (e) { fail = 1; console.log('  ✗ i18n (ngôn ngữ giao diện):', e.message); }
   finally { await b16.close(); srv16.kill(); }
 }
+// CSP: bộ test vừa đi khắp Studio (mọi khu, dock, xuất phim, âm thanh, Lên mạng…) — không được có vi phạm nào
+{ const v = [...new Set(CSP_VIOL)];
+  if (v.length) { fail = 1; console.log('  ✗ CSP của Studio chặn ' + v.length + ' thứ Studio cần:\n      ' + v.slice(0, 20).join('\n      ')); }
+  else console.log('  ✓ CSP của Studio (script-src \'self\', không frame): không vi phạm nào trên mọi trang của bộ test'); }
 process.exit(fail);

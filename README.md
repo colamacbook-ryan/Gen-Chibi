@@ -48,7 +48,7 @@ genchibi update            # check and update now
 genchibi logs
 genchibi backup | restore <file>
 genchibi mcp               # MCP stdio bridge for agents
-genchibi token             # set the GitHub token (private repo), hidden input
+genchibi token             # set the GitHub token (private repo), hidden input — NOT the owner token (that is GC_API_TOKEN in .env, or data/owner-token)
 genchibi lang [en|vi]      # show / set the language (CLI + Studio default)
 genchibi open              # open the Studio (first time: the owner-password setup page, code filled in)
 genchibi password          # set / reset the owner password
@@ -59,16 +59,16 @@ genchibi uninstall
 
 ## Go online (domain, HTTPS, MCP) in one step
 
-**Beta** — both paths are tested against simulated Cloudflare / DNS / Caddy, not yet on a real VPS or a real Cloudflare account.
+**Beta** — path A is tested with a real Caddy (internal TLS) in Docker and simulated DNS; path B with a simulated Cloudflare API; the temporary link with a simulated `cloudflared`. None of them has run yet on a real VPS, with Let's Encrypt or with a real Cloudflare account.
 
-You do exactly **one** thing outside the app — point an A record at the machine (**path A**), **or** create one Cloudflare API token (**path B**) — and within a few minutes you get `https://your-domain` (the Studio, behind the owner password) and `https://your-domain/mcp` that claude.ai can connect to. No `.env`, Caddyfile, DNS or dashboard editing by hand.
+You do exactly **one** thing outside the app — point an A record at the machine (**path A**), **or** create one Cloudflare API token (**path B**) — and within a few minutes you get `https://your-domain` (the Studio, behind the owner password) and `https://your-domain/mcp` that claude.ai can connect to. No `.env`, Caddyfile, DNS or dashboard editing by hand — with two exceptions on path B, each shown as a step with the exact instructions: if the token has no WAF permission you add one Skip rule yourself (the app prints the expression), and on the free plan *Bot Fight Mode* cannot be skipped by a rule, so you switch it off in the dashboard.
 
 | Machine | You do | Command / where to click |
 |---|---|---|
 | **VPS with a public IP** (path A) | Create an A record `chibi.example.com → the machine's IP` | at install: `curl -fsSL https://raw.githubusercontent.com/colamacbook-ryan/Gen-Chibi/main/install.sh \| bash -s -- --domain chibi.example.com` · later: `genchibi online caddy chibi.example.com` |
 | **Home machine / behind a router / ports 80-443 busy** (path B) | Create a Cloudflare API token | at install: `… \| bash -s -- --domain chibi.example.com --cloudflare` · later: `genchibi online cloudflare chibi.example.com`, or **Studio › System › Go online › Cloudflare** |
 | **You already run a reverse proxy** | Keep it | `genchibi online proxy chibi.example.com` (prints the config to paste, then checks from outside) |
-| (trial) | nothing | `genchibi online quick` — a temporary `*.trycloudflare.com` link that changes on every restart (not for long-term OAuth) |
+| (trial, **beta**) | nothing | `genchibi online quick` — a temporary `*.trycloudflare.com` link that changes on every restart (not for long-term OAuth) |
 
 **Prerequisites (checked by the app, shown as ✓ / ✗ with the fix):**
 - Path A: the machine has a public IP; ports **80 and 443** are open in the provider's firewall (security group) and in `ufw`; no other service holds 80/443; Docker mode (the edge Caddy runs in its own container `gen-chibi-edge`).
@@ -77,7 +77,7 @@ You do exactly **one** thing outside the app — point an A record at the machin
 
 **The Cloudflare API token (path B):** *Studio › System › Go online* and `genchibi online cloudflare` show a link that opens Cloudflare's token page with the permissions filled in. The token needs **Account › Cloudflare Tunnel › Edit**, **Zone › DNS › Edit**, **Zone › Zone › Read**, and optionally **Zone › WAF › Edit** (then the app adds the Skip rule that lets claude.ai through; without it the app shows the rule to add by hand). Set a short **TTL** (a day is plenty): the app deletes the token from memory when it is done (it keeps it, encrypted, only if you ask), and the running tunnel does not need it. The token is **never** accepted on the command line: in a terminal it is asked for hidden; without a terminal set `GC_CF_TOKEN` in the environment (or pipe it to `--token-stdin`).
 
-**Step by step, as you watch:** `genchibi online` prints every step (domain / DNS, edge, ports, certificate, public address, MCP from the Internet, owner password) with ✓ / ✗ and the fix for a ✗, then `https://your-domain` and `https://your-domain/mcp`. On a fresh VPS the last step is the owner password: open `https://your-domain/setup`, enter the setup code (printed by the installer and by `genchibi status`), then `genchibi online recheck`.
+**Step by step, as you watch:** `genchibi online` prints every step (domain / DNS, edge, ports, certificate, public address, MCP from the Internet, owner password) with ✓ / ✗ and the fix for a ✗, then `https://your-domain` and `https://your-domain/mcp`. On a fresh VPS the last step is the owner password: open `https://your-domain/setup` and enter the setup code (printed by the installer and by `genchibi status`), or run `genchibi password` on the server. Until then the address is only on *temporarily* (`genchibi status` says "Online (temporary — waiting for the owner password)"); once the password is set the app finishes going online by itself — no recheck needed.
 
 ```
 genchibi online                         # status: mode, address, each step, edge
@@ -90,6 +90,10 @@ genchibi online migrate                 # machines set up by hand in .env (GC_PU
 ```
 
 Changing the public address signs out agents connected through OAuth (they must connect again); the command asks first (`--yes` without a terminal). Exit code `3` means "online, waiting for the owner password". `genchibi expose` (the v0.20 way, with a browser login to Cloudflare) still works in this version and is removed in v0.22.
+
+**Backups contain your password and sessions; restoring turns Go online off.** `genchibi backup` saves `data/`, which now also holds the owner password (hashed), the Studio sessions / remembered devices and the online settings. `genchibi restore <file>` keeps the password of the backup but signs out every session and device, and turns Go online **off** (no public address, tunnel stopped, a new install id — a backup from another machine never takes over that machine's domain or tunnel). Run Go online again afterwards.
+
+**You already have your own login page in front of the app** (for example a proxy that sends people to its own `/login`): the app now has its own owner password and its own `/login` and `/setup` pages. In your proxy, protect only the people routes and let the app's `/login`, `/setup` and `/oauth/authorize` reach the app behind your login (machine routes — `/mcp`, `/.well-known/…`, `/oauth/register|token|revoke` — must stay unprotected, as before). The snippet printed by `genchibi online proxy` shows where your own login fits.
 
 ## Core frame (Workshop)
 Every asset is built from one **theme-neutral core frame** (like the greybox of game development):

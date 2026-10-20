@@ -193,9 +193,9 @@ printf '#!/bin/bash\n{ printf "%%s\\0" ARGV "$0" "$@"; /usr/bin/env -0; printf "
 PB="$(freeport)"
 GC_CF_TOKEN="$CFT" INST_PORT="$PB" INST_ENV="PATH=$SHIMD:$PATH GC_TEST=1 GC_TEST_CF_API=$(cat "$CFOUT" 2>/dev/null) GC_TEST_ONLINE_VIA=127.0.0.1:$((PB + 2)) GC_ONLINE_POLL=0.3 GC_ONLINE_RETRY=2.2" inst domb --domain chibi.example.com --cloudflare
 c="$(codeof domb)"
-[ $IRC = 0 ] && echo "$INST_OUT" | grep -q '✓ Tunnel' && echo "$INST_OUT" | grep -q '✓ MCP from the Internet' && echo "$INST_OUT" | grep -q 'Online: .*https://chibi.example.com.*MCP: https://chibi.example.com/mcp'
-check $? "--domain chibi.example.com --cloudflare (GC_CF_TOKEN) → cài + genchibi online cloudflare tới bậc mật khẩu: in tiến độ, Online https://chibi.example.com + /mcp, thoát 0 (VPS mới: chỉ còn đặt mật khẩu)" "$IRC $(echo "$INST_OUT" | tail -14)"
-[ -n "$c" ] && lastline "$INST_OUT" | grep -q "^Setup code: .*$c.*https://chibi.example.com/setup" && ! lastline "$INST_OUT" | grep -q 'genchibi open'; check $? "dòng cuối = mã setup ($c) + https://chibi.example.com/setup" "$(lastline "$INST_OUT")"
+[ $IRC = 0 ] && echo "$INST_OUT" | grep -q '✓ Tunnel' && echo "$INST_OUT" | grep -q '✓ MCP from the Internet' && echo "$INST_OUT" | grep -q 'Online (temporary — waiting for the owner password): .*https://chibi.example.com.*MCP: https://chibi.example.com/mcp'
+check $? "--domain chibi.example.com --cloudflare (GC_CF_TOKEN) → cài + genchibi online cloudflare tới bậc mật khẩu: in tiến độ, 'Online (temporary — waiting for the owner password)' https://chibi.example.com + /mcp, thoát 0 (VPS mới: chỉ còn đặt mật khẩu — CNS-209)" "$IRC $(echo "$INST_OUT" | tail -14)"
+[ -n "$c" ] && lastline "$INST_OUT" | grep -q "^Setup code: .*$c.*https://chibi.example.com/setup.*finishes going online by itself" && ! lastline "$INST_OUT" | grep -q 'genchibi open'; check $? "dòng cuối = mã setup ($c) + https://chibi.example.com/setup + 'đặt xong là app tự hoàn tất lên mạng'" "$(lastline "$INST_OUT")"
 ! printf '%s' "$INST_OUT" | grep -q "$CFT" && ! grep -q "$CFT" "$W/shim.log" 2>/dev/null && ! grep -rq "$CFT" "$W/domb" 2>/dev/null && [ -s "$W/shim.log" ]
 check $? "token Cloudflare không có trong đầu ra trình cài, argv / môi trường của mọi lần gọi curl (shim), tệp nào của thư mục cài" "$(grep -c "$CFT" "$W/shim.log" 2>/dev/null) lần trong shim.log"
 HOME="$W/domb-home" "$W/domb-home/.local/bin/genchibi" stop >/dev/null 2>&1
@@ -206,8 +206,9 @@ FK="$W/fakedocker"; FS="$W/fakestate"; mkdir -p "$FK"
 cat > "$FK/id" <<'EOF'
 #!/bin/bash
 case "$*" in
-  -u|-g) echo 1000 ;;
-  -un) echo tester ;;
+  -u|-g) if [ -n "${FAKE_ROOT:-}" ]; then echo 0; else echo 1000; fi ;;
+  "-u tester"|"-g tester") echo 1001 ;;
+  -un) if [ -n "${FAKE_ROOT:-}" ]; then echo root; else echo tester; fi ;;
   "-nG tester") if [ -f "$FAKE_STATE/usermod" ]; then echo "tester docker"; else echo tester; fi ;;
   *) exec /usr/bin/id "$@" ;;
 esac
@@ -233,7 +234,7 @@ cat > "$FK/docker" <<'EOF'
 #!/bin/bash
 echo "${FAKE_DOCKER_GROUP:+[sg]}${FAKE_SUDO:+[sudo]} $*" >> "$FAKE_STATE/docker.log"
 [ -f "$FAKE_STATE/installed" ] || { echo "docker: command not found" >&2; exit 127; }
-[ -n "${FAKE_DOCKER_GROUP:-}${FAKE_SUDO:-}" ] || { echo "permission denied while trying to connect to the Docker daemon socket" >&2; exit 1; }
+[ -n "${FAKE_DOCKER_GROUP:-}${FAKE_SUDO:-}${FAKE_ROOT:-}" ] || { echo "permission denied while trying to connect to the Docker daemon socket" >&2; exit 1; }
 if [ "$1" = compose ]; then
   for a in "$@"; do [ "$a" = up ] || continue
     nohup node "$FAKE_STATE/../fakeapp.js" "$(sed -n 's/^GC_PORT=//p' .env)" "$PWD" >/dev/null 2>&1 &
@@ -267,6 +268,13 @@ check $? "genchibi start trong cùng phiên chạy docker compose qua sg (không
 dockinst dsudo FAKE_NO_SG=1
 [ $IRC = 0 ] && echo "$INST_OUT" | grep -q 'continuing with sudo docker' && grep -q '^\[sudo\] compose -f docker-compose.yml up -d' "$FS/docker.log"
 check $? "không dùng được sg → sudo docker (không hỏi mật khẩu: -n), compose chạy qua sudo" "$IRC $(echo "$INST_OUT" | tail -4) · $(tail -3 "$FS/docker.log" 2>/dev/null)"
+# trình cài chạy bằng root (sudo bash install.sh): container KHÔNG chạy root — GC_UID = uid của SUDO_USER (giả: tester = 1001), không có thì 1000; thư mục cài chown theo
+dockinst droot FAKE_ROOT=1 SUDO_USER=tester
+[ $IRC = 0 ] && grep -q '^GC_UID=1001$' "$W/droot/.env" && grep -q '^GC_GID=1001$' "$W/droot/.env" && [ "$(stat -c %u "$W/droot")" = 1001 ] && [ "$(stat -c %u "$W/droot/.env")" = 1001 ] && echo "$INST_OUT" | grep -q 'Running as root: the containers run as user 1001:1001'
+check $? "trình cài chạy bằng root + SUDO_USER → GC_UID/GC_GID = 1001 (user gọi sudo), thư mục cài chown 1001, báo rõ" "$IRC $(grep '^GC_[UG]ID' "$W/droot/.env" 2>/dev/null | tr '\n' ' ') owner=$(stat -c %u "$W/droot" 2>/dev/null) · $(echo "$INST_OUT" | tail -4)"
+dockinst droot2 FAKE_ROOT=1
+[ $IRC = 0 ] && grep -q '^GC_UID=1000$' "$W/droot2/.env" && [ "$(stat -c %u "$W/droot2/data")" = 1000 ] && ! grep -q '^GC_UID=0$' "$W/droot2/.env"
+check $? "trình cài chạy bằng root, không SUDO_USER → GC_UID=1000 (không bao giờ 0), data/ thuộc 1000" "$IRC $(grep '^GC_[UG]ID' "$W/droot2/.env" 2>/dev/null | tr '\n' ' ')"
 # đột biến: bỏ đường sg / sudo (chỉ docker thẳng) → trình cài phải rơi về native / dừng, kiểm ở trên ĐỎ
 sed 's/^  case "\$g" in \*" docker "\*)$/  case "$g" in *" docker-mutated "*)/; s/command -v sudo >\/dev\/null \&\& sudo -n docker info/false \&\& sudo -n docker info/' "$ROOT/install.sh" > "$W/install-mut.sh"
 if ! cmp -s "$ROOT/install.sh" "$W/install-mut.sh"; then

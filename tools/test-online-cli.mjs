@@ -1,7 +1,7 @@
 // Kiểm `genchibi online` (v0.21 P4) với server THẬT + launcher thật + Cloudflare API giả + cloudflared giả — không mạng ngoài, không Docker:
 //   1) cách dùng: token trên dòng lệnh bị từ chối (không gửi đi) · app dừng → báo rõ · trạng thái khi chưa online (en + vi)
 //   2) đường Cloudflare qua CLI: không terminal + không token → dừng có hướng dẫn · CNAME có sẵn + không terminal → dừng, KHÔNG đè ·
-//      --token-stdin --overwrite-dns → chạy hết các bậc tới "chờ mật khẩu" (mã thoát 3, in mã setup) · genchibi password + online recheck → xong
+//      --token-stdin --overwrite-dns → chạy hết các bậc tới "chờ mật khẩu" (mã thoát 3, in mã setup; status nói "tạm — chờ mật khẩu") · genchibi password → luồng TỰ xong (CNS-201)
 //      (in https://tên + /mcp) · trạng thái · đổi địa chỉ không --yes → hỏi / dừng · proxy (in đoạn cấu hình, bậc lỗi in cách sửa) · Go offline dọn Cloudflare
 //   3) token API: không có trong argv / môi trường của bất kỳ tiến trình con nào (shim ghi argv + env của curl, awk, sed… và quét /proc/*/cmdline),
 //      không trong đầu ra CLI, log app / launcher, tệp dữ liệu · có terminal (script): hỏi ẩn, không hiện lại
@@ -159,20 +159,29 @@ console.log('   — đường Cloudflare qua CLI (Cloudflare API giả)');
   r = await cli(home, ['online', 'cloudflare', 'chibi.example.com', '--token-stdin', '--overwrite-dns'], { input: TOKEN + '\n' }); outs.push(r.out);
   const code = (/[0-9A-Z]{5}-[0-9A-Z]{5}/.exec(fs.existsSync(path.join(home, 'data', 'setup-code.txt')) ? fs.readFileSync(path.join(home, 'data', 'setup-code.txt'), 'utf8') : '') || [])[0];
   const cname = cf.st.dns.find(x => x.name === 'chibi.example.com');
-  ok(r.code === 3 && code && r.out.includes(code) && /https:\/\/chibi\.example\.com\/setup/.test(r.out) && /genchibi online recheck/.test(r.out),
+  ok(r.code === 3 && code && r.out.includes(code) && /https:\/\/chibi\.example\.com\/setup/.test(r.out) && /finishes going online by itself/.test(r.out) && /genchibi password/.test(r.out) && !/then run: genchibi online recheck/.test(r.out),
     '--token-stdin --overwrite-dns → các bậc chạy tới "chờ mật khẩu": thoát 3, in mã setup ' + code + ' + https://chibi.example.com/setup', r.code + ' ' + r.out);
   ok(['Owner', 'API token', 'Domain + sub-name', 'Tunnel', 'Public address', 'WAF rule', 'MCP from the Internet'].every(n => new RegExp('✓ ' + n.replace(/[+]/g, '\\+')).test(r.out)) && /… Owner password/.test(r.out),
     'tiến độ từng bậc in ra: ✓ owner · token · zone · tunnel · public · waf · mcp, … mật khẩu', r.out);
   ok(cname && cname.type === 'CNAME' && cf.st.tunnels.length === 1 && cf.st.ruleset && cf.st.ruleset.rules.length === 1, 'Cloudflare giả: CNAME thay bản ghi A (đã xác nhận bằng --overwrite-dns), 1 tunnel, 1 luật WAF', JSON.stringify(cf.st.dns));
   ok(!procHits.length && !shimLeaks().length, '--token-stdin: token không có trong argv / môi trường của tiến trình nào (quét /proc + shim curl / awk / sed …)', procHits.concat(shimLeaks()).join('\n'));
 
-  // mật khẩu + recheck → xong
+  // CNS-209: trong lúc chờ mật khẩu, status / online nói rõ trạng thái TẠM (không phải "off")
+  r = await cli(home, ['status']);
+  ok(/Online \(temporary — waiting for the owner password\): https:\/\/chibi\.example\.com \(mode cloudflare\)/.test(r.out) && /genchibi password/.test(r.out) && !/Online: off/.test(r.out), 'chờ mật khẩu: genchibi status in "Online (temporary — waiting for the owner password): https://chibi.example.com" + cách đặt, không báo off', r.out);
+  r = await cli(home, ['online']);
+  ok(/Waiting for the owner password: https:\/\/chibi\.example\.com is on temporarily/.test(r.out), 'genchibi online: dòng "Waiting for the owner password … on temporarily"', r.out);
+  const v0 = (await api(L, 'GET', '/api/online')).j;
+  ok(v0 && v0.mode === 'off' && v0.flow.waitingPassword === true && v0.cloudflare.tokenInMemory === true, 'server lúc chờ: mode còn off, luồng chờ ở bậc mật khẩu, token API còn trong bộ nhớ');
+  // CNS-201: genchibi password → app TỰ hoàn tất (không recheck): mode / publicUrl chính thức / online: true / bỏ API token
   r = await cli(home, ['password'], { input: 'correct horse battery staple\n' });
   ok(r.code === 0, 'genchibi password (stdin) đặt mật khẩu chủ', r.out);
+  const v = await until(async () => { const x = (await api(L, 'GET', '/api/online')).j; return x && x.flow && x.flow.done && !x.busy ? x : null; }, 15000, 250);
+  const intent = (() => { try { return JSON.parse(fs.readFileSync(path.join(home, 'run', 'edge-intent.json'), 'utf8')); } catch (e) { return {}; } })();
+  ok(v && v.mode === 'cloudflare' && v.publicUrl === 'https://chibi.example.com' && !v.publicUrlPending && v.flow.done && !v.cloudflare.tokenInMemory && intent.online === true && intent.tunnel === 'token',
+    'đặt mật khẩu → luồng TỰ xong, KHÔNG cần Kiểm lại: mode cloudflare, publicUrl chính thức, intent online: true, token API đã bỏ khỏi bộ nhớ', JSON.stringify(v && { mode: v.mode, pub: v.publicUrl, done: v.flow && v.flow.done, mem: v.cloudflare.tokenInMemory }) + ' ' + JSON.stringify(intent));
   r = await cli(home, ['online', 'recheck']); outs.push(r.out);
-  ok(r.code === 0 && /✓ Online: https:\/\/chibi\.example\.com/.test(r.out) && /https:\/\/chibi\.example\.com\/mcp/.test(r.out) && /✓ Owner password/.test(r.out), 'genchibi online recheck → xong: in https://chibi.example.com + https://chibi.example.com/mcp', r.code + ' ' + r.out);
-  const v = (await api(L, 'GET', '/api/online')).j;
-  ok(v && v.mode === 'cloudflare' && v.publicUrl === 'https://chibi.example.com' && v.flow.done && !v.cloudflare.tokenInMemory, 'server: mode cloudflare, publicUrl chính thức, token API đã bỏ khỏi bộ nhớ');
+  ok(r.code === 0 && /✓ Online: https:\/\/chibi\.example\.com/.test(r.out) && /https:\/\/chibi\.example\.com\/mcp/.test(r.out), 'genchibi online recheck (lối dự phòng) vẫn chạy: in https://chibi.example.com + https://chibi.example.com/mcp', r.code + ' ' + r.out);
   r = await cli(home, ['online']);
   ok(r.code === 0 && /mode cloudflare · chibi\.example\.com/.test(r.out) && /Public address: https:\/\/chibi\.example\.com/.test(r.out) && /Last run: cloudflare · finished/.test(r.out) && (r.out.match(/  ✓ /g) || []).length === 8 && /tunnel token/.test(r.out),
     'genchibi online: mode · địa chỉ · 8 bậc ✓ · edge tunnel token', r.out);
@@ -291,6 +300,45 @@ console.log('   — máy kế thừa: cấu hình ra ngoài bằng .env');
   r = await cli(hl, ['online', 'migrate']);
   ok((r.code === 1 && /no migrate step yet — update first: genchibi update/.test(r.out)) || (r.code === 0 && /now live in Go online/.test(r.out)), 'genchibi online migrate: route chưa có (404) → "cần bản mới"; có route → chuyển xong', r.code + ' ' + r.out);
   await stopLauncher(LL);
+}
+
+// ---------------------------------------------------------------- 7) móc kiểm thử chỉ có tác dụng khi GC_TEST=1 (review bảo mật 🟡7)
+console.log('   — móc kiểm thử: GC_TEST_* / GC_AUTH_RATE không tác dụng khi thiếu GC_TEST=1; không đi qua .env');
+{
+  // (a) server: GC_TEST_CF_API có mà thiếu GC_TEST=1 → client Cloudflare KHÔNG gọi API giả (gọi api.cloudflare.com thật → trong sandbox không có mạng → lỗi)
+  const PG = 7871, hg = mkHome('gate', PG), calls0 = cf.st.log.length;
+  const env = Object.assign({}, Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^GC_/.test(k))), { GC_HOME: hg, GC_PORT: String(PG), GC_NO_AUTOCHECK: '1', GC_TEST_CF_API: cf.base, GC_AUTH_RATE: '1000', HTTPS_PROXY: '', https_proxy: '' });
+  const sv = spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env, stdio: 'ignore', detached: true }); kids.push(sv);
+  await until(() => health(PG), 20000);
+  const Lg = { port: PG, home: hg };
+  const st0 = await api(Lg, 'POST', '/api/online/cloudflare', { token: TOKEN, zone: 'example.com' });
+  const vg = await until(async () => { const x = (await api(Lg, 'GET', '/api/online')).j; return x && !x.busy && x.flow ? x : null; }, 30000, 300);
+  const tok = vg && vg.flow.steps.find(x => x.id === 'token');
+  ok(st0.status === 202 && tok && tok.state === 'fail' && cf.st.log.length === calls0, 'GC_TEST_CF_API mà KHÔNG có GC_TEST=1 → bị bỏ qua: Cloudflare API giả không nhận lời gọi nào, bậc token ✗ (gọi API thật, không có mạng)', JSON.stringify(tok));
+  try { process.kill(-sv.pid, 'SIGTERM'); } catch (e) { /* đã tắt */ }
+  // (b) launcher: env của app con bỏ GC_TEST* / GC_AUTH_RATE / GC_OAUTH_RATE trừ khi chính launcher chạy với GC_TEST=1
+  const { createRequire } = await import('module'), req = createRequire(import.meta.url), Lmod = req(path.join(ROOT, 'launcher.js'));
+  const keep = { GC_TEST: process.env.GC_TEST, GC_TEST_CF_API: process.env.GC_TEST_CF_API, GC_AUTH_RATE: process.env.GC_AUTH_RATE };
+  delete process.env.GC_TEST; process.env.GC_TEST_CF_API = 'http://127.0.0.1:9/client/v4'; process.env.GC_AUTH_RATE = '1000';
+  const e1 = Lmod.appEnv(); process.env.GC_TEST = '1'; const e2 = Lmod.appEnv();
+  Object.entries(keep).forEach(([k, v]) => { if (v === undefined) delete process.env[k]; else process.env[k] = v; });
+  ok(!Object.keys(e1).some(k => /^GC_TEST/.test(k) || k === 'GC_AUTH_RATE') && e1.PATH && e2.GC_TEST === '1' && e2.GC_TEST_CF_API && e2.GC_AUTH_RATE === '1000', 'launcher: thiếu GC_TEST=1 → env của app không có GC_TEST_* / GC_AUTH_RATE; có GC_TEST=1 (bộ test) → giữ');
+  // (c) CLI: .env có GC_TEST=1 / GC_TEST_CF_API → không xuất sang launcher (genchibi start); set_env ghi .env thì bỏ hẳn các dòng đó
+  const hc = mkHome('envhook', 7881), dump = path.join(hc, 'launcher-env.json');
+  fs.appendFileSync(path.join(hc, '.env'), 'GC_TEST=1\nexport GC_TEST_CF_API=http://127.0.0.1:9/client/v4\nGC_TEST_ONLINE_VIA=127.0.0.1:9\n');
+  fs.writeFileSync(path.join(hc, 'launcher.js'), 'require("fs").writeFileSync(' + JSON.stringify(dump) + ', JSON.stringify(process.env));\n');
+  let r = await cli(hc, ['start']);
+  await until(() => fs.existsSync(dump), 10000);
+  const de = (() => { try { return JSON.parse(fs.readFileSync(dump, 'utf8')); } catch (e) { return null; } })();
+  ok(r.code === 0 && de && de.GC_PORT === '7881' && !Object.keys(de).some(k => /^GC_TEST/.test(k)), 'CLI nạp .env có GC_TEST=1 / GC_TEST_CF_API → launcher KHÔNG nhận móc nào (chỉ từ shell gọi lệnh)', r.out + ' ' + (de ? Object.keys(de).filter(k => /^GC_/.test(k)).join(',') : 'không có env'));
+  fs.rmSync(dump, { force: true }); fs.rmSync(path.join(hc, 'logs', 'launcher.pid'), { force: true });   // launcher giả đã thoát (sandbox có thể chưa dọn zombie — kill -0 vẫn thấy)
+  r = await cli(hc, ['start'], { env: { GC_TEST: '1' } });
+  await until(() => fs.existsSync(dump), 10000);
+  const de2 = (() => { try { return JSON.parse(fs.readFileSync(dump, 'utf8')); } catch (e) { return null; } })();
+  ok(de2 && de2.GC_TEST === '1' && !de2.GC_TEST_CF_API, 'đối chứng: GC_TEST=1 từ shell gọi lệnh (bộ test) vẫn tới launcher; GC_TEST_CF_API trong .env thì không', r.out + ' ' + (de2 ? Object.keys(de2).filter(k => /^GC_/.test(k)).join(',') : 'không có env'));
+  r = await cli(hc, ['lang', 'vi']);
+  const envTxt = fs.readFileSync(path.join(hc, '.env'), 'utf8');
+  ok(/^GC_LANG=vi$/m.test(envTxt) && !/GC_TEST/.test(envTxt), 'CLI ghi .env (genchibi lang vi) → các dòng GC_TEST* bị bỏ khỏi .env', envTxt);
 }
 
 cf.close();

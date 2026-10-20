@@ -189,7 +189,7 @@
         title = _t('Đăng nhập gen-chibi');
         body.push(h('div', { class: 'note', text: _t('Nhập mật khẩu chủ. Trình duyệt này nhớ đăng nhập 30 ngày.') }), field(_t('Mật khẩu'), pw));
         // trần theo tài khoản đang chặn người lạ (trình duyệt chưa từng đăng nhập): nói thẳng + lối token (token chủ không bị trần)
-        if (st.locked > 0) body.push(h('div', { class: 'banner warn', id: 'gcLocked', role: 'status' }, h('span', { text: _t('Đăng nhập đang bị chặn tạm vì nhiều lần sai — dùng token hoặc chờ {n} phút.', { n: Math.ceil(st.locked / 60) }) })));
+        if (st.locked > 0) body.push(h('div', { class: 'banner warn', id: 'gcLocked', role: 'status' }, h('span', { text: _t('Đăng nhập đang bị chặn tạm vì nhiều lần sai — trên máy chủ chạy genchibi password (đặt lại mật khẩu), hoặc dùng token, hoặc chờ {n} phút.', { n: Math.ceil(st.locked / 60) }) })));
         btn.textContent = _t('Đăng nhập');
         submit = function () {
           Auth.post('api/auth/login', { password: pw.value }).then(function (x) {
@@ -5589,6 +5589,9 @@
   var OL_STEP = { domain: N_('Tên miền → IP'), edge: N_('Edge Caddy (cổng 80 / 443)'), port: N_('Cổng 80 tới được'), cert: N_('Chứng chỉ HTTPS'), public: N_('Địa chỉ công khai'), mcp: N_('MCP từ Internet'),
     password: N_('Mật khẩu chủ'), owner: N_('Quyền chủ máy'), token: N_('API token Cloudflare'), zone: N_('Tên miền + tên con'), tunnel: N_('Tunnel + CNAME'), waf: N_('Luật WAF cho agent'),
     config: N_('Cấu hình proxy'), local: N_('Dọn trên máy'), remote: N_('Dọn ở Cloudflare') };
+  // nhãn bậc theo đường: link tạm cũng có bậc `tunnel` nhưng không có CNAME nào (CNS-208c)
+  var OL_STEP_BY = { quick: { tunnel: N_('Tunnel tạm (*.trycloudflare.com)') } };
+  function olStep(mode, id) { return (OL_STEP_BY[mode] || {})[id] || OL_STEP[id] || id; }
   var OL_MODE = { off: N_('Ngoại tuyến'), caddy: N_('Caddy (IP công khai)'), cloudflare: N_('Cloudflare Tunnel'), proxy: N_('Proxy riêng'), quick: N_('Link tạm') };
   var OL_STATE = { ok: ['ok', '✓', N_('Đã qua')], fail: ['bad', '✗', N_('Chưa qua')], running: ['warn', '…', N_('Đang chạy')], pending: ['', '○', N_('Chờ')] };
   // mã lỗi ổn định của launcher (run/edge-status.json, launcher.js) → câu người đọc được; luôn kèm mã gốc
@@ -5680,7 +5683,10 @@
       clear(box); clear($('actions'));
       var reB = h('button', { class: 'btn', id: 'olRecheck', disabled: v.busy || !f || f.mode === 'off', onclick: function () { post('recheck', {}).then(function (x) { if (x) after(x); }); } }, _t('Kiểm lại'));
       var offB = h('button', { class: 'btn danger', id: 'olOffBtn', disabled: v.busy && !S.off, onclick: function () { S.off = true; render(S.v); var o = $('olOffPanel'); if (o) o.scrollIntoView({ block: 'nearest' }); } }, _t('Ngắt mạng (Go offline)'));
-      actions(f && f.mode !== 'off' ? reB : null, v.mode !== 'off' || (f && f.mode !== 'off') || v.publicUrlPending ? offB : null);
+      // Go offline chỉ khi có gì đang ra ngoài để gỡ (CNS-211): đang online · publicUrl bật tạm · tunnel bật · luồng Cloudflare đã tạo tunnel (dọn ở Cloudflare)
+      var tunOk = f && f.mode === 'cloudflare' && f.steps.some(function (s) { return s.id === 'tunnel' && s.state === 'ok'; });
+      var anyOn = v.mode !== 'off' || !!v.publicUrlPending || ((v.edge || {}).intent && v.edge.intent !== 'off') || tunOk;
+      actions(f && f.mode !== 'off' ? reB : null, anyOn ? offB : null);
       if (S.err) box.appendChild(h('div', { class: 'banner bad', role: 'alert', id: 'olErr' }, h('span', { text: '✗ ' + S.err }), h('button', { class: 'btn sm', onclick: function () { S.err = ''; render(S.v); } }, _t('Đóng'))));
       // ---- trạng thái hiện tại
       var es = (v.edge || {}).status, edgeTxt;
@@ -5704,6 +5710,14 @@
         h('span', { text: S.ask.from ? _t('Đổi địa chỉ công khai từ {from} sang {to}: {n} kết nối agent (OAuth) sẽ bị gỡ và phải nối lại.', { from: S.ask.from, to: S.ask.to || _t('địa chỉ mới'), n: S.ask.revokes }) : _t('Bật địa chỉ công khai mới {to}: {n} kết nối agent (OAuth) cũ sẽ bị gỡ và phải nối lại.', { to: S.ask.to || _t('địa chỉ mới'), n: S.ask.revokes }) }),
         h('button', { class: 'btn primary sm', id: 'olAskYes', onclick: function () { var a = S.ask; S.ask = null; start(a.id, a.body); } }, _t('Đổi và tiếp tục')),
         h('button', { class: 'btn sm', onclick: function () { S.ask = null; render(S.v); } }, _t('Huỷ'))));
+      // ---- mọi bậc ✓ nhưng chính thức hoá địa chỉ mới sẽ gỡ kết nối agent cũ (link tạm / Cloudflare không ghi tên miền — luồng không biết địa chỉ lúc bắt đầu): hỏi
+      if (f && f.needs === 'urlChange' && !f.done) box.appendChild(h('div', { class: 'banner warn', id: 'olAskFinish', role: 'alertdialog' },
+        h('span', { text: _t('Bật địa chỉ công khai mới {to}: {n} kết nối agent (OAuth) cũ sẽ bị gỡ và phải nối lại.', { to: f.url || _t('địa chỉ mới'), n: f.revokes || 0 }) }),
+        h('button', { class: 'btn primary sm', id: 'olAskFinishYes', disabled: v.busy, onclick: function () { post('recheck', { confirmUrlChange: true }).then(function (x) { if (x) after(x); }); } }, _t('Đổi và tiếp tục'))));
+      // ---- chỉ còn bậc "mật khẩu chủ": địa chỉ đang bật TẠM; đặt mật khẩu (ở đây, /setup hay genchibi password) là app tự hoàn tất (CNS-201)
+      if (f && f.waitingPassword) box.appendChild(h('div', { class: 'banner warn', id: 'olWaitPw', role: 'status' },
+        h('span', { text: _t('Sắp xong: {url} đang bật tạm. Bước cuối — đặt mật khẩu chủ; đặt xong là app tự hoàn tất lên mạng (không cần Kiểm lại).', { url: v.publicUrlPending || f.url || '—' }) }),
+        h('button', { class: 'btn primary sm', id: 'olSetPw', onclick: function () { Auth.render('setup'); } }, _t('Đặt mật khẩu'))));
       // ---- Go offline: hỏi trước, liệt kê hệ quả; đường Cloudflare xin token để dọn tunnel + CNAME
       if (S.off) {
         var cfNeed = (v.mode === 'cloudflare' || (f && f.mode === 'cloudflare')) && !(v.cloudflare || {}).tokenKept && !(v.cloudflare || {}).tokenInMemory;
@@ -5780,7 +5794,7 @@
     }
     function stepsPanel(v, f) {
       var hasAct = f.steps.some(function (s) { return s.manual && s.id === 'waf' && s.state === 'fail'; });   // cột thao tác chỉ khi có bậc cần chủ bấm
-      var tbl = h('table', { class: 'grid olsteps', id: 'olSteps' }), cols = [_t('Bậc'), _t('Trạng thái'), _t('Chi tiết'), _t('Cách sửa'), _t('Lúc')].concat(hasAct ? [''] : []);
+      var tbl = h('table', { class: 'grid olsteps', id: 'olSteps' }), cols = [_t('Bậc'), _t('Trạng thái'), _t('Chi tiết'), _t('Cách sửa'), _t('Lúc')].concat(hasAct ? [_t('Thao tác')] : []);   // cột nào cũng có tiêu đề + chữ cột (STD-07, CNS-208a)
       tbl.appendChild(h('tr', { class: 'letters' }, h('td'), cols.map(function (c, i) { return h('td', { text: c ? String.fromCharCode(65 + i) : '' }); })));
       tbl.appendChild(h('tr', null, h('th', { text: 'ID' }), cols.map(function (c) { return h('th', { text: c }); })));
       var n = { ok: 0, fail: 0 };
@@ -5789,7 +5803,7 @@
         var act = s.manual && s.id === 'waf' && s.state === 'fail' ? h('button', { class: 'btn sm primary', id: 'olWafDone', disabled: v.busy, onclick: function () { post('recheck', { confirmManual: 'waf' }).then(function (x) { if (x) after(x); }); } }, _t('Tôi đã làm')) : null;
         tbl.appendChild(h('tr', { 'data-step': s.id, 'data-state': s.state },
           h('td', { class: 'id', text: 'GO-' + String(i + 1).padStart(2, '0') }),
-          h('td', { class: 'nw' }, h('b', { text: _t(OL_STEP[s.id] || s.id) })),
+          h('td', { class: 'nw' }, h('b', { text: _t(olStep(f.mode, s.id)) })),
           h('td', { class: 'nw' }, h('span', { class: 'chip ' + st[0], text: st[1] + ' ' + _t(st[2]) })),
           h('td', { class: 'wrap', text: s.detail || '' }, s.expires ? h('div', { class: 'note', text: _t('hết hạn {at}', { at: fmtTime(s.expires) }) }) : null),
           // biểu thức luật WAF dài: chữ trong câu rút thành "(…)", bản đầy đủ ở ô mã cuộn được + nút chép (fixCopies)
@@ -5800,7 +5814,7 @@
       var title = f.mode === 'off' ? _t('Ngắt mạng') : _t(OL_MODE[f.mode] || f.mode);
       return h('div', { class: 'panel', id: 'olStepsPanel' }, h('h3', null, _t('Các bậc · {mode}', { mode: title }), f.domain ? h('span', { class: 'r mono note', text: f.mode === 'quick' && f.url ? f.url : f.domain }) : null),
         h('div', { class: 'scroll' }, tbl),
-        h('div', { class: 'olfoot note', id: 'olFoot' }, h('span', { text: _t('{n} bậc · {ok} đạt · {bad} lỗi', { n: f.steps.length, ok: n.ok, bad: n.fail }) }), h('span', { text: v.busy ? _t('đang chạy…') : f.done ? _t('xong lúc {at}', { at: fmtClock(f.doneAt) }) : _t('dừng ở bậc lỗi — sửa rồi bấm Kiểm lại') }), h('span', { class: 'mono', text: _t('cập nhật {at}', { at: fmtClock(new Date().toISOString()) }) })));
+        h('div', { class: 'olfoot note', id: 'olFoot' }, h('span', { text: _t('{n} bậc · {ok} đạt · {bad} lỗi', { n: f.steps.length, ok: n.ok, bad: n.fail }) }), h('span', { text: v.busy ? _t('đang chạy…') : f.done ? _t('xong lúc {at}', { at: fmtClock(f.doneAt) }) : f.waitingPassword ? _t('chờ mật khẩu chủ — đặt xong là tự hoàn tất') : f.needs === 'urlChange' ? _t('chờ bạn xác nhận đổi địa chỉ') : _t('dừng ở bậc lỗi — sửa rồi bấm Kiểm lại') }), h('span', { class: 'mono', text: _t('cập nhật {at}', { at: fmtClock(new Date().toISOString()) }) })));
     }
     function donePanel(v, f) {
       var url = v.publicUrl, mcpUrl = url + '/mcp', cert = f.steps.filter(function (s) { return s.id === 'cert' && s.expires; })[0], es = (v.edge || {}).status;
@@ -5899,7 +5913,7 @@
           h('td', { class: 'nw' }, h('button', { class: 'btn sm danger', onclick: function () { revoke('devices', d.id, d.current ? _t('Thu hồi thiết bị NÀY?\n\nMọi phiên của trình duyệt này bị huỷ — bạn sẽ phải đăng nhập lại ngay.') : _t('Thu hồi thiết bị {id} ({ua})?\n\nMọi phiên của thiết bị đó bị huỷ; lần sau nó phải đăng nhập lại.', { id: d.id.slice(0, 8), ua: uaShort(d.ua) })); } }, _t('Thu hồi'))));
       });
       box.appendChild(h('div', { class: 'panel', id: 'acDevices' }, h('h3', null, _t('Thiết bị đã nhớ'), h('span', { class: 'r note', text: _t('{n} thiết bị · trình duyệt từng đăng nhập đúng không bị khoá chung với kẻ lạ', { n: devs.length }) })),
-        grid('acDevGrid', [_t('Trình duyệt'), _t('Lần đầu'), _t('Lần cuối'), _t('Trạng thái'), ''], dRows, _t('Chưa có thiết bị nào.'))));
+        grid('acDevGrid', [_t('Trình duyệt'), _t('Lần đầu'), _t('Lần cuối'), _t('Trạng thái'), _t('Thu hồi')], dRows, _t('Chưa có thiết bị nào.'))));
       // ---- cảnh báo đăng nhập sai
       var al = a.alerts || [];
       var aRows = al.slice().reverse().map(function (e) {
@@ -5913,7 +5927,8 @@
         grid('acAlertGrid', [_t('Lúc'), _t('Loại'), _t('Số lần sai'), _t('Số địa chỉ'), _t('Địa chỉ gần nhất'), _t('Chặn tới')], aRows, _t('Không có cảnh báo mới. Khi nhiều lần sai từ nơi lạ làm đăng nhập bị chặn tạm, cảnh báo hiện ở đây tới khi bạn bấm Đã xem.'))));
       // ---- token chủ: không hiện
       box.appendChild(h('div', { class: 'panel', id: 'acToken' }, h('h3', null, _t('Token chủ')), h('div', { class: 'pad stack' },
-        h('div', null, _t('Owner token: dùng cho CLI / agent — xem bằng'), ' ', h('code', { class: 'mono', text: 'genchibi token' }), ' ', _t('trên máy chủ.')),
+        // CNS-200: KHÔNG có lệnh in token chủ (`genchibi token` là token GitHub) — chỉ đúng chỗ đọc trên máy chủ + lệnh in sẵn cấu hình nối agent
+        h('div', null, _t('Token chủ dùng cho CLI / agent nằm trên máy chủ:'), ' ', h('code', { class: 'mono', text: 'GC_API_TOKEN' }), ' ', _t('trong .env của thư mục cài, hoặc'), ' ', h('code', { class: 'mono', text: 'data/owner-token' }), ' ', _t('(khi .env không đặt) — CLI tự đọc. Cấu hình nối agent in sẵn:'), ' ', h('code', { class: 'mono', text: 'genchibi agent connect' }), '.'),
         h('div', { class: 'note', text: a.tokenSource === 'env' ? _t('Nguồn: GC_API_TOKEN trong .env. Token không bao giờ hiện trong Studio.') : _t('Nguồn: data/owner-token (server tự sinh). Token không bao giờ hiện trong Studio.') }))));
     }
     load();

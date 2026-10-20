@@ -23,6 +23,7 @@ _en() {
     st_mcp_quick) F="  MCP to the Internet: temporary tunnel %s (genchibi link)" ;;
     st_mcp_off) F="  Online: off — this machine only (genchibi online --help: domain + HTTPS + MCP in one step)" ;;
     st_online) F="  Online: %s (mode %s · genchibi online shows each step)" ;;
+    st_online_wait) F="  Online (temporary — waiting for the owner password): %s (mode %s). Set it at %s/setup with the setup code above, or here: genchibi password — the app then finishes going online by itself" ;;
     upd_checking) F="Checking for a new version…" ;;
     upd_nocheck) F="Could not check (is the app running?)" ;;
     upd_failed) F="Update failed; still running the current version." ;;
@@ -31,6 +32,9 @@ _en() {
     restore_ask) F="Replace the current data with %s? (type 'yes') " ;;
     cancelled) F="Cancelled." ;;
     restored) F="Restored." ;;
+    restore_note) F="Note: a backup holds the owner password and the Studio sessions of the moment it was made. After restoring, Go online is OFF on this machine (run it again to go online) and every session / remembered device is signed out — sign in with the password of the backup (forgot it: genchibi password)." ;;
+    restored_off) F="Go online is off and all sessions / devices were signed out (the password is the one in the backup). Go online again: genchibi online --help" ;;
+    open_code) F="If the page does not open: go to %s and enter the setup code %s" ;;
     un_ask) F="Uninstall gen-chibi. Keep your data (characters, scripts, backups)? [Y/n] " ;;
     un_wiped) F="Uninstalled and all data deleted." ;;
     un_kept) F="Uninstalled. Data kept in %s/data and %s/backups." ;;
@@ -134,8 +138,9 @@ _en() {
     on_done) F="✓ Online: %s" ;;
     on_done_studio) F="  Studio: %s (sign in with the owner password)" ;;
     on_done_mcp) F="  MCP:    %s/mcp — claude.ai: Customize › Connectors › Add custom connector › paste it › Connect › Authorize (Studio › System › Agent connections lists it)" ;;
-    on_pw_wait) F="Almost done: %s answers. Last step — set the owner password: open %s/setup and enter the setup code %s, then run: genchibi online recheck" ;;
-    on_pw_wait_nocode) F="Almost done: %s answers. Last step — set the owner password at %s/setup with the setup code (genchibi status prints it), then run: genchibi online recheck" ;;
+    on_pw_wait) F="Almost done: %s answers (temporarily). Last step — set the owner password: open %s/setup and enter the setup code %s (or on the server: genchibi password). The app then finishes going online by itself — genchibi status shows it." ;;
+    on_pw_wait_nocode) F="Almost done: %s answers (temporarily). Last step — set the owner password at %s/setup with the setup code (genchibi status prints it), or on the server: genchibi password. The app then finishes going online by itself." ;;
+    on_wait_pw) F="  Waiting for the owner password: %s is on temporarily — set it (%s/setup or genchibi password) and the app finishes by itself" ;;
     on_timeout) F="Still waiting after %s minutes — the step keeps its state; check again later: genchibi online recheck" ;;
     on_failed) F="✗ Stopped at: %s. Fix it as shown above, then: genchibi online recheck" ;;
     on_url_change) F="This changes the public address (%s → %s): %s connected agent(s) will be signed out and must connect again." ;;
@@ -193,6 +198,7 @@ _vi() {
     st_mcp_quick) F="  MCP ra ngoài: tunnel tạm %s (genchibi link)" ;;
     st_mcp_off) F="  Ra Internet: tắt — chỉ máy này (genchibi online --help: tên miền + HTTPS + MCP một bước)" ;;
     st_online) F="  Ra Internet: %s (chế độ %s · genchibi online xem từng bậc)" ;;
+    st_online_wait) F="  Ra Internet (tạm — chờ mật khẩu chủ): %s (chế độ %s). Đặt mật khẩu ở %s/setup bằng mã setup ở trên, hoặc tại đây: genchibi password — app tự hoàn tất lên mạng" ;;
     upd_checking) F="Kiểm tra phiên bản…" ;;
     upd_nocheck) F="Không kiểm tra được (app có đang chạy?)" ;;
     upd_failed) F="Cập nhật thất bại; vẫn chạy bản hiện tại." ;;
@@ -201,6 +207,9 @@ _vi() {
     restore_ask) F="Thay dữ liệu hiện tại bằng %s? (gõ 'dong y') " ;;
     cancelled) F="Huỷ." ;;
     restored) F="Đã khôi phục." ;;
+    restore_note) F="Lưu ý: bản sao lưu chứa mật khẩu chủ và các phiên Studio lúc sao lưu. Khôi phục xong thì Go online TẮT trên máy này (chạy lại để lên mạng) và mọi phiên / thiết bị đã nhớ bị đăng xuất — đăng nhập bằng mật khẩu của bản sao lưu (quên: genchibi password)." ;;
+    restored_off) F="Go online đã tắt, mọi phiên / thiết bị đã bị đăng xuất (mật khẩu là mật khẩu trong bản sao lưu). Lên mạng lại: genchibi online --help" ;;
+    open_code) F="Trang không mở: vào %s và nhập mã setup %s" ;;
     un_ask) F="Gỡ gen-chibi. Giữ lại dữ liệu (nhân vật, kịch bản, backup)? [C/k] " ;;
     un_wiped) F="Đã gỡ và xoá toàn bộ dữ liệu." ;;
     un_kept) F="Đã gỡ. Dữ liệu giữ ở %s/data và %s/backups." ;;
@@ -268,11 +277,11 @@ _vi() {
     lang_restart) F="Khởi động lại app để giao diện mặc định đổi theo…" ;;
     lang_norun) F="App đang không chạy — mặc định mới có hiệu lực ở lần chạy tới (genchibi start)." ;;
     lang_note) F="Đây là mặc định cho CLI và cho mọi người mở Studio. Mỗi người vẫn đổi ngôn ngữ riêng trong Studio được (nút chuyển ngôn ngữ); lựa chọn đó được nhớ trong trình duyệt của họ." ;;
-    expose_moved) F="Lưu ý: genchibi expose đã được thay bằng genchibi online (genchibi online --help, hoặc Studio › Hệ thống › Go online: Cloudflare bằng API token, không cần đăng nhập trình duyệt). Bản này vẫn chạy expose cũ (cloudflared login) cho máy đang dùng nó; bỏ ở v0.22." ;;
-    caddy_native) F="genchibi online --caddy cần chế độ Docker: Caddy mở cổng 80/443 (dưới 1024). Chế độ native: dùng đường Cloudflare (Studio › Hệ thống › Go online › Cloudflare)." ;;
-    caddy_busy) F="Cổng %s trên máy này đang bị chiếm — CHƯA bật Caddy (app vẫn chạy). Dừng dịch vụ đang giữ cổng, hoặc dùng đường Cloudflare (Studio › Hệ thống › Go online › Cloudflare, không cần mở cổng)." ;;
+    expose_moved) F="Lưu ý: genchibi expose đã được thay bằng genchibi online (genchibi online --help, hoặc Studio › Hệ thống › Lên mạng: Cloudflare bằng API token, không cần đăng nhập trình duyệt). Bản này vẫn chạy expose cũ (cloudflared login) cho máy đang dùng nó; bỏ ở v0.22." ;;
+    caddy_native) F="genchibi online --caddy cần chế độ Docker: Caddy mở cổng 80/443 (dưới 1024). Chế độ native: dùng đường Cloudflare (Studio › Hệ thống › Lên mạng › Cloudflare)." ;;
+    caddy_busy) F="Cổng %s trên máy này đang bị chiếm — CHƯA bật Caddy (app vẫn chạy). Dừng dịch vụ đang giữ cổng, hoặc dùng đường Cloudflare (Studio › Hệ thống › Lên mạng › Cloudflare, không cần mở cổng)." ;;
     caddy_old) F="Bản đang chạy chưa có edge Caddy (cần v0.21 trở lên) — chạy genchibi update trước." ;;
-    caddy_on) F="Đã bật edge Caddy: cổng 80 và 443 vào container gen-chibi-edge. Làm tiếp ở Studio › Hệ thống › Go online." ;;
+    caddy_on) F="Đã bật edge Caddy: cổng 80 và 443 vào container gen-chibi-edge. Làm tiếp ở Studio › Hệ thống › Lên mạng." ;;
     caddy_already) F="Edge Caddy đã bật từ trước — kiểm cho chắc nó đang chạy." ;;
     caddy_off) F="Đã tắt edge Caddy: trả cổng 80/443. Chứng chỉ vẫn giữ trong %s/edge (bật lại: genchibi online --caddy)." ;;
     caddy_not_on) F="Edge Caddy chưa bật — không có gì để tắt." ;;
@@ -304,8 +313,9 @@ _vi() {
     on_done) F="✓ Đã ra Internet: %s" ;;
     on_done_studio) F="  Studio: %s (đăng nhập bằng mật khẩu chủ)" ;;
     on_done_mcp) F="  MCP:    %s/mcp — claude.ai: Customize › Connectors › Add custom connector › dán vào › Connect › Authorize (Studio › Hệ thống › Kết nối agent có danh sách)" ;;
-    on_pw_wait) F="Sắp xong: %s đã trả lời. Bước cuối — đặt mật khẩu chủ: mở %s/setup, nhập mã setup %s, rồi chạy: genchibi online recheck" ;;
-    on_pw_wait_nocode) F="Sắp xong: %s đã trả lời. Bước cuối — đặt mật khẩu chủ ở %s/setup bằng mã setup (genchibi status in mã), rồi chạy: genchibi online recheck" ;;
+    on_pw_wait) F="Sắp xong: %s đã trả lời (tạm). Bước cuối — đặt mật khẩu chủ: mở %s/setup, nhập mã setup %s (hoặc trên máy chủ: genchibi password). Xong là app tự hoàn tất lên mạng — genchibi status cho biết." ;;
+    on_pw_wait_nocode) F="Sắp xong: %s đã trả lời (tạm). Bước cuối — đặt mật khẩu chủ ở %s/setup bằng mã setup (genchibi status in mã), hoặc trên máy chủ: genchibi password. Xong là app tự hoàn tất lên mạng." ;;
+    on_wait_pw) F="  Chờ mật khẩu chủ: %s đang bật tạm — đặt mật khẩu (%s/setup hoặc genchibi password) là app tự hoàn tất" ;;
     on_timeout) F="Đã chờ %s phút mà chưa xong — bậc vẫn giữ trạng thái; kiểm lại sau: genchibi online recheck" ;;
     on_failed) F="✗ Dừng ở: %s. Sửa theo hướng dẫn ở trên rồi chạy: genchibi online recheck" ;;
     on_url_change) F="Lệnh này đổi địa chỉ công khai (%s → %s): %s agent đang nối sẽ bị đăng xuất và phải nối lại." ;;
@@ -365,7 +375,13 @@ INNER="$HOME_DIR/current/cli/genchibi"
 if [ -z "${GC_CLI_INNER:-}" ] && [ -f "$INNER" ]; then GC_CLI_INNER=1 GC_HOME="$HOME_DIR" exec bash "$INNER" ${1+"$@"}; fi
 ORIG_PWD="$PWD"   # thư mục người gọi lệnh (agent skill cài vào dự án của họ, không phải thư mục cài)
 cd "$HOME_DIR"
+# móc kiểm thử CHỈ từ shell gọi lệnh (bộ test), không bao giờ từ .env (review bảo mật 🟡7). Chỉ builtin (compgen, ${!v}): ở đây môi trường còn có thể
+# mang GC_CF_TOKEN (cf_token chưa xoá) — không được sinh tiến trình ngoài nào nhận nó
+_gctn=(); _gctv=(); for _v in $(compgen -v GC_TEST || true); do _gctn+=("$_v"); _gctv+=("${!_v}"); done
 set -a; [ -f .env ] && . ./.env; set +a
+for _v in $(compgen -v GC_TEST || true); do unset "$_v"; done
+_i=0; while [ "$_i" -lt "${#_gctn[@]}" ]; do export "${_gctn[$_i]}=${_gctv[$_i]}"; _i=$((_i + 1)); done
+unset _v _i _gctn _gctv
 # GC_LANG (biến môi trường › .env) rỗng — bản cài ≤ v0.19 nâng cấp, hoặc cài lại không chọn — thì CLI nói theo mặc định của Studio (CNS-152)
 UI_SRC="${ENV_LANG:-${GC_LANG:-}}"; [ -n "$UI_SRC" ] || UI_SRC="$(settings_lang)"
 pick_ui "$UI_SRC"
@@ -432,9 +448,14 @@ guard_exposure() {
     [ -n "$(owner_token)" ] || { m refuse_bind "$GC_BIND" >&2; exit 1; } ;;
   esac
 }
+# CLI chạy bằng root ở chế độ Docker (sudo genchibi …): tệp / thư mục nó tạo trả về cho user của container (GC_UID:GC_GID trong .env — trình cài không để 0)
+own_fix() {
+  { [ "${MODE:-}" = docker ] && [ "$(id -u)" = 0 ] && [ -n "${GC_UID:-}" ] && [ "$GC_UID" != 0 ]; } || return 0
+  local p; for p in ${1+"$@"}; do [ -e "$p" ] && chown -R "$GC_UID:${GC_GID:-$GC_UID}" "$p" 2>/dev/null; done; return 0
+}
 start() {
   guard_exposure
-  if [ "$MODE" = docker ]; then sync_compose; edge_prepare; compose up -d --quiet-pull 2>&1 | grep -vE "Creating|Created|Starting|Network|Container .* (Running|Waiting)" || true
+  if [ "$MODE" = docker ]; then own_fix data run logs; sync_compose; edge_prepare; compose up -d --quiet-pull 2>&1 | grep -vE "Creating|Created|Starting|Network|Container .* (Running|Waiting)" || true
   else
     running_native && { m already_running "$(cat "$PIDF")"; return; }
     mkdir -p logs
@@ -460,7 +481,8 @@ status() {
     named) m st_mcp_named "${GC_PUBLIC_URL:-?}" ;;   # máy còn dùng genchibi expose cũ (bỏ ở v0.22)
     quick) m st_mcp_quick "$(quick_url)" ;;
     *) if [ -n "$h" ]; then oapi GET /api/online; fi
-       if [ "$OCODE" = 200 ] && [ "$(jv mode)" != off ] && [ -n "$(jv publicUrl)" ]; then m st_online "$(jv publicUrl)" "$(jv mode)"; else m st_mcp_off; fi ;;
+       if [ "$OCODE" = 200 ] && [ "$(jv flow.waitingPassword)" = true ] && [ -n "$(jv publicUrlPending)" ]; then m st_online_wait "$(jv publicUrlPending)" "$(jv flow.mode)" "$(jv publicUrlPending)"   # CNS-209: trạng thái TẠM, không phải "off"
+       elif [ "$OCODE" = 200 ] && [ "$(jv mode)" != off ] && [ -n "$(jv publicUrl)" ]; then m st_online "$(jv publicUrl)" "$(jv mode)"; else m st_mcp_off; fi ;;
   esac
 }
 update() {
@@ -480,12 +502,22 @@ backup() {
   mkdir -p backups; local f="backups/thu-cong-$(date +%Y%m%d-%H%M%S).tar.gz"
   tar -czf "$f" data && m backed_up "$HOME_DIR/$f"
 }
+# khôi phục (CNS-202): bản sao lưu có thể của máy khác → không mang trạng thái online sang. Trước khi chạy lại: tunnel tắt (run/edge-intent.json off, xoá
+# run/tunnel.token), bỏ data/install-id (lần Go online sau dùng tên tunnel mới — không giành tunnel của máy gốc), đặt data/restore-pending.json → server
+# lúc khởi động đưa online.json về off và thu hồi mọi phiên + thiết bị (giữ mật khẩu của bản sao lưu)
 restore() {
   local f="${1:-}"; [ -f "$f" ] || { m restore_usage; exit 1; }
+  m restore_note
   read -r -p "$(mn restore_ask "$f")" a
   case "$a" in "dong y"|yes) ;; *) m cancelled; exit 1 ;; esac
   backup; stop; rm -rf data.restore && mkdir data.restore && tar -xzf "$f" -C data.restore
-  rm -rf data && mv data.restore/data data && rm -rf data.restore; start; m restored
+  rm -rf data && mv data.restore/data data && rm -rf data.restore
+  rm -f data/install-id
+  printf '{"v":1,"at":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > data/restore-pending.json && chmod 600 data/restore-pending.json
+  mkdir -p run && chmod 700 run && rm -f run/tunnel.token
+  printf '{"tunnel":"off","online":false}\n' > run/edge-intent.json && chmod 600 run/edge-intent.json
+  own_fix data run
+  start; m restored; m restored_off
 }
 uninstall() {
   read -r -p "$(mn un_ask)" a
@@ -515,17 +547,31 @@ setup_code() {
   return 0
 }
 setup_until() { local e; e="$(sed -n 's/^expires=\([0-9]*\).*/\1/p' data/setup-code.txt 2>/dev/null)"; [ -n "$e" ] && { date -d "@$e" '+%H:%M' 2>/dev/null || date -r "$e" '+%H:%M' 2>/dev/null; }; return 0; }
-# genchibi open: chưa có mật khẩu chủ → mở http://localhost:<cổng>/setup#code=<mã> (mã ở fragment: trình duyệt không gửi lên server, không vào log);
-# mã sắp hết hạn → xin mã mới qua API (token chủ) rồi đọc lại tệp. Có mật khẩu rồi → mở trang chính (đăng nhập một lần, máy nhớ 30 ngày)
+# genchibi open: chưa có mật khẩu chủ → mở trang đặt mật khẩu với mã setup điền sẵn; mã sắp hết hạn → xin mã mới qua API (token chủ) rồi đọc lại tệp.
+# Có mật khẩu rồi → mở trang chính (đăng nhập một lần, máy nhớ 30 ngày).
+# MÃ KHÔNG BAO GIỜ NẰM TRONG argv (review bảo mật O1): argv của open / xdg-open / trình duyệt đọc được qua /proc/<pid>/cmdline bởi MỌI user của máy — user khác
+# đọc được mã thì đặt mật khẩu trước chủ. Cách làm (kiểu Jupyter): ghi tệp HTML chuyển hướng 0600 trong run/ (0700) của thư mục cài — chỉ chủ đọc được — chứa
+# location.replace('http://localhost:<cổng>/setup#code=<mã>') (mã ở fragment: không gửi lên server, không vào log), rồi mở ĐƯỜNG DẪN TỆP. Tệp tự xoá sau 2 phút
+# và ở lần `genchibi open` sau. Không mở được trang (máy không có trình duyệt, trình duyệt bị sandbox không đọc được tệp): in /setup + mã ra terminal (builtin, không argv).
 open_ui() {
-  local u="http://localhost:$PORT" st c
+  local u="http://localhost:$PORT" st c f=""
   st="$(curl -fsS -m 5 "$URL/api/auth/state" 2>/dev/null || true)"
   if echo "$st" | grep -q '"password":false'; then
     c="$(setup_code 5)"
     if [ -z "$c" ]; then api POST /api/auth/setup-code >/dev/null 2>&1 || true; c="$(setup_code 5)"; fi
-    if [ -n "$c" ]; then u="$u/setup#code=$c"; m open_setup; fi
+    if [ -n "$c" ]; then
+      m open_setup
+      mkdir -p run && chmod 700 run && rm -f run/open-setup-*.html
+      f="$HOME_DIR/run/open-setup-$(rand_hex 8).html"
+      ( umask 077; printf '<!doctype html>\n<meta charset="utf-8"><meta name="referrer" content="no-referrer"><title>gen-chibi setup</title>\n<script>location.replace("%s/setup#code=%s")</script>\n<p><a href="%s/setup#code=%s">gen-chibi: set the owner password</a></p>\n' "$u" "$c" "$u" "$c" > "$f" )
+      chmod 600 "$f"
+      m open_code "$u/setup" "$c"
+      u="$u/setup"
+      ( sleep 120; rm -f "$f" ) </dev/null >/dev/null 2>&1 &
+    fi
   fi
-  (command -v open >/dev/null && open "$u") || (command -v xdg-open >/dev/null && xdg-open "$u") || echo "$u"
+  local t="${f:-$u}"   # có mã → mở TỆP (argv chỉ có đường dẫn tệp); không mã → mở URL trơn
+  (command -v open >/dev/null && open "$t") || (command -v xdg-open >/dev/null && xdg-open "$t") || echo "$u"
 }
 # genchibi password: đặt / đặt lại mật khẩu chủ (quên mật khẩu: ai vào được máy chủ là chủ — §3.3). Hỏi ẩn hai lần (không có terminal: đọc một dòng stdin).
 # App đang chạy → POST /api/auth/password bằng token chủ (server thu hồi phiên trong bộ nhớ, nhất quán; mật khẩu + token đi qua stdin của curl, không vào argv).
@@ -572,6 +618,7 @@ edge_prepare() {
   mkdir -p edge/conf edge/run edge/caddy-data edge/caddy-config && chmod 700 edge/conf edge/run
   [ -f edge/conf/Caddyfile ] || { [ -f edge/Caddyfile.base ] && cp edge/Caddyfile.base edge/conf/Caddyfile; }
   [ -f edge/conf/sites.caddy ] || : > edge/conf/sites.caddy
+  own_fix edge
   return 0
 }
 port_busy() { # port_busy <cổng> → 0 khi có tiến trình đang nghe trên máy này
@@ -751,6 +798,15 @@ $(jsteps)
 EOF
     if [ "$(jv busy)" = true ]; then sleep "${GC_ONLINE_POLL:-2}"; continue; fi
     [ "$(jv flow.done)" = true ] && return 0
+    if [ "$(jv flow.needs)" = urlChange ]; then   # mọi bậc ✓, chính thức hoá địa chỉ mới sẽ gỡ kết nối agent cũ (luồng không biết địa chỉ lúc bắt đầu) → hỏi như lúc bắt đầu
+      local from; from="$(jv publicUrl)"
+      m on_url_change "${from:--}" "$(jv flow.url)" "$(jv flow.revokes)"
+      if [ -n "$YES" ] || ask_yn "$(mn on_url_ask)"; then
+        opost /api/online/recheck '{"confirmUrlChange":true}'
+        case "$OCODE" in 2??) continue ;; *) online_err; return 1 ;; esac
+      fi
+      m on_url_stop >&2; return 1
+    fi
     first_open
     case "$FIRST_ST" in
       fail)
@@ -820,6 +876,7 @@ online_status() {
   m on_title "$md" "${dom:+ · $dom}"
   if [ -n "$u" ]; then m on_url "$u"; else m on_url_none; fi
   [ -z "$pend" ] || m on_url_pending "$pend"
+  [ "$(jv flow.waitingPassword)" != true ] || m on_wait_pw "$pend" "$pend"
   fm="$(jv flow.mode)"
   if [ -n "$fm" ]; then
     if [ "$(jv busy)" = true ]; then m on_flow "$fm" "$(mn on_w_busy)"
@@ -970,11 +1027,12 @@ online_cmd() {
     *) m bad_opt "$sub" >&2; online_usage >&2; return 2 ;;
   esac
 }
-set_env() { # set_env KHOÁ GIÁ_TRỊ — sửa hoặc thêm dòng trong .env
+set_env() { # set_env KHOÁ GIÁ_TRỊ — sửa hoặc thêm dòng trong .env. Móc kiểm thử GC_TEST* không bao giờ vào .env (review bảo mật 🟡7): từ chối, và bỏ dòng cũ nếu có
   local k="$1" v="$2" tmp; touch .env
-  if grep -q "^$k=" .env; then
-    tmp="$(mktemp)"; awk -v k="$k" -v v="$v" 'index($0, k "=") == 1 { print k "=" v; next } { print }' .env > "$tmp" && cat "$tmp" > .env && rm -f "$tmp"
-  else echo "$k=$v" >> .env; fi
+  case "$k" in GC_TEST*) return 0 ;; esac
+  tmp="$(mktemp)"
+  awk -v k="$k" -v v="$v" '/^[ \t]*(export[ \t]+)?GC_TEST/ { next } index($0, k "=") == 1 { if (!d) print k "=" v; d = 1; next } { print } END { if (!d) print k "=" v }' .env > "$tmp" && cat "$tmp" > .env
+  rm -f "$tmp"
   export "$k=$v"
 }
 rand_hex() { openssl rand -hex "$1" 2>/dev/null || node -e "console.log(require('crypto').randomBytes($1).toString('hex'))"; }
@@ -1374,6 +1432,7 @@ genchibi — quản lý gen-chibi ($HOME_DIR, chế độ $MODE)
   link [--check]                    in link MCP + lệnh nối agent
   agent connect|guide|tools|skill   bootstrap cho agent mọi hãng: cấu hình nối, hướng dẫn, schema tool, cài skill
   token [giá-trị|--clear]           đặt token GitHub (repo private) cho tự cập nhật; bỏ trống = nhập ẩn
+                                    (KHÔNG phải token chủ: token chủ là GC_API_TOKEN trong .env, hoặc data/owner-token — CLI tự đọc)
   lang [en|vi]                      xem / đặt ngôn ngữ (CLI + giao diện mặc định của Studio)
   open                              mở Studio trong trình duyệt (lần đầu: trang đặt mật khẩu chủ, kèm mã setup)
   password                          đặt / đặt lại mật khẩu chủ để đăng nhập Studio (quên mật khẩu: chạy lệnh này trên máy chủ)
@@ -1391,6 +1450,7 @@ genchibi — manage gen-chibi ($HOME_DIR, mode $MODE)
   link [--check]                    print the MCP link + agent connect commands
   agent connect|guide|tools|skill   bootstrap for agents of any vendor: connect config, guide, tool schema, skill install
   token [value|--clear]             set the GitHub token (private repo) for auto-update; empty = hidden prompt
+                                    (NOT the owner token: that is GC_API_TOKEN in .env, or data/owner-token — the CLI reads it itself)
   lang [en|vi]                      show / set the language (CLI + Studio default)
   open                              open the Studio in the browser (first time: the owner password setup page, with the setup code)
   password                          set / reset the owner password for Studio sign-in (forgot it: run this on the server)

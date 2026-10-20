@@ -97,7 +97,11 @@ const secrets = new Secrets(DATA);
 const online = new OnlineConfig({ dir: DATA, log, env: { publicUrl: process.env.GC_PUBLIC_URL, allowedHosts: process.env.GC_ALLOWED_HOSTS, tunnel: process.env.GC_TUNNEL, clientIpHeader: process.env.GC_CLIENT_IP_HEADER },
   impact: url => oauth.grantsNotFor(url), onCommit: () => { const n = oauth.prune(); if (n) log('[oauth] public URL changed: ' + n + ' agent connection(s) issued for the old address were revoked'); } });
 const TOKEN_FILE_EXISTED = fs.existsSync(path.join(DATA, 'owner-token'));   // đo TRƯỚC khi auth tự sinh: phân biệt bản cài v0.20 không token (nâng cấp) với lần chạy sau
-const auth = new Auth({ dir: DATA, envToken: ENV_TOKEN, key: secrets.key, log, ipHeader: () => online.ipHeader(), rate: process.env.GC_AUTH_RATE });
+// GC_TEST=1 là điều kiện của MỌI móc / núm chỉ dành cho kiểm thử (review bảo mật 🟡7): thiếu thì GC_AUTH_RATE / GC_OAUTH_RATE / GC_TEST_* bị bỏ qua hẳn
+const TESTING = process.env.GC_TEST === '1';
+// onPasswordSet: đặt mật khẩu chủ (mọi đường) → Go online đang chờ ở bậc "mật khẩu chủ" tự đi tiếp (CNS-201). goOnline tạo ở dưới — móc chỉ chạy lúc có request
+const auth = new Auth({ dir: DATA, envToken: ENV_TOKEN, key: secrets.key, log, ipHeader: () => online.ipHeader(), rate: TESTING ? process.env.GC_AUTH_RATE : 1,
+  publicUrl: () => online.publicUrl(), onPasswordSet: () => goOnline.passwordSet() });
 // dấu máy kế thừa (CNS-173, 199b): MỘT lần ở lần khởi động đầu của v0.21 — đọc env lúc đó; tokenless = bản cài đã có dữ liệu chạy không token (agent cũ cần nối lại, CNS-197)
 auth.markLegacy({ publicUrl: process.env.GC_PUBLIC_URL, allowedHosts: process.env.GC_ALLOWED_HOSTS, tokenless: !ENV_TOKEN && !TOKEN_FILE_EXISTED && hasUserData() });
 if (!auth.hasPassword()) auth.ensureSetupCode(false);
@@ -185,6 +189,13 @@ function oauthBody(req) {
 const { bearerOf } = require('./auth');   // Authorization: Bearer … | X-GC-Token
 
 /* ---------------------------------------------------------------- tệp tĩnh */
+// Trang Studio ra Internet (v0.21) → CSP làm lớp phòng thủ cho XSS từ dữ liệu agent ghi qua MCP (review bảo mật 🟡5). Studio không có script inline:
+// script chỉ từ 'self'. style 'unsafe-inline' vì Studio đặt thuộc tính style + thẻ <style> (ẩn tới khi nạp bảng dịch, phông nhúng engine/fonts.js).
+// data: / blob: cho ảnh SVG dựng tại chỗ, âm thanh WAV / clip, phông WOFF2 nhúng, fetch(data:) của engine/audio.js, tải tệp (blob). Không frame (frame-ancestors).
+// Phim HTML xuất ra là tệp tải về riêng — không mang header này. send() đã đặt X-Frame-Options: DENY + Referrer-Policy: no-referrer (chặt hơn same-origin)
+const STUDIO_CSP = ["default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline'", "img-src 'self' data: blob:", "media-src 'self' data: blob:", "font-src 'self' data:",
+  "connect-src 'self' data: blob:", "object-src 'none'", "base-uri 'none'", "form-action 'self'", "frame-ancestors 'none'"].join('; ');
+const STUDIO_HEADERS = { 'Content-Security-Policy': STUDIO_CSP };
 const STATIC_ROOTS = ['engine', 'kinds', 'studio', 'locales'];   // locales/<lang>/*.json: bảng dịch Studio nạp trước lần vẽ đầu
 function serveStatic(req, res, urlPath) {
   let rel = decodeURIComponent(urlPath).replace(/^\/+/, '');
@@ -193,6 +204,7 @@ function serveStatic(req, res, urlPath) {
   // /setup (đặt mật khẩu đầu) chỉ có khi CHƯA có mật khẩu — sau đó chuyển sang /login (bảng §3.4)
   if (rel === 'setup' && auth.hasPassword()) { res.writeHead(302, { Location: '/login', 'Cache-Control': 'no-store' }); return res.end(); }
   if (rel === '' || rel === 'index.html' || rel === 'xuong' || rel === 'thu-vien' || rel === 'tao-tac' || rel === 'login' || rel === 'setup') rel = 'studio/index.html';   // 3 ứng dụng độc lập + màn đăng nhập / đặt mật khẩu dùng chung một bộ mã (Studio tĩnh — mọi lớp)
+  if (rel === 'studio/index.html') return send(res, 200, fs.readFileSync(path.join(APP, rel)), MIME['.html'], STUDIO_HEADERS);
   if (rel === 'CHANGELOG.md' || rel === 'VERSION') return send(res, 200, fs.readFileSync(path.join(APP, rel)), MIME[path.extname(rel)] || 'text/plain; charset=utf-8');
   const top = rel.split('/')[0];
   if (!STATIC_ROOTS.includes(top) || rel.split('/').includes('..')) return fail(res, 404, 'không tìm thấy');
@@ -285,20 +297,18 @@ async function dockTurn(b) {
 // LƯỢT AI DÀI qua proxy cắt khi im lặng (CNS-175, v0.21): Cloudflare ngắt request ~100 s không có byte nào, còn một lượt dock / AI đạo diễn có thể tới
 // 10 vòng LLM × 120 s. Client gửi { async: true } → server trả 202 + id lượt NGAY, việc chạy nền (cùng hàm, cùng khoá lượt, cùng kết quả); Studio hỏi
 // GET /api/ai/turns/<id> mỗi giây tới khi xong. Lỗi tức thì (tin rỗng, đối tượng đang bận — ném trước lần chờ đầu tiên) vẫn trả ngay như cũ.
-// Không có async → chặn như v0.20 (MCP, client cũ). Lượt giữ trong bộ nhớ 10 phút sau khi xong; id 128 bit; chỉ chủ (đã qua cổng /api).
-const TURNS = new Map(), TURN_KEEP_MS = 10 * 60e3, TURN_MAX = 40;
-function turnSweep() { const t = Date.now(); for (const [id, x] of TURNS) if (x.status !== 'running' && t - x.doneAt > TURN_KEEP_MS) TURNS.delete(id); }
+// Không có async → chặn như v0.20 (MCP, client cũ). Lượt giữ trong bộ nhớ 10 phút sau khi xong, tối đa 200 lượt xong (bỏ cũ nhất — review bảo mật 🟡9),
+// tối đa 40 lượt đang chạy; id 128 bit; chỉ chủ (đã qua cổng /api). Bộ nhớ: server/turns.js
+const TURNS = require('./turns').createTurns({ keepMs: 10 * 60e3, maxRunning: 40, maxDone: 200 });
 async function turnOrWait(res, b, fn) {
   if (b.async !== true) return send(res, 200, await fn());
-  turnSweep();
-  if ([...TURNS.values()].filter(x => x.status === 'running').length >= TURN_MAX) return fail(res, 429, 'quá nhiều lượt AI đang chạy — đợi xong rồi gửi tiếp');
+  TURNS.sweep();
+  if (TURNS.running() >= TURNS.limits.maxRunning) return fail(res, 429, 'quá nhiều lượt AI đang chạy — đợi xong rồi gửi tiếp');
   const p = fn(), early = await Promise.race([p.then(r => ({ r }), e => ({ e })), new Promise(r => setImmediate(() => r(null)))]);
   if (early && early.e) throw early.e;            // lỗi đồng bộ (400 / 409): trả ngay, không tạo lượt
   if (early) return send(res, 200, early.r);
-  const id = require('crypto').randomBytes(16).toString('base64url'), t = { status: 'running', at: Date.now(), doneAt: 0 };
-  TURNS.set(id, t);
-  p.then(r => { t.status = 'done'; t.result = r; }, e => { t.status = 'error'; t.code = e.code && e.code >= 400 && e.code < 600 ? e.code : 502; t.error = String(e.message || e); })
-    .finally(() => { t.doneAt = Date.now(); });
+  const id = TURNS.add(p);
+  if (!id) { p.catch(() => {}); return fail(res, 429, 'quá nhiều lượt AI đang chạy — đợi xong rồi gửi tiếp'); }
   return send(res, 202, { turn: id, status: 'running', poll: '/api/ai/turns/' + id, pollMs: 1000 });
 }
 function turnView(res, id) {
@@ -310,7 +320,7 @@ function turnView(res, id) {
 }
 /* ---------------------------------------------------------------- OAuth 2.1 (v0.19) */
 // GC_OAUTH_RATE (1–100, mặc định 1) nhân trần TOÀN CỤC (register 200 / 10 phút, authorize 600 / phút) — chỉ dùng để chạy test số lượng lớn
-const OAUTH_RATE = Math.max(1, Math.min(100, Math.round(+process.env.GC_OAUTH_RATE) || 1));
+const OAUTH_RATE = TESTING ? Math.max(1, Math.min(100, Math.round(+process.env.GC_OAUTH_RATE) || 1)) : 1;
 // Cho agent tự đăng ký: công tắc của chủ (Cài đặt › Kết nối agent), mặc định BẬT
 const registerOn = () => settings().oauthRegister !== false;
 function oauthView(lang) {   // lang: nhãn / mô tả phạm vi theo ngôn ngữ người gọi (Studio › Kết nối agent)
@@ -694,9 +704,9 @@ const tunnelListener = createTunnelListener({ port: PORT + 2, handler: (req, res
 // isOwner = bằng chứng dương S / T (auth.ownerOf); legacy.active = đang chạy bằng .env kế thừa (chỉ đọc — di chuyển trước), marked = dấu data/legacy.json
 // CHỈ cho kiểm thử (tools/test-ingress.mjs): GC_TEST=1 + GC_TEST_ONLINE_VIA=127.0.0.1:<cổng> — lời gọi "từ Internet" của wizard đi tới cổng loopback đó
 // (cloudflared giả đóng vai Cloudflare, Host giữ nguyên), tên miền phân giải ra một IP công khai giả không bao giờ được gọi. Thiếu GC_TEST=1 → bỏ qua hẳn.
-const ONLINE_TEST_VIA = process.env.GC_TEST === '1' && /^127\.0\.0\.1:\d{2,5}$/.test(process.env.GC_TEST_ONLINE_VIA || '') ? process.env.GC_TEST_ONLINE_VIA : '';
+const ONLINE_TEST_VIA = TESTING && /^127\.0\.0\.1:\d{2,5}$/.test(process.env.GC_TEST_ONLINE_VIA || '') ? process.env.GC_TEST_ONLINE_VIA : '';
 // GC_TEST=1 + GC_TEST_CF_API=http://127.0.0.1:<cổng>/client/v4 — client Cloudflare của wizard gọi Cloudflare API GIẢ (tools/fixtures/fake-cloudflare-api.mjs — test-browser + test-online-cli)
-const ONLINE_TEST_CF = process.env.GC_TEST === '1' && /^http:\/\/127\.0\.0\.1:\d{2,5}\/client\/v4$/.test(process.env.GC_TEST_CF_API || '') ? process.env.GC_TEST_CF_API : '';
+const ONLINE_TEST_CF = TESTING && /^http:\/\/127\.0\.0\.1:\d{2,5}\/client\/v4$/.test(process.env.GC_TEST_CF_API || '') ? process.env.GC_TEST_CF_API : '';
 const onlineTestCf = !ONLINE_TEST_CF ? {} : { cloudflare: o => require('./cloudflare').createCloudflare(Object.assign({}, o, { base: ONLINE_TEST_CF })) };
 const onlineTestNet = !ONLINE_TEST_VIA ? {} : {
   resolve: async () => ({ a: ['192.0.32.10'], aaaa: [], via: 'system', error: '' }), publicIp: async () => ({ v4: '192.0.32.10', v6: '' }),
@@ -705,6 +715,17 @@ const onlineTestNet = !ONLINE_TEST_VIA ? {} : {
 const goOnline = require('./online').createOnline(Object.assign({ home: HOME, dataDir: DATA, port: PORT, inDocker: process.env.GC_IN_DOCKER === '1', config: online, secrets, log, edge, tunnel: tunnelListener,
   isOwner: req => !!auth.ownerOf(req), hasPassword: () => auth.hasPassword(),
   legacy: () => { const c = online.get(); return { active: !!c.readOnly, marked: auth.isLegacy(), publicUrl: c.env.publicUrl, allowedHosts: c.env.allowedHosts.join(','), tunnel: c.env.tunnel }; } }, onlineTestNet, onlineTestCf));
+
+// KHÔI PHỤC SAO LƯU (CNS-202): `genchibi restore` đặt data/restore-pending.json vào bản vừa giải nén. Lần khởi động đầu sau đó: Go online về off
+// (online.json mode off, publicUrl rỗng, intent off, xoá run/tunnel.token, install-id mới) và THU HỒI mọi phiên + thiết bị (mật khẩu giữ theo bản sao lưu).
+// Sao lưu có thể từ máy khác: không quảng bá tên miền / không giành tunnel của máy gốc, phiên cũ không sống lại.
+{
+  const mark = path.join(DATA, 'restore-pending.json');
+  if (fs.existsSync(mark)) {
+    try { goOnline.resetAfterRestore(); auth.revokeAll('backup restored'); fs.rmSync(mark, { force: true }); }
+    catch (e) { log('[server] after restore: ' + MSG.en(e.message)); }
+  }
+}
 
 // Chứng minh cổng ingress (launcher, CNS-B v0.21): launcher sinh GC_INGRESS_NONCE ngẫu nhiên mỗi lần khởi động, truyền cho app con qua env; trước khi
 // spawn cloudflared (và định kỳ) nó GET http://127.0.0.1:<GC_PORT+2>/api/health kèm X-GC-Ingress-Challenge: <hex ngẫu nhiên>. CHỈ listener ingress của app trả

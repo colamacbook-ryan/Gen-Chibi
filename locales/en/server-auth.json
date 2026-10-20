@@ -4,7 +4,6 @@
  "mật khẩu quá dài (tối đa {n} byte)": "the password is too long (at most {n} bytes)",
  "mật khẩu không được chứa ký tự điều khiển (xuống dòng, tab…)": "the password must not contain control characters (newline, tab…)",
  "mật khẩu cần ít nhất {n} ký tự — gợi ý: một cụm từ dễ nhớ": "the password needs at least {n} characters — tip: a memorable phrase",
- "quá nhiều lần thử sai — thử lại sau {n} giây": "too many failed attempts — try again in {n} seconds",
  "máy đã có mật khẩu chủ — đăng nhập ở /login": "this install already has an owner password — sign in at /login",
  "mã setup sai định dạng (10 ký tự, dạng XXXXX-XXXXX)": "the setup code has the wrong format (10 characters, like XXXXX-XXXXX)",
  "mã setup đã hết hạn — chạy genchibi open trên máy chủ để lấy mã mới": "the setup code has expired — run genchibi open on the server to get a new one",
@@ -29,5 +28,8 @@
  "mode phải là off | caddy | tunnel | proxy | quick": "mode must be off | caddy | tunnel | proxy | quick",
  "clientIpHeader phải là x-forwarded-for | cf-connecting-ip | x-real-ip": "clientIpHeader must be x-forwarded-for | cf-connecting-ip | x-real-ip",
  "không có cấu hình .env kế thừa để di chuyển": "there is no legacy .env online configuration to move",
- "đăng nhập đang bị chặn tạm vì nhiều lần sai — dùng token của bản cài hoặc chờ {n} phút": "sign-in is temporarily blocked after many failed attempts — use the install token or wait {n} minutes"
+ "quá nhiều lần thử sai — thử lại sau {n} giây (quên mật khẩu: chạy genchibi password trên máy chủ)": "too many failed attempts — try again in {n} seconds (forgot the password: run genchibi password on the server)",
+ "màn đặt mật khẩu đang bị chặn tạm vì nhiều lần sai mã — trên máy chủ chạy genchibi password (đặt mật khẩu ngay), hoặc dùng token của bản cài, hoặc chờ {n} phút": "the set-password screen is temporarily blocked after many wrong codes — on the server run genchibi password (sets the password right away), or use the install token, or wait {n} minutes",
+ "đăng nhập đang bị chặn tạm vì nhiều lần sai — trên máy chủ chạy genchibi password (đặt lại mật khẩu), hoặc dùng token của bản cài, hoặc chờ {n} phút": "sign-in is temporarily blocked after many failed attempts — on the server run genchibi password (resets the password), or use the install token, or wait {n} minutes",
+ "đang đặt mật khẩu chủ từ một trình duyệt khác — đợi vài giây rồi đăng nhập ở /login": "the owner password is being set from another browser — wait a few seconds, then sign in at /login"
 }

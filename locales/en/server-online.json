@@ -64,7 +64,6 @@
  "Caddy đang xin chứng chỉ (tự thử lại, dùng staging khi lỗi) — app không xin lại": "Caddy is getting the certificate (it retries, using staging after errors) — the app does not request again",
  "Đợi vài phút rồi bấm Kiểm lại": "Wait a few minutes, then press Check again",
  "Kiểm proxy của bạn chuyển {url} tới gen-chibi (đoạn cấu hình mẫu ở bậc trước)": "Check that your proxy forwards {url} to gen-chibi (sample configuration in the previous step)",
- "Xem trạng thái cloudflared ở System › Go online, rồi bấm Kiểm lại": "See the cloudflared status in System › Go online, then press Check again",
  "{url}/api/health không trả lời đúng ({error})": "{url}/api/health did not answer correctly ({error})",
  "Metadata OAuth qua {url} chưa đúng ({error}, issuer {issuer})": "OAuth metadata through {url} is not right yet ({error}, issuer {issuer})",
  "OAuth chưa nhận publicUrl mới — cập nhật gen-chibi rồi bấm Kiểm lại": "OAuth has not picked up the new publicUrl — update gen-chibi, then press Check again",
@@ -88,8 +87,6 @@
  "Proxy phía trước phải chuyển /mcp thẳng tới gen-chibi (không qua trang đăng nhập), giữ nguyên header WWW-Authenticate": "The proxy in front must send /mcp straight to gen-chibi (no login page) and keep the WWW-Authenticate header",
  "Agent tới được MCP từ Internet (401 + WWW-Authenticate với User-Agent Claude-User). Không kiểm được luật chặn theo IP (dải Anthropic {ips})": "Agents reach MCP from the Internet (401 + WWW-Authenticate with User-Agent Claude-User). Rules that block by IP cannot be checked (Anthropic range {ips})",
  "Chủ máy đã có mật khẩu": "The owner password is set",
- "Chưa có mật khẩu chủ máy": "No owner password yet",
- "Mở {url}/setup, nhập mã setup (lệnh genchibi status in mã) rồi đặt mật khẩu; xong bấm Kiểm lại": "Open {url}/setup, enter the setup code (genchibi status prints it) and set the password; then press Check again",
  "Không còn API token trong bộ nhớ (hết phiên wizard hoặc server đã khởi động lại)": "The API token is no longer in memory (the wizard session ended or the server restarted)",
  "Dán lại API token Cloudflare": "Paste the Cloudflare API token again",
  "Token thấy {n} tên miền — chọn một": "The token sees {n} domains — choose one",
@@ -142,5 +139,8 @@
  "tên con không hợp lệ (một nhãn: chữ thường, số, dấu gạch ngang)": "invalid subdomain (one label: lowercase letters, digits, hyphens)",
  "tên miền không hợp lệ (chỉ tên kiểu chibi.example.com — không IP, không *, không cổng)": "invalid domain (only names like chibi.example.com — no IP, no *, no port)",
  "đổi địa chỉ công khai sẽ ngắt các agent đã nối (phải nối lại) — gửi lại với confirmUrlChange: true": "changing the public address disconnects the agents already connected (they must reconnect) — send again with confirmUrlChange: true",
- "không di chuyển được: {error}": "could not migrate: {error}"
+ "không di chuyển được: {error}": "could not migrate: {error}",
+ "Xem trạng thái cloudflared ở Hệ thống › Lên mạng, rồi bấm Kiểm lại": "See the cloudflared status in System › Go online, then press Check again",
+ "Chưa có mật khẩu chủ máy — địa chỉ công khai đang bật tạm, chờ bước cuối này": "No owner password yet — the public address is on temporarily, waiting for this last step",
+ "Mở {url}/setup, nhập mã setup (lệnh genchibi status in mã) rồi đặt mật khẩu — xong là app tự hoàn tất lên mạng (hoặc trên máy chủ: genchibi password)": "Open {url}/setup, enter the setup code (genchibi status prints it) and set the password — the app then finishes going online by itself (or on the server: genchibi password)"
 }

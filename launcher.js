@@ -503,6 +503,13 @@ async function verifyPending() {
   if (child) child.kill('SIGTERM');
 }
 
+// env của app con: như của launcher, TRỪ móc kiểm thử (review bảo mật 🟡7) — GC_TEST* / GC_AUTH_RATE / GC_OAUTH_RATE chỉ đi tiếp khi CHÍNH launcher chạy với
+// GC_TEST=1 (bộ test). Bản cài thật chạy từ shell của chủ (native) không mang móc nào từ env shell / .env sang app
+function appEnv() {
+  const e = Object.assign({}, process.env);
+  if (process.env.GC_TEST !== '1') Object.keys(e).forEach(k => { if (/^GC_TEST/.test(k) || k === 'GC_AUTH_RATE' || k === 'GC_OAUTH_RATE') delete e[k]; });
+  return e;
+}
 async function start() {
   if (stopping) return;
   await selfUpdate();
@@ -510,7 +517,7 @@ async function start() {
   if (!fs.existsSync(entry)) { log('not found:', entry, '— retrying in 5 s'); return setTimeout(start, 5000); }
   log('starting', target('current'));
   const startedAt = Date.now();
-  child = spawn(process.execPath, [entry], { stdio: 'inherit', env: Object.assign({}, process.env, { GC_HOME: HOME, GC_PORT: String(PORT), GC_INGRESS_NONCE: INGRESS_NONCE }) });
+  child = spawn(process.execPath, [entry], { stdio: 'inherit', env: Object.assign(appEnv(), { GC_HOME: HOME, GC_PORT: String(PORT), GC_INGRESS_NONCE: INGRESS_NONCE }) });
   verifyPending();
   child.on('exit', code => {
     child = null;
@@ -541,5 +548,5 @@ if (require.main === module) {
   selfUpdate().then(() => { edgeInit(); start(); });
 } else {
   // tools/test-update.sh kiểm các hàm thuần (schema ý định, hợp đồng, giải nén) mà không chạy launcher
-  module.exports = { readIntent, abiOf, untarOne, cfArgs, cfPin, tokenProblem, portOwnedBy, freePort, LAUNCHER_ABI, EDGE_ABI, CF_VERSION, CF_ASSETS, INGRESS_PORT };
+  module.exports = { readIntent, abiOf, untarOne, cfArgs, cfPin, tokenProblem, portOwnedBy, freePort, appEnv, LAUNCHER_ABI, EDGE_ABI, CF_VERSION, CF_ASSETS, INGRESS_PORT };
 }

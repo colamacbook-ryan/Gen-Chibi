@@ -83,7 +83,7 @@ const ROOT_CADDYFILE = '{\n\tadmin unix//edge/run/caddy-admin.sock|0660\n\thttp_
 async function mkOnline(o = {}) {
   const home = tmp(o.name || 'x'), dataDir = path.join(home, 'data');
   fs.mkdirSync(dataDir, { recursive: true });
-  const cfg = new OnlineConfig({ dir: dataDir, env: {} });   // online-config thật (P1): nguồn app, không .env kế thừa
+  const cfg = new OnlineConfig({ dir: dataDir, env: {}, impact: o.impact });   // online-config thật (P1): nguồn app, không .env kế thừa; impact = số kết nối OAuth bị gỡ (giả)
   if (o.publicUrl) { cfg.setPending(o.publicUrl); cfg.commit(); cfg.set({ mode: 'proxy', domain: new URL(o.publicUrl).hostname }); }
   const logs = [], responses = [];
   const netf = fakeNet(o.net || {});
@@ -491,6 +491,14 @@ console.log('   — chống thành công cụ quét (CNS-180) + publicUrl tạm'
   }
   ok(['169.254.169.254', '100.64.1.1', '::ffff:10.0.0.1', 'fe80::1', '0.0.0.0'].every(ip => !ONLINE.isPublicIp(ip)) && [PUB4, PUB6, '1.1.1.1'].every(ONLINE.isPublicIp), 'isPublicIp: link-local / CGNAT / IPv4-mapped / unspecified bị coi là nội bộ');
   ok(ONLINE.isCloudflareIp('104.21.3.4') && ONLINE.isCloudflareIp('2606:4700::1') && !ONLINE.isCloudflareIp(PUB4), 'dải IP Cloudflare (cloudflare.com/ips, kiểm 2026-10-20)');
+  // review bảo mật 🟡6: từng dải — IPv4 nhúng trong IPv6 (mapped / compatible / 6to4 / NAT64 / Teredo), site-local cũ, CGNAT, 0/8, multicast / broadcast
+  const PRIV_TABLE = { 'IPv4-compatible ::a.b.c.d': ['::127.0.0.1', '::8.8.8.8', '::10.0.0.1'], 'IPv4-mapped ::ffff:': ['::ffff:127.0.0.1', '::ffff:8.8.8.8', '::ffff:7f00:1'], 'NAT64 64:ff9b::/96': ['64:ff9b::7f00:1', '64:ff9b::808:808'],
+    'NAT64 local 64:ff9b:1::/48': ['64:ff9b:1::a00:1', '64:ff9b:1:ffff::1'], 'site-local fec0::/10': ['fec0::1', 'feff::1'], '6to4 2002::/16 → IPv4 riêng': ['2002:7f00:1::1', '2002:a00:1::1', '2002:c0a8:101::1', '2002:a9fe:a9fe::1'],
+    'Teredo 2001::/32': ['2001:0:4136:e378::1'], 'CGNAT 100.64.0.0/10': ['100.64.0.1', '100.127.255.254'], '0.0.0.0/8': ['0.0.0.0', '0.1.2.3'], 'multicast / broadcast': ['224.0.0.1', '239.255.255.250', '255.255.255.255', 'ff02::1', 'ff05::2'],
+    'loopback / link-local / ULA': ['127.0.0.1', '::1', '::', '169.254.169.254', 'fe80::1', 'fe80::1%eth0', 'fd00::1'] };
+  const leakIp = Object.entries(PRIV_TABLE).flatMap(([k, ips]) => ips.filter(ip => ONLINE.isPublicIp(ip)).map(ip => k + ': ' + ip));
+  const pubOk = [PUB4, PUB6, '1.1.1.1', '8.8.8.8', '2606:4700:4700::1111', '2002:808:808::1'].filter(ip => !ONLINE.isPublicIp(ip));
+  ok(!leakIp.length && !pubOk.length, 'isPublicIp chặn từng dải (' + Object.keys(PRIV_TABLE).length + ' nhóm, ' + Object.values(PRIV_TABLE).flat().length + ' địa chỉ); IP công khai thật (kể cả 6to4 của IPv4 công khai) vẫn qua' + (leakIp.length ? ' — LỌT: ' + leakIp.join(', ') : '') + (pubOk.length ? ' — CHẶN NHẦM: ' + pubOk.join(', ') : ''));
   // publicUrl tạm → lỗi giữa chừng (MCP bị chặn theo UA) → trả về giá trị cũ
   const x = await flowA({ net: { blockUA: true }, mk: { publicUrl: 'https://old.example.org' } });
   const r0 = await x.post('/api/online/caddy', { domain: 'chibi.example.com' });
@@ -565,6 +573,37 @@ console.log('   — proxy riêng + link tạm');
   const vu = await qu.view(), su = qu.step(vu, 'tunnel');
   ok(su.state === 'fail' && /127\.0\.0\.1:7482/.test(su.detail) && /ss -ltnp/.test(su.fix) && !vu.flow.done, 'launcher báo ingress-unverified tới hết hạn chờ → bậc tunnel ✗ nói rõ cổng 7482 bị tiến trình khác giữ + cách sửa');
   qu.close();
+  // CNS-201: luồng dừng ở bậc "mật khẩu chủ" (publicUrl bật TẠM) → chủ đặt mật khẩu → auth gọi onPasswordSet → passwordSet() → tự xong, không cần Kiểm lại
+  const po = { name: 'pw', hasPassword: false, net: { dns: { 'chibi.example.com': { a: [PUB4] } } } }, pz = await mkOnline(po);
+  await pz.post('/api/online/proxy', { domain: 'chibi.example.com' }); await pz.idle();
+  const pv0 = await pz.view(), ps0 = pz.step(pv0, 'password');
+  ok(ps0.state === 'running' && pv0.flow.waitingPassword === true && !pv0.flow.done && pv0.mode === 'off' && pv0.publicUrl === '' && pv0.publicUrlPending === 'https://chibi.example.com' && /tự hoàn tất/.test(ps0.fix) && pz.online.passwordSet() === false,
+    'chưa có mật khẩu: luồng dừng ở bậc mật khẩu (waitingPassword), publicUrl chỉ bật tạm, mode còn off; cách sửa nói "tự hoàn tất"; passwordSet() khi chưa có mật khẩu không làm gì');
+  po.hasPassword = true;
+  const fired = pz.online.passwordSet(); await pz.idle();
+  const pv1 = await pz.view(), it1 = (() => { try { return JSON.parse(fs.readFileSync(path.join(pz.home, 'run', 'edge-intent.json'), 'utf8')); } catch (e) { return {}; } })();
+  ok(fired === true && pv1.flow.done && pv1.mode === 'proxy' && pv1.publicUrl === 'https://chibi.example.com' && pv1.publicUrlPending === '' && it1.online === true && pv1.flow.waitingPassword === false && pz.step(pv1, 'password').state === 'ok' && pz.online.passwordSet() === false,
+    'đặt mật khẩu → passwordSet() chạy tiếp tới finish(): mode proxy, publicUrl chính thức, intent online: true — không cần bấm Kiểm lại; gọi lại khi đã xong không làm gì');
+  pz.close();
+  // review bảo mật 🟡8: luồng không biết địa chỉ lúc bắt đầu (link tạm) + còn kết nối OAuth cũ (sau Go offline) → finish() KHÔNG gỡ kết nối mà dừng needs urlChange
+  const uq = await mkOnline({ name: 'uq', impact: () => 2, net: { dns: { 'abc-def-ghi.trycloudflare.com': { a: ['104.16.1.1'] } } } });
+  fs.mkdirSync(path.join(uq.home, 'run'), { recursive: true });
+  fs.writeFileSync(path.join(uq.home, 'run', 'edge-status.json'), JSON.stringify({ tunnel: 'quick', running: true, ready: true, since: 'x', url: 'https://abc-def-ghi.trycloudflare.com' }));
+  const uq0 = await uq.post('/api/online/quick', {}); await uq.idle();
+  const uv1 = await uq.view();
+  ok(uq0.status === 202 && !uv1.flow.done && uv1.flow.needs === 'urlChange' && uv1.flow.revokes === 2 && uv1.publicUrl === '' && uv1.flow.steps.every(s => s.state === 'ok'), 'link tạm + 2 kết nối OAuth cũ: mọi bậc ✓ nhưng KHÔNG chính thức hoá — needs urlChange (2 kết nối), publicUrl chưa đổi');
+  const uq1 = await uq.post('/api/online/recheck', {}); await uq.idle();
+  ok(uq1.status === 409 && uq1.j.needs === 'urlChange' && uq1.j.revokes === 2 && !(await uq.view()).flow.done, 'Kiểm lại không xác nhận → 409 needs urlChange (không gỡ kết nối)');
+  const uq2 = await uq.post('/api/online/recheck', { confirmUrlChange: true }); await uq.idle();
+  const uv2 = await uq.view();
+  ok(uq2.status === 202 && uv2.flow.done && uv2.publicUrl === 'https://abc-def-ghi.trycloudflare.com' && !uv2.flow.needs, 'chủ xác nhận (confirmUrlChange) → xong, publicUrl chính thức');
+  uq.close();
+  const uc = await mkOnline({ name: 'uc', impact: () => 3, net: { dns: { 'abc-def-ghi.trycloudflare.com': { a: ['104.16.1.1'] } } } });
+  fs.mkdirSync(path.join(uc.home, 'run'), { recursive: true });
+  fs.writeFileSync(path.join(uc.home, 'run', 'edge-status.json'), JSON.stringify({ tunnel: 'quick', running: true, ready: true, since: 'x', url: 'https://abc-def-ghi.trycloudflare.com' }));
+  await uc.post('/api/online/quick', { confirmUrlChange: true }); await uc.idle();
+  ok((await uc.view()).flow.done, 'đã xác nhận ngay lúc bắt đầu (confirmUrlChange) → finish() không hỏi lại');
+  uc.close();
 }
 
 // ---------------------------------------------------------------- 7) rào ngược: đột biến → test phải đỏ

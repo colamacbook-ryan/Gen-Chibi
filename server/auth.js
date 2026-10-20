@@ -76,21 +76,31 @@ function cookieName(base, req) {
   const m = /:(\d{1,5})$/.exec(String((req.headers || {}).host || ''));
   return m ? base + '_' + m[1] : base;
 }
-// request đi qua https? Chỉ quyết định cờ Secure (không cấp quyền gì): edge của app (luôn TLS ở phía khách) · X-Forwarded-Proto mục cuối · socket TLS
-function isHttps(req) {
+// request đi qua https? Chỉ quyết định cờ Secure (không cấp quyền gì): edge của app (luôn TLS ở phía khách) · socket TLS · X-Forwarded-Proto mục cuối ·
+// publicUrl (chính thức hoặc đang bật tạm) là https và Host khớp đúng tên đó (review bảo mật 🟡3: proxy riêng tối giản không gửi X-Forwarded-Proto —
+// trang vẫn là https ở phía khách, cookie không được đi trần qua http://<tên>/ khi kẻ trên đường mạng chèn link). pub = publicUrl đang phục vụ ('' = không có)
+function isHttps(req, pub) {
   if (req.gcEdge === 'caddy' || req.gcEdge === 'tunnel' || (req.socket && req.socket.encrypted)) return true;
-  return String((req.headers || {})['x-forwarded-proto'] || '').split(',').pop().trim().toLowerCase() === 'https';
+  if (String((req.headers || {})['x-forwarded-proto'] || '').split(',').pop().trim().toLowerCase() === 'https') return true;
+  if (!pub) return false;
+  let u = null; try { u = new URL(pub); } catch (e) { return false; }
+  const host = String((req.headers || {}).host || '').toLowerCase().replace(/:\d+$/, '');
+  return u.protocol === 'https:' && !!host && host === u.hostname.toLowerCase();
 }
 function bearerOf(req) { const h = req.headers || {}; return String(h.authorization || '').replace(/^Bearer\s+/i, '') || String(h['x-gc-token'] || ''); }
 const uaOf = req => String((req.headers || {})['user-agent'] || '').replace(/[^\x20-\x7e]/g, '').slice(0, MAX.ua);
 
 class Auth {
-  // opts: { dir, envToken, key (Buffer — khoá chủ, Secrets.key), log?, now?, ipHeader?: () => tên header IP cho lớp P/N, rate?: GC_AUTH_RATE }
+  // opts: { dir, envToken, key (Buffer — khoá chủ, Secrets.key), log?, now?, ipHeader?: () => tên header IP cho lớp P/N, rate?: GC_AUTH_RATE (main.js chỉ chuyển khi GC_TEST=1),
+  //         publicUrl?: () => địa chỉ công khai đang phục vụ (cờ Secure), onPasswordSet?: () => void — báo Go online đi tiếp bậc "mật khẩu chủ" (CNS-201) }
   constructor(opts) {
     this.dir = opts.dir;
     this.now = opts.now || Date.now;
     this.log = opts.log || (() => {});
     this.ipHeader = opts.ipHeader || (() => '');
+    this.publicUrl = opts.publicUrl || (() => '');
+    this.onPasswordSet = opts.onPasswordSet || (() => {});
+    this.setupBusy = false;   // một lần đặt mật khẩu đầu đang chạy (mã setup đã bị tiêu thụ) — request song song thứ hai → 409 (review bảo mật 🟡1)
     this.rate = Math.max(1, Math.min(1000, Math.round(+opts.rate) || 1));
     // khoá con suy từ khoá chủ (HKDF): ký cookie thiết bị · HMAC mã setup — lộ một khoá con không lộ khoá chủ / khoá kia
     const key = Buffer.isBuffer(opts.key) && opts.key.length >= 32 ? opts.key : crypto.createHash('sha256').update(String(opts.key || '')).digest();
@@ -178,7 +188,16 @@ class Auth {
     this.s.sessions = nul(); this.s.devices = nul();
     this.save(); this.dropSetupCode();
     this.log('[auth] owner password ' + (had ? 'changed' : 'set') + ' (' + (by || '?') + '); ' + revoked + ' session(s) revoked');
+    // Go online đang chờ ở bậc "mật khẩu chủ" → tự đi tiếp tới xong (CNS-201) — lỗi của móc không làm hỏng việc đặt mật khẩu
+    try { this.onPasswordSet(); } catch (e) { this.log('[auth] onPasswordSet: ' + MSG.en(e.message)); }
     return { revoked };
+  }
+  // thu hồi MỌI phiên + thiết bị (giữ mật khẩu) — khôi phục sao lưu (CNS-202): phiên / thiết bị trong bản sao lưu không sống lại
+  revokeAll(why) {
+    const n = Object.keys(this.s.sessions).length, d = Object.keys(this.s.devices).length;
+    this.s.sessions = nul(); this.s.devices = nul(); this.save();
+    this.log('[auth] ' + (why || 'revoke') + ': ' + n + ' session(s) and ' + d + ' device(s) revoked');
+    return { sessions: n, devices: d };
   }
   async checkPassword(pw) {
     const u = this.owner(); if (!u || typeof pw !== 'string' || Buffer.byteLength(pw) > PW.maxBytes) return false;
@@ -252,11 +271,11 @@ class Auth {
     if (hs.length >= MAX.sessions) delete S.sessions[hs.sort((a, b) => S.sessions[a].exp - S.sessions[b].exp)[0]];
     S.sessions[sha(raw)] = { id: rnd(9), user: 'owner', device: dev.id, createdAt: iso(t), seenAt: iso(t), exp: t + TTL.session, ua };
     this.save();
-    const sec = isHttps(req);
+    const sec = isHttps(req, this.publicUrl());
     return [this.cookie(cookieName(COOKIE.session, req), raw, TTL.session, sec), this.cookie(cookieName(COOKIE.device, req), 'v1.' + dev.id + '.' + this.devSig(dev.id), TTL.device, sec)];
   }
   cookie(name, value, ttl, secure) { return name + '=' + value + '; Path=/; HttpOnly; SameSite=Lax; Max-Age=' + Math.floor(ttl / 1000) + (secure ? '; Secure' : ''); }
-  clearCookie(req) { return this.cookie(cookieName(COOKIE.session, req), '', 0, isHttps(req)); }
+  clearCookie(req) { return this.cookie(cookieName(COOKIE.session, req), '', 0, isHttps(req, this.publicUrl())); }
   logout(req) { const s = this.sessionOf(req); if (s) { delete this.s.sessions[s.hash]; this.save(); } return !!s; }
   dropDevice(id) {
     if (!Object.hasOwn(this.s.devices, id)) return false;
@@ -359,25 +378,34 @@ class Auth {
   // io = { send(res, code, body, type, extra), body(req, limit) }. Luôn trả lời (true)
   async handle(req, res, p, m, io) {
     const json = (code, b, extra) => io.send(res, code, b, null, extra);
-    const busy = sec => json(429, { error: tr(VI, 'quá nhiều lần thử sai — thử lại sau {n} giây', { n: sec }), retryAfter: sec }, { 'Retry-After': String(sec) });
-    const blocked = (g) => g.locked ? json(429, { error: tr(VI, 'đăng nhập đang bị chặn tạm vì nhiều lần sai — dùng token của bản cài hoặc chờ {n} phút', { n: Math.ceil(g.wait / 60) }), retryAfter: g.wait, locked: true }, { 'Retry-After': String(g.wait) }) : busy(g.wait);
+    // câu 429 chỉ thẳng lối thoát (review bảo mật 🟡2): trên máy chủ `genchibi password` đặt (lại) mật khẩu, hoặc dùng token của bản cài — không phải chờ
+    const busy = sec => json(429, { error: tr(VI, 'quá nhiều lần thử sai — thử lại sau {n} giây (quên mật khẩu: chạy genchibi password trên máy chủ)', { n: sec }), retryAfter: sec }, { 'Retry-After': String(sec) });
+    const blocked = (g) => g.locked ? json(429, { error: tr(VI, g.kind === 'setup' ? 'màn đặt mật khẩu đang bị chặn tạm vì nhiều lần sai mã — trên máy chủ chạy genchibi password (đặt mật khẩu ngay), hoặc dùng token của bản cài, hoặc chờ {n} phút'
+      : 'đăng nhập đang bị chặn tạm vì nhiều lần sai — trên máy chủ chạy genchibi password (đặt lại mật khẩu), hoặc dùng token của bản cài, hoặc chờ {n} phút', { n: Math.ceil(g.wait / 60) }), retryAfter: g.wait, locked: true }, { 'Retry-After': String(g.wait) }) : busy(g.wait);
+    const taken = () => json(409, { error: 'đang đặt mật khẩu chủ từ một trình duyệt khác — đợi vài giây rồi đăng nhập ở /login', login: '/login' });
     if (p === '/api/auth/state' && m === 'GET') return json(200, this.state(req));
 
     // ---- đặt mật khẩu đầu: C (mã setup) hoặc T. Có mật khẩu rồi → 404 (trang /setup chuyển sang /login)
     if (p === '/api/auth/setup' && m === 'POST') {
       if (this.hasPassword()) return json(404, { error: 'máy đã có mật khẩu chủ — đăng nhập ở /login', login: '/login' });
       const b = await io.body(req, 8 * 1024), g = this.guard('setup', req);
+      if (this.setupBusy) return taken();
       const bad = pwProblem(b.password); if (bad) return json(400, { error: bad });
       if (g.who !== 'T') {
         if (!normCode(b.code)) return json(400, { error: 'mã setup sai định dạng (10 ký tự, dạng XXXXX-XXXXX)' });   // sai định dạng không thử mã nào → không đếm
         if (g.wait) return blocked(g);                                                       // xét trần TRƯỚC khi kiểm (CNS-166)
         if (this.inflight.setup >= SLOW.inflight * this.rate) return busy(2);
         this.inflight.setup++; const release = this.hold(g);
-        let r; try { if (g.slow) await sleep(g.slow); r = this.checkCode(b.code); } finally { this.inflight.setup--; release(); }
+        let r; try { if (g.slow) await sleep(g.slow); if (this.setupBusy) r = 'busy'; else r = this.checkCode(b.code); } finally { this.inflight.setup--; release(); }
+        if (r === 'busy') return taken();
         if (r !== 'ok') { if (r === 'wrong') this.fail('setup', g); return json(401, { error: r === 'expired' ? 'mã setup đã hết hạn — chạy genchibi open trên máy chủ để lấy mã mới' : 'mã setup không đúng — chạy genchibi open (hoặc genchibi status) trên máy chủ để lấy mã' }); }
         if (this.hasPassword()) return json(404, { error: 'máy đã có mật khẩu chủ — đăng nhập ở /login', login: '/login' });   // hai trình duyệt cùng đặt: người sau thua
       }
-      await this.setPassword(b.password, g.who === 'T' ? 'token' : 'setup-code');
+      // TIÊU THỤ mã NGAY (đồng bộ, trước lần await scrypt): request song song mang cùng mã thấy setupBusy → 409, không đặt được lần hai (review bảo mật 🟡1)
+      this.setupBusy = true; if (g.who !== 'T') this.dropSetupCode();
+      try { await this.setPassword(b.password, g.who === 'T' ? 'token' : 'setup-code'); }
+      catch (e) { if (!this.hasPassword()) this.ensureSetupCode(true); throw e; }   // băm lỗi (hiếm): mã mới để chủ thử lại (genchibi open / status in mã)
+      finally { this.setupBusy = false; }
       return json(200, { ok: true, next: '/' }, { 'Set-Cookie': this.issue(req) });
     }
 
@@ -408,6 +436,7 @@ class Auth {
     if (p === '/api/auth/password' && m === 'POST') {
       const b = await io.body(req, 8 * 1024);
       const bad = pwProblem(b.password); if (bad) return json(400, { error: bad });
+      if (this.setupBusy) return taken();
       if (who === 'S' && this.hasPassword()) {
         const g = this.guard('login', req); if (g.wait) return busy(g.wait);
         const release = this.hold(g); let good = false;

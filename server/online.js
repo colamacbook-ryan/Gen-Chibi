@@ -39,17 +39,37 @@ const CF_IPS = {   // https://www.cloudflare.com/ips-v4 + /ips-v6 — kiểm 202
   v4: ['173.245.48.0/20', '103.21.244.0/22', '103.22.200.0/22', '103.31.4.0/22', '141.101.64.0/18', '108.162.192.0/18', '190.93.240.0/20', '188.114.96.0/20', '197.234.240.0/22', '198.41.128.0/17', '162.158.0.0/15', '104.16.0.0/13', '104.24.0.0/14', '172.64.0.0/13', '131.0.72.0/22'],
   v6: ['2400:cb00::/32', '2606:4700::/32', '2803:f800::/32', '2405:b500::/32', '2405:8100::/32', '2a06:98c0::/29', '2c0f:f248::/32']
 };
-const PRIVATE_V4 = ['0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8', '169.254.0.0/16', '172.16.0.0/12', '192.0.0.0/24', '192.0.2.0/24', '192.168.0.0/16', '198.18.0.0/15', '198.51.100.0/24', '203.0.113.0/24', '224.0.0.0/3'];
-const PRIVATE_V6 = ['::/127', 'fc00::/7', 'fe80::/10', 'ff00::/8', '2001:db8::/32', '64:ff9b::/96', '100::/64'];
+// địa chỉ app KHÔNG gọi tới (CNS-180 + review bảo mật 🟡6): riêng / loopback / link-local / CGNAT / tài liệu / benchmark / multicast + dành riêng + broadcast (224.0.0.0/3)
+const PRIVATE_V4 = ['0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8', '169.254.0.0/16', '172.16.0.0/12', '192.0.0.0/24', '192.0.2.0/24', '192.88.99.0/24', '192.168.0.0/16', '198.18.0.0/15', '198.51.100.0/24', '203.0.113.0/24', '224.0.0.0/3'];
+// IPv6: ::/96 (IPv4-compatible ::a.b.c.d, gồm :: và ::1 — đã bỏ, RFC 4291) · ::ffff:0:0/96 (IPv4-mapped) · NAT64 64:ff9b::/96 + 64:ff9b:1::/48 (RFC 8215) · 100::/64 (discard) ·
+// 2001::/32 (Teredo — IPv4 nhúng bị che) · tài liệu · ULA fc00::/7 · link-local fe80::/10 · site-local cũ fec0::/10 · multicast ff00::/8. 6to4 2002::/16 xét IPv4 nhúng (v6to4)
+const PRIVATE_V6 = ['::/96', '::ffff:0:0/96', '64:ff9b::/96', '64:ff9b:1::/48', '100::/64', '2001::/32', '2001:db8::/32', 'fc00::/7', 'fe80::/10', 'fec0::/10', 'ff00::/8'];
 function blockList(v4, v6) {
   const b = new net.BlockList();
   v4.forEach(c => { const [a, p] = c.split('/'); b.addSubnet(a, +p, 'ipv4'); });
   v6.forEach(c => { const [a, p] = c.split('/'); b.addSubnet(a, +p, 'ipv6'); });
   return b;
 }
-const PRIV = blockList(PRIVATE_V4, PRIVATE_V6), CFB = blockList(CF_IPS.v4, CF_IPS.v6);
+// hai bảng riêng: net.BlockList so IPv4 với cả luật IPv6 dạng ánh xạ (::/96, ::ffff:0:0/96 sẽ chặn MỌI IPv4) — v4 chỉ xét luật v4, v6 chỉ xét luật v6
+const PRIV4 = blockList(PRIVATE_V4, []), PRIV6 = blockList([], PRIVATE_V6), CFB = blockList(CF_IPS.v4, CF_IPS.v6);
 const fam = ip => net.isIP(ip) === 6 ? 'ipv6' : 'ipv4';
-const isPublicIp = ip => net.isIP(ip) > 0 && !PRIV.check(ip, fam(ip));   // ::ffff:a.b.c.d được xét theo luật IPv4 (net.BlockList)
+// IPv6 → 8 nhóm 16 bit (có dạng nhúng a.b.c.d ở cuối); null nếu không đọc được
+function v6words(ip) {
+  let s = String(ip).toLowerCase();
+  const m = /(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(s);
+  if (m) s = s.slice(0, m.index) + ((+m[1] << 8) | +m[2]).toString(16) + ':' + ((+m[3] << 8) | +m[4]).toString(16);
+  const parts = s.split('::'); if (parts.length > 2) return null;
+  const hd = parts[0] ? parts[0].split(':') : [], tl = parts.length === 2 && parts[1] ? parts[1].split(':') : [];
+  const w = parts.length === 2 ? hd.concat(Array(Math.max(0, 8 - hd.length - tl.length)).fill('0'), tl) : hd;
+  return w.length === 8 && w.every(x => /^[0-9a-f]{1,4}$/.test(x)) ? w.map(x => parseInt(x, 16)) : null;
+}
+const v6to4 = w => [w[1] >> 8, w[1] & 255, w[2] >> 8, w[2] & 255].join('.');   // 2002:AABB:CCDD::/48 → A.B.C.D
+function isPublicIp(ip) {
+  if (typeof ip !== 'string' || ip.includes('%') || net.isIP(ip) === 0) return false;   // %zone = địa chỉ có phạm vi giao diện (link-local) → nội bộ
+  if (net.isIP(ip) === 4 ? PRIV4.check(ip, 'ipv4') : PRIV6.check(ip, 'ipv6')) return false;
+  if (net.isIP(ip) === 6) { const w = v6words(ip); if (!w) return false; if (w[0] === 0x2002) return isPublicIp(v6to4(w)); }
+  return true;
+}
 const isCloudflareIp = ip => net.isIP(ip) > 0 && CFB.check(ip, fam(ip));
 
 const FLOWS = {
@@ -358,7 +378,7 @@ function createOnline(opts) {
       if (w) return w;
     }
     const h = await call(url + '/api/health', { headers: { Accept: 'application/json' } }), hj = jsonOf(h);
-    const fixHost = flow.mode === 'proxy' ? N_('Kiểm proxy của bạn chuyển {url} tới gen-chibi (đoạn cấu hình mẫu ở bậc trước)', { url }) : flow.mode === 'caddy' ? N_('Xem log của edge: docker logs gen-chibi-edge') : N_('Xem trạng thái cloudflared ở System › Go online, rồi bấm Kiểm lại');
+    const fixHost = flow.mode === 'proxy' ? N_('Kiểm proxy của bạn chuyển {url} tới gen-chibi (đoạn cấu hình mẫu ở bậc trước)', { url }) : flow.mode === 'caddy' ? N_('Xem log của edge: docker logs gen-chibi-edge') : N_('Xem trạng thái cloudflared ở Hệ thống › Lên mạng, rồi bấm Kiểm lại');
     if (h.status !== 200 || !hj || hj.ok !== true) return fail(N_('{url}/api/health không trả lời đúng ({error})', { url, error: errOf(h) }), fixHost);
     const m = await call(url + '/.well-known/oauth-authorization-server', { headers: { Accept: 'application/json' } }), mj = jsonOf(m);
     if (m.status !== 200 || !mj || mj.issuer !== url) return fail(N_('Metadata OAuth qua {url} chưa đúng ({error}, issuer {issuer})', { url, error: errOf(m), issuer: cut(mj && mj.issuer, 120) || '-' }), N_('OAuth chưa nhận publicUrl mới — cập nhật gen-chibi rồi bấm Kiểm lại'));
@@ -408,7 +428,8 @@ function createOnline(opts) {
   }
   async function stepPassword() {
     if (d.hasPassword()) return ok(N_('Chủ máy đã có mật khẩu'));
-    return wait(N_('Chưa có mật khẩu chủ máy'), N_('Mở {url}/setup, nhập mã setup (lệnh genchibi status in mã) rồi đặt mật khẩu; xong bấm Kiểm lại', { url: urlOf() }));
+    // đặt mật khẩu (qua /setup, Tài khoản chủ hay genchibi password) → auth báo onPasswordSet → luồng tự đi tiếp tới xong (CNS-201), không cần Kiểm lại
+    return wait(N_('Chưa có mật khẩu chủ máy — địa chỉ công khai đang bật tạm, chờ bước cuối này'), N_('Mở {url}/setup, nhập mã setup (lệnh genchibi status in mã) rồi đặt mật khẩu — xong là app tự hoàn tất lên mạng (hoặc trên máy chủ: genchibi password)', { url: urlOf() }));
   }
   // ---- đường B
   function client() {
@@ -560,6 +581,12 @@ function createOnline(opts) {
   }
   // xong: publicUrl chính thức, mode mới, dọn edge cục bộ của mode cũ, bỏ token API (giữ chỉ khi chủ chọn)
   function finish() {
+    // chính thức hoá publicUrl = OAuth gỡ kết nối agent của địa chỉ khác (onCommit → oauth.prune). Luồng không biết địa chỉ lúc bắt đầu (link tạm, Cloudflare
+    // không ghi tên miền) chưa hỏi chủ → dừng needs 'urlChange' như các luồng khác; chủ xác nhận bằng recheck { confirmUrlChange: true } (review bảo mật 🟡8)
+    if (!flow.urlOk && typeof d.config.preview === 'function') {
+      const pv = d.config.preview(urlOf()), n = pv && pv.ok ? +pv.revokes || 0 : 0;
+      if (n > 0) { flow.needs = 'urlChange'; flow.revokes = n; save(); d.log('[online] ' + n + ' agent connection(s) would be revoked by the new public address - waiting for the owner to confirm'); return; }
+    }
     const prev = flowMode((d.config.get() || {}).mode || 'off');
     d.config.commit(); flow.pending = false;
     d.config.set({ mode: cfgMode(flow.mode), domain: flow.domain, clientIpHeader: flow.mode === 'proxy' ? 'x-forwarded-for' : '' });
@@ -567,9 +594,36 @@ function createOnline(opts) {
     if (['cloudflare', 'quick'].includes(prev) && !['cloudflare', 'quick'].includes(flow.mode)) { try { fs.rmSync(files.tunnelToken, { force: true }); } catch (e) { /* không có */ } }
     writeIntent(flow.mode === 'cloudflare' ? 'token' : flow.mode === 'quick' ? 'quick' : 'off', true);   // online: true — launcher giữ edge khi cập nhật
     if (flow.mode === 'cloudflare') { if (mem && mem.keep && d.secrets) d.secrets.set(SECRET_KEY, mem.token); dropToken(); }
-    flow.done = true; flow.doneAt = iso(); flow.needs = null;
+    flow.done = true; flow.doneAt = iso(); flow.needs = null; delete flow.revokes;
     save();
     d.log('[online] online via ' + flow.mode + ' at ' + urlOf());
+  }
+  // luồng dừng ĐÚNG ở bậc "mật khẩu chủ" (mọi bậc trước đã ✓, publicUrl đang bật tạm)
+  function waitingPassword() {
+    if (!flow || flow.done || flow.mode === 'off' || flow.needs) return false;
+    const st = flow.steps.find(s => s.state !== 'ok');
+    return !!st && st.id === 'password';
+  }
+  // auth.setPassword → main.js → đây (CNS-201): đang chờ mật khẩu thì chạy tiếp ngay tới finish() (mode / publicUrl chính thức / online: true / bỏ API token).
+  // Lượt khác đang chạy → đợi nó xong rồi xét lại (lượt đó tới bậc mật khẩu thì tự thấy đã có)
+  function passwordSet() {
+    if (running || offQueued) { waitRun().then(() => { if (!offQueued) passwordSet(); }); return false; }
+    if (!waitingPassword() || !d.hasPassword()) return false;
+    d.log('[online] owner password set: finishing Go online (' + flow.mode + ')');
+    kick(() => advance(false));
+    return true;
+  }
+  // khôi phục sao lưu (CNS-202): data/ có thể của máy khác → không mang trạng thái online sang. mode off, publicUrl rỗng, bỏ luồng, intent off (tunnel dừng),
+  // xoá run/tunnel.token + install-id (lần Go online sau dùng tên tunnel mới — không giành tunnel của máy gốc), bỏ site Caddy. Giữ cfResources (Go offline còn dọn được)
+  function resetAfterRestore() {
+    flow = null;
+    try { writeIntent('off', false); } catch (e) { d.log('[online] restore: ' + cut(e.message)); }
+    [files.tunnelToken, files.installId].forEach(f => { try { fs.rmSync(f, { force: true }); } catch (e) { /* không có */ } });
+    try { d.config.revert(); } catch (e) { /* .env kế thừa: chỉ đọc */ }
+    const r = d.config.set({ mode: 'off', domain: '', clientIpHeader: '', publicUrl: '', flow: null });
+    clearCaddy().catch(e => d.log('[online] caddy cleanup: ' + cut(e.message)));
+    d.log('[online] backup restored: Go online is off on this machine (new install id; run Go online again to put it online)');
+    return r;
   }
   async function clearCaddy() {
     if (!caddy.enabled() || !(await caddy.adminUp())) return 'skipped';
@@ -647,7 +701,7 @@ function createOnline(opts) {
     const c = d.config.get() || {}, h = (req && req.headers) || {};
     const f = flow && {
       mode: flow.mode, domain: flow.domain, url: urlOf(), startedAt: flow.startedAt, done: !!flow.done, doneAt: flow.doneAt || null, pending: !!flow.pending,
-      needs: flow.needs || null, conflicts: flow.conflicts || null, choices: flow.choices || null,
+      needs: flow.needs || null, conflicts: flow.conflicts || null, choices: flow.choices || null, revokes: flow.needs === 'urlChange' ? +flow.revokes || 0 : 0, waitingPassword: waitingPassword(),
       steps: flow.steps.map(s => Object.assign({ id: s.id, state: s.state, detail: tx(s.detail, lang), fix: tx(s.fix, lang), at: s.at }, s.manual ? { manual: true } : {}, s.expires ? { expires: s.expires } : {})),
       cloudflare: flow.cf ? { zone: flow.cf.zone || '', sub: flow.cf.sub || '', tunnelName: flow.cf.tunnelName || '', cname: flow.cf.cname || '', waf: !!flow.cf.waf, overwrite: !!flow.cf.overwrite } : null
     };
@@ -681,7 +735,7 @@ function createOnline(opts) {
       // kết nối OAuth của địa chỉ khác (kể cả còn sót sau Go offline) sẽ bị thu hồi khi chính thức hoá → cũng hỏi chủ (online-config preview đếm)
       const pv = url && typeof d.config.preview === 'function' ? d.config.preview(url) : null, revokes = pv && pv.ok ? +pv.revokes || 0 : 0;
       if (((cur && (!url || url !== cur)) || revokes > 0) && b.confirmUrlChange !== true) return send(res, 409, { error: tr(SRC, 'đổi địa chỉ công khai sẽ ngắt các agent đã nối (phải nối lại) — gửi lại với confirmUrlChange: true'), needs: 'urlChange', from: cur, to: url || null, revokes });
-      flow = newFlow(mode, extra); save();
+      flow = newFlow(mode, Object.assign({}, extra, { urlOk: b.confirmUrlChange === true })); save();   // urlOk: chủ đã xác nhận đổi địa chỉ — finish() không hỏi lại
       kick(() => advance(false));
       return send(res, 202, view(req, lang));
     };
@@ -712,6 +766,10 @@ function createOnline(opts) {
     }
     if (p === '/api/online/recheck') {
       if (!flow || flow.mode === 'off') return send(res, 409, { error: tr(SRC, 'chưa có luồng Go online nào') });
+      if (flow.needs === 'urlChange') {   // finish() đang chờ chủ xác nhận gỡ kết nối agent của địa chỉ cũ
+        if (b.confirmUrlChange !== true) return send(res, 409, { error: tr(SRC, 'đổi địa chỉ công khai sẽ ngắt các agent đã nối (phải nối lại) — gửi lại với confirmUrlChange: true'), needs: 'urlChange', from: String((d.config.get() || {}).publicUrl || ''), to: urlOf() || null, revokes: +flow.revokes || 0 });
+        flow.urlOk = true; flow.needs = null; save();
+      }
       if (b.confirmManual === 'waf' && flow.mode === 'cloudflare') {   // chủ đã tạo luật WAF bằng tay (token không có quyền WAF)
         const st = stepOf('waf');
         if (st && st.state === 'fail' && st.manual) put(st, ok(N_('Chủ máy xác nhận đã tạo luật Skip bằng tay')));
@@ -738,10 +796,11 @@ function createOnline(opts) {
   let watch = null;
   function init() {
     d.tunnel.set(intent() !== 'off');
+    if (waitingPassword() && d.hasPassword()) passwordSet();   // mật khẩu đặt lúc app dừng (genchibi password → auth-cli.js): xong nốt luồng
     if (!watch) { watch = setInterval(() => { if (!running) d.tunnel.set(intent() !== 'off'); }, 2000); if (watch.unref) watch.unref(); }
   }
 
-  return { route, checkRoute, view, init, intent, idle, migrate, files, tunnelPort, _flow: () => flow };
+  return { route, checkRoute, view, init, intent, idle, migrate, passwordSet, waitingPassword, resetAfterRestore, files, tunnelPort, _flow: () => flow };
 }
 
 module.exports = { createOnline, isPublicIp, isCloudflareIp, probeUrl, resolveFresh, traceIp, snippets, ANTHROPIC, CF_IPS, FLOWS };
