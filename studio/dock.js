@@ -8,9 +8,9 @@
 (function () {
   'use strict';
   var GC = window.GenChibi, B = null;
-  var _t = GC.i18n.t, _l = GC.i18n.label;   // ngôn ngữ (ADR 0007): _t câu giao diện · _l nhãn dữ liệu (nhãn khu do server gửi, tên phần tử)
+  var _t = GC.i18n.t, _l = GC.i18n.label, N_ = GC.i18n.N;   // ngôn ngữ (ADR 0007): _t câu giao diện · _l nhãn dữ liệu (nhãn khu do server gửi, tên phần tử)
   // nhãn / vai / lời giới thiệu của từng khu do SERVER giữ (mcp.js ZONES, qua GET /api/ai › zones) — dock không chép lại; chưa có (bản xem thử không server) thì hiện id khu
-  var KIND_LABEL = { asset: 'Nhân vật', item: 'Vật phẩm', scene: 'Bối cảnh', action: 'Hành động', work: 'Tác phẩm', shot: 'Phân cảnh', step: 'Bước', project: 'Dự án', panel: 'Khu vực', zone: 'Khu' };
+  var KIND_LABEL = { asset: N_('Nhân vật'), item: N_('Vật phẩm'), scene: N_('Bối cảnh'), action: N_('Hành động'), work: N_('Tác phẩm'), shot: N_('Phân cảnh'), step: N_('Bước'), project: N_('Dự án'), panel: N_('Khu vực'), zone: N_('Khu') };
   var ANCHOR_RE = /^(asset|item|scene|action|work|shot|step|project|panel|zone):[A-Za-z0-9][A-Za-z0-9._~\/-]{0,160}$/;
   var CHIP_RE = /⟦([^|⟧]{1,200})(?:\|([^⟧]{0,100}))?⟧/g;
   var BUDGET = 4000, MAX_PINS = 8;   // ngân sách snapshot (ký tự ≈ 1/3 token tiếng Việt) và số ghim tối đa một tin
@@ -27,7 +27,8 @@
   function cut(t, n) { var a = Array.from(String(t == null ? '' : t)); return a.length > n ? a.slice(0, n - 1).join('') + '…' : a.join(''); }
   function norm(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase(); }
   function zoneOf(id) { return (S.zones && S.zones[id]) || null; }
-  function zoneLabel(id) { var z = zoneOf(id); return z ? z.label : id; }
+  function kindLabel(k) { return KIND_LABEL[k] ? _t(KIND_LABEL[k]) : k; }
+  function zoneLabel(id) { var z = zoneOf(id); return z ? _l(z.label) : id; }   // nhãn khu do server gửi (đã theo X-GC-Lang); _l phòng server cũ
   function esc(s) { return window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/["\\]/g, '\\$&'); }
 
   /* ============================================================ trạng thái nhớ theo máy */
@@ -67,12 +68,12 @@
         else if (p.kind === 'scene') { var sc = GC.getScene(p.id); if (sc) return sc.name; }
         else if (p.kind === 'action') { var ac = GC.choreo && GC.choreo.ACTIONS[p.id]; if (ac) return ac.label; }
         else if (p.kind === 'project') return B.Projects.name(p.id);
-        else if (p.kind === 'zone') return 'Mở ' + zoneLabel(p.id);
+        else if (p.kind === 'zone') return _t('Mở {zoneLabel}', { zoneLabel: zoneLabel(p.id) });
         else if (p.kind === 'work') { w = Works.peek(p.id); if (w) return w.title; }
         else if (p.kind === 'shot' || p.kind === 'step') {
           var q = p.id.split('/'); w = Works.peek(q[0]); s = w && (w.shots || []).filter(function (z) { return z.id === q[1]; })[0];
-          if (s) return (p.kind === 'step' ? 'Bước ' + q[2] + ' · ' : '') + s.title;
-          return (p.kind === 'step' ? 'Bước ' + q[2] + ' · ' : '') + q[1];
+          if (s) return (p.kind === 'step' ? _t('Bước {x} · ', { x: q[2] }) : '') + s.title;
+          return (p.kind === 'step' ? _t('Bước {x} · ', { x: q[2] }) : '') + q[1];
         }
       } catch (e) { /* dùng id */ }
       n = p.id.split('/'); return n[n.length - 1];
@@ -140,26 +141,26 @@
           var steps = (s.event && s.event.steps) || [];
           if (p.kind === 'step') return cut(JSON.stringify(steps[+q[2] - 1] || null), max);
           var rv = w.review && w.review.shots && w.review.shots[s.id];
-          return cut(JSON.stringify({ id: s.id, title: s.title, description: s.description, scene: s.scene, cast: s.cast, buoc: steps.length, loiThoai: steps.slice(0, 6).map(function (t) { return t.actor + ': ' + (t.say || t.action || ''); }), duyet: rv ? { status: rv.status, notes: (rv.notes || []).map(function (n) { return (n.step ? 'bước ' + n.step + ': ' : '') + n.text; }) } : undefined }), max);
+          return cut(JSON.stringify({ id: s.id, title: s.title, description: s.description, scene: s.scene, cast: s.cast, buoc: steps.length, loiThoai: steps.slice(0, 6).map(function (t) { return t.actor + ': ' + (t.say || t.action || ''); }), duyet: rv ? { status: rv.status, notes: (rv.notes || []).map(function (n) { return (n.step ? _t('bước {step}: ', { step: n.step }) : '') + n.text; }) } : undefined }), max);
         });
       } catch (e) { return Promise.resolve(''); }
     },
     // ứng viên cho picker @ : phần tử đang hiện (có data-anchor) + dữ liệu của khu
     candidates: function () {
       var out = [], seen = {};
-      function put(a, label, sub, rank) { if (!seen[a] && Anchors.valid(a)) { seen[a] = 1; out.push({ anchor: a, label: label || Anchors.labelOf(a), sub: sub || KIND_LABEL[Anchors.parse(a).kind], rank: rank || 2 }); } }
+      function put(a, label, sub, rank) { if (!seen[a] && Anchors.valid(a)) { seen[a] = 1; out.push({ anchor: a, label: label || Anchors.labelOf(a), sub: sub || kindLabel(Anchors.parse(a).kind), rank: rank || 2 }); } }
       Array.prototype.forEach.call(document.querySelectorAll('[data-anchor]'), function (el) {
         var a = el.getAttribute('data-anchor');
-        if (!el.closest('#dock') && Anchors.valid(a)) { var r = el.getBoundingClientRect(); if (r.width > 0 && r.height > 0) put(a, el.getAttribute('data-anchor-label'), 'đang hiện · ' + KIND_LABEL[Anchors.parse(a).kind], 1); }
+        if (!el.closest('#dock') && Anchors.valid(a)) { var r = el.getBoundingClientRect(); if (r.width > 0 && r.height > 0) put(a, el.getAttribute('data-anchor-label'), _t('đang hiện · {kind}', { kind: kindLabel(Anchors.parse(a).kind) }), 1); }
       });
       try {
-        GC.assets().forEach(function (x) { if (!/^gen\.khung\//.test(x.key) || B.zoneNow() === 'fab') put('asset:' + x.key, x.name, 'Nhân vật · ' + x.key); });
-        GC.items().forEach(function (x) { if (x.pack === B.MY_PACK || B.zoneNow() === 'fab') put('item:' + x.key, x.name, 'Vật phẩm · ' + x.key); });
-        GC.scenes().forEach(function (x) { if (x.pack === B.MY_PACK || B.zoneNow() === 'fab') put('scene:' + x.key, x.name, 'Bối cảnh · ' + x.key); });
-        B.Projects.all().forEach(function (x) { put('project:' + x.id, x.name, 'Dự án · ' + x.id); });
+        GC.assets().forEach(function (x) { if (!/^gen\.khung\//.test(x.key) || B.zoneNow() === 'fab') put('asset:' + x.key, x.name, _t('Nhân vật · {key}', { key: x.key })); });
+        GC.items().forEach(function (x) { if (x.pack === B.MY_PACK || B.zoneNow() === 'fab') put('item:' + x.key, x.name, _t('Vật phẩm · {key}', { key: x.key })); });
+        GC.scenes().forEach(function (x) { if (x.pack === B.MY_PACK || B.zoneNow() === 'fab') put('scene:' + x.key, x.name, _t('Bối cảnh · {key}', { key: x.key })); });
+        B.Projects.all().forEach(function (x) { put('project:' + x.id, x.name, _t('Dự án · {id}', { id: x.id })); });
         Object.keys(Works.map).forEach(function (id) {
-          var w = Works.map[id]; put('work:' + id, w.title, 'Tác phẩm · ' + id);
-          (w.shots || []).forEach(function (s, i) { put('shot:' + id + '/' + s.id, 'Cảnh ' + (i + 1) + ' · ' + s.title, 'Phân cảnh · ' + w.title); });
+          var w = Works.map[id]; put('work:' + id, w.title, _t('Tác phẩm · {id}', { id: id }));
+          (w.shots || []).forEach(function (s, i) { put('shot:' + id + '/' + s.id, _t('Cảnh {n} · {title}', { n: i + 1, title: s.title }), _t('Phân cảnh · {title}', { title: w.title })); });
         });
       } catch (e) { /* thiếu nguồn nào bỏ nguồn đó */ }
       return out;
@@ -213,7 +214,7 @@
   function goAnchor(a) {
     if (Spot.flash(a)) return;   // đang hiện sẵn ở đây: tô sáng luôn
     var r = Anchors.route(a);
-    if (!r) { toast('Phần tử này không còn trên màn hình.'); return; }
+    if (!r) { toast(_t('Phần tử này không còn trên màn hình.')); return; }
     var z = B.zoneOfPage(r.page), cross = z !== 'sys' && z !== 'home' && (!B.APP() || z !== B.APP().zone);
     if (cross) { if (Anchors.parse(a).kind !== 'zone') { try { sessionStorage.setItem('gc-spot', a); } catch (e) { /* bỏ qua */ } } B.go(r); return; }
     B.go(r);
@@ -228,18 +229,18 @@
   function chipEl(anchor, label, opt) {
     opt = opt || {};
     var p = Anchors.parse(anchor), name = label || Anchors.labelOf(anchor);
-    var b = h('button', { type: 'button', class: 'achip' + (opt.pin ? ' pin' : ''), 'data-chip': anchor, 'aria-label': 'Chỉ tới ' + KIND_LABEL[p.kind].toLowerCase() + ' ' + name,
+    var b = h('button', { type: 'button', class: 'achip' + (opt.pin ? ' pin' : ''), 'data-chip': anchor, 'aria-label': _t('Chỉ tới {kind} {name}', { kind: kindLabel(p.kind).toLowerCase(), name: name }),
       onmouseenter: function () { if (!b.disabled) Spot.show(anchor, name); }, onmouseleave: function () { Spot.hide(); },
       onfocus: function () { if (!b.disabled) Spot.show(anchor, name); }, onblur: function () { Spot.hide(); },
       onclick: function () { if (!b.disabled) goAnchor(anchor); } },
       h('span', { class: 'gl', 'aria-hidden': 'true', text: '⌖' }), h('span', { class: 'tx', text: name }));
     function mark(ok) {
       b.disabled = !ok; b.classList.toggle('gone', !ok);
-      b.setAttribute('aria-label', ok ? 'Chỉ tới ' + KIND_LABEL[p.kind].toLowerCase() + ' ' + name : name + ' — không còn');
-      b.title = ok ? KIND_LABEL[p.kind] + ' · ' + p.id : 'Phần tử này không còn nữa (đã xoá hoặc đổi id)';
-      b.lastChild.textContent = ok ? name : name + ' · không còn';
+      b.setAttribute('aria-label', ok ? _t('Chỉ tới {kind} {name}', { kind: kindLabel(p.kind).toLowerCase(), name: name }) : _t('{name} — không còn', { name: name }));
+      b.title = ok ? kindLabel(p.kind) + ' · ' + p.id : _t('Phần tử này không còn nữa (đã xoá hoặc đổi id)');
+      b.lastChild.textContent = ok ? name : _t('{name} · không còn', { name: name });
     }
-    b.title = KIND_LABEL[p.kind] + ' · ' + p.id;
+    b.title = kindLabel(p.kind) + ' · ' + p.id;
     var ex = Anchors.exists(anchor);
     if (ex && typeof ex.then === 'function') ex.then(mark, function () { /* không kiểm được: giữ nguyên, bấm sẽ báo */ }); else mark(ex);
     return b;
@@ -278,7 +279,7 @@
       if (!this.cur || !document.contains(this.cur)) { this.ring.hidden = true; return; }
       var r = this.cur.getBoundingClientRect(), a = this.cur.getAttribute('data-anchor');
       this.ring.style.cssText = 'left:' + (r.left - 2) + 'px;top:' + (r.top - 2) + 'px;width:' + (r.width + 4) + 'px;height:' + (r.height + 4) + 'px';
-      this.tag.textContent = KIND_LABEL[Anchors.parse(a).kind] + ' · ' + (this.cur.getAttribute('data-anchor-label') || a);
+      this.tag.textContent = kindLabel(Anchors.parse(a).kind) + ' · ' + (this.cur.getAttribute('data-anchor-label') || a);
       this.tag.classList.toggle('below', r.top < 30);
       this.ring.hidden = false;
     },
@@ -303,8 +304,8 @@
   /* ============================================================ ghim (chip trong ô soạn) */
   function addPin(anchor, label) {
     if (!Anchors.valid(anchor)) return false;
-    if (S.pins.some(function (p) { return p.anchor === anchor; })) { toast('Đã ghim rồi.'); return false; }
-    if (S.pins.length >= MAX_PINS) { toast('Ghim tối đa ' + MAX_PINS + ' phần tử một tin.'); return false; }
+    if (S.pins.some(function (p) { return p.anchor === anchor; })) { toast(_t('Đã ghim rồi.')); return false; }
+    if (S.pins.length >= MAX_PINS) { toast(_t('Ghim tối đa {MAX_PINS} phần tử một tin.', { MAX_PINS: MAX_PINS })); return false; }
     var pin = { anchor: anchor, label: plain(label) || Anchors.labelOf(anchor), snap: '' };
     S.pins.push(pin);
     if (!S.open) setOpen(true);
@@ -316,7 +317,7 @@
     clear(E.pins);
     S.pins.forEach(function (p, i) {
       var c = chipEl(p.anchor, p.label, { pin: true });
-      E.pins.appendChild(h('span', { class: 'pinwrap' }, c, h('button', { type: 'button', class: 'pinx', 'aria-label': 'Bỏ ghim ' + p.label, onclick: function () { S.pins.splice(i, 1); paintPins(); E.ta.focus(); } }, '×')));
+      E.pins.appendChild(h('span', { class: 'pinwrap' }, c, h('button', { type: 'button', class: 'pinx', 'aria-label': _t('Bỏ ghim {label}', { label: p.label }), onclick: function () { S.pins.splice(i, 1); paintPins(); E.ta.focus(); } }, '×')));
     });
     E.pins.hidden = !S.pins.length;
     tokens();
@@ -332,7 +333,7 @@
     var n = S.pins.length, per = n ? Math.max(300, Math.min(1200, Math.floor(BUDGET / n))) : 0, typed = E.ta.value.length + 80, pins = 0, b = baseChars();
     S.pins.forEach(function (p) { pins += Math.min(p.snap.length, per) + p.label.length + p.anchor.length; });
     E.tok.textContent = '~' + Math.ceil((typed + pins + b.sys + b.ctx + b.hist) / 3) + ' token';
-    E.tok.title = 'Ước tính token vòng đầu của tin này: chữ bạn gõ ~' + Math.ceil(typed / 3) + ' + ' + n + ' phần tử ghim ~' + Math.ceil(pins / 3) + ' + chỉ dẫn của khu ~' + Math.ceil(b.sys / 3) + ' + dữ liệu giao diện ~' + Math.ceil(b.ctx / 3) + ' + lịch sử ~' + Math.ceil(b.hist / 3) + '. Mỗi lần AI gọi tool là một vòng nữa; số thật hiện dưới câu trả lời.';
+    E.tok.title = _t('Ước tính token vòng đầu của tin này: chữ bạn gõ ~{ceil} + {n} phần tử ghim ~{ceil2} + chỉ dẫn của khu ~{ceil3} + dữ liệu giao diện ~{ceil4} + lịch sử ~{ceil5}. Mỗi lần AI gọi tool là một vòng nữa; số thật hiện dưới câu trả lời.', { ceil: Math.ceil(typed / 3), n: n, ceil2: Math.ceil(pins / 3), ceil3: Math.ceil(b.sys / 3), ceil4: Math.ceil(b.ctx / 3), ceil5: Math.ceil(b.hist / 3) });
   }
 
   /* ============================================================ picker @ (khớp mờ) */
@@ -352,7 +353,7 @@
   }
   function mentionPaint() {
     clear(E.pop);
-    if (!Mention.list.length) { E.pop.appendChild(h('div', { class: 'pop-empty', text: 'Không thấy phần tử nào khớp' })); E.pop.hidden = false; return; }
+    if (!Mention.list.length) { E.pop.appendChild(h('div', { class: 'pop-empty', text: _t('Không thấy phần tử nào khớp') })); E.pop.hidden = false; return; }
     Mention.list.forEach(function (c, i) {
       var id = 'dockopt' + i;
       E.pop.appendChild(h('div', { id: id, role: 'option', class: 'pop-opt', 'aria-selected': String(i === Mention.idx), onmousedown: function (ev) { ev.preventDefault(); mentionPick(i); } },
@@ -402,7 +403,7 @@
     var i = S.info; if (!i) return '';
     var parts = [zoneLabel(i.zone)];
     parts.push(S.tabLabel || i.pageLabel);
-    if (S.obj && S.obj.label) parts.push(S.obj.label + (S.shotLabel ? ' · ' + S.shotLabel : ''));
+    if (S.obj && S.obj.label) parts.push(_l(S.obj.label) + (S.shotLabel ? ' · ' + S.shotLabel : ''));
     return parts.filter(Boolean);
   }
   function paintCtx() {
@@ -410,15 +411,15 @@
     var i = S.info;
     clear(E.ctx);
     if (!i) return;
-    E.role.textContent = (zoneOf(i.zone) || {}).short || 'Trợ lý';
+    E.role.textContent = _l((zoneOf(i.zone) || {}).short) || _t('Trợ lý');
     if (S.ctxOn) {
       var path = ctxPath();
-      E.ctx.appendChild(h('span', { class: 'lbl', text: 'Đang xem:' }));
+      E.ctx.appendChild(h('span', { class: 'lbl', text: _t('Đang xem:') }));
       E.ctx.appendChild(h('span', { class: 'path', title: path.join(' › ') }, path.map(function (p, n) { return [n ? h('span', { class: 'sep', 'aria-hidden': 'true', text: '›' }) : null, h(n === path.length - 1 ? 'b' : 'span', { text: p })]; })));
-      E.ctx.appendChild(h('button', { type: 'button', class: 'x', 'aria-label': 'Bỏ ngữ cảnh: không nói cho AI biết bạn đang xem gì', title: 'Bỏ ngữ cảnh (AI chỉ biết khu đang mở)', onclick: function () { S.ctxOn = false; paintCtx(); loadThread(); } }, '×'));
+      E.ctx.appendChild(h('button', { type: 'button', class: 'x', 'aria-label': _t('Bỏ ngữ cảnh: không nói cho AI biết bạn đang xem gì'), title: _t('Bỏ ngữ cảnh (AI chỉ biết khu đang mở)'), onclick: function () { S.ctxOn = false; paintCtx(); loadThread(); } }, '×'));
     } else {
-      E.ctx.appendChild(h('span', { class: 'lbl', text: 'Không gắn ngữ cảnh — AI chỉ biết khu ' + zoneLabel(i.zone) }));
-      E.ctx.appendChild(h('button', { type: 'button', class: 'btn sm', onclick: function () { S.ctxOn = true; paintCtx(); loadThread(); } }, 'Gắn lại'));
+      E.ctx.appendChild(h('span', { class: 'lbl', text: _t('Không gắn ngữ cảnh — AI chỉ biết khu {zoneLabel}', { zoneLabel: zoneLabel(i.zone) }) }));
+      E.ctx.appendChild(h('button', { type: 'button', class: 'btn sm', onclick: function () { S.ctxOn = true; paintCtx(); loadThread(); } }, _t('Gắn lại')));
     }
     paintQuick();
   }
@@ -427,14 +428,14 @@
     var list = B.quick(S.info, S.obj) || [];
     list.forEach(function (q) { E.quick.appendChild(h('button', { type: 'button', class: 'qk', title: q[1], onclick: function () { E.ta.value = q[1]; autosize(); tokens(); E.ta.focus(); } }, q[0])); });
     E.quick.hidden = !list.length;
-    var p = (zoneOf(S.info && S.info.zone) || {}).ask || 'Nhắn trợ lý…';
-    E.ta.placeholder = p + ' · gõ @ để gắn thứ đang xem · Alt+P chỉ vào màn hình';
+    var p = _l((zoneOf(S.info && S.info.zone) || {}).ask) || _t('Nhắn trợ lý…');
+    E.ta.placeholder = _t('{p} · gõ @ để gắn thứ đang xem · Alt+P chỉ vào màn hình', { p: p });
   }
   function msgEl(m) {
     var el = h('div', { class: 'msg ' + m.role + (m.err ? ' err' : '') });
     if (m.role === 'user' && m.pins && m.pins.length) el.appendChild(h('div', { class: 'pins' }, m.pins.map(function (p) { return chipEl(p.anchor, p.label, { pin: true }); })));
     var body = h('div', { class: 'tx' });
-    if (m.role === 'assistant') richText(m.content || '(đã làm, không lời)', body); else body.textContent = m.content || '';
+    if (m.role === 'assistant') richText(m.content || _t('(đã làm, không lời)'), body); else body.textContent = m.content || '';
     el.appendChild(body);
     if (m.log && m.log.length) {
       var lg = h('div', { class: 'toollog' });
@@ -444,9 +445,9 @@
     // kết quả tool (thứ vừa tạo / sửa) tự thành nút — kể cả khi AI quên nhắc trong lời
     var named = {}; (m.content || '').replace(CHIP_RE, function (_, a) { named[a.trim()] = 1; return ''; });
     var extra = (m.anchors || []).filter(function (a) { return Anchors.valid(a.anchor) && !named[a.anchor]; });
-    if (extra.length) el.appendChild(h('div', { class: 'made' }, h('span', { class: 'note', text: 'Vừa làm:' }), extra.map(function (a) { return chipEl(a.anchor, a.label); })));
-    if (m.usage && (m.usage.prompt || m.usage.completion)) el.appendChild(h('div', { class: 'usage note mono', title: 'Token THẬT nhà cung cấp tính cho lượt này (cộng mọi vòng gọi tool): vào = chỉ dẫn + dữ liệu giao diện + lịch sử + kết quả tool, ra = lời AI viết', text: 'token vào ' + m.usage.prompt + ' · ra ' + m.usage.completion }));
-    if (m.renders && m.renders.length) el.appendChild(h('div', { class: 'renders' }, m.renders.map(function (r) { return h('img', { src: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(r.svg), alt: 'Ảnh do tool ' + r.tool + ' dựng' }); })));
+    if (extra.length) el.appendChild(h('div', { class: 'made' }, h('span', { class: 'note', text: _t('Vừa làm:') }), extra.map(function (a) { return chipEl(a.anchor, a.label); })));
+    if (m.usage && (m.usage.prompt || m.usage.completion)) el.appendChild(h('div', { class: 'usage note mono', title: _t('Token THẬT nhà cung cấp tính cho lượt này (cộng mọi vòng gọi tool): vào = chỉ dẫn + dữ liệu giao diện + lịch sử + kết quả tool, ra = lời AI viết'), text: _t('token vào {prompt} · ra {completion}', { prompt: m.usage.prompt, completion: m.usage.completion }) }));
+    if (m.renders && m.renders.length) el.appendChild(h('div', { class: 'renders' }, m.renders.map(function (r) { return h('img', { src: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(r.svg), alt: _t('Ảnh do tool {tool} dựng', { tool: r.tool }) }); })));
     return el;
   }
   function paintLog() {
@@ -454,10 +455,10 @@
     clear(E.log);
     if (!S.msgs.length) E.log.appendChild(h('div', { class: 'dock-empty note' }, emptyText()));
     S.msgs.forEach(function (m) { E.log.appendChild(msgEl(m)); });
-    if (S.busy) E.log.appendChild(h('div', { class: 'msg assistant busy', role: 'status', text: 'AI đang làm (gọi tool của nhà xưởng)…' }));
+    if (S.busy) E.log.appendChild(h('div', { class: 'msg assistant busy', role: 'status', text: _t('AI đang làm (gọi tool của nhà xưởng)…') }));
     E.log.scrollTop = E.log.scrollHeight;
   }
-  function emptyText() { return (zoneOf(S.info && S.info.zone) || {}).intro || 'Tôi là trợ lý của gen-chibi — hỏi cách dùng hoặc nhờ làm việc ở khu đang mở.'; }
+  function emptyText() { return _l((zoneOf(S.info && S.info.zone) || {}).intro) || _t('Tôi là trợ lý của gen-chibi — hỏi cách dùng hoặc nhờ làm việc ở khu đang mở.'); }
 
   /* ============================================================ cấu hình AI (có key chưa) */
   function loadCfg() {
@@ -470,20 +471,20 @@
     clear(E.gate);
     var c = S.cfg;
     if (!c) { E.gate.hidden = true; return; }
-    if (c.off) E.gate.appendChild(h('div', { class: 'banner warn', role: 'status' }, h('span', { text: 'Trợ lý AI cần bản cài trên máy (server) và một API key LLM. Bản xem thử trong trình duyệt chỉ cho xem.' })));
+    if (c.off) E.gate.appendChild(h('div', { class: 'banner warn', role: 'status' }, h('span', { text: _t('Trợ lý AI cần bản cài trên máy (server) và một API key LLM. Bản xem thử trong trình duyệt chỉ cho xem.') })));
     else if (!c.hasKey || !c.model) E.gate.appendChild(h('div', { class: 'banner warn', role: 'status' },
-      h('span', { text: !c.hasKey ? 'Chưa có API key LLM — dán key ở Cài đặt AI để trợ lý trả lời.' : 'Chưa chọn model — chọn model ở Cài đặt AI.' }),
-      h('button', { type: 'button', class: 'btn sm primary', onclick: function () { B.go({ page: 'ai' }); } }, 'Mở Cài đặt AI ›')));
+      h('span', { text: !c.hasKey ? _t('Chưa có API key LLM — dán key ở Cài đặt AI để trợ lý trả lời.') : _t('Chưa chọn model — chọn model ở Cài đặt AI.') }),
+      h('button', { type: 'button', class: 'btn sm primary', onclick: function () { B.go({ page: 'ai' }); } }, _t('Mở Cài đặt AI ›'))));
     E.gate.hidden = !E.gate.firstChild;
     E.send.disabled = S.busy || !aiReady();
-    E.send.title = aiReady() ? 'Gửi (Ctrl/⌘ + Enter)' : 'Cần API key + model ở Cài đặt AI';
+    E.send.title = aiReady() ? _t('Gửi (Ctrl/⌘ + Enter)') : _t('Cần API key + model ở Cài đặt AI');
   }
 
   /* ============================================================ gửi */
   function send(text) {
     text = String(text == null ? E.ta.value : text).trim();
     if (!text || S.busy) return;
-    if (!aiReady()) { paintGate(); toast('Chưa có API key / model — mở Cài đặt AI.'); return; }
+    if (!aiReady()) { paintGate(); toast(_t('Chưa có API key / model — mở Cài đặt AI.')); return; }
     var pins = S.pins.slice(), sentCtx = ctxPayload(), key = S.key;
     S.msgs.push({ role: 'user', content: text, pins: pins.map(function (p) { return { anchor: p.anchor, label: p.label }; }) });
     S.busy = true; E.ta.value = ''; S.pins = []; paintPins(); autosize(); paintLog(); paintGate();
@@ -494,17 +495,17 @@
       .then(function (r) {
         if (S.key === key) { S.msgs.push({ role: 'assistant', content: r.reply || '', log: r.log, anchors: r.anchors, renders: r.renders, usage: r.usage }); S.sent = r.sent || null; S.sentKey = key; }
         if (r.work) Works.put(r.work);
-        if (S.key !== key) toast('AI đã trả lời ở luồng khác — mở lại đối tượng đó để xem.');
+        if (S.key !== key) toast(_t('AI đã trả lời ở luồng khác — mở lại đối tượng đó để xem.'));
         return Promise.resolve(B.refreshData(r)).catch(function () { /* nạp lại kho lỗi: chip kiểm lại ở lần vẽ sau */ });   // nạp kho TRƯỚC khi vẽ chip → chip của asset vừa tạo không bị báo "không còn"
       })
-      .catch(function (e) { if (S.key === key) S.msgs.push({ role: 'assistant', content: 'Lỗi: ' + e.message, err: true }); })
+      .catch(function (e) { if (S.key === key) S.msgs.push({ role: 'assistant', content: _t('Lỗi: {message}', { message: e.message }), err: true }); })
       .then(function () { S.busy = false; paintLog(); paintGate(); });
   }
   function autosize() { E.ta.style.height = 'auto'; E.ta.style.height = clamp(E.ta.scrollHeight + 2, 56, 160) + 'px'; }
   function clearThread() {
     var k = objKey();
-    if (!S.msgs.length || !window.confirm('Xoá luồng hội thoại này?\n\nChỉ xoá tin nhắn với trợ lý (' + ctxPath().join(' › ') + '); tác phẩm / asset giữ nguyên.')) return;
-    B.Store.api('DELETE', 'api/chats/' + encodeURIComponent(k.kind) + '/' + encodeURIComponent(k.id)).then(function () { S.msgs = []; paintLog(); toast('Đã xoá luồng.'); }).catch(function (e) { toast(e.message); });
+    if (!S.msgs.length || !window.confirm(_t('Xoá luồng hội thoại này?\n\nChỉ xoá tin nhắn với trợ lý ({ctxPath}); tác phẩm / asset giữ nguyên.', { ctxPath: ctxPath().join(' › ') }))) return;
+    B.Store.api('DELETE', 'api/chats/' + encodeURIComponent(k.kind) + '/' + encodeURIComponent(k.id)).then(function () { S.msgs = []; paintLog(); toast(_t('Đã xoá luồng.')); }).catch(function (e) { toast(e.message); });
   }
 
   /* ============================================================ mở / đóng / kéo rộng */

@@ -33,6 +33,9 @@
 (function (GC) {
   'use strict';
   var MY_PACK = 'local.my';
+  // NGÔN NGỮ (ADR 0007): chữ người xem thấy đi qua engine/i18n.js (Studio, phim xuất ra nhúng bảng player + engine); thiếu i18n thì giữ msgid
+  function _t(s, v) { var I = GC.i18n; return I ? I.t(s, v) : String(s).replace(/\{(\w+)\}/g, function (m, k) { return v && Object.prototype.hasOwnProperty.call(v, k) ? String(v[k]) : m; }); }
+  function _l(s) { var I = GC.i18n; return I ? I.label(s) : s; }
   var FILL = ['midLeft', 'midRight', 'left', 'right', 'center', 'backLeft', 'backRight', 'back'];
 
   function actors(shot) {
@@ -51,23 +54,24 @@
   // phân cảnh diễn được khi: có bối cảnh còn trong Thư viện, có diễn viên còn trong Thư viện, có lời thoại
   // MỘT định nghĩa "sẵn sàng" cho cả bảng tình trạng, sân khấu Studio và phim xuất ra
   function issues(s) {
-    var miss = [], sc = scene(s), acts = actors(s);
-    if (!s.scene) miss.push('bối cảnh'); else if (!sc) miss.push('bối cảnh đã bị xoá khỏi Thư viện');
-    if (!(s.cast || []).length) miss.push('diễn viên'); else if (acts.length < s.cast.length) miss.push((s.cast.length - acts.length) + ' diễn viên không còn trong Thư viện');
-    if (!s.event) miss.push('lời thoại');
-    if (sc && acts.length > sc.spots.length) miss.push('dàn diễn viên nhiều hơn chỗ đứng');
+    var miss = [], sc = scene(s), acts = actors(s), needs = [];
+    if (!s.scene) { miss.push(_t('bối cảnh')); needs.push('scene'); } else if (!sc) { miss.push(_t('bối cảnh đã bị xoá khỏi Thư viện')); needs.push('scene'); }
+    if (!(s.cast || []).length) { miss.push(_t('diễn viên')); needs.push('cast'); } else if (acts.length < s.cast.length) { miss.push(_t('{n} diễn viên không còn trong Thư viện', { n: s.cast.length - acts.length })); needs.push('cast'); }
+    if (!s.event) { miss.push(_t('lời thoại')); needs.push('event'); }
+    if (sc && acts.length > sc.spots.length) { miss.push(_t('dàn diễn viên nhiều hơn chỗ đứng')); needs.push('spots'); }
     // hành động (v0.16, CNS-042): đòn phải có (khung hoặc gói động tác đã nạp) và người làm phải làm được (needs) — thiếu thì BÁO, không lặng lẽ bỏ đòn
     var C = GC.choreo, AC = (C && C.ACTIONS) || {};
     (s.event && s.event.steps || []).forEach(function (st) {
       if (!st || !st.action) return;
-      if (!Object.prototype.hasOwnProperty.call(AC, st.action)) { miss.push('đòn "' + st.action + '" không có — cài / cập nhật gói động tác có đòn này'); return; }
+      if (!Object.prototype.hasOwnProperty.call(AC, st.action)) { miss.push(_t('đòn "{action}" không có — cài / cập nhật gói động tác có đòn này', { action: st.action })); needs.push('action'); return; }
       var who = acts.filter(function (a) { return a.id === st.actor; })[0];
-      if (who && C.canDo && !C.canDo(who, AC[st.action])) miss.push(who.name + ' không làm được "' + AC[st.action].label + '" (cần binh khí)');
+      if (who && C.canDo && !C.canDo(who, AC[st.action])) { miss.push(_t('{name} không làm được "{action}" (cần binh khí)', { name: who.name, action: _l(AC[st.action].label) })); needs.push('weapon'); }
     });
+    miss.needs = needs;   // mã loại thiếu (không phụ thuộc ngôn ngữ): scene · cast · event · spots · action · weapon
     return miss;
   }
   function readiness(work) {
-    return (work && work.shots || []).map(function (s, i) { var miss = issues(s); return { shot: s, index: i, ok: !miss.length, missing: miss }; });
+    return (work && work.shots || []).map(function (s, i) { var miss = issues(s); return { shot: s, index: i, ok: !miss.length, missing: miss.slice(), needs: miss.needs }; });
   }
   function still(shot) {
     var sc = scene(shot), acts = actors(shot);
@@ -163,7 +167,7 @@
       var me = s.actor, base = GC.LIB.states[s.state] || GC.LIB.states.normal;
       if (s.spot && GC.SCENE.spots[s.spot]) row[me] = GC.SCENE.spots[s.spot];
       var ac = s.action && own(AC, s.action) ? AC[s.action] : null, silent = ac && !String(s.say || '').trim();   // ra đòn không hô: chỉ có nhịp hành động
-      if (s.action && !ac) plan.warnings.push('bước ' + (i + 1) + ': đòn "' + s.action + '" không có — bỏ qua (cài / cập nhật gói động tác)');
+      if (s.action && !ac) plan.warnings.push(_t('bước {n}: đòn "{action}" không có — bỏ qua (cài / cập nhật gói động tác)', { n: i + 1, action: s.action }));
       var line = { type: 'line', i: i, actor: me, say: s.say == null ? '' : String(s.say), state: s.state, hold: s.hold || 0 };
       // đi tới chỗ mới khi spot đổi (chạy khi hoảng / giận hoặc đường xa)
       if (s.spot && s.spot !== cur[me]) {
@@ -228,7 +232,7 @@
         try {
           if (tg) tl = C.duel({ a: Pa, b: { asset: byId[tg], x: sx(cur[tg]), y: row[tg].y, k: row[tg].k }, action: s.action, react: beat.react, walls: walls });
           else { var o = to || nearest(me, ids, cur); tl = C.solo({ a: Pa, action: s.action, dir: o && sx(cur[o]) < Pa.x ? -1 : 1, walls: walls }); }
-        } catch (e) { tl = null; plan.warnings.push('bước ' + (i + 1) + ': không dựng được đòn "' + s.action + '" — ' + String(e.message).slice(0, 120)); }   // bỏ hành động, câu thoại vẫn diễn — nhưng BÁO (CNS-042)
+        } catch (e) { tl = null; plan.warnings.push(_t('bước {n}: không dựng được đòn "{action}" — {error}', { n: i + 1, action: s.action, error: String(e.message).slice(0, 120) })); }   // bỏ hành động, câu thoại vẫn diễn — nhưng BÁO (CNS-042)
         if (tl) {
           beat.real = Math.round(tl.real * 100) / 100; beat.dir = tl.duel.dir;
           beat.from = [Pa.x, tg ? sx(cur[tg]) : null];
@@ -287,6 +291,7 @@
       if (cap) {
         // phụ đề: dải dưới khung (giữa → sát trái / phải), lùi lên từng nấc nếu đầu người chiếm dải; cuối cùng mới tới dải trên
         var bot = H - 0.045 * H - h, step = 0.055 * H;
+        // i18n-ignore-start(tên ứng viên chỗ đặt lời thoại — mã gỡ lỗi, không hiện cho người xem)
         for (j = 0; j < 7; j++) { y = bot - j * step; add((W - w) / 2, y, j * 1.2, 'dưới'); add(m, y, j * 1.2 + 2, 'dưới-trái'); add(W - m - w, y, j * 1.2 + 2, 'dưới-phải'); }
         add((W - w) / 2, m, 16, 'trên'); add(m, m, 17, 'trên-trái'); add(W - m - w, m, 17, 'trên-phải');
       } else {
@@ -298,6 +303,7 @@
         add(scx - w / 2, m, 4, 'dải-trên'); add(m, m, 4.5, 'góc-trái'); add(W - m - w, m, 4.5, 'góc-phải');
         for (i = 0; i <= 6; i++) for (j = 0; j <= 4; j++) add(m + (W - 2 * m - w) * i / 6, m + (H - 2 * m - h) * j / 4, 7, 'lưới');   // quét thưa cả khung: còn chỗ sạch là tìm ra
         if (c.prev && c.prev.id === c.who) add(c.prev.cx - w / 2, c.prev.cy - h / 2, 0.5, 'giữ-chỗ');
+        // i18n-ignore-end
       }
       cs.forEach(function (k) {
         var R = { x0: k[0], y0: k[1], x1: k[0] + w, y1: k[1] + h }, hard = 0, soft = k[2], ho = 0, T = null;
@@ -539,6 +545,7 @@
   // nạp sẵn phông lời thoại (engine/fonts.js) để bong bóng đầu tiên không nhảy cỡ khi phông về muộn
   function warmFonts() {
     if (typeof document === 'undefined' || !document.fonts || !document.fonts.load) return Promise.resolve();
+    // i18n-ignore(chuỗi mẫu nạp glyph phông chữ, không hiện ra)
     return Promise.all(['500', '700', '800'].map(function (w) { return document.fonts.load(w + ' 16px "Be Vietnam Pro"', 'Aăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ'); })).catch(function () {});
   }
   var DIALOGS = ['auto', 'bubble', 'caption'];   // lời thoại: tự động (bong bóng khi có chỗ sạch, không thì phụ đề) · luôn bong bóng · luôn phụ đề
@@ -637,7 +644,7 @@
     function gate(p, line, r) {
       var ms = typeof opts.clipWait === 'function' ? opts.clipWait(line) : opts.clipWait;
       ms = typeof ms === 'number' && ms >= 0 ? ms : 2500;
-      if (!p.settled) progress((plan.shotTitle || '') + ' · đang chờ giọng thu sẵn…');
+      if (!p.settled) progress((plan.shotTitle || '') + ' · ' + _t('đang chờ giọng thu sẵn…'));
       return Promise.race([p, new Promise(function (ok) { timers.push(setTimeout(function () { ok(null); }, ms)); })]);
     }
     function panOf(id) { return pos[id] ? Math.max(-0.8, Math.min(0.8, (pos[id].x - 320) / 320)) : 0; }
@@ -773,7 +780,7 @@
     function build(shot, entering) {
       clearBox();
       var sc = scene(shot);
-      if (!sc) { box.appendChild(el('div', 'gcp-empty', shot ? 'Phân cảnh "' + shot.title + '" chưa có bối cảnh.' : 'Chưa có phân cảnh.')); return null; }
+      if (!sc) { box.appendChild(el('div', 'gcp-empty', shot ? _t('Phân cảnh "{title}" chưa có bối cảnh.', { title: shot.title }) : _t('Chưa có phân cảnh.'))); return null; }
       plan = direct(shot, { project: curProject() }) || { scene: sc, cast: actors(shot).slice(0, R.budget).map(function (a) { return { id: a.id, key: a.key, name: a.name, home: 'center', color: colorOf(a) }; }), beats: [] };
       shk = el('div', 'gcp-shk'); cam = el('div', 'gcp-cam'); ov = el('div', 'gcp-ov'); ov.setAttribute('aria-live', 'polite'); flash = el('div', 'gcp-flash');
       shk.appendChild(cam); box.appendChild(shk); box.appendChild(flash); box.appendChild(ov);
@@ -939,7 +946,7 @@
         progress((plan.shotTitle || '') + ' · ' + i + '/' + L.length);
         var go = Promise.resolve();
         if (line.move) { camera('wide'); go = wait(300, r).then(function () { sfx('whoosh', { gain: 0.35, pan: panOf(line.actor) }); return walk(line.actor, line.move.to, line.move.gait, r); }); }
-        if (line.type === 'act') { progress((plan.shotTitle || '') + ' · ' + line.label); lastCam = 'two'; return go.then(function () { return perform(line, r); }).then(next); }
+        if (line.type === 'act') { progress((plan.shotTitle || '') + ' · ' + _l(line.label)); lastCam = 'two'; return go.then(function () { return perform(line, r); }).then(next); }
         return go.then(function () {
           camera(line.camera, line.camOn, line.punch);
           if (line.camera !== 'wide' && line.camera !== lastCam) sfx(evSfx('cut', 'whoosh'), { gain: 0.18 });
@@ -966,7 +973,7 @@
     }
     return {
       show: function (shot) { stop(); return show(shot); },   // show huỷ vòng diễn đang chạy
-      stop: function () { stop(); progress('Đã dừng'); },
+      stop: function () { stop(); progress(_t('Đã dừng')); },
       destroy: function () { stop(); if (ro) ro.disconnect(); clearBox(); },
       plan: function () { return plan; },
       dialog: function () { return dialog; },
@@ -981,15 +988,15 @@
         stop();
         if (A) A.unlock();   // gọi ngay trong cú bấm của người xem (trình duyệt chỉ cho phát tiếng sau thao tác)
         var r = run, i = 0, ready = (list || []).filter(function (s) { return !issues(s).length; });
-        if (!ready.length) { progress('Chưa có phân cảnh nào đủ bối cảnh + diễn viên + lời thoại'); return false; }
+        if (!ready.length) { progress(_t('Chưa có phân cảnh nào đủ bối cảnh + diễn viên + lời thoại')); return false; }
         (function next() {
           if (i >= ready.length) {
-            progress((title || '') + ' · hết');
+            progress((title || '') + ' · ' + _t('hết'));
             if (A) { A.music(null); A.ambient(null); }
-            return card(title || 'Hết', 'hết', r, 2400).then(function () { if (opts.onEnd) opts.onEnd(); }).catch(function () {});
+            return card(title || _t('Hết'), _t('hết'), r, 2400).then(function () { if (opts.onEnd) opts.onEnd(); }).catch(function () {});
           }
           var shot = ready[i++];
-          return (ready.length > 1 ? card(shot.title, 'Phân cảnh ' + i + '/' + ready.length, r) : Promise.resolve())
+          return (ready.length > 1 ? card(shot.title, _t('Phân cảnh {i}/{n}', { i: i, n: ready.length }), r) : Promise.resolve())
             .then(function () { return playShot(shot, r); }).then(next)
             .catch(function () {});
         })();

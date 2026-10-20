@@ -2705,7 +2705,7 @@ if (!ONLY || ONLY === 'i18n') {
     const ctx = await b16.newContext({ viewport: { width: 1500, height: 950 } }), q = await ctx.newPage();
     q.on('pageerror', e => errs16.push(e.message));
     // 1) mặc định: tiếng Anh (máy không đặt GC_LANG, trình duyệt chưa chọn)
-    await q.goto(U + 'xuong'); await ready(q);
+    await q.goto(U + 'xuong'); await ready(q); await q.waitForSelector('.nav-item');   // go() đầu tiên ghi tuyến SAU khi verChip hiện — đợi xong rồi mới đặt tuyến
     const l0 = await q.evaluate(() => [document.documentElement.lang, localStorage.getItem('gc-lang'), document.querySelector('#langSwitch [aria-pressed="true"]') && document.querySelector('#langSwitch [aria-pressed="true"]').getAttribute('data-lang')]);
     if (l0.join() !== 'en,,en') throw new Error('mặc định phải là en: ' + l0.join());
     await q.evaluate(() => localStorage.setItem('gc-route-xuong', JSON.stringify({ page: 'lang' }))); await q.reload(); await ready(q);
@@ -2716,6 +2716,9 @@ if (!ONLY || ONLY === 'i18n') {
     await q.click('#langSwitch button[data-lang="vi"]');
     await q.waitForFunction(() => document.documentElement.lang === 'vi' && (document.querySelector('#crumbs b') || {}).textContent === 'Ngôn ngữ', null, { timeout: 4000 });
     if (!(await q.evaluate(() => window.__noReload === 1))) throw new Error('đổi ngôn ngữ không được tải lại trang (mất bản nháp)');
+    const navVi = await q.$$eval('.nav-item', els => els.map(e => e.textContent.trim()).join('|'));
+    if (!/Bàn chỉnh nhân vật/.test(navVi) || !/Cài đặt AI/.test(navVi) || /Character editor|AI settings/.test(navVi)) throw new Error('menu sau khi chuyển vi: ' + navVi);
+    if (!/Trợ lý AI/.test(await q.textContent('#dockToggle'))) throw new Error('nút dock sau khi chuyển vi: ' + await q.textContent('#dockToggle'));
     if ((await q.evaluate(() => localStorage.getItem('gc-lang'))) !== 'vi') throw new Error('không nhớ gc-lang');
     await q.reload(); await ready(q);
     if ((await q.evaluate(() => document.documentElement.lang)) !== 'vi' || (await q.textContent('#crumbs b')) !== 'Ngôn ngữ') throw new Error('tải lại không nhớ tiếng Việt');
@@ -2744,6 +2747,82 @@ if (!ONLY || ONLY === 'i18n') {
     if (await q2.evaluate(() => localStorage.getItem('gc-lang'))) throw new Error('?lang= không được ghi đè lựa chọn đã lưu');
     await put('en');
     console.log('  ✓ Mặc định của máy (PUT api/settings uiLang, /api/info): trình duyệt mới theo máy; ?lang= thắng mà không lưu');
+    // 5) QUÉT CHỮ VIỆT ở chế độ en (INT-18c): mọi trang chính + 5 tab phòng làm phim + dock — không còn ký tự có dấu tiếng Việt,
+    //    trừ nội dung người dùng: input / textarea / [data-user-content] / [lang="vi"] và mọi chuỗi có trong dữ liệu người dùng (bộ mẫu Tam Quốc: tên tướng, lời thoại…)
+    const H = { 'Content-Type': 'application/json', 'X-GC-Request': '1' };
+    const tq = JSON.parse(fs.readFileSync(path.join(ROOT, 'studio/mau/tam-quoc.json'), 'utf8'));
+    const imp = await fetch(U + 'api/projects/import', { method: 'POST', headers: H, body: JSON.stringify({ bundle: tq }) });
+    if (!imp.ok) throw new Error('nhập bộ mẫu Tam Quốc: ' + imp.status);
+    const VI = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ]/;
+    const userStr = new Set(), grab = o => { if (typeof o === 'string') { if (VI.test(o)) { userStr.add(o); o.split(/\n+/).forEach(x => x.trim() && userStr.add(x.trim())); } } else if (o && typeof o === 'object') Object.values(o).forEach(grab); };
+    const getJ = async p => { const r = await fetch(U + p); return r.ok ? r.json() : []; };
+    for (const p of ['api/assets', 'api/items', 'api/scenes', 'api/projects', 'api/motion-packs', 'api/sound-packs', 'api/parts']) grab(await getJ(p));
+    const works = await getJ('api/works'); grab(works);
+    for (const w of works) grab(await getJ('api/works/' + w.id));
+    const USER = [...userStr].sort((a, b) => b.length - a.length);
+    // câu ĐỘNG do engine ghép (core.js — cổng kiểm có số đếm): chưa dịch được bằng tra bảng nguyên câu; builder engine chuyển sang mẫu {n}.
+    // Đếm riêng và in cảnh báo — KHÔNG làm đỏ test; xoá dần danh sách này khi engine đã dịch (mục tiêu: rỗng).
+    const PENDING = ['^Dấu nhận diện bắt buộc \\(\\d+\\)$', '^Dựng đủ \\d+ trạng thái$', '^Dựng đủ \\d+ hoạt động \\(tư thế × di chuyển × động tác\\)$', '^Bản vẽ nghiêng 45°: \\d+/\\d+ linh kiện$',
+      '^thiếu: [a-z]+:', '^\\d+ phông$', '^\\d+ chỗ đứng$', '^\\d+/\\d+ đạo cụ · \\d+/\\d+ hạt · diễn viên ≤ \\d+$'];
+    const pendingSeen = new Set();
+    const scanEn = async (q, where) => (await q.evaluate(([USER, where, PENDING]) => {
+      const VI = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ]/;
+      const skip = el => !!el.closest('[data-user-content], [lang|="vi"], script, style, noscript, svg title');
+      const vis = el => { const v = el.closest('option, optgroup') ? el.closest('select') : el; return !!v && (v.checkVisibility ? v.checkVisibility({ visibilityProperty: true }) : v.getClientRects().length > 0); };
+      // bỏ nội dung người dùng theo NGUYÊN CỤM (biên là ký tự không phải chữ): chuỗi ngắn như "Hí" không được ăn mất một phần chữ giao diện
+      const RX = window.__gcUserRx || (window.__gcUserRx = USER.map(u => new RegExp('(?<![\\p{L}\\p{M}])' + u.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\p{L}\\p{M}])', 'gu')));
+      const strip = s => { for (let i = 0; i < USER.length; i++) if (s.indexOf(USER[i]) >= 0) s = s.replace(RX[i], ' '); return s; };
+      const tag = el => el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '');
+      const bad = new Set(), PEND = PENDING.map(p => new RegExp(p));
+      const pend = s => PEND.some(r => r.test(s.trim()));
+      const tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      for (let n; (n = tw.nextNode());) {
+        const el = n.parentElement; if (!el || !VI.test(n.nodeValue) || skip(el) || el.closest('input, textarea') || !vis(el)) continue;
+        const rest = strip(n.nodeValue); if (VI.test(rest)) bad.add((pend(rest) ? '~' : '') + where + ' · ' + tag(el) + ' · ' + rest.trim().slice(0, 100));
+      }
+      for (const el of document.body.querySelectorAll('[title], [placeholder], [aria-label], optgroup[label]')) {
+        if (skip(el) || !vis(el)) continue;
+        for (const a of ['title', 'placeholder', 'aria-label', 'label']) { const v = el.getAttribute(a); if (v && VI.test(v) && (a !== 'label' || el.tagName === 'OPTGROUP')) { const rest = strip(v); if (VI.test(rest)) bad.add((pend(rest) ? '~' : '') + where + ' · ' + tag(el) + ' [' + a + '] · ' + rest.trim().slice(0, 100)); } }
+      }
+      return [...bad];
+    }, [USER, where, PENDING])).filter(x => { if (x[0] === '~') { pendingSeen.add(x.slice(x.lastIndexOf(' · ') + 3)); return false; } return true; });
+    const ctxE = await b16.newContext({ viewport: { width: 1500, height: 950 } }), qe = await ctxE.newPage();
+    qe.on('pageerror', e => errs16.push(e.message)); qe.on('dialog', d => d.dismiss().catch(() => {}));
+    const found = [];
+    await qe.goto(U + '?lang=en'); await ready(qe); await qe.waitForSelector('.appcard');
+    found.push(...await scanEn(qe, 'Chọn khu'));
+    let nPages = 0;
+    for (const app of ['xuong', 'thu-vien', 'tao-tac']) {
+      await qe.goto(U + app + '?lang=en'); await ready(qe); await qe.waitForSelector('.nav-item');
+      const n = await qe.$$eval('.nav-item', els => els.length);
+      for (let i = 0; i < n; i++) {
+        const btn = (await qe.$$('.nav-item'))[i], label = (await btn.textContent()).trim();
+        await btn.click(); await qe.waitForTimeout(700); nPages++;
+        found.push(...await scanEn(qe, app + ' › ' + label));
+        if (/^Theme projects/.test(label) && await qe.$('.libcard.proj[title="mau-tam-quoc"]')) { await qe.click('.libcard.proj[title="mau-tam-quoc"]'); await qe.waitForTimeout(600); found.push(...await scanEn(qe, app + ' › ' + label + ' › Tam Quốc')); }
+        if (/^(Characters|Items|Scenes|Motions)/.test(label) && await qe.$('.libcard')) { await qe.click('.libcard'); await qe.waitForTimeout(600); found.push(...await scanEn(qe, app + ' › ' + label + ' › thẻ đầu')); }
+      }
+    }
+    // Tạo tác: phòng làm phim của tác phẩm Tam Quốc, đủ 5 tab
+    await qe.goto(U + 'tao-tac?lang=en#/tac-pham/tq-vuon-dao-xich-bich/script'); await ready(qe); await qe.waitForSelector('#wtab-script');
+    for (const t of ['script', 'shots', 'review', 'voice', 'publish']) { await qe.click('#wtab-' + t); await qe.waitForTimeout(700); found.push(...await scanEn(qe, 'Tạo tác › phòng làm phim › ' + t)); }
+    // phim HTML xuất ở chế độ en: chữ trình phát tiếng Anh + mang bảng player/engine để engine/player.js dịch lúc chạy; lời thoại giữ nguyên
+    await qe.click('#wtab-publish');
+    const [fdl16] = await Promise.all([qe.waitForEvent('download'), qe.click('button:text-is("Film (HTML)")')]);
+    const fp16 = path.join(home16, 'phim-en.html'); await fdl16.saveAs(fp16);
+    const fh = fs.readFileSync(fp16, 'utf8');
+    for (const w of ['>▶ Play<', '>■ Stop<', 'aria-label="Character voices"', '>Voice: auto<', 'Made with gen-chibi', 'I.setLang("en")']) if (!fh.includes(w)) throw new Error('phim xuất ra (en) thiếu ' + JSON.stringify(w));
+    if (!/I\.add\("en", \{[^]*"Đã dừng":"Stopped"/.test(fh)) throw new Error('phim xuất ra (en) không mang bảng player');
+    if (/>▶ Xem<|>■ Dừng</.test(fh)) throw new Error('phim xuất ra (en) còn nút tiếng Việt');
+    const pf = await ctxE.newPage(); await pf.goto('file://' + fp16); await pf.waitForFunction(() => window.GenChibi && window.GenChibi.film);
+    const fl = await pf.evaluate(() => [document.getElementById('play').textContent, window.GenChibi.i18n.lang(), window.GenChibi.i18n.t('Đã dừng')]);
+    if (fl.join('|') !== '▶ Play|en|Stopped') throw new Error('phim mở bằng file:// ở chế độ en: ' + fl.join('|'));
+    const uniq = [...new Set(found)];
+    if (process.env.GC_I18N_DUMP) fs.writeFileSync(process.env.GC_I18N_DUMP, uniq.join('\n') + '\n');   // GC_I18N_DUMP=<tệp>: ghi đủ danh sách để sửa
+    if (uniq.length) throw new Error('chế độ en còn ' + uniq.length + ' chữ tiếng Việt trên giao diện:\n      ' + uniq.slice(0, 60).join('\n      '));
+    if (pendingSeen.size) console.log('  ! ' + pendingSeen.size + ' câu động của engine (core.js, cổng kiểm) còn tiếng Việt — chờ builder engine: ' + [...pendingSeen].slice(0, 4).map(x => JSON.stringify(x.slice(0, 40))).join(', ') + (pendingSeen.size > 4 ? '…' : ''));
+    console.log('  ✓ Chế độ en: không còn chữ tiếng Việt trên ' + (nPages + 6) + ' trang / tab (Xưởng, Thư viện mọi mục, Tạo tác + 5 tab phòng làm phim, Hệ thống, dock Trợ lý AI) + phim HTML xuất ra (nút, bảng player, mở file://) — trừ nội dung người dùng (' + USER.length + ' chuỗi của bộ mẫu)');
+    await ctxE.close();
     if (errs16.length) throw new Error('lỗi trang: ' + errs16.slice(0, 3).join(' | '));
   } catch (e) { fail = 1; console.log('  ✗ i18n (ngôn ngữ giao diện):', e.message); }
   finally { await b16.close(); srv16.kill(); }

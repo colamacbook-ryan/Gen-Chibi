@@ -24,7 +24,8 @@ const mock = http.createServer((req, res) => {
 }).listen(MOCK, '127.0.0.1');
 const home = mkdtempSync(path.join(tmpdir(), 'gc-dock-'));
 const srv = spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home, GC_PORT: String(APP), GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' });
-const raw = (m, p, body) => fetch('http://127.0.0.1:' + APP + p, { method: m, headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: body ? JSON.stringify(body) : undefined });
+// X-GC-Lang: vi — các kiểm tra cũ so chữ tiếng Việt: gọi như Studio ở chế độ vi (ADR 0007; mặc định API của bản cài mới là en)
+const raw = (m, p, body, lang) => fetch('http://127.0.0.1:' + APP + p, { method: m, headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1', 'X-GC-Lang': lang || 'vi' }, body: body ? JSON.stringify(body) : undefined });
 const api = (m, p, body) => raw(m, p, body).then(r => r.json());
 let fail = 0; const ok = (c, m) => { if (c) console.log('   ✓', m); else { fail = 1; console.log('   ✗', m); } };
 const chat = (message, context, anchors) => api('POST', '/api/ai/agent', { message, context, anchors });
@@ -159,6 +160,8 @@ try {
 
   /* ---------------------------------------------------------------- CNS-124: nhãn khu từ server · CNS-119: token thật */
   const cfg = await api('GET', '/api/ai');
+  const cfgEn = await raw('GET', '/api/ai', null, 'en').then(r => r.json());
+  ok(cfgEn.zones && cfgEn.zones.khung.label === 'Core frame' && cfgEn.zones['tao-tac'].short === 'AI director' && !/[ạ-ỹđ]/.test(cfgEn.zones.xuong.intro), 'GET /api/ai theo X-GC-Lang: en → nhãn / vai / lời giới thiệu của khu bằng tiếng Anh (ADR 0007)');
   ok(cfg.zones && ['xuong', 'khung', 'thu-vien', 'tao-tac', 'he-thong'].every(z => cfg.zones[z] && cfg.zones[z].label && cfg.zones[z].short && cfg.zones[z].intro && cfg.zones[z].systemChars > 300) && cfg.zones.khung.label === 'Bộ khung', 'GET /api/ai trả zones: nhãn / vai ngắn / lời giới thiệu / cỡ chỉ dẫn của 5 khu (dock lấy từ đây, không chép lại)');
   script = []; reply = 'Xin chào.';
   const u1 = await chat('Đo token', WK), th1 = await api('GET', '/api/chats/work/phim-dock');

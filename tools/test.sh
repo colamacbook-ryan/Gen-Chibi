@@ -30,7 +30,12 @@ echo "   ✓ không có method trùng tên trong class (server)"
 
 echo "1b) ngôn ngữ (ADR 0007): i18n lõi (t / placeholder / số nhiều / fallback / langOf / tr) · bảng locales/en hợp lệ · độ phủ bản dịch"
 node tools/test-i18n.mjs || exit 1
-node tools/i18n-scan.mjs || exit 1
+node tools/i18n-scan.mjs --strict || exit 1
+# gói phát hành phải mang bảng dịch (thiếu locales/ thì bản cài chạy toàn msgid tiếng Việt)
+PKG_TMP="$(mktemp -d)"; PKG="$(bash tools/package.sh "$PKG_TMP" | tail -1)"
+PKG_LIST="$(tar -tzf "$PKG")"; rm -f "$PKG" "$PKG_TMP/SHA256SUMS"; rmdir "$PKG_TMP"   # chỉ xoá đúng hai tệp vừa tạo + thư mục rỗng
+for f in studio server engine player; do grep -q "/locales/en/$f.json$" <<< "$PKG_LIST" || { echo "   ✗ gói phát hành thiếu locales/en/$f.json"; exit 1; }; done
+echo "   ✓ gói phát hành có locales/en/{studio,server,engine,player}.json"
 
 echo "2) cổng kiểm thư viện"
 node -e '

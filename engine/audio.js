@@ -554,14 +554,15 @@
   }
   function renderWav(what, o) {
     o = o || {};
+    var _t = function (s, v) { return GC.i18n ? GC.i18n.t(s, v) : s.replace(/\{(\w+)\}/g, function (m, k) { return v && k in v ? String(v[k]) : m; }); };   // lỗi hiện cho người dùng (Studio › Âm thanh › Tải WAV) — ADR 0007
     var OC = W && (W.OfflineAudioContext || W.webkitOfflineAudioContext), S = GC.sounds, list = [].concat(what), cues = [], end = 0, i, c, d;
-    if (!OC) return Promise.reject(new Error('Trình duyệt không có OfflineAudioContext — không dựng được WAV'));
-    if (!S) return Promise.reject(new Error('Thiếu engine/sounds.js (thư viện âm)'));
+    if (!OC) return Promise.reject(new Error(_t('Trình duyệt không có OfflineAudioContext — không dựng được WAV')));
+    if (!S) return Promise.reject(new Error(_t('Thiếu engine/sounds.js (thư viện âm)')));
     if (!list.length || list.length > MAX_FX) return Promise.reject(new Error('renderWav: 1…' + MAX_FX + ' lần phát'));
     for (i = 0; i < list.length; i++) {
       c = list[i]; c = typeof c === 'string' ? { name: c } : Array.isArray(c) ? { delay: c[0], name: c[1] } : (c || {});
       d = S.get(c.name);
-      if (!d) return Promise.reject(new Error('Không có âm "' + String(c.name).slice(0, 32) + '" trong thư viện (GC.sounds.list)'));
+      if (!d) return Promise.reject(new Error(_t('Không có âm "{name}" trong thư viện (GC.sounds.list)', { name: String(c.name).slice(0, 32) })));
       c = { d: d, delay: clamp(c.delay, 0, 10, 0), gain: c.gain, pan: c.pan };
       cues.push(c); end = Math.max(end, c.delay + d.dur + 0.1);
     }

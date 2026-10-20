@@ -126,7 +126,8 @@
         this.resolvedLayers = c.layers;
         if (this.state !== null && (this.state !== s || director)) { this.t0 = performance.now(); this.popAt = this.t0; }
         this.state = s; this.resolved = c.state; this.director = director;
-        svg.setAttribute('aria-label', (this.asset.name || this.asset.id) + ' · ' + ((GC.LIB.states[s] || {}).label || s));
+        var _l = GC.i18n ? GC.i18n.label : function (x) { return x; };   // nhãn theo ngôn ngữ giao diện (ADR 0007); tên do người dùng đặt giữ nguyên
+        svg.setAttribute('aria-label', _l(this.asset.name || this.asset.id) + ' · ' + _l((GC.LIB.states[s] || {}).label || s));
         this.settled = false;
         return c.state;
       },

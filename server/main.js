@@ -46,12 +46,30 @@ const SETTINGS = path.join(DATA, 'settings.json');
 fs.mkdirSync(DATA, { recursive: true });
 
 function log(...a) { console.log(new Date().toISOString(), ...a); }
-// uiLang: ngôn ngữ mặc định của máy cho Studio / câu trả lời API (người dùng vẫn chọn riêng trong trình duyệt); trình cài đặt đặt qua GC_LANG
+// uiLang: ngôn ngữ mặc định của MÁY cho Studio / câu trả lời API (người dùng vẫn chọn riêng trong trình duyệt). Quy tắc — xem initUiLang()
 const UI_LANG0 = L10N.norm(process.env.GC_LANG) || 'en';
+const SETTINGS_EXISTED = fs.existsSync(path.join(HOME, 'data', 'settings.json'));   // đo TRƯỚC mọi lần ghi: phân biệt bản cài cũ (nâng cấp) với bản cài mới
 function settings() { const s = Object.assign({ autoUpdate: process.env.GC_AUTO_UPDATE !== '0', checkHours: 6, oauthRegister: true, uiLang: UI_LANG0 }, readJSON(SETTINGS, {})); if (!L10N.norm(s.uiLang)) s.uiLang = UI_LANG0; return s; }   // oauthRegister: cho agent tự đăng ký OAuth (v0.19; chỉ có tác dụng khi có GC_PUBLIC_URL)
 
 L10N.load(APP);
 const store = new Store(DATA);
+// NGÔN NGỮ MẶC ĐỊNH CỦA MÁY (ADR 0007) — một nguồn sự thật: settings.uiLang. Người mở Studio: ?lang= › gc-lang của trình duyệt › settings.uiLang › 'en'.
+//   GC_LANG ('en' | 'vi'; install.sh / `genchibi lang` ghi .env, docker-compose truyền vào; rỗng = không đặt): chủ máy đổi bằng CLI là lựa chọn MỚI NHẤT →
+//     khi khởi động thấy GC_LANG khác giá trị đã áp lần trước (settings.uiLangEnv) thì chép vào settings.uiLang. GC_LANG không đổi thì không đè.
+//   Studio (Hệ thống › Ngôn ngữ) PUT { uiLang } đổi settings.uiLang — giữ tới lần GC_LANG đổi tiếp.
+//   NÂNG CẤP từ ≤ v0.19 (Gen quyết): GC_LANG rỗng + chưa có settings.uiLang + data có từ trước (settings.json đã có, hoặc có tác phẩm / asset)
+//     → ghi settings.uiLang = 'vi' MỘT lần: bản cài cũ không tự đổi sang tiếng Anh. Bản cài mới (data trống) → 'en' (không ghi gì).
+function initUiLang() {
+  const env = L10N.norm(process.env.GC_LANG), s = readJSON(SETTINGS, {});
+  if (env && env !== s.uiLangEnv) {
+    s.uiLang = env; s.uiLangEnv = env; writeJSON(SETTINGS, s);
+    log('[i18n] GC_LANG=' + env + ' → ngôn ngữ mặc định của máy = ' + env);
+  } else if (!env && !L10N.norm(s.uiLang) && (SETTINGS_EXISTED || store.listWorks().length || store.listAssets().length)) {
+    s.uiLang = 'vi'; writeJSON(SETTINGS, s);
+    log('[i18n] nâng cấp bản cài cũ: giữ giao diện tiếng Việt (settings.uiLang = vi, chỉ một lần; đổi ở Hệ thống › Ngôn ngữ hoặc genchibi lang)');
+  }
+}
+initUiLang();
 const engine = loadEngine(APP);
 const updater = new Updater({ home: HOME, version: VERSION, repo: REPO, feedUrl: process.env.GC_FEED_URL, log, token: process.env.GC_GITHUB_TOKEN || '' });
 const secrets = new Secrets(DATA);
@@ -81,6 +99,14 @@ function localize(res, body) {
   const out = Object.assign({}, body);
   if (hasErr) out.error = L10N.label(lang, body.error);
   if (hasList) out.errors = body.errors.map(x => typeof x === 'string' ? L10N.label(lang, x) : x);
+  return out;
+}
+// cấu hình AI cho Studio: chữ người đọc (nhãn nhà cung cấp, nhãn / vai / lời giới thiệu của từng khu ở dock) theo ngôn ngữ người gọi
+function aiView(lang, c) {
+  const L = s => typeof s === 'string' ? L10N.label(lang, s) : s;
+  const out = Object.assign({}, c);
+  if (c.providers) { out.providers = {}; Object.keys(c.providers).forEach(k => { out.providers[k] = Object.assign({}, c.providers[k], { label: L(c.providers[k].label) }); }); }
+  if (c.zones) { out.zones = {}; Object.keys(c.zones).forEach(k => { const z = c.zones[k]; out.zones[k] = Object.assign({}, z, { label: L(z.label), short: L(z.short), intro: L(z.intro), ask: L(z.ask) }); }); }
   return out;
 }
 function send(res, code, body, type, extra) {
@@ -224,9 +250,10 @@ async function dockTurn(b) {
 const OAUTH_RATE = Math.max(1, Math.min(100, Math.round(+process.env.GC_OAUTH_RATE) || 1));
 // Cho agent tự đăng ký: công tắc của chủ (Cài đặt › Kết nối agent), mặc định BẬT
 const registerOn = () => settings().oauthRegister !== false;
-function oauthView() {
+function oauthView(lang) {   // lang: nhãn / mô tả phạm vi theo ngôn ngữ người gọi (Studio › Kết nối agent)
+  const L = s => lang ? L10N.label(lang, s) : s;
   return { enabled: oauth.enabled, configured: !!PUBLIC_URL, publicUrl: oauth.publicUrl, mcpUrl: oauth.enabled ? oauth.resource : null, register: registerOn(), tokenSet: !!API_TOKEN,
-    scopes: OAUTH_SCOPES.map(id => Object.assign({ id }, OAUTH_SCOPE_INFO[id])), redirects: oauth.redirects, accessTtl: oauth.accessTtl, clients: oauth.list() };
+    scopes: OAUTH_SCOPES.map(id => Object.assign({ id }, OAUTH_SCOPE_INFO[id], { label: L(OAUTH_SCOPE_INFO[id].label), desc: L(OAUTH_SCOPE_INFO[id].desc) })), redirects: oauth.redirects, accessTtl: oauth.accessTtl, clients: oauth.list() };
 }
 // /.well-known/oauth-* và /oauth/*. Trả true nếu đã trả lời. Tắt (thiếu GC_PUBLIC_URL) → 404 để /mcp 401 trơn như cũ
 async function oauthRoute(req, res, url, p, m) {
@@ -374,7 +401,7 @@ async function route(req, res) {
   }
 
   // ---- kết nối agent (OAuth, v0.19): chủ máy duyệt + quản lý. Đã qua cổng /api: token chủ máy (hoặc cục bộ không token) + X-GC-Request + originOK — KHÔNG tin cổng đăng nhập ngoài app
-  if (p === '/api/oauth' && m === 'GET') return send(res, 200, oauthView());
+  if (p === '/api/oauth' && m === 'GET') return send(res, 200, oauthView(langOf(req)));
   if (p === '/api/oauth/approve' && m === 'POST') {
     if (!oauth.enabled) return fail(res, 404, 'OAuth chưa bật — đặt GC_PUBLIC_URL');
     const b = await body(req, 8 * 1024), r = oauth.approve(b.request, b.decision, typeof b.scope === 'string' ? b.scope : '');
@@ -383,12 +410,12 @@ async function route(req, res) {
     return send(res, 200, { redirect: r.redirect });
   }
   const ocm = p.match(/^\/api\/oauth\/clients\/(?!(?:__proto__|constructor|prototype)(?:\/|$))([A-Za-z0-9_-]{1,128})(\/revoke)?$/);
-  if (ocm && !ocm[2] && m === 'PUT') { const b = await body(req, 4 * 1024); return oauth.setScope(ocm[1], b.scope) ? send(res, 200, oauthView()) : fail(res, 400, 'client không có hoặc phạm vi không hợp lệ'); }
-  if (ocm && ocm[2] && m === 'POST') { if (!oauth.revokeClient(ocm[1])) return fail(res, 404, 'không có client này'); log('[oauth] chủ máy thu hồi một kết nối agent'); return send(res, 200, oauthView()); }
+  if (ocm && !ocm[2] && m === 'PUT') { const b = await body(req, 4 * 1024); return oauth.setScope(ocm[1], b.scope) ? send(res, 200, oauthView(langOf(req))) : fail(res, 400, 'client không có hoặc phạm vi không hợp lệ'); }
+  if (ocm && ocm[2] && m === 'POST') { if (!oauth.revokeClient(ocm[1])) return fail(res, 404, 'không có client này'); log('[oauth] chủ máy thu hồi một kết nối agent'); return send(res, 200, oauthView(langOf(req))); }
 
   // ---- core AI (LLM qua API chuẩn OpenAI; key mã hoá, không trả về trình duyệt)
-  if (p === '/api/ai' && m === 'GET') return send(res, 200, Object.assign(ai.publicConfig(), { zones: mcp.zoneInfo() }));   // zones: nhãn / vai / lời giới thiệu theo khu cho dock (một nguồn: mcp ZONES)
-  if (p === '/api/ai' && m === 'PUT') return send(res, 200, ai.setConfig(await body(req)));
+  if (p === '/api/ai' && m === 'GET') return send(res, 200, aiView(langOf(req), Object.assign(ai.publicConfig(), { zones: mcp.zoneInfo() })));   // zones: nhãn / vai / lời giới thiệu theo khu cho dock (một nguồn: mcp ZONES)
+  if (p === '/api/ai' && m === 'PUT') return send(res, 200, aiView(langOf(req), ai.setConfig(await body(req))));
   if (p === '/api/ai/models' && m === 'GET') {
     try { return send(res, 200, await ai.models()); } catch (e) { return fail(res, e.code || 502, 'Không lấy được danh sách model: ' + e.message); }
   }

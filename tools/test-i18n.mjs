@@ -75,4 +75,40 @@ for (const f of fs.readdirSync(path.join(ROOT, 'locales/en')).filter(x => x.ends
 const { loadEngine } = require(ROOT + '/server/engine-node.js');
 const GC = loadEngine(ROOT);
 ok(GC.i18n && GC.i18n.lang() === 'vi', 'loadEngine: GC.i18n có trong vm, ngôn ngữ chung = vi');
+
+// HỢP ĐỒNG GC_LANG + QUY TẮC NÂNG CẤP (server/main.js initUiLang): dựng server thật trên GC_HOME tạm, đọc /api/info › uiLang
+const { spawn } = await import('child_process');
+const os = await import('os');
+let port = 7681;
+async function boot(home, lang, put) {
+  const p = port++, out = [];
+  const srv = spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home, GC_PORT: String(p), GC_NO_AUTOCHECK: '1', GC_LANG: lang || '', GC_API_TOKEN: '' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  srv.stdout.on('data', d => out.push(String(d)));
+  try {
+    const U = 'http://127.0.0.1:' + p;
+    for (let i = 0; i < 80; i++) { try { if ((await fetch(U + '/api/health')).ok) break; } catch (e) { /* chưa lên */ } await new Promise(r => setTimeout(r, 100)); }
+    if (put) await fetch(U + '/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify({ uiLang: put }) });
+    const info = await (await fetch(U + '/api/info')).json();
+    return { uiLang: info.uiLang, log: out.join(''), file: fs.existsSync(path.join(home, 'data/settings.json')) ? JSON.parse(fs.readFileSync(path.join(home, 'data/settings.json'), 'utf8')) : null };
+  } finally { srv.kill(); await new Promise(r => srv.once('exit', r)); }
+}
+const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'gc-i18n-'));
+{ const h = tmp(); const r = await boot(h);
+  ok(r.uiLang === 'en' && !r.file, 'bản cài mới (data trống, không GC_LANG) → en, không ghi settings.json'); }
+{ const h = tmp(); fs.mkdirSync(path.join(h, 'data'), { recursive: true }); fs.writeFileSync(path.join(h, 'data/settings.json'), JSON.stringify({ autoUpdate: true, checkHours: 6 }));
+  const r = await boot(h), r2 = await boot(h);
+  ok(r.uiLang === 'vi' && r.file && r.file.uiLang === 'vi' && /nâng cấp bản cài cũ/.test(r.log), 'nâng cấp ≤ v0.19 (settings.json có sẵn) → giữ vi, ghi settings.uiLang = vi + log một dòng');
+  ok(r2.uiLang === 'vi' && !/nâng cấp bản cài cũ/.test(r2.log), 'migration chỉ chạy MỘT lần (lần khởi động sau không ghi lại)'); }
+{ const h = tmp(); const { Store } = require(ROOT + '/server/store.js'); new Store(path.join(h, 'data')).saveWork({ id: 'cu', title: 'Phim cũ', shots: [] });
+  const r = await boot(h);
+  ok(r.uiLang === 'vi', 'nâng cấp: chưa có settings.json nhưng đã có tác phẩm → vi'); }
+{ const h = tmp(); fs.mkdirSync(path.join(h, 'data'), { recursive: true }); fs.writeFileSync(path.join(h, 'data/settings.json'), JSON.stringify({ autoUpdate: true }));
+  const r = await boot(h, 'en');
+  ok(r.uiLang === 'en', 'bản cài cũ nhưng trình cài / genchibi lang đặt GC_LANG=en → en (GC_LANG thắng migration)'); }
+{ const h = tmp();
+  const a = await boot(h, 'vi'); ok(a.uiLang === 'vi' && a.file.uiLangEnv === 'vi', 'GC_LANG=vi lúc cài → mặc định máy vi');
+  const b = await boot(h, 'vi', 'en'); ok(b.uiLang === 'en', 'Studio PUT uiLang=en đổi mặc định máy');
+  const c = await boot(h, 'vi'); ok(c.uiLang === 'en', 'khởi động lại, GC_LANG không đổi → giữ lựa chọn của Studio (en)');
+  const d = await boot(h, 'en'), e = await boot(h, 'vi'); ok(d.uiLang === 'en' && e.uiLang === 'vi', 'genchibi lang đổi GC_LANG → lần khởi động đó thắng (en rồi vi)');
+  const g = await boot(h, ''); ok(g.uiLang === 'vi', 'GC_LANG rỗng / không đặt → giữ settings.uiLang'); }
 process.exit(fail);
