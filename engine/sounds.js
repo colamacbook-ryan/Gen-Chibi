@@ -35,6 +35,9 @@
 (function (GC) {
   'use strict';
   var hasOwn = function (o, k) { return o != null && Object.prototype.hasOwnProperty.call(o, k); };
+  // NGÔN NGỮ (ADR 0007): câu engine sinh vẫn TIẾNG VIỆT (msgid). N_(msgid, vars): đánh dấu msgid (tools/i18n-scan.mjs) + điền {biến} — KHÔNG dịch;
+  // Studio / server dịch ở chỗ hiển thị (t(msgid, vars) hoặc khớp ngược mẫu — engine/i18n-msg.js)
+  function N_(id, vars) { return !vars ? id : id.replace(/\{([A-Za-z0-9_]+)\}/g, function (m, k) { return hasOwn(vars, k) ? String(vars[k]) : m; }); }
   var FORMAT = 'gen-chibi.sound/1', FRAME = 'gen.am';
 
   /* --------------------------------------------------------------- từ vựng */
@@ -146,19 +149,19 @@
   function validateSoundPack(pack, opts) {
     opts = opts || {};
     var errs = [], E = function (m) { if (errs.length < 40) errs.push(m); };
-    if (!pack || typeof pack !== 'object' || Array.isArray(pack)) return { errors: ['gói âm phải là object'], def: null };
+    if (!pack || typeof pack !== 'object' || Array.isArray(pack)) return { errors: [N_('gói âm phải là object')], def: null };
     var size;
-    try { size = JSON.stringify(pack).length; } catch (x) { return { errors: ['gói không phải JSON thuần'], def: null }; }
-    if (size > BUDGET.bytes) return { errors: ['gói quá lớn (tối đa ' + BUDGET.bytes / 1000 + ' KB)'], def: null };
+    try { size = JSON.stringify(pack).length; } catch (x) { return { errors: [N_('gói không phải JSON thuần')], def: null }; }
+    if (size > BUDGET.bytes) return { errors: [N_('gói quá lớn (tối đa {n} KB)', { n: BUDGET.bytes / 1000 })], def: null };
     // không có mã: mọi giá trị phải là JSON thuần (hàm / symbol / bigint / getter đều là lỗi), không khoá nguy hiểm
     (function scan(v, p, depth) {
-      if (depth > 8) { E(p + ': lồng quá sâu'); return; }
+      if (depth > 8) { E(p + ': ' + N_('lồng quá sâu')); return; }
       var t = typeof v;
-      if (t === 'function' || t === 'symbol' || t === 'bigint' || t === 'undefined') { E(p + ': chứa mã / kiểu không phải dữ liệu (' + t + ') — gói chỉ được có số + chuỗi'); return; }
+      if (t === 'function' || t === 'symbol' || t === 'bigint' || t === 'undefined') { E(p + ': ' + N_('chứa mã / kiểu không phải dữ liệu ({type}) — gói chỉ được có số + chuỗi', { type: t })); return; }
       if (v && t === 'object') Object.keys(v).forEach(function (k) {
-        if (hasOwn(BAD_KEYS, k) || k === '__proto__') { E(p + '.' + k + ': tên khoá dành riêng của JavaScript'); return; }
+        if (hasOwn(BAD_KEYS, k) || k === '__proto__') { E(p + '.' + k + ': ' + N_('tên khoá dành riêng của JavaScript')); return; }
         var d = Object.getOwnPropertyDescriptor(v, k);
-        if (d && (d.get || d.set)) { E(p + '.' + k + ': getter / setter là mã — không cho phép'); return; }
+        if (d && (d.get || d.set)) { E(p + '.' + k + ': ' + N_('getter / setter là mã — không cho phép')); return; }
         scan(v[k], p + '.' + k, depth + 1);
       });
     })(pack, 'pack', 0);
@@ -169,62 +172,62 @@
     var notes = [], EL = opts.tolerant ? function (m) { notes.push(m); } : E;
     var d = { format: FORMAT, kind: 'sound' };
     Object.keys(pack).forEach(function (k) {
-      if (k === 'partial') EL('pack.partial: đây là gói CHỈ CÓ MỘT PHẦN (get_sound_pack › names) — lưu sẽ làm gói co lại; lấy gói đầy đủ (không truyền names), sửa rồi lưu');
-      else if (PACK_META.indexOf(k) < 0) EL('pack.' + k.slice(0, 20) + ': khoá lạ ở cấp gói (được dùng: ' + PACK_KEYS.join(', ') + ')');
+      if (k === 'partial') EL('pack.partial: ' + N_('đây là gói CHỈ CÓ MỘT PHẦN (get_sound_pack › names) — lưu sẽ làm gói co lại; lấy gói đầy đủ (không truyền names), sửa rồi lưu'));
+      else if (PACK_META.indexOf(k) < 0) EL('pack.' + k.slice(0, 20) + ': ' + N_('khoá lạ ở cấp gói (được dùng: {ids})', { ids: PACK_KEYS.join(', ') }));
     });
-    if (pack.format !== undefined && pack.format !== FORMAT) E('format: phải là "' + FORMAT + '"');
+    if (pack.format !== undefined && pack.format !== FORMAT) E('format: ' + N_('phải là "{code}"', { code: FORMAT }));
     var id = String(pack.id == null ? '' : pack.id);
-    if (opts.frame) { if (id !== FRAME) E('id: gói khung phải là "' + FRAME + '"'); }
-    else if (!PACK_RE.test(id)) E('id: chữ thường, số, gạch nối, 2–40 ký tự (vd. "tam-quoc-am")' + (/^gen\./.test(id) ? ' — tiền tố "gen." dành cho gói khung' : ''));
-    else if (RESERVED_IDS.indexOf(id) >= 0 || id in Object.prototype) E('id: "' + id + '" là tên dành riêng của JavaScript — đổi id');
+    if (opts.frame) { if (id !== FRAME) E('id: ' + N_('gói khung phải là "{code}"', { code: FRAME })); }
+    else if (!PACK_RE.test(id)) E('id: ' + (/^gen\./.test(id) ? N_('chữ thường, số, gạch nối, 2–40 ký tự (vd. "tam-quoc-am") — tiền tố "gen." dành cho gói khung') : N_('chữ thường, số, gạch nối, 2–40 ký tự (vd. "tam-quoc-am")')));
+    else if (RESERVED_IDS.indexOf(id) >= 0 || id in Object.prototype) E('id: ' + N_('"{id}" là tên dành riêng của JavaScript — đổi id', { id: id }));
     d.id = id; d.name = plainText(pack.name || id, 60); d.description = plainText(pack.description, 300);
-    if (pack.project != null && pack.project !== '' && !PROJ_RE.test(String(pack.project))) E('project: slug dự án');
+    if (pack.project != null && pack.project !== '' && !PROJ_RE.test(String(pack.project))) E('project: ' + N_('slug dự án'));
     d.project = pack.project ? String(pack.project) : '';
     d.version = Math.max(1, Math.floor(+pack.version) || 1);
     d.status = pack.status === 'published' ? 'published' : 'draft';
     // giấy phép / chủ sở hữu / tác giả đi theo gói (nạp, lưu, xuất, bán) — INT-02
     ['license', 'owner', 'author'].forEach(function (k) {
       if (pack[k] === undefined) return;
-      if (typeof pack[k] !== 'string') { E('pack.' + k + ': cần chuỗi'); return; }
+      if (typeof pack[k] !== 'string') { E('pack.' + k + ': ' + N_('cần chuỗi')); return; }
       var t = plainText(pack[k], k === 'license' ? 200 : 60); if (t) d[k] = t;
     });
     var shared = !d.project && !opts.frame;   // gói dùng chung (không dự án) — không phải bộ khung
     var S = pack.sounds;
-    if (!S || typeof S !== 'object' || Array.isArray(S)) { E('sounds: cần object { tên: âm }'); return { errors: errs, def: null }; }
+    if (!S || typeof S !== 'object' || Array.isArray(S)) { E('sounds: ' + N_('cần object { tên: âm }')); return { errors: errs, def: null }; }
     var names = Object.keys(S);
-    if (!names.length || names.length > BUDGET.sounds) E('sounds: 1…' + BUDGET.sounds + ' âm (đang có ' + names.length + ')');
+    if (!names.length || names.length > BUDGET.sounds) E('sounds: ' + N_('1…{max} âm (đang có {n})', { max: BUDGET.sounds, n: names.length }));
     d.sounds = {};
     names.slice(0, BUDGET.sounds).forEach(function (nm) {
       var p = 'sounds.' + nm.slice(0, 32);
-      if (!NAME_RE.test(nm) || nm.length < 2 || nm.length > 32) { E(p + ': tên âm chữ thường ASCII + gạch nối, 2–32 ký tự (vd. "kiem-cham")'); return; }
-      if (nm in Object.prototype) { E(p + ': tên dành riêng của JavaScript — đổi tên'); return; }
+      if (!NAME_RE.test(nm) || nm.length < 2 || nm.length > 32) { E(p + ': ' + N_('tên âm chữ thường ASCII + gạch nối, 2–32 ký tự (vd. "kiem-cham")')); return; }
+      if (nm in Object.prototype) { E(p + ': ' + N_('tên dành riêng của JavaScript — đổi tên')); return; }
       var s = checkSound(S[nm], p, E);
       // cue của gói dùng chung đổi âm tự gán của KHUNG ở mọi dự án (ranh giới tin cậy, INT-10): chỉ gói thuộc một dự án mới có cue, và chỉ trong dự án đó
-      if (s && s.cue && shared) { EL(p + '.cue: gói dùng chung không được đổi âm tự gán của khung — đặt "project" của gói (cue chỉ có hiệu lực trong dự án đó)'); if (opts.tolerant) delete s.cue; }
+      if (s && s.cue && shared) { EL(p + '.cue: ' + N_('gói dùng chung không được đổi âm tự gán của khung — đặt "project" của gói (cue chỉ có hiệu lực trong dự án đó)')); if (opts.tolerant) delete s.cue; }
       if (s) d.sounds[nm] = s;
     });
     return { errors: errs, def: errs.length ? null : d, notes: notes };
   }
 
   function checkSound(s0, p, E) {
-    if (!s0 || typeof s0 !== 'object' || Array.isArray(s0)) { E(p + ': cần object'); return null; }
+    if (!s0 || typeof s0 !== 'object' || Array.isArray(s0)) { E(p + ': ' + N_('cần object')); return null; }
     var s = {}, n0 = 0;
-    Object.keys(s0).forEach(function (k) { if (SOUND_KEYS.indexOf(k) < 0) E(p + '.' + k.slice(0, 20) + ': khoá lạ (được dùng: ' + SOUND_KEYS.join(', ') + ')'); });
+    Object.keys(s0).forEach(function (k) { if (SOUND_KEYS.indexOf(k) < 0) E(p + '.' + k.slice(0, 20) + ': ' + N_('khoá lạ (được dùng: {ids})', { ids: SOUND_KEYS.join(', ') })); });
     var fixed = function (v, lo, hi, path, dflt) {
       if (v === undefined && dflt !== undefined) return dflt;
-      if (!isNum(v) || v < lo || v > hi) { E(path + ': cần số trong khoảng ' + lo + '…' + hi); return lo; }
+      if (!isNum(v) || v < lo || v > hi) { E(path + ': ' + N_('cần số trong khoảng {min}…{max}', { min: lo, max: hi })); return lo; }
       return v;
     };
-    if (typeof s0.label !== 'string' || !plainText(s0.label, 40)) E(p + '.label: cần nhãn tiếng Việt (≤ 40 ký tự)');
+    if (typeof s0.label !== 'string' || !plainText(s0.label, 40)) E(p + '.label: ' + N_('cần nhãn (≤ 40 ký tự)'));   // nhãn viết bằng ngôn ngữ của người dùng / dự án (INT-18)
     s.label = plainText(s0.label, 40);
-    if (!hasOwn(CAT_LABEL, s0.cat)) E(p + '.cat: chọn ' + CATS.map(function (c) { return c[0]; }).join(', '));
+    if (!hasOwn(CAT_LABEL, s0.cat)) E(p + '.cat: ' + N_('chọn {ids}', { ids: CATS.map(function (c) { return c[0]; }).join(', ') }));
     s.cat = String(s0.cat);
-    if (typeof s0.use !== 'string' || !s0.use.trim()) E(p + '.use: cần một câu "dùng khi" (≤ 160 ký tự)');
-    else if (s0.use.length > 160) E(p + '.use: dài quá 160 ký tự');
+    if (typeof s0.use !== 'string' || !s0.use.trim()) E(p + '.use: ' + N_('cần một câu "dùng khi" (≤ 160 ký tự)'));
+    else if (s0.use.length > 160) E(p + '.use: ' + N_('dài quá 160 ký tự'));
     s.use = plainText(s0.use, 160);
     s.tags = [];
     if (s0.tags !== undefined) {
-      if (!Array.isArray(s0.tags) || s0.tags.length > BUDGET.tags || s0.tags.some(function (t) { return typeof t !== 'string' || !t.trim() || t.length > 24; })) E(p + '.tags: mảng ≤ ' + BUDGET.tags + ' chuỗi, mỗi chuỗi ≤ 24 ký tự');
+      if (!Array.isArray(s0.tags) || s0.tags.length > BUDGET.tags || s0.tags.some(function (t) { return typeof t !== 'string' || !t.trim() || t.length > 24; })) E(p + '.tags: ' + N_('mảng ≤ {n} chuỗi, mỗi chuỗi ≤ 24 ký tự', { n: BUDGET.tags }));
       else s.tags = s0.tags.map(function (t) { return plainText(t, 24); });
     }
     s.dur = fixed(s0.dur, 0.03, BUDGET.dur, p + '.dur');
@@ -235,11 +238,11 @@
     if (s0.cue !== undefined) { var c = checkCue(s0.cue, p + '.cue', E); if (c) s.cue = c; }
     var lanesN = 0;
     if (s0.lanes !== undefined) {
-      if (!Array.isArray(s0.lanes) || !s0.lanes.length || s0.lanes.length > BUDGET.lanes) E(p + '.lanes: mảng 1…' + BUDGET.lanes + ' làn [pan đầu, pan cuối?, giây trượt?, giây bắt đầu trượt?]');
+      if (!Array.isArray(s0.lanes) || !s0.lanes.length || s0.lanes.length > BUDGET.lanes) E(p + '.lanes: ' + N_('mảng 1…{n} làn [pan đầu, pan cuối?, giây trượt?, giây bắt đầu trượt?]', { n: BUDGET.lanes }));
       else {
         s.lanes = s0.lanes.map(function (ln, i) {
           var q = p + '.lanes[' + i + ']';
-          if (!Array.isArray(ln) || ln.length < 1 || ln.length > 4) { E(q + ': cần [pan đầu, pan cuối?, giây trượt?, giây bắt đầu?]'); return [0]; }
+          if (!Array.isArray(ln) || ln.length < 1 || ln.length > 4) { E(q + ': ' + N_('cần [pan đầu, pan cuối?, giây trượt?, giây bắt đầu?]')); return [0]; }
           var o = [fixed(ln[0], -1, 1, q + '[0]')];
           if (ln.length > 1 && ln[1] !== null) o[1] = fixed(ln[1], -1, 1, q + '[1]'); else if (ln.length > 1) o[1] = null;
           if (ln.length > 2) o[2] = fixed(ln[2], 0.01, 4, q + '[2]');
@@ -249,132 +252,132 @@
         lanesN = s.lanes.length;
       }
     }
-    if (!Array.isArray(s0.layers) || !s0.layers.length || s0.layers.length > BUDGET.layers) { E(p + '.layers: mảng 1…' + BUDGET.layers + ' lớp'); return null; }
+    if (!Array.isArray(s0.layers) || !s0.layers.length || s0.layers.length > BUDGET.layers) { E(p + '.layers: ' + N_('mảng 1…{n} lớp', { n: BUDGET.layers })); return null; }
     s.layers = [];
     s0.layers.forEach(function (L0, i) {
       var L = checkLayer(L0, p + '.layers[' + i + ']', E, lanesN);
       if (!L) return;
       // lớp không vượt quá thời lượng khai báo của âm (MAX_FX + dọn node tính theo dur)
       var end = numMax(L.at) + (L.jit || 0) + layerDur(L);
-      if (end > s.dur + 0.05) E(p + '.layers[' + i + ']: kết thúc lúc ' + end.toFixed(2) + ' s > dur ' + s.dur + ' s (+0,05) — tăng dur của âm hoặc rút lớp');
+      if (end > s.dur + 0.05) E(p + '.layers[' + i + ']: ' + N_('kết thúc lúc {end} s > dur {dur} s (+0,05) — tăng dur của âm hoặc rút lớp', { end: end.toFixed(2), dur: s.dur }));
       s.layers.push(L);
     });
     if (s.layers.length === s0.layers.length) {
       n0 = nodesOf(s);
-      if (n0 > BUDGET.nodes) E(p + ': ' + n0 + ' node Web Audio > ngân sách ' + BUDGET.nodes + ' (L-42: âm là thứ chạy nhiều nhất trong phim) — bớt lớp / hài / làn');
+      if (n0 > BUDGET.nodes) E(p + ': ' + N_('{n} node Web Audio > ngân sách {max} (L-42: âm là thứ chạy nhiều nhất trong phim) — bớt lớp / hài / làn', { n: n0, max: BUDGET.nodes }));
       s.nodes = n0;
     }
     return s;
   }
 
   function checkCue(c0, p, E) {
-    if (!c0 || typeof c0 !== 'object' || Array.isArray(c0)) { E(p + ': cần object { state | fx | activity | event | mood: [..] }'); return null; }
+    if (!c0 || typeof c0 !== 'object' || Array.isArray(c0)) { E(p + ': ' + N_('cần object { state | fx | activity | event | mood: [..] }')); return null; }
     var c = {}, trig = 0;
     Object.keys(c0).forEach(function (k) {
-      if (!hasOwn(VOCAB, k)) { E(p + '.' + k.slice(0, 20) + ': khoá lạ (được dùng: ' + Object.keys(VOCAB).join(', ') + ')'); return; }
+      if (!hasOwn(VOCAB, k)) { E(p + '.' + k.slice(0, 20) + ': ' + N_('khoá lạ (được dùng: {ids})', { ids: Object.keys(VOCAB).join(', ') })); return; }
       var v = c0[k];
-      if (!Array.isArray(v) || !v.length || v.length > 24) { E(p + '.' + k + ': cần mảng 1…24 giá trị'); return; }
+      if (!Array.isArray(v) || !v.length || v.length > 24) { E(p + '.' + k + ': ' + N_('cần mảng 1…24 giá trị')); return; }
       var bad = v.filter(function (x) { return VOCAB[k].indexOf(x) < 0; });
-      if (bad.length) { E(p + '.' + k + ': giá trị lạ ' + bad.slice(0, 3).map(function (x) { return '"' + String(x).slice(0, 20) + '"'; }).join(', ') + ' (chọn: ' + VOCAB[k].join(', ') + ')'); return; }
+      if (bad.length) { E(p + '.' + k + ': ' + N_('giá trị lạ {refs} (chọn: {ids})', { refs: bad.slice(0, 3).map(function (x) { return '"' + String(x).slice(0, 20) + '"'; }).join(', '), ids: VOCAB[k].join(', ') })); return; }
       c[k] = v.filter(function (x, i) { return v.indexOf(x) === i; });
       if (TRIGGERS.indexOf(k) >= 0) trig++;
     });
-    if (c.mood && !trig) E(p + '.mood: là điều kiện — cần đi kèm state / fx / activity / event');
+    if (c.mood && !trig) E(p + '.mood: ' + N_('là điều kiện — cần đi kèm state / fx / activity / event'));
     return c;
   }
 
   function checkLayer(L0, p, E, lanesN) {
-    if (!L0 || typeof L0 !== 'object' || Array.isArray(L0)) { E(p + ': cần object'); return null; }
+    if (!L0 || typeof L0 !== 'object' || Array.isArray(L0)) { E(p + ': ' + N_('cần object')); return null; }
     var K = KINDS[L0.k];
-    if (!K || !hasOwn(KINDS, L0.k)) { E(p + '.k: loại lớp ' + Object.keys(KINDS).join(' | ')); return null; }
+    if (!K || !hasOwn(KINDS, L0.k)) { E(p + '.k: ' + N_('loại lớp {ids}', { ids: Object.keys(KINDS).join(' | ') })); return null; }
     var L = { k: L0.k }, ok = true;
     var err = function (m) { ok = false; E(m); };
     var num = function (v, key, path) {
       var R = RANGE[key];
       if (isNum(v)) {
-        if (v < R[0] || v > R[1]) { err(path + ': cần số trong khoảng ' + R[0] + '…' + R[1]); return R[0]; }
-        if (INTS[key] && v !== Math.floor(v)) { err(path + ': cần số nguyên'); return R[0]; }
+        if (v < R[0] || v > R[1]) { err(path + ': ' + N_('cần số trong khoảng {min}…{max}', { min: R[0], max: R[1] })); return R[0]; }
+        if (INTS[key] && v !== Math.floor(v)) { err(path + ': ' + N_('cần số nguyên')); return R[0]; }
         return v;
       }
       // ngẫu nhiên có kiểm soát { v, r }: cả v lẫn v + r phải trong khoảng
       if (v && typeof v === 'object' && !Array.isArray(v) && !INTS[key] && Object.keys(v).every(function (x) { return x === 'v' || x === 'r'; }) && isNum(v.v) && isNum(v.r)) {
-        if (v.v < R[0] || v.v > R[1] || v.v + v.r < R[0] || v.v + v.r > R[1]) { err(path + ': { v, r } — cả v lẫn v + r phải trong ' + R[0] + '…' + R[1]); return R[0]; }
+        if (v.v < R[0] || v.v > R[1] || v.v + v.r < R[0] || v.v + v.r > R[1]) { err(path + ': ' + N_('{ v, r } — cả v lẫn v + r phải trong {min}…{max}', { min: R[0], max: R[1] })); return R[0]; }
         return { v: v.v, r: v.r };
       }
-      err(path + ': cần số' + (INTS[key] ? ' nguyên' : ' hoặc { "v": số, "r": số } (ngẫu nhiên mỗi lần phát)') + ' trong khoảng ' + R[0] + '…' + R[1]);
+      err(path + ': ' + (INTS[key] ? N_('cần số nguyên trong khoảng {min}…{max}', { min: R[0], max: R[1] }) : N_('cần số hoặc { "v": số, "r": số } (ngẫu nhiên mỗi lần phát) trong khoảng {min}…{max}', { min: R[0], max: R[1] })));
       return R[0];
     };
     var allowed = ['k', 'at', 'jit', 'lane'].concat(K.keys);
     Object.keys(L0).forEach(function (key) {
       var v = L0[key], q = p + '.' + key.slice(0, 16);
-      if (allowed.indexOf(key) < 0) { err(q + ': khoá lạ cho lớp "' + L0.k + '" (được dùng: ' + allowed.join(', ') + ')'); return; }
+      if (allowed.indexOf(key) < 0) { err(q + ': ' + N_('khoá lạ cho lớp "{kind}" (được dùng: {ids})', { kind: L0.k, ids: allowed.join(', ') })); return; }
       if (key === 'k') return;
-      if (hasOwn(K.en, key)) { if (K.en[key].indexOf(v) < 0) err(q + ': chọn ' + K.en[key].join(', ')); else L[key] = v; return; }
-      if (key === 'lane') { if (!isNum(v) || v !== Math.floor(v) || v < 0 || v >= lanesN) err(q + ': số thứ tự làn 0…' + (lanesN - 1) + (lanesN ? '' : ' (âm chưa khai lanes)')); else L.lane = v; return; }
+      if (hasOwn(K.en, key)) { if (K.en[key].indexOf(v) < 0) err(q + ': ' + N_('chọn {ids}', { ids: K.en[key].join(', ') })); else L[key] = v; return; }
+      if (key === 'lane') { if (!isNum(v) || v !== Math.floor(v) || v < 0 || v >= lanesN) err(q + ': ' + (lanesN ? N_('số thứ tự làn 0…{max}', { max: lanesN - 1 }) : N_('số thứ tự làn 0…{max} (âm chưa khai lanes)', { max: lanesN - 1 }))); else L.lane = v; return; }
       if (key === 'path') { L.path = points(v, q, BUDGET.path, 1, false, err); return; }
       if (key === 'curve') { L.curve = curvePts(v, q, err); return; }
       if (key === 'list') { L.list = modeList(v, q, err); return; }
-      if (key === 'mv') { if (!Array.isArray(v) || v.length !== 2 || !v.every(function (x) { return isNum(x) && x >= -1 && x <= 1; })) err(q + ': cần [pan đầu, pan cuối] trong −1…1'); else L.mv = v.slice(); return; }
+      if (key === 'mv') { if (!Array.isArray(v) || v.length !== 2 || !v.every(function (x) { return isNum(x) && x >= -1 && x <= 1; })) err(q + ': ' + N_('cần [pan đầu, pan cuối] trong −1…1')); else L.mv = v.slice(); return; }
       if (key === 'notes') { L.notes = noteList(v, q, err); return; }
       if (L0.k === 'voice' && (key === 'hz' || key === 'cut' || key === 'amp')) { L[key] = points(v, q, BUDGET.points, key === 'amp' ? 2 : 1, key !== 'amp', err, key === 'amp'); return; }
-      if (!hasOwn(RANGE, key)) { err(q + ': khoá lạ'); return; }
+      if (!hasOwn(RANGE, key)) { err(q + ': ' + N_('khoá lạ')); return; }
       L[key] = num(v, key, q);
     });
-    K.need.forEach(function (key) { if (L0[key] === undefined) err(p + ': thiếu "' + key + '" (lớp ' + L0.k + ' cần ' + K.need.join(', ') + ')'); });
-    if ((L0.k === 'tone') && L0.hz === undefined && L0.curve === undefined) err(p + ': lớp tone cần "hz" hoặc "curve"');
+    K.need.forEach(function (key) { if (L0[key] === undefined) err(p + ': ' + N_('thiếu "{key}" (lớp {kind} cần {ids})', { key: key, kind: L0.k, ids: K.need.join(', ') })); });
+    if ((L0.k === 'tone') && L0.hz === undefined && L0.curve === undefined) err(p + ': ' + N_('lớp tone cần "hz" hoặc "curve"'));
     if (!ok) return null;
     // bao biên độ: tấn công + giữ phải xong trước khi hết lớp
-    if (L.a != null && L.dur != null && numMax(L.a) + numMax(L.hold) > numMax(L.dur) * 0.98 && L.k !== 'mallet') { E(p + ': a + hold phải ngắn hơn dur'); return null; }
-    if (L.vibd != null && L.dur != null && numMax(L.vibd) >= numMax(L.dur)) { E(p + '.vibd: rung bắt đầu sau khi lớp đã hết'); return null; }
-    if ((L.vibc != null || L.vibc1 != null || L.vib1 != null || L.vibd != null || L.vibr != null) && L.vib == null) { E(p + ': có vibc / vibd… nhưng thiếu "vib" (tần số rung, Hz)'); return null; }
+    if (L.a != null && L.dur != null && numMax(L.a) + numMax(L.hold) > numMax(L.dur) * 0.98 && L.k !== 'mallet') { E(p + ': ' + N_('a + hold phải ngắn hơn dur')); return null; }
+    if (L.vibd != null && L.dur != null && numMax(L.vibd) >= numMax(L.dur)) { E(p + '.vibd: ' + N_('rung bắt đầu sau khi lớp đã hết')); return null; }
+    if ((L.vibc != null || L.vibc1 != null || L.vib1 != null || L.vibd != null || L.vibr != null) && L.vib == null) { E(p + ': ' + N_('có vibc / vibd… nhưng thiếu "vib" (tần số rung, Hz)')); return null; }
     return L;
   }
   // [[giây, giá trị, 's'?]…] tăng dần — tần số (hz) hoặc biên độ (amp, tuyến tính, 0…1.5)
   function points(v, q, max, minN, allowS, err, isAmp) {
-    if (!Array.isArray(v) || v.length < minN || v.length > max) { err(q + ': cần mảng ' + minN + '…' + max + ' điểm [giây, ' + (isAmp ? 'độ to' : 'Hz') + (allowS ? ", 's'?" : '') + ']'); return []; }
+    if (!Array.isArray(v) || v.length < minN || v.length > max) { err(q + ': ' + N_(isAmp ? 'cần mảng {min}…{max} điểm [giây, độ to{s}]' : 'cần mảng {min}…{max} điểm [giây, Hz{s}]', { min: minN, max: max, s: allowS ? ", 's'?" : '' })); return []; }
     var prev = -1, out = [];
     v.forEach(function (pt, i) {
       var r = q + '[' + i + ']';
-      if (!Array.isArray(pt) || pt.length < 2 || pt.length > 3 || !isNum(pt[0]) || !isNum(pt[1])) { err(r + ': cần [giây, số' + (allowS ? ", 's'?" : '') + ']'); return; }
-      if (pt[0] < 0 || pt[0] > 4) err(r + '[0]: giây trong 0…4');
-      if (pt[0] < prev) err(r + '[0]: thời điểm phải tăng dần');
+      if (!Array.isArray(pt) || pt.length < 2 || pt.length > 3 || !isNum(pt[0]) || !isNum(pt[1])) { err(r + ': ' + N_('cần [giây, số{s}]', { s: allowS ? ", 's'?" : '' })); return; }
+      if (pt[0] < 0 || pt[0] > 4) err(r + '[0]: ' + N_('giây trong 0…4'));
+      if (pt[0] < prev) err(r + '[0]: ' + N_('thời điểm phải tăng dần'));
       prev = pt[0];
-      if (isAmp ? pt[1] < 0 || pt[1] > 1.5 : pt[1] < HZ[0] || pt[1] > HZ[1]) err(r + '[1]: ' + (isAmp ? 'độ to 0…1.5' : 'tần số 20…16000 Hz'));
-      if (pt.length === 3 && !(allowS && pt[2] === 's')) err(r + "[2]: chỉ được là 's' (nhảy tức thì)");
+      if (isAmp ? pt[1] < 0 || pt[1] > 1.5 : pt[1] < HZ[0] || pt[1] > HZ[1]) err(r + '[1]: ' + (isAmp ? N_('độ to 0…1.5') : N_('tần số 20…16000 Hz')));
+      if (pt.length === 3 && !(allowS && pt[2] === 's')) err(r + '[2]: ' + N_("chỉ được là 's' (nhảy tức thì)"));
       out.push(pt.slice());
     });
     return out;
   }
   function curvePts(v, q, err) {
-    if (!Array.isArray(v) || v.length < 2 || v.length > BUDGET.curve) { err(q + ': cần 2…' + BUDGET.curve + ' điểm [u 0…1, Hz]'); return []; }
+    if (!Array.isArray(v) || v.length < 2 || v.length > BUDGET.curve) { err(q + ': ' + N_('cần 2…{max} điểm [u 0…1, Hz]', { max: BUDGET.curve })); return []; }
     var prev = -1;
     v.forEach(function (pt, i) {
       var r = q + '[' + i + ']';
-      if (!Array.isArray(pt) || pt.length !== 2 || !isNum(pt[0]) || !isNum(pt[1]) || pt[0] < 0 || pt[0] > 1 || pt[1] < HZ[0] || pt[1] > HZ[1]) { err(r + ': cần [u 0…1, Hz 20…16000]'); return; }
-      if (pt[0] <= prev) err(r + ': u phải tăng dần');
+      if (!Array.isArray(pt) || pt.length !== 2 || !isNum(pt[0]) || !isNum(pt[1]) || pt[0] < 0 || pt[0] > 1 || pt[1] < HZ[0] || pt[1] > HZ[1]) { err(r + ': ' + N_('cần [u 0…1, Hz 20…16000]')); return; }
+      if (pt[0] <= prev) err(r + ': ' + N_('u phải tăng dần'));
       prev = pt[0];
     });
-    if (v[0] && v[0][0] !== 0) err(q + '[0]: điểm đầu u = 0');
-    if (v[v.length - 1] && v[v.length - 1][0] !== 1) err(q + ': điểm cuối u = 1');
+    if (v[0] && v[0][0] !== 0) err(q + '[0]: ' + N_('điểm đầu u = 0'));
+    if (v[v.length - 1] && v[v.length - 1][0] !== 1) err(q + ': ' + N_('điểm cuối u = 1'));
     return v.map(function (pt) { return pt.slice(); });
   }
   function modeList(v, q, err) {
-    if (!Array.isArray(v) || !v.length || v.length > BUDGET.list) { err(q + ': cần 1…' + BUDGET.list + ' phần [tỉ số, biên độ, thời tắt (s), tấn công (s)?]'); return []; }
+    if (!Array.isArray(v) || !v.length || v.length > BUDGET.list) { err(q + ': ' + N_('cần 1…{max} phần [tỉ số, biên độ, thời tắt (s), tấn công (s)?]', { max: BUDGET.list })); return []; }
     return v.map(function (m, i) {
       var r = q + '[' + i + ']';
-      if (!Array.isArray(m) || m.length < 3 || m.length > 4 || !m.every(isNum)) { err(r + ': cần [tỉ số 0.1…32, biên độ 0…1.5, thời tắt 0.005…6, tấn công 0…1?]'); return [1, 0, 0.1]; }
-      if (m[0] < 0.1 || m[0] > 32 || m[1] < 0 || m[1] > 1.5 || m[2] < 0.005 || m[2] > 6 || (m.length > 3 && (m[3] < 0 || m[3] > 1))) err(r + ': ngoài khoảng (tỉ số 0.1…32, biên độ 0…1.5, thời tắt 0.005…6, tấn công 0…1)');
+      if (!Array.isArray(m) || m.length < 3 || m.length > 4 || !m.every(isNum)) { err(r + ': ' + N_('cần [tỉ số 0.1…32, biên độ 0…1.5, thời tắt 0.005…6, tấn công 0…1?]')); return [1, 0, 0.1]; }
+      if (m[0] < 0.1 || m[0] > 32 || m[1] < 0 || m[1] > 1.5 || m[2] < 0.005 || m[2] > 6 || (m.length > 3 && (m[3] < 0 || m[3] > 1))) err(r + ': ' + N_('ngoài khoảng (tỉ số 0.1…32, biên độ 0…1.5, thời tắt 0.005…6, tấn công 0…1)'));
       return m.slice();
     });
   }
   function noteList(v, q, err) {
-    if (!Array.isArray(v) || !v.length || v.length > BUDGET.notes) { err(q + ': cần 1…' + BUDGET.notes + ' nốt [giây, Hz, độ to?]'); return []; }
+    if (!Array.isArray(v) || !v.length || v.length > BUDGET.notes) { err(q + ': ' + N_('cần 1…{max} nốt [giây, Hz, độ to?]', { max: BUDGET.notes })); return []; }
     var prev = -1;
     return v.map(function (m, i) {
       var r = q + '[' + i + ']';
-      if (!Array.isArray(m) || m.length < 2 || m.length > 3 || !m.every(isNum)) { err(r + ': cần [giây 0…4, Hz 20…16000, độ to 0…1.5?]'); return [0, 440]; }
-      if (m[0] < 0 || m[0] > 4 || m[1] < HZ[0] || m[1] > HZ[1] || (m.length > 2 && (m[2] < 0 || m[2] > 1.5))) err(r + ': ngoài khoảng (giây 0…4, Hz 20…16000, độ to 0…1.5)');
-      if (m[0] < prev) err(r + '[0]: thời điểm phải tăng dần');
+      if (!Array.isArray(m) || m.length < 2 || m.length > 3 || !m.every(isNum)) { err(r + ': ' + N_('cần [giây 0…4, Hz 20…16000, độ to 0…1.5?]')); return [0, 440]; }
+      if (m[0] < 0 || m[0] > 4 || m[1] < HZ[0] || m[1] > HZ[1] || (m.length > 2 && (m[2] < 0 || m[2] > 1.5))) err(r + ': ' + N_('ngoài khoảng (giây 0…4, Hz 20…16000, độ to 0…1.5)'));
+      if (m[0] < prev) err(r + '[0]: ' + N_('thời điểm phải tăng dần'));
       prev = m[0];
       return m.slice();
     });
@@ -390,7 +393,7 @@
     var d = c.def, errs = [];
     Object.keys(d.sounds).forEach(function (nm) {
       var o = OWNER[nm];
-      if (o && o !== d.id) errs.push('sounds.' + nm + ': trùng tên âm của gói "' + o + '" (' + PACKS[o].name + ') — tên âm là chung toàn thư viện, đổi tên (vd. "' + nm + '-' + d.id.split('-')[0] + '")');
+      if (o && o !== d.id) errs.push('sounds.' + nm + ': ' + N_('trùng tên âm của gói "{pack}" ({label}) — tên âm là chung toàn thư viện, đổi tên (vd. "{alt}")', { pack: o, label: PACKS[o].name, alt: nm + '-' + d.id.split('-')[0] }));
     });
     if (errs.length) return { errors: errs, def: null };
     if (PACKS[d.id]) unregisterPack(d.id, true);
@@ -538,20 +541,20 @@
   (function (R) {
     var vi = function (n) { return String(n).replace('.', ','); }, sk = function (xs) { return xs.join(' / '); };
     R.list = [
-      { code: 'S1', level: 'error', short: '≤ ' + R.maxPerStep + ' âm / ≤ ' + R.maxAccent + ' âm nhấn mỗi bước',
-        rule: '≤ ' + R.maxPerStep + ' âm mỗi bước; ≤ ' + R.maxAccent + ' âm NHẤN (nhóm ' + sk(R.accent) + ') mỗi bước — hai cú nhấn cùng lúc triệt tiêu nhau.' },
-      { code: 'S2', level: 'warn', short: 'mật độ ≤ ' + R.density.max + ' âm / ' + R.density.window + ' s',
-        rule: 'Mật độ ≤ ' + R.density.max + ' âm trong ' + R.density.window + ' giây phim (kể cả âm tự gán và tiếng bật bong bóng thoại, không tính ' + sk(R.density.skip) + ') — dày hơn là "ồn", khán giả mất điểm nhấn.' },
-      { code: 'S3', level: 'warn', short: 'âm nhấn không đè lời thoại',
-        rule: 'Âm nhấn không đè câu thoại: đặt ở bước không có lời, hoặc chọn âm ngắn xong trước câu ≥ ' + vi(R.speech.gap) + ' s.' },
-      { code: 'S4', level: 'warn', short: 'âm va chạm để đòn đánh tự phát',
-        rule: 'Âm va chạm (nhóm ' + R.impact.cat + ') để động tác tự phát ở điểm đánh; đặt tay chỉ khi bước có cú va thấy được (' + R.impact.activities.concat(R.impact.states).join(', ') + ').' },
-      { code: 'S5', level: 'warn', short: 'một âm ≤ ' + R.repeat.max + ' bước liền',
-        rule: 'Cùng một âm không quá ' + R.repeat.max + ' bước liền (trừ ' + sk(R.repeat.skip) + ') — đổi âm cùng nhóm hoặc bỏ.' },
-      { code: 'S6', level: 'error', short: 'âm phải có trong thư viện của dự án',
-        rule: 'Âm phải có trong thư viện của dự án (khung + gói dùng chung + gói của dự án) — tên lạ / âm của dự án khác là lỗi, có gợi ý tên gần nhất.' },
-      { code: 'S7', level: 'warn', short: 'âm dài > ' + R.long.dur + ' s chỉ ở đầu / cuối cảnh',
-        rule: 'Âm dài > ' + R.long.dur + ' s (gong, dun-dun, trống trận…) chỉ ở bước đầu / cuối cảnh (mở màn, chuyển cảnh).' }
+      { code: 'S1', level: 'error', short: N_('≤ {max} âm / ≤ {acc} âm nhấn mỗi bước', { max: R.maxPerStep, acc: R.maxAccent }),
+        rule: N_('≤ {max} âm mỗi bước; ≤ {acc} âm NHẤN (nhóm {ids}) mỗi bước — hai cú nhấn cùng lúc triệt tiêu nhau.', { max: R.maxPerStep, acc: R.maxAccent, ids: sk(R.accent) }) },
+      { code: 'S2', level: 'warn', short: N_('mật độ ≤ {max} âm / {win} s', { max: R.density.max, win: R.density.window }),
+        rule: N_('Mật độ ≤ {max} âm trong {win} giây phim (kể cả âm tự gán và tiếng bật bong bóng thoại, không tính {ids}) — dày hơn là "ồn", khán giả mất điểm nhấn.', { max: R.density.max, win: R.density.window, ids: sk(R.density.skip) }) },
+      { code: 'S3', level: 'warn', short: N_('âm nhấn không đè lời thoại'),
+        rule: N_('Âm nhấn không đè câu thoại: đặt ở bước không có lời, hoặc chọn âm ngắn xong trước câu ≥ {gap} s.', { gap: vi(R.speech.gap) }) },
+      { code: 'S4', level: 'warn', short: N_('âm va chạm để đòn đánh tự phát'),
+        rule: N_('Âm va chạm (nhóm {cat}) để động tác tự phát ở điểm đánh; đặt tay chỉ khi bước có cú va thấy được ({ids}).', { cat: R.impact.cat, ids: R.impact.activities.concat(R.impact.states).join(', ') }) },
+      { code: 'S5', level: 'warn', short: N_('một âm ≤ {max} bước liền', { max: R.repeat.max }),
+        rule: N_('Cùng một âm không quá {max} bước liền (trừ {ids}) — đổi âm cùng nhóm hoặc bỏ.', { max: R.repeat.max, ids: sk(R.repeat.skip) }) },
+      { code: 'S6', level: 'error', short: N_('âm phải có trong thư viện của dự án'),
+        rule: N_('Âm phải có trong thư viện của dự án (khung + gói dùng chung + gói của dự án) — tên lạ / âm của dự án khác là lỗi, có gợi ý tên gần nhất.') },
+      { code: 'S7', level: 'warn', short: N_('âm dài > {dur} s chỉ ở đầu / cuối cảnh', { dur: R.long.dur }),
+        rule: N_('Âm dài > {dur} s (gong, dun-dun, trống trận…) chỉ ở bước đầu / cuối cảnh (mở màn, chuyển cảnh).', { dur: R.long.dur }) }
     ];
     // mã luật theo mức, gộp dãy liền: error → "S1, S6" · warn → "S2–S5, S7"
     var span = function (codes) {
@@ -611,13 +614,13 @@
     else if (input && Array.isArray(input.shots)) shots = input.shots.map(function (s, j) { return { steps: (s && s.event && Array.isArray(s.event.steps) && s.event.steps) || [], path: 'shots[' + j + '].event.steps', shot: j }; });
     else if (input && input.event && Array.isArray(input.event.steps)) shots = [{ steps: input.event.steps, path: 'event.steps' }];
     else if (input && Array.isArray(input.steps)) shots = [{ steps: input.steps, path: 'steps' }];
-    else return [{ code: 'S0', level: 'error', path: '', step: -1, msg: 'cần mảng bước (steps), một phân cảnh ({ event: { steps } }) hoặc tác phẩm ({ shots })' }];
+    else return [{ code: 'S0', level: 'error', path: '', step: -1, msg: N_('cần mảng bước (steps), một phân cảnh ({ event: { steps } }) hoặc tác phẩm ({ shots })') }];
     var big = function (path, msg) { return [{ code: 'S0', level: 'error', path: path, step: -1, msg: 'S0: ' + msg }]; }, tooMany = null;
-    if (shots.length > LINT_MAX.shots) return big('shots', 'tối đa ' + LINT_MAX.shots + ' phân cảnh một lần chấm (đang có ' + shots.length + ') — chấm từng tác phẩm / từng phân cảnh');
+    if (shots.length > LINT_MAX.shots) return big('shots', N_('tối đa {max} phân cảnh một lần chấm (đang có {n}) — chấm từng tác phẩm / từng phân cảnh', { max: LINT_MAX.shots, n: shots.length }));
     shots.forEach(function (sh) { if (!tooMany && sh.steps.length > LINT_MAX.steps) tooMany = sh; });
-    if (tooMany) return big(tooMany.path, 'tối đa ' + LINT_MAX.steps + ' bước một phân cảnh (đang có ' + tooMany.steps.length + ') — đúng trần của lược đồ đạo diễn');
-    var size; try { size = JSON.stringify(input).length; } catch (x) { return big('', 'đầu vào không phải JSON thuần'); }
-    if (size > LINT_MAX.bytes) return big('', 'đầu vào quá lớn (' + Math.round(size / 1000) + ' KB > ' + LINT_MAX.bytes / 1000 + ' KB)');
+    if (tooMany) return big(tooMany.path, N_('tối đa {max} bước một phân cảnh (đang có {n}) — đúng trần của lược đồ đạo diễn', { max: LINT_MAX.steps, n: tooMany.steps.length }));
+    var size; try { size = JSON.stringify(input).length; } catch (x) { return big('', N_('đầu vào không phải JSON thuần')); }
+    if (size > LINT_MAX.bytes) return big('', N_('đầu vào quá lớn ({n} KB > {max} KB)', { n: Math.round(size / 1000), max: LINT_MAX.bytes / 1000 }));
     var ctx = { sug: Object.create(null), nSug: 0 };    // nhớ gợi ý theo tên lạ; chỉ gợi ý LINT_MAX.suggest tên lạ đầu (mỗi lần gợi ý là một lượt quét ~70 âm)
     shots.forEach(function (sh) { lintShot(sh, opts, project, out, ctx); });
     return out;
@@ -641,27 +644,28 @@
       // S1 (âm nhấn) + S3 (nhấn đè lời) cho MỘT âm — dùng chung cho sfx ghi tay và âm tự gán (CNS-103): tự gán thì chỉ là cảnh báo + cách tắt
       var accent = function (nm, snd, k, sub) {
         if (ACCENT.indexOf(snd.cat) < 0) return;
-        if (++acc === R.maxAccent + 1) W('S1', i, nm, 'hai âm nhấn' + (auto ? ' TỰ GÁN' : '') + ' trong một bước ("' + nm + '" và âm nhấn trước nó) — giữ một', sub, auto ? 'warn' : undefined);
+        if (++acc === R.maxAccent + 1) W('S1', i, nm, auto ? N_('hai âm nhấn TỰ GÁN trong một bước ("{name}" và âm nhấn trước nó) — giữ một', { name: nm }) : N_('hai âm nhấn trong một bước ("{name}" và âm nhấn trước nó) — giữ một', { name: nm }), sub, auto ? 'warn' : undefined);
         if (hasSay(s) && (R.speech.sfxAt[Math.min(k, 2)] + snd.dur > R.speech.speechAt - R.speech.gap))
-          W('S3', i, nm, auto ? 'âm nhấn TỰ GÁN "' + nm + '" (' + snd.dur + ' s) đè lên câu thoại của bước — đặt sfx: [] để tắt âm tự gán, hoặc bỏ cue của âm đó'
-            : 'âm nhấn "' + nm + '" (' + snd.dur + ' s) đè lên câu thoại của bước — chuyển sang bước không có lời / bước trước, hoặc chọn âm ngắn hơn', sub, auto ? 'warn' : undefined);
+          W('S3', i, nm, auto ? N_('âm nhấn TỰ GÁN "{name}" ({dur} s) đè lên câu thoại của bước — đặt sfx: [] để tắt âm tự gán, hoặc bỏ cue của âm đó', { name: nm, dur: snd.dur })
+            : N_('âm nhấn "{name}" ({dur} s) đè lên câu thoại của bước — chuyển sang bước không có lời / bước trước, hoặc chọn âm ngắn hơn', { name: nm, dur: snd.dur }), sub, auto ? 'warn' : undefined);
       };
       if (ex) {
-        if (ex.length > R.maxPerStep) W('S1', i, null, 'bước có ' + ex.length + ' âm (tối đa ' + R.maxPerStep + ') — giữ âm quan trọng nhất', '.sfx');
+        if (ex.length > R.maxPerStep) W('S1', i, null, N_('bước có {n} âm (tối đa {max}) — giữ âm quan trọng nhất', { n: ex.length, max: R.maxPerStep }), '.sfx');
         ex.slice(0, LINT_MAX.sfx).forEach(function (nm, k) {    // quá LINT_MAX.sfx tên thì S1 đã báo; không duyệt tiếp
           var snd = typeof nm === 'string' ? get(nm) : null, sub = '.sfx[' + k + ']';
           if (!snd || !visible(PACKS[snd.pack], project)) {
             var sg = typeof nm === 'string' ? hint(nm) : null;
-            W('S6', i, String(nm).slice(0, 32), (snd ? 'âm "' + nm + '" thuộc gói "' + snd.pack + '" của dự án khác' : 'không có âm "' + String(nm).slice(0, 32) + '" trong thư viện') + (sg ? ' — gần nhất: "' + sg + '"' : ''), sub);
+            W('S6', i, String(nm).slice(0, 32), snd ? (sg ? N_('âm "{name}" thuộc gói "{pack}" của dự án khác — gần nhất: "{alt}"', { name: nm, pack: snd.pack, alt: sg }) : N_('âm "{name}" thuộc gói "{pack}" của dự án khác', { name: nm, pack: snd.pack }))
+              : (sg ? N_('không có âm "{name}" trong thư viện — gần nhất: "{alt}"', { name: String(nm).slice(0, 32), alt: sg }) : N_('không có âm "{name}" trong thư viện', { name: String(nm).slice(0, 32) })), sub);
             return;
           }
           eff.push(nm);
           accent(nm, snd, k, sub);
           if (snd.cat === R.impact.cat) {
-            if (s.action) W('S4', i, nm, 'bước có động tác "' + s.action + '" — âm va chạm đã tự phát ở điểm đánh; bỏ "' + nm + '" khỏi sfx (hoặc sửa âm trong gói động tác)', sub);
-            else if (R.impact.activities.indexOf(s.activity) < 0 && R.impact.states.indexOf(s.state) < 0) W('S4', i, nm, 'âm va chạm "' + nm + '" rải giữa bước không có cú va thấy được — dùng action (đòn đánh) hoặc activity attack / defend / faint…', sub);
+            if (s.action) W('S4', i, nm, N_('bước có động tác "{action}" — âm va chạm đã tự phát ở điểm đánh; bỏ "{name}" khỏi sfx (hoặc sửa âm trong gói động tác)', { action: s.action, name: nm }), sub);
+            else if (R.impact.activities.indexOf(s.activity) < 0 && R.impact.states.indexOf(s.state) < 0) W('S4', i, nm, N_('âm va chạm "{name}" rải giữa bước không có cú va thấy được — dùng action (đòn đánh) hoặc activity attack / defend / faint…', { name: nm }), sub);
           }
-          if (snd.dur > R.long.dur && i !== 0 && i !== steps.length - 1) W('S7', i, nm, 'âm dài "' + nm + '" (' + snd.dur + ' s) giữa cảnh — để ở bước đầu / cuối cảnh', sub);
+          if (snd.dur > R.long.dur && i !== 0 && i !== steps.length - 1) W('S7', i, nm, N_('âm dài "{name}" ({dur} s) giữa cảnh — để ở bước đầu / cuối cảnh', { name: nm, dur: snd.dur }), sub);
         });
       } else if (opts.auto !== false) {
         auto = true;
@@ -677,7 +681,8 @@
       eff.forEach(function (nm) {
         if (R.repeat.skip.indexOf(nm) >= 0) return;
         next[nm] = (run[nm] || 0) + 1;
-        if (next[nm] === R.repeat.max + 1) W('S5', i, nm, 'âm "' + nm + '" lặp ' + next[nm] + ' bước liền — đổi âm cùng nhóm (' + (CAT_LABEL[get(nm).cat] || '') + ') hoặc bỏ' + (ex ? '' : ' (âm tự gán: đặt sfx của bước để thay)'));
+        if (next[nm] === R.repeat.max + 1) W('S5', i, nm, ex ? N_('âm "{name}" lặp {n} bước liền — đổi âm cùng nhóm ({label}) hoặc bỏ', { name: nm, n: next[nm], label: CAT_LABEL[get(nm).cat] || '' })
+          : N_('âm "{name}" lặp {n} bước liền — đổi âm cùng nhóm ({label}) hoặc bỏ (âm tự gán: đặt sfx của bước để thay)', { name: nm, n: next[nm], label: CAT_LABEL[get(nm).cat] || '' }));
       });
       run = next;
       t += dur;
@@ -689,7 +694,7 @@
       var n = 0; for (var b = a; b < ev.length && ev[b].t < e.t + R.density.window; b++) n++;
       if (n > R.density.max) {
         var last = ev[a + n - 1];
-        if (!warned[last.i]) { warned[last.i] = 1; W('S2', last.i, null, n + ' âm trong ' + R.density.window + ' s (tối đa ' + R.density.max + ') — bỏ bớt (đặt sfx: [] cho bước không cần âm)'); }
+        if (!warned[last.i]) { warned[last.i] = 1; W('S2', last.i, null, N_('{n} âm trong {win} s (tối đa {max}) — bỏ bớt (đặt sfx: [] cho bước không cần âm)', { n: n, win: R.density.window, max: R.density.max })); }
       }
     });
   }
@@ -748,7 +753,7 @@
     modes: 'chuông / thanh kim loại / gỗ: list [[tỉ số, biên độ, thời tắt s, tấn công s?]…] trên hz gốc — hài không nguyên, hài cao tắt nhanh hơn',
     voice: 'giọng liên tục (kèn, ngâm nga, còi bóp, kẽo kẹt): hz / cut [[giây, Hz, \'s\'?]…] (\'s\' = nhảy), amp [[giây, 0…1.5]…] (tuyến tính); det (cent, 2 dao động), sat, q, ftype lowpass | bandpass, rung vib…',
     fm: 'FM hai toán tử (lò xo "boing" đàn môi, "đoing", kim loại ngân, tia phép): sóng mang hz/to/path/curve; bộ điều chế = sóng mang × ratio, độ sâu index → index1 (sáng → tối); mtype; lp; sat; rung vib…',
-    mallet: 'nhạc cụ gõ có nốt: inst (' + Object.keys(INST).join(' | ') + '), notes [[giây, Hz, độ to?]…] ≤ 32, decay (s), poly 1…6 (số giọng luân phiên: nốt ngân tới khi giọng đó gõ nốt mới), lp — một chuỗi nốt chỉ tốn 2·poly·số hài node',
+    mallet: N_('nhạc cụ gõ có nốt: inst ({ids}), notes [[giây, Hz, độ to?]…] ≤ 32, decay (s), poly 1…6 (số giọng luân phiên: nốt ngân tới khi giọng đó gõ nốt mới), lp — một chuỗi nốt chỉ tốn 2·poly·số hài node', { ids: Object.keys(INST).join(' | ') }),
     drum: 'trống tổng hợp: thân sin hz → to (tụt cao độ trong dur·glide; kick / tom / timpani / taiko), sat + bias (dày), click (tách dùi 0…1.5), snare (dây snare 0…1.5, nf Hz, nq, ndur s)'
   };
   var EXAMPLE = {
@@ -778,26 +783,31 @@
   function guide(o) {
     o = o || {};
     var L = [], pr = o.project === undefined ? undefined : o.project || '';
-    L.push('# Âm thanh hiệu ứng — thư viện + quy trình ghép (' + FORMAT + ')', '');
-    L.push('Phong cách: KHOA TRƯƠNG kiểu phim hoạt hình — cao độ trượt lớn, có nốt nhạc, đuôi rung, hai nhịp đà → va. Mọi âm tổng hợp bằng code (không tệp mẫu).', '');
-    L.push('## Quy trình ghép (làm theo thứ tự)');
-    L.push('1. Để TRỐNG `sfx` ở phần lớn các bước — bộ phát tự gán ≤ ' + RULES.autoMax + ' âm theo cảm xúc (state) / hiệu ứng (fx) / hoạt động (activity) qua cue của âm (gói dự án thắng khung).');
-    L.push('2. Chỉ đặt `sfx` khi muốn NHẤN một khoảnh khắc: tối đa ' + RULES.maxPerStep + ' âm, trong đó ≤ ' + RULES.maxAccent + ' âm nhấn (nhóm ' + ACCENT.join(' / ') + '); âm nhấn để ở bước KHÔNG có lời hoặc bước trước câu.');
-    L.push('3. Va chạm (nhóm danh): dùng `action` (đòn đánh) — âm tự phát đúng điểm đánh. Đặt tay chỉ khi bước có cú va thấy được.');
-    L.push('4. Hài: ghép "đà → va → hậu quả" trải trên 2–3 bước, mỗi bước MỘT âm (xem công thức mẫu). Âm có lấy đà (hitAt) đặt ở bước trước khung va.');
-    L.push('5. `sfx: []` = bước im (tắt âm tự gán). Chạy lint (S1–S7) trước khi xuất: lỗi (error) phải sửa, cảnh báo (warn) nên sửa.', '');
-    L.push('## Luật (lintSoundTrack)');
-    RULES.list.forEach(function (r) { L.push('- **' + r.code + '** (' + (r.level === 'error' ? 'lỗi' : 'cảnh báo') + '): ' + r.rule); });
-    L.push('', '## Công thức ghép mẫu (giây → âm)');
+    // mỗi dòng là MỘT msgid (N_, có placeholder cho số lấy từ RULES / BUDGET) → Studio dịch từng dòng; tiêu đề "## Quy trình ghép" giữ nguyên chữ (Studio tìm mục theo chữ này)
+    L.push(N_('# Âm thanh hiệu ứng — thư viện + quy trình ghép ({code})', { code: FORMAT }), '');
+    L.push(N_('Phong cách: KHOA TRƯƠNG kiểu phim hoạt hình — cao độ trượt lớn, có nốt nhạc, đuôi rung, hai nhịp đà → va. Mọi âm tổng hợp bằng code (không tệp mẫu).'), '');
+    L.push(N_('## Quy trình ghép (làm theo thứ tự)'));
+    // các bước đánh số NGOÀI msgid: Studio bóc "n. " rồi dịch phần chữ (msgid có biến → GenChibi.i18nMsg.msg(lang, câu) hoặc t(msgid, vars))
+    [
+      N_('Để TRỐNG `sfx` ở phần lớn các bước — bộ phát tự gán ≤ {n} âm theo cảm xúc (state) / hiệu ứng (fx) / hoạt động (activity) qua cue của âm (gói dự án thắng khung).', { n: RULES.autoMax }),
+      N_('Chỉ đặt `sfx` khi muốn NHẤN một khoảnh khắc: tối đa {max} âm, trong đó ≤ {acc} âm nhấn (nhóm {ids}); âm nhấn để ở bước KHÔNG có lời hoặc bước trước câu.', { max: RULES.maxPerStep, acc: RULES.maxAccent, ids: ACCENT.join(' / ') }),
+      N_('Va chạm (nhóm danh): dùng `action` (đòn đánh) — âm tự phát đúng điểm đánh. Đặt tay chỉ khi bước có cú va thấy được.'),
+      N_('Hài: ghép "đà → va → hậu quả" trải trên 2–3 bước, mỗi bước MỘT âm (xem công thức mẫu). Âm có lấy đà (hitAt) đặt ở bước trước khung va.'),
+      N_('`sfx: []` = bước im (tắt âm tự gán). Chạy lint (S1–S7) trước khi xuất: lỗi (error) phải sửa, cảnh báo (warn) nên sửa.')
+    ].forEach(function (x, i) { L.push((i + 1) + '. ' + x); });
+    L.push('');
+    L.push(N_('## Luật (lintSoundTrack)'));
+    RULES.list.forEach(function (r) { L.push('- **' + r.code + '** (' + (r.level === 'error' ? N_('lỗi') : N_('cảnh báo')) + '): ' + r.rule); });
+    L.push('', N_('## Công thức ghép mẫu (giây → âm)'));
     RECIPES.forEach(function (r) { L.push('- **' + r.label + '** (`' + r.id + '`): ' + r.seq.map(function (x) { return x[0] + ' s ' + x[1]; }).join(' → ') + ' — ' + r.note); });
-    L.push('', '## Thư viện theo nhóm' + (pr !== undefined ? ' (dự án "' + pr + '")' : ''));
+    L.push('', pr !== undefined ? N_('## Thư viện theo nhóm (dự án "{project}")', { project: pr }) : N_('## Thư viện theo nhóm'));
     CATS.forEach(function (c) {
       var xs = list({ cat: c[0], project: pr });
       if (!xs.length) return;
-      L.push('### ' + c[1] + ' (`' + c[0] + '`)' + (ACCENT.indexOf(c[0]) >= 0 ? ' — âm NHẤN' : ''));
-      xs.forEach(function (x) { L.push('- `' + x.name + '` — ' + x.label + ' (' + x.dur + ' s' + (x.pack !== FRAME ? ', gói ' + x.pack : '') + '): ' + x.use); });
+      L.push('### ' + c[1] + ' (`' + c[0] + '`)' + (ACCENT.indexOf(c[0]) >= 0 ? N_(' — âm NHẤN') : ''));
+      xs.forEach(function (x) { L.push('- `' + x.name + '` — ' + x.label + ' (' + x.dur + ' s' + (x.pack !== FRAME ? N_(', gói {pack}', { pack: x.pack }) : '') + '): ' + x.use); });
     });
-    L.push('', '## Viết gói âm mới', 'Gọi spec để có khuôn tham số + ví dụ chạy được. Tên âm là chung toàn thư viện (trùng = lỗi). Ngân sách ≤ ' + BUDGET.nodes + ' node / âm, ≤ ' + BUDGET.layers + ' lớp, dur ≤ ' + BUDGET.dur + ' s. Không nghe được ở server (Node không có Web Audio): nhờ người dùng bấm ▶ trong Studio.');
+    L.push('', N_('## Viết gói âm mới'), N_('Gọi spec để có khuôn tham số + ví dụ chạy được. Tên âm là chung toàn thư viện (trùng = lỗi). Ngân sách ≤ {nodes} node / âm, ≤ {layers} lớp, dur ≤ {dur} s. Không nghe được ở server (Node không có Web Audio): nhờ người dùng bấm ▶ trong Studio.', { nodes: BUDGET.nodes, layers: BUDGET.layers, dur: BUDGET.dur }));
     return L.join('\n');
   }
 
