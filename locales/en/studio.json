@@ -289,7 +289,10 @@
  "Ma trận mắt": "Eye matrix",
  "{n} kiểu × {n2} dáng = {n3} cặp, không vẽ tay cặp nào": "{n} styles × {n2} poses = {n3} pairs, none drawn by hand",
  " · của tôi": " · mine",
- "{n} item · mặc ở {slots}": "{n} items · worn on {slots}",
+ "{n} item · mặc ở {slots}": [
+  "{n} item · worn on {slots}",
+  "{n} items · worn on {slots}"
+ ],
  "Tấn công": "Attack",
  "thẻ {name}": "{name} card",
  "Mặc thử lên": "Try on",
@@ -562,7 +565,10 @@
  "Không có tác phẩm nào khớp bộ lọc.": "No works match the filter.",
  "Chưa có tác phẩm nào. Đặt tên ở ô phía trên rồi bấm \"+ Tác phẩm mới\" — hoặc mở dự án mẫu ở Thư viện để thấy trọn một phim.": "No works yet. Type a name in the box above and click \"+ New work\" — or open a sample project in the Library to see a complete film.",
  "{n} / {n2} tác phẩm": "{n} / {n2} works",
- "{n} tác phẩm · {sh} cảnh": "{n} works · {sh} shots",
+ "{n} tác phẩm · {sh} cảnh": [
+  "{n} work · {sh} shots",
+  "{n} works · {sh} shots"
+ ],
  "Đạt {ok}/{sh}": "Approved {ok}/{sh}",
  "Đặt tên tác phẩm mới cho dự án {name} rồi bấm \"+ Tác phẩm mới\".": "Name a new work for project {name}, then click \"+ New work\".",
  "‹ Danh sách tác phẩm": "‹ All works",
@@ -795,7 +801,10 @@
  "đoán": "guessed",
  "Giọng chốt": "Locked voice",
  "Câu mẫu": "Sample line",
- "{n} nhân vật · {n2} đã chốt giọng{x}": "{n} characters · {n2} with a locked voice{x}",
+ "{n} nhân vật · {n2} đã chốt giọng{x}": [
+  "{n} character · {n2} with a locked voice{x}",
+  "{n} characters · {n2} with a locked voice{x}"
+ ],
  "↑↓ chọn · Space nghe giọng máy": "↑↓ select · Space plays the machine voice",
  "Chọn một nhân vật trong bảng.": "Select a character in the table.",
  "Nghe giọng máy": "Play machine voice",
@@ -1234,7 +1243,7 @@
  "Đã tạo dự án {name}": "Created project {name}",
  "— Chưa xếp dự án —": "— No project —",
  "+ Dự án mới…": "+ New project…",
- "Asset tạo từ bộ khung chuẩn được xếp theo dự án chủ đề.": "Assets built from the core frame, organised by theme project.",
+ "Asset tạo từ bộ khung chuẩn được xếp theo dự án chủ đề.": "Assets from the core frame, by theme project.",
  "Nhập tệp gói dự án (.json) — mọi thứ đi qua cổng kiểm": "Import a project bundle file (.json) — everything goes through the gates",
  "Nhập gói…": "Import bundle…",
  "Bộ mẫu trên máy là bản cũ — {note}": "The sample on this machine is out of date — {note}",
@@ -1411,7 +1420,10 @@
  "hôm nay {today} câu (không giới hạn)": "today {today} lines (no cap)",
  "dùng chung key AI đạo diễn": "shares the AI director's key",
  "chưa có key": "no key yet",
- "{x} câu đã lưu": "{x} lines saved",
+ "{x} câu đã lưu": [
+  "{x} line saved",
+  "{x} lines saved"
+ ],
  "{model} hết lượt tới {clockOf}": "{model}: quota used up until {clockOf}",
  "Đã có key — dán key mới nếu muốn đổi": "Key saved — paste a new key to replace it",
  "Dán API key Google AI Studio (AIza…)": "Paste a Google AI Studio API key (AIza…)",
