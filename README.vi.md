@@ -50,7 +50,7 @@ Mặc định là tiếng Anh ở mọi nơi: trình cài, CLI và Studio. Chọ
 - **Sau khi cài, cho cả bản cài:** `genchibi lang` in ngôn ngữ hiện tại; `genchibi lang vi` (hoặc `en`) ghi `GC_LANG` vào `.env` rồi khởi động lại app, nên CLI và giao diện mặc định của Studio đổi cùng lúc.
 - **Từng người, trong Studio:** nút chuyển ngôn ngữ trong Studio chỉ đổi giao diện của bạn, nhớ theo máy chủ + trình duyệt; `GC_LANG` vẫn là mặc định cho người khác.
 - Nội dung của bạn (tên nhân vật, kịch bản, lời thoại) không bao giờ bị dịch. Bộ mẫu *Tam Quốc* giữ nội dung tiếng Việt.
-- Nâng cấp từ v0.19 trở về trước: mặc định giờ là tiếng Anh; chạy `genchibi lang vi` để giữ tiếng Việt.
+- Nâng cấp từ v0.19 trở về trước: bản cài đã có dữ liệu **giữ tiếng Việt** (đặt một lần ở lần chạy đầu của v0.20); chỉ bản cài mới bắt đầu bằng tiếng Anh. Đổi bất cứ lúc nào bằng `genchibi lang en|vi` hoặc nút chuyển trong Studio (trang *Hệ thống › Ngôn ngữ*).
 
 ## Bộ khung chuẩn (Xưởng)
 Mọi asset dựng từ một **bộ khung chuẩn không chủ đề** (kiểu greybox của làm game):
