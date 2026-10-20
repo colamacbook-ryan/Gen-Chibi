@@ -278,8 +278,8 @@ const rejectAll = (fn, msg) => fn().then(() => no(true, msg + ': phải lỗi'),
     // luật ngôn ngữ: chỉ dẫn agent không còn ép lời thoại tiếng Việt; AI đạo diễn biết ngôn ngữ phim
     no(/Viewer-facing text is Vietnamese/.test(INSTRUCTIONS) || !/work's language/.test(INSTRUCTIONS), 'INSTRUCTIONS: lời thoại theo ngôn ngữ của tác phẩm');
     const wi = workInstructions(Object.assign({}, st.getWork(W)));
-    no(!/NGÔN NGỮ LỜI THOẠI của phim: Tiếng Quảng Đông \(yue \/ hk\)/.test(wi) || !/phồn thể/.test(wi), 'AI đạo diễn phải biết ngôn ngữ phim');
-    no(!/NGÔN NGỮ LỜI THOẠI của phim: Tiếng Việt/.test(workInstructions({ id: 'x', shots: [] })), 'tác phẩm chưa chọn ngôn ngữ → tiếng Việt');
+    no(!/DIALOGUE LANGUAGE of the film: Cantonese \(yue \/ hk\)/.test(wi) || !/Traditional characters/.test(wi), 'AI đạo diễn phải biết ngôn ngữ phim (chỉ dẫn LLM tiếng Anh — ADR 0007)');
+    no(!/DIALOGUE LANGUAGE of the film: Vietnamese/.test(workInstructions({ id: 'x', shots: [] })), 'tác phẩm chưa chọn ngôn ngữ → tiếng Việt');
     no(m.prepare({ id: 'ci-v', name: 'V', look: {}, voice: { pitch: 9, rate: 0.1 } }).voice.pitch !== V.GV.CLAMP.pitch[1], 'kẹp cao độ một nguồn (voices.js CLAMP)'); }
   // ---- CNS-146: "Giọng AI x/y" của server đếm ĐÚNG các câu Studio lồng / phim xuất đọc (beat của đạo diễn, GC.film.lines), không theo bước thô ----
   { const { MCP } = require(ROOT + '/server/mcp.js'), { Store } = require(ROOT + '/server/store.js'), { loadEngine } = require(ROOT + '/server/engine-node.js'), GV = V.GV;

@@ -112,15 +112,15 @@ await good('validate_motion_pack', { pack: bad });
 const e2 = await call('render_action', { character: 'gen.khung/ma-no-canh', action: 'thrust' });
 ok(e2.isError && e2.structuredContent.error.code === 'VALIDATION_FAILED' && e2.structuredContent.error.allowed.indexOf('punch') >= 0, 'tay không gọi đòn binh khí phải bị chặn kèm danh sách đòn làm được');
 const e5 = await call('lint_sound_track', { steps: [{ actor: 'a', state: 'normal', say: '', sfx: ['bonkk'] }] }), er5 = e5.structuredContent && e5.structuredContent.error;
-ok(e5.isError && /^\[VALIDATION_FAILED\]/.test(e5.content[0].text) && er5.details.some(d => d.path === 'steps[0].sfx[0]' && /gần nhất: "bonk"/.test(d.message)), 'lint_sound_track: tên âm lạ phải là lỗi có path + gợi ý tên gần nhất: ' + e5.content[0].text.slice(0, 240));
+ok(e5.isError && /^\[VALIDATION_FAILED\]/.test(e5.content[0].text) && er5.details.some(d => d.path === 'steps[0].sfx[0]' && /closest: "bonk"/.test(d.message)), 'lint_sound_track: tên âm lạ phải là lỗi có path + gợi ý tên gần nhất: ' + e5.content[0].text.slice(0, 240));
 const e6 = await call('save_shot', { work: work.id, shot: Object.assign({}, shot, { id: 'canh-am-sai', event: Object.assign({}, shot.event, { steps: shot.event.steps.map((s, i) => i === 0 ? Object.assign({}, s, { sfx: ['bonkk'] }) : s) }) }) });
-ok(e6.isError && e6.structuredContent.error.details.some(d => d.path === 'shot.event.steps[0].sfx' && /gần nhất: "bonk"/.test(d.message)), 'save_shot với âm lạ phải bị chặn tại shot.event.steps[0].sfx kèm gợi ý: ' + e6.content[0].text.slice(0, 240));
+ok(e6.isError && e6.structuredContent.error.details.some(d => d.path === 'shot.event.steps[0].sfx' && /closest: "bonk"/.test(d.message)), 'save_shot với âm lạ phải bị chặn tại shot.event.steps[0].sfx kèm gợi ý: ' + e6.content[0].text.slice(0, 240));
 const e7 = await call('validate_sound_pack', { pack: Object.assign({}, sndPack, { id: 'am-sai', sounds: { 'coc-dau-go': sndPack.sounds['coc-dau-go'] } }) });
-ok(e7.isError && e7.structuredContent.error.details.some(d => d.path === 'sounds.coc-dau-go' && /trùng tên âm của gói "am-vi-du-agent"/.test(d.message)), 'tên âm trùng gói khác phải bị chặn, nêu gói giữ tên: ' + e7.content[0].text.slice(0, 240));
+ok(e7.isError && e7.structuredContent.error.details.some(d => d.path === 'sounds.coc-dau-go' && /sound name already used by pack "am-vi-du-agent"/.test(d.message)), 'tên âm trùng gói khác phải bị chặn, nêu gói giữ tên: ' + e7.content[0].text.slice(0, 240));
 const e3 = await call('get_guide', { topic: 'khong-co' });
 ok(e3.isError && e3.structuredContent.error.code === 'NOT_FOUND' && e3.structuredContent.error.allowed.indexOf('film') >= 0, 'chủ đề lạ phải NOT_FOUND kèm danh sách');
 const e4 = await call('save_motion_pack', { pack: Object.assign({}, pack, { id: 'zero-trung', actions: { punch: pack.actions.bonk } }) });
-ok(e4.isError && /trùng id hành động của bộ khung/.test(e4.content[0].text), 'id hành động trùng khung phải bị chặn');
+ok(e4.isError && /action id is already used by the core frame/.test(e4.content[0].text), 'id hành động trùng khung phải bị chặn');
 console.log('   ✓ lỗi có mã: [VALIDATION_FAILED] + details[].path chỉ đúng chỗ → sửa đúng chỗ là qua · đòn binh khí cho tay không bị chặn kèm đòn làm được · NOT_FOUND kèm danh sách · không đè đòn của khung');
 
 // ---------- 4. agent KHÔNG có MCP client: GET ?guide / ?tools (cùng token), function-calling

@@ -8,6 +8,9 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+// NGÔN NGỮ (ADR 0007): error_description trong JSON / redirect là cho MÁY (agent, claude.ai) → tiếng Anh, ASCII (RFC 6749 §5.2); câu cho NGƯỜI
+// (trang lỗi { page }, lỗi của approve, nhãn phạm vi) giữ msgid tiếng Việt — trang Cấp phép / main.js dịch theo người xem
+const MSG = require('./i18n-msg'), { VI, tr } = MSG;
 
 const SCOPES = ['mcp:read', 'mcp:write', 'mcp:owner'];            // thứ tự = mức quyền tăng dần
 const SCOPE_INFO = {
@@ -57,15 +60,17 @@ function isDirectLocal(headers, peer) {
 }
 const nul = o => Object.assign(Object.create(null), o && typeof o === 'object' && !Array.isArray(o) ? o : {});   // bảng không prototype: id do client gửi (__proto__, constructor…) không chạm tới Object.prototype
 
-// redirect_uri: https hoặc http loopback (CLI); không fragment, không user:pass, độ dài có trần. Trả '' nếu hợp lệ, ngược lại lý do
+// redirect_uri: https hoặc http loopback (CLI); không fragment, không user:pass, độ dài có trần. Trả '' nếu hợp lệ, ngược lại lý do (tiếng Anh — error_description cho máy)
 function shapeRedirect(u) {
-  if (typeof u !== 'string' || !u || u.length > MAX.uri || /[\s\u0000-\u001F\u007F]/.test(u)) return 'redirect_uri rỗng, có khoảng trắng hoặc dài quá ' + MAX.uri + ' ký tự';
-  if (u.indexOf('#') >= 0) return 'redirect_uri không được có fragment (#)';
-  let x; try { x = new URL(u); } catch (e) { return 'redirect_uri không phải URL'; }
-  if (x.username || x.password) return 'redirect_uri không được chứa user:pass';
-  if (x.protocol === 'http:') return LOOP.has(x.hostname.toLowerCase()) ? '' : 'redirect_uri http chỉ nhận loopback (127.0.0.1 / localhost) — còn lại phải https';
-  return x.protocol === 'https:' && x.hostname ? '' : 'redirect_uri phải là https (hoặc http loopback)';
+  if (typeof u !== 'string' || !u || u.length > MAX.uri || /[\s\u0000-\u001F\u007F]/.test(u)) return 'redirect_uri is empty, contains whitespace or is longer than ' + MAX.uri + ' characters';
+  if (u.indexOf('#') >= 0) return 'redirect_uri must not contain a fragment (#)';
+  let x; try { x = new URL(u); } catch (e) { return 'redirect_uri is not a URL'; }
+  if (x.username || x.password) return 'redirect_uri must not contain user:pass';
+  if (x.protocol === 'http:') return LOOP.has(x.hostname.toLowerCase()) ? '' : 'redirect_uri over http is only accepted for loopback (127.0.0.1 / localhost) - everything else must be https';
+  return x.protocol === 'https:' && x.hostname ? '' : 'redirect_uri must be https (or http loopback)';
 }
+// nhãn + mô tả một phạm vi theo ngôn ngữ (lang bỏ trống = ngôn ngữ của yêu cầu) — trang Cấp phép, Studio › Hệ thống › Kết nối agent
+function scopeInfo(id, lang) { const s = SCOPE_INFO[id]; return s ? { label: MSG._t(s.label, null, lang), desc: MSG._t(s.desc, null, lang) } : null; }
 // khoá so khớp: loopback bỏ port (RFC 8252 §7.3); địa chỉ khác = chính chuỗi (so tuyệt đối)
 function redirectKey(u) {
   let x; try { x = new URL(u); } catch (e) { return u; }
@@ -105,8 +110,8 @@ class OAuth {
       try { d = JSON.parse(fs.readFileSync(this.file, 'utf8')); if (!d || typeof d !== 'object' || Array.isArray(d)) throw new Error('không phải đối tượng JSON'); }
       catch (e) {
         d = {}; const bak = this.file + '.corrupt-' + Date.now();
-        try { fs.renameSync(this.file, bak); (opts.warn || (() => {}))('[oauth] oauth.json hỏng (' + e.message + ') — đã đổi tên thành ' + path.basename(bak) + ', bắt đầu với danh sách trống'); }
-        catch (e2) { (opts.warn || (() => {}))('[oauth] oauth.json hỏng và không đổi tên được: ' + e2.message); }
+        try { fs.renameSync(this.file, bak); /* i18n-ignore(nhật ký máy chủ) */ (opts.warn || (() => {}))('[oauth] oauth.json hỏng (' + e.message + ') — đã đổi tên thành ' + path.basename(bak) + ', bắt đầu với danh sách trống'); }
+        catch (e2) { (opts.warn || (() => {}))('[oauth] oauth.json hỏng và không đổi tên được: ' + e2.message); }   // i18n-ignore(nhật ký máy chủ)
       }
     }
     this.s = { v: 1, clients: nul(d.clients), grants: nul(d.grants), tokens: nul(d.tokens) };
@@ -211,17 +216,17 @@ class OAuth {
     this.sweep();
     b = b && typeof b === 'object' && !Array.isArray(b) ? b : {};
     const uris = Array.isArray(b.redirect_uris) ? b.redirect_uris : null;
-    if (!uris || !uris.length) return oerr(400, 'invalid_redirect_uri', 'cần redirect_uris (mảng, 1–' + MAX.uris + ' địa chỉ)');
-    if (uris.length > MAX.uris) return oerr(400, 'invalid_redirect_uri', 'tối đa ' + MAX.uris + ' redirect_uris');
+    if (!uris || !uris.length) return oerr(400, 'invalid_redirect_uri', 'redirect_uris is required (array, 1-' + MAX.uris + ' URLs)');
+    if (uris.length > MAX.uris) return oerr(400, 'invalid_redirect_uri', 'at most ' + MAX.uris + ' redirect_uris');
     for (const u of uris) {
       const why = shapeRedirect(u);
       if (why) return oerr(400, 'invalid_redirect_uri', why);
-      if (!this.redirectKeys.has(redirectKey(u))) return oerr(400, 'invalid_redirect_uri', 'redirect_uri ' + new URL(u).origin + ' không nằm trong danh sách cho phép (claude.ai, claude.com, loopback). Chủ máy thêm bằng GC_OAUTH_REDIRECTS.');
+      if (!this.redirectKeys.has(redirectKey(u))) return oerr(400, 'invalid_redirect_uri', 'redirect_uri ' + new URL(u).origin + ' is not on the allow list (claude.ai, claude.com, loopback). The owner can add it with GC_OAUTH_REDIRECTS.');
     }
     let grants = ['authorization_code', 'refresh_token'];
-    if (Array.isArray(b.grant_types)) { grants = grants.filter(g => b.grant_types.indexOf(g) >= 0); if (grants.indexOf('authorization_code') < 0) return oerr(400, 'invalid_client_metadata', 'grant_types phải có authorization_code'); }
-    if (Array.isArray(b.response_types) && b.response_types.length && b.response_types.indexOf('code') < 0) return oerr(400, 'invalid_client_metadata', 'response_types phải có "code"');
-    if (Object.keys(this.s.clients).length >= MAX.clients && !this.evict()) return oerr(429, 'temporarily_unavailable', 'đã đủ ' + MAX.clients + ' client đang dùng — chủ máy thu hồi bớt ở Studio › Hệ thống › Kết nối agent', { retry_after: 60 });
+    if (Array.isArray(b.grant_types)) { grants = grants.filter(g => b.grant_types.indexOf(g) >= 0); if (grants.indexOf('authorization_code') < 0) return oerr(400, 'invalid_client_metadata', 'grant_types must include authorization_code'); }
+    if (Array.isArray(b.response_types) && b.response_types.length && b.response_types.indexOf('code') < 0) return oerr(400, 'invalid_client_metadata', 'response_types must include "code"');
+    if (Object.keys(this.s.clients).length >= MAX.clients && !this.evict()) return oerr(429, 'temporarily_unavailable', 'already ' + MAX.clients + ' clients in use - the owner can revoke some in Studio > System > Agent connections', { retry_after: 60 });
     const t = this.now(), id = 'gcc_' + rnd(18);
     const requested = str(b.scope, MAX.scope).split(/\s+/).filter(x => SCOPES.indexOf(x) >= 0);
     const c = { id, name: text(b.client_name, MAX.name) || 'Agent không tên', redirectUris: uris.slice(), grantTypes: grants, createdAt: iso(t), approvedAt: null, scope: DEFAULT_SCOPE, requested };
@@ -246,21 +251,22 @@ class OAuth {
     const cid = p('client_id'), uri = p('redirect_uri'), state = p('state');
     const c = this.getClient(cid);
     // cổng đăng nhập riêng trước app (/login?redirect=…) hay làm rơi / cắt phần sau dấu ? khi chuyển hướng về → báo đúng nguyên nhân (CNS-130)
-    const GATE = ' Nếu trước app có trang đăng nhập riêng: trang đó có thể đã làm rơi hoặc cắt phần sau dấu ? của địa chỉ khi chuyển hướng về đây — quay lại agent bấm Connect lần nữa (đã đăng nhập thì không bị chuyển hướng), hoặc sửa cổng để giữ nguyên địa chỉ đầy đủ.';
-    if (!cid) return { page: 'Thiếu client_id trong địa chỉ.' + GATE };
+    // câu cho NGƯỜI (trang lỗi): msgid tiếng Việt, errorPage() dịch theo người xem
+    const GATE = 'Nếu trước app có trang đăng nhập riêng: trang đó có thể đã làm rơi hoặc cắt phần sau dấu ? của địa chỉ khi chuyển hướng về đây — quay lại agent bấm Connect lần nữa (đã đăng nhập thì không bị chuyển hướng), hoặc sửa cổng để giữ nguyên địa chỉ đầy đủ.';
+    if (!cid) return { page: tr(VI, 'Thiếu client_id trong địa chỉ. {gate}', { gate: GATE }) };
     if (!c) return { page: 'client_id không tồn tại hoặc đã hết hạn (client chưa được cấp phép tự xoá sau 24 giờ). Quay lại agent và thêm kết nối lại.' };
     // trùng tuyệt đối với bản đã đăng ký (riêng loopback bỏ qua port — CLI chọn port lúc chạy); lệch → trang lỗi, KHÔNG chuyển hướng (không open-redirect)
-    if (!uri || uri.length > MAX.uri || shapeRedirect(uri) || !c.redirectUris.some(r => r === uri || redirectKey(r) === redirectKey(uri))) return { page: 'redirect_uri ' + (uri ? 'không trùng địa chỉ agent đã đăng ký' : 'bị thiếu') + ' — từ chối, không chuyển hướng.' + (uri ? '' : GATE) };
+    if (!uri || uri.length > MAX.uri || shapeRedirect(uri) || !c.redirectUris.some(r => r === uri || redirectKey(r) === redirectKey(uri))) return { page: uri ? 'redirect_uri không trùng địa chỉ agent đã đăng ký — từ chối, không chuyển hướng.' : tr(VI, 'redirect_uri bị thiếu — từ chối, không chuyển hướng. {gate}', { gate: GATE }) };
     // danh sách cho phép đổi sau lúc đăng ký (chủ bỏ một mục GC_OAUTH_REDIRECTS) → client cũ cũng mất quyền dùng callback đó
-    if (!this.redirectKeys.has(redirectKey(uri))) return { page: 'Địa chỉ quay về ' + new URL(uri).origin + ' không còn nằm trong danh sách cho phép của máy này (GC_OAUTH_REDIRECTS) — từ chối, không chuyển hướng.' };
+    if (!this.redirectKeys.has(redirectKey(uri))) return { page: tr(VI, 'Địa chỉ quay về {origin} không còn nằm trong danh sách cho phép của máy này (GC_OAUTH_REDIRECTS) — từ chối, không chuyển hướng.', { origin: new URL(uri).origin }) };
     const back = (error, description) => ({ redirect: this.redirectTo(uri, { error, error_description: description, state }) });
-    if (state.length > MAX.state) return back('invalid_request', 'state dài quá ' + MAX.state + ' ký tự');
-    if (p('response_type') !== 'code') return back('unsupported_response_type', 'chỉ hỗ trợ response_type=code');
+    if (state.length > MAX.state) return back('invalid_request', 'state is longer than ' + MAX.state + ' characters');
+    if (p('response_type') !== 'code') return back('unsupported_response_type', 'only response_type=code is supported');
     const ch = p('code_challenge');
-    if (!/^[A-Za-z0-9_-]{43}$/.test(ch) || ch.length > MAX.challenge) return back('invalid_request', 'cần code_challenge (PKCE S256, 43 ký tự base64url)');
-    if (p('code_challenge_method') !== 'S256') return back('invalid_request', 'cần code_challenge_method=S256');
+    if (!/^[A-Za-z0-9_-]{43}$/.test(ch) || ch.length > MAX.challenge) return back('invalid_request', 'code_challenge is required (PKCE S256, 43 base64url characters)');
+    if (p('code_challenge_method') !== 'S256') return back('invalid_request', 'code_challenge_method=S256 is required');
     const res = p('resource');
-    if (res && !this.ownResource(res)) return back('invalid_target', 'resource phải là ' + this.resource);
+    if (res && !this.ownResource(res)) return back('invalid_target', 'resource must be ' + this.resource);
     const req = p('scope').slice(0, MAX.scope).split(/\s+/).filter(x => SCOPES.indexOf(x) >= 0);
     // gợi ý mức quyền: mức cao nhất agent xin nhưng không quá mcp:write — mcp:owner chỉ khi chủ chủ động chọn
     const top = req.length ? SCOPES[Math.max.apply(null, req.map(x => SCOPES.indexOf(x)))] : '';
@@ -289,7 +295,7 @@ class OAuth {
     id = String(id || '').slice(0, 64);
     const p = this.pending.get(id);
     if (!p) return { status: 410, error: 'Yêu cầu này đã hết hạn hoặc đã xử lý. Quay lại agent và bấm kết nối lại.' };
-    if (decision === 'deny') { this.pending.delete(id); return { redirect: this.redirectTo(p.redirectUri, { error: 'access_denied', error_description: 'chủ máy đã từ chối', state: p.state }) }; }
+    if (decision === 'deny') { this.pending.delete(id); return { redirect: this.redirectTo(p.redirectUri, { error: 'access_denied', error_description: 'the owner denied the request', state: p.state }) }; }
     if (decision !== 'approve') return { status: 400, error: 'decision phải là approve hoặc deny' };
     if (SCOPES.indexOf(scope) < 0) return { status: 400, error: 'phạm vi không hợp lệ (mcp:read | mcp:write | mcp:owner)' };
     this.pending.delete(id);
@@ -307,26 +313,26 @@ class OAuth {
   // client công khai: chỉ cần client_id (PKCE chứng minh phần còn lại). Không có client_secret ở bất cứ đâu
   authClient(f) {
     const c = this.getClient(str(f.client_id, MAX.id));
-    return c ? { client: c } : oerr(401, 'invalid_client', 'client_id không tồn tại hoặc đã hết hạn');
+    return c ? { client: c } : oerr(401, 'invalid_client', 'client_id does not exist or has expired');
   }
   token(f) {
     this.sweep();
     const a = this.authClient(f); if (a.status) return a;
     const c = a.client, gt = str(f.grant_type, 40);
     if (gt !== 'authorization_code' && gt !== 'refresh_token') return oerr(400, 'unsupported_grant_type', 'grant_type: authorization_code | refresh_token');
-    if (c.grantTypes.indexOf(gt) < 0) return oerr(400, 'unauthorized_client', 'client này không đăng ký grant_type ' + gt);
-    if (f.resource !== undefined && f.resource !== '' && !this.ownResource(str(f.resource, MAX.uri))) return oerr(400, 'invalid_target', 'resource phải là ' + this.resource);
+    if (c.grantTypes.indexOf(gt) < 0) return oerr(400, 'unauthorized_client', 'this client did not register grant_type ' + gt);
+    if (f.resource !== undefined && f.resource !== '' && !this.ownResource(str(f.resource, MAX.uri))) return oerr(400, 'invalid_target', 'resource must be ' + this.resource);
     if (gt === 'authorization_code') {
       const rec = this.codes.get(sha(str(f.code, MAX.code)));
-      if (!rec) return oerr(400, 'invalid_grant', 'code sai hoặc đã hết hạn');
-      if (rec.used) { if (rec.grant) this.dropGrant(rec.grant); this.save(); return oerr(400, 'invalid_grant', 'code đã được dùng — token cấp từ code này đã bị thu hồi'); }
+      if (!rec) return oerr(400, 'invalid_grant', 'code is wrong or has expired');
+      if (rec.used) { if (rec.grant) this.dropGrant(rec.grant); this.save(); return oerr(400, 'invalid_grant', 'code was already used - the tokens issued from it have been revoked'); }
       rec.used = true;   // đốt mã ngay: mọi lần thử sau (kể cả sai PKCE) đều không dùng lại được
-      if (rec.exp <= this.now()) return oerr(400, 'invalid_grant', 'code đã hết hạn (60 giây)');
-      if (rec.client !== c.id) return oerr(400, 'invalid_grant', 'code không thuộc client này');
-      if (str(f.redirect_uri, MAX.uri + 1) !== rec.redirectUri) return oerr(400, 'invalid_grant', 'redirect_uri không khớp lúc xin code');
+      if (rec.exp <= this.now()) return oerr(400, 'invalid_grant', 'code has expired (60 seconds)');
+      if (rec.client !== c.id) return oerr(400, 'invalid_grant', 'code does not belong to this client');
+      if (str(f.redirect_uri, MAX.uri + 1) !== rec.redirectUri) return oerr(400, 'invalid_grant', 'redirect_uri does not match the one used to get the code');
       const v = str(f.code_verifier, MAX.verifier + 1);
-      if (!/^[A-Za-z0-9._~-]{43,128}$/.test(v)) return oerr(400, 'invalid_request', 'cần code_verifier (43–128 ký tự)');
-      if (!safeEq(crypto.createHash('sha256').update(v).digest('base64url'), rec.challenge)) return oerr(400, 'invalid_grant', 'code_verifier không khớp code_challenge (PKCE)');
+      if (!/^[A-Za-z0-9._~-]{43,128}$/.test(v)) return oerr(400, 'invalid_request', 'code_verifier is required (43-128 characters)');
+      if (!safeEq(crypto.createHash('sha256').update(v).digest('base64url'), rec.challenge)) return oerr(400, 'invalid_grant', 'code_verifier does not match code_challenge (PKCE)');
       const gid = 'g_' + rnd(12);
       this.s.grants[gid] = { id: gid, client: c.id, scope: rec.scope, createdAt: iso(this.now()) };
       rec.grant = gid;
@@ -334,10 +340,10 @@ class OAuth {
     }
     // refresh_token: xoay vòng — dùng lại refresh cũ = thu hồi cả chuỗi
     const h = sha(str(f.refresh_token, MAX.code)), t = this.s.tokens[h];
-    if (!t || t.k !== 'r') return oerr(400, 'invalid_grant', 'refresh_token sai hoặc đã hết hạn');
-    if (t.aud !== this.resource) { this.dropGrant(t.g); this.save(); return oerr(400, 'invalid_grant', 'refresh_token cấp cho địa chỉ khác (đã đổi GC_PUBLIC_URL) — cần cấp phép lại'); }
+    if (!t || t.k !== 'r') return oerr(400, 'invalid_grant', 'refresh_token is wrong or has expired');
+    if (t.aud !== this.resource) { this.dropGrant(t.g); this.save(); return oerr(400, 'invalid_grant', 'refresh_token was issued for another address (GC_PUBLIC_URL changed) - authorize again'); }
     const g = this.s.grants[t.g];
-    if (!g || g.client !== c.id) return oerr(400, 'invalid_grant', 'refresh_token không thuộc client này');
+    if (!g || g.client !== c.id) return oerr(400, 'invalid_grant', 'refresh_token does not belong to this client');
     if (t.used) {
       // ân hạn 60 s: refresh VỪA xoay mà bị gửi lại (mất response, hoặc hai phiên refresh song song) và cặp kế của nó chưa ai dùng → thu hồi cặp kế đó, cấp cặp mới. Ngoài ân hạn / cặp kế đã dùng → thu hồi cả chuỗi
       const nx = t.next, nr = nx && this.s.tokens[nx.r], na = nx && this.s.tokens[nx.a];
@@ -346,7 +352,7 @@ class OAuth {
         const body = this.issue(c, g.id); t.next = { a: sha(body.access_token), r: body.refresh_token ? sha(body.refresh_token) : '' }; this.save();
         return { status: 200, body };
       }
-      this.dropGrant(t.g); this.save(); return oerr(400, 'invalid_grant', 'refresh_token đã được dùng — cả chuỗi token đã bị thu hồi, cần cấp phép lại');
+      this.dropGrant(t.g); this.save(); return oerr(400, 'invalid_grant', 'refresh_token was already used - the whole token chain has been revoked, authorize again');
     }
     t.used = true; t.usedAt = this.now();
     const body = this.issue(c, g.id); t.next = { a: sha(body.access_token), r: body.refresh_token ? sha(body.refresh_token) : '' }; this.save();
@@ -416,4 +422,4 @@ class OAuth {
   }
 }
 
-module.exports = { OAuth, clientIp, isDirectLocal, SCOPES, SCOPE_INFO, DEFAULT_SCOPE, DEFAULT_REDIRECTS, TTL, shapeRedirect, canonResource };
+module.exports = { OAuth, clientIp, isDirectLocal, SCOPES, SCOPE_INFO, scopeInfo, DEFAULT_SCOPE, DEFAULT_REDIRECTS, TTL, shapeRedirect, canonResource };

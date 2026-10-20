@@ -2,6 +2,7 @@
 // © 2026 Gen Labs — All rights reserved.
 // Node 22 không tự đọc biến proxy; người dùng sau proxy công ty sẽ không cập nhật hay gọi LLM được nếu thiếu phần này.
 'use strict';
+const { tr } = require('./i18n');   // tr('vi', mẫu, biến): msgid tiếng Việt có placeholder, dịch ở rìa (ADR 0007)
 const http = require('http');
 const https = require('https');
 const tls = require('tls');
@@ -27,7 +28,7 @@ class TunnelAgent extends https.Agent {
     if (this.proxy.username) headers['Proxy-Authorization'] = 'Basic ' + Buffer.from(decodeURIComponent(this.proxy.username) + ':' + decodeURIComponent(this.proxy.password)).toString('base64');
     const req = http.request({ host: this.proxy.hostname, port: this.proxy.port || 80, method: 'CONNECT', path: target, headers });
     req.on('connect', (res, socket) => {
-      if (res.statusCode !== 200) { socket.destroy(); return cb(new Error('proxy từ chối kết nối tới ' + opts.host + ' (' + res.statusCode + ')')); }
+      if (res.statusCode !== 200) { socket.destroy(); return cb(new Error(tr('vi', 'proxy từ chối kết nối tới {host} ({code})', { host: opts.host, code: res.statusCode }))); }
       cb(null, tls.connect({ socket, servername: opts.servername || opts.host }));
     });
     req.on('error', cb);

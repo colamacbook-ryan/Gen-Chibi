@@ -8,6 +8,9 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { agentFor } = require('./net');
+// NGÔN NGỮ (ADR 0007): chữ gửi LLM (chỉ dẫn, kết quả tool, câu yêu cầu sửa) viết tiếng Anh; câu cho người dùng (lỗi, nhãn nhà cung cấp, kết luận đo model)
+// giữ msgid tiếng Việt — dịch theo ngôn ngữ của yêu cầu (MSG.reqLang) hoặc ở rìa (main.js)
+const MSG = require('./i18n-msg'), { VI, tr } = MSG;
 
 const PROVIDERS = {
   openrouter: { label: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', models: true, keyUrl: 'https://openrouter.ai/keys' },
@@ -33,7 +36,7 @@ function request(method, url, { headers = {}, body, timeout = 90000 } = {}) {
         if (res.statusCode >= 400) {
           // chỉ lấy dòng thông báo lỗi chuẩn, không chép nguyên phản hồi của nhà cung cấp
           const msg = json && json.error && typeof json.error.message === 'string' ? json.error.message.slice(0, 200) : '';
-          return reject(Object.assign(new Error('Nhà cung cấp trả lỗi ' + res.statusCode + (msg ? ': ' + msg : '')), { status: res.statusCode }));
+          return reject(Object.assign(new Error(msg ? tr(VI, 'Nhà cung cấp trả lỗi {code}: {reason}', { code: res.statusCode, reason: msg }) : tr(VI, 'Nhà cung cấp trả lỗi {code}', { code: res.statusCode })), { status: res.statusCode }));
         }
         resolve(json);
       });
@@ -74,7 +77,9 @@ class AI {
   config() { return Object.assign({ provider: 'openrouter', baseUrl: PROVIDERS.openrouter.baseUrl, model: '', temperature: 0.8 }, this.read(this.file, {})); }
   publicConfig() {
     const c = this.config();
-    return Object.assign({}, c, { hasKey: !!this.secrets.get('llm.' + c.provider), keyHint: this.secrets.hint('llm.' + c.provider), providers: PROVIDERS });
+    // nhãn nhà cung cấp theo ngôn ngữ của yêu cầu (Studio gửi X-GC-Lang)
+    const providers = {}; Object.keys(PROVIDERS).forEach(k => { providers[k] = Object.assign({}, PROVIDERS[k], { label: MSG._t(PROVIDERS[k].label) }); });
+    return Object.assign({}, c, { hasKey: !!this.secrets.get('llm.' + c.provider), keyHint: this.secrets.hint('llm.' + c.provider), providers });
   }
   setConfig(b) {
     const c = this.config();
@@ -101,7 +106,7 @@ class AI {
     const key = this.secrets.get('llm.' + c.provider);
     const bound = this.secrets.get('llm.' + c.provider + '.origin');
     if (key && bound && bound !== new URL(c.baseUrl).origin) throw Object.assign(new Error('API key được nhập cho địa chỉ khác; hãy nhập lại key cho địa chỉ hiện tại'), { code: 400 });
-    if (!key) throw Object.assign(new Error('Chưa nhập API key cho ' + (PROVIDERS[c.provider] || {}).label), { code: 400 });
+    if (!key) throw Object.assign(new Error(tr(VI, 'Chưa nhập API key cho {provider}', { provider: (PROVIDERS[c.provider] || {}).label })), { code: 400 });
     const h = { Authorization: 'Bearer ' + key };
     if (c.provider === 'openrouter') { h['HTTP-Referer'] = 'https://github.com/colamacbook-ryan/Gen-Chibi'; h['X-Title'] = 'gen-chibi'; }
     return h;
@@ -145,7 +150,8 @@ class AI {
   // system: chỉ dẫn TĨNH đã dựng (mcp.uiSystem); không truyền thì dùng vai của khu.
   // context: tin `user` DỮ LIỆU GIAO DIỆN (mcp.uiContext: ngữ cảnh + hiện trạng tác phẩm + ghi chú duyệt + ghim, bọc JSON) — chen ngay trước tin cuối của người dùng, không lưu vào luồng.
   // Ngân sách (CNS-119): system + context + lịch sử ≤ mcp.limits().llm ký tự mỗi vòng — lịch sử bị xén từ tin cũ nhất (luôn giữ tin cuối); trả về `sent` (ký tự đã gửi) + `usage` thật
-  async agent({ messages, model, zone, system, context }, mcp) {
+  // lang (tuỳ chọn): ngôn ngữ giao diện của người dùng — cho câu server tự viết vào lời trả lời (dừng sau 10 vòng); bỏ trống = ngôn ngữ của yêu cầu
+  async agent({ messages, model, zone, system, context, lang }, mcp) {
     const c = this.config();
     if (model) c.model = model;
     if (!c.model) throw Object.assign(new Error('Chưa chọn model'), { code: 400 });
@@ -176,12 +182,12 @@ class AI {
         const name = call.function && call.function.name;
         let args = {}, text, ok = false, anchors = [];
         try { args = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (e) { args = null; }
-        if (!allowed.has(name)) text = 'Tool "' + name + '" không có trong nhà xưởng.';
-        else if (!args) text = 'arguments không phải JSON hợp lệ.';
+        if (!allowed.has(name)) text = 'Tool "' + name + '" is not available in this area.';
+        else if (!args) text = 'arguments is not valid JSON.';
         else {
           let res;
           try { res = await mcp.callTool(name, args, { channel: 'ui', zone }); }   // zone: khu Thư viện không tạo asset mới (mcp.libraryGuard)
-          catch (e) { res = { isError: true, content: [{ type: 'text', text: 'Tool lỗi: ' + String(e.message).slice(0, 300) }] }; }
+          catch (e) { res = { isError: true, content: [{ type: 'text', text: 'Tool failed: ' + MSG.en(String(e.message)).slice(0, 300) }] }; }
           ok = !!res && !res.isError;
           if (ok) { try { anchors = mcp.anchorsOf(name, args, res.structuredContent); } catch (e) { anchors = []; } }   // thứ vừa tạo / sửa → chip Soi trong dock
           const parts = (res && res.content) || [];
@@ -189,16 +195,16 @@ class AI {
             if (p.type === 'text') return p.text;
             if (p.type === 'resource' && p.resource && /svg/.test(p.resource.mimeType)) {
               if (renders.length < 6) renders.push({ tool: name, svg: p.resource.text });
-              return '[Ảnh SVG ' + p.resource.text.length + ' ký tự — đã hiển thị cho người dùng]';
+              return '[SVG image, ' + p.resource.text.length + ' characters — already shown to the user]';
             }
             return '';
-          }).join('\n') || (ok ? 'ok' : 'lỗi');
+          }).join('\n') || (ok ? 'ok' : 'error');
         }
         log.push({ tool: name, ok, summary: String(text).replace(/\s+/g, ' ').slice(0, 160), anchors });
         msgs.push({ role: 'tool', tool_call_id: call.id, content: String(text).slice(0, 12000) });
       }
     }
-    return { reply: 'Dừng sau 10 lượt gọi tool — hãy chia nhỏ yêu cầu.', log, renders, rounds: 10, usage, sent, model: c.model, anchors: anchorsOfLog(log) };
+    return { reply: MSG._t('Dừng sau 10 lượt gọi tool — hãy chia nhỏ yêu cầu.', null, lang), log, renders, rounds: 10, usage, sent, model: c.model, anchors: anchorsOfLog(log) };
   }
 
   castFrom(ids, extraAssets) {
@@ -217,8 +223,9 @@ class AI {
     if (!c.model) throw Object.assign(new Error('Chưa chọn model'), { code: 400 });
     if (!description || String(description).length > 2000) throw Object.assign(new Error('mô tả sự kiện cần 1–2000 ký tự'), { code: 400 });
     const cast = this.castFrom(ids, extraAssets);
-    const system = this.GC.director.prompt(cast, typeof project === 'string' ? { project } : undefined).replace('Sự kiện: <mô tả sự kiện ở đây>', 'Trả lời bằng json.');
-    const messages = [{ role: 'system', content: system }, { role: 'user', content: 'Sự kiện: ' + description }];
+    // chỉ dẫn tiếng Anh (engine directorPrompt); lời thoại viết bằng ngôn ngữ của MÔ TẢ sự kiện (người dùng viết tiếng Việt → thoại tiếng Việt như trước)
+    const system = this.GC.director.prompt(cast, typeof project === 'string' ? { project } : undefined).replace('Event: <event description here>', 'Write every "say" in the language of the event description. Answer in json.');
+    const messages = [{ role: 'system', content: system }, { role: 'user', content: 'Event: ' + description }];
     const t0 = Date.now();
     const usage = { prompt: 0, completion: 0 };
     let lastErr = null;
@@ -231,9 +238,9 @@ class AI {
       if (!errs.length) return { event: ev, attempts: attempt, ms: Date.now() - t0, usage, model: c.model };
       lastErr = errs;
       messages.push({ role: 'assistant', content: String(text || '').slice(0, 6000) });
-      messages.push({ role: 'user', content: 'JSON chưa đúng schema. Sửa các lỗi sau rồi trả lại MỘT object json hoàn chỉnh:\n- ' + errs.slice(0, 12).join('\n- ') });
+      messages.push({ role: 'user', content: 'The JSON does not match the schema. Fix these errors and return ONE complete json object:\n- ' + errs.slice(0, 12).map(MSG.en).join('\n- ') });
     }
-    throw Object.assign(new Error('Model không viết được kịch bản đúng chuẩn sau 3 lần: ' + lastErr.slice(0, 4).join('; ')), { code: 422 });
+    throw Object.assign(new Error(tr(VI, 'Model không viết được kịch bản đúng chuẩn sau 3 lần: {list}', { list: lastErr.slice(0, 4).join('; ') })), { code: 422 });
   }
 
   // Đo một model: có dùng được cho hệ thống này không (JSON hợp lệ, đúng schema, số lần thử, độ trễ, token)
@@ -242,17 +249,19 @@ class AI {
     const m = model || c.model;
     const row = { model: m, provider: c.provider, at: new Date().toISOString() };
     try {
-      const r = await this.director({ description: 'Ma-nơ-canh được thưởng nóng vì hoàn thành việc sớm, nhưng lỡ tay làm đổ trà lên bản kế hoạch.', cast: ['ma-no-canh'], model: m });
-      Object.assign(row, { ok: true, attempts: r.attempts, ms: r.ms, tokensIn: r.usage.prompt, tokensOut: r.usage.completion, steps: r.event.steps.length, verdict: r.attempts === 1 ? 'Dùng tốt' : 'Dùng được (cần sửa ' + (r.attempts - 1) + ' lần)' });
+      const r = await this.director({ description: 'The mannequin gets a surprise bonus for finishing early, but accidentally spills tea on the plan.', cast: ['ma-no-canh'], model: m });
+      Object.assign(row, { ok: true, attempts: r.attempts, ms: r.ms, tokensIn: r.usage.prompt, tokensOut: r.usage.completion, steps: r.event.steps.length, verdict: r.attempts === 1 ? 'Dùng tốt' : tr(VI, 'Dùng được (cần sửa {n} lần)', { n: r.attempts - 1 }) });
     } catch (e) {
       Object.assign(row, { ok: false, error: e.message.slice(0, 300), verdict: 'Không dùng được' });
     }
     const bench = this.read(this.benchFile, []);
     bench.unshift(row);
     this.write(this.benchFile, bench.slice(0, 100));
-    return row;
+    return this.benchView(row);
   }
-  bench() { return this.read(this.benchFile, []); }
+  // sổ đo lưu msgid tiếng Việt (kết luận + lỗi); trả ra theo ngôn ngữ của yêu cầu
+  benchView(row) { return Object.assign({}, row, { verdict: MSG.label('', row.verdict), error: row.error ? MSG.label('', row.error) : row.error }); }
+  bench() { return this.read(this.benchFile, []).map(r => this.benchView(r)); }
 }
 
 module.exports = { AI, PROVIDERS, extractJSON };

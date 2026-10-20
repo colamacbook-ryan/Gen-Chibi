@@ -10,6 +10,8 @@ const http = require('http');
 const crypto = require('crypto');
 const { extractTarGz } = require('./tar');
 const { agentFor } = require('./net');
+// câu cho người dùng: msgid tiếng Việt, câu ghép = mẫu tr(VI, …) — dịch ở rìa (Studio theo người gọi, MCP sang tiếng Anh) (ADR 0007)
+const { VI, tr } = require('./i18n-msg');
 
 const RESTART_CODE = 75;
 
@@ -41,7 +43,7 @@ function get(url, { json = false, maxBytes = 200 * 1024 * 1024, redirects = 5, t
         const sameHost = next.host === new URL(url).host;
         return resolve(get(next.toString(), { json, maxBytes, redirects: redirects - 1, token: sameHost ? token : '', octet: sameHost && octet }));
       }
-      if (res.statusCode !== 200) { res.resume(); return reject(new Error('HTTP ' + res.statusCode + ' khi tải ' + url)); }
+      if (res.statusCode !== 200) { res.resume(); return reject(new Error(tr(VI, 'HTTP {code} khi tải {url}', { code: res.statusCode, url }))); }
       const chunks = []; let n = 0;
       res.on('data', c => { n += c.length; if (n > maxBytes) { req.destroy(); reject(new Error('tệp quá lớn')); } else chunks.push(c); });
       res.on('end', () => {
@@ -61,7 +63,7 @@ function latestTagByRedirect(url) {
       res.resume();
       const m = /\/releases\/tag\/(v[^/?#]+)/.exec(res.headers.location || '');
       if ([301, 302, 303, 307, 308].includes(res.statusCode) && m) resolve(decodeURIComponent(m[1]));
-      else reject(new Error('không đọc được bản mới nhất (HTTP ' + res.statusCode + ')'));
+      else reject(new Error(tr(VI, 'không đọc được bản mới nhất (HTTP {code})', { code: res.statusCode })));
     });
     req.on('timeout', () => req.destroy(new Error('hết thời gian chờ mạng')));
     req.on('error', reject);
@@ -115,10 +117,10 @@ class Updater {
     catch (e) {
       if (!this.apiFeed) throw e;
       // repo private: trang công khai cũng 404 — báo rõ thay vì đoán
-      if (this.token || /HTTP 404/.test(e.message)) throw new Error(this.token ? 'GitHub từ chối token (' + e.message + ') — kiểm GC_GITHUB_TOKEN còn hạn và có quyền đọc repo ' + this.repo : 'Không thấy bản phát hành (' + e.message + '). Repo private: thêm GC_GITHUB_TOKEN vào .env.');
+      if (this.token || /HTTP 404/.test(e.message)) throw new Error(this.token ? tr(VI, 'GitHub từ chối token ({error}) — kiểm GC_GITHUB_TOKEN còn hạn và có quyền đọc repo {repo}', { error: e.message, repo: this.repo }) : tr(VI, 'Không thấy bản phát hành ({error}). Repo private: thêm GC_GITHUB_TOKEN vào .env.', { error: e.message }));
       const tag = await latestTagByRedirect('https://github.com/' + this.repo + '/releases/latest');
       const base = 'https://github.com/' + this.repo + '/releases/download/' + tag + '/';
-      return { tag_name: tag, body: 'Ghi chú phát hành: https://github.com/' + this.repo + '/releases/tag/' + tag, published_at: null,
+      return { tag_name: tag, body: 'Release notes: https://github.com/' + this.repo + '/releases/tag/' + tag, published_at: null,
         assets: [{ name: 'gen-chibi-' + tag + '.tar.gz', browser_download_url: base + 'gen-chibi-' + tag + '.tar.gz' }, { name: 'SHA256SUMS', browser_download_url: base + 'SHA256SUMS' }] };
     }
   }
@@ -148,7 +150,7 @@ class Updater {
     if (this.busy) throw new Error('đang cập nhật');
     await this.check();
     const ok = this.state.available || (force && this.state.newer);
-    if (!ok) return { restart: false, message: this.state.skipped ? 'Bản ' + this.state.latest + ' đã bị bỏ qua vì lần trước chạy lỗi.' : 'Đang dùng bản mới nhất.' };
+    if (!ok) return { restart: false, message: this.state.skipped ? tr(VI, 'Bản {tag} đã bị bỏ qua vì lần trước chạy lỗi.', { tag: this.state.latest }) : 'Đang dùng bản mới nhất.' };
     this.busy = true;
     const tag = this.state.latest;
     const relDir = path.join(this.home, 'releases', tag);
@@ -156,7 +158,7 @@ class Updater {
       const auth = this.state.viaApi ? { token: this.token, octet: true } : {};
       const [tarBuf, sumsBuf] = await Promise.all([get(this.state.tarUrl, auth), get(this.state.sumsUrl, Object.assign({ maxBytes: 1024 * 1024 }, auth))]);
       const want = sumsBuf.toString('utf8').split('\n').map(l => l.trim().split(/\s+/)).find(p => p[1] && p[1].replace(/^\*/, '') === this.state.tarName);
-      if (!want) throw new Error('SHA256SUMS không có dòng cho ' + this.state.tarName);
+      if (!want) throw new Error(tr(VI, 'SHA256SUMS không có dòng cho {name}', { name: this.state.tarName }));
       const got = crypto.createHash('sha256').update(tarBuf).digest('hex');
       if (got !== want[0].toLowerCase()) throw new Error('sai checksum: gói tải về không khớp SHA256SUMS');
       const tmpTar = path.join(this.home, 'releases', '.' + tag + '.tar.gz');
@@ -167,7 +169,7 @@ class Updater {
       extractTarGz(tmpTar, tmpDir);
       fs.rmSync(tmpTar, { force: true });
       const ver = fs.readFileSync(path.join(tmpDir, 'VERSION'), 'utf8').trim();
-      if ('v' + ver.replace(/^v/, '') !== tag) throw new Error('VERSION trong gói (' + ver + ') khác tag ' + tag);
+      if ('v' + ver.replace(/^v/, '') !== tag) throw new Error(tr(VI, 'VERSION trong gói ({ver}) khác tag {tag}', { ver, tag }));
       if (!fs.existsSync(path.join(tmpDir, 'server', 'main.js'))) throw new Error('gói thiếu server/main.js');
       fs.rmSync(relDir, { recursive: true, force: true });
       fs.renameSync(tmpDir, relDir);
@@ -176,7 +178,7 @@ class Updater {
       this.switchTo(tag);
       this.write(path.join(this.dataDir, 'update-pending.json'), { kind: 'update', from: 'v' + this.version.replace(/^v/, ''), to: tag, previousBefore, backup, at: new Date().toISOString() });
       this.log('[updater] đã chuyển sang ' + tag + ', khởi động lại để chạy bản mới');
-      return { restart: true, message: 'Đã tải ' + tag + '. Đang khởi động lại…' };
+      return { restart: true, message: tr(VI, 'Đã tải {tag}. Đang khởi động lại…', { tag }) };
     } catch (e) {
       this.state.error = e.message;
       this.write(this.stateFile, this.state);
@@ -195,7 +197,7 @@ class Updater {
     this.link('current', prev);
     if (cur) this.link('previous', cur);
     this.write(path.join(this.dataDir, 'update-pending.json'), { kind: 'rollback', from: cur, to: prev, at: new Date().toISOString() });
-    return { restart: true, message: 'Đang chạy lại ' + prev + '…' };
+    return { restart: true, message: tr(VI, 'Đang chạy lại {tag}…', { tag: prev }) };
   }
 
   switchTo(tag) {

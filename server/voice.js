@@ -9,12 +9,14 @@ const path = require('path');
 const crypto = require('crypto');
 const https = require('https');
 const { agentFor } = require('./net');
+// câu lỗi: msgid tiếng Việt (câu ghép = mẫu tr(VI, …)), dịch ở rìa — Studio theo người gọi, MCP sang tiếng Anh (ADR 0007)
+const MSG = require('./i18n-msg'), { VI, tr } = MSG;
 
 const API = 'https://generativelanguage.googleapis.com/v1beta';
 // Vai giọng, giọng vùng, 30 giọng dựng sẵn của Gemini, thẻ cảm xúc: MỘT nguồn ở engine/voices.js (dùng chung với Studio, bộ phát, MCP).
 // Giọng nam / nữ là DỰ KIẾN — nghe thử ở Studio; giọng bị API từ chối thì đánh dấu hỏng lúc chạy, không dùng nữa.
 const GV = require('../engine/voices.js');
-const VOICES = GV.AI_VOICES.map(v => ({ name: v.name, gender: v.gender === 'f' ? 'nữ' : 'nam', style: v.style }));
+const VOICES = GV.AI_VOICES.map(v => ({ name: v.name, gender: v.gender === 'f' ? 'nữ' : 'nam', style: v.style }));   // i18n-ignore(giá trị dữ liệu: main.js so khớp 'nữ')
 const VOICE_SET = new Set(VOICES.map(v => v.name));
 const PREBUILT = new Map(VOICES.map(v => [v.name.toLowerCase(), v.name]));   // thư viện trả id viết thường ('achernar') → tên chuẩn
 const LIB_ID = /^[a-z]{2,3}-[a-z0-9]{2,4}-[a-z0-9-]{2,40}$/;                // giọng thư viện Google, vd vi-vn-tutor-2
@@ -184,7 +186,7 @@ class Voice {
     if (this._models && Date.now() - this._modelsAt < 6 * 3600e3) return this._models;
     const key = this.key(); if (!key) throw fail(409, 'Chưa có API key Google AI Studio (Cài đặt AI › Giọng AI)');
     const r = await this.http.get(API + '/models?pageSize=200');
-    if (r.status >= 400 || !r.json) throw fail(502, 'Không lấy được danh sách model của Google (' + r.status + ')');
+    if (r.status >= 400 || !r.json) throw fail(502, tr(VI, 'Không lấy được danh sách model của Google ({code})', { code: r.status }));
     const cmp = (a, b) => { const x = verOf(a), y = verOf(b); return (y[0] - x[0]) || (y[1] - x[1]); };
     const rank = n => (/preview/.test(n) ? 2 : 0) + (/lite/.test(n) ? 1 : 0);
     this._models = (r.json.models || []).filter(m => /-tts\b/.test(m.name) && (m.supportedGenerationMethods || []).indexOf('generateContent') >= 0)
@@ -201,7 +203,7 @@ class Voice {
     this._libErr = this._libErr || {};
     if (this._libErr[code] > Date.now()) { if (hit) return hit.voices; throw fail(502, 'Thư viện giọng của Google vừa lỗi — thử lại sau ít phút'); }   // không gọi lại mỗi lần cast (CNS-094)
     const r = await this.http.get(API + '/voices?language_code=' + encodeURIComponent(code) + '&page_size=1000');
-    if (r.status >= 400 || !r.json) { this._libErr[code] = Date.now() + 600e3; if (hit) return hit.voices; throw fail(502, 'Không lấy được thư viện giọng của Google (' + r.status + ')'); }
+    if (r.status >= 400 || !r.json) { this._libErr[code] = Date.now() + 600e3; if (hit) return hit.voices; throw fail(502, tr(VI, 'Không lấy được thư viện giọng của Google ({code})', { code: r.status })); }
     // lọc lại theo mã ngôn ngữ (không tin hẳn bộ lọc phía Google) + chỉ nhận id đúng dạng
     const voices = (r.json.voices || []).filter(v => v && typeof v.id === 'string' && String(v.language_code || '').toLowerCase() === code.toLowerCase() &&
       (PREBUILT.has(v.id.toLowerCase()) || LIB_ID.test(v.id) || DESIGN_ID.test(v.id))).slice(0, 1000)
@@ -233,7 +235,7 @@ class Voice {
       const R = GV.ROLES[a.role], d = c.designs[a.role + '|' + L + '|' + a.accent], h = hashN(a.id);   // nhân vật có giọng vùng riêng → giọng thiết kế của vùng đó
       const kv = this.validVoice(kept[a.id], c);
       // giọng THIẾT KẾ cho vai (chủ máy chủ động làm) thắng giọng đã chốt; còn lại giữ giọng đã chốt — thêm người / Google thêm giọng không đổi ai
-      if (d && DESIGN_ID.test(d.voice) && (!taken.has(d.voice) || kv === d.voice) && !this.isBad(d.voice, c)) { out[a.id] = { voice: d.voice, source: 'design', label: R.label + ' (thiết kế)' }; taken.add(d.voice); return; }
+      if (d && DESIGN_ID.test(d.voice) && (!taken.has(d.voice) || kv === d.voice) && !this.isBad(d.voice, c)) { out[a.id] = { voice: d.voice, source: 'design', label: MSG._t('{label} (thiết kế)', { label: MSG.label('', R.label) }) }; taken.add(d.voice); return; }
       if (kv) { out[a.id] = { voice: kv, source: srcOf(kv), label: (libById.get(kv) || {}).name || kv, kept: true }; return; }
       if (R.ages) {   // vai người lớn: giọng bản ngữ của thư viện, chấm theo giới + tuổi + cao độ + chất giọng (mô tả của Google)
         const kw = KIND_KW[R.kind] || KIND_KW.thuong;
@@ -243,7 +245,7 @@ class Voice {
           .map(v => ({ v, s: sc(v) })).filter(x => x.s <= 12).sort((x, y) => x.s - y.s || (x.v.id < y.v.id ? -1 : 1));
         // đa dạng nhưng không đánh đổi độ hợp vai: chỉ xoay giữa các giọng sát điểm giọng tốt nhất (≤ 2 điểm), tối đa 3
         if (pool.length) pool.splice(Math.min(3, pool.filter(x => x.s <= pool[0].s + 2).length));
-        if (pool.length) { const v = pool[h % pool.length].v; out[a.id] = { voice: v.id, source: 'library', label: v.name + (v.age ? ' · ' + v.age + ' tuổi' : '') }; taken.add(v.id); return; }
+        if (pool.length) { const v = pool[h % pool.length].v; out[a.id] = { voice: v.id, source: 'library', label: v.age ? MSG._t('{name} · {age} tuổi', { name: v.name, age: v.age }) : v.name }; taken.add(v.id); return; }
       }
       const n = R.ai.length; let pick = '';
       for (let i = 0; i < n && !pick; i++) { const k = R.ai[(h + i) % n]; if (!taken.has(k) && !this.isBad(k, c)) pick = k; }
@@ -267,8 +269,8 @@ class Voice {
   // Vai trẻ em / vị thành niên: Google chặn (chính sách an toàn) → báo rõ, không gọi.
   async design({ role, lang, accent }) {
     const R = hasOwn(GV.ROLES, role) ? GV.ROLES[role] : null;
-    if (!R) throw fail(400, 'Không có vai "' + String(role).slice(0, 30) + '" (xem danh sách vai giọng)');
-    if (!GV.canDesign(role)) throw fail(400, 'Google không cho thiết kế giọng trẻ em / vị thành niên (chính sách an toàn) — vai "' + R.label + '" dùng giọng trẻ trung có sẵn');
+    if (!R) throw fail(400, tr(VI, 'Không có vai "{role}" (xem danh sách vai giọng)', { role: String(role).slice(0, 30) }));
+    if (!GV.canDesign(role)) throw fail(400, tr(VI, 'Google không cho thiết kế giọng trẻ em / vị thành niên (chính sách an toàn) — vai "{label}" dùng giọng trẻ trung có sẵn', { label: R.label }));
     const c = this.config();
     if (c.enabled === false) throw fail(409, 'Giọng AI đang tắt (Cài đặt AI › Giọng AI)');
     if (!this.key()) throw fail(409, 'Chưa có API key Google AI Studio (Cài đặt AI › Giọng AI)');
@@ -284,9 +286,9 @@ class Voice {
     let r = await this.http.post(API + '/voices', body(cs.libLang));
     const msg = j => String((j && j.error && j.error.message) || '');
     if (r.status === 400 && /language/i.test(msg(r.json)) && cs.libLang !== cs.bcp) r = await this.http.post(API + '/voices', body(cs.bcp));   // mã ngôn ngữ lạ (cmn-TW) → thử mã BCP của giọng vùng (zh-TW)
-    if (isQuota(r, r.json && r.json.error)) { const at = Date.now() + retryMs(r.json && r.json.error); throw fail(429, 'Hết lượt thiết kế giọng lúc này — thử lại sau ' + new Date(at).toLocaleString('vi-VN'), { retryAt: new Date(at).toISOString() }); }
+    if (isQuota(r, r.json && r.json.error)) { const at = Date.now() + retryMs(r.json && r.json.error); throw fail(429, tr(VI, 'Hết lượt thiết kế giọng lúc này — thử lại sau {at}', { at: new Date(at).toLocaleString('vi-VN') }), { retryAt: new Date(at).toISOString() }); }
     if (r.status === 400 && /safety|blocked/i.test(msg(r.json))) throw fail(400, 'Google chặn mô tả giọng này (chính sách an toàn)');
-    if (r.status >= 400 || !r.json || !DESIGN_ID.test(String(r.json.id || ''))) throw fail(502, 'Google không thiết kế được giọng (' + r.status + (msg(r.json) ? ': ' + msg(r.json).slice(0, 160) : '') + ')');
+    if (r.status >= 400 || !r.json || !DESIGN_ID.test(String(r.json.id || ''))) throw fail(502, tr(VI, 'Google không thiết kế được giọng ({detail})', { detail: r.status + (msg(r.json) ? ': ' + msg(r.json).slice(0, 160) : '') }));
     const v = r.json, sa = v.sample_audio || v.sampleAudio;
     let pid = null;
     if (sa && sa.data) {   // giọng mẫu Google trả kèm → clip nghe thử (cắt lặng, chuẩn hoá, tối đa 20 giây)
@@ -306,7 +308,7 @@ class Voice {
   // trần câu / ngày của chủ máy (0 = không giới hạn) — hết trần thì 429 kèm giờ đặt lại, khác "Google hết lượt" (cap: true)
   capCheck(c) {
     const day = new Date().toISOString().slice(0, 10), used = c.usage[day] || 0;
-    if (c.dailyCap > 0 && used >= c.dailyCap) throw fail(429, 'Đã chạm trần ' + c.dailyCap + ' câu giọng AI hôm nay (Cài đặt AI › Giọng AI › Trần câu / ngày)', { retryAt: new Date(nextDay()).toISOString(), cap: true });
+    if (c.dailyCap > 0 && used >= c.dailyCap) throw fail(429, tr(VI, 'Đã chạm trần {n} câu giọng AI hôm nay (Cài đặt AI › Giọng AI › Trần câu / ngày)', { n: c.dailyCap }), { retryAt: new Date(nextDay()).toISOString(), cap: true });
   }
   // đọc một câu → { id, cached, model, seconds }; cùng giọng + cách nói + chữ → cùng clip (không gọi lại API)
   // role → cách nói của vai (style); state + bubble → cảm xúc; dry: chỉ lấy clip đã có (xuất phim), không bao giờ gọi Google
@@ -315,13 +317,13 @@ class Voice {
     if (!t) throw fail(400, 'Câu thoại trống');
     if (t.length > 240) throw fail(400, 'Câu thoại dài quá 240 ký tự');
     const c0 = this.config(), vid = this.validVoice(voice, Object.assign({}, c0, { skipBad: true }));
-    if (!vid) throw fail(400, 'Không có giọng "' + String(voice).slice(0, 40) + '" (chọn trong danh sách giọng AI)');
+    if (!vid) throw fail(400, tr(VI, 'Không có giọng "{voice}" (chọn trong danh sách giọng AI)', { voice: String(voice).slice(0, 40) }));
     const R = hasOwn(GV.ROLES, role) ? GV.ROLES[role] : null, style = [R ? R.style : '', tagsOf(state, bubble)].filter(Boolean).join(', ');
     const id = this.idOf(t, vid, style), file = this.clipPath(id);
     if (fs.existsSync(file)) return { id, cached: true, seconds: this.seconds(file) };
     if (dry) throw fail(404, 'Câu này chưa đọc bằng giọng AI');
     if (c0.enabled === false) throw fail(409, 'Giọng AI đang tắt (Cài đặt AI › Giọng AI)');
-    if (this.isBad(vid, c0)) throw fail(400, 'Giọng ' + vid + ' tạm không dùng được (Google báo không còn) — tự thử lại sau 24 giờ hoặc Cài đặt AI › Thử lại giọng hỏng');
+    if (this.isBad(vid, c0)) throw fail(400, tr(VI, 'Giọng {id} tạm không dùng được (Google báo không còn) — tự thử lại sau 24 giờ hoặc Cài đặt AI › Thử lại giọng hỏng', { id: vid }));
     this.capCheck(c0);
     // một lời gọi Google mỗi lúc (gói miễn phí giới hạn số câu / phút / model)
     const job = this._busy.then(() => this.render(t, vid, style, id, file));
@@ -349,10 +351,10 @@ class Voice {
     if (!all.length) throw fail(502, 'Key này không gọi được model đọc giọng nào của Google');
     // model đời trước chỉ biết 30 giọng dựng sẵn → giọng thư viện / thiết kế chỉ đi qua model 3.8+
     const fit = all.filter(m => interactive(m) || VOICE_SET.has(voice));
-    if (!fit.length) throw fail(502, 'Giọng ' + voice + ' cần model đọc giọng đời 3.8 trở lên (key này chưa gọi được)');
+    if (!fit.length) throw fail(502, tr(VI, 'Giọng {id} cần model đọc giọng đời 3.8 trở lên (key này chưa gọi được)', { id: voice }));
     const order = (c.model && fit.indexOf(c.model) >= 0 ? [c.model] : []).concat(fit.filter(m => m !== c.model)).filter(m => !(c.blocked[m] > now));
     const soonest = ms => { const cc = this.config(); return Math.min.apply(null, ms.map(m => cc.blocked[m] || Date.now())); };
-    const quotaErr = at => fail(429, 'Hết lượt đọc giọng AI lúc này (gói miễn phí của Google rất ít lượt / ngày / model). Thử lại sau ' + new Date(at).toLocaleString('vi-VN') + ', hoặc bật thanh toán cho project Google.', { retryAt: new Date(at).toISOString() });
+    const quotaErr = at => fail(429, tr(VI, 'Hết lượt đọc giọng AI lúc này (gói miễn phí của Google rất ít lượt / ngày / model). Thử lại sau {at}, hoặc bật thanh toán cho project Google.', { at: new Date(at).toLocaleString('vi-VN') }), { retryAt: new Date(at).toISOString() });
     if (!order.length) throw quotaErr(soonest(fit));
     let last = null;
     for (const model of order) {
@@ -367,13 +369,13 @@ class Voice {
       const err = r.json && r.json.error;
       if (isQuota(r, err) || r.status === 503) {   // hết hạn mức / quá tải: khoá model này tới giờ Google báo, thử model kế
         const cc = this.config(); cc.blocked[model] = Date.now() + (r.status === 503 ? 60000 : retryMs(err)); this.write(cc);
-        last = fail(r.status === 503 ? 503 : 429, 'Google: ' + (r.status === 429 ? 'hết hạn mức' : 'đang quá tải') + ' (' + model + ')'); continue;
+        last = fail(r.status === 503 ? 503 : 429, r.status === 429 ? tr(VI, 'Google: hết hạn mức ({model})', { model }) : tr(VI, 'Google: đang quá tải ({model})', { model })); continue;
       }
       if ((r.status === 400 || r.status === 404) && voiceGone(r, err)) {   // giọng không còn (Google chỉ đích danh) → tạm bỏ 24 giờ; giọng dựng sẵn thì không
         if (!VOICE_SET.has(voice)) { const cc = this.config(); cc.bad[voice] = Date.now() + 24 * 3600e3; this.write(cc); }
-        throw fail(400, 'Giọng ' + voice + ' không dùng được (' + String(err.message || '').slice(0, 120) + ')');
+        throw fail(400, tr(VI, 'Giọng {id} không dùng được ({reason})', { id: voice, reason: String(err.message || '').slice(0, 120) }));
       }
-      if (r.status >= 400 || !r.json) { last = fail(502, 'Google trả lỗi ' + r.status + (err && err.message ? ': ' + String(err.message).slice(0, 160) : '')); continue; }
+      if (r.status >= 400 || !r.json) { last = fail(502, err && err.message ? tr(VI, 'Google trả lỗi {code}: {reason}', { code: r.status, reason: String(err.message).slice(0, 160) }) : tr(VI, 'Google trả lỗi {code}', { code: r.status })); continue; }
       let inl = null;
       if (inter) {   // Interactions: steps[].type = model_output → content[].type = audio (lấy đoạn cuối)
         (r.json.steps || []).forEach(s => { if (s && s.type === 'model_output') (s.content || []).forEach(x => { if (x && x.type === 'audio' && x.data) inl = { data: x.data, mimeType: x.mime_type || x.mimeType || '' }; }); });
@@ -381,7 +383,7 @@ class Voice {
         const part = (((r.json.candidates || [])[0] || {}).content || {}).parts;
         inl = part && part[0] && part[0].inlineData;
       }
-      if (!inl || !inl.data) { last = fail(502, 'Google không trả âm thanh (' + model + ')'); continue; }
+      if (!inl || !inl.data) { last = fail(502, tr(VI, 'Google không trả âm thanh ({model})', { model })); continue; }
       const raw = Buffer.from(inl.data, 'base64');
       let pcm, rate;
       const w = wavInfo(raw);

@@ -22,7 +22,7 @@ function post(line) {
     });
     req.on('error', e => {
       let id = null; try { id = JSON.parse(line).id; } catch { /* bỏ qua */ }
-      resolve(id === null || id === undefined ? '' : JSON.stringify({ jsonrpc: '2.0', id, error: { code: -32000, message: 'gen-chibi chưa chạy ở cổng ' + PORT + ' (' + e.message + '). Chạy: genchibi start' } }));
+      resolve(id === null || id === undefined ? '' : JSON.stringify({ jsonrpc: '2.0', id, error: { code: -32000, message: 'gen-chibi is not running on port ' + PORT + ' (' + e.message + '). Run: genchibi start' } }));   // agent đọc → tiếng Anh (CNS-067)
     });
     req.write(data);
     req.end();

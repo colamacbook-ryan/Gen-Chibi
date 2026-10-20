@@ -45,7 +45,7 @@ a clash is rejected and names the pack that owns the name.
 2. `get_sound_pack` with `{ "id": "gen.am", "names": ["bonk", "boing"] }` → copy the recipe of a similar sound as your model.
    Cartoon style: big pitch glides (1–2 octaves), a clear musical note, a wobbling tail, two beats (wind-up → hit) for big hits.
 3. Write the pack with `"project": "<project id>"` (a pack of a project is usable only in that project — rule S6 — and travels with
-   `export_project`). Each sound needs `label` (Vietnamese), `cat`, `tags`, `use` (one sentence "when to use", ≤ 160 chars), `dur`, `level`,
+   `export_project`). Each sound needs `label` (in the user's / project's language), `cat`, `tags`, `use` (one sentence "when to use", ≤ 160 chars), `dur`, `level`,
    `layers`; optional `cue` (`state` / `fx` / `activity` / `event` lists + `mood` condition) to be auto-assigned, `lanes` (stereo),
    `hitAt` (where the hit lands, for sounds with a wind-up).
 4. `validate_sound_pack` with `{ "pack": <pack> }` → fix every `details[].path`.
