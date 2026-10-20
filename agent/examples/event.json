@@ -1,16 +1,16 @@
 {
-  "title": "Chiêu mới",
-  "scene": "local.my/vi-du-san-tap",
+  "title": "New move",
+  "scene": "local.my/example-training-yard",
   "steps": [
     {
-      "actor": "vi-du-thu-thu",
+      "actor": "example-pip",
       "state": "proud",
       "spot": "midLeft",
       "to": "ma-no-canh",
-      "say": "Xem chiêu mới của ta!"
+      "say": "Watch my new move!"
     },
     {
-      "actor": "vi-du-thu-thu",
+      "actor": "example-pip",
       "state": "rage",
       "action": "bonk",
       "target": "ma-no-canh",
@@ -20,14 +20,14 @@
     {
       "actor": "ma-no-canh",
       "state": "shock",
-      "to": "vi-du-thu-thu",
-      "say": "Ui da!"
+      "to": "example-pip",
+      "say": "Ouch!"
     },
     {
-      "actor": "vi-du-thu-thu",
+      "actor": "example-pip",
       "state": "proud",
       "action": "bowDeep",
-      "say": "Đa tạ đã chỉ giáo!"
+      "say": "Thank you for the lesson!"
     }
   ]
 }

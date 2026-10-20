@@ -13,10 +13,12 @@ const SND = require('../engine/sounds.js'), SR = SND.RULES, SB = SND.BUDGET, SL 
 // (saveXChecked, nhập / xuất gói, duyệt…) giữ msgid tiếng Việt — câu ghép động viết thành mẫu tr(VI, 'mẫu {x}', { x }) — và được dịch ở rìa: main.js theo người gọi,
 // toolError() sang tiếng Anh cho agent (MSG.en). Mã lỗi [CODE] và đường dẫn (details[].path) không bao giờ dịch.
 const MSG = require('./i18n-msg'), { VI, tr } = MSG;
+const L10N = require('./i18n');   // label(lang, s): nhãn dữ liệu khớp NGUYÊN VĂN (không khớp mẫu câu) — chữ của bộ khung trả agent (frameView)
 
 const PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const SERVER_INFO = { name: 'gen-chibi', title: 'gen-chibi — a factory of chibi assets made from code (characters, items, scenes, motion packs, films)' };
 const MY_PACK = 'local.my';
+const UNREG = tr(VI, '(chưa đăng ký)');   // mô tả của dự án chưa đăng ký mà asset đang trỏ tới (câu hệ thống)
 const TMP_PACK = 'local.preview';
 // TRẦN số gói âm / gói động tác của MỘT dự án: kiểm khi LƯU và là trần khi NHẬP gói dự án — hai trần luôn bằng nhau, sao lưu nào lưu được thì nhập lại được (L-61, CNS-101).
 // Gói động tác bị giữ ở 8 vì mỗi gói phải dựng thử ≤ 4 s lúc nhập; gói âm không dựng thử nên rộng hơn
@@ -233,6 +235,20 @@ function provKeys(b) {
 function slugOf(s) {
   return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50);
 }
+// CHỮ CỦA BỘ KHUNG trả ra ngoài (CNS-154): trường hiển thị của đồ Gen Labs (GC.isGenLabs) dịch theo ngôn ngữ của YÊU CẦU (MSG.reqLang) —
+// /mcp (agent ngoài, stdio) luôn 'en'; dock Trợ lý AI trong Studio (kênh 'ui': main.js bọc route trong MSG.run(ngôn ngữ người dùng)) theo ngôn ngữ người dùng,
+// vì AI đó viết nội dung cho chính người dùng ấy. Agent chép khung → đổi tên → lưu thì bản lưu mang chữ của người dùng, không mang msgid tiếng Việt.
+// Nội dung người dùng (Của tôi, bộ mẫu đã nhập, gói nhập) trả NGUYÊN — kể cả khi trùng msgid (CNS-158)
+const FRAME_TEXT = ['name', 'role', 'persona', 'faction', 'description', 'label', 'source'];
+function frameView(GC, x) {
+  if (!x || typeof x !== 'object' || !GC.isGenLabs(x)) return x;
+  const L = MSG.reqLang(), T = s => typeof s === 'string' && s ? L10N.label(L, s) : s, o = Object.assign({}, x);
+  FRAME_TEXT.forEach(k => { if (typeof o[k] === 'string') o[k] = T(o[k]); });
+  if (o.identity && typeof o.identity === 'object') { o.identity = Object.assign({}, o.identity); ['p1', 'source'].forEach(k => { if (typeof o.identity[k] === 'string') o.identity[k] = T(o.identity[k]); }); }
+  return o;
+}
+// nhãn TỪ VỰNG của một mục (đòn, âm, linh kiện, phông) cho agent: đồ Gen Labs → tiếng Anh (bảng); đồ người dùng → nguyên chữ họ viết (CNS-158: "Nam" ≠ "Male")
+const ownEn = (GC, x, s) => GC.isGenLabs(x) ? MSG.en(s) : s;
 
 class MCP {
   // system (tuỳ chọn): { updater, restartSoon } — để agent tự kiểm và cập nhật phiên bản; smokeMs: hạn chót dựng thử gói động tác (test hạ xuống)
@@ -271,31 +287,33 @@ class MCP {
   projects() {
     const GC = this.GC, list = this.store.listProjects(), ids = list.map(p => p.id);
     const mine = [].concat(GC.assets(), GC.items(), GC.scenes()).filter(x => x.pack === MY_PACK);
-    mine.forEach(x => { if (x.project && ids.indexOf(x.project) < 0) { ids.push(x.project); list.push({ id: x.project, name: x.project, description: '(chưa đăng ký)' }); } });
+    mine.forEach(x => { if (x.project && ids.indexOf(x.project) < 0) { ids.push(x.project); list.push({ id: x.project, name: x.project, description: UNREG }); } });
     return list.map(p => Object.assign({}, p, {
       characters: GC.assets().filter(x => x.pack === MY_PACK && x.project === p.id).length,
       items: GC.items().filter(x => x.pack === MY_PACK && x.project === p.id).length,
       scenes: GC.scenes().filter(x => x.pack === MY_PACK && x.project === p.id).length }));
   }
 
+  // danh sách gói âm cho agent: tên bộ âm chuẩn (khung) tiếng Anh; gói của người dùng giữ tên họ đặt
+  soundPacks() { return this.GC.sounds.packs().map(p => p.frame ? Object.assign({}, p, { name: MSG.en(p.name) }) : p); }
   // từ vựng cho agent: id là thứ dùng được; nhãn / gợi ý (dữ liệu engine, tiếng Việt) trả bằng TIẾNG ANH (bảng locales/en/engine-data.json — CNS-067)
   catalog() {
     const GC = this.GC, L = GC.LIB, E = MSG.en;
     const slots = {};
     Object.keys(L.slots).forEach(s => {
       slots[s] = { label: E(L.slots[s].label), default: L.slots[s].fallback, parts: GC.partsOfSlot(s).map(p => {
-        const o = { id: p.id, label: E(p.label), pack: p.pack, views: ['front'].concat(p.views ? Object.keys(p.views) : []) };
-        if (p.params) o.params = Object.keys(p.params).reduce((m, k) => { const d = p.params[k]; m[k] = { label: E(d.label), min: d.min, max: d.max, default: d.def }; return m; }, {});
+        const o = { id: p.id, label: ownEn(GC, p, p.label), pack: p.pack, views: ['front'].concat(p.views ? Object.keys(p.views) : []) };
+        if (p.params) o.params = Object.keys(p.params).reduce((m, k) => { const d = p.params[k]; m[k] = { label: ownEn(GC, p, d.label), min: d.min, max: d.max, default: d.def }; return m; }, {});
         return o;
       }) };
     });
     const face = {};
     Object.keys(GC.FACE_PARAMS).forEach(g => { face[g] = Object.keys(GC.FACE_PARAMS[g]).reduce((m, k) => { const d = GC.FACE_PARAMS[g][k]; m[k] = { label: E(d.label), min: d.min, max: d.max, default: d.def }; return m; }, {}); });
     return {
-      actions: Object.keys(GC.choreo.ACTIONS).map(k => { const a = GC.choreo.ACTIONS[k]; return { id: k, label: E(a.label), attack: !!a.attack, needs: a.needs || null, ranged: !!a.ranged, pack: a.pack }; }),
+      actions: Object.keys(GC.choreo.ACTIONS).map(k => { const a = GC.choreo.ACTIONS[k]; return { id: k, label: ownEn(GC, a, a.label), attack: !!a.attack, needs: a.needs || null, ranged: !!a.ranged, pack: a.pack }; }),
       reacts: Object.keys(GC.choreo.REACTS), motionPacks: GC.choreo.packs().map(p => p.key), motionSpec: 'get_motion_spec',
       // thư viện âm thanh (v0.18): tên âm dùng được trong step.sfx / events[].sfx — danh sách đầy đủ + lọc: list_sounds; luật ghép: get_sound_spec
-      sounds: { count: GC.sounds.names().length, cats: GC.sounds.CATS.map(c => ({ id: c[0], label: E(c[1]), accent: GC.sounds.ACCENT.indexOf(c[0]) >= 0, count: GC.sounds.list({ cat: c[0] }).length })), packs: GC.sounds.packs(),
+      sounds: { count: GC.sounds.names().length, cats: GC.sounds.CATS.map(c => ({ id: c[0], label: E(c[1]), accent: GC.sounds.ACCENT.indexOf(c[0]) >= 0, count: GC.sounds.list({ cat: c[0] }).length })), packs: this.soundPacks(),
         legacy: GC.sounds.LEGACY, list: 'list_sounds', spec: 'get_sound_spec', lint: 'lint_sound_track', rules: GC.sounds.RULES.list.map(r => r.code + ': ' + E(r.rule)) },
       aiVoices: this.voice ? this.voice.publicConfig().voices.map(v => ({ name: v.name, gender: v.gender === 'nữ' ? 'female' : 'male', style: E(v.style) })) : [],
       voiceRoles: GV.roleList().map(r => Object.assign({}, r, { label: E(r.label), ageLabel: E(r.ageLabel), kindLabel: E(r.kindLabel) })), voiceLangs: GV.langList().map(l => Object.assign({}, l, { label: E(l.label), accents: l.accents.map(a => Object.assign({}, a, { label: E(a.label) })) })),
@@ -313,12 +331,12 @@ class MCP {
       moves: Object.keys(L.moves).map(id => ({ id, label: E(L.moves[id].label), postures: L.moves[id].postures || null })),
       props: Object.keys(L.props).map(id => ({ id, label: E(L.props[id].label) })),
       items: { types: Object.keys(GC.ITEM.types).map(k => ({ id: k, label: E(GC.ITEM.types[k].label), slots: GC.ITEM.types[k].slots })), rarity: GC.ITEM.rarityOrder.map(k => ({ id: k, label: E(GC.ITEM.rarity[k].label) })),
-        stats: GC.ITEM.stats, count: GC.items().length },
+        stats: Object.keys(GC.ITEM.stats).reduce((m, k) => { m[k] = E(GC.ITEM.stats[k]); return m; }, {}), count: GC.items().length },
       scenes: this.sceneVocab(),
       composition: 'Frame = state (face) × activity (preset) or posture × move × motion, plus facing left/right and an 8-direction view: front · left/right (slight turn) · left45/right45 · left90/right90 (profile) · left135/right135 (back three-quarter) · back — drawn for real at part level; when a part lacks a view the engine borrows the nearest one.',
       fx: Object.keys(L.fx).map(id => ({ id, label: E(L.fx[id].label) })),
       traits: L.traits.map(t => ({ id: t.id, label: E(t.label) })),
-      profiles: Object.keys(L.profiles).map(id => ({ id, label: E(L.profiles[id].label), map: L.profiles[id].map })),
+      profiles: Object.keys(L.profiles).map(id => ({ id, label: E(L.profiles[id].label), map: L.profiles[id].map.map(m => [E(m[0])].concat(m.slice(1))) })),
       assetShape: {
         id: 'lowercase-hyphen-slug', name: 'Display name', han: 'optional', faction: '', role: '', persona: 'personality for the AI director',
         look: { eyes: 'eye style id', brows: 'brow style id', parts: { slot: 'part id' }, params: { 'slot|eyes|brows|mouth|rig': { param: 'number' } }, palette: { colour_key: '#hex' } },
@@ -399,12 +417,12 @@ class MCP {
       case 'get_catalog': return json(this.catalog());
       case 'list_characters': {
         this.sync();
-        return json(GC.assets().map(a => ({ id: a.id, key: a.key, name: a.name, pack: a.pack, status: a.status, version: a.version, role: a.role, persona: a.persona })));
+        return json(GC.assets().map(a0 => { const a = frameView(GC, a0); return { id: a.id, key: a.key, name: a.name, pack: a.pack, status: a.status, version: a.version, role: a.role, persona: a.persona }; }));
       }
       case 'get_character': {
         const a = this.findAsset(String(args.key || ''));
         // khung là dữ liệu Gen Labs ("published"); agent hay chép khung → đổi tên → save: đưa status "draft" ra để bản chép không mang dấu phát hành của khung
-        return a ? json(this.isFrame(a.pack) ? Object.assign({}, a, { status: 'draft' }) : a) : toolError('No character ' + args.key + '. Call list_characters to see the keys.', { code: 'NOT_FOUND' });
+        return a ? json(this.isFrame(a.pack) ? frameView(GC, Object.assign({}, a, { status: 'draft' })) : a) : toolError('No character ' + args.key + '. Call list_characters to see the keys.', { code: 'NOT_FOUND' });
       }
       case 'validate_character': {
         let a; try { a = this.prepare(args.asset); } catch (e) { return toolError(e); }
@@ -428,10 +446,10 @@ class MCP {
         if (args.action) {   // một khung của hành động: lúc va chạm (đòn đánh) hoặc giữa động tác
           const C = GC.choreo, ac = Object.prototype.hasOwnProperty.call(C.ACTIONS, String(args.action)) ? C.ACTIONS[args.action] : null;
           if (!ac) return toolError('No action ' + args.action, { code: 'NOT_FOUND', allowed: Object.keys(C.ACTIONS) });
-          if (!C.canDo(a, ac)) return toolError((a.name || a.id) + ' cannot do "' + MSG.en(ac.label) + '" (needs to hold a weapon)', { code: 'VALIDATION_FAILED', allowed: C.actionsFor(a) });
+          if (!C.canDo(a, ac)) return toolError((frameView(GC, a).name || a.id) + ' cannot do "' + ownEn(GC, ac, ac.label) + '" (needs to hold a weapon)', { code: 'VALIDATION_FAILED', allowed: C.actionsFor(a) });
           let tl; try { tl = C.actionTimeline({ asset: a, action: args.action }); } catch (e) { return toolError(e, { code: 'INTERNAL' }); }
           const r = tl.duel && tl.duel.impact != null ? C.storyToReal(tl, tl.duel.impact) : tl.real / 2, sv = C.animFrame(tl, r, C.animBox(tl), { size: 480 });
-          return { content: [{ type: 'text', text: 'SVG of ' + (a.name || a.id) + ' · ' + MSG.en(ac.label) + ' (frame ' + r.toFixed(2) + ' s / ' + tl.real.toFixed(2) + ' s). Whole sequence: render_action.' },
+          return { content: [{ type: 'text', text: 'SVG of ' + (frameView(GC, a).name || a.id) + ' · ' + ownEn(GC, ac, ac.label) + ' (frame ' + r.toFixed(2) + ' s / ' + tl.real.toFixed(2) + ' s). Whole sequence: render_action.' },
             { type: 'resource', resource: { uri: 'genchibi://render/' + a.key + '/action-' + args.action + '.svg', mimeType: 'image/svg+xml', text: sv } }] };
         }
         const act = args.activity && GC.LIB.activities[args.activity];
@@ -445,7 +463,7 @@ class MCP {
         const label = MSG.en(GC.LIB.states[state].label) + (act ? ' · ' + MSG.en(act.label) : '');
         return {
           content: [
-            { type: 'text', text: 'SVG of ' + (a.name || a.id) + ' · ' + label + ' (' + svg.length + ' characters). Opens directly in a browser.' },
+            { type: 'text', text: 'SVG of ' + (frameView(GC, a).name || a.id) + ' · ' + label + ' (' + svg.length + ' characters). Opens directly in a browser.' },
             { type: 'resource', resource: { uri: 'genchibi://render/' + a.key + '/' + state + (act ? '-' + act.id : '') + (args.crop ? '-avatar' : '') + '.svg', mimeType: 'image/svg+xml', text: svg } }
           ]
         };
@@ -479,7 +497,7 @@ class MCP {
         const C = GC.choreo, who = args.character ? this.findAsset(String(args.character)) : null;
         if (args.character && !who) return toolError('No character ' + args.character, { code: 'NOT_FOUND' });
         return json({
-          actions: Object.keys(C.ACTIONS).map(k => { const a = C.ACTIONS[k]; return Object.assign({ id: k, label: MSG.en(a.label), attack: !!a.attack, needs: a.needs || null, ranged: !!a.ranged, aim: a.aim || null, pack: a.pack, hint: MSG.en(a.hint || '') }, who ? { can: C.canDo(who, a) } : {}); }),
+          actions: Object.keys(C.ACTIONS).map(k => { const a = C.ACTIONS[k]; return Object.assign({ id: k, label: ownEn(GC, a, a.label), attack: !!a.attack, needs: a.needs || null, ranged: !!a.ranged, aim: a.aim || null, pack: a.pack, hint: ownEn(GC, a, a.hint || '') }, who ? { can: C.canDo(who, a) } : {}); }),
           reacts: Object.keys(C.REACTS).map(k => ({ id: k, label: MSG.en(C.REACTS[k].label) })),
           character: who ? { key: who.key, weapon: C.hasWeapon(who) } : undefined,
           note: 'attack actions need step.target (another actor); needs "weapon" = the actor holds a weapon item / grip:"weapon" part in heldR'
@@ -505,9 +523,9 @@ class MCP {
         ['cat', 'tag', 'q'].forEach(k => { if (typeof args[k] === 'string' && args[k]) o[k] = args[k]; });
         if (typeof args.project === 'string') o.project = args.project;
         if (o.cat && !S.CATS.some(c => c[0] === o.cat)) return toolError('cat: no group "' + o.cat.slice(0, 24) + '"', { code: 'NOT_FOUND', allowed: S.CATS.map(c => c[0]) });
-        // nhãn / "dùng khi" của âm khung + bộ mẫu: tiếng Anh từ bảng (âm của người dùng không có bản dịch → giữ nguyên chữ họ viết)
-        const xs = S.list(o).map(x => Object.assign({ name: x.name, label: MSG.en(x.label), cat: x.cat, tags: x.tags, use: MSG.en(x.use), dur: x.dur, accent: x.accent, pack: x.pack }, x.project ? { project: x.project } : {}, x.cue ? { cue: x.cue } : {}, x.hitAt != null ? { hitAt: x.hitAt } : {}));
-        return json({ count: xs.length, sounds: xs, cats: S.CATS.map(c => ({ id: c[0], label: MSG.en(c[1]), accent: S.ACCENT.indexOf(c[0]) >= 0 })), packs: S.packs(), use: 'step.sfx = ["<name>"] (≤ 3, ≤ 1 accent sound); leave empty and the player auto-assigns. Mixing rules: get_sound_spec › rules · lint_sound_track.' });
+        // nhãn / "dùng khi" của âm bộ chuẩn (khung): tiếng Anh từ bảng; âm của người dùng / bộ mẫu giữ nguyên chữ họ viết — kể cả khi trùng msgid (CNS-158)
+        const xs = S.list(o).map(x => Object.assign({ name: x.name, label: ownEn(GC, x, x.label), cat: x.cat, tags: x.tags, use: ownEn(GC, x, x.use), dur: x.dur, accent: x.accent, pack: x.pack }, x.project ? { project: x.project } : {}, x.cue ? { cue: x.cue } : {}, x.hitAt != null ? { hitAt: x.hitAt } : {}));
+        return json({ count: xs.length, sounds: xs, cats: S.CATS.map(c => ({ id: c[0], label: MSG.en(c[1]), accent: S.ACCENT.indexOf(c[0]) >= 0 })), packs: this.soundPacks(), use: 'step.sfx = ["<name>"] (≤ 3, ≤ 1 accent sound); leave empty and the player auto-assigns. Mixing rules: get_sound_spec › rules · lint_sound_track.' });
       }
       case 'get_sound_spec': return json(this.soundSpec());
       case 'get_sound_pack': {
@@ -518,6 +536,8 @@ class MCP {
           if (miss.length) return toolError('Pack ' + id + ' has no sound: ' + miss.slice(0, 5).join(', '), { code: 'NOT_FOUND', allowed: Object.keys(P.sounds) });
           P.sounds = want.reduce((o, n) => (o[n] = P.sounds[n], o), {}); P.partial = true;
         }
+        // bộ âm chuẩn (khung): chữ theo ngôn ngữ của yêu cầu như frameView — agent hay chép âm khung vào gói của mình (CNS-154); gói người dùng trả nguyên
+        if (id === S.FRAME) { const L = MSG.reqLang(), T = o => ['name', 'description', 'label', 'use'].forEach(k => { if (typeof o[k] === 'string' && o[k]) o[k] = L10N.label(L, o[k]); }); T(P); Object.keys(P.sounds).forEach(n => T(P.sounds[n])); }
         return json(P);
       }
       case 'validate_sound_pack': {
@@ -589,14 +609,14 @@ class MCP {
         const C = GC.choreo, A = this.findAsset(String(args.character || '')), act = Object.prototype.hasOwnProperty.call(C.ACTIONS, String(args.action)) ? C.ACTIONS[args.action] : null;
         if (!A) return toolError('No character ' + args.character + ' (list_characters)', { code: 'NOT_FOUND' });
         if (!act) return toolError('No action ' + args.action, { code: 'NOT_FOUND', allowed: Object.keys(C.ACTIONS) });
-        if (!C.canDo(A, act)) return toolError((A.name || A.id) + ' cannot do "' + MSG.en(act.label) + '" (needs to hold a weapon)', { code: 'VALIDATION_FAILED', allowed: C.actionsFor(A) });
+        if (!C.canDo(A, act)) return toolError((frameView(GC, A).name || A.id) + ' cannot do "' + ownEn(GC, act, act.label) + '" (needs to hold a weapon)', { code: 'VALIDATION_FAILED', allowed: C.actionsFor(A) });
         const B = args.partner ? this.findAsset(String(args.partner)) : null;
         if (args.partner && !B) return toolError('No character ' + args.partner, { code: 'NOT_FOUND' });
         if (args.react !== undefined && !Object.prototype.hasOwnProperty.call(C.REACTS, String(args.react))) return toolError('react: no reaction "' + String(args.react).slice(0, 40) + '"', { code: 'NOT_FOUND', allowed: Object.keys(C.REACTS) });
         // số từ client không tin: kẹp fps / cell đúng inputSchema (cell đi thẳng vào thuộc tính SVG)
         const fmt = ['sheet', 'frames', 'meta'].indexOf(args.format) >= 0 ? args.format : 'sheet', fps = Math.max(4, Math.min(30, Math.round(+args.fps) || 12)), cell = Math.max(48, Math.min(512, Math.round(+args.cell) || 160));
         let an; try { an = C.animate(C.actionTimeline({ asset: A, action: args.action, partner: B, react: args.react }), { fps, maxFrames: fmt === 'frames' ? 60 : 120 }); } catch (e) { return toolError(e, { code: 'INTERNAL' }); }
-        const meta = Object.assign({ character: A.key }, an.meta), head = (A.name || A.id) + ' · ' + MSG.en(act.label) + ' — ' + an.frames.length + ' frames, ' + an.fps + ' fps, ' + an.duration + ' s';
+        const meta = Object.assign({ character: A.key }, an.meta), head = (frameView(GC, A).name || A.id) + ' · ' + ownEn(GC, act, act.label) + ' — ' + an.frames.length + ' frames, ' + an.fps + ' fps, ' + an.duration + ' s';
         if (fmt === 'meta') return json(meta);
         if (fmt === 'frames') return { content: [{ type: 'text', text: head + '\n' + JSON.stringify(meta) }].concat(an.frames.map((f, i) => ({ type: 'resource', resource: { uri: 'genchibi://action/' + A.key + '/' + args.action + '/' + i + '.svg', mimeType: 'image/svg+xml', text: f.svg } }))), structuredContent: meta };
         const sh = C.sheetSVG(an, { cell });
@@ -624,7 +644,7 @@ class MCP {
       case 'list_events': return json(this.store.listEvents().map(e => ({ id: e.id, title: e.title, author: e.author, savedAt: e.savedAt, steps: (e.event && e.event.steps || e.steps || []).length })));
       case 'get_app_version': case 'update_app': case 'rollback_app': return this.appTool(name, args, ctx || {});
       case 'get_part_spec': return json(this.partSpec(args.slot));
-      case 'list_projects': { this.sync(); return json(this.projects().map(p => enFields(p, ['description']))); }
+      case 'list_projects': { this.sync(); return json(this.projects().map(p => p.description === UNREG ? Object.assign({}, p, { description: MSG.en(UNREG) }) : p)); }   // mô tả người dùng viết giữ nguyên (CNS-158)
       case 'list_works': return json(this.listWorks());
       case 'export_project': { try { return json(this.exportProject(String(args.id || ''), { sale: args.sale === true })); } catch (e) { return toolError(e); } }
       case 'import_project': {
@@ -655,7 +675,7 @@ class MCP {
       }
       case 'list_items': {
         return json(GC.items().filter(i => (!args.type || i.type === args.type) && (!args.rarity || i.rarity === args.rarity))
-          .map(i => ({ key: i.key, name: i.name, type: i.type, rarity: i.rarity, slot: i.equip.slot, part: i.equip.part, stats: i.stats })));
+          .map(i => ({ key: i.key, name: frameView(GC, i).name, type: i.type, rarity: i.rarity, slot: i.equip.slot, part: i.equip.part, stats: i.stats })));
       }
       case 'validate_item': {
         const c = GC.checkItem(args.item);
@@ -684,10 +704,10 @@ class MCP {
           try { svg = GC.svgString(a, (GC.LIB.activities[dir.activity] || {}).state || 'normal', { director: dir }); } catch (e) { return toolError('Cannot render: ' + MSG.en(e.message)); }
         } else svg = GC.itemSvg(it, { mode: args.mode === 'card' ? 'card' : 'icon', size: 160 });
         } finally { if (tmp) { delete GC.ITEMS[tmp.key]; const i = GC.ITEM_ORDER.indexOf(tmp.key); if (i >= 0) GC.ITEM_ORDER.splice(i, 1); } }
-        return { content: [{ type: 'text', text: it.name + ' · ' + MSG.en((GC.ITEM.rarity[it.rarity] || {}).label) + ' · ' + (args.mode || 'icon') }, { type: 'resource', resource: { uri: 'genchibi://item/' + it.key + '/' + (args.mode || 'icon') + '.svg', mimeType: 'image/svg+xml', text: svg } }] };
+        return { content: [{ type: 'text', text: frameView(GC, it).name + ' · ' + MSG.en((GC.ITEM.rarity[it.rarity] || {}).label) + ' · ' + (args.mode || 'icon') }, { type: 'resource', resource: { uri: 'genchibi://item/' + it.key + '/' + (args.mode || 'icon') + '.svg', mimeType: 'image/svg+xml', text: svg } }] };
       }
       case 'list_scenes': {
-        return json(GC.scenes().map(x => ({ key: x.key, name: x.name, han: x.han, time: x.time, weather: x.weather, layers: Object.keys(x.layers).reduce((m, k) => { m[k] = x.layers[k].part; return m; }, {}), deco: x.deco.length, spots: x.spots, description: x.description })));
+        return json(GC.scenes().map(x0 => { const x = frameView(GC, x0); return { key: x.key, name: x.name, han: x.han, time: x.time, weather: x.weather, layers: Object.keys(x.layers).reduce((m, k) => { m[k] = x.layers[k].part; return m; }, {}), deco: x.deco.length, spots: x.spots, description: x.description }; }));
       }
       case 'validate_scene': {
         const c = GC.checkScene(args.scene);
@@ -716,7 +736,7 @@ class MCP {
         if (args.time) opts.time = args.time; if (args.weather) opts.weather = args.weather;
         let svg;
         try { svg = GC.sceneSvg(sc, opts); } catch (e) { return toolError('Cannot render: ' + MSG.en(e.message)); }
-        return { content: [{ type: 'text', text: sc.name + ' · ' + MSG.en(GC.SCENE.times[opts.time || sc.time].label) + ' · ' + MSG.en(GC.SCENE.weathers[opts.weather || sc.weather].label) + ' · ' + cast.length + ' actor(s)' },
+        return { content: [{ type: 'text', text: frameView(GC, sc).name + ' · ' + MSG.en(GC.SCENE.times[opts.time || sc.time].label) + ' · ' + MSG.en(GC.SCENE.weathers[opts.weather || sc.weather].label) + ' · ' + cast.length + ' actor(s)' },
           { type: 'resource', resource: { uri: 'genchibi://scene/' + sc.key + '.svg', mimeType: 'image/svg+xml', text: svg } }] };
       }
       case 'preview_part': {
@@ -861,7 +881,7 @@ class MCP {
       convention: 'Side views are authored facing LEFT: forward = -x, R = near limbs; arm rot + swings forward; thigh rot + kicks forward; shin rot - bends the knee; root.rot - leans forward; wR/wL = weapon angle in the world (0 = upright). Use "$" to inherit a framework pose and change only what moves.',
       framePoses: Object.keys(C.POSES).filter(k => k.indexOf(':') < 0), frameClips: Object.keys(C.CLIPS).filter(k => k.indexOf(':') < 0 && !C.CLIPS[k].make),
       eases: Object.keys(C.EASE), views: M.views, strikePoints: ['tip', 'hand', 'handL', 'foot'], eventAt: M.points, fx: M.fx, sfx: GC.sounds.names(), sfxNote: 'sound names come from the sound library (list_sounds / get_sound_spec); a pack of project P may call frame + shared + P sounds; save the sound pack BEFORE the motion pack that uses it', music: M.music, grades: M.grades,
-      projectileArt: M.arts, needs: M.needs, aim: ['body', 'head'], hideSlots: M.hide, face: { eyes: Object.keys(GC.LIB.eyePoses), brows: Object.keys(GC.LIB.browPoses), mouth: Object.keys(GC.LIB.mouths), fx: Object.keys(GC.LIB.fx) },
+      projectileArt: M.arts, needs: Object.keys(M.needs).reduce((o, k) => { o[k] = MSG.en(M.needs[k]); return o; }, {}), aim: ['body', 'head'], hideSlots: M.hide, face: { eyes: Object.keys(GC.LIB.eyePoses), brows: Object.keys(GC.LIB.browPoses), mouth: Object.keys(GC.LIB.mouths), fx: Object.keys(GC.LIB.fx) },
       budget: M.budget, takenActionIds: Object.keys(C.ACTIONS), reacts: Object.keys(C.REACTS), example: Agent.examples()['motion-pack'] || null };
   }
   // kiểm gói KHÔNG lưu: cổng + dựng thử trong bàn soát tạm (gỡ ra ngay, trả lại bản đang nạp nếu đang sửa gói cũ)
@@ -940,8 +960,9 @@ class MCP {
     ['random', 'timing', 'cueNote'].forEach(k => { sp[k] = E(sp[k]); });
     sp.rules = sp.rules.map(r => Object.assign({}, r, { short: E(r.short), rule: E(r.rule) }));
     sp.recipes = sp.recipes.map(r => Object.assign({}, r, { label: E(r.label), note: E(r.note) }));
-    if (sp.example && sp.example.sounds) { sp.example.name = E(sp.example.name); Object.keys(sp.example.sounds).forEach(n => { const x = sp.example.sounds[n]; x.label = E(x.label); x.use = E(x.use); }); }
-    return Object.assign(sp, { packs: S.packs(), workflow: 'get_guide topic sound: get_sound_spec → list_sounds → get_sound_pack (names) as a template → validate_sound_pack → save_sound_pack → put into step.sfx → lint_sound_track',
+    // ví dụ của engine (agent chép làm khuôn): cả thẻ tìm kiếm cũng tiếng Anh — không để thẻ tiếng Việt lọt vào gói của người dùng (CNS-154)
+    if (sp.example && sp.example.sounds) { sp.example.name = E(sp.example.name); Object.keys(sp.example.sounds).forEach(n => { const x = sp.example.sounds[n]; x.label = E(x.label); x.use = E(x.use); if (Array.isArray(x.tags)) x.tags = x.tags.map(E); }); }
+    return Object.assign(sp, { packs: this.soundPacks(), workflow: 'get_guide topic sound: get_sound_spec → list_sounds → get_sound_pack (names) as a template → validate_sound_pack → save_sound_pack → put into step.sfx → lint_sound_track',
       hearing: 'Agents cannot hear (the server has no Web Audio): check with the gates + lint; ask the owner to press ▶ in Studio › Library › Sounds to judge the sound and download the WAV.' });
   }
   // nhắc phạm vi của gói (validate_sound_pack → notes; save_sound_pack → warnings) — cổng đã chặn cue của gói dùng chung, nên chỉ còn nhắc đúng phạm vi
@@ -1360,7 +1381,7 @@ class MCP {
     const GC = this.GC, S = GC.SCENE;
     return {
       canvas: { width: S.W, height: S.H }, count: GC.scenes().length,
-      layers: Object.keys(S.slots).reduce((m, k) => { m[k] = { label: MSG.en(S.slots[k].label), required: !!S.slots[k].required, scenery: GC.scenery(k).filter(p => p.pack !== TMP_PACK).map(p => ({ ref: p.pack + '/' + p.id, label: MSG.en(p.label) })) }; return m; }, {}),
+      layers: Object.keys(S.slots).reduce((m, k) => { m[k] = { label: MSG.en(S.slots[k].label), required: !!S.slots[k].required, scenery: GC.scenery(k).filter(p => p.pack !== TMP_PACK).map(p => ({ ref: p.pack + '/' + p.id, label: ownEn(GC, p, p.label) })) }; return m; }, {}),
       spots: S.spotOrder.map(k => ({ id: k, label: MSG.en(S.spots[k].label), x: S.spots[k].x, y: S.spots[k].y, scale: S.spots[k].k })),
       times: S.timeOrder.map(k => ({ id: k, label: MSG.en(S.times[k].label) })), weathers: S.weatherOrder.map(k => ({ id: k, label: MSG.en(S.weathers[k].label) })),
       paletteKeys: Object.keys(S.defaults), paletteDefaults: S.defaults, budget: S.budget
@@ -1425,7 +1446,7 @@ class MCP {
         if (w) { data.object.anchor = 'work:' + w.id; data.object.name = one(w.title).slice(0, 80); } else data.object.missing = true;
       } else if (o.kind === 'asset') {
         const a = this.findAsset(o.id), it = !a && this.GC.getItem(o.id, MY_PACK), sc = !a && !it && this.GC.getScene(o.id, MY_PACK), x = a || it || sc;
-        if (x) { data.object.anchor = (a ? 'asset:' : it ? 'item:' : 'scene:') + x.key; data.object.name = one(x.name).slice(0, 60); } else data.object.missing = true;
+        if (x) { data.object.anchor = (a ? 'asset:' : it ? 'item:' : 'scene:') + x.key; data.object.name = one(frameView(this.GC, x).name).slice(0, 60); } else data.object.missing = true;   // tên khung: theo ngôn ngữ người dùng (CNS-154)
       } else if (o.kind === 'project') data.object.anchor = 'project:' + o.id;
     }
     if (ctx.shot && o && o.kind === 'work') data.shot = { id: ctx.shot, anchor: 'shot:' + o.id + '/' + ctx.shot };
@@ -1571,7 +1592,7 @@ class MCP {
   partSpec(slot) {
     const GC = this.GC, A = GC.RIG.anchors;
     if (slot && Object.prototype.hasOwnProperty.call(GC.SCENE.slots, slot)) return { kind: 'scenery', scenery: this.sceneSpec(slot) };
-    const slots = Object.keys(GC.LIB.slots).filter(k => !slot || k === slot).map(k => ({ slot: k, label: GC.LIB.slots[k].label, layers: SLOT_LAYERS[k] || [],
+    const slots = Object.keys(GC.LIB.slots).filter(k => !slot || k === slot).map(k => ({ slot: k, label: MSG.en(GC.LIB.slots[k].label), layers: SLOT_LAYERS[k] || [],
       examples: GC.partsOfSlot(k).filter(p => p.id !== 'none' && p.pack !== TMP_PACK).slice(0, 6).map(p => p.pack + '/' + p.id) }));
     return {
       standard: 'docs/QUY-TRINH-LINH-KIEN.md — a character = a combination of parts; a good part serves hundreds of characters in every expression, pose and view.',

@@ -1,5 +1,5 @@
 {
-  "id": "vi-du-agent",
-  "name": "Ví dụ của agent",
-  "description": "Dự án mẫu do agent tạo theo hướng dẫn — xoá được sau khi thử."
+  "id": "agent-example",
+  "name": "Agent example",
+  "description": "Sample project an agent created by following the guide — safe to delete after trying it."
 }

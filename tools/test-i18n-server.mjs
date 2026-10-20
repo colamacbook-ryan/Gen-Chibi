@@ -316,6 +316,55 @@ console.log('(h) dịch câu không bao giờ chặn event loop · id giữ nguy
   ok(tCall < 2000 && tHealth < 2000, 'MCP get_work với id 5 KB: trả lời sau ' + tCall + ' ms, /api/health song song ' + tHealth + ' ms (trước khi sửa: 15 s)');
 }
 
+/* ---------------------------------------------------------------- (i) CNS-154 / CNS-158 */
+// (i) dữ liệu KHUNG trả agent theo ngôn ngữ của yêu cầu (/mcp luôn tiếng Anh) → agent chép khung → đổi tên → lưu không mang chữ Việt vào asset người dùng;
+//     nội dung NGƯỜI DÙNG không bao giờ bị dịch, kể cả khi trùng msgid ("Nam" ≠ "Male", "Đạt" ≠ "Approved")
+console.log('(i) dữ liệu khung qua MCP theo ngôn ngữ yêu cầu (CNS-154) · tên người dùng không bị dịch (CNS-158)');
+{
+  const H = { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', Authorization: 'Bearer ' + OWNER, 'Accept-Language': 'vi-VN', 'X-GC-Lang': 'vi' };
+  let id = 100;
+  const tool = async (b, name, args) => { const r = await fetch(b + '/mcp', { method: 'POST', headers: H, body: JSON.stringify({ jsonrpc: '2.0', id: ++id, method: 'tools/call', params: { name, arguments: args || {} } }) }).then(x => x.json()); return r.result; };
+  const data = res => res && !res.isError ? JSON.parse(res.content[0].text) : null;
+  const viLines = (o, skip) => JSON.stringify(o, null, 1).split('\n').filter(l => VI_RE.test(l) && !(skip && skip.test(l))).map(l => l.trim());
+  // 1) máy mặc định vi + header vi: /mcp vẫn trả khung tiếng Anh; get_catalog không còn chữ Việt (chỉ số vật phẩm, tên bộ âm chuẩn, bảng trạng thái hồ sơ…)
+  const fr = data(await tool(viBase, 'get_character', { key: 'gen.khung/ma-no-canh' })), cat = data(await tool(viBase, 'get_catalog'));
+  ok(fr && fr.name === 'Mannequin' && fr.role === 'Standard character frame' && fr.status === 'draft' && !viLines(fr).length, 'MCP HTTP get_character gen.khung/ma-no-canh (máy vi, header vi): khung tiếng Anh, không còn chữ Việt: ' + cut(viLines(fr || {}).join(' | ') || (fr && fr.name), 120));
+  ok(cat && cat.items.stats.atk === 'Attack' && !viLines(cat).length, 'MCP HTTP get_catalog: không còn chữ Việt (chỉ số, tên bộ âm, hồ sơ trạng thái…): ' + cut(viLines(cat || {}).slice(0, 4).join(' | '), 160));
+  const ls = data(await tool(viBase, 'list_scenes')), li = data(await tool(viBase, 'list_items'));
+  ok(ls && li && !viLines(ls).length && !viLines(li).length && ls.some(x => x.name === 'Standard stage'), 'MCP HTTP list_scenes / list_items: cảnh + vật phẩm khung tiếng Anh');
+  // 2) đúng quy trình "lấy khung → đổi tên → lưu" (probe cortex p-export): gói dự án không mang "Khung chuẩn nhân vật" / "Ma-nơ-canh…"
+  await tool(viBase, 'save_project', { id: 'euro-i18n', name: 'Euro' });
+  const def = Object.assign({}, fr, { id: 'hero', name: 'Hero', project: 'euro-i18n' }); ['pack', 'key', 'version', 'savedAt', 'status'].forEach(k => delete def[k]);
+  const sv = await tool(viBase, 'save_character', { asset: def }), ex = data(await tool(viBase, 'export_project', { id: 'euro-i18n' }));
+  ok(sv && !sv.isError && ex && ex.characters.length === 1 && ex.characters[0].role === 'Standard character frame' && !viLines(ex).length, 'agent chép khung → đổi tên → lưu → export_project không còn chữ Việt (vai: "' + (ex && ex.characters[0] && ex.characters[0].role) + '"): ' + cut(viLines(ex || {}).join(' | ') || (sv && sv.isError ? sv.content[0].text : ''), 140));
+  // 3) nội dung người dùng giữ nguyên chữ dù trùng msgid ("Nam" → "Male", "Đạt" → "Approved" trong bảng en)
+  ok(L10N.label('en', 'Nam') === 'Male' && L10N.label('en', 'Đạt') === 'Approved', 'tiền đề: bảng en có "Nam" → "Male", "Đạt" → "Approved" (va chạm thật)');
+  await tool(viBase, 'save_character', { asset: Object.assign({}, def, { id: 'nam', name: 'Nam', role: 'Đạt', persona: 'Văn võ song toàn' }) });
+  await tool(viBase, 'save_item', { item: { id: 'dat', name: 'Đạt', type: 'weapon', rarity: 'common', project: 'euro-i18n', equip: { slot: 'heldR', part: 'gen.khung/khoi-que-ngan' } } });
+  const gn = data(await tool(viBase, 'get_character', { key: 'local.my/nam' })), lc = data(await tool(viBase, 'list_characters')), li2 = data(await tool(viBase, 'list_items')), ex2 = data(await tool(viBase, 'export_project', { id: 'euro-i18n' }));
+  const ln = lc && lc.find(x => x.key === 'local.my/nam'), ld = li2 && li2.find(x => x.key === 'local.my/dat'), en = ex2 && ex2.characters.find(x => x.id === 'nam');
+  ok(gn && gn.name === 'Nam' && gn.role === 'Đạt' && ln && ln.name === 'Nam' && ln.role === 'Đạt' && ld && ld.name === 'Đạt' && en && en.name === 'Nam' && ex2.items.some(x => x.name === 'Đạt'),
+    'asset người dùng qua MCP giữ nguyên chữ: nhân vật "Nam" (vai "Đạt"), vật phẩm "Đạt" — get_character / list_characters / list_items / export_project: ' + cut([gn && gn.name, ln && ln.name, ld && ld.name].join(' · '), 80));
+  // 4) kênh 'ui' (dock Trợ lý AI trong Studio): dữ liệu khung theo ngôn ngữ NGƯỜI DÙNG (AI viết nội dung cho chính họ) — vi giữ nguyên chữ Việt như trước
+  const m = fresh(), viaUi = (L, name, args) => MSG.run(L, () => m.callTool(name, args, { channel: 'ui', zone: 'xuong' })).then(data);
+  const [uiVi, uiEn, noCtx] = [await viaUi('vi', 'get_character', { key: 'gen.khung/ma-no-canh' }), await viaUi('en', 'get_character', { key: 'gen.khung/ma-no-canh' }), data(await m.callTool('get_character', { key: 'gen.khung/ma-no-canh' }))];
+  ok(uiVi && uiVi.name === 'Ma-nơ-canh' && uiVi.role === 'Khung chuẩn nhân vật' && uiEn && uiEn.name === 'Mannequin' && !viLines(uiEn).length && noCtx && noCtx.name === 'Mannequin',
+    'dock (kênh ui): khung theo ngôn ngữ người dùng (vi: "' + (uiVi && uiVi.name) + '" · en: "' + (uiEn && uiEn.name) + '"); ngoài yêu cầu = tiếng Anh');
+  // 5) rào ngược: coi MỌI thứ là "của người dùng" → khung lại ra chữ Việt (kiểm 1 đỏ); coi MỌI thứ là "của Gen Labs" → "Nam" thành "Male" (kiểm 3 đỏ)
+  const GCm = m.GC, keep = GCm.isGenLabs, lst = () => m.callTool('list_characters', {}).then(data);
+  await m.callTool('save_character', { asset: Object.assign({}, def, { id: 'nam', name: 'Nam', project: '' }) });
+  GCm.isGenLabs = () => false; const redA = viLines(data(await m.callTool('get_character', { key: 'gen.khung/ma-no-canh' })) || {}).length;
+  GCm.isGenLabs = () => true; const redB = ((await lst()) || []).find(x => x.key === 'local.my/nam');
+  GCm.isGenLabs = keep; const green = ((await lst()) || []).find(x => x.key === 'local.my/nam');
+  ok(redA > 0 && redB && redB.name === 'Male' && green && green.name === 'Nam', 'rào ngược: bỏ phân loại "đồ Gen Labs" → khung ra chữ Việt (' + redA + ' dòng) / dịch cả đồ người dùng → "Nam" thành "' + (redB && redB.name) + '"; trả lại → xanh');
+  // 6) phân loại một nguồn (engine GC.isGenLabs) + lời nhắc đạo diễn: khung tiếng Anh, tên người dùng giữ nguyên
+  const G2 = loadEngine(ROOT);
+  ok(G2.isGenLabs({ pack: 'gen.khung' }) && G2.isGenLabs({ pack: 'afi.khung' }) && G2.isGenLabs({ pack: 'gen.core' }) && G2.isGenLabs({ pack: G2.choreo.FRAME_PACK }) && G2.isGenLabs({ pack: G2.sounds.FRAME }) &&
+    !G2.isGenLabs({ pack: 'local.my' }) && !G2.isGenLabs({ pack: 'tam-quoc-am' }) && !G2.isGenLabs({}) && !G2.isGenLabs(null), 'GC.isGenLabs: gen.core / gen.khung (cả tên cũ afi.*) / đòn khung / bộ âm chuẩn = Gen Labs; Của tôi, gói người dùng, không pack = nội dung');
+  const dp = G2.director.prompt([G2.ASSETS['gen.khung/ma-no-canh'], Object.assign({}, G2.ASSETS['gen.khung/ma-no-canh'], { id: 'nam', key: 'local.my/nam', pack: 'local.my', name: 'Nam', persona: 'Đạt' })], {});
+  ok(/- ma-no-canh: Mannequin — /.test(dp) && /- nam: Nam — Đạt/.test(dp) && /Standard stage/.test(dp) && !/Sân khấu chuẩn|Ma-nơ-canh/.test(dp), 'lời nhắc đạo diễn (get_director_schema / AI đạo diễn): diễn viên + cảnh khung tiếng Anh, tên người dùng giữ nguyên');
+}
+
 console.log('   (' + pass + ' kiểm tra đạt' + (pend ? ' · ' + pend + ' chờ hook main.js — Gen gộp hook rồi chạy lại để kiểm nghiêm' : '') + ')');
 if (fail) { console.log('   ✗ có kiểm tra đỏ'); process.exit(1); }
 process.exit(0);

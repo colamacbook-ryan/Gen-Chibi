@@ -52,7 +52,8 @@ The owner can print ready-made client configs with `genchibi agent connect`.
 Call **`start_here`** first. It returns the app version, what already exists (projects, assets,
 motion packs, works), the golden rules, the list of guide topics and suggested next steps.
 Then call **`get_guide`** with the topic of your job (section 4). Each topic is a numbered procedure
-with a runnable JSON example.
+with a runnable JSON example. The examples are written in English; write your own names, labels and dialogue
+in the language of the user / project (rule 6).
 
 ## 3. Golden rules (MUST)
 

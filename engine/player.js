@@ -36,6 +36,8 @@
   // NGÔN NGỮ (ADR 0007): chữ người xem thấy đi qua engine/i18n.js (Studio, phim xuất ra nhúng bảng player + engine); thiếu i18n thì giữ msgid
   function _t(s, v) { var I = GC.i18n; return I ? I.t(s, v) : String(s).replace(/\{(\w+)\}/g, function (m, k) { return v && Object.prototype.hasOwnProperty.call(v, k) ? String(v[k]) : m; }); }
   function _l(s) { var I = GC.i18n; return I ? I.label(s) : s; }
+  // nhãn của một mục dữ liệu (đòn): chỉ dịch đồ Gen Labs (đòn khung); đòn trong gói của người dùng giữ nguyên chữ họ đặt (CNS-158)
+  function _lo(x, s) { return GC.isGenLabs && !GC.isGenLabs(x) ? s : _l(s); }
   var FILL = ['midLeft', 'midRight', 'left', 'right', 'center', 'backLeft', 'backRight', 'back'];
 
   function actors(shot) {
@@ -65,7 +67,7 @@
       if (!st || !st.action) return;
       if (!Object.prototype.hasOwnProperty.call(AC, st.action)) { miss.push(_t('đòn "{action}" không có — cài / cập nhật gói động tác có đòn này', { action: st.action })); needs.push('action'); return; }
       var who = acts.filter(function (a) { return a.id === st.actor; })[0];
-      if (who && C.canDo && !C.canDo(who, AC[st.action])) { miss.push(_t('{name} không làm được "{action}" (cần binh khí)', { name: who.name, action: _l(AC[st.action].label) })); needs.push('weapon'); }
+      if (who && C.canDo && !C.canDo(who, AC[st.action])) { miss.push(_t('{name} không làm được "{action}" (cần binh khí)', { name: who.name, action: _lo(AC[st.action], AC[st.action].label) })); needs.push('weapon'); }
     });
     miss.needs = needs;   // mã loại thiếu (không phụ thuộc ngôn ngữ): scene · cast · event · spots · action · weapon
     return miss;
@@ -946,7 +948,7 @@
         progress((plan.shotTitle || '') + ' · ' + i + '/' + L.length);
         var go = Promise.resolve();
         if (line.move) { camera('wide'); go = wait(300, r).then(function () { sfx('whoosh', { gain: 0.35, pan: panOf(line.actor) }); return walk(line.actor, line.move.to, line.move.gait, r); }); }
-        if (line.type === 'act') { progress((plan.shotTitle || '') + ' · ' + _l(line.label)); lastCam = 'two'; return go.then(function () { return perform(line, r); }).then(next); }
+        if (line.type === 'act') { progress((plan.shotTitle || '') + ' · ' + _lo(GC.choreo && GC.choreo.ACTIONS[line.action], line.label)); lastCam = 'two'; return go.then(function () { return perform(line, r); }).then(next); }
         return go.then(function () {
           camera(line.camera, line.camOn, line.punch);
           if (line.camera !== 'wide' && line.camera !== lastCam) sfx(evSfx('cut', 'whoosh'), { gain: 0.18 });

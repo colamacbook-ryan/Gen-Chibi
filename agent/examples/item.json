@@ -1,9 +1,9 @@
 {
-  "id": "vi-du-kiem-go",
-  "name": "Kiếm gỗ tập",
+  "id": "example-wooden-sword",
+  "name": "Training wooden sword",
   "type": "weapon",
   "rarity": "common",
-  "project": "vi-du-agent",
+  "project": "agent-example",
   "equip": {
     "slot": "heldR",
     "part": "gen.khung/khoi-que-ngan",
@@ -15,5 +15,5 @@
     "atk": 8,
     "spd": 4
   },
-  "description": "Kiếm gỗ để tập — đánh không đau."
+  "description": "A wooden sword for practice — the hits do not hurt."
 }

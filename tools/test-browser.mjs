@@ -2832,6 +2832,37 @@ if (!ONLY || ONLY === 'i18n') {
     if (uniq.length) throw new Error('chế độ en còn ' + uniq.length + ' lỗi (chữ tiếng Việt chưa dịch / bố cục chồng lấn) trên giao diện:\n      ' + uniq.slice(0, 60).join('\n      '));
     if (pendingSeen.size) console.log('  ! ' + pendingSeen.size + ' câu động của engine (core.js, cổng kiểm) còn tiếng Việt — chờ builder engine: ' + [...pendingSeen].slice(0, 4).map(x => JSON.stringify(x.slice(0, 40))).join(', ') + (pendingSeen.size > 4 ? '…' : ''));
     console.log('  ✓ Chế độ en: không còn chữ tiếng Việt trên ' + (nPages + 6) + ' trang / tab (Xưởng, Thư viện mọi mục, Tạo tác + 5 tab phòng làm phim, Hệ thống, dock Trợ lý AI) + phim HTML xuất ra (nút, bảng player, mở file://) — trừ nội dung người dùng (' + USER.length + ' chuỗi của bộ mẫu)');
+    // 6) CNS-158: tên do NGƯỜI DÙNG đặt không bị dịch dù trùng msgid (bảng en có "Nam" → "Male", "Đạt" → "Approved"); nhãn của bộ khung vẫn dịch.
+    //    Tạo SAU lượt quét (5) để không lẫn vào danh sách nội dung người dùng của lượt quét
+    const fr16 = await qe.evaluate(() => JSON.parse(JSON.stringify(window.GenChibi.ASSETS['gen.khung/ma-no-canh'])));
+    Object.assign(fr16, { id: 'nam', pack: 'local.my', name: 'Nam', role: 'Đạt', faction: '', persona: 'Văn võ song toàn', status: 'draft' }); delete fr16.key;
+    const putN = await fetch(U + 'api/assets/local.my/nam', { method: 'PUT', headers: H, body: JSON.stringify(fr16) });
+    const putD = await fetch(U + 'api/items', { method: 'POST', headers: H, body: JSON.stringify({ item: { id: 'dat', name: 'Đạt', type: 'weapon', rarity: 'common', equip: { slot: 'heldR', part: 'gen.khung/khoi-que-ngan' } } }) });
+    if (!putN.ok || !putD.ok) throw new Error('không lưu được nhân vật "Nam" / vật phẩm "Đạt": ' + putN.status + ' / ' + putD.status);
+    const at = async (app, route, sel) => { await qe.evaluate(([k, v]) => localStorage.setItem(k, v), ['gc-route-' + app, JSON.stringify(route)]); await qe.goto(U + app + '?lang=en'); await ready(qe); await qe.waitForSelector(sel, { timeout: 6000 }); };
+    const lbl = sel => qe.$eval(sel, el => [el.getAttribute('data-anchor-label'), (el.querySelector('b') || {}).textContent].join('|'));
+    const names = [];
+    await at('xuong', { page: 'characters' }, '[data-anchor="asset:local.my/nam"]');   // Xưởng › Bàn chỉnh nhân vật: bảng có cả khung lẫn của tôi
+    const rowN = await qe.$eval('[data-anchor="asset:local.my/nam"]', el => [el.getAttribute('data-anchor-label'), ...[...el.querySelectorAll('td')].map(td => td.textContent.trim())].join('|'));
+    names.push(['Xưởng › nhân vật "Nam" (tên | vai)', rowN, /^Nam\|/.test(rowN) && /\|Đạt\|/.test(rowN) && !/Male|Approved/.test(rowN)]);
+    const rowF = await qe.$eval('[data-anchor="asset:gen.khung/ma-no-canh"]', el => [el.getAttribute('data-anchor-label'), ...[...el.querySelectorAll('td')].map(td => td.textContent.trim())].join('|'));
+    names.push(['Xưởng › khung ma-nơ-canh', rowF, /^Mannequin\|/.test(rowF) && /\|Standard character frame\|/.test(rowF)]);
+    await at('xuong', { page: 'items' }, '[data-anchor="item:local.my/dat"]');
+    names.push(['Xưởng › vật phẩm "Đạt"', await lbl('[data-anchor="item:local.my/dat"]'), null]);
+    names[names.length - 1][2] = names[names.length - 1][1] === 'Đạt|Đạt';
+    names.push(['Xưởng › vật phẩm khung', await lbl('[data-anchor="item:gen.khung/khung-vu-khi-dai"]'), null]);
+    names[names.length - 1][2] = names[names.length - 1][1] === 'Long weapon frame|Long weapon frame';
+    await at('thu-vien', { page: 'lib-characters', key: 'local.my/nam' }, '.libcard[data-anchor="asset:local.my/nam"]');   // Thư viện › Nhân vật: thẻ + hồ sơ đang mở
+    names.push(['Thư viện › thẻ "Nam"', await lbl('.libcard[data-anchor="asset:local.my/nam"]'), null]);
+    names[names.length - 1][2] = names[names.length - 1][1] === 'Nam|Nam';
+    await qe.waitForSelector('.sticky .panel h3', { timeout: 6000 }); const insp16 = await qe.$eval('.sticky .panel h3', el => el.textContent);
+    names.push(['Thư viện › hồ sơ "Nam"', insp16, /^Nam/.test(insp16) && !/Male/.test(insp16)]);
+    await at('thu-vien', { page: 'lib-items', key: 'local.my/dat' }, '.libcard[data-anchor="item:local.my/dat"]');
+    names.push(['Thư viện › thẻ "Đạt"', await lbl('.libcard[data-anchor="item:local.my/dat"]'), null]);
+    names[names.length - 1][2] = names[names.length - 1][1] === 'Đạt|Đạt';
+    const badN = names.filter(x => !x[2]);
+    if (badN.length) throw new Error('CNS-158 — tên người dùng bị dịch / nhãn khung không dịch: ' + badN.map(x => x[0] + ': "' + x[1] + '"').join(' · '));
+    console.log('  ✓ CNS-158: tên người dùng không bị dịch dù trùng msgid — "Nam" (vai "Đạt"), vật phẩm "Đạt" ở Xưởng + Thư viện (thẻ, hồ sơ, nhãn neo); nhãn khung vẫn dịch ("' + rowF.split('|')[0] + '", "Long weapon frame")');
     await ctxE.close();
     if (errs16.length) throw new Error('lỗi trang: ' + errs16.slice(0, 3).join(' | '));
   } catch (e) { fail = 1; console.log('  ✗ i18n (ngôn ngữ giao diện):', e.message); }

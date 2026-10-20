@@ -1,19 +1,19 @@
 {
-  "id": "vi-du-thu-thu",
-  "name": "Thủ Thư",
-  "role": "Võ sinh tập sự",
-  "persona": "Lễ phép, hay cốc đầu bạn tập khi thắng.",
-  "project": "vi-du-agent",
+  "id": "example-pip",
+  "name": "Pip",
+  "role": "Apprentice martial artist",
+  "persona": "Polite; bonks sparring partners on the head whenever he wins.",
+  "project": "agent-example",
   "look": {
     "eyes": "round",
     "brows": "normal",
     "parts": {
-      "hat": "local.my/non-la",
+      "hat": "local.my/conical-hat",
       "outfit": "gen.khung/khoi-ao",
       "shoes": "gen.khung/khoi-giay"
     },
     "equip": {
-      "heldR": "local.my/vi-du-kiem-go"
+      "heldR": "local.my/example-wooden-sword"
     },
     "params": {},
     "palette": {
@@ -25,9 +25,9 @@
     }
   },
   "identity": {
-    "p1": "Nón lá + áo xanh + kiếm gỗ",
+    "p1": "Conical hat + blue robe + wooden sword",
     "must": [
-      "hat:non-la"
+      "hat:conical-hat"
     ],
     "source": "agent/examples/character.json"
   },

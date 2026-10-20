@@ -1,16 +1,16 @@
 {
   "format": "gen-chibi.sound/1",
-  "id": "am-vi-du-agent",
-  "name": "Âm của dự án ví dụ",
-  "project": "vi-du-agent",
+  "id": "example-agent-sounds",
+  "name": "Example project sounds",
+  "project": "agent-example",
   "status": "draft",
-  "description": "Ví dụ gói âm: tiếng cốc đầu gỗ + lò xo rung, và một chuỗi mộc cầm đi lên.",
+  "description": "Example sound pack: a wooden bonk on the head + a wobbling spring, and a rising xylophone run.",
   "sounds": {
-    "coc-dau-go": {
-      "label": "Cốc đầu “CỐC—oing”",
+    "wooden-bonk": {
+      "label": "Head bonk “BONK—boing”",
       "cat": "hai",
-      "tags": ["cốc", "gõ", "hài"],
-      "use": "Ví dụ: cú cốc vào đầu — gỗ “tóc” rồi lò xo rung ngắn; hợp bước có hành động cốc đầu.",
+      "tags": ["bonk", "knock", "comic"],
+      "use": "Example: a bonk on the head — a wooden “tok”, then a short spring wobble; fits a step with a bonk action.",
       "dur": 0.6,
       "level": 0.8,
       "rev": 0.1,
@@ -21,11 +21,11 @@
         { "k": "fm", "at": 0.01, "hz": 700, "to": 320, "glide": 0.3, "ratio": 1, "index": 1.5, "index1": 0.2, "dur": 0.5, "peak": 0.4, "hold": 0.05, "vib": 11, "vibc": 80, "vibc1": 10 }
       ]
     },
-    "len-thang": {
-      "label": "Mộc cầm đi lên “ting-ting-ting-ting”",
+    "rising-xylo": {
+      "label": "Rising xylophone “ting-ting-ting-ting”",
       "cat": "nhac-cu",
-      "tags": ["mộc cầm", "leo", "nảy ý"],
-      "use": "Ví dụ: chuỗi mộc cầm đi lên — vui, leo trèo, nảy ra ý tưởng (âm NHẤN: mỗi bước tối đa một).",
+      "tags": ["xylophone", "climb", "idea"],
+      "use": "Example: a rising xylophone run — cheerful, climbing, a bright idea (ACCENT sound: at most one per step).",
       "dur": 0.7,
       "level": 0.8,
       "rev": 0.15,
