@@ -6,6 +6,7 @@
 #   3) MCP: bắt tay, danh sách tool, tạo nhân vật / linh kiện / item / cảnh, chặn dữ liệu xấu
 #   4) tự cập nhật end-to-end (tools/test-update.sh)
 #   4c) OAuth cho MCP từ xa (tools/test-oauth.mjs)
+#   4e) đăng nhập chủ máy + bảng truy cập v0.21 (tools/test-auth-owner.mjs)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -622,7 +623,7 @@ echo "2n) thư viện âm thanh nối vào app: âm nào dùng được = một 
 node tools/test-sounds-app.js || exit 1
 echo "2l) âm thanh: dựng offline MỌI âm của thư viện (không vỡ / NaN, không câm, không gắt kéo dài, độ to ±7 dB, đúng thời lượng, node ≤ ngân sách) · limiter khi chồng · ghép mẫu · rò node · CPU sfx() · nạp gói / trùng tên trên trang · clip giọng trong say() — cần Playwright, không có thì bỏ qua phần trình duyệt"
 node tools/test-audio.mjs || exit 1
-echo "3) MCP"
+echo "3) MCP (server không đặt GC_API_TOKEN = bản cài v0.20 nâng cấp: owner-token tự sinh, cầu stdio tự đọc — CNS-197)"
 H="$(mktemp -d)"; PORT=7495
 (echo > /dev/tcp/127.0.0.1/$PORT) 2>/dev/null && { echo "Cổng $PORT đang bị chiếm"; exit 1; }
 GC_HOME="$H" GC_PORT=$PORT GC_NO_AUTOCHECK=1 node server/main.js > "$H/s.log" 2>&1 & SP=$!
@@ -669,7 +670,7 @@ printf '%s\n' \
  '{"jsonrpc":"2.0","id":37,"method":"tools/call","params":{"name":"export_project","arguments":{"id":"ci-chu-de"}}}' \
  '{"jsonrpc":"2.0","id":38,"method":"tools/call","params":{"name":"import_project","arguments":{"bundle":{"format":"gen-chibi.project/1","project":{"id":"ci-chu-de"},"items":[{"id":"ci-proj","name":"x","type":"weapon","rarity":"rare","equip":{"part":"gen.khung/khoi-que-dai"}}]}}}}' \
  '{"jsonrpc":"2.0","id":39,"method":"tools/call","params":{"name":"export_project","arguments":{"id":"ci-chu-de","sale":true}}}' \
- | GC_PORT=$PORT node server/mcp-stdio.js > "$H/mcp.out"
+ | GC_HOME="$H" GC_PORT=$PORT node server/mcp-stdio.js > "$H/mcp.out"
 node -e '
 const L = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n").map(JSON.parse);
 const by = id => L.find(r => r.id === id);
@@ -743,6 +744,9 @@ node tools/test-dock-core.mjs || exit 1
 
 echo "4) khoá truy cập"
 bash tools/test-auth.sh || exit 1
+echo "4e) đăng nhập chủ máy + bảng truy cập v0.21: mã setup · mật khẩu (scrypt) · phiên / cookie thiết bị · trần L-66 (10.000 lần đoán) · máy kế thừa · nâng cấp không token · online.json lúc chạy"
+for P in 7741 7742 7743 7744 7745 7746 7747 7748 7749; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done
+node tools/test-auth-owner.mjs || exit 1
 
 echo "4d) ngôn ngữ (ADR 0007): trình cài --lang / GC_LANG / câu hỏi khi có terminal · genchibi lang · trợ giúp en / vi · README + tài liệu tiếng Anh"
 bash tools/test-lang.sh || exit 1

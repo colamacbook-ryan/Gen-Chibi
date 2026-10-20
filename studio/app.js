@@ -129,9 +129,120 @@
   }
   GC.pack({ id: MY_PACK, name: N_('Của tôi'), owner: N_('Bạn'), group: 'mine', visibility: 'private', license: N_('Thuộc người tạo'), description: N_('Nhân vật bạn tạo hoặc chỉnh trên máy này.') }, function () {});
 
+  /* ============================================================ đăng nhập chủ máy (v0.21, spec §3.3–§3.4) */
+  // Ba màn trên cùng một lớp phủ #gcLogin: ĐẶT MẬT KHẨU (máy chưa có mật khẩu: mã setup từ `genchibi open` — tự điền từ #code=… rồi xoá khỏi địa chỉ — hoặc token),
+  // ĐĂNG NHẬP (mật khẩu; trình duyệt nhớ 30 ngày bằng cookie HttpOnly) và TOKEN (máy kế thừa / CLI — như v0.20). Server là nơi kiểm duy nhất; ở đây chỉ dẫn đường.
+  var Auth = {
+    code: '', st: null,
+    // ?next=/đường/nội-bộ (trang Cấp phép gửi sang) — chỉ nhận đường cùng máy, không // (khác máy), không ký tự lạ
+    next: function () { var n = ''; try { n = new URLSearchParams(location.search).get('next') || ''; } catch (e) { /* bỏ qua */ } return /^\/(?![\/\\])[A-Za-z0-9\/%._~!*'()?&=+,:;@-]*$/.test(n) ? n : '/'; },
+    done: function () { if (/^\/(login|setup)$/.test(location.pathname)) location.replace(Auth.next()); else location.reload(); },
+    post: function (url, body, token) {
+      var hd = { 'Content-Type': 'application/json', 'X-GC-Request': '1', 'X-GC-Lang': I18N.lang() };
+      if (token) hd.Authorization = 'Bearer ' + token;
+      return fetch(url, { method: 'POST', headers: hd, body: JSON.stringify(body || {}) }).then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { s: r.status, j: j }; }); });
+    },
+    // mode: '' (tự chọn theo trạng thái máy) | 'token' | 'token-wrong' | 'setup' | 'login'
+    show: function (mode) {
+      if (document.getElementById('gcLogin')) return new Promise(function () {});
+      fetch('api/auth/state', { headers: { 'X-GC-Lang': I18N.lang() } }).then(function (r) { return r.ok ? r.json() : {}; }).catch(function () { return {}; }).then(function (st) {
+        Auth.st = st;
+        // máy kế thừa (.env có GC_PUBLIC_URL / GC_ALLOWED_HOSTS từ trước v0.21) chưa có mật khẩu: vào bằng token như v0.20 (CNS-173); mở /setup hoặc có mã thì vẫn là màn đặt mật khẩu
+        var m = mode || (st.password ? 'login' : st.legacy && !Auth.code && location.pathname !== '/setup' ? 'token' : 'setup');
+        Auth.render(m === 'token-wrong' ? 'token' : m, m === 'token-wrong');
+      });
+      return new Promise(function () {});
+    },
+    render: function (mode, wrong) {
+      var old = document.getElementById('gcLogin'); if (old) old.parentNode.removeChild(old);
+      var st = Auth.st || {}, minLen = st.minLength || 12, tok = Store.token();
+      var err = h('div', { role: 'alert', hidden: true, style: 'color:var(--danger);font-size:12px' });
+      var fail = function (msg) { err.hidden = false; err.textContent = '✗ ' + msg; busy(false); };
+      var btn = h('button', { class: 'btn primary', type: 'submit' }), busy = function (on) { btn.disabled = on; };
+      var link = function (text, to) { return h('a', { href: '#', class: 'note', onclick: function (ev) { ev.preventDefault(); Auth.render(to); } }, text); };
+      var field = function (label, inp) { return h('label', { style: 'display:grid;gap:4px' }, h('span', { class: 'note', text: label }), inp); };
+      var input = function (o) { return h('input', Object.assign({ style: 'width:100%', spellcheck: 'false' }, o)); };
+      var title, body = [], submit;
+      if (mode === 'setup') {
+        // dùng token khi trình duyệt đã đăng nhập bằng token (dải "Đặt mật khẩu" của máy kế thừa) — không cần mã
+        var useTok = !!tok && !Auth.code;
+        var code = input({ id: 'gcCode', name: 'code', placeholder: 'XXXXX-XXXXX', autocomplete: 'one-time-code', value: Auth.code, maxlength: '20' });
+        var p1 = input({ id: 'gcPw', type: 'password', autocomplete: 'new-password', minlength: String(minLen) }), p2 = input({ id: 'gcPw2', type: 'password', autocomplete: 'new-password' });
+        title = _t('Đặt mật khẩu chủ');
+        body.push(h('div', { class: 'note', text: useTok ? _t('Bạn đang đăng nhập bằng token của bản cài — đặt mật khẩu để lần sau đăng nhập bằng mật khẩu (trình duyệt nhớ 30 ngày).')
+          : _t('Máy này chưa có mật khẩu chủ. Chạy genchibi open trên máy chủ để lấy mã setup (mã dùng một lần, hạn 1 giờ; genchibi status cũng in mã).') }));
+        if (!useTok) body.push(field(_t('Mã setup'), code));
+        body.push(field(_t('Mật khẩu mới (ít nhất {n} ký tự — gợi ý: một cụm từ dễ nhớ)', { n: minLen }), p1), field(_t('Nhập lại mật khẩu'), p2));
+        btn.textContent = _t('Đặt mật khẩu');
+        submit = function () {
+          if (Array.from(p1.value).length < minLen) return fail(_t('Mật khẩu cần ít nhất {n} ký tự', { n: minLen }));
+          if (p1.value !== p2.value) return fail(_t('Hai lần nhập mật khẩu không khớp'));
+          Auth.post('api/auth/setup', useTok ? { password: p1.value } : { code: code.value, password: p1.value }, useTok ? tok : '').then(function (x) {
+            if (x.s !== 200) return fail(x.j.error || _t('Lỗi {status}', { status: x.s }));
+            try { localStorage.removeItem('gc-token'); } catch (e) { /* bỏ qua */ }   // đã có phiên cookie: token không cần nằm trong trình duyệt nữa
+            Auth.done();
+          }).catch(function (e) { fail(e.message); });
+        };
+        if (!tok) body.push(h('div', { class: 'row', style: 'justify-content:space-between' }, link(_t('Dùng token của bản cài'), 'token')));
+      } else if (mode === 'login') {
+        var pw = input({ id: 'gcPw', type: 'password', autocomplete: 'current-password' });
+        title = _t('Đăng nhập gen-chibi');
+        body.push(h('div', { class: 'note', text: _t('Nhập mật khẩu chủ. Trình duyệt này nhớ đăng nhập 30 ngày.') }), field(_t('Mật khẩu'), pw));
+        btn.textContent = _t('Đăng nhập');
+        submit = function () {
+          Auth.post('api/auth/login', { password: pw.value }).then(function (x) {
+            if (x.s !== 200) { pw.select(); return fail(x.j.error || _t('Lỗi {status}', { status: x.s })); }
+            try { localStorage.removeItem('gc-token'); } catch (e) { /* bỏ qua */ }
+            Auth.done();
+          }).catch(function (e) { fail(e.message); });
+        };
+        body.push(h('div', { class: 'row', style: 'justify-content:space-between;flex-wrap:wrap;gap:6px' }, h('span', { class: 'note', text: _t('Quên mật khẩu? Chạy genchibi password trên máy chủ.') }), link(_t('Dùng token'), 'token')));
+      } else {
+        var ti = input({ id: 'gcTok', type: 'password', placeholder: 'GC_API_TOKEN', autocomplete: 'current-password' });
+        title = _t('Đăng nhập bằng token');
+        body.push(h('div', { class: 'note', text: wrong ? _t('Token không đúng. Nhập lại token trong ~/gen-chibi/.env.') : _t('Bản cài này có khoá. Nhập GC_API_TOKEN trong ~/gen-chibi/.env.') }),
+          h('div', { class: 'note', text: _t('Bản cài không có GC_API_TOKEN trong .env: token nằm ở data/owner-token trong thư mục cài.') }), ti);
+        btn.textContent = _t('Đăng nhập');
+        submit = function () {
+          var t = ti.value.trim(); if (!t) return fail(_t('Cần token'));
+          fetch('api/info', { headers: { Authorization: 'Bearer ' + t, 'X-GC-Lang': I18N.lang() } }).then(function (r) {
+            if (r.status === 401) return Auth.render('token', true);
+            try { localStorage.setItem('gc-token', t); } catch (e) { /* bỏ qua */ }
+            Auth.done();
+          }).catch(function (e) { fail(e.message); });
+        };
+        body.push(h('div', { class: 'row' }, link(st.password ? _t('Đăng nhập bằng mật khẩu') : _t('Đặt mật khẩu bằng mã setup'), st.password ? 'login' : 'setup')));
+      }
+      // đã ở trong Studio (mở từ dải "Đặt mật khẩu") thì có nút Huỷ; màn chặn do 401 thì không
+      var cancel = Store.mode === 'server' ? h('button', { class: 'btn', type: 'button', onclick: function () { var o = document.getElementById('gcLogin'); if (o) o.parentNode.removeChild(o); } }, _t('Huỷ')) : null;
+      var form = h('form', { class: 'panel', style: 'width:min(420px,calc(100vw - 32px))', 'data-auth': mode, novalidate: true, onsubmit: function (ev) { ev.preventDefault(); err.hidden = true; busy(true); submit(); } },
+        h('h3', null, title), h('div', { class: 'pad', style: 'display:grid;gap:10px' }, body, err, h('div', { class: 'row', style: 'justify-content:flex-end;gap:8px' }, cancel, btn)));
+      document.body.appendChild(h('div', { id: 'gcLogin', style: 'position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:var(--bg)' }, form));
+      var empty = Array.prototype.filter.call(form.querySelectorAll('input'), function (x) { return !x.value; })[0]; if (empty) empty.focus();
+    },
+    // chân thanh bên: trạng thái đăng nhập + dải "Đặt mật khẩu" (đang vào bằng token, máy chưa có mật khẩu) + dải "agent cũ cần nối lại" (CNS-197) + Đăng xuất
+    paint: function () {
+      var box = $('authNote'); if (!box) return;
+      clear(box);
+      var a = Store.mode === 'server' && Store.info && Store.info.auth; if (!a) return;
+      if (a.session) { try { localStorage.removeItem('gc-token'); } catch (e) { /* bỏ qua */ } }
+      if (!a.password) box.appendChild(h('div', { class: 'row', style: 'gap:6px;flex-wrap:wrap' }, h('span', { class: 'chip warn', text: _t('Chưa có mật khẩu chủ') }),
+        h('a', { href: '#', id: 'authSetPw', onclick: function (ev) { ev.preventDefault(); Auth.st = a; Auth.render('setup'); } }, _t('Đặt mật khẩu'))));
+      var seen = false; try { seen = localStorage.getItem('gc-agents-ok') === '1'; } catch (e) { /* bỏ qua */ }
+      if (a.agentsReconnect && !seen) box.appendChild(h('div', { id: 'authAgents' }, _t('Agent cũ nối không token cần nối lại — chạy genchibi agent connect trên máy chủ.') + ' ',
+        h('a', { href: '#', onclick: function (ev) { ev.preventDefault(); try { localStorage.setItem('gc-agents-ok', '1'); } catch (e) { /* bỏ qua */ } Auth.paint(); } }, _t('Đã hiểu'))));
+      if (a.session) box.appendChild(h('div', null, h('a', { href: '#', id: 'authLogout', onclick: function (ev) {
+        ev.preventDefault(); Auth.post('api/auth/logout', {}).then(function () { location.href = '/login'; }).catch(function (e) { toast(e.message); });
+      } }, _t('Đăng xuất'))));
+    }
+  };
+  // mã setup trong fragment (#code=XXXXX-XXXXX, do `genchibi open` mở): đọc rồi XOÁ ngay khỏi địa chỉ (không nằm lại trong lịch sử / không bị chép theo link)
+  (function () { var m = /^#code=([0-9A-Za-z-]{10,12})$/.exec(location.hash || ''); if (m) { Auth.code = m[1]; try { history.replaceState(history.state, '', location.pathname + location.search); } catch (e) { location.hash = ''; } } })();
+
   var Store = {
     mode: 'browser', info: null,
-    // Bản cài có GC_API_TOKEN: Studio đăng nhập bằng token, giữ trong trình duyệt này.
+    // Token chủ (máy kế thừa / CLI, v0.20): giữ trong trình duyệt này, gửi Authorization. v0.21: cách chính là phiên cookie (HttpOnly, server đặt sau khi đăng nhập
+    // bằng mật khẩu) — trình duyệt tự gửi, JS không đọc được. Có phiên cookie thì xoá gc-token (Auth.paint).
     token: function () { try { return localStorage.getItem('gc-token') || ''; } catch (e) { return ''; } },
     headers: function () {
       var hd = { 'Content-Type': 'application/json', 'X-GC-Request': '1', 'X-GC-Lang': I18N.lang() }, t = this.token();   // X-GC-Lang: server trả lỗi theo ngôn ngữ người dùng
@@ -142,26 +253,12 @@
       var self = this;
       return fetch(url, { method: method, headers: this.headers(), body: body ? JSON.stringify(body) : undefined })
         .then(function (r) {
-          if (r.status === 401) { self.login(); throw new Error(_t('Cần đăng nhập bằng token')); }
+          if (r.status === 401) { self.login(); throw new Error(_t('Cần đăng nhập')); }
           // lỗi cổng kiểm (422) mang theo danh sách lỗi chi tiết để trang hiện đủ, không chỉ câu tóm tắt; 409 mang theo conflicts[] (các chỗ còn phụ thuộc, vd. gỡ gói âm còn được gọi)
           return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw Object.assign(new Error(j.error || (_t('Lỗi {status}', { status: r.status }))), { status: r.status, errors: j.errors || null, conflicts: Array.isArray(j.conflicts) ? j.conflicts : null, retryAt: j.retryAt || null, cap: j.cap === true }); return j; });   // cap: 429 do chạm trần câu / ngày của máy (Cài đặt AI), khác hết lượt của Google
         });
     },
-    login: function (wrong) {
-      if (document.getElementById('gcLogin')) return new Promise(function () {});
-      var inp = h('input', { type: 'password', placeholder: 'GC_API_TOKEN', autocomplete: 'current-password', style: 'width:100%;margin:10px 0' });
-      var form = h('form', { class: 'panel', style: 'width:380px;padding:18px 20px', onsubmit: function (ev) {
-        ev.preventDefault();
-        try { localStorage.setItem('gc-token', inp.value.trim()); } catch (e) { /* bỏ qua */ }
-        location.reload();
-      } },
-        h('div', { style: 'font-weight:600;font-size:14px', text: _t('Đăng nhập gen-chibi') }),
-        h('div', { style: 'color:var(--fg2);margin-top:4px', text: wrong ? _t('Token không đúng. Nhập lại token trong ~/gen-chibi/.env.') : _t('Bản cài này có khoá. Nhập GC_API_TOKEN trong ~/gen-chibi/.env.') }),
-        inp, h('button', { class: 'btn primary', type: 'submit', text: _t('Đăng nhập') }));
-      document.body.appendChild(h('div', { id: 'gcLogin', style: 'position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:var(--bg)' }, form));
-      inp.focus();
-      return new Promise(function () {});
-    },
+    login: function (wrong) { return Auth.show(wrong ? 'token-wrong' : ''); },   // 401 → màn đăng nhập (v0.21: mật khẩu / mã setup / token) — xem Auth
     init: function () {
       var self = this;
       return fetch('api/info', { headers: this.headers() }).then(function (r) {
@@ -5541,6 +5638,7 @@
     paintStatic();
     $('verChip').textContent = Store.mode === 'server' ? 'v' + String(Store.info.version).replace(/^v/, '') : _t('xem thử');
     $('modeNote').textContent = Store.mode === 'server' ? _t('Đang chạy trên máy · dữ liệu lưu cục bộ') : _t('Bản xem thử · lưu trong trình duyệt');
+    Auth.paint();
     document.title = 'gen-chibi · ' + (APP ? _t(APP.name) : 'Studio');
     $('appName').textContent = APP ? _t(APP.name) : 'Studio';
   }
@@ -5551,6 +5649,7 @@
     go(route);
   }
   Lang.boot().then(function () { return Store.init(); }).then(function () { return Projects.load(); }).then(function () {
+    if (Store.mode === 'server' && /^\/(login|setup)$/.test(location.pathname)) return location.replace(Auth.next());   // đã đăng nhập (phiên / token) mà mở trang đăng nhập → về trang đích
     paintChrome();
     try { var tmsg = localStorage.getItem('gc-toast'); if (tmsg) { localStorage.removeItem('gc-toast'); setTimeout(function () { toast(tmsg); }, 300); } } catch (e) { /* bỏ qua */ }
     if (window.GCDock) window.GCDock.attach(DOCK_BRIDGE);   // dock Trợ lý AI ở cột phải: trước lần go() đầu tiên

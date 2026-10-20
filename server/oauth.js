@@ -82,21 +82,13 @@ function canonResource(u) {
 }
 
 class OAuth {
-  // opts: { dir, publicUrl, now?, accessTtl?, redirects?: [] (thêm vào DEFAULT_REDIRECTS) }
+  // opts: { dir, publicUrl: chuỗi | () => chuỗi (đọc LÚC CHẠY — v0.21 data/online.json, đổi không cần khởi động lại), pruneOk?: () => bool, now?, accessTtl?, redirects?: [] (thêm vào DEFAULT_REDIRECTS) }
   constructor(opts) {
     // H = origin công khai: scheme + host chữ thường, không port mặc định, không "/" cuối, không đường dẫn. Chỉ https (riêng loopback được http). Thiếu / sai thì OAuth tắt (this.why nói lý do)
-    let raw = '', why = '';
-    if (opts.publicUrl) {
-      try {
-        const x = new URL(String(opts.publicUrl));
-        if (x.protocol !== 'https:' && !(x.protocol === 'http:' && LOOP.has(x.hostname.toLowerCase()))) why = 'GC_PUBLIC_URL phải là https (http chỉ cho loopback như http://localhost:7480) — token bay qua mạng không được để trần';
-        else if (!((x.pathname === '/' || x.pathname === '') && !x.search && !x.hash && !x.username)) why = 'GC_PUBLIC_URL phải là gốc, vd https://chibi.example.com (không đường dẫn, query, user:pass)';
-        else raw = x.origin;
-      } catch (e) { why = 'GC_PUBLIC_URL không phải URL hợp lệ'; }
-    }
-    this.publicUrl = raw;
-    this.why = why;
-    this.enabled = !!raw;
+    this.srcUrl = typeof opts.publicUrl === 'function' ? opts.publicUrl : (v => () => v)(opts.publicUrl || '');
+    // pruneOk: được gỡ token của audience khác không? false khi publicUrl đang bật TẠM (wizard kiểm tên miền mới) — trả về (revert) thì kết nối cũ còn nguyên
+    this.pruneOk = opts.pruneOk || (() => true);
+    this.cfgMemo = null;
     this.now = opts.now || Date.now;
     this.accessTtl = Math.max(1, Math.min(86400, Math.round(+opts.accessTtl) || TTL.access));
     const extra = (opts.redirects || []).filter(u => !shapeRedirect(u));
@@ -121,10 +113,37 @@ class OAuth {
     this.global = new Map();     // trần toàn cục theo loại việc (rất cao, chỉ chống lũ; không bị dồn ra khỏi bộ nhớ)
     this.useDirty = false;
     // đổi GC_PUBLIC_URL sang miền khác: mọi token cấp cho miền cũ (aud ≠ H/mcp hiện tại) bị gỡ cùng cả chuỗi — kể cả refresh. Chỉ khi OAuth bật (tắt tạm thì giữ nguyên để bật lại còn dùng)
-    if (this.enabled) {
-      const stale = new Set(Object.keys(this.s.tokens).filter(h => this.s.tokens[h].aud !== this.resource).map(h => this.s.tokens[h].g));
-      if (stale.size) { stale.forEach(g => this.dropGrant(g)); this.sweep(); this.save(); }
+    if (this.enabled && this.pruneOk()) this.prune();
+  }
+  // cấu hình theo publicUrl hiện tại (nhớ theo chuỗi nguồn — gọi mỗi request không tốn)
+  cfg() {
+    const src = String(this.srcUrl() || '');
+    if (this.cfgMemo && this.cfgMemo.src === src) return this.cfgMemo;
+    let raw = '', why = '';
+    if (src) {
+      try {
+        const x = new URL(src);
+        if (x.protocol !== 'https:' && !(x.protocol === 'http:' && LOOP.has(x.hostname.toLowerCase()))) why = 'GC_PUBLIC_URL phải là https (http chỉ cho loopback như http://localhost:7480) — token bay qua mạng không được để trần';
+        else if (!((x.pathname === '/' || x.pathname === '') && !x.search && !x.hash && !x.username)) why = 'GC_PUBLIC_URL phải là gốc, vd https://chibi.example.com (không đường dẫn, query, user:pass)';
+        else raw = x.origin;
+      } catch (e) { why = 'GC_PUBLIC_URL không phải URL hợp lệ'; }
     }
+    return (this.cfgMemo = { src, raw, why });
+  }
+  get publicUrl() { return this.cfg().raw; }
+  get why() { return this.cfg().why; }
+  get enabled() { return !!this.cfg().raw; }
+  // gỡ mọi grant còn token cấp cho audience khác H/mcp hiện tại (gọi khi khởi động và khi publicUrl được CHÍNH THỨC đổi). Trả số grant đã gỡ
+  prune() {
+    if (!this.enabled) return 0;
+    const stale = new Set(Object.keys(this.s.tokens).filter(h => this.s.tokens[h].aud !== this.resource).map(h => this.s.tokens[h].g));
+    if (stale.size) { stale.forEach(g => this.dropGrant(g)); this.sweep(); this.save(); }
+    return stale.size;
+  }
+  // đổi sang url này thì bao nhiêu kết nối (grant) bị thu hồi — để UI hỏi chủ TRƯỚC (online-config preview / setPending)
+  grantsNotFor(url) {
+    let aud = ''; try { aud = new URL(url).origin + '/mcp'; } catch (e) { return 0; }
+    return new Set(Object.keys(this.s.tokens).filter(h => this.s.tokens[h].aud !== aud).map(h => this.s.tokens[h].g)).size;
   }
   get resource() { return this.publicUrl + '/mcp'; }
   // RFC 8707: máy này chỉ có MỘT resource (H/mcp) — client gửi origin trần H cũng hiểu là H/mcp (token vẫn mang aud = H/mcp), mọi thứ khác là invalid_target
@@ -341,7 +360,7 @@ class OAuth {
     // refresh_token: xoay vòng — dùng lại refresh cũ = thu hồi cả chuỗi
     const h = sha(str(f.refresh_token, MAX.code)), t = this.s.tokens[h];
     if (!t || t.k !== 'r') return oerr(400, 'invalid_grant', 'refresh_token is wrong or has expired');
-    if (t.aud !== this.resource) { this.dropGrant(t.g); this.save(); return oerr(400, 'invalid_grant', 'refresh_token was issued for another address (GC_PUBLIC_URL changed) - authorize again'); }
+    if (t.aud !== this.resource) { if (this.pruneOk()) { this.dropGrant(t.g); this.save(); } return oerr(400, 'invalid_grant', 'refresh_token was issued for another address (GC_PUBLIC_URL changed) - authorize again'); }   // publicUrl đang bật tạm: không gỡ (trả về thì còn dùng)
     const g = this.s.grants[t.g];
     if (!g || g.client !== c.id) return oerr(400, 'invalid_grant', 'refresh_token does not belong to this client');
     if (t.used) {

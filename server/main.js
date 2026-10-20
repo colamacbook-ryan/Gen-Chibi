@@ -12,6 +12,8 @@ const { Voice, VOICES, GV } = require('./voice');
 const { MCP, TOOLS: MCP_TOOLS, cleanContext, cleanAnchors, scopeCtx } = require('./mcp');   // chỉ dẫn + bộ tool theo khu của dock nằm trong mcp.js (một nguồn)
 const Agent = require('./agent.js');
 const { OAuth, clientIp, isDirectLocal, SCOPES: OAUTH_SCOPES, SCOPE_INFO: OAUTH_SCOPE_INFO } = require('./oauth');
+const { Auth } = require('./auth');                       // v0.21: đăng nhập chủ máy — mật khẩu / phiên / cookie thiết bị / mã setup / token chủ (spec §3.3–§3.4)
+const { OnlineConfig } = require('./online-config');      // v0.21: data/online.json — publicUrl / Host / header IP đọc LÚC CHẠY (spec §3.2)
 const { consentPage, errorPage } = require('./oauth-page');
 const { Store, KEY, CHAT_KINDS, readJSON, writeJSON } = require('./store');
 const { loadEngine } = require('./engine-node');
@@ -24,25 +26,21 @@ const HOME = process.env.GC_HOME || (path.basename(path.dirname(APP)) === 'relea
 const VERSION = fs.readFileSync(path.join(APP, 'VERSION'), 'utf8').trim();
 const PORT = +(process.env.GC_PORT || 7480);
 const HOST = process.env.GC_LISTEN || '127.0.0.1';   // trong Docker đặt 0.0.0.0; cổng ngoài vẫn chỉ mở cho 127.0.0.1
-const API_TOKEN = process.env.GC_API_TOKEN || '';
+// Token chủ (T): GC_API_TOKEN; trống thì server tự sinh data/owner-token (CNS-195) — xem auth.loadToken. Bản cài nào cũng có token (v0.21)
+const ENV_TOKEN = process.env.GC_API_TOKEN || '';
 // Link MCP có khoá (https://<tên miền>/mcp/<GC_MCP_KEY>): chỉ cấp quyền MCP, không mở Studio hay /api.
 // Dùng cho agent không đặt được header (Claude web/desktop Connectors). Đổi khoá: genchibi expose --rotate.
 const MCP_KEY = process.env.GC_MCP_KEY || '';
 if (MCP_KEY && !/^[A-Za-z0-9_-]{24,}$/.test(MCP_KEY)) { console.error('GC_MCP_KEY must be at least 24 characters of [A-Za-z0-9_-].'); process.exit(2); }
-const PUBLIC_URL = String(process.env.GC_PUBLIC_URL || '').replace(/\/+$/, '');
 function safeEq(x, y) {
   const a = Buffer.from(String(x)), b = Buffer.from(String(y));
   return a.length === b.length && require('crypto').timingSafeEqual(a, b);
 }
-function tokenOk(t) { return safeEq(t, API_TOKEN); }
-const IN_DOCKER = process.env.GC_IN_DOCKER === '1';
 const REPO = process.env.GC_REPO || 'colamacbook-ryan/Gen-Chibi';
-const EXTRA_HOSTS = String(process.env.GC_ALLOWED_HOSTS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-const ALLOWED_HOSTS = new Set(['localhost', '127.0.0.1', '::1'].concat(EXTRA_HOSTS));
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
+// Chống DNS rebinding: Host cục bộ + tên được cho phép đọc LÚC CHẠY từ online-config (.env kế thừa GC_ALLOWED_HOSTS / GC_PUBLIC_URL, hoặc data/online.json).
 // "*.trycloudflare.com" = mọi tên con (tunnel tạm đổi tên mỗi lần chạy). Tên công cộng như vậy không trỏ được về 127.0.0.1 nên không mở lại lỗ DNS rebinding.
-const WILD_HOSTS = EXTRA_HOSTS.filter(h => /^\*\.[a-z0-9.-]+\.[a-z]+$/.test(h)).map(h => h.slice(1));
-function hostAllowed(h) { return ALLOWED_HOSTS.has(h) || WILD_HOSTS.some(suf => h.endsWith(suf) && h.length > suf.length); }
-if (EXTRA_HOSTS.length && !API_TOKEN) { console.error('GC_ALLOWED_HOSTS needs GC_API_TOKEN as well (access from other machines must use a token).'); process.exit(2); }
+function hostAllowed(h) { return LOCAL_HOSTS.has(h) || online.hostAllowed(h); }
 const DATA = path.join(HOME, 'data');
 const SETTINGS = path.join(DATA, 'settings.json');
 fs.mkdirSync(DATA, { recursive: true });
@@ -95,15 +93,31 @@ initUiLang();
 const engine = loadEngine(APP);
 const updater = new Updater({ home: HOME, version: VERSION, repo: REPO, feedUrl: process.env.GC_FEED_URL, log, token: process.env.GC_GITHUB_TOKEN || '' });
 const secrets = new Secrets(DATA);
+// cấu hình online lúc chạy (§3.2) + đăng nhập chủ (§3.3). Thứ tự: online trước (auth lấy header IP từ đây), oauth gắn vào online sau khi tạo
+const online = new OnlineConfig({ dir: DATA, log, env: { publicUrl: process.env.GC_PUBLIC_URL, allowedHosts: process.env.GC_ALLOWED_HOSTS, tunnel: process.env.GC_TUNNEL, clientIpHeader: process.env.GC_CLIENT_IP_HEADER },
+  impact: url => oauth.grantsNotFor(url), onCommit: () => { const n = oauth.prune(); if (n) log('[oauth] public URL changed: ' + n + ' agent connection(s) issued for the old address were revoked'); } });
+const TOKEN_FILE_EXISTED = fs.existsSync(path.join(DATA, 'owner-token'));   // đo TRƯỚC khi auth tự sinh: phân biệt bản cài v0.20 không token (nâng cấp) với lần chạy sau
+const auth = new Auth({ dir: DATA, envToken: ENV_TOKEN, key: secrets.key, log, ipHeader: () => online.ipHeader(), rate: process.env.GC_AUTH_RATE });
+// dấu máy kế thừa (CNS-173, 199b): MỘT lần ở lần khởi động đầu của v0.21 — đọc env lúc đó; tokenless = bản cài đã có dữ liệu chạy không token (agent cũ cần nối lại, CNS-197)
+auth.markLegacy({ publicUrl: process.env.GC_PUBLIC_URL, allowedHosts: process.env.GC_ALLOWED_HOSTS, tokenless: !ENV_TOKEN && !TOKEN_FILE_EXISTED && hasUserData() });
+if (!auth.hasPassword()) auth.ensureSetupCode(false);
+setInterval(() => auth.tick(), 60000).unref();   // phiên hết hạn, seenAt, mã setup hết hạn → mã mới
+// HỢP ĐỒNG CHO ROUTE MỚI (P3 /api/online/*, P4): mọi /api/* (trừ /api/health, /api/auth/*) đã qua cổng S / T ở route() — req.gcOwner = 'S' | 'T'.
+// Route đặt ngoài /api mà cần quyền chủ: `if (!requireOwner(req, res)) return;`. Lớp E: listener của edge gắn req.gcEdge = 'caddy' | 'tunnel' TRƯỚC khi gọi route()
+// (chỉ ảnh hưởng IP dùng cho trần + cờ Secure, không cấp quyền). Cấu hình online: online.get() / preview(url) / setPending(url, { force }) / commit() / revert() / setMode() / migrate()
+function requireOwner(req, res) { return auth.requireOwner(req, res, { send }); }
 const ai = new AI({ dataDir: DATA, secrets, engine });
 const voice = new Voice({ dataDir: DATA, secrets });   // giọng AI (Google Gemini TTS) — dùng chung kho bí mật với AI đạo diễn
 const mcp = new MCP({ engine, store, version: VERSION, system: { updater, restartSoon }, voice, uiLang: () => settings().uiLang });   // uiLang: lời thoại mặc định của tác phẩm agent tạo qua MCP (/mcp luôn 'en' ở tầng HTTP) — CNS-151
-// OAuth 2.1 cho MCP từ xa (v0.19): mọi URL dựng từ GC_PUBLIC_URL — thiếu hoặc không phải gốc (có đường dẫn) thì OAuth tắt, /mcp vẫn 401 như cũ
-const oauth = new OAuth({ dir: DATA, publicUrl: PUBLIC_URL, warn: log, accessTtl: process.env.GC_OAUTH_ACCESS_TTL, redirects: String(process.env.GC_OAUTH_REDIRECTS || '').split(',').map(x => x.trim()).filter(Boolean) });
-if (PUBLIC_URL && !oauth.enabled) log('[oauth] OAuth is OFF: ' + MSG.en(oauth.why));
-// header chứa IP khách để giới hạn tốc độ (xem clientIp): mặc định mục cuối của x-forwarded-for; đứng sau Cloudflare đặt GC_CLIENT_IP_HEADER=cf-connecting-ip
-const IP_HEADER = String(process.env.GC_CLIENT_IP_HEADER || '').trim().toLowerCase();
-if (IP_HEADER && ['x-forwarded-for', 'cf-connecting-ip', 'x-real-ip'].indexOf(IP_HEADER) < 0) { console.error('GC_CLIENT_IP_HEADER must be x-forwarded-for | cf-connecting-ip | x-real-ip.'); process.exit(2); }
+// OAuth 2.1 cho MCP từ xa (v0.19): mọi URL dựng từ publicUrl — đọc LÚC CHẠY từ online-config (v0.21: data/online.json; .env GC_PUBLIC_URL kế thừa).
+// Thiếu hoặc không phải gốc (có đường dẫn) thì OAuth tắt, /mcp vẫn 401 như cũ. publicUrl đang bật TẠM thì không gỡ kết nối của địa chỉ cũ (trả về còn dùng)
+const oauth = new OAuth({ dir: DATA, publicUrl: () => online.publicUrl(), pruneOk: () => !online.pending(), warn: log, accessTtl: process.env.GC_OAUTH_ACCESS_TTL, redirects: String(process.env.GC_OAUTH_REDIRECTS || '').split(',').map(x => x.trim()).filter(Boolean) });
+if (online.publicUrl() && !oauth.enabled) log('[oauth] OAuth is OFF: ' + MSG.en(oauth.why));
+// header chứa IP khách để giới hạn tốc độ (xem clientIp) ở lớp P: mặc định mục cuối của x-forwarded-for; đứng sau Cloudflare (proxy riêng) đặt GC_CLIENT_IP_HEADER=cf-connecting-ip
+// (kế thừa) hoặc online.json clientIpHeader. Lớp E (edge của app) lấy IP theo cờ req.gcEdge — xem auth.ipOf
+const IP_HEADER0 = String(process.env.GC_CLIENT_IP_HEADER || '').trim().toLowerCase();
+if (IP_HEADER0 && ['x-forwarded-for', 'cf-connecting-ip', 'x-real-ip'].indexOf(IP_HEADER0) < 0) { console.error('GC_CLIENT_IP_HEADER must be x-forwarded-for | cf-connecting-ip | x-real-ip.'); process.exit(2); }
+const ipHeader = () => online.ipHeader();
 setInterval(() => oauth.flush(), 30000).unref();   // lastUsedAt ghi đĩa trễ
 
 /* ---------------------------------------------------------------- tiện ích HTTP */
@@ -168,7 +182,7 @@ function oauthBody(req) {
     });
   });
 }
-function bearerOf(req) { return String(req.headers.authorization || '').replace(/^Bearer\s+/i, '') || String(req.headers['x-gc-token'] || ''); }
+const { bearerOf } = require('./auth');   // Authorization: Bearer … | X-GC-Token
 
 /* ---------------------------------------------------------------- tệp tĩnh */
 const STATIC_ROOTS = ['engine', 'kinds', 'studio', 'locales'];   // locales/<lang>/*.json: bảng dịch Studio nạp trước lần vẽ đầu
@@ -176,7 +190,9 @@ function serveStatic(req, res, urlPath) {
   let rel = decodeURIComponent(urlPath).replace(/^\/+/, '');
   const slash = rel.match(/^(xuong|thu-vien|tao-tac)\/$/);   // /xuong/ → /xuong (đường dẫn tương đối của trang chỉ đúng khi không có / cuối)
   if (slash) { res.writeHead(301, { Location: '/' + slash[1] }); return res.end(); }
-  if (rel === '' || rel === 'index.html' || rel === 'xuong' || rel === 'thu-vien' || rel === 'tao-tac') rel = 'studio/index.html';   // 3 ứng dụng độc lập dùng chung một bộ mã
+  // /setup (đặt mật khẩu đầu) chỉ có khi CHƯA có mật khẩu — sau đó chuyển sang /login (bảng §3.4)
+  if (rel === 'setup' && auth.hasPassword()) { res.writeHead(302, { Location: '/login', 'Cache-Control': 'no-store' }); return res.end(); }
+  if (rel === '' || rel === 'index.html' || rel === 'xuong' || rel === 'thu-vien' || rel === 'tao-tac' || rel === 'login' || rel === 'setup') rel = 'studio/index.html';   // 3 ứng dụng độc lập + màn đăng nhập / đặt mật khẩu dùng chung một bộ mã (Studio tĩnh — mọi lớp)
   if (rel === 'CHANGELOG.md' || rel === 'VERSION') return send(res, 200, fs.readFileSync(path.join(APP, rel)), MIME[path.extname(rel)] || 'text/plain; charset=utf-8');
   const top = rel.split('/')[0];
   if (!STATIC_ROOTS.includes(top) || rel.split('/').includes('..')) return fail(res, 404, 'không tìm thấy');
@@ -186,7 +202,7 @@ function serveStatic(req, res, urlPath) {
 }
 
 /* ---------------------------------------------------------------- định tuyến */
-function restartSoon() { setTimeout(() => { log('[server] exiting so the launcher restarts it'); oauth.flush(); process.exit(RESTART_CODE); }, 400); }
+function restartSoon() { setTimeout(() => { log('[server] exiting so the launcher restarts it'); oauth.flush(); auth.flush(); process.exit(RESTART_CODE); }, 400); }
 // Origin (nếu có) phải trỏ về chính máy chủ này. Lớp chặn chính là header X-GC-Request (trang khác không gửi được nếu không qua preflight CORS, mà máy chủ
 // không trả CORS); đây là lớp thứ hai nên chấp nhận các cách mở hợp lệ: trùng Host · trùng tên mà proxy báo (X-Forwarded-Host) hoặc GC_PUBLIC_URL ·
 // cùng là máy cục bộ (localhost / 127.0.0.1 / [::1]) và cùng cổng. Origin hỏng → chặn (không ném lỗi 500).
@@ -199,7 +215,8 @@ function originOK(req) {
   const host = String(req.headers.host || '').toLowerCase();
   if (oh === host) return true;
   if (String(req.headers['x-forwarded-host'] || '').toLowerCase().split(',').map(x => x.trim()).includes(oh)) return true;
-  if (PUBLIC_URL) { try { if (new URL(PUBLIC_URL).host.toLowerCase() === oh) return true; } catch (e) { /* GC_PUBLIC_URL hỏng: bỏ qua */ } }
+  const pub = online.publicUrl();
+  if (pub) { try { if (new URL(pub).host.toLowerCase() === oh) return true; } catch (e) { /* GC_PUBLIC_URL hỏng: bỏ qua */ } }
   const [a, ap] = hostPort(oh), [b, bp] = hostPort(host);
   return LOOPBACK.has(a) && LOOPBACK.has(b) && ap === bp;
 }
@@ -272,7 +289,7 @@ const OAUTH_RATE = Math.max(1, Math.min(100, Math.round(+process.env.GC_OAUTH_RA
 const registerOn = () => settings().oauthRegister !== false;
 function oauthView(lang) {   // lang: nhãn / mô tả phạm vi theo ngôn ngữ người gọi (Studio › Kết nối agent)
   const L = s => lang ? L10N.label(lang, s) : s;
-  return { enabled: oauth.enabled, configured: !!PUBLIC_URL, publicUrl: oauth.publicUrl, mcpUrl: oauth.enabled ? oauth.resource : null, register: registerOn(), tokenSet: !!API_TOKEN,
+  return { enabled: oauth.enabled, configured: !!online.publicUrl(), publicUrl: oauth.publicUrl, mcpUrl: oauth.enabled ? oauth.resource : null, register: registerOn(), tokenSet: true,   // v0.21: bản cài nào cũng có token chủ
     scopes: OAUTH_SCOPES.map(id => Object.assign({ id }, OAUTH_SCOPE_INFO[id], { label: L(OAUTH_SCOPE_INFO[id].label), desc: L(OAUTH_SCOPE_INFO[id].desc) })), redirects: oauth.redirects, accessTtl: oauth.accessTtl, clients: oauth.list() };
 }
 // /.well-known/oauth-* và /oauth/*. Trả true nếu đã trả lời. Tắt (thiếu GC_PUBLIC_URL) → 404 để /mcp 401 trơn như cũ
@@ -285,7 +302,7 @@ async function oauthRoute(req, res, url, p, m) {
   }
   // Giới hạn tốc độ: kiểm trần IP trước, trần toàn cục (rất cao) chỉ cộng cho request đã qua trần IP; CHỈ ĐẾM thất bại (token / revoke) hoặc mọi lần (register / authorize — mỗi lần tạo trạng thái).
   // Request loopback thật (không header proxy) được miễn. Trả true nếu đã trả 429.
-  const ip = clientIp(req.headers, req.socket.remoteAddress, IP_HEADER), direct = isDirectLocal(req.headers, req.socket.remoteAddress);
+  const ip = clientIp(req.headers, req.socket.remoteAddress, ipHeader()), direct = isDirectLocal(req.headers, req.socket.remoteAddress);
   const throttled = kind => { const w = direct ? 0 : oauth.gate(kind, ip, OAUTH_RATE); if (w) send(res, 429, { error: 'temporarily_unavailable', error_description: 'too many requests - retry after ' + w + ' seconds' }, null, { 'Retry-After': String(w) }); return !!w; };
   const tick = kind => { if (!direct) oauth.tick(kind, ip); };
   const oerr = (e) => send(res, e.code >= 400 && e.code < 600 ? e.code : 400, { error: 'invalid_request', error_description: e.message });
@@ -296,7 +313,8 @@ async function oauthRoute(req, res, url, p, m) {
     const r = oauth.authorize(url.searchParams);
     if (r.page) { const e = errorPage(r.page); send(res, r.status || 400, e.html, 'text/html; charset=utf-8', { 'Content-Security-Policy': e.csp }); return true; }
     if (r.redirect) { res.writeHead(302, { Location: r.redirect, 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' }); res.end(); return true; }
-    const pg = consentPage(r.view, { needToken: !!API_TOKEN, publicHost: new URL(oauth.publicUrl).host });
+    // chưa có bằng chứng chủ (S / T) → trang hỏi token; máy đã có mật khẩu → kèm lối "đăng nhập" quay lại đúng trang này (bảng §3.4: Cấp phép = S hoặc T)
+    const pg = consentPage(r.view, { needToken: !auth.ownerOf(req), loginUrl: auth.hasPassword() ? '/login?next=' + encodeURIComponent(req.url) : '', publicHost: new URL(oauth.publicUrl).host });
     send(res, 200, pg.html, 'text/html; charset=utf-8', { 'Content-Security-Policy': pg.csp }); return true;
   }
   if (p === '/oauth/register' || p === '/oauth/token' || p === '/oauth/revoke') {
@@ -328,15 +346,10 @@ async function route(req, res) {
   // Chống DNS rebinding: chỉ phục vụ khi Host là máy cục bộ (hoặc tên được cho phép trong GC_ALLOWED_HOSTS)
   const hostName = String(req.headers.host || '').replace(/:\d+$/, '').replace(/^\[|\]$/g, '').toLowerCase();
   if (!hostAllowed(hostName)) return fail(res, 403, 'Host không được phép');
-  // Không có token thì chỉ phục vụ kết nối từ chính máy này (Host có thể bị giả, nên kiểm địa chỉ thật).
-  // Trong Docker, cổng ngoài đã khoá 127.0.0.1 và CLI từ chối mở ra mạng khi thiếu token.
-  if (!API_TOKEN && !IN_DOCKER && !/^(127\.|::1$|::ffff:127\.)/.test(String(req.socket.remoteAddress || ''))) return fail(res, 403, 'chỉ phục vụ máy cục bộ (đặt GC_API_TOKEN để mở cho máy khác)');
-  // Request đi qua tunnel/reverse proxy (cloudflared, ngrok, nginx…) không phân biệt được với máy cục bộ
-  // bằng địa chỉ hay Host (tunnel chạy trên chính máy này, có thể đổi Host thành localhost). Dấu vết duy nhất là
-  // header chuyển tiếp: thấy nó mà chưa có token thì từ chối hết — không bao giờ để app mở ra Internet không khoá.
-  const viaProxy = !!(req.headers['x-forwarded-for'] || req.headers.forwarded || req.headers['cf-connecting-ip'] || req.headers['x-real-ip']);
-  if (!API_TOKEN && viaProxy && !viaLink) return fail(res, 403, 'đang đi qua tunnel/proxy: phải đặt GC_API_TOKEN trước khi mở ra ngoài');
-
+  // BẢNG TRUY CẬP v0.21 (spec §3.4, CNS-167 / 191 / 193 / 195): quyền chủ CHỈ từ bằng chứng dương — S (phiên cookie), T (token chủ), C (mã setup, chỉ
+  // /api/auth/setup), K / O (link có khoá / OAuth, chỉ /mcp). KHÔNG lớp nào được quyền vì THIẾU header (localhost, Docker, proxy không thêm XFF đều như nhau).
+  //   Studio tĩnh · GET /api/health · /login · OAuth máy → mọi lớp · /api/auth/* → luật riêng trong auth.handle · /api/* khác (kể cả /api/oauth/approve,
+  //   /api/online/*) → S hoặc T (chưa có mật khẩu thì chỉ T — S không tồn tại) · /mcp → K, O, T. Lớp E / P / N chỉ dùng cho trần tần suất (auth.ipOf).
   // ---- OAuth (v0.19): khám phá + đăng ký + token + thu hồi là đường MÁY (công khai, bảo vệ bằng PKCE / token — không cần cookie hay phiên Studio); authorize là trang cho chủ
   if (p.startsWith('/oauth/') || p.startsWith('/.well-known/oauth-')) { const done = await oauthRoute(req, res, url, p, m); if (done) return; }
 
@@ -344,19 +357,24 @@ async function route(req, res) {
   // /mcp còn nhận access token OAuth (Authorization: Bearer): phạm vi → kênh SẴN CÓ (scopeCtx). Không có / sai token → 401 + WWW-Authenticate trỏ metadata để agent tự khám phá.
   let mcpCtx = { viaLink }, oauthGrant = null;
   if (p === '/mcp' && !viaLink) {
-    const b = bearerOf(req), owner = !!API_TOKEN && tokenOk(b);
-    oauthGrant = !owner && oauth.enabled ? oauth.verify(b) : null;   // token OAuth hợp lệ luôn được áp phạm vi của nó — kể cả khi không đặt GC_API_TOKEN (quyền ít hơn quyền chủ máy cục bộ)
+    const b = bearerOf(req), owner = auth.tokenOk(b);   // /mcp: K / O / T — phiên cookie (S) KHÔNG mở /mcp
+    oauthGrant = !owner && oauth.enabled ? oauth.verify(b) : null;   // token OAuth hợp lệ luôn được áp phạm vi của nó (quyền ít hơn token chủ)
     if (oauthGrant) mcpCtx = scopeCtx(oauthGrant.scope);
-    else if (API_TOKEN && !owner) return send(res, 401, { error: oauth.enabled ? VI('cần token của bản cài hoặc kết nối OAuth (xem WWW-Authenticate)') : 'cần token của bản cài' }, null, oauth.enabled ? { 'WWW-Authenticate': 'Bearer resource_metadata="' + oauth.metaUrl + '"' } : undefined);
+    // agent cũ nối không token (bản cài v0.20) nhận 401 KÈM lối đi (CNS-197): genchibi mcp (stdio tự đọc token) hoặc genchibi agent connect
+    else if (!owner) return send(res, 401, { error: oauth.enabled ? VI('cần token của bản cài hoặc kết nối OAuth (xem WWW-Authenticate)') : 'cần token của bản cài', hint: 'gen-chibi now always requires the owner token: on the server run `genchibi agent connect` for the connection settings (Authorization: Bearer <token>), or use `genchibi mcp` (stdio, reads the token itself)' }, null, oauth.enabled ? { 'WWW-Authenticate': 'Bearer resource_metadata="' + oauth.metaUrl + '"' } : undefined);
   }
-  if (API_TOKEN && !viaLink && p.startsWith('/api/') && p !== '/api/health' && !tokenOk(bearerOf(req))) {
-    // approve là đường /api duy nhất tunnel mở ra Internet → chỗ thử token chủ máy. Token ĐÚNG không bao giờ bị trần; chỉ đếm (theo IP) và chặn các lần SAI
-    if (p === '/api/oauth/approve' && oauth.enabled && !isDirectLocal(req.headers, req.socket.remoteAddress)) {
-      const ip = clientIp(req.headers, req.socket.remoteAddress, IP_HEADER), w = oauth.gate('approve', ip);
-      if (w) return send(res, 429, { error: VI('quá nhiều lần sai token — thử lại sau {n} giây', { n: w }) }, null, { 'Retry-After': String(w) });
-      oauth.tick('approve', ip);
+  if (p.startsWith('/api/') && p !== '/api/health' && !p.startsWith('/api/auth/')) {
+    const who = auth.ownerOf(req);
+    if (!who) {
+      // approve là đường /api mà tunnel / cổng ngoài thường mở ra Internet → chỗ thử token chủ máy. Token ĐÚNG không bao giờ bị trần; chỉ đếm (theo IP) và chặn các lần SAI
+      if (p === '/api/oauth/approve' && oauth.enabled && !isDirectLocal(req.headers, req.socket.remoteAddress)) {
+        const ip = auth.ipOf(req), w = oauth.gate('approve', ip);
+        if (w) return send(res, 429, { error: VI('quá nhiều lần sai token — thử lại sau {n} giây', { n: w }) }, null, { 'Retry-After': String(w) });
+        oauth.tick('approve', ip);
+      }
+      return fail(res, 401, 'cần token của bản cài');
     }
-    return fail(res, 401, 'cần token của bản cài');
+    req.gcOwner = who;   // 'S' | 'T' — route sau (P3 /api/online/*) đọc được nếu cần phân biệt
   }
 
   // ---- MCP (Streamable HTTP, trả JSON). Chống CSRF: bắt buộc Content-Type JSON (trang khác gửi kiểu này phải qua preflight, server không cho)
@@ -388,8 +406,10 @@ async function route(req, res) {
     if (!originOK(req)) return fail(res, 403, originMsg(req));
   }
 
-  if (p === '/api/health') return send(res, 200, { ok: true, version: VERSION, uiLang: settings().uiLang });   // uiLang công khai: màn đăng nhập (chưa có token) cũng nói đúng ngôn ngữ của máy
-  if (p === '/api/info') return send(res, 200, { version: VERSION, repo: REPO, home: HOME, port: PORT, settings: settings(), uiLang: settings().uiLang, lang: langOf(req), mcp: { http: '/mcp', stdio: 'genchibi mcp', link: PUBLIC_URL && MCP_KEY ? PUBLIC_URL + '/mcp/' + MCP_KEY : null, oauth: oauth.enabled ? oauth.resource : null } });
+  if (p === '/api/health') return send(res, 200, { ok: true, version: VERSION, uiLang: settings().uiLang });   // CÔNG KHAI, chỉ 3 trường: launcher, healthcheck Docker, màn đăng nhập (ngôn ngữ của máy) — §3.4
+  // đăng nhập chủ: state (công khai) · setup (C / T) · login (mọi lớp, trần §3.3) · logout · password / setup-code / sessions (S / T) — luật trong auth.handle
+  if (p.startsWith('/api/auth/')) return auth.handle(req, res, p, m, { send, body });
+  if (p === '/api/info') { const pub = online.publicUrl(); return send(res, 200, { version: VERSION, repo: REPO, home: HOME, port: PORT, settings: settings(), uiLang: settings().uiLang, lang: langOf(req), auth: auth.view(req), mcp: { http: '/mcp', stdio: 'genchibi mcp', link: pub && MCP_KEY ? pub + '/mcp/' + MCP_KEY : null, oauth: oauth.enabled ? oauth.resource : null } }); }
   if (p === '/api/settings' && m === 'PUT') {
     const b = await body(req);
     const s = settings();
@@ -423,7 +443,7 @@ async function route(req, res) {
     catch (e) { return fail(res, 400, e.message); }
   }
 
-  // ---- kết nối agent (OAuth, v0.19): chủ máy duyệt + quản lý. Đã qua cổng /api: token chủ máy (hoặc cục bộ không token) + X-GC-Request + originOK — KHÔNG tin cổng đăng nhập ngoài app
+  // ---- kết nối agent (OAuth, v0.19): chủ máy duyệt + quản lý. Đã qua cổng /api: S hoặc T + X-GC-Request + originOK — KHÔNG tin cổng đăng nhập ngoài app
   if (p === '/api/oauth' && m === 'GET') return send(res, 200, oauthView(langOf(req)));
   if (p === '/api/oauth/approve' && m === 'POST') {
     if (!oauth.enabled) return fail(res, 404, 'OAuth chưa bật — đặt GC_PUBLIC_URL');
@@ -657,4 +677,4 @@ server.listen(PORT, HOST, () => {
   scheduleChecks();
   if (process.env.GC_NO_AUTOCHECK !== '1') setTimeout(autoCheck, 15000);
 });
-process.on('SIGTERM', () => server.close(() => { oauth.flush(); process.exit(0); }));
+process.on('SIGTERM', () => server.close(() => { oauth.flush(); auth.flush(); process.exit(0); }));

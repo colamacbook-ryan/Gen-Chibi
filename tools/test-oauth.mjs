@@ -42,8 +42,8 @@ const own = { Authorization: 'Bearer ' + OWNER, 'X-GC-Request': '1', 'Content-Ty
 const rpc = (base, method, params, headers, id) => fetch(base + '/mcp', { method: 'POST', headers: { ...jh, Accept: 'application/json, text/event-stream', ...headers }, body: JSON.stringify(id === null ? { jsonrpc: '2.0', method, params } : { jsonrpc: '2.0', id: id || 1, method, params }) });
 const call = async (base, tok, name, args) => { const r = await rpc(base, 'tools/call', { name, arguments: args || {} }, { Authorization: 'Bearer ' + tok }); const j = await r.json(); return j.result || j; };
 const forbidden = r => r && r.isError === true && /^\[FORBIDDEN\]/.test(r.content[0].text);
-// mỗi lời gọi một "IP" khác (mục cuối x-forwarded-for — header mặc định) để không dính giới hạn tốc độ theo IP — trừ máy chủ không token (header proxy ở đó = bị chặn) và ca thử giới hạn (tự đặt IP)
-let ipn = 0; const noise = base => (base === open.base ? {} : { 'x-forwarded-for': '10.' + ((++ipn >> 8) & 255) + '.' + (ipn & 255) + '.1' });
+// mỗi lời gọi một "IP" khác (mục cuối x-forwarded-for — header mặc định) để không dính giới hạn tốc độ theo IP — trừ ca thử giới hạn (tự đặt IP)
+let ipn = 0; const noise = base => ({ 'x-forwarded-for': '10.' + ((++ipn >> 8) & 255) + '.' + (ipn & 255) + '.1' });
 const form = (base, p, o, headers) => fetch(base + p, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...noise(base), ...headers }, body: new URLSearchParams(o).toString() });
 const dcr = (base, body, headers) => fetch(base + '/oauth/register', { method: 'POST', headers: { ...jh, ...noise(base), ...headers }, body: JSON.stringify(body) });
 const CB = 'https://claude.ai/api/mcp/auth_callback';
@@ -72,7 +72,7 @@ const initWith = (base, tok, headers) => rpc(base, 'initialize', { protocolVersi
 // GC_OAUTH_RATE=50: nhân trần TOÀN CỤC để bộ test nhiều lời gọi không chạm trần (trần mặc định được thử riêng ở máy `caps`)
 const main = spawnServer(P.main, { GC_API_TOKEN: OWNER, GC_PUBLIC_URL: H, GC_MCP_KEY: KEY, GC_ALLOWED_HOSTS: 'chibi.example.test', GC_OAUTH_RATE: '50' });
 const off = spawnServer(P.off, { GC_API_TOKEN: OWNER });                                   // không GC_PUBLIC_URL → OAuth tắt
-const open = spawnServer(P.open, { GC_PUBLIC_URL: H });                                    // không GC_API_TOKEN → chỉ máy cục bộ
+const open = spawnServer(P.open, { GC_PUBLIC_URL: H, GC_API_TOKEN: '' });                     // không GC_API_TOKEN → v0.21: server tự sinh data/owner-token, máy mình KHÔNG được miễn
 const ttl = spawnServer(P.ttl, { GC_API_TOKEN: OWNER, GC_PUBLIC_URL: H, GC_OAUTH_ACCESS_TTL: '2', GC_OAUTH_REDIRECTS: 'https://agent.example.org/cb' });   // access token sống 2 giây; callback thêm
 const caps = spawnServer(P.caps, { GC_API_TOKEN: OWNER, GC_PUBLIC_URL: H });                // giới hạn mặc định (header IP mặc định = mục cuối x-forwarded-for)
 const cfip = spawnServer(P.cfip, { GC_API_TOKEN: OWNER, GC_PUBLIC_URL: H, GC_CLIENT_IP_HEADER: 'cf-connecting-ip' });   // đứng sau Cloudflare
@@ -335,10 +335,13 @@ try {
   const ov = await (await fetch(O + '/api/oauth', { headers: own })).json(); ok(ov.enabled === false && ov.configured === false && ov.mcpUrl === null, 'Cài đặt báo OAuth tắt, cần đặt GC_PUBLIC_URL');
   r = await initWith(O, OWNER); ok(r.status === 200, '…token chủ máy vẫn chạy');
 
-  const Q = open.base;   // không GC_API_TOKEN: local = chủ máy
+  // v0.21 (spec §3.4, CNS-191): không GC_API_TOKEN thì server tự sinh data/owner-token — máy mình KHÔNG còn được duyệt vì "không có header proxy"
+  const Q = open.base, OT = readFileSync(path.join(open.home, 'data/owner-token'), 'utf8').trim();
   const gl = await grantCode(Q, { headers: { ...jh, 'X-GC-Request': '1' } });
-  r = await exchange(Q, gl); j = await r.json(); ok(gl.approve.status === 200 && r.status === 200 && j.access_token, 'không GC_API_TOKEN: chủ ở chính máy này duyệt được không cần token (như quy tắc /api)');
-  const gp = await grantCode(Q, { headers: { ...jh, 'X-GC-Request': '1', 'X-Forwarded-For': '1.2.3.4' } }); ok(gp.approve.status === 403, '…nhưng qua proxy / tunnel (X-Forwarded-For) mà chưa có token → 403 (không bao giờ mở ra Internet không khoá)');
+  ok(gl.approve.status === 401 && !gl.code, 'không GC_API_TOKEN: chủ ở chính máy này (loopback, không header proxy) KHÔNG duyệt được nếu không có token / phiên → 401 (CNS-191)');
+  const gp = await grantCode(Q, { headers: { ...jh, 'X-GC-Request': '1', 'X-Forwarded-For': '1.2.3.4' } }); ok(gp.approve.status === 401, '…qua proxy / tunnel (X-Forwarded-For) không token → 401');
+  const go = await grantCode(Q, { headers: { ...jh, 'X-GC-Request': '1', Authorization: 'Bearer ' + OT } });
+  r = await exchange(Q, go); j = await r.json(); ok(go.approve.status === 200 && r.status === 200 && j.access_token, '…token chủ tự sinh (data/owner-token) → duyệt được, đổi code lấy token');
 
   // giới hạn tốc độ theo IP + trần client (mỗi "IP" khác nhau qua x-forwarded-for)
   const ip = n => ({ 'x-forwarded-for': '10.9.' + n });
@@ -490,8 +493,9 @@ try {
     ok(purged, '…khởi tạo đã quét bỏ token + grant có aud khác H/mcp hiện tại (kiểm ngay sau khi dựng, chưa gọi gì)');
     const raw2 = JSON.parse(readFileSync(path.join(dirA, 'oauth.json'), 'utf8')); ok(Object.keys(raw2.tokens).length === 0, '…và ghi xuống oauth.json');
     // nhánh kiểm aud trong token() (không dựa vào quét lúc khởi tạo): token cũ xuất hiện giữa chừng
-    const oc = new OAuth({ dir: mkdtempSync(path.join(tmpdir(), 'gc-oauthaud2-')), publicUrl: A, now: () => now }), cC = oc.register({ client_name: 'c', redirect_uris: [CB] }).body, xC = xchg(oc, cC, approve(oc, cC));
-    oc.publicUrl = Bu; x = oc.token({ grant_type: 'refresh_token', refresh_token: xC.body.refresh_token, client_id: cC.client_id });
+    // v0.21: publicUrl đọc LÚC CHẠY qua hàm (data/online.json) — đổi nguồn giữa chừng, không dựng lại OAuth
+    let pubC = A; const oc = new OAuth({ dir: mkdtempSync(path.join(tmpdir(), 'gc-oauthaud2-')), publicUrl: () => pubC, now: () => now }), cC = oc.register({ client_name: 'c', redirect_uris: [CB] }).body, xC = xchg(oc, cC, approve(oc, cC));
+    pubC = Bu; x = oc.token({ grant_type: 'refresh_token', refresh_token: xC.body.refresh_token, client_id: cC.client_id });
     ok(x.status === 400 && x.body.error === 'invalid_grant' && Object.keys(oc.s.grants).length === 0, 'token() tự kiểm aud: refresh cấp cho miền cũ → invalid_grant + xoá grant');
     const od = new OAuth({ dir: dirA, publicUrl: '', now: () => now }); ok(od.enabled === false, 'OAuth tắt thì không quét (không làm mất token khi tắt tạm)');
     const dirK = mkdtempSync(path.join(tmpdir(), 'gc-oauthaud3-')), ok1 = new OAuth({ dir: dirK, publicUrl: A, now: () => now }), cK = ok1.register({ client_name: 'c', redirect_uris: [CB] }).body, xK = xchg(ok1, cK, approve(ok1, cK));

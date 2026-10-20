@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Kiểm khoá truy cập: không có đường vòng qua Host/địa chỉ khi đã đặt token; tunnel bị chặn khi chưa có token.
+# Kiểm khoá truy cập: không có đường vòng qua Host/địa chỉ khi đã đặt token. v0.21 (spec §3.4, CNS-191): bản cài nào cũng có token chủ —
+# không đặt GC_API_TOKEN thì server tự sinh data/owner-token; KHÔNG lớp nào được quyền chủ vì thiếu header (localhost cũng phải có token / phiên).
+# Bảng truy cập đầy đủ (mật khẩu, mã setup, phiên, trần L-66, máy kế thừa…): tools/test-auth-owner.mjs
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; T="$(mktemp -d)"; F=0
 K=linkkey_0123456789abcdefghijklmn
@@ -26,8 +28,12 @@ t() { curl -s -H 'Host: mcp.example.com' -H 'Content-Type: application/json' -d 
 if t rollback_app '{"confirm":"ROLLBACK"}' | grep -q 'Through an MCP link' && t update_app '{"force":true}' | grep -q 'Through an MCP link'; then echo "   ✓ link không được rollback/force"; else echo "   ✗ link vượt quyền rollback/force"; F=1; fi
 c 403 "có token: Host lạ"                               -H 'Host: evil.example.net' "${J[@]}" "http://127.0.0.1:7493/mcp/$K"
 c 403 "có token: wildcard không khớp tên gốc"           -H 'Host: trycloudflare.com' "${J[@]}" "http://127.0.0.1:7493/mcp/$K"
-c 200 "chưa token: localhost dùng bình thường"          http://localhost:7494/api/info
-c 403 "chưa token: tunnel đổi Host=localhost (XFF)"     -H 'X-Forwarded-For: 1.2.3.4' http://localhost:7494/api/assets
-c 403 "chưa token: tunnel Cloudflare"                   -H 'Cf-Connecting-Ip: 1.2.3.4' http://localhost:7494/
-c 200 "chưa token: link có khoá vẫn dùng được qua tunnel" -H 'Cf-Connecting-Ip: 1.2.3.4' "${J[@]}" "http://localhost:7494/mcp/$K"
+c 401 "không GC_API_TOKEN: localhost không header → 401 (v0.21: owner-token tự sinh, máy mình KHÔNG được miễn — CNS-191)" http://localhost:7494/api/info
+c 401 "không GC_API_TOKEN: tunnel đổi Host=localhost (XFF) → 401" -H 'X-Forwarded-For: 1.2.3.4' http://localhost:7494/api/assets
+c 200 "không GC_API_TOKEN: Studio tĩnh qua tunnel → 200 (không chứa dữ liệu; dữ liệu nằm sau /api)" -H 'Cf-Connecting-Ip: 1.2.3.4' http://localhost:7494/
+c 401 "không GC_API_TOKEN: /mcp không header → 401"     "${J[@]}" http://localhost:7494/mcp
+OT="$(tr -d ' \n' < "$T/b/data/owner-token" 2>/dev/null)"
+[ "${#OT}" = 64 ] && [ "$(stat -c %a "$T/b/data/owner-token" 2>/dev/null || stat -f %Lp "$T/b/data/owner-token")" = 600 ] && echo "   ✓ data/owner-token tự sinh: 256 bit, 0600" || { echo "   ✗ thiếu data/owner-token (256 bit, 0600)"; F=1; }
+printf 'header = "Authorization: Bearer %s"\n' "$OT" | c 200 "không GC_API_TOKEN: token từ data/owner-token → 200" -K - http://localhost:7494/api/info
+c 200 "không GC_API_TOKEN: link có khoá vẫn dùng được qua tunnel" -H 'Cf-Connecting-Ip: 1.2.3.4' "${J[@]}" "http://localhost:7494/mcp/$K"
 exit $F

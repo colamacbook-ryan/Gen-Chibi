@@ -124,9 +124,11 @@ async function boot(home, lang, put) {
   try {
     const U = 'http://127.0.0.1:' + p;
     for (let i = 0; i < 80; i++) { try { if ((await fetch(U + '/api/health')).ok) break; } catch (e) { /* chưa lên */ } await new Promise(r => setTimeout(r, 100)); }
+    // v0.21: GC_API_TOKEN rỗng → server tự sinh data/owner-token (CNS-195) — harness đọc tệp đó làm token chủ như CLI
+    const OWN = { Authorization: 'Bearer ' + fs.readFileSync(path.join(home, 'data/owner-token'), 'utf8').trim() };
     let putStatus = 0;
-    for (const x of put ? [].concat(put) : []) putStatus = (await fetch(U + '/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify(typeof x === 'string' ? { uiLang: x } : x) })).status;
-    const info = await (await fetch(U + '/api/info')).json();
+    for (const x of put ? [].concat(put) : []) putStatus = (await fetch(U + '/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1', ...OWN }, body: JSON.stringify(typeof x === 'string' ? { uiLang: x } : x) })).status;
+    const info = await (await fetch(U + '/api/info', { headers: OWN })).json();
     return { uiLang: info.uiLang, putStatus, log: out.join(''), file: fs.existsSync(path.join(home, 'data/settings.json')) ? JSON.parse(fs.readFileSync(path.join(home, 'data/settings.json'), 'utf8')) : null };
   } finally { srv.kill(); await new Promise(r => srv.once('exit', r)); }
 }

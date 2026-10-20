@@ -5,16 +5,26 @@
 // Dùng: `genchibi mcp`  (hoặc: node <thư mục cài>/current/server/mcp-stdio.js)
 'use strict';
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 const readline = require('readline');
 
 const PORT = +(process.env.GC_PORT || 7480);
-const TOKEN = process.env.GC_API_TOKEN || '';
+// token chủ: GC_API_TOKEN (env) → data/owner-token của bản cài (v0.21: server tự sinh khi env trống — CNS-195 / 197; `docker compose exec` có GC_HOME=/install).
+// Thư mục cài: GC_HOME → suy từ vị trí tệp (<cài>/releases/<bản>/server/…) như main.js. Đọc lại mỗi lần gọi khi chưa có (server có thể sinh tệp SAU khi cầu chạy)
+const APP = path.resolve(__dirname, '..');
+const HOME = process.env.GC_HOME || (path.basename(path.dirname(APP)) === 'releases' ? path.resolve(APP, '..', '..') : path.join(APP, '.home'));
+let TOKEN = process.env.GC_API_TOKEN || '';
+function token() {
+  if (!TOKEN) { try { const t = fs.readFileSync(path.join(HOME, 'data', 'owner-token'), 'utf8').trim(); if (/^[A-Za-z0-9_-]{32,256}$/.test(t)) TOKEN = t; } catch (e) { /* chưa có tệp: gọi không token, server trả 401 */ } }
+  return TOKEN;
+}
 
 function post(line) {
   return new Promise(resolve => {
     const data = Buffer.from(line);
     const headers = { 'Content-Type': 'application/json', Accept: 'application/json', 'Content-Length': data.length, Host: '127.0.0.1:' + PORT };
-    if (TOKEN) headers.Authorization = 'Bearer ' + TOKEN;
+    if (token()) headers.Authorization = 'Bearer ' + token();
     const req = http.request({ host: '127.0.0.1', port: PORT, path: '/mcp', method: 'POST', headers, timeout: 120000 }, res => {
       let s = '';
       res.on('data', c => (s += c));

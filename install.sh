@@ -274,6 +274,7 @@ env_put() { # env_put KHOÁ BIẾN_CHỨA_GIÁ_TRỊ
 # ---------- .env (sinh một lần; không có bí mật mặc định)
 if [ ! -f "$DIR/.env" ]; then
   KEY="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  APITOKEN="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"   # v0.21: bản cài nào cũng có token chủ (CLI, agent, đăng nhập dự phòng — spec §3.4 T)
   ENV_LANG="$UI"; [ -z "$KEPT" ] || ENV_LANG=""   # dữ liệu có sẵn mà không chọn: không đặt GC_LANG (giữ mặc định của Studio)
   cat > "$DIR/.env" <<EOF
 # gen-chibi — generated at install time. Do not share this file.
@@ -289,8 +290,9 @@ GC_REPO=$REPO
 GC_LANG=$ENV_LANG
 # Private repo: fine-grained read-only token (Contents: Read-only) for auto-update
 GC_GITHUB_TOKEN=$TOKEN
-# Open to other machines on the network: set GC_BIND=0.0.0.0, GC_ALLOWED_HOSTS=<host name> and GC_API_TOKEN=<long random string>
-GC_API_TOKEN=
+# Owner token: the CLI, agents (Authorization: Bearer) and the Studio's "use a token" sign-in use it. Keep it secret.
+GC_API_TOKEN=$APITOKEN
+# Open to other machines on the network: set GC_BIND=0.0.0.0 and GC_ALLOWED_HOSTS=<host name> (the Studio then asks for the owner password)
 GC_ALLOWED_HOSTS=
 # Proxy (taken from this machine at install time, if any)
 HTTPS_PROXY=${HTTPS_PROXY:-${https_proxy:-}}

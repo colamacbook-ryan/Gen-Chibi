@@ -15,8 +15,6 @@
  "đường dẫn không hợp lệ (dot-segment)": "invalid path (dot-segment)",
  "không có": "none",
  "Host không được phép": "Host not allowed",
- "chỉ phục vụ máy cục bộ (đặt GC_API_TOKEN để mở cho máy khác)": "only serving this machine (set GC_API_TOKEN to open it to other machines)",
- "đang đi qua tunnel/proxy: phải đặt GC_API_TOKEN trước khi mở ra ngoài": "coming through a tunnel/proxy: GC_API_TOKEN must be set before opening to the outside",
  "cần token của bản cài": "the install token is required",
  "cần token của bản cài hoặc kết nối OAuth (xem WWW-Authenticate)": "the install token or an OAuth connection is required (see WWW-Authenticate)",
  "quá nhiều lần sai token — thử lại sau {n} giây": "too many wrong tokens — try again in {n} seconds",

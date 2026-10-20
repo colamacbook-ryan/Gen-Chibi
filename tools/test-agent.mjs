@@ -29,8 +29,10 @@ const mock = http.createServer((req, res) => {
   });
 }).listen(MOCK);
 const home = mkdtempSync(path.join(tmpdir(), 'gc-agent-'));
-const srv = spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home, GC_PORT: String(APP), GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' });
-const api = (m, p, body) => fetch('http://127.0.0.1:' + APP + p, { method: m, headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: body ? JSON.stringify(body) : undefined }).then(r => r.json());
+// v0.21: bản cài nào cũng có token chủ — harness gắn T (Authorization: Bearer) cho mọi lời gọi /api (không nới luật truy cập)
+const TOKEN = 'test-owner-' + Math.random().toString(36).slice(2) + Date.now().toString(36), OWN = { Authorization: 'Bearer ' + TOKEN };
+const srv = spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home, GC_PORT: String(APP), GC_NO_AUTOCHECK: '1', GC_API_TOKEN: TOKEN }, stdio: 'ignore' });
+const api = (m, p, body) => fetch('http://127.0.0.1:' + APP + p, { method: m, headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1', ...OWN }, body: body ? JSON.stringify(body) : undefined }).then(r => r.json());
 let fail = 0; const ok = (c, m) => { if (c) console.log('   ✓', m); else { fail = 1; console.log('   ✗', m); } };
 try {
   for (let i = 0; i < 40; i++) { try { await api('GET', '/api/health'); break; } catch { await new Promise(r => setTimeout(r, 250)); } }
@@ -45,7 +47,7 @@ try {
   ok(L[5] && !L[5].ok && /not available in this area/.test(L[5].summary), 'tool hệ thống (update_app) bị từ chối với AI trong chatroom');
   const parts = await api('GET', '/api/parts'), assets = await api('GET', '/api/assets');
   ok(parts.some(p => p.id === 'ai-hat') && assets.some(a => a.id === 'ai-mix' && a.look.parts.hat === 'local.my/ai-hat'), 'kết quả nằm trong kho, đúng chuẩn');
-  const put = await fetch('http://127.0.0.1:' + APP + '/api/assets/local.my/lach-cong', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify({ name: 'Lách', look: { eyes: 'round', brows: 'normal', parts: { hat: 'ufo' } } }) });
+  const put = await fetch('http://127.0.0.1:' + APP + '/api/assets/local.my/lach-cong', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1', ...OWN }, body: JSON.stringify({ name: 'Lách', look: { eyes: 'round', brows: 'normal', parts: { hat: 'ufo' } } }) });
   ok(put.status === 422, 'API HTTP của Studio cũng đi qua cổng kiểm (linh kiện lạ → 422)');
   // Giai đoạn ③: AI đạo diễn của một tác phẩm — thiếu nhân vật thì tự tạo ở Xưởng (từ khung, đúng dự án), rồi chia phân cảnh và viết lời thoại
   const w = await api('POST', '/api/works', { title: 'Phim CI', project: 'ci-phim' });
@@ -69,7 +71,7 @@ try {
   ok(na && na.project === 'ci-phim', 'nhân vật AI tạo nằm trong dự án của tác phẩm');
   const keep = await api('POST', '/api/works/phim-ci/shots', { shot: { id: 'canh-1' }, remove: 'false' });
   ok(keep.shots && keep.shots.length === 1, 'remove phải là true thật mới bỏ phân cảnh ("false" không xoá)');
-  const many = await fetch('http://127.0.0.1:' + APP + '/api/works/phim-ci/shots', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify({ shot: { id: 7, title: 'x' } }) });
+  const many = await fetch('http://127.0.0.1:' + APP + '/api/works/phim-ci/shots', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1', ...OWN }, body: JSON.stringify({ shot: { id: 7, title: 'x' } }) });
   ok(many.status === 422, 'shot.id không phải chuỗi bị chặn');
   const th = await api('GET', '/api/chats/work/phim-ci');
   ok(th.messages.length === 2 && th.messages[1].log.length === 6, 'lịch sử chat được lưu theo tác phẩm (data/chats/work-<id>.json, kèm nhật ký tool)');

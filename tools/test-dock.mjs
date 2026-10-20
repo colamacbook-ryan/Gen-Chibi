@@ -23,9 +23,11 @@ const mock = http.createServer((req, res) => {
   });
 }).listen(MOCK, '127.0.0.1');
 const home = mkdtempSync(path.join(tmpdir(), 'gc-dock-'));
-const srv = spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home, GC_PORT: String(APP), GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' });
+// v0.21: bản cài nào cũng có token chủ — harness gắn T (Authorization: Bearer) cho /api và /mcp (không nới luật truy cập)
+const TOKEN = 'test-owner-' + Math.random().toString(36).slice(2) + Date.now().toString(36), OWN = { Authorization: 'Bearer ' + TOKEN };
+const srv = spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home, GC_PORT: String(APP), GC_NO_AUTOCHECK: '1', GC_API_TOKEN: TOKEN }, stdio: 'ignore' });
 // X-GC-Lang: vi — các kiểm tra cũ so chữ tiếng Việt: gọi như Studio ở chế độ vi (ADR 0007; mặc định API của bản cài mới là en)
-const raw = (m, p, body, lang) => fetch('http://127.0.0.1:' + APP + p, { method: m, headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1', 'X-GC-Lang': lang || 'vi' }, body: body ? JSON.stringify(body) : undefined });
+const raw = (m, p, body, lang) => fetch('http://127.0.0.1:' + APP + p, { method: m, headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1', 'X-GC-Lang': lang || 'vi', ...OWN }, body: body ? JSON.stringify(body) : undefined });
 const api = (m, p, body) => raw(m, p, body).then(r => r.json());
 let fail = 0; const ok = (c, m) => { if (c) console.log('   ✓', m); else { fail = 1; console.log('   ✗', m); } };
 const chat = (message, context, anchors) => api('POST', '/api/ai/agent', { message, context, anchors });
@@ -116,7 +118,7 @@ try {
   const stale = await raw('POST', '/api/works/phim-dock/proposals', { id: w.proposals[0].id, action: 'apply' });
   ok(stale.status === 422, 'áp dụng đề xuất đã cũ (dàn diễn viên đổi) bị cổng đạo diễn chặn → 422, đề xuất còn nguyên để chủ xem');
   await api('POST', '/api/works/phim-dock/shots', { shot: { id: 'canh-1', cast: ['ma-no-canh'] } });
-  const MC = await fetch('http://127.0.0.1:' + APP + '/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'propose_edit', arguments: { work: 'phim-dock', shot: 'canh-1', field: 'description', value: 'x' } } }) }).then(r => r.json());
+  const MC = await fetch('http://127.0.0.1:' + APP + '/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json', ...OWN }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'propose_edit', arguments: { work: 'phim-dock', shot: 'canh-1', field: 'description', value: 'x' } } }) }).then(r => r.json());
   ok(MC.error || (MC.result && MC.result.isError), 'agent ngoài (MCP) không có propose_edit — chỉ dock có chủ duyệt tại chỗ');
 
   // ---- duyệt từng cảnh (work.review): cổng riêng
@@ -147,7 +149,7 @@ try {
   const after = await api('GET', '/api/works/phim-dock');
   ok(after.review.shots['canh-1'].status === 'draft' && /Cảnh đã đổi sau khi duyệt/.test(after.review.shots['canh-1'].notes.slice(-1)[0].text), 'cảnh đổi sau khi "Đạt" → về "Nháp" kèm ghi chú (số Đạt không nói dối)');
   // MCP get_work đọc được review; gói dự án mang review, không mang chat / đề xuất
-  const gw = await fetch('http://127.0.0.1:' + APP + '/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'get_work', arguments: { id: 'phim-dock' } } }) }).then(r => r.json());
+  const gw = await fetch('http://127.0.0.1:' + APP + '/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json', ...OWN }, body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'get_work', arguments: { id: 'phim-dock' } } }) }).then(r => r.json());
   const gv = gw.result.structuredContent;
   ok(gv.review && gv.review.shots['canh-1'] && gv.review.note === 'Phim ổn, sửa cảnh một', 'MCP get_work trả review (agent đọc ghi chú duyệt)');
   await api('POST', '/api/projects', { id: 'ci-dock', name: 'CI dock' });

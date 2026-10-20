@@ -55,7 +55,7 @@ function errorPage(message, lang) {
     '<script nonce="' + n + '">document.getElementById("m").textContent=' + safeJSON(MSG.label(L, String(message)).slice(0, 400)) + ';</script>'), csp: csp(n) };
 }
 
-// view: kết quả OAuth.authorize().view; opts: { needToken, publicHost, lang? }
+// view: kết quả OAuth.authorize().view; opts: { needToken (chưa có S / T), loginUrl ('' = máy chưa có mật khẩu), publicHost, lang? }
 function consentPage(view, opts) {
   const n = nonce(), L = MSG.reqLang(opts.lang), _t = s => MSG._t(s, null, L);
   // chữ JS trong trang (dịch sẵn) — đi cùng dữ liệu, không ghép vào mã
@@ -64,7 +64,8 @@ function consentPage(view, opts) {
     badRedirect: _t('Địa chỉ quay về không hợp lệ.'), going: _t('Đang quay về agent…'), noServer: _t('Không gọi được máy chủ: {error}') };
   const v = Object.assign({}, view, { client: view.client === 'Agent không tên' ? _t('Agent không tên') : view.client,   // tên agent tự khai: dữ liệu, không khớp mẫu — chỉ dịch tên mặc định
     scopes: (view.scopes || []).map(s => Object.assign({}, s, scopeInfo(s.id, L) || {})) });
-  const data = Object.assign({ needToken: !!opts.needToken, publicHost: opts.publicHost || '', tx }, v);
+  const loginUrl = /^\/login\?next=[A-Za-z0-9%._~!*'()-]*$/.test(opts.loginUrl || '') ? opts.loginUrl : '';   // chỉ đường nội bộ do main.js dựng
+  const data = Object.assign({ needToken: !!opts.needToken, loginUrl, publicHost: opts.publicHost || '', tx }, v);
   const body = '<div class="pad">' +
     '<div>' + _t('Một agent muốn kết nối vào <b>gen-chibi</b> của bạn ({host}) để đọc / tạo asset qua MCP. Chỉ bấm <b>Cấp phép</b> nếu chính bạn vừa thêm kết nối này.').replace('{host}', '<span class="mono" id="ph"></span>') + '</div>' +
     '<div class="kv"><label>' + esc(_t('Tên agent')) + '</label><div><b id="cn"></b> <span class="note">' + esc(_t('(agent tự khai — không phải bằng chứng danh tính)')) + '</span></div>' +
@@ -72,7 +73,8 @@ function consentPage(view, opts) {
     '<label>' + esc(_t('Agent xin')) + '</label><div class="mono" id="rq"></div></div>' +
     '<div class="alert" id="warn" hidden></div>' +
     '<div><div class="lbl">' + esc(_t('Phạm vi cấp (đổi lại được ở Studio › Hệ thống › Kết nối agent)')) + '</div><div class="scopes" id="sc" role="radiogroup" aria-label="' + esc(_t('Phạm vi cấp')) + '"></div></div>' +
-    '<div id="tk" hidden><label for="tki" class="note">' + esc(_t('Token chủ máy (GC_API_TOKEN) — để chứng minh bạn là chủ máy')) + '</label><input id="tki" type="password" autocomplete="current-password" placeholder="GC_API_TOKEN"></div>' +
+    '<div id="tk" hidden><div class="note" id="lg" hidden><a id="lga" href="#">' + esc(_t('Đăng nhập bằng mật khẩu chủ')) + '</a> ' + esc(_t('— hoặc dán token chủ máy bên dưới.')) + '</div>' +
+    '<label for="tki" class="note">' + esc(_t('Token chủ máy (GC_API_TOKEN) — để chứng minh bạn là chủ máy')) + '</label><input id="tki" type="password" autocomplete="current-password" placeholder="GC_API_TOKEN"></div>' +
     '<div class="alert bad" id="er" hidden></div>' +
     '<div class="row"><button class="btn" id="no" type="button">' + esc(_t('Từ chối')) + '</button><button class="btn primary" id="ok" type="button">' + esc(_t('Cấp phép')) + '</button></div></div>';
   const js = `(function(){
@@ -87,6 +89,7 @@ D.scopes.forEach(function(s){var l=document.createElement('label');l.className='
 var b=document.createElement('b');b.textContent=s.label+' ('+s.id+')';var d=document.createElement('span');d.textContent=s.desc;l.appendChild(r);l.appendChild(b);l.appendChild(d);$('sc').appendChild(l);});
 var token='';try{token=localStorage.getItem('gc-token')||''}catch(e){}
 if(D.needToken&&!token)$('tk').hidden=false;
+if(D.loginUrl){$('lg').hidden=false;$('lga').setAttribute('href',D.loginUrl);}
 // anti misclick / popup clickjacking: the Authorize button only enables 800 ms after the page shows or regains focus (timer resets each time)
 var armT=0,busy=false;
 function arm(){$('ok').disabled=true;clearTimeout(armT);armT=setTimeout(function(){if(!busy)$('ok').disabled=false;},800);}

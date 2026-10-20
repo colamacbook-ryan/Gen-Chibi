@@ -40,7 +40,7 @@ const cut = (s, n) => JSON.stringify(String(s)).slice(0, n || 160);
 /* ---------------------------------------------------------------- các hàm kiểm (dùng lại ở rào ngược (g)) */
 const tables = {};
 readdirSync(ROOT + '/locales/en').filter(f => f.endsWith('.json')).forEach(f => { tables[f] = JSON.parse(readFileSync(path.join(ROOT, 'locales/en', f), 'utf8')); });
-const MINE = ['server-msg.json', 'server-main.json', 'engine-data.json'];
+const MINE = ['server-msg.json', 'server-main.json', 'server-auth.json', 'engine-data.json'];   // server-auth.json: đăng nhập chủ + online-config (v0.21)
 // biến mẫu cho một khoá: số cho {n}/{total}…, mã không khoảng trắng cho {id}/{key}…, chữ thường cho phần còn lại
 const CODE = /^(id|key|n|slot|pack|code|path)\d*$/, NUM = /^(n\d*|total|max|cast|deco|decoMax|fx|fxMax|count|sec)$/;
 function sample(k) { const v = {}; let i = 0; k.replace(/\{([A-Za-z0-9_]+)\}/g, (m, nm) => { v[nm] = NUM.test(nm) ? 3 + i++ : CODE.test(nm) ? 'x-' + i++ : 'zz' + i++; }); return v; }
