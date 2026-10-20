@@ -1,5 +1,7 @@
 # Quy trình tạo lập linh kiện — chuẩn nhà xưởng gen-chibi
 
+[English](PART-WORKFLOW.md) | **Tiếng Việt**
+
 > Giá trị của nhà xưởng là **khung sườn + quy trình**, không phải từng nhân vật.
 > Nhân vật = phối linh kiện. Một linh kiện tốt dùng được cho hàng trăm nhân vật, ở mọi biểu cảm, tư thế, góc nhìn.
 

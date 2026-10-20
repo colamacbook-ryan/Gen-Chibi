@@ -112,22 +112,24 @@ with a runnable JSON example.
 | `UNAVAILABLE` | the app is restarting or busy | wait ~15 s, then call `get_app_version` |
 | `INTERNAL` | unexpected failure | report the message to the owner |
 
-## 6. Glossary (Studio UI is Vietnamese)
+## 6. Glossary (the Studio UI is English by default, Vietnamese on request)
 
-| Vietnamese (UI / owner) | API term |
-|---|---|
-| Xưởng | Workshop — creating parts / assets |
-| Thư viện | Library — saved assets, projects |
-| Tạo tác | Create — works, shots, films |
-| Dự án chủ đề | project (themed collection) |
-| Nhân vật · Vật phẩm / Trang bị · Bối cảnh | character · item · scene |
-| Linh kiện · Phông | part · scenery part |
-| Gói động tác | motion pack (`gen-chibi.motion/1`) — not the same as `LIB.motions` (looping idle motions) |
-| Thư viện âm thanh · Gói âm · Âm nhấn | sound library · sound pack (`gen-chibi.sound/1`) · accent sound (group `cam-xuc` / `nhac-cu`, ≤ 1 per step) |
-| Hành động · Đòn đánh · Phản ứng | action · attack action · reaction (`react`) |
-| Phân cảnh · Kịch bản · Bước | shot · event · step |
-| Nháp · Phát hành | draft · published |
-| Gói bán · Gói sao lưu · Bộ mẫu | sale bundle · backup bundle · sample bundle |
+The owner may use either the English or the Vietnamese UI label; both map to the same API term.
+
+| English UI | Vietnamese UI | API term |
+|---|---|---|
+| Workshop | Xưởng | creating parts / assets |
+| Library | Thư viện | saved assets, projects |
+| Create | Tạo tác | works, shots, films |
+| Theme project | Dự án chủ đề | project (themed collection) |
+| Character · Item · Scene | Nhân vật · Vật phẩm / Trang bị · Bối cảnh | character · item · scene |
+| Part · Backdrop | Linh kiện · Phông | part · scenery part |
+| Motion pack | Gói động tác | motion pack (`gen-chibi.motion/1`) — not the same as `LIB.motions` (looping idle motions) |
+| Sound library · Sound pack · Accent sound | Thư viện âm thanh · Gói âm · Âm nhấn | sound library · sound pack (`gen-chibi.sound/1`) · accent sound (group `cam-xuc` / `nhac-cu`, ≤ 1 per step) |
+| Action · Attack · Reaction | Hành động · Đòn đánh · Phản ứng | action · attack action · reaction (`react`) |
+| Shot · Script · Step | Phân cảnh · Kịch bản · Bước | shot · event · step |
+| Draft · Published | Nháp · Phát hành | draft · published |
+| Sale bundle · Backup bundle · Sample | Gói bán · Gói sao lưu · Bộ mẫu | sale bundle · backup bundle · sample bundle |
 
 ## 7. Before you report "done"
 
