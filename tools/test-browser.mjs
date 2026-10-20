@@ -290,7 +290,7 @@ if (!ONLY) {
     console.log('  ✓ Dữ liệu cũ (afi.*): Studio chọn đúng bối cảnh, Lưu giữ nguyên bối cảnh + lời thoại; bản ghi trong pack khung thành bản sao Của tôi');
     // PHIM SỐNG (L-51): đo đúng thứ người xem thấy — nhân vật di chuyển thật, miệng nhép thật, bong bóng vẽ thật, máy quay cận, âm thanh bật
     await q.evaluate(() => { localStorage.setItem('gc-audio', JSON.stringify({ voice: 'blip' })); localStorage.setItem('gc-route-tao-tac', JSON.stringify({ page: 'works', work: 'mau-ngay-dau-di-lam' })); });
-    await q.goto('http://localhost:7494/tao-tac'); await q.waitForSelector('.readybar');
+    await q.goto('http://localhost:7494/tao-tac'); await q.waitForSelector('.readybar:not(.dubbar)');
     await q.click('button[data-playall]');
     const seen = { left: new Set(), mouth: new Set(), scale: 0, bubble: 0, tail: 0, name: 0 };
     for (let k = 0; k < 26; k++) {
@@ -318,7 +318,7 @@ if (!ONLY) {
     await q.click('.libcard.proj[title="mau-tam-quoc"]'); await q.waitForSelector('text=Gói bán · bộ mẫu, không bán');
     if (await q.$('button:has-text("Gói bán ·")')) throw new Error('bộ mẫu Gen Labs không được có nút xuất gói bán');
     await q.evaluate(() => localStorage.setItem('gc-route-tao-tac', JSON.stringify({ page: 'works', work: 'tq-vuon-dao-xich-bich' })));
-    await q.goto('http://localhost:7494/tao-tac'); await q.waitForSelector('.readybar');
+    await q.goto('http://localhost:7494/tao-tac'); await q.waitForSelector('.readybar:not(.dubbar)');
     if (!/Sẵn sàng diễn cả 6 phân cảnh/.test(await q.textContent('.readybar'))) throw new Error('phim Tam Quốc chưa sẵn sàng: ' + await q.textContent('.readybar'));
     if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
     // máy đã nhập bộ mẫu bản cũ (trước phân cảnh đấu): Thư viện mời cập nhật → nhập đè → đủ phân cảnh mới (CNS-036)
@@ -337,7 +337,7 @@ if (!ONLY) {
     if (await q.$('button:has-text("⟳ Cập nhật Tam Quốc")')) throw new Error('cập nhật xong vẫn còn mời cập nhật (sau ' + ((Date.now() - tUp) / 1000).toFixed(1) + ' s)');
     console.log('    (cập nhật bộ mẫu Tam Quốc xong sau ' + ((Date.now() - tUp) / 1000).toFixed(1) + ' s)');
     await q.evaluate(() => localStorage.setItem('gc-route-tao-tac', JSON.stringify({ page: 'works', work: 'tq-vuon-dao-xich-bich' })));
-    await q.goto('http://localhost:7494/tao-tac'); await q.waitForSelector('.readybar');
+    await q.goto('http://localhost:7494/tao-tac'); await q.waitForSelector('.readybar:not(.dubbar)');
     if (!/Sẵn sàng diễn cả 6 phân cảnh/.test(await q.textContent('.readybar'))) throw new Error('cập nhật bộ mẫu chưa có phân cảnh mới: ' + await q.textContent('.readybar'));
     if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
     console.log('  ✓ Bộ mẫu cũ trên máy → nút "Cập nhật Tam Quốc" → nhập đè → đủ 6 phân cảnh (có màn đấu)');
