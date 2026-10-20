@@ -282,6 +282,32 @@ async function dockTurn(b) {
   }
   return out;
 }
+// LƯỢT AI DÀI qua proxy cắt khi im lặng (CNS-175, v0.21): Cloudflare ngắt request ~100 s không có byte nào, còn một lượt dock / AI đạo diễn có thể tới
+// 10 vòng LLM × 120 s. Client gửi { async: true } → server trả 202 + id lượt NGAY, việc chạy nền (cùng hàm, cùng khoá lượt, cùng kết quả); Studio hỏi
+// GET /api/ai/turns/<id> mỗi giây tới khi xong. Lỗi tức thì (tin rỗng, đối tượng đang bận — ném trước lần chờ đầu tiên) vẫn trả ngay như cũ.
+// Không có async → chặn như v0.20 (MCP, client cũ). Lượt giữ trong bộ nhớ 10 phút sau khi xong; id 128 bit; chỉ chủ (đã qua cổng /api).
+const TURNS = new Map(), TURN_KEEP_MS = 10 * 60e3, TURN_MAX = 40;
+function turnSweep() { const t = Date.now(); for (const [id, x] of TURNS) if (x.status !== 'running' && t - x.doneAt > TURN_KEEP_MS) TURNS.delete(id); }
+async function turnOrWait(res, b, fn) {
+  if (b.async !== true) return send(res, 200, await fn());
+  turnSweep();
+  if ([...TURNS.values()].filter(x => x.status === 'running').length >= TURN_MAX) return fail(res, 429, 'quá nhiều lượt AI đang chạy — đợi xong rồi gửi tiếp');
+  const p = fn(), early = await Promise.race([p.then(r => ({ r }), e => ({ e })), new Promise(r => setImmediate(() => r(null)))]);
+  if (early && early.e) throw early.e;            // lỗi đồng bộ (400 / 409): trả ngay, không tạo lượt
+  if (early) return send(res, 200, early.r);
+  const id = require('crypto').randomBytes(16).toString('base64url'), t = { status: 'running', at: Date.now(), doneAt: 0 };
+  TURNS.set(id, t);
+  p.then(r => { t.status = 'done'; t.result = r; }, e => { t.status = 'error'; t.code = e.code && e.code >= 400 && e.code < 600 ? e.code : 502; t.error = String(e.message || e); })
+    .finally(() => { t.doneAt = Date.now(); });
+  return send(res, 202, { turn: id, status: 'running', poll: '/api/ai/turns/' + id, pollMs: 1000 });
+}
+function turnView(res, id) {
+  const t = TURNS.get(id);
+  if (!t) return fail(res, 404, 'không có lượt AI này (đã quá 10 phút hoặc server đã khởi động lại)');
+  if (t.status === 'running') return send(res, 200, { turn: id, status: 'running', since: new Date(t.at).toISOString() });
+  if (t.status === 'error') return send(res, 200, { turn: id, status: 'error', code: t.code, error: t.error });
+  return send(res, 200, { turn: id, status: 'done', result: t.result });
+}
 /* ---------------------------------------------------------------- OAuth 2.1 (v0.19) */
 // GC_OAUTH_RATE (1–100, mặc định 1) nhân trần TOÀN CỤC (register 200 / 10 phút, authorize 600 / phút) — chỉ dùng để chạy test số lượng lớn
 const OAUTH_RATE = Math.max(1, Math.min(100, Math.round(+process.env.GC_OAUTH_RATE) || 1));
@@ -514,11 +540,13 @@ async function route(req, res) {
     res.writeHead(200, { 'Content-Type': 'audio/wav', 'Content-Length': buf.length, 'Cache-Control': 'private, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff' });
     return res.end(buf);
   }
+  const tm = /^\/api\/ai\/turns\/([A-Za-z0-9_-]{22})$/.exec(p);
+  if (tm && m === 'GET') return turnView(res, tm[1]);   // trạng thái lượt AI chạy nền (CNS-175)
   if (p === '/api/ai/test' && m === 'POST') { const b = await body(req); return send(res, 200, await ai.test(typeof b.model === 'string' ? b.model : '')); }
   if (p === '/api/ai/agent' && m === 'POST') {
     const b = await body(req);
     try {
-      if (typeof b.message === 'string') return send(res, 200, await dockTurn(b));   // dock: ngữ cảnh + ghim + luồng theo đối tượng
+      if (typeof b.message === 'string') return await turnOrWait(res, b, () => dockTurn(b));   // dock: ngữ cảnh + ghim + luồng theo đối tượng (async: 202 + hỏi lượt — CNS-175)
       // kiểu cũ { messages } (client không có dock): vai của Xưởng, không lưu luồng
       return send(res, 200, await ai.agent({ messages: b.messages, model: typeof b.model === 'string' ? b.model : '', zone: cleanContext(b.context).zone }, mcp));
     } catch (e) { return fail(res, e.code || 502, e.message); }
@@ -536,7 +564,7 @@ async function route(req, res) {
   }
   if (p === '/api/ai/director' && m === 'POST') {
     const b = await body(req);
-    try { return send(res, 200, await ai.director(b, store.listAssets())); } catch (e) { return fail(res, e.code || 502, e.message); }
+    try { return await turnOrWait(res, b, () => ai.director(b, store.listAssets())); } catch (e) { return fail(res, e.code || 502, e.message); }
   }
 
   // ---- kịch bản sự kiện (do Studio hoặc agent qua MCP lưu)
@@ -577,7 +605,7 @@ async function route(req, res) {
   if (wm && wm[2] === '/chat' && m === 'POST') {
     const b = await body(req);
     if (!store.getWork(wm[1])) return fail(res, 404, 'không có tác phẩm này');
-    try { return send(res, 200, await dockTurn(Object.assign({}, b, { context: { zone: 'tao-tac', page: 'works', object: { kind: 'work', id: wm[1] } } }))); }
+    try { return await turnOrWait(res, b, () => dockTurn(Object.assign({}, b, { context: { zone: 'tao-tac', page: 'works', object: { kind: 'work', id: wm[1] } } }))); }
     catch (e) { return fail(res, e.code || 502, e.message); }
   }
   if (p === '/api/projects' && m === 'GET') { mcp.sync(); return send(res, 200, mcp.projects()); }
@@ -667,13 +695,16 @@ const tunnelListener = createTunnelListener({ port: PORT + 2, handler: (req, res
 // CHỈ cho kiểm thử (tools/test-ingress.mjs): GC_TEST=1 + GC_TEST_ONLINE_VIA=127.0.0.1:<cổng> — lời gọi "từ Internet" của wizard đi tới cổng loopback đó
 // (cloudflared giả đóng vai Cloudflare, Host giữ nguyên), tên miền phân giải ra một IP công khai giả không bao giờ được gọi. Thiếu GC_TEST=1 → bỏ qua hẳn.
 const ONLINE_TEST_VIA = process.env.GC_TEST === '1' && /^127\.0\.0\.1:\d{2,5}$/.test(process.env.GC_TEST_ONLINE_VIA || '') ? process.env.GC_TEST_ONLINE_VIA : '';
+// GC_TEST=1 + GC_TEST_CF_API=http://127.0.0.1:<cổng>/client/v4 — client Cloudflare của wizard gọi Cloudflare API GIẢ (tools/fixtures/fake-cloudflare-api.mjs, test browser)
+const ONLINE_TEST_CF = process.env.GC_TEST === '1' && /^http:\/\/127\.0\.0\.1:\d{2,5}\/client\/v4$/.test(process.env.GC_TEST_CF_API || '') ? process.env.GC_TEST_CF_API : '';
+const onlineTestCf = !ONLINE_TEST_CF ? {} : { cloudflare: o => require('./cloudflare').createCloudflare(Object.assign({ base: ONLINE_TEST_CF }, o)) };
 const onlineTestNet = !ONLINE_TEST_VIA ? {} : {
   resolve: async () => ({ a: ['192.0.32.10'], aaaa: [], via: 'system', error: '' }), publicIp: async () => ({ v4: '192.0.32.10', v6: '' }),
   probe: (url, o) => { const u = new URL(url); return require('./online').probeUrl('http://' + ONLINE_TEST_VIA + u.pathname + u.search, Object.assign({}, o, { ip: null, headers: Object.assign({}, o && o.headers, { Host: u.host }) })); }
 };
 const goOnline = require('./online').createOnline(Object.assign({ home: HOME, dataDir: DATA, port: PORT, inDocker: process.env.GC_IN_DOCKER === '1', config: online, secrets, log, edge, tunnel: tunnelListener,
   isOwner: req => !!auth.ownerOf(req), hasPassword: () => auth.hasPassword(),
-  legacy: () => { const c = online.get(); return { active: !!c.readOnly, marked: auth.isLegacy(), publicUrl: c.env.publicUrl, allowedHosts: c.env.allowedHosts.join(','), tunnel: c.env.tunnel }; } }, onlineTestNet));
+  legacy: () => { const c = online.get(); return { active: !!c.readOnly, marked: auth.isLegacy(), publicUrl: c.env.publicUrl, allowedHosts: c.env.allowedHosts.join(','), tunnel: c.env.tunnel }; } }, onlineTestNet, onlineTestCf));
 
 // Chứng minh cổng ingress (launcher, CNS-B v0.21): launcher sinh GC_INGRESS_NONCE ngẫu nhiên mỗi lần khởi động, truyền cho app con qua env; trước khi
 // spawn cloudflared (và định kỳ) nó GET http://127.0.0.1:<GC_PORT+2>/api/health kèm X-GC-Ingress-Challenge: <hex ngẫu nhiên>. CHỈ listener ingress của app trả

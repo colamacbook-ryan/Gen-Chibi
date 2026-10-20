@@ -141,5 +141,6 @@
  "quá nhiều lần kiểm — thử lại sau {n} giây": "too many checks — try again in {n} seconds",
  "tên con không hợp lệ (một nhãn: chữ thường, số, dấu gạch ngang)": "invalid subdomain (one label: lowercase letters, digits, hyphens)",
  "tên miền không hợp lệ (chỉ tên kiểu chibi.example.com — không IP, không *, không cổng)": "invalid domain (only names like chibi.example.com — no IP, no *, no port)",
- "đổi địa chỉ công khai sẽ ngắt các agent đã nối (phải nối lại) — gửi lại với confirmUrlChange: true": "changing the public address disconnects the agents already connected (they must reconnect) — send again with confirmUrlChange: true"
+ "đổi địa chỉ công khai sẽ ngắt các agent đã nối (phải nối lại) — gửi lại với confirmUrlChange: true": "changing the public address disconnects the agents already connected (they must reconnect) — send again with confirmUrlChange: true",
+ "không di chuyển được: {error}": "could not migrate: {error}"
 }

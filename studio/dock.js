@@ -501,7 +501,7 @@
     // snapshot lấy lại lúc gửi (tác phẩm vừa sửa → không gửi bản cũ); cắt theo ngân sách chung
     var per = pins.length ? Math.max(300, Math.min(1200, Math.floor(BUDGET / pins.length))) : 0;
     Promise.all(pins.map(function (p) { return Anchors.snapshot(p.anchor, per).then(function (t) { return { anchor: p.anchor, kind: Anchors.parse(p.anchor).kind, id: Anchors.parse(p.anchor).id, label: p.label, snapshot: t }; }); }))
-      .then(function (anchors) { return B.Store.api('POST', 'api/ai/agent', { message: text, context: sentCtx, anchors: anchors }); })
+      .then(function (anchors) { return B.Store.turn('api/ai/agent', { message: text, context: sentCtx, anchors: anchors }); })   // 202 + hỏi lượt: lượt dài không bị proxy cắt ~100 s (CNS-175)
       .then(function (r) {
         if (S.key === key) { S.msgs.push({ role: 'assistant', content: r.reply || '', log: r.log, anchors: r.anchors, renders: r.renders, usage: r.usage }); S.sent = r.sent || null; S.sentKey = key; }
         if (r.work) Works.put(r.work);

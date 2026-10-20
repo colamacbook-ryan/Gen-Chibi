@@ -574,3 +574,27 @@ body.dock-open:not(.dock-narrow) .toast { right: calc(var(--dock-w, 0px) + 20px)
 .pagehead .dock-toggle { flex: none; }
 .banner { flex-wrap: wrap; }
 .banner > span:first-child { flex: 1 1 260px; min-width: 0; }
+
+/* ---- Hệ thống › Lên mạng (Go online) + Tài khoản chủ (v0.21) — Data Console: lưới bậc có ID, thẻ chọn đường, chân lưới */
+.olpaths { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (min-width: 1800px) { .olpaths { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.olpath { text-align: left; display: grid; gap: 6px; align-content: start; padding: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--fg); cursor: pointer; font: inherit; min-width: 0; }
+.olpath:hover:not(:disabled) { background: var(--raised); }
+.olpath[aria-checked="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.olpath:disabled { opacity: .55; cursor: not-allowed; }
+.olpath b { font-size: 13px; }
+.olpath ul { margin: 0; padding-left: 16px; color: var(--fg2); font-size: 12px; display: grid; gap: 2px; }
+.olpath .olyou { font-size: 12px; color: var(--fg); border-top: 1px solid var(--line); padding-top: 6px; }
+.olform { border-top: 1px solid var(--line); padding-top: 12px; max-width: 760px; }
+.olcf2, .accpw2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; align-items: start; }
+.olform label.row > span { flex: 1 1 0; min-width: 0; }
+.olform a.btn { text-decoration: none; color: var(--fg); }
+.olsnip { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.olsnip pre.code { max-height: 260px; }
+table.grid.olsteps td.wrap { white-space: normal; min-width: 120px; overflow-wrap: anywhere; }
+table.grid.olsteps td { vertical-align: top; }
+.olcmd { font-size: 12px; background: var(--sunken); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; }
+.olfoot { display: flex; gap: 16px; flex-wrap: wrap; padding: 6px 12px; border-top: 1px solid var(--line); }
+.olfoot > :last-child { margin-left: auto; }
+.accpw { max-width: 760px; }
+pre.code.olexpr { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 96px; padding: 6px; margin-top: 6px; font-size: 11px; }

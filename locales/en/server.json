@@ -28,5 +28,7 @@
  "Tạo và sửa": "Create and edit",
  "Tạo / sửa nhân vật, vật phẩm, cảnh, tác phẩm trong dự án. Không tốn lượt giọng AI, không gỡ gói âm, không cập nhật hay quay lại bản cũ của app.": "Create and edit characters, items, scenes and works in projects. Uses no AI voice requests, can't remove sound packs, can't update the app or roll back.",
  "Toàn quyền chủ máy": "Full owner access",
- "Như token chủ máy: thêm cả giọng AI (tốn lượt), gỡ gói âm, cập nhật / quay lại bản cũ. Chỉ cấp cho agent bạn tin hoàn toàn.": "Same as the owner token: also AI voices (uses requests), removing sound packs, updating / rolling back. Grant it only to agents you fully trust."
+ "Như token chủ máy: thêm cả giọng AI (tốn lượt), gỡ gói âm, cập nhật / quay lại bản cũ. Chỉ cấp cho agent bạn tin hoàn toàn.": "Same as the owner token: also AI voices (uses requests), removing sound packs, updating / rolling back. Grant it only to agents you fully trust.",
+ "quá nhiều lượt AI đang chạy — đợi xong rồi gửi tiếp": "too many AI turns are running — wait for them to finish, then send again",
+ "không có lượt AI này (đã quá 10 phút hoặc server đã khởi động lại)": "no such AI turn (more than 10 minutes passed, or the server restarted)"
 }

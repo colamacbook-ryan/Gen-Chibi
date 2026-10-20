@@ -15,7 +15,7 @@ const isCtx = m => m.role === 'user' && /^UI DATA/.test(m.content);
 const mock = http.createServer((req, res) => {
   let b = ''; req.on('data', d => b += d).on('end', () => {
     const body = JSON.parse(b), done = body.messages.filter(m => m.role === 'tool').length, cm = body.messages.find(isCtx);
-    seen = { system: body.messages[0].content, tools: body.tools.map(t => t.function.name), messages: body.messages, ctxText: cm ? cm.content : '', ctx: cm ? JSON.parse(cm.content.slice(cm.content.indexOf('\n') + 1)) : null, users: body.messages.filter(m => m.role === 'user' && !isCtx(m)) };
+    seen = { system: body.messages[0].content, tools: (body.tools || []).map(t => t.function.name), messages: body.messages, ctxText: cm ? cm.content : '', ctx: cm ? JSON.parse(cm.content.slice(cm.content.indexOf('\n') + 1)) : null, users: body.messages.filter(m => m.role === 'user' && !isCtx(m)) };
     const msg = done < script.length
       ? { role: 'assistant', content: '', tool_calls: [{ id: 'c' + done, type: 'function', function: { name: script[done][0], arguments: JSON.stringify(script[done][1]) } }] }
       : { role: 'assistant', content: reply };
@@ -227,6 +227,51 @@ try {
   delay = 0;
   const free = await go('hết bận', WKL);
   ok(free.status === 200, 'xong lượt thì khoá được nhả (lượt kế chạy được, kể cả khi lượt trước lỗi 409)');
+
+  /* ---------------------------------------------------------------- CNS-175 (v0.21): lượt dài sau proxy cắt khi im lặng → 202 + hỏi lượt */
+  // proxy giả kiểu Cloudflare: chưa có byte phản hồi sau CUT ms → trả 524 và bỏ (Cloudflare: ~100 s; ở đây thu nhỏ 100×: CUT 1 s, LLM giả "nghĩ" 2,5 s)
+  const CUT = 1000, PX = 7480 + 13;
+  const cutter = http.createServer((req, res) => {
+    const up = http.request({ host: '127.0.0.1', port: APP, path: req.url, method: req.method, headers: req.headers }, r => { clearTimeout(t); res.writeHead(r.statusCode, r.headers); r.pipe(res); });
+    const t = setTimeout(() => { up.destroy(); if (!res.headersSent) { res.writeHead(524, { 'Content-Type': 'text/plain' }); res.end('A timeout occurred'); } }, CUT);
+    up.on('error', () => { if (!res.headersSent) { res.writeHead(502); res.end(); } });
+    req.pipe(up);
+  }).listen(PX, '127.0.0.1');
+  const viaPx = (m, p, b) => fetch('http://127.0.0.1:' + PX + p, { method: m, headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1', 'X-GC-Lang': 'vi', ...OWN }, body: b ? JSON.stringify(b) : undefined });
+  const pollTurn = async (id, ms) => { const end = Date.now() + ms; let n = 0, j = null; for (;;) { j = await (await viaPx('GET', '/api/ai/turns/' + id)).json(); n++; if (j.status !== 'running' || Date.now() > end) return Object.assign(j, { polls: n }); await pause(250); } };
+  try {
+    script = []; reply = 'Trả lời sau 2,5 giây'; delay = 2500;
+    const KX = { zone: 'xuong', page: 'create' }, KL = { zone: 'thu-vien', page: 'lib-characters' }, KK = { zone: 'khung', page: 'khung' };
+    const cutR = await viaPx('POST', '/api/ai/agent', { message: 'lượt dài, gọi kiểu cũ', context: KX });
+    ok(cutR.status === 524, 'gọi kiểu cũ (chặn tới khi xong) sau proxy cắt ' + CUT + ' ms: LLM nghĩ ' + delay + ' ms → proxy trả 524 (lỗi CNS-175 tái hiện)');
+    const t0 = Date.now(), ar = await viaPx('POST', '/api/ai/agent', { message: 'lượt dài, gọi kiểu mới', context: KL, async: true }), aj = await ar.json();
+    ok(ar.status === 202 && /^[A-Za-z0-9_-]{22}$/.test(aj.turn || '') && aj.status === 'running' && Date.now() - t0 < CUT, 'async: true → 202 + id lượt ngay (trước khi proxy cắt), việc chạy nền');
+    const done = await pollTurn(aj.turn, 15000);
+    ok(done.status === 'done' && done.result && done.result.reply === reply && done.result.chat.kind === 'khu' && done.result.chat.id === 'thu-vien' && done.polls > 2 && Date.now() - t0 >= delay,
+      'hỏi GET /api/ai/turns/<id> qua cùng proxy (mỗi lần < ' + CUT + ' ms) tới khi xong → đủ kết quả như kiểu cũ (reply, luồng) sau ' + done.polls + ' lần hỏi');
+    const th2 = await api('GET', '/api/chats/khu/thu-vien');
+    ok(th2.messages.slice(-2).map(x => x.content).join('|') === 'lượt dài, gọi kiểu mới|' + reply, 'lượt chạy nền vẫn ghi luồng hội thoại như cũ');
+    await pause(1700);   // lượt kiểu cũ (bị proxy cắt) vẫn chạy ở server tới xong — đợi nó nhả khoá luồng Xưởng
+    const busyA = await viaPx('POST', '/api/ai/agent', { message: 'giữ khoá', context: KK, async: true }), busyJ = await busyA.json();
+    const lock = await viaPx('POST', '/api/ai/agent', { message: 'trùng luồng', context: KK, async: true }), lockJ = await lock.json();
+    const empty = await viaPx('POST', '/api/ai/agent', { message: '   ', context: KK, async: true });
+    ok(busyA.status === 202 && lock.status === 409 && /AI đang làm lượt trước/.test(lockJ.error) && empty.status === 400, 'lỗi tức thì vẫn trả ngay, không tạo lượt: đối tượng đang bận → 409, tin rỗng → 400');
+    await pollTurn(busyJ.turn, 15000);
+    // AI đạo diễn (Tạo tác › phân cảnh) cùng cơ chế
+    delay = 2500; reply = JSON.stringify({ title: 'Cảnh chào', steps: [{ actor: 'ma-no-canh', state: 'normal', say: 'Xin chào' }] });
+    const dr = await viaPx('POST', '/api/ai/director', { description: 'Ma-nơ-canh chào khán giả', cast: ['ma-no-canh'], async: true }), dj = await dr.json();
+    const dd = await pollTurn(dj.turn, 15000);
+    ok(dr.status === 202 && dd.status === 'done' && dd.result && dd.result.event && dd.result.event.steps[0].say === 'Xin chào', 'POST /api/ai/director async → 202, hỏi lượt → event như kiểu cũ');
+    // lỗi giữa lượt (LLM trả không phải JSON mãi) → status error + mã, câu lỗi dịch theo người hỏi
+    delay = 1200; reply = 'không phải JSON';
+    const er = await viaPx('POST', '/api/ai/director', { description: 'cảnh lỗi', cast: ['ma-no-canh'], async: true }), ej = await er.json();
+    const ed = await pollTurn(ej.turn, 30000);
+    ok(er.status === 202 && ed.status === 'error' && ed.code >= 400 && typeof ed.error === 'string' && ed.error.length > 0, 'lỗi trong lượt chạy nền → status error + code ' + ed.code + ' (Studio báo như lỗi kiểu cũ)');
+    const nf = await viaPx('GET', '/api/ai/turns/' + 'A'.repeat(22));
+    ok(nf.status === 404 && (await viaPx('GET', '/api/ai/turns/x')).status === 404, 'id lượt lạ → 404');
+    const anonT = await fetch('http://127.0.0.1:' + APP + '/api/ai/turns/' + aj.turn);
+    ok(anonT.status === 401, 'hỏi lượt không bằng chứng chủ → 401 (kết quả lượt chỉ cho chủ)');
+  } finally { delay = 0; cutter.close(); }
 } catch (e) { fail = 1; console.log('   ✗', e.stack || e.message); }
 finally { srv.kill(); mock.close(); }
 process.exit(fail);

@@ -8,6 +8,7 @@
 //   cloudflare (B) owner → token → zone → tunnel → public → waf → mcp → password
 //   proxy          domain → config → public → mcp → password                     (proxy riêng của owner)
 //   quick          tunnel → public → mcp → password                              (*.trycloudflare.com)
+// Máy kế thừa (.env GC_PUBLIC_URL / GC_ALLOWED_HOSTS): mọi luồng 409 needs legacy; POST /api/online/migrate chép .env vào online.json (migrate()).
 // publicUrl: bậc `public` bật TẠM (OAuth phục vụ metadata) → hết bậc thì chính thức; một bậc sau đó ✗ → trả về giá trị cũ (CNS-193).
 // Chống thành công cụ quét (CNS-180): chỉ chủ máy (isOwner — P1), chỉ gọi đúng tên miền của luồng, phân giải trước rồi TỪ CHỐI IP riêng /
 // loopback / link-local và ghim kết nối vào IP đã kiểm (không DNS rebinding), không theo redirect, trần tần suất.
@@ -610,6 +611,17 @@ function createOnline(opts) {
     flow.done = true; flow.doneAt = iso(); save();
     d.log('[online] offline');
   }
+  // nút "Migrate" (máy kế thừa, CNS-177): cấu hình ra ngoài bằng .env (GC_PUBLIC_URL / GC_ALLOWED_HOSTS) → chép vào data/online.json, từ đó app nhận quyền
+  // (online-config.migrate). Không đụng .env, không đổi publicUrl (kết nối agent giữ nguyên); wizard hết chỉ đọc
+  function migrate() {
+    const lg = d.legacy();
+    if (!lg || !lg.active) return { ok: false, error: tr(SRC, 'không có cấu hình .env kế thừa để di chuyển') };
+    const r = d.config.migrate();
+    if (!r || r.ok === false) return { ok: false, error: tr(SRC, 'không di chuyển được: {error}', { error: cut(r && r.error, 160) }) };
+    flow = null; save();
+    d.log('[online] legacy .env online settings moved into data/online.json (mode ' + (r.mode || 'off') + ')');
+    return { ok: true };
+  }
   async function waitRun() { while (running) { try { await running; } catch (e) { /* đã ghi log */ } } }
   async function idle() { while (running || offQueued) { if (running) await waitRun(); else await sleep(5); } }   // test / CLI: chờ hết việc nền (kể cả off đang xếp hàng)
 
@@ -655,12 +667,13 @@ function createOnline(opts) {
     const send = h.send, lang = h.lang || 'en';
     if (!d.isOwner(req)) return send(res, 403, { error: tr(SRC, 'chỉ chủ máy được điều khiển Go online') });
     if (p === '/api/online' && m === 'GET') return send(res, 200, view(req, lang));
-    if (m !== 'POST' || !/^\/api\/online\/(caddy|cloudflare|cloudflare\/confirm|proxy|quick|recheck|off)$/.test(p)) return send(res, 404, { error: tr(SRC, 'không có API này') });
+    if (m !== 'POST' || !/^\/api\/online\/(caddy|cloudflare|cloudflare\/confirm|proxy|quick|recheck|off|migrate)$/.test(p)) return send(res, 404, { error: tr(SRC, 'không có API này') });
     const b = await h.body(req, 16 * 1024);
     const bad = msg => send(res, 400, { error: msg });
     if (p !== '/api/online/off' && (running || offQueued)) return send(res, 409, { error: tr(SRC, 'Go online đang chạy — đợi xong rồi thử lại') });
     const w = gate();
     if (w) return send(res, 429, { error: tr(SRC, 'quá nhiều lần kiểm — thử lại sau {n} giây', { n: w }) }, null, { 'Retry-After': String(w) });
+    if (p === '/api/online/migrate') { const r = migrate(); return r.ok ? send(res, 200, view(req, lang)) : send(res, 409, { error: r.error }); }
     const start = (mode, extra, url) => {
       const lg = d.legacy();
       if (lg && lg.active) return send(res, 409, { error: tr(SRC, 'máy đang cấu hình ra ngoài bằng .env (GC_PUBLIC_URL / GC_ALLOWED_HOSTS) — di chuyển sang Go online trước'), needs: 'legacy' });
@@ -728,7 +741,7 @@ function createOnline(opts) {
     if (!watch) { watch = setInterval(() => { if (!running) d.tunnel.set(intent() !== 'off'); }, 2000); if (watch.unref) watch.unref(); }
   }
 
-  return { route, checkRoute, view, init, intent, idle, files, tunnelPort, _flow: () => flow };
+  return { route, checkRoute, view, init, intent, idle, migrate, files, tunnelPort, _flow: () => flow };
 }
 
 module.exports = { createOnline, isPublicIp, isCloudflareIp, probeUrl, resolveFresh, traceIp, snippets, ANTHROPIC, CF_IPS, FLOWS };

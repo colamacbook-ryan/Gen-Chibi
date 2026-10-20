@@ -1,5 +1,5 @@
 // Kiểm thử trong trình duyệt (chạy cục bộ, cần Playwright): mọi lớp gắn vào đầu phải đi cùng đầu.
-// Dùng: node tools/test-browser.mjs   (tự dựng server tạm ở cổng 7496) · GC_ONLY=voice node tools/test-browser.mjs → chỉ nhóm giọng AI (cổng 7660) · GC_ONLY=lib → chỉ Thư viện Âm thanh / Giọng (cổng 7662) · GC_ONLY=oauth → chỉ nhóm OAuth (cổng 7664–7666) · GC_ONLY=bubble → chỉ "lời thoại chuyên nghiệp" (cổng 7495; GC_THROTTLE=4 → CPU trang chậm 4× như máy yếu)
+// Dùng: node tools/test-browser.mjs   (tự dựng server tạm ở cổng 7496) · GC_ONLY=voice node tools/test-browser.mjs → chỉ nhóm giọng AI (cổng 7660) · GC_ONLY=lib → chỉ Thư viện Âm thanh / Giọng (cổng 7662) · GC_ONLY=oauth → chỉ nhóm OAuth (cổng 7664–7666) · GC_ONLY=online → chỉ Hệ thống › Lên mạng + Tài khoản chủ (cổng 7672–7680; GC_SHOTS=<thư mục> chụp màn en + vi) · GC_ONLY=bubble → chỉ "lời thoại chuyên nghiệp" (cổng 7495; GC_THROTTLE=4 → CPU trang chậm 4× như máy yếu)
 import { createRequire } from 'module';
 import { spawn, execFileSync } from 'child_process';
 import { mkdtempSync, readFileSync } from 'fs';
@@ -2813,6 +2813,238 @@ if (!ONLY || ONLY === 'oauth') {
 }
 // ---- v0.20 (ADR 0007, INT-18): giao diện tiếng Anh là mặc định, chuyển sang tiếng Việt được (nút EN | VI), nhớ theo trình duyệt,
 // mặc định của máy (settings.uiLang); lỗi server hiện theo ngôn ngữ người dùng. GC_ONLY=i18n chỉ chạy nhóm này (cổng 7668).
+// v0.21 P4 (spec v021 §2, §3.3, §3.7): Hệ thống › Lên mạng (Go online) + Tài khoản chủ — đi thật trên Studio, không gọi mạng ngoài:
+//   · server A (cổng 7672): GC_TEST_ONLINE_VIA trỏ lời gọi "từ Internet" của wizard về chính nó, GC_TEST_CF_API = Cloudflare API GIẢ
+//     (tools/fixtures/fake-cloudflare-api.mjs, dùng chung với tools/test-online.mjs), GC_IN_DOCKER=1 (đường Caddy hiện được; edge chưa bật);
+//     Caddy tới bậc "edge chưa publish" (cách sửa = đúng một lệnh host) → Cloudflare: token chỉ ở ô password, chọn zone (choices), CNAME đã có → hỏi đè →
+//     WAF → MCP → Xong (link Studio + MCP, trỏ Kết nối agent) → đổi địa chỉ (urlChange, số kết nối bị gỡ) → proxy riêng (đoạn cấu hình + chép) →
+//     Go offline có token (dọn tunnel + CNAME ở Cloudflare giả) → WAF không quyền: "Tôi đã làm" → Go offline không token (bậc dọn Cloudflare ✗ làm tay)
+//     → Tài khoản chủ: lưới phiên + thiết bị, thu hồi một phiên, cảnh báo đăng nhập sai + Đã xem, đổi mật khẩu thu hồi phiên khác, token chủ không hiện;
+//   · server B (7680): máy kế thừa (.env GC_PUBLIC_URL) — wizard chỉ đọc + Migrate (POST /api/online/migrate);
+//   · launcher thật + app + cloudflared giả (7676, như tools/test-ingress.mjs): Link tạm đi hết qua cổng ingress → Xong → Go offline (cloudflared dừng).
+//   Ở mỗi màn chính: chế độ en không còn chữ Việt, bố cục 1366 px không chồng; GC_SHOTS=<thư mục> → chụp en + vi (Q29). GC_ONLY=online chỉ chạy nhóm này.
+if (!ONLY || ONLY === 'online') {
+  const crypto = await import('crypto'), net = await import('net'), http = await import('http'), os = await import('os');
+  const { fakeCloudflare } = await import('./fixtures/fake-cloudflare-api.mjs');
+  const SHOTS = process.env.GC_SHOTS || '';
+  if (SHOTS) fs.mkdirSync(SHOTS, { recursive: true });
+  const CF_TOK = 'cfapi_' + crypto.randomBytes(18).toString('hex');
+  const cf = await fakeCloudflare({ token: CF_TOK, zones: [{ id: crypto.randomBytes(16).toString('hex'), name: 'example.com', status: 'active', type: 'full' }, { id: crypto.randomBytes(16).toString('hex'), name: 'other.org', status: 'active', type: 'full' }],
+    dns: [{ type: 'A', name: 'chibi.example.com', content: '45.33.32.156' }] });
+  const PA = 7672, PB = 7680, PL = 7676, PLX = 7679;
+  const homeA = mkdtempSync(path.join(tmpdir(), 'gc-'));
+  let logA = '';
+  const srvA = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: homeA, GC_PORT: String(PA), GC_NO_AUTOCHECK: '1', GC_TEST: '1', GC_TEST_ONLINE_VIA: '127.0.0.1:' + PA, GC_TEST_CF_API: cf.base, GC_IN_DOCKER: '1',
+    GC_CLIENT_IP_HEADER: 'x-forwarded-for', GC_AUTH_RATE: '3', GC_PUBLIC_URL: '', GC_ALLOWED_HOSTS: '', HTTPS_PROXY: 'http://127.0.0.1:9', https_proxy: '', NO_PROXY: '', no_proxy: '' }, stdio: ['ignore', 'pipe', 'pipe'] }));
+  srvA.stdout.on('data', d => { logA += d; }); srvA.stderr.on('data', d => { logA += d; });
+  const homeB = mkdtempSync(path.join(tmpdir(), 'gc-'));
+  const srvB = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: homeB, GC_PORT: String(PB), GC_NO_AUTOCHECK: '1', GC_PUBLIC_URL: 'https://legacy.example.test', GC_ALLOWED_HOSTS: 'legacy.example.test' }, stdio: 'ignore' }));
+  await new Promise(r => setTimeout(r, 1500));
+  legacyVi(true); const b20 = await pw.chromium.launch();
+  const errs20 = [], VI = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ]/;
+  const found = [], shotList = [];
+  let launcher = null;
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  try {
+    const ctx = await b20.newContext({ viewport: { width: 1366, height: 900 } });
+    const q = await ctx.newPage(); q.on('pageerror', e => errs20.push(e.message)); q.on('dialog', d => d.accept().catch(() => {}));
+    const ready = pg => pg.waitForFunction(() => /^v\d/.test((document.getElementById('verChip') || {}).textContent), null, { timeout: 10000 });
+    const openPage = async (pg, base, page, sel) => { await pg.goto(base + '/xuong'); await ready(pg); await pg.waitForSelector('.nav-item'); await pg.evaluate(p => localStorage.setItem('gc-route-xuong', JSON.stringify({ page: p })), page); await pg.reload(); await ready(pg); await pg.waitForSelector(sel, { timeout: 10000 }); };
+    const idle = (pg, ms) => pg.waitForFunction(() => document.getElementById('olBox') && document.getElementById('olStatus') && !document.getElementById('olBusy'), null, { timeout: ms || 30000 });
+    const step = (pg, id) => pg.$eval('#olSteps tr[data-step="' + id + '"]', tr => ({ state: tr.getAttribute('data-state'), text: tr.textContent })).catch(() => null);
+    const gap = () => sleep(2100);   // trần lệnh Go online: hai lệnh cách nhau ≥ 2 giây (CNS-180)
+    const leak = pg => pg.evaluate(t => document.documentElement.outerHTML.includes(t) || JSON.stringify(localStorage).includes(t) || JSON.stringify(sessionStorage).includes(t) || [...document.querySelectorAll('input')].some(i => (i.value || '').includes(t)), CF_TOK);
+    // quét chữ Việt ở chế độ en (như nhóm i18n: bỏ ô nhập, nội dung người dùng) + bố cục thanh đầu trang / banner ở 1366 px
+    const scanEn = (pg, where) => pg.evaluate(([where, src]) => {
+      const VI = new RegExp(src), out = [], vis = el => !!el && (el.checkVisibility ? el.checkVisibility({ visibilityProperty: true }) : el.getClientRects().length > 0);
+      const skip = el => !!el.closest('[data-user-content], [lang|="vi"], script, style, input, textarea, svg title');
+      const tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      for (let n; (n = tw.nextNode());) { const el = n.parentElement; if (el && VI.test(n.nodeValue) && !skip(el) && vis(el)) out.push(where + ' · ' + el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + ' · ' + n.nodeValue.trim().slice(0, 90)); }
+      for (const el of document.body.querySelectorAll('[title], [placeholder], [aria-label]')) { if (skip(el) && el.tagName !== 'INPUT' || !vis(el)) continue; for (const a of ['title', 'placeholder', 'aria-label']) { const v = el.getAttribute(a); if (v && VI.test(v)) out.push(where + ' · [' + a + '] ' + v.slice(0, 90)); } }
+      const R = e => e.getBoundingClientRect(), hit = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 2 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 2;
+      const items = [...document.querySelectorAll('.pagehead .actions > *, #dockToggle, #crumbs')].filter(vis);
+      for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) if (!items[i].contains(items[j]) && !items[j].contains(items[i]) && hit(R(items[i]), R(items[j]))) out.push('BỐ CỤC ' + where + ' · thanh đầu trang chồng: ' + items[i].textContent.trim().slice(0, 30) + ' ↔ ' + items[j].textContent.trim().slice(0, 30));
+      for (const sp of document.querySelectorAll('.banner > span:first-child')) { if (!vis(sp)) continue; const w = R(sp).width, bw = R(sp.parentElement).width; if (bw > 320 && w < 180) out.push('BỐ CỤC ' + where + ' · chữ banner bị ép ' + Math.round(w) + 'px'); }
+      const view = document.getElementById('view'); if (view && view.scrollWidth > view.clientWidth + 4) out.push('BỐ CỤC ' + where + ' · trang tràn ngang ' + view.scrollWidth + ' > ' + view.clientWidth);
+      for (const sc of document.querySelectorAll('#olBox .scroll, #acBox .scroll')) if (vis(sc) && sc.scrollWidth > sc.clientWidth + 2) out.push('BỐ CỤC ' + where + ' · lưới ' + ((sc.firstElementChild || {}).id || '') + ' tràn ngang ' + sc.scrollWidth + ' > ' + sc.clientWidth + ' (cột cuối bị che)');
+      return out;
+    }, [where, VI.source]);
+    const setLang = async (pg, l) => { if ((await pg.evaluate(() => document.documentElement.lang)) === l) return; await pg.click('#langSwitch button[data-lang="' + l + '"]'); await pg.waitForFunction(l => document.documentElement.lang === l, l, { timeout: 5000 }); await pg.waitForTimeout(500); };
+    // một màn: quét en (luôn) + chụp en / vi khi có GC_SHOTS; prep dựng lại trạng thái chỉ có trong trang (hộp hỏi, bảng Go offline) sau khi đổi ngôn ngữ
+    const screen = async (pg, name, prep) => {
+      for (const l of ['en', 'vi']) {
+        await setLang(pg, l); if (prep) await prep(pg, l); await pg.waitForTimeout(300);
+        if (l === 'en') found.push(...await scanEn(pg, name));
+        if (SHOTS) {   // khung trang cố định, #view tự cuộn: kéo cao khung nhìn bằng nội dung để ảnh có đủ màn (rộng giữ 1366 px)
+          const f = path.join(SHOTS, name + '-' + l + '.png'), hgt = await pg.evaluate(() => { const v = document.getElementById('view'); return v ? v.scrollHeight + v.getBoundingClientRect().top + 24 : 900; });
+          await pg.setViewportSize({ width: 1366, height: Math.max(900, Math.min(4000, Math.ceil(hgt))) }); await pg.waitForTimeout(200);
+          await pg.screenshot({ path: f }); shotList.push(f); await pg.setViewportSize({ width: 1366, height: 900 });
+        }
+      }
+    };
+    const A = 'http://localhost:' + PA;
+    // ---- 1) chọn đường
+    await openPage(q, A, 'online', '#olPaths');
+    const cards = await q.$$eval('.olpath', els => els.map(e => [e.getAttribute('data-path'), !!e.querySelector('.tag.badge'), e.disabled].join(':')).join(' '));
+    if (cards !== 'caddy:true:false cloudflare:true:false proxy:false:false quick:false:false') throw new Error('4 thẻ chọn đường (beta cho Caddy + Cloudflare): ' + cards);
+    if (!/(Lên mạng)/.test(await q.$$eval('.nav-item', els => els.map(e => e.textContent).join('|'))) || !/Tài khoản chủ/.test(await q.$$eval('.nav-item', els => els.map(e => e.textContent).join('|')))) throw new Error('menu Hệ thống thiếu Lên mạng / Tài khoản chủ');
+    await screen(q, '01-chon-duong');
+    console.log('  ✓ Hệ thống › Lên mạng: 4 thẻ chọn đường (Caddy · Cloudflare có nhãn beta · proxy riêng · link tạm) kèm điều kiện tiên quyết');
+    // ---- 2) Caddy → bậc edge chưa publish: cách sửa = đúng một lệnh host
+    await q.click('.olpath[data-path="caddy"]'); await q.fill('#olDomCaddy', 'chibi.example.com'); await q.click('#olGo');
+    await q.waitForSelector('#olSteps tr[data-step="edge"][data-state="fail"]', { timeout: 20000 }); await idle(q);
+    const sDom = await step(q, 'domain'), sEdge = await step(q, 'edge'), cmd = await q.$eval('#olSteps tr[data-step="edge"] .olcmd', e => e.textContent).catch(() => '');
+    if (sDom.state !== 'ok' || cmd !== 'genchibi online --caddy' || !(await q.$('#olSteps tr[data-step="edge"] button'))) throw new Error('Caddy: domain ✓ rồi edge ✗ với lệnh host + nút chép: ' + JSON.stringify([sDom, sEdge, cmd]));
+    const ids = await q.$$eval('#olSteps td.id', els => els.map(e => e.textContent).join(','));
+    if (ids !== 'GO-01,GO-02,GO-03,GO-04,GO-05,GO-06,GO-07' || !(await q.$('#olSteps tr.letters')) || !/1 /.test(await q.textContent('#olFoot'))) throw new Error('lưới bậc Data Console (ID hàng, chữ cột, chân lưới): ' + ids);
+    await screen(q, '02-caddy-edge-chua-bat');
+    console.log('  ✓ Caddy: Tên miền ✓ → Edge ✗ "chưa publish 80/443", cách sửa = một lệnh host (genchibi online --caddy) + nút chép; lưới GO-01…07, chữ cột, chân lưới');
+    // ---- 3) Cloudflare: token chỉ ở ô password → choices (2 tên miền) → CNAME đã có → hỏi đè → Xong
+    await gap();
+    await q.click('.olpath[data-path="cloudflare"]');
+    const tl = await q.$eval('#olTokenLink', a => [a.href, a.target, a.rel].join('|')), tType = await q.$eval('#olToken', e => e.type);
+    if (!/^https:\/\/dash\.cloudflare\.com\/profile\/api-tokens\?permissionGroupKeys=/.test(tl) || !/\|_blank\|noopener noreferrer$/.test(tl) || tType !== 'password' || (await q.$$('#olHowto li')).length !== 4) throw new Error('form Cloudflare: link tạo token điền sẵn quyền + hướng dẫn 4 bước + ô password: ' + tl + ' ' + tType);
+    if ((await q.inputValue('#olSub')) !== 'chibi') throw new Error('tên con mặc định phải là chibi');
+    await screen(q, '03-cloudflare-form', async pg => { if (!(await pg.$('#olForm[data-path="cloudflare"]'))) await pg.click('.olpath[data-path="cloudflare"]'); });
+    await q.fill('#olToken', CF_TOK); await q.click('#olGo');
+    await q.waitForSelector('#olZoneSel option', { state: 'attached', timeout: 20000 }); await idle(q);
+    if (await leak(q)) throw new Error('token Cloudflare còn trong DOM / ô nhập / bộ nhớ trình duyệt sau khi gửi');
+    const zs = await q.$$eval('#olZoneSel option', o => o.map(x => x.value).join(','));
+    if (zs !== 'example.com,other.org' || (await step(q, 'token')).state !== 'fail') throw new Error('choices: ' + zs);
+    await screen(q, '04-cloudflare-chon-ten-mien');
+    await gap();
+    await q.selectOption('#olZoneSel', 'example.com'); await q.click('#olGo');   // ô token để trống: server còn giữ token trong bộ nhớ (≤ 30 phút)
+    await q.waitForSelector('#olConfirm', { timeout: 20000 }); await idle(q);
+    if (!/A 45\.33\.32\.156/.test(await q.textContent('#olConfirm')) || cf.st.dns.some(r => r.type === 'CNAME')) throw new Error('CNAME đã có: phải hỏi, chưa ghi DNS');
+    await screen(q, '05-cloudflare-hoi-de-cname');
+    await gap();
+    await q.click('#olOverwrite');
+    await q.waitForSelector('#olDone', { timeout: 30000 }); await idle(q);
+    const done = await q.evaluate(() => [document.getElementById('olDoneStudio').textContent, document.getElementById('olDoneMcp').textContent, document.getElementById('olMode').getAttribute('data-mode')].join('|'));
+    const steps3 = await q.$$eval('#olSteps tr[data-step]', trs => trs.map(t => t.getAttribute('data-step') + ':' + t.getAttribute('data-state')).join(' '));
+    if (done !== 'https://chibi.example.com|https://chibi.example.com/mcp|cloudflare' || /fail|pending|running/.test(steps3)) throw new Error('Cloudflare xong: ' + done + ' · ' + steps3);
+    const cn = cf.st.dns.find(r => r.name === 'chibi.example.com');
+    if (!cn || cn.type !== 'CNAME' || !cf.st.tunnels.length || !cf.st.ruleset) throw new Error('Cloudflare giả: thiếu CNAME / tunnel / luật WAF');
+    if (await leak(q)) throw new Error('token Cloudflare lọt vào trang sau khi xong');
+    await screen(q, '06-cloudflare-xong');
+    await q.click('#olToConnect'); await q.waitForSelector('#connectUrl', { timeout: 8000 });
+    if ((await q.textContent('#connectUrl')) !== 'https://chibi.example.com/mcp') throw new Error('Kết nối agent sau khi lên mạng: ' + await q.textContent('#connectUrl'));
+    console.log('  ✓ Cloudflare (API giả): token chỉ ở ô password, xoá ngay khi gửi (không còn trong DOM / ô / bộ nhớ trình duyệt) → chọn tên miền (choices) → CNAME đã có → hỏi đè → tunnel · WAF · MCP ✓ → trang Xong (Studio + MCP + chép) → Kết nối agent hiện ' + 'https://chibi.example.com/mcp');
+    // ---- 4) đổi địa chỉ: hỏi trước (số kết nối agent bị gỡ) → proxy riêng: đoạn cấu hình + chép
+    await openPage(q, A, 'online', '#olDone'); await gap();
+    const askProxy = async pg => { if (await pg.$('#olAsk')) return; await gap(); await pg.click('.olpath[data-path="proxy"]'); await pg.fill('#olDomProxy', 'proxy.example.com'); await pg.click('#olGo'); await pg.waitForSelector('#olAsk', { timeout: 8000 }); };
+    await askProxy(q);
+    if (!/https:\/\/chibi\.example\.com/.test(await q.textContent('#olAsk')) || !/\b0\b/.test(await q.textContent('#olAsk'))) throw new Error('hộp hỏi đổi địa chỉ: ' + await q.textContent('#olAsk'));
+    await screen(q, '07-hoi-doi-dia-chi', askProxy);
+    await gap(); await q.click('#olAskYes');
+    await q.waitForSelector('#olSnippets', { timeout: 20000 }); await idle(q);
+    if (!/proxy\.example\.com/.test(await q.textContent('#olSnippets pre')) || !(await q.$('#olCopyCaddy')) || !(await q.$('#olCopyNginx'))) throw new Error('đoạn cấu hình proxy + nút chép');
+    const pub4 = await q.textContent('#olPub');
+    if ((await step(q, 'public')).state !== 'fail' || pub4 !== 'https://chibi.example.com') throw new Error('proxy không gửi X-Forwarded-For → bậc public ✗, publicUrl trả về giá trị cũ: ' + pub4);
+    await screen(q, '08-proxy-doan-cau-hinh');
+    console.log('  ✓ Đổi địa chỉ công khai: hỏi trước (từ https://chibi.example.com, số kết nối agent bị gỡ) → proxy riêng: đoạn Caddy / nginx + nút chép; bậc ✗ → publicUrl về giá trị cũ');
+    // ---- 5) Go offline có token: dọn tunnel + CNAME ở Cloudflare
+    await gap();
+    const offPrep = async pg => { if (!(await pg.$('#olOffPanel'))) { await pg.click('#olOffBtn'); await pg.waitForSelector('#olOffPanel'); } };
+    await offPrep(q);
+    if (!(await q.$('#olOffToken'))) throw new Error('Go offline đường Cloudflare phải xin token để dọn');
+    await screen(q, '09-go-offline-hoi', offPrep);
+    await q.fill('#olOffToken', CF_TOK); await q.click('#olOffYes');
+    await q.waitForSelector('#olMode[data-mode="off"]', { timeout: 20000 }); await idle(q);
+    const offS = await q.$$eval('#olSteps tr[data-step]', trs => trs.map(t => t.getAttribute('data-step') + ':' + t.getAttribute('data-state')).join(' '));
+    if (offS !== 'local:ok remote:ok' || cf.st.dns.some(r => r.name === 'chibi.example.com') || cf.st.tunnels.some(t => !t.deleted_at) || await leak(q)) throw new Error('Go offline (token): ' + offS);
+    await screen(q, '10-offline');
+    console.log('  ✓ Go offline (hỏi trước, liệt kê hệ quả, xin token Cloudflare): dọn trên máy ✓ + dọn ở Cloudflare ✓ (CNAME + tunnel đã xoá ở API giả), token không lọt vào trang');
+    // ---- 6) token không có quyền WAF → "Tôi đã làm" → Xong; Go offline không token → bậc dọn Cloudflare ✗ (làm tay)
+    cf.st.perms.waf = false;
+    await gap();
+    await q.click('.olpath[data-path="cloudflare"]'); await q.fill('#olToken', CF_TOK); await q.fill('#olZone', 'example.com'); await q.click('#olGo');
+    await q.waitForSelector('#olWafDone', { timeout: 30000 }); await idle(q);
+    if (!/Skip/.test((await step(q, 'waf')).text) || !(await q.$('#olSteps tr[data-step="waf"] button:not(#olWafDone)'))) throw new Error('bậc WAF làm tay: cách sửa + nút chép biểu thức');
+    await screen(q, '11-waf-lam-tay');
+    await gap(); await q.click('#olWafDone');
+    await q.waitForSelector('#olDone', { timeout: 30000 }); await idle(q);
+    await gap(); await q.click('#olOffBtn'); await q.click('#olOffYes');
+    await q.waitForSelector('#olMode[data-mode="off"]', { timeout: 20000 }); await idle(q);
+    const rem = await step(q, 'remote');
+    if (rem.state !== 'fail' || !/dash\.cloudflare\.com/.test(rem.text)) throw new Error('Go offline không token: bậc dọn Cloudflare phải ✗ kèm cách xoá tay: ' + JSON.stringify(rem));
+    console.log('  ✓ Token không có quyền WAF: bậc WAF ✗ + cách tạo luật tay + "Tôi đã làm" → Xong; Go offline không token → dọn ở Cloudflare ✗ (nêu cách xoá tay)');
+    const files = fs.readdirSync(path.join(homeA, 'data')).map(f => { try { return fs.readFileSync(path.join(homeA, 'data', f), 'utf8'); } catch (e) { return ''; } }).join('\n');
+    if (logA.includes(CF_TOK) || files.includes(CF_TOK)) throw new Error('token Cloudflare lọt vào log / data của server');
+    // ---- 7) Tài khoản chủ: phiên + thiết bị, thu hồi, cảnh báo, đổi mật khẩu thu hồi phiên khác
+    const loginNode = async () => { const r = await _fetch(A + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0) Firefox/131.0' }, body: JSON.stringify({ password: TEST_PW }) }); return r.headers.getSetCookie().map(c => c.split(';')[0]).join('; '); };
+    const ck1 = await loginNode(), ck2 = await loginNode();
+    const stOf = async ck => (await _fetch(A + '/api/auth/sessions', { headers: { cookie: ck } })).status;
+    for (let i = 0; i < 100; i++) await _fetch(A + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1', 'X-Forwarded-For': '198.51.100.' + (i % 10 + 1) + ', 203.0.113.' + (i % 10 + 1) }, body: JSON.stringify({ password: 'doan sai ' + i }) });
+    await openPage(q, A, 'account', '#acSessGrid');
+    const nS = (await q.$$('#acSessGrid tr[data-session]')).length, cur = await q.$$eval('#acSessGrid tr[data-current]', t => t.length);
+    if (nS < 3 || cur !== 1 || !(await q.$('#acDevGrid tr[data-device]')) || !(await q.$('#acAlertGrid tr[data-alert]'))) throw new Error('Tài khoản chủ: lưới phiên (' + nS + ', hiện tại ' + cur + ') / thiết bị / cảnh báo');
+    const tokTxt = await q.textContent('#acToken');
+    if (!/genchibi token/.test(tokTxt) || tokTxt.includes(TEST_TOKEN) || (await q.content()).includes(TEST_TOKEN)) throw new Error('dòng token chủ: chỉ nói cách xem, không hiện token');
+    await screen(q, '12-tai-khoan-chu');
+    await q.click('#acAck'); await q.waitForSelector('#acAlertGrid', { state: 'detached', timeout: 8000 });
+    const sid1 = await q.$$eval('#acSessGrid tr[data-session]:not([data-current])', t => t.map(x => x.getAttribute('data-session')));
+    await q.click('#acSessGrid tr[data-session="' + sid1[0] + '"] button');
+    await q.waitForFunction(id => !document.querySelector('#acSessGrid tr[data-session="' + id + '"]'), sid1[0], { timeout: 8000 });
+    const killed = [await stOf(ck1), await stOf(ck2)].filter(s => s === 401).length;
+    if (killed !== 1) throw new Error('thu hồi một phiên: đúng một phiên Node phải bị 401, có ' + killed);
+    const NEWPW = 'mat khau moi cua chu may 2026';
+    await q.fill('#acCur', 'sai mat khau hien tai'); await q.fill('#acPw', NEWPW); await q.fill('#acPw2', NEWPW); await q.click('#acSave');
+    await q.waitForSelector('#acErr:not([hidden])', { timeout: 8000 });
+    if (await q.$('#gcLogin')) throw new Error('mật khẩu hiện tại sai không được đẩy ra màn đăng nhập');
+    await q.fill('#acCur', TEST_PW); await q.fill('#acPw', NEWPW); await q.fill('#acPw2', NEWPW); await q.click('#acSave');
+    await q.waitForFunction(() => document.querySelectorAll('#acSessGrid tr[data-session]').length === 1, null, { timeout: 8000 });
+    if ((await stOf(ck1)) !== 401 || (await stOf(ck2)) !== 401 || (await q.evaluate(async () => (await fetch('api/auth/sessions')).status)) !== 200) throw new Error('đổi mật khẩu: phiên khác phải bị thu hồi, trình duyệt này vẫn vào được');
+    // kẻ lạ đang bị khoá theo tài khoản (100 lần sai ở trên) — trình duyệt của chủ có cookie thiết bị (mới cấp khi đổi mật khẩu) vẫn đăng nhập được bằng mật khẩu mới
+    const relog = await q.evaluate(async pw => (await fetch('api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify({ password: pw }) })).status, NEWPW);
+    const stranger = await _fetch(A + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify({ password: NEWPW }) });
+    if (relog !== 200 || stranger.status !== 429) throw new Error('mật khẩu mới: trình duyệt chủ (cookie thiết bị) ' + relog + ' (cần 200) · kẻ lạ lúc bị khoá ' + stranger.status + ' (cần 429)');
+    console.log('  ✓ Tài khoản chủ: lưới phiên (' + nS + ') + thiết bị + cảnh báo đăng nhập sai (Đã xem), thu hồi một phiên → phiên đó 401; mật khẩu hiện tại sai báo lỗi tại chỗ; đổi mật khẩu → mọi phiên khác 401, trình duyệt này vẫn vào (cookie thiết bị mới — đăng nhập lại được cả khi kẻ lạ đang bị khoá); token chủ không hiện (chỉ "genchibi token")');
+    // ---- 8) máy kế thừa: wizard chỉ đọc + Migrate
+    const qb = await ctx.newPage(); qb.on('pageerror', e => errs20.push(e.message));
+    await openPage(qb, 'http://localhost:' + PB, 'online', '#olLegacy');
+    if (!(await qb.$$eval('.olpath', els => els.every(e => e.disabled))) || !/legacy\.example\.test/.test(await qb.textContent('#olLegacy'))) throw new Error('máy kế thừa: thẻ chọn đường phải khoá, banner nêu .env');
+    await screen(qb, '13-may-ke-thua');
+    await qb.click('#olMigrate'); await qb.waitForSelector('#olLegacy', { state: 'detached', timeout: 8000 });
+    if ((await qb.getAttribute('#olMode', 'data-mode')) !== 'proxy' || (await qb.textContent('#olPub')) !== 'https://legacy.example.test' || await qb.$eval('.olpath[data-path="quick"]', e => e.disabled)) throw new Error('sau Migrate: mode proxy, publicUrl giữ nguyên, hết chỉ đọc');
+    console.log('  ✓ Máy kế thừa (.env GC_PUBLIC_URL): wizard chỉ đọc + nút Migrate → POST /api/online/migrate → mode proxy, publicUrl giữ nguyên, thẻ mở lại');
+    await qb.close();
+    // ---- 9) link tạm: launcher thật + cloudflared giả (cách của tools/test-ingress.mjs) → Xong → Go offline
+    const FAKE = fs.readFileSync(path.join(ROOT, 'tools/fixtures/fake-cloudflared.js')), FAKE_SHA = crypto.createHash('sha256').update(FAKE).digest('hex'), VER = fs.readFileSync(path.join(ROOT, 'VERSION'), 'utf8').trim();
+    const homeL = fs.mkdtempSync(path.join(os.tmpdir(), 'gci-online-'));
+    const rel = path.join(homeL, 'releases', 'v' + VER.replace(/^v/, ''));
+    fs.cpSync(ROOT, rel, { recursive: true, filter: s => !/(^|\/)(\.git|dist|node_modules)$/.test(s) });
+    fs.symlinkSync(path.join('releases', path.basename(rel)), path.join(homeL, 'current'));
+    fs.copyFileSync(path.join(rel, 'launcher.js'), path.join(homeL, 'launcher.js'));
+    fs.mkdirSync(path.join(homeL, 'bin'), { recursive: true, mode: 0o700 }); fs.writeFileSync(path.join(homeL, 'bin', 'cloudflared-test'), FAKE, { mode: 0o700 });
+    fs.mkdirSync(path.join(homeL, 'run'), { recursive: true, mode: 0o700 }); fs.writeFileSync(path.join(homeL, 'fake-cf-proxy-port'), String(PLX));
+    launcher = spawn(process.execPath, [path.join(homeL, 'launcher.js')], { detached: true, stdio: 'ignore', env: { ...process.env, GC_HOME: homeL, GC_PORT: String(PL), GC_NO_AUTOCHECK: '1', GC_PUBLIC_URL: '', GC_ALLOWED_HOSTS: '', GC_TUNNEL: '',
+      GC_TEST: '1', GC_TEST_CF_URL: 'http://127.0.0.1:9/cloudflared', GC_TEST_CF_SHA256: FAKE_SHA, GC_TEST_INGRESS_RECHECK_MS: '1500', GC_TEST_ONLINE_VIA: '127.0.0.1:' + PLX, HTTPS_PROXY: 'http://127.0.0.1:9', https_proxy: '', NO_PROXY: '', no_proxy: '' } });
+    for (let i = 0; i < 100; i++) { try { if ((await _fetch('http://127.0.0.1:' + PL + '/api/health')).ok) break; } catch (e) { /* chưa lên */ } await sleep(200); }
+    const L = 'http://localhost:' + PL;
+    await openPage(q, L, 'online', '#olPaths');
+    await q.click('.olpath[data-path="quick"]'); await q.click('#olGo');
+    await q.waitForSelector('#olDone', { timeout: 60000 }); await idle(q);
+    const qurl = await q.textContent('#olDoneStudio'), edgeOk = await q.$eval('#olDone', e => /✓/.test(e.textContent));
+    const est = JSON.parse(fs.readFileSync(path.join(homeL, 'run', 'edge-status.json'), 'utf8'));
+    if (!/^https:\/\/fake-\d+\.trycloudflare\.com$/.test(qurl) || !edgeOk || est.ready !== true || est.url !== qurl) throw new Error('link tạm qua launcher: ' + qurl + ' ' + JSON.stringify(est));
+    await screen(q, '14-link-tam-xong');
+    await gap(); await q.click('#olOffBtn');
+    if (await q.$('#olOffToken')) throw new Error('Go offline link tạm không cần token Cloudflare');
+    await q.click('#olOffYes'); await q.waitForSelector('#olMode[data-mode="off"]', { timeout: 20000 }); await idle(q);
+    let st9 = null; for (let i = 0; i < 60; i++) { st9 = JSON.parse(fs.readFileSync(path.join(homeL, 'run', 'edge-status.json'), 'utf8')); if (st9.running === false) break; await sleep(250); }
+    if (st9.running !== false) throw new Error('Go offline: cloudflared phải dừng: ' + JSON.stringify(st9));
+    console.log('  ✓ Link tạm (launcher thật + cloudflared giả, đi qua cổng ingress): ' + qurl + ' → Xong (tunnel ✓) → Go offline không hỏi token → cloudflared dừng');
+    const uniq = [...new Set(found)];
+    if (uniq.length) throw new Error('chế độ en / bố cục 1366 px còn ' + uniq.length + ' lỗi:\n      ' + uniq.slice(0, 40).join('\n      '));
+    console.log('  ✓ Chế độ en: 14 màn mới (Lên mạng mọi trạng thái, Tài khoản chủ, máy kế thừa) không còn chữ Việt; bố cục 1366 px không chồng, không tràn ngang' + (SHOTS ? ' · ' + shotList.length + ' ảnh ở ' + SHOTS : ''));
+    if (errs20.length) throw new Error('lỗi trang: ' + errs20.slice(0, 3).join(' | '));
+  } catch (e) { fail = 1; console.log('  ✗ Lên mạng / Tài khoản chủ:', e.message); }
+  finally {
+    await b20.close(); srvA.kill(); srvB.kill(); cf.close();
+    if (launcher) { try { process.kill(-launcher.pid, 'SIGTERM'); } catch (e) { /* đã tắt */ } await sleep(1500); try { process.kill(-launcher.pid, 'SIGKILL'); } catch (e) { /* đã tắt */ } }
+  }
+}
 if (!ONLY || ONLY === 'i18n') {
   const home16 = mkdtempSync(path.join(tmpdir(), 'gc-'));
   const srv16 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home16, GC_PORT: '7668', GC_NO_AUTOCHECK: '1', GC_LANG: '' }, stdio: 'ignore' }));
