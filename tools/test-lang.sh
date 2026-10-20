@@ -30,10 +30,10 @@ L.forEach(l => { if (/^\s*#/.test(l) || /^ {4}[a-z0-9_]+\) F=/.test(l)) return; 
 const miss = [...used].filter(k => !en.has(k) || !vi.has(k)), extra = [...new Set([...en, ...vi])].filter(k => !used.has(k)), diff = [...en].filter(k => !vi.has(k)).concat([...vi].filter(k => !en.has(k)));
 console.log(used.size + " " + en.size + " " + [miss.length ? "thiếu: " + miss.join(",") : "", extra.length ? "thừa: " + extra.join(",") : "", diff.length ? "lệch hai bảng: " + diff.join(",") : ""].filter(Boolean).join(" · "));
 ' "$ROOT/$f")"
-  set -- $r; n="$1"; tot="$2"; shift 2
-  [ -z "$*" ] && [ "$n" -gt 10 ] && ok "$f: $n khoá dùng tới, đủ ở _en và _vi ($tot khoá mỗi bảng)" || bad "$f: $* (dùng $n khoá)"
-  b4="$(grep -nE 'declare -A|local -A|typeset -A|\$\{[A-Za-z_]+(,,|\^\^)|mapfile|readarray|;;&|;&|&>>|\|&|coproc' "$ROOT/$f" | grep -vE '^[0-9]+:[[:space:]]*#' || true)"
-  [ -z "$b4" ] && ok "$f: không cú pháp bash 4 (mảng kết hợp, \${x,,}, mapfile, ;&, |&…)" || bad "$f dùng cú pháp bash 4: $b4"
+  set -- $r; n="$1"; tot="$2"; shift 2; rest="${*:-}"
+  [ -z "$rest" ] && [ "$n" -gt 10 ] && ok "$f: $n khoá dùng tới, đủ ở _en và _vi ($tot khoá mỗi bảng)" || bad "$f: $rest (dùng $n khoá)"
+  b4="$( { grep -nE 'declare -A|local -A|typeset -A|\$\{[A-Za-z_]+(,,|\^\^)|mapfile|readarray|;;&|;&|&>>|\|&|coproc' "$ROOT/$f"; grep -n '"\$@"' "$ROOT/$f" | grep -v '\${1+"\$@"}'; } | grep -vE '^[0-9]+:[[:space:]]*#' || true)"
+  [ -z "$b4" ] && ok "$f: không cú pháp bash 4 (mảng kết hợp, \${x,,}, mapfile, ;&, |&…), \"\$@\" luôn có rào \${1+…} cho set -u" || bad "$f không chạy được trên bash 3.2: $b4"
 done
 
 echo "   2) install.sh"

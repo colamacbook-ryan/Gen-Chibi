@@ -6,7 +6,8 @@ set -euo pipefail
 # ---------------------------------------------------------------- ngôn ngữ (ADR 0007): GC_LANG = en (mặc định) | vi
 # Câu chữ nằm ở hai bảng _en / _vi, mỗi khoá một dòng `khoá) F="chuỗi printf" ;;` (%s = đối số, %% = dấu phần trăm).
 # m KHOÁ [đối số…] in một dòng · mn KHOÁ [đối số…] in không xuống dòng (lời hỏi). Khoá thiếu ở _vi → dùng _en.
-# Viết cho bash 3.2 (macOS): không mảng kết hợp, không ${x,,}. tools/test-lang.sh kiểm mọi khoá dùng tới có đủ hai bảng.
+# Viết cho bash 3.2 (macOS): không mảng kết hợp, không ${x,,}; "$@" luôn viết ${1+"$@"} (bash < 4 báo "unbound variable" khi rỗng dưới set -u).
+# tools/test-lang.sh kiểm mọi khoá dùng tới có đủ hai bảng.
 _en() {
   case "$1" in
     no_home) F="Install folder not found: %s" ;;
@@ -168,8 +169,8 @@ _vi() {
   esac
 }
 _t() { F=""; if [ "$UI" = vi ]; then _vi "$1"; fi; if [ -z "$F" ]; then _en "$1"; fi; if [ -z "$F" ]; then F="$1"; fi; }
-m()  { _t "$1"; shift; printf "%s$F\n" "" "$@"; }   # "%s" + "" đứng đầu: câu bắt đầu bằng "-" không bị printf hiểu là tuỳ chọn
-mn() { _t "$1"; shift; printf "%s$F" "" "$@"; }
+m()  { _t "$1"; shift; printf "%s$F\n" "" ${1+"$@"}; }   # "%s" + "" đứng đầu: câu bắt đầu bằng "-" không bị printf hiểu là tuỳ chọn
+mn() { _t "$1"; shift; printf "%s$F" "" ${1+"$@"}; }
 pick_ui() { case "${1:-}" in vi|vi[_.-]*|VI|VI[_.-]*|Vi) UI=vi ;; *) UI=en ;; esac; }
 lang_name() { case "$1" in vi) echo "Tiếng Việt" ;; *) echo "English" ;; esac; }
 ENV_LANG="${GC_LANG:-}"   # GC_LANG=vi genchibi … (biến môi trường) thắng giá trị trong .env
@@ -179,7 +180,7 @@ HOME_DIR="${GC_HOME:-__GC_HOME__}"
 [ -d "$HOME_DIR" ] || { m no_home "$HOME_DIR" >&2; exit 1; }
 # Lệnh đi theo bản cài: chuyển cho cli/genchibi của bản đang chạy, để bản cập nhật mang theo lệnh mới.
 INNER="$HOME_DIR/current/cli/genchibi"
-if [ -z "${GC_CLI_INNER:-}" ] && [ -f "$INNER" ]; then GC_CLI_INNER=1 GC_HOME="$HOME_DIR" exec bash "$INNER" "$@"; fi
+if [ -z "${GC_CLI_INNER:-}" ] && [ -f "$INNER" ]; then GC_CLI_INNER=1 GC_HOME="$HOME_DIR" exec bash "$INNER" ${1+"$@"}; fi
 ORIG_PWD="$PWD"   # thư mục người gọi lệnh (agent skill cài vào dự án của họ, không phải thư mục cài)
 cd "$HOME_DIR"
 set -a; [ -f .env ] && . ./.env; set +a
@@ -329,8 +330,8 @@ ensure_keys() {
 CFH() { if [ "$MODE" = docker ]; then echo /work; else echo "$TDIR"; fi; }   # thư mục nhà của cloudflared
 cf() { # chạy cloudflared cho các bước thiết lập
   mkdir -p "$TDIR/.cloudflared"; chmod 700 "$TDIR"
-  if [ "$MODE" = docker ]; then docker run --rm -i -u "$(id -u):$(id -g)" -e HOME=/work -v "$TDIR:/work" "$CF_IMAGE" "$@"
-  else HOME="$TDIR" cloudflared --no-autoupdate "$@"; fi
+  if [ "$MODE" = docker ]; then docker run --rm -i -u "$(id -u):$(id -g)" -e HOME=/work -v "$TDIR:/work" "$CF_IMAGE" ${1+"$@"}
+  else HOME="$TDIR" cloudflared --no-autoupdate ${1+"$@"}; fi
 }
 need_cf() {
   if [ "$MODE" = docker ]; then docker image inspect "$CF_IMAGE" >/dev/null 2>&1 || docker pull -q "$CF_IMAGE" >/dev/null || { m cf_pull_fail "$CF_IMAGE" >&2; exit 1; }
@@ -570,7 +571,7 @@ link_cmd() {
 
 # genchibi agent …: bootstrap cho agent BẤT KỲ hãng nào (INT-05) — cấu hình nối từng client, hướng dẫn, schema tool, cài skill.
 # Lấy mọi thứ qua HTTP của app (chế độ Docker có thể không có Node trên máy chủ); token không bao giờ in ra màn hình.
-agent_curl() { auth_cfg | curl -fsS -K - "$@"; }
+agent_curl() { auth_cfg | curl -fsS -K - ${1+"$@"}; }
 agent_connect() {
   local u link hdr=""
   u="$URL/mcp"; link="$(link_url)"
@@ -688,9 +689,9 @@ case "${1:-help}" in
   start) start ;; stop) stop ;; restart) stop; start ;; status) status ;; update) update ;;
   logs) logs ;; backup) backup ;; restore) shift; restore "${1:-}" ;; uninstall) uninstall ;;
   mcp) mcp ;; open) open_ui ;; version) status ;;
-  expose) shift; expose "$@" ;; link) shift; link_cmd "$@" ;;
+  expose) shift; expose ${1+"$@"} ;; link) shift; link_cmd ${1+"$@"} ;;
   token|github-token) shift; token_cmd "${1:-}" ;;
   lang|language) shift; lang_cmd "${1:-}" ;;
-  agent) shift; agent_cmd "$@" ;;
+  agent) shift; agent_cmd ${1+"$@"} ;;
   *) usage ;;
 esac

@@ -32,7 +32,7 @@ done
 B=$'\033[1m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; N=$'\033[0m'
 
 # ---------- ngôn ngữ (ADR 0007): English mặc định; --lang / GC_LANG / .env của bản cài cũ / câu hỏi khi có terminal
-# Hai bảng câu chữ _en / _vi (chuỗi printf, %s = đối số). bash 3.2: không mảng kết hợp.
+# Hai bảng câu chữ _en / _vi (chuỗi printf, %s = đối số). bash 3.2: không mảng kết hợp; "$@" viết ${1+"$@"} (rỗng dưới set -u).
 _en() {
   case "$1" in
     usage) F="gen-chibi installer (Linux, macOS)\n  curl -fsSL https://raw.githubusercontent.com/colamacbook-ryan/Gen-Chibi/main/install.sh | bash\n  curl -fsSL https://raw.githubusercontent.com/colamacbook-ryan/Gen-Chibi/main/install.sh | bash -s -- --lang vi\nOptions: --dir <folder> (default ~/gen-chibi) · --port <port> (7480) · --native (run with Node, no Docker)\n         --docker · --version vX.Y.Z (default: latest) · --lang en|vi (default en; or GC_LANG=vi)\nPrivate repo: set GC_GITHUB_TOKEN=<fine-grained token, Contents: Read-only> (see README). The token goes into .env and is never printed." ;;
@@ -123,11 +123,11 @@ _vi() {
 }
 UI=en
 _t() { F=""; if [ "$UI" = vi ]; then _vi "$1"; fi; if [ -z "$F" ]; then _en "$1"; fi; if [ -z "$F" ]; then F="$1"; fi; }
-say()  { _t "$1"; shift; printf "%s$F\n" "" "$@"; }
-step() { _t "$1"; shift; printf "%s◐%s $F\n" "$Y" "$N" "$@"; }
-ok()   { _t "$1"; shift; printf "%s✓%s $F\n" "$G" "$N" "$@"; }
-warn() { _t "$1"; shift; printf "%s!%s $F\n" "$Y" "$N" "$@"; }
-die()  { _t "$1"; shift; printf "%s✗ $F%s\n" "$R" "$@" "$N" >&2; exit 1; }
+say()  { _t "$1"; shift; printf "%s$F\n" "" ${1+"$@"}; }
+step() { _t "$1"; shift; printf "%s◐%s $F\n" "$Y" "$N" ${1+"$@"}; }
+ok()   { _t "$1"; shift; printf "%s✓%s $F\n" "$G" "$N" ${1+"$@"}; }
+warn() { _t "$1"; shift; printf "%s!%s $F\n" "$Y" "$N" ${1+"$@"}; }
+die()  { _t "$1"; shift; printf "%s✗ $F%s\n" "$R" ${1+"$@"} "$N" >&2; exit 1; }
 
 lang_of() { # chuẩn hoá: en | vi | "" (lạ)
   case "$1" in en|EN|En|en[_.-]*|EN[_.-]*) echo en ;; vi|VI|Vi|vi[_.-]*|VI[_.-]*) echo vi ;; *) echo "" ;; esac
@@ -200,7 +200,7 @@ else
     # token đi qua tệp cấu hình curl (chmod 600), không nằm trên dòng lệnh nên không lộ trong ps.
     # curl không chuyển header Authorization tự đặt sang host khác khi bị chuyển hướng (GitHub chuyển file sang host lưu trữ có chữ ký).
     ( umask 077; printf 'header = "Authorization: Bearer %s"\n' "$TOKEN" > "$TMP/auth.curl" )
-    acurl() { curl -K "$TMP/auth.curl" "$@"; }
+    acurl() { curl -K "$TMP/auth.curl" ${1+"$@"}; }
     META="$(acurl -fsSL -H 'Accept: application/vnd.github+json' "$API" 2>/dev/null)" || die token_rejected "$REPO"
     # asset trong repo private chỉ tải được qua URL API (.../releases/assets/<id>); đọc tên từng asset để chọn đúng gói
     TARURL=""; SUMURL=""
