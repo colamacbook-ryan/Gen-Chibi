@@ -1,5 +1,7 @@
 # gen-chibi
 
+[English](README.md) | **Tiếng Việt**
+
 **gen-chibi — nhà máy asset chibi theo chủ đề.** Từ một bộ khung chuẩn (ma-nơ-canh, khối vật phẩm, khối bối cảnh) dựng nhân vật / vật phẩm / bối cảnh **bằng code**, cất vào thư viện theo dự án chủ đề, **phát hành** thành gói bán theo chủ đề. **Làm phim** với AI đạo diễn là cách dùng asset — và là bản demo sống của thư viện: chat ra kịch bản, phân cảnh, xuất thành một tệp HTML xem được ở mọi trình duyệt. Mỗi asset là một **công thức JSON** qua cổng kiểm tự động; engine dựng SVG / PNG / sprite 8 hướng hoặc nhân vật "sống" đổi biểu cảm lúc chạy.
 
 **Bắt đầu nhanh:** mở Studio → **✨ Mở dự án mẫu "Văn phòng vui"** → Tạo tác → bấm tác phẩm trong bảng → tab *Xem & duyệt* → ▶ Cả phim → tab *Xuất bản* → *Phim (HTML)*. Xem một bộ chủ đề trọn vẹn: **🏯 Mở bộ chủ đề mẫu "Tam Quốc"** (7 tướng · 13 trang bị · 8 bối cảnh · phim 6 phân cảnh có dàn dựng, giọng nói, âm thanh, màn đấu võ — dựng hoàn toàn từ khung; bộ mẫu Gen Labs, không xuất bán). Hướng dẫn đầy đủ: [`docs/HUONG-DAN.md`](docs/HUONG-DAN.md).
@@ -19,7 +21,7 @@ curl -fsSL https://raw.githubusercontent.com/colamacbook-ryan/Gen-Chibi/main/ins
 
 - Cần **Docker** đang chạy (macOS: Docker Desktop) hoặc **Node ≥ 18** (`--native`).
 - Mặc định cài vào `~/gen-chibi`, cổng `7480`, chỉ mở cho máy này. Mở **http://localhost:7480**.
-- Tuỳ chọn: `--dir <thư mục>` · `--port <cổng>` · `--native` · `--version vX.Y.Z`.
+- Tuỳ chọn: `--dir <thư mục>` · `--port <cổng>` · `--native` · `--version vX.Y.Z` · `--lang en|vi`.
 
 ## Lệnh
 
@@ -30,8 +32,25 @@ genchibi logs
 genchibi backup | restore <tệp>
 genchibi mcp               # cầu MCP stdio cho agent
 genchibi token             # đặt token GitHub (repo private), nhập ẩn
+genchibi lang [en|vi]      # xem / đặt ngôn ngữ (CLI + giao diện mặc định của Studio)
 genchibi open | uninstall
 ```
+
+## Ngôn ngữ
+
+Mặc định là tiếng Anh ở mọi nơi: trình cài, CLI và Studio. Chọn tiếng Việt được ngay lúc cài, và đổi lại bất cứ lúc nào sau đó.
+
+- **Lúc cài:** chạy trong terminal, trình cài hỏi đúng một câu:
+  `Language / Ngôn ngữ: [1] English  [2] Tiếng Việt  (Enter = English)`.
+  Không có terminal (CI, ống dẫn) thì không hỏi và dùng tiếng Anh. Chọn trước bằng `--lang vi` hoặc `GC_LANG=vi`:
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/colamacbook-ryan/Gen-Chibi/main/install.sh | bash -s -- --lang vi
+  ```
+  Lựa chọn được ghi thành `GC_LANG=en|vi` trong `.env` của bản cài; chạy lại trình cài thì giữ nguyên, trừ khi bạn chọn lại.
+- **Sau khi cài, cho cả bản cài:** `genchibi lang` in ngôn ngữ hiện tại; `genchibi lang vi` (hoặc `en`) ghi `GC_LANG` vào `.env` rồi khởi động lại app, nên CLI và giao diện mặc định của Studio đổi cùng lúc.
+- **Từng người, trong Studio:** nút chuyển ngôn ngữ trong Studio chỉ đổi giao diện của bạn, nhớ theo máy chủ + trình duyệt; `GC_LANG` vẫn là mặc định cho người khác.
+- Nội dung của bạn (tên nhân vật, kịch bản, lời thoại) không bao giờ bị dịch. Bộ mẫu *Tam Quốc* giữ nội dung tiếng Việt.
+- Nâng cấp từ v0.19 trở về trước: mặc định giờ là tiếng Anh; chạy `genchibi lang vi` để giữ tiếng Việt.
 
 ## Bộ khung chuẩn (Xưởng)
 Mọi asset dựng từ một **bộ khung chuẩn không chủ đề** (kiểu greybox của làm game):
@@ -124,9 +143,10 @@ engine/       core.js (khung xương, thư viện, kế thừa 4 tầng, cổng 
 kinds/        character/gen.core.js (khung lõi: khuôn mặt, biểu cảm, chuyển động, thân ma-nơ-canh) · khung/gen.khung.js (khối vật phẩm, khối bối cảnh, ma-nơ-canh, sân khấu chuẩn)
 studio/       3 ứng dụng Xưởng / Thư viện / Tạo tác (một bộ mã) · mau/ dự án mẫu
 server/       API cục bộ, updater, core AI, MCP, kho bí mật
+locales/      chữ giao diện tiếng Anh (locales/en/*.json — ADR 0007)
 launcher.js   chạy phiên bản hiện tại, canh sức khoẻ sau cập nhật, tự rollback
 install.sh    cài một lệnh · cli/genchibi
-tools/        test.sh (CI), test-update.sh, package.sh
+tools/        test.sh (CI), test-update.sh, test-lang.sh, package.sh
 ```
 
 ## Repo private: token cập nhật

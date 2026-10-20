@@ -114,5 +114,37 @@ cli "$G" stop >/dev/null 2>&1
 out="$(cli "$G" lang vi)"; echo "$out" | grep -q 'Đã đặt ngôn ngữ Tiếng Việt' && echo "$out" | grep -q 'App đang không chạy' && [ "$(envlang vi)" = vi ]; check $? "app đang dừng: genchibi lang vi chỉ ghi .env, báo áp dụng ở lần chạy tới (không tự chạy app)" "$out"
 ! curl -fsS "http://127.0.0.1:$P_VI/api/health" >/dev/null 2>&1; check $? "app vẫn dừng sau lang vi"
 
+echo "   4) README + tài liệu"
+DOCS_OUT="$(node -e '
+const fs = require("fs"), path = require("path"), root = process.argv[1], VI = new RegExp(process.argv[2]);
+// tên riêng / chuỗi trích nguyên văn được phép giữ dấu trong bản tiếng Anh: tên ngôn ngữ, câu hỏi song ngữ của trình cài,
+// tên bộ mẫu và nội dung mẫu (nội dung người dùng không dịch — ADR 0007 §4)
+const ALLOW = ["Language / Ngôn ngữ", "Tiếng Việt", "Tam Quốc", "Văn phòng vui", "Ngày đầu đi làm", "Từ vườn đào tới Xích Bích", "Lưu Bị"];
+let bad = 0; const say = (ok, m) => { console.log("   " + (ok ? "✓ " : "✗ ") + m); if (!ok) bad++; };
+const read = f => fs.readFileSync(path.join(root, f), "utf8");
+const leftovers = f => read(f).split("\n").map((l, i) => [i + 1, l]).filter(([, l]) => !(/README\.vi\.md|HUONG-DAN\.md|QUY-CACH-KHUNG\.md|QUY-TRINH-LINH-KIEN\.md/.test(l) && /English/.test(l) && /Tiếng Việt/.test(l)))
+  .filter(([, l]) => VI.test(ALLOW.reduce((s, a) => s.split(a).join(""), l))).map(([n, l]) => n + ": " + l.slice(0, 90));
+for (const f of ["README.md", "docs/USER-GUIDE.md", "docs/FRAME-SPEC.md", "docs/PART-WORKFLOW.md"]) {
+  if (!fs.existsSync(path.join(root, f))) { say(false, f + " chưa có"); continue; }
+  const left = leftovers(f); say(!left.length, f + ": không còn chữ tiếng Việt (trừ dòng chuyển ngôn ngữ, tên riêng)" + (left.length ? "\n      " + left.slice(0, 8).join("\n      ") : ""));
+}
+const pairs = [["README.md", "README.vi.md"], ["docs/USER-GUIDE.md", "docs/HUONG-DAN.md"], ["docs/FRAME-SPEC.md", "docs/QUY-CACH-KHUNG.md"], ["docs/PART-WORKFLOW.md", "docs/QUY-TRINH-LINH-KIEN.md"]];
+for (const [en, vi] of pairs) {
+  const head = f => fs.existsSync(path.join(root, f)) ? read(f).split("\n").slice(0, 3).join("\n") : "";
+  say(head(en).includes("(" + path.basename(vi) + ")") && head(vi).includes("(" + path.basename(en) + ")") && /English/.test(head(en)) && /Tiếng Việt/.test(head(vi)),
+    en + " ↔ " + vi + ": dòng chuyển ngôn ngữ ở đầu cả hai bản, trỏ nhau");
+}
+const rd = read("README.md");
+say(["docs/USER-GUIDE.md", "docs/FRAME-SPEC.md", "docs/PART-WORKFLOW.md"].every(d => rd.indexOf(d) >= 0) && !/HUONG-DAN|QUY-CACH|QUY-TRINH/.test(rd) && /^## Language/m.test(rd) && /--lang vi/.test(rd) && /genchibi lang vi/.test(rd) && /GC_LANG/.test(rd),
+  "README.md trỏ bản tiếng Anh của tài liệu, có mục Language (--lang vi · GC_LANG · genchibi lang · Studio)");
+// link tương đối trong README* và docs/*.md phải tới tệp có thật
+const broken = [];
+for (const f of ["README.md", "README.vi.md"].concat(fs.readdirSync(path.join(root, "docs")).filter(x => x.endsWith(".md")).map(x => "docs/" + x)))
+  for (const m of read(f).matchAll(/\]\(([^)\s]+)\)/g)) { const t = m[1].split("#")[0]; if (!t || /^[a-z]+:/.test(t)) continue; if (!fs.existsSync(path.join(root, path.dirname(f), t))) broken.push(f + " → " + m[1]); }
+say(!broken.length, "link tương đối trong README* + docs/*.md không gãy" + (broken.length ? ": " + broken.join(", ") : ""));
+process.exit(bad ? 1 : 0);
+' "$ROOT" "$VI_RE" 2>&1)" || FAIL=$((FAIL+1))
+echo "$DOCS_OUT"; PASS=$((PASS + $(echo "$DOCS_OUT" | grep -c '^   ✓')))
+
 echo "   Kết quả ngôn ngữ: $PASS đạt, $FAIL trượt"
 [ $FAIL = 0 ]
