@@ -259,14 +259,21 @@ function createOnline(opts) {
     if (dnsCache) dnsCache[host] = x;
     return x;
   }
+  // MỘT rào cho MỌI kết nối theo tên miền (HTTP qua call(), TLS ở bậc chứng chỉ): đúng tên của luồng, phân giải, có IP riêng / loopback /
+  // link-local nào thì từ chối hết (chống DNS rebinding giữa các bậc), trả về IP đã kiểm để ghim kết nối
+  async function vetted(host) {
+    if (!flow || host !== flow.domain) return { error: 'not the saved domain' };
+    const r = await lookup(host), ips = r.a.concat(r.aaaa);
+    if (!ips.length) return { error: r.error || 'ENOTFOUND' };
+    const bad = ips.filter(ip => !isPublicIp(ip));
+    if (bad.length) return { error: 'private address ' + bad[0], private: true };
+    return { ip: r.a[0] || r.aaaa[0] };
+  }
   async function call(url, o) {
     let host = ''; try { host = new URL(url).hostname; } catch (e) { return { status: 0, error: 'bad url', headers: {}, body: '' }; }
-    if (!flow || host !== flow.domain) return { status: 0, error: 'not the saved domain', headers: {}, body: '' };
-    const r = await lookup(host), ips = r.a.concat(r.aaaa);
-    if (!ips.length) return { status: 0, error: r.error || 'ENOTFOUND', headers: {}, body: '' };
-    const bad = ips.filter(ip => !isPublicIp(ip));
-    if (bad.length) return { status: 0, error: 'private address ' + bad[0], private: true, headers: {}, body: '' };
-    return d.probe(url, Object.assign({ ip: r.a[0] || r.aaaa[0] }, o));
+    const v = await vetted(host);
+    if (!v.ip) return { status: 0, error: v.error, private: !!v.private, headers: {}, body: '' };
+    return d.probe(url, Object.assign({ ip: v.ip }, o));
   }
   const errOf = r => r.error ? cut(r.error, 120) : 'HTTP ' + r.status;
 
@@ -312,8 +319,9 @@ function createOnline(opts) {
     return ok(N_('Cổng 80 tới được edge Caddy (kiểm từ trong máy — kiểm từ ngoài thật là bậc chứng chỉ)'));
   }
   async function stepCert() {
-    const r = await lookup(flow.domain), ip = r.a[0] || r.aaaa[0];
-    if (!ip) return fail(N_('Không phân giải được {domain} ({error})', { domain: flow.domain, error: r.error || 'ENOTFOUND' }), N_('Kiểm DNS của máy rồi bấm Kiểm lại'));
+    const v = await vetted(flow.domain), ip = v.ip;
+    if (v.private) return fail(N_('{domain} trỏ về địa chỉ nội bộ {ips} — app không gọi địa chỉ nội bộ', { domain: flow.domain, ips: v.error.replace(/^private address /, '') }), N_('Trỏ {domain} về IP công khai của máy', { domain: flow.domain }));
+    if (!ip) return fail(N_('Không phân giải được {domain} ({error})', { domain: flow.domain, error: v.error }), N_('Kiểm DNS của máy rồi bấm Kiểm lại'));
     const since = flow.waitSince.cert || (flow.waitSince.cert = d.now());
     const until = d.now() + d.waits.certMs;
     let info = null;

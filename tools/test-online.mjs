@@ -113,9 +113,10 @@ function fakeNet(o = {}) {
   const calls = { probe: [], resolve: [] };
   return {
     calls,
+    swap(dns, onTls) { o.dns = dns; o.onTls = onTls; },
     resolve: async h => { calls.resolve.push(h); return Object.assign({ a: [], aaaa: [], via: 'authoritative', error: '' }, (o.dns || {})[h]); },
     publicIp: async () => o.pub || { v4: PUB4, v6: '' },
-    tlsInfo: async () => o.tls || { ok: true, authorized: true, matches: true, issuer: "Let's Encrypt · R11", validTo: '2027-01-18T00:00:00.000Z', staging: false },
+    tlsInfo: async () => (o.onTls && o.onTls(), 0) || o.tls || { ok: true, authorized: true, matches: true, issuer: "Let's Encrypt · R11", validTo: '2027-01-18T00:00:00.000Z', staging: false },
     probe: async (url, op) => {
       const u = new URL(url), hd = op.headers || {}, ua = hd['User-Agent'] || '';
       calls.probe.push({ url, host: u.hostname, ip: op.ip, method: op.method || 'GET', ua });
@@ -181,7 +182,7 @@ async function mkOnline(o = {}) {
   const call = async (m, p, b, h) => { const r = await fetch('http://127.0.0.1:' + port + p, { method: m, headers: Object.assign({ Authorization: 'Bearer owner', 'Content-Type': 'application/json' }, h), body: b === undefined ? undefined : JSON.stringify(b) }); const t = await r.text(); let j = null; try { j = JSON.parse(t); } catch (e) { j = null; } return { status: r.status, j, t, h: r.headers }; };
   const view = async lang => (await call('GET', '/api/online', undefined, lang ? { 'X-GC-Lang': lang } : {})).j;
   const step = (v, id) => v.flow.steps.find(s => s.id === id);
-  return { home, dataDir, cfg, online, net: netf, logs, responses, tl, secrets, call, view, step, idle: () => online.idle(), close: () => srv.close(), post: (p, b, h) => call('POST', p, b, h) };
+  return { netSwap: (dns, onTls) => netf.swap(dns, onTls), home, dataDir, cfg, online, net: netf, logs, responses, tl, secrets, call, view, step, idle: () => online.idle(), close: () => srv.close(), post: (p, b, h) => call('POST', p, b, h) };
 }
 function leaksOf(token, x, extraTexts) {
   const where = [];
@@ -549,6 +550,17 @@ console.log('   — chống thành công cụ quét (CNS-180) + publicUrl tạm'
     ok(s.state === 'fail' && /địa chỉ nội bộ/.test(s.detail) && x.net.calls.probe.length === 0, 'tên miền → ' + ip + ': từ chối, không gọi ra');
     x.close(); x.adm.close();
   }
+  // DNS đổi giữa các bậc (rebinding): bậc tên miền thấy IP công khai, tới bậc chứng chỉ phân giải ra IP nội bộ → ✗, KHÔNG nối TLS
+  for (const ip of ['127.0.0.1', '10.0.0.5', '::1']) {
+    const x = await flowA({ net: { tls: { ok: false, error: 'ECONNRESET' } } });
+    let tlsCalls = 0;
+    await x.post('/api/online/caddy', { domain: 'chibi.example.com' }); await x.idle();   // dừng ở bậc cert (chờ)
+    x.netSwap({ 'chibi.example.com': ip.includes(':') ? { aaaa: [ip] } : { a: [ip] } }, () => { tlsCalls++; });
+    await sleep(5); await x.post('/api/online/recheck', {}); await x.idle();
+    const s = x.step(await x.view(), 'cert');
+    ok(s.state === 'fail' && /địa chỉ nội bộ/.test(s.detail) && tlsCalls === 0, 'rebinding ở bậc chứng chỉ → ' + ip + ': ✗, không nối TLS');
+    x.close(); x.adm.close();
+  }
   ok(['169.254.169.254', '100.64.1.1', '::ffff:10.0.0.1', 'fe80::1', '0.0.0.0'].every(ip => !ONLINE.isPublicIp(ip)) && [PUB4, PUB6, '1.1.1.1'].every(ONLINE.isPublicIp), 'isPublicIp: link-local / CGNAT / IPv4-mapped / unspecified bị coi là nội bộ');
   ok(ONLINE.isCloudflareIp('104.21.3.4') && ONLINE.isCloudflareIp('2606:4700::1') && !ONLINE.isCloudflareIp(PUB4), 'dải IP Cloudflare (cloudflare.com/ips, kiểm 2026-10-20)');
   // publicUrl tạm → lỗi giữa chừng (MCP bị chặn theo UA) → trả về giá trị cũ
@@ -637,6 +649,16 @@ function mutated(file, from, to) {
   const c = await conflictCase(M2o.createOnline, M2.createCloudflare);
   ok(c.dnsWrites > 0 && !c.aStill, 'cho đè CNAME (bỏ hai rào) → ca xung đột ĐỎ: ' + c.dnsWrites + ' lần ghi DNS, bản ghi A của chủ bị xoá');
   c.x.close(); c.x.cf.close();
+  const M5 = mutated('online.js', 'const v = await vetted(flow.domain), ip = v.ip;', 'const r0 = await lookup(flow.domain), v = { ip: r0.a[0] || r0.aaaa[0] }, ip = v.ip;');
+  {
+    const x = await flowA({ net: { tls: { ok: false, error: 'ECONNRESET' } }, mk: { createOnline: M5.createOnline } });
+    let tlsCalls = 0;
+    await x.post('/api/online/caddy', { domain: 'chibi.example.com' }); await x.idle();
+    x.netSwap({ 'chibi.example.com': { a: ['127.0.0.1'] } }, () => { tlsCalls++; });
+    await sleep(5); await x.post('/api/online/recheck', {}); await x.idle();
+    ok(tlsCalls > 0, 'bỏ rào IP ở bậc chứng chỉ → ca rebinding ĐỎ (app nối TLS tới 127.0.0.1)');
+    x.close(); x.adm.close();
+  }
   const M3 = mutated('online.js', 'mem = { token: tok, at: d.now(), keep: b.keepToken === true };', "mem = { token: tok, at: d.now(), keep: b.keepToken === true }; d.log('[online] cloudflare token ' + tok);");
   const x3 = await flowB({ mk: { createOnline: M3.createOnline } });
   await x3.post('/api/online/cloudflare', { token: API_TOKEN, zone: 'example.com' }); await x3.idle();
