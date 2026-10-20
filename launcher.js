@@ -30,7 +30,11 @@ function link(name, tag) {
 }
 function norm(v) { return 'v' + String(v || '').trim().replace(/^v/, ''); }
 
-// Launcher mới đi kèm phiên bản mới: tự thay mình rồi thoát để container khởi động lại.
+// Launcher mới đi kèm phiên bản mới: tự thay mình rồi khởi động lại.
+// Docker: thoát, container tự khởi động lại (restart: unless-stopped). Native (nohup, không ai canh): tự chạy launcher mới
+// cùng env + cùng tệp log, trao tệp pid cho nó (genchibi stop / status đọc tệp này) rồi mới thoát — trước v0.20.1 thoát luôn
+// nên bản native tắt hẳn sau lần cập nhật có launcher mới (CNS-171)
+const PIDF = path.join(HOME, 'logs', 'launcher.pid');
 function selfUpdate() {
   const next = path.join(HOME, 'current', 'launcher.js');
   try {
@@ -38,6 +42,10 @@ function selfUpdate() {
       fs.copyFileSync(next, __filename + '.tmp');
       fs.renameSync(__filename + '.tmp', __filename);
       log('replaced the launcher with the one shipped in', target('current'), '— restarting');
+      if (process.env.GC_IN_DOCKER === '1') process.exit(0);
+      const c = spawn(process.execPath, [__filename], { detached: true, stdio: 'inherit', env: process.env, cwd: process.cwd() });
+      try { fs.mkdirSync(path.dirname(PIDF), { recursive: true }); fs.writeFileSync(PIDF, String(c.pid)); } catch (e) { log('could not write', PIDF, e.message); }
+      c.unref();
       process.exit(0);
     }
   } catch (e) { log('could not replace the launcher:', e.message); }

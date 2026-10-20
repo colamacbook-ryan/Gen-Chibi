@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.20.1 — Native installs keep running after an update that ships a new launcher
+Found by the review of the v0.21 plan (CNS-171) and reproduced on a real native install: v0.19.1 → v0.20.0 updated, then stopped for good.
+- **Fixed**: when an update brings a new `launcher.js`, the launcher replaces itself and must restart. In Docker the container restarts it; in native mode (`--native`, started with `nohup`) nothing did, so the app stopped after the update. The launcher now starts the new launcher itself (same environment, same log file), hands over `logs/launcher.pid` so `genchibi stop` / `status` keep working, then exits. Docker mode is unchanged.
+- **If your native install stopped after updating to v0.20.0, or stops once more while updating to v0.20.1**: run `genchibi start`. The launcher that was running before this release cannot restart itself; from v0.20.1 on it does.
+- Tests: `tools/test-update.sh` section 7 builds a release with a different launcher, updates a native install to it and checks the new version answers, the pid file points to the new launcher, the old one is gone and `launcher.js` was replaced (31 ✓). The previous release's tests never exercised this path because every test build shared the same launcher; the v0.20.0 launcher fails the new section (2 ✗).
+
 ## v0.20.0 — English first: the Studio, installer, CLI and agent contract in English, switchable to Vietnamese at install time or any time after
 Ryan: "ngoài ra hệ thống này tôi cần thêm giao diện tiếng Anh để cho người châu âu sử dụng , nên là trên github hay quá trình cài đặt tốt nhất dùng tiếng anh làm chủ đạo và có thể chuyển sang tiếng việt trong quá trình cài đặt hoặc quá trình sử dụng" (ADR 0007).
 *(In English: "I also need an English interface so European users can use this system — on GitHub and during installation, English should lead, with the option to switch to Vietnamese during installation or while using it.")*

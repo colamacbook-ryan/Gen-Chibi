@@ -5,10 +5,11 @@
 #   3) bản v0.1.2 hỏng (server chết) → launcher tự rollback về v0.1.1
 #   4) rollback thủ công (xác nhận 2 bước)
 #   5) agent tự kiểm và cập nhật qua MCP (get_app_version, update_app)
+#   7) bản mới mang launcher MỚI, chạy native (không ai canh): launcher tự thay mình, tự chạy lại, trao tệp pid (CNS-171)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 W="$(mktemp -d)"; FEED="$W/feed"; HOME_DIR="$W/home"; PORT=7499; FPORT=7498
-trap 'kill $LPID $FPID 2>/dev/null || true; [ -n "${KEEP:-}" ] || rm -rf "$W"' EXIT
+trap 'kill $LPID $FPID $(cat "$HOME_DIR/logs/launcher.pid" 2>/dev/null) 2>/dev/null || true; [ -n "${KEEP:-}" ] || rm -rf "$W"' EXIT
 mkdir -p "$FEED" "$HOME_DIR/releases"
 pass=0; failn=0
 ok()  { echo "  ✓ $1"; pass=$((pass+1)); }
@@ -18,6 +19,7 @@ build() { # build <ver> [broken]
   local src="$W/src-$1"; rm -rf "$src"; cp -R "$ROOT" "$src"; rm -rf "$src/.git" "$src/dist"
   echo "$1" > "$src/VERSION"
   if [ "${2:-}" = broken ]; then echo 'throw new Error("bản hỏng cố ý");' > "$src/server/main.js"; fi
+  if [ "${2:-}" = newlauncher ]; then printf '\n// launcher của bản thử %s\n' "$1" >> "$src/launcher.js"; fi   # launcher khác bản đang chạy → nhánh tự thay launcher
   bash "$src/tools/package.sh" "$FEED/$1" >/dev/null
 }
 feed() { # feed <ver> [badsum]
@@ -97,6 +99,15 @@ mcpcall update_app | grep -q 'restart\\": true' && ok "update_app nhận lệnh"
 waitver 0.1.3 && ok "đang chạy v0.1.3 (do agent yêu cầu)" || bad "không lên v0.1.3"
 sleep 7; mcpcall get_app_version '{"check":false}' | grep -q 'current\\": \\"v0.1.3' && ok "get_app_version xác nhận v0.1.3 sau cửa sổ sức khoẻ" || bad "xác nhận sai"
 mcpcall rollback_app | grep -q 'ROLLBACK' && ok "rollback_app đòi xác nhận" || bad "rollback_app không đòi xác nhận"
+
+echo "7) bản mới mang launcher mới, chạy native (nohup, không ai canh) — launcher tự thay mình rồi tự chạy lại (CNS-171)"
+build 0.1.5 newlauncher; feed 0.1.5
+api POST /api/update/check >/dev/null; api POST /api/update/apply >/dev/null
+waitver 0.1.5 && ok "lên v0.1.5 sau khi launcher tự thay mình (trước v0.20.1: launcher thoát, bản native tắt hẳn)" || bad "bản native tắt sau khi thay launcher"
+NPID="$(cat "$HOME_DIR/logs/launcher.pid" 2>/dev/null || true)"
+[ -n "$NPID" ] && [ "$NPID" != "$LPID" ] && kill -0 "$NPID" 2>/dev/null && ok "tệp pid trỏ launcher mới (pid $NPID) — genchibi stop / status vẫn đúng" || bad "tệp pid không trỏ launcher mới đang chạy ($NPID)"
+kill -0 "$LPID" 2>/dev/null && bad "launcher cũ còn sống (hai launcher)" || ok "launcher cũ đã thoát — chỉ một launcher"
+cmp -s "$HOME_DIR/launcher.js" "$HOME_DIR/current/launcher.js" && ok "launcher.js ở thư mục cài = bản đi kèm v0.1.5" || bad "launcher.js chưa được thay"
 
 echo "6) docker-compose.override.yml: update / rollback / sync_compose không xoá, không ghi đè"
 cmp -s "$HOME_DIR/docker-compose.override.yml" "$W/override.orig" && ok "sau cập nhật + rollback tự động + rollback thủ công + agent cập nhật: override còn nguyên từng byte" || bad "docker-compose.override.yml bị đổi / mất sau khi update"
