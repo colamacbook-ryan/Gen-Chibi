@@ -213,6 +213,13 @@ case "$*" in
   *) exec /usr/bin/id "$@" ;;
 esac
 EOF
+# chown giả: ghi lại lệnh; chỉ đổi chủ thật khi máy test là root thật (runner CI không root — chown sang uid khác thì lỗi)
+cat > "$FK/chown" <<'EOF'
+#!/bin/bash
+echo "chown $*" >> "$FAKE_STATE/chown.log"
+[ "$(/usr/bin/id -u)" = 0 ] && exec /bin/chown "$@"
+exit 0
+EOF
 cat > "$FK/sudo" <<'EOF'
 #!/bin/bash
 [ "$1" = -n ] && shift
@@ -270,11 +277,11 @@ dockinst dsudo FAKE_NO_SG=1
 check $? "không dùng được sg → sudo docker (không hỏi mật khẩu: -n), compose chạy qua sudo" "$IRC $(echo "$INST_OUT" | tail -4) · $(tail -3 "$FS/docker.log" 2>/dev/null)"
 # trình cài chạy bằng root (sudo bash install.sh): container KHÔNG chạy root — GC_UID = uid của SUDO_USER (giả: tester = 1001), không có thì 1000; thư mục cài chown theo
 dockinst droot FAKE_ROOT=1 SUDO_USER=tester
-[ $IRC = 0 ] && grep -q '^GC_UID=1001$' "$W/droot/.env" && grep -q '^GC_GID=1001$' "$W/droot/.env" && [ "$(stat -c %u "$W/droot")" = 1001 ] && [ "$(stat -c %u "$W/droot/.env")" = 1001 ] && echo "$INST_OUT" | grep -q 'Running as root: the containers run as user 1001:1001'
-check $? "trình cài chạy bằng root + SUDO_USER → GC_UID/GC_GID = 1001 (user gọi sudo), thư mục cài chown 1001, báo rõ" "$IRC $(grep '^GC_[UG]ID' "$W/droot/.env" 2>/dev/null | tr '\n' ' ') owner=$(stat -c %u "$W/droot" 2>/dev/null) · $(echo "$INST_OUT" | tail -4)"
+[ $IRC = 0 ] && grep -q '^GC_UID=1001$' "$W/droot/.env" && grep -q '^GC_GID=1001$' "$W/droot/.env" && grep -qx "chown -R 1001:1001 $W/droot" "$FS/chown.log" && echo "$INST_OUT" | grep -q 'Running as root: the containers run as user 1001:1001'
+check $? "trình cài chạy bằng root + SUDO_USER → GC_UID/GC_GID = 1001 (user gọi sudo), thư mục cài chown 1001, báo rõ" "$IRC $(grep '^GC_[UG]ID' "$W/droot/.env" 2>/dev/null | tr '\n' ' ') $(cat "$FS/chown.log" 2>/dev/null | tr '\n' ' ') · $(echo "$INST_OUT" | tail -4)"
 dockinst droot2 FAKE_ROOT=1
-[ $IRC = 0 ] && grep -q '^GC_UID=1000$' "$W/droot2/.env" && [ "$(stat -c %u "$W/droot2/data")" = 1000 ] && ! grep -q '^GC_UID=0$' "$W/droot2/.env"
-check $? "trình cài chạy bằng root, không SUDO_USER → GC_UID=1000 (không bao giờ 0), data/ thuộc 1000" "$IRC $(grep '^GC_[UG]ID' "$W/droot2/.env" 2>/dev/null | tr '\n' ' ')"
+[ $IRC = 0 ] && grep -q '^GC_UID=1000$' "$W/droot2/.env" && grep -qx "chown -R 1000:1000 $W/droot2" "$FS/chown.log" && ! grep -q '^GC_UID=0$' "$W/droot2/.env"
+check $? "trình cài chạy bằng root, không SUDO_USER → GC_UID=1000 (không bao giờ 0), thư mục cài chown 1000" "$IRC $(grep '^GC_[UG]ID' "$W/droot2/.env" 2>/dev/null | tr '\n' ' ') $(cat "$FS/chown.log" 2>/dev/null | tr '\n' ' ')"
 # đột biến: bỏ đường sg / sudo (chỉ docker thẳng) → trình cài phải rơi về native / dừng, kiểm ở trên ĐỎ
 sed 's/^  case "\$g" in \*" docker "\*)$/  case "$g" in *" docker-mutated "*)/; s/command -v sudo >\/dev\/null \&\& sudo -n docker info/false \&\& sudo -n docker info/' "$ROOT/install.sh" > "$W/install-mut.sh"
 if ! cmp -s "$ROOT/install.sh" "$W/install-mut.sh"; then
