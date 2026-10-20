@@ -177,7 +177,7 @@ class Updater {
       const previousBefore = this.target('previous');
       this.switchTo(tag);
       this.write(path.join(this.dataDir, 'update-pending.json'), { kind: 'update', from: 'v' + this.version.replace(/^v/, ''), to: tag, previousBefore, backup, at: new Date().toISOString() });
-      this.log('[updater] đã chuyển sang ' + tag + ', khởi động lại để chạy bản mới');
+      this.log('[updater] switched to ' + tag + ', restarting to run the new version');
       return { restart: true, message: tr(VI, 'Đã tải {tag}. Đang khởi động lại…', { tag }) };
     } catch (e) {
       this.state.error = e.message;

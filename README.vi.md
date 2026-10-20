@@ -46,11 +46,11 @@ Mặc định là tiếng Anh ở mọi nơi: trình cài, CLI và Studio. Chọ
   ```bash
   curl -fsSL https://raw.githubusercontent.com/colamacbook-ryan/Gen-Chibi/main/install.sh | bash -s -- --lang vi
   ```
-  Lựa chọn được ghi thành `GC_LANG=en|vi` trong `.env` của bản cài; chạy lại trình cài thì giữ nguyên, trừ khi bạn chọn lại.
-- **Sau khi cài, cho cả bản cài:** `genchibi lang` in ngôn ngữ hiện tại; `genchibi lang vi` (hoặc `en`) ghi `GC_LANG` vào `.env` rồi khởi động lại app, nên CLI và giao diện mặc định của Studio đổi cùng lúc.
-- **Từng người, trong Studio:** nút chuyển ngôn ngữ trong Studio chỉ đổi giao diện của bạn, nhớ theo máy chủ + trình duyệt; `GC_LANG` vẫn là mặc định cho người khác.
+  Lựa chọn được ghi thành `GC_LANG=en|vi` trong `.env` của bản cài; chạy lại trình cài thì giữ ngôn ngữ đang dùng, trừ khi bạn chọn lại (không hỏi, và không bao giờ tự đổi mặc định của Studio).
+- **Sau khi cài, cho cả bản cài:** `genchibi lang` in cả ngôn ngữ của CLI lẫn mặc định của Studio; `genchibi lang vi` (hoặc `en`) ghi `GC_LANG` vào `.env` và đổi ngay mặc định của Studio, nên CLI và giao diện mặc định của Studio đổi cùng lúc.
+- **Từng người, trong Studio:** nút chuyển ngôn ngữ trong Studio chỉ đổi giao diện của bạn, nhớ theo máy chủ + trình duyệt; mặc định của Studio (*Hệ thống › Ngôn ngữ*) vẫn là mặc định cho người khác. `GC_LANG` chỉ là giá trị ban đầu hoặc lựa chọn có chủ ý (`--lang`, `genchibi lang`).
 - Nội dung của bạn (tên nhân vật, kịch bản, lời thoại) không bao giờ bị dịch. Bộ mẫu *Tam Quốc* giữ nội dung tiếng Việt.
-- Nâng cấp từ v0.19 trở về trước: bản cài đã có dữ liệu **giữ tiếng Việt** (đặt một lần ở lần chạy đầu của v0.20); chỉ bản cài mới bắt đầu bằng tiếng Anh. Đổi bất cứ lúc nào bằng `genchibi lang en|vi` hoặc nút chuyển trong Studio (trang *Hệ thống › Ngôn ngữ*).
+- Nâng cấp từ v0.19 trở về trước: bản cài đã có dữ liệu **giữ tiếng Việt** (đặt một lần ở lần chạy đầu của v0.20) — dù tự cập nhật hay chạy lại trình cài mà không có `--lang`; CLI nói theo. Chỉ bản cài mới bắt đầu bằng tiếng Anh. Đổi bất cứ lúc nào bằng `genchibi lang en|vi` hoặc nút chuyển trong Studio (trang *Hệ thống › Ngôn ngữ*).
 
 ## Bộ khung chuẩn (Xưởng)
 Mọi asset dựng từ một **bộ khung chuẩn không chủ đề** (kiểu greybox của làm game):

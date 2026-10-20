@@ -28,7 +28,7 @@ const API_TOKEN = process.env.GC_API_TOKEN || '';
 // Link MCP có khoá (https://<tên miền>/mcp/<GC_MCP_KEY>): chỉ cấp quyền MCP, không mở Studio hay /api.
 // Dùng cho agent không đặt được header (Claude web/desktop Connectors). Đổi khoá: genchibi expose --rotate.
 const MCP_KEY = process.env.GC_MCP_KEY || '';
-if (MCP_KEY && !/^[A-Za-z0-9_-]{24,}$/.test(MCP_KEY)) { console.error('GC_MCP_KEY phải dài ít nhất 24 ký tự [A-Za-z0-9_-].'); process.exit(2); }
+if (MCP_KEY && !/^[A-Za-z0-9_-]{24,}$/.test(MCP_KEY)) { console.error('GC_MCP_KEY must be at least 24 characters of [A-Za-z0-9_-].'); process.exit(2); }
 const PUBLIC_URL = String(process.env.GC_PUBLIC_URL || '').replace(/\/+$/, '');
 function safeEq(x, y) {
   const a = Buffer.from(String(x)), b = Buffer.from(String(y));
@@ -42,7 +42,7 @@ const ALLOWED_HOSTS = new Set(['localhost', '127.0.0.1', '::1'].concat(EXTRA_HOS
 // "*.trycloudflare.com" = mọi tên con (tunnel tạm đổi tên mỗi lần chạy). Tên công cộng như vậy không trỏ được về 127.0.0.1 nên không mở lại lỗ DNS rebinding.
 const WILD_HOSTS = EXTRA_HOSTS.filter(h => /^\*\.[a-z0-9.-]+\.[a-z]+$/.test(h)).map(h => h.slice(1));
 function hostAllowed(h) { return ALLOWED_HOSTS.has(h) || WILD_HOSTS.some(suf => h.endsWith(suf) && h.length > suf.length); }
-if (EXTRA_HOSTS.length && !API_TOKEN) { console.error('GC_ALLOWED_HOSTS cần đi kèm GC_API_TOKEN (truy cập từ máy khác phải có token).'); process.exit(2); }
+if (EXTRA_HOSTS.length && !API_TOKEN) { console.error('GC_ALLOWED_HOSTS needs GC_API_TOKEN as well (access from other machines must use a token).'); process.exit(2); }
 const DATA = path.join(HOME, 'data');
 const SETTINGS = path.join(DATA, 'settings.json');
 fs.mkdirSync(DATA, { recursive: true });
@@ -65,19 +65,30 @@ function settings() { const s = Object.assign({ autoUpdate: process.env.GC_AUTO_
 L10N.load(APP);
 const store = new Store(DATA);
 // NGÔN NGỮ MẶC ĐỊNH CỦA MÁY (ADR 0007) — một nguồn sự thật: settings.uiLang. Người mở Studio: ?lang= › gc-lang của trình duyệt › settings.uiLang › 'en'.
-//   GC_LANG ('en' | 'vi'; install.sh / `genchibi lang` ghi .env, docker-compose truyền vào; rỗng = không đặt): chủ máy đổi bằng CLI là lựa chọn MỚI NHẤT →
-//     khi khởi động thấy GC_LANG khác giá trị đã áp lần trước (settings.uiLangEnv) thì chép vào settings.uiLang. GC_LANG không đổi thì không đè.
+//   GC_LANG ('en' | 'vi'; rỗng = không đặt) chỉ là giá trị KHỞI TẠO hoặc ghi đè CÓ CHỦ Ý: install.sh ghi .env khi người cài chọn rõ (--lang / GC_LANG= /
+//     câu hỏi) hoặc cài mới; `genchibi lang` ghi .env (+ PUT /api/settings khi .env đã đúng mà Studio khác). Khi khởi động thấy GC_LANG khác giá trị
+//     đã áp lần trước (settings.uiLangEnv) thì chép vào settings.uiLang. GC_LANG không đổi thì không đè.
 //   Studio (Hệ thống › Ngôn ngữ) PUT { uiLang } đổi settings.uiLang — giữ tới lần GC_LANG đổi tiếp.
-//   NÂNG CẤP từ ≤ v0.19 (Gen quyết): GC_LANG rỗng + chưa có settings.uiLang + data có từ trước (settings.json đã có, hoặc có tác phẩm / asset)
-//     → ghi settings.uiLang = 'vi' MỘT lần: bản cài cũ không tự đổi sang tiếng Anh. Bản cài mới (data trống) → 'en' (không ghi gì).
+//   NÂNG CẤP từ ≤ v0.19 (Gen quyết, Q24): GC_LANG rỗng + chưa có settings.uiLang + bản cài đã có dữ liệu (hasUserData) → ghi settings.uiLang = 'vi'
+//     MỘT lần: bản cài cũ không tự đổi sang tiếng Anh — kể cả khi chạy lại trình cài mà không chọn ngôn ngữ (CNS-152). Bản cài mới (data trống) → ghi 'en' một lần.
+// "Đã có dữ liệu" = settings.json có từ trước, hoặc bất kỳ tác phẩm / asset / linh kiện / vật phẩm / bối cảnh / gói động tác / gói âm / dự án nào
+// (CNS-152 D: chỉ có dự án / gói cũng là bản cài đang dùng). Store đã tạo sẵn các thư mục → đếm TỆP, không đếm thư mục. cli/genchibi + install.sh không lặp luật này
+const DATA_DIRS = ['works', 'assets', 'parts', 'items', 'scenes', 'motionpacks', 'soundpacks'];
+function hasUserData() {
+  if (SETTINGS_EXISTED) return true;
+  const any = d => { try { return fs.readdirSync(path.join(DATA, d)).some(f => f.endsWith('.json')); } catch (e) { return false; } };
+  return DATA_DIRS.some(any) || store.listProjects().length > 0;
+}
 function initUiLang() {
   const env = L10N.norm(process.env.GC_LANG), s = readJSON(SETTINGS, {});
   if (env && env !== s.uiLangEnv) {
     s.uiLang = env; s.uiLangEnv = env; saveSettings(s);
-    log('[i18n] GC_LANG=' + env + ' → ngôn ngữ mặc định của máy = ' + env);
-  } else if (!env && !L10N.norm(s.uiLang) && (SETTINGS_EXISTED || store.listWorks().length || store.listAssets().length)) {
-    s.uiLang = 'vi'; saveSettings(s);
-    log('[i18n] nâng cấp bản cài cũ: giữ giao diện tiếng Việt (settings.uiLang = vi, chỉ một lần; đổi ở Hệ thống › Ngôn ngữ hoặc genchibi lang)');
+    log('[i18n] GC_LANG=' + env + ' → machine default language = ' + env);
+  } else if (!env && !L10N.norm(s.uiLang)) {
+    if (hasUserData()) {
+      s.uiLang = 'vi'; saveSettings(s);
+      log('[i18n] upgrade of an existing install: keeping the Vietnamese interface (settings.uiLang = vi, once; change it in System › Language or with genchibi lang)');
+    } else { s.uiLang = 'en'; saveSettings(s); }   // bản cài mới không có GC_LANG: ghi 'en' MỘT lần — dữ liệu tạo về sau không biến nó thành "bản cũ" (khởi động lại không lật sang vi)
   }
 }
 initUiLang();
@@ -89,10 +100,10 @@ const voice = new Voice({ dataDir: DATA, secrets });   // giọng AI (Google Gem
 const mcp = new MCP({ engine, store, version: VERSION, system: { updater, restartSoon }, voice });
 // OAuth 2.1 cho MCP từ xa (v0.19): mọi URL dựng từ GC_PUBLIC_URL — thiếu hoặc không phải gốc (có đường dẫn) thì OAuth tắt, /mcp vẫn 401 như cũ
 const oauth = new OAuth({ dir: DATA, publicUrl: PUBLIC_URL, warn: log, accessTtl: process.env.GC_OAUTH_ACCESS_TTL, redirects: String(process.env.GC_OAUTH_REDIRECTS || '').split(',').map(x => x.trim()).filter(Boolean) });
-if (PUBLIC_URL && !oauth.enabled) log('[oauth] OAuth đang TẮT: ' + oauth.why);
+if (PUBLIC_URL && !oauth.enabled) log('[oauth] OAuth is OFF: ' + MSG.en(oauth.why));
 // header chứa IP khách để giới hạn tốc độ (xem clientIp): mặc định mục cuối của x-forwarded-for; đứng sau Cloudflare đặt GC_CLIENT_IP_HEADER=cf-connecting-ip
 const IP_HEADER = String(process.env.GC_CLIENT_IP_HEADER || '').trim().toLowerCase();
-if (IP_HEADER && ['x-forwarded-for', 'cf-connecting-ip', 'x-real-ip'].indexOf(IP_HEADER) < 0) { console.error('GC_CLIENT_IP_HEADER phải là x-forwarded-for | cf-connecting-ip | x-real-ip.'); process.exit(2); }
+if (IP_HEADER && ['x-forwarded-for', 'cf-connecting-ip', 'x-real-ip'].indexOf(IP_HEADER) < 0) { console.error('GC_CLIENT_IP_HEADER must be x-forwarded-for | cf-connecting-ip | x-real-ip.'); process.exit(2); }
 setInterval(() => oauth.flush(), 30000).unref();   // lastUsedAt ghi đĩa trễ
 
 /* ---------------------------------------------------------------- tiện ích HTTP */
@@ -175,7 +186,7 @@ function serveStatic(req, res, urlPath) {
 }
 
 /* ---------------------------------------------------------------- định tuyến */
-function restartSoon() { setTimeout(() => { log('[server] thoát để launcher khởi động lại'); oauth.flush(); process.exit(RESTART_CODE); }, 400); }
+function restartSoon() { setTimeout(() => { log('[server] exiting so the launcher restarts it'); oauth.flush(); process.exit(RESTART_CODE); }, 400); }
 // Origin (nếu có) phải trỏ về chính máy chủ này. Lớp chặn chính là header X-GC-Request (trang khác không gửi được nếu không qua preflight CORS, mà máy chủ
 // không trả CORS); đây là lớp thứ hai nên chấp nhận các cách mở hợp lệ: trùng Host · trùng tên mà proxy báo (X-Forwarded-Host) hoặc GC_PUBLIC_URL ·
 // cùng là máy cục bộ (localhost / 127.0.0.1 / [::1]) và cùng cổng. Origin hỏng → chặn (không ném lỗi 500).
@@ -386,6 +397,9 @@ async function route(req, res) {
     if (Number.isFinite(b.checkHours) && b.checkHours >= 1 && b.checkHours <= 168) s.checkHours = Math.round(b.checkHours);
     if (typeof b.oauthRegister === 'boolean') s.oauthRegister = b.oauthRegister;
     if (b.uiLang !== undefined) { const l = L10N.norm(b.uiLang); if (!l) return fail(res, 400, 'uiLang phải là en hoặc vi'); s.uiLang = l; }   // ngôn ngữ mặc định của máy (Hệ thống › Ngôn ngữ)
+    // `genchibi lang` vừa ghi GC_LANG vào .env và đổi luôn mặc định qua đây (không khởi động lại): đánh dấu giá trị .env đó ĐÃ ÁP,
+    // để lần khởi động sau không áp lại nó đè lên lựa chọn Studio làm sau lệnh CLI (CNS-153). Studio không gửi trường này
+    if (b.uiLangEnv !== undefined) { const l = L10N.norm(b.uiLangEnv); if (!l) return fail(res, 400, 'uiLang phải là en hoặc vi'); s.uiLangEnv = l; }
     saveSettings(s);
     scheduleChecks();
     return send(res, 200, s);
@@ -415,12 +429,12 @@ async function route(req, res) {
     if (!oauth.enabled) return fail(res, 404, 'OAuth chưa bật — đặt GC_PUBLIC_URL');
     const b = await body(req, 8 * 1024), r = oauth.approve(b.request, b.decision, typeof b.scope === 'string' ? b.scope : '');
     if (!r.redirect) return fail(res, r.status || 400, r.error);
-    log('[oauth] chủ máy ' + (b.decision === 'approve' ? 'đã cấp phép (' + b.scope + ')' : 'đã từ chối') + ' một kết nối agent');
+    log('[oauth] owner ' + (b.decision === 'approve' ? 'approved (' + b.scope + ')' : 'denied') + ' an agent connection');
     return send(res, 200, { redirect: r.redirect });
   }
   const ocm = p.match(/^\/api\/oauth\/clients\/(?!(?:__proto__|constructor|prototype)(?:\/|$))([A-Za-z0-9_-]{1,128})(\/revoke)?$/);
   if (ocm && !ocm[2] && m === 'PUT') { const b = await body(req, 4 * 1024); return oauth.setScope(ocm[1], b.scope) ? send(res, 200, oauthView(langOf(req))) : fail(res, 400, 'client không có hoặc phạm vi không hợp lệ'); }
-  if (ocm && ocm[2] && m === 'POST') { if (!oauth.revokeClient(ocm[1])) return fail(res, 404, 'không có client này'); log('[oauth] chủ máy thu hồi một kết nối agent'); return send(res, 200, oauthView(langOf(req))); }
+  if (ocm && ocm[2] && m === 'POST') { if (!oauth.revokeClient(ocm[1])) return fail(res, 404, 'không có client này'); log('[oauth] owner revoked an agent connection'); return send(res, 200, oauthView(langOf(req))); }
 
   // ---- core AI (LLM qua API chuẩn OpenAI; key mã hoá, không trả về trình duyệt)
   if (p === '/api/ai' && m === 'GET') return send(res, 200, aiView(langOf(req), Object.assign(ai.publicConfig(), { zones: mcp.zoneInfo() })));   // zones: nhãn / vai / lời giới thiệu theo khu cho dock (một nguồn: mcp ZONES)
@@ -617,7 +631,7 @@ async function route(req, res) {
 
 const server = http.createServer((req, res) => {
   MSG.run(langOf(req), () => route(req, res)).catch(e => {   // ngôn ngữ của yêu cầu cho trang Cấp phép, nhãn khu / nhà cung cấp / giọng, tên phân cảnh mặc định…
-    log('[server] lỗi', e.message); if (!res.headersSent) fail(res, e.code && e.code >= 400 && e.code < 600 ? e.code : 500, e.message); });
+    log('[server] error', MSG.en(e.message)); if (!res.headersSent) fail(res, e.code && e.code >= 400 && e.code < 600 ? e.code : 500, e.message); });
 });
 
 /* ---------------------------------------------------------------- tự kiểm tra phiên bản */
@@ -626,12 +640,12 @@ async function autoCheck() {
   const s = settings();
   try {
     const st = await updater.check();
-    log('[updater] kiểm tra: hiện tại v' + VERSION.replace(/^v/, '') + ', mới nhất ' + st.latest + (st.available ? ' (có bản mới)' : ''));
+    log('[updater] check: current v' + VERSION.replace(/^v/, '') + ', latest ' + st.latest + (st.available ? ' (update available)' : ''));
     if (st.available && s.autoUpdate) {
       const r = await updater.apply();
       if (r.restart) restartSoon();
     }
-  } catch (e) { log('[updater] không kiểm tra được:', e.message); }
+  } catch (e) { log('[updater] could not check:', MSG.en(e.message)); }
 }
 function scheduleChecks() {
   clearInterval(timer);
@@ -639,7 +653,7 @@ function scheduleChecks() {
 }
 
 server.listen(PORT, HOST, () => {
-  log('[server] gen-chibi v' + VERSION.replace(/^v/, '') + ' chạy tại http://' + HOST + ':' + PORT + ' · home ' + HOME);
+  log('[server] gen-chibi v' + VERSION.replace(/^v/, '') + ' running at http://' + HOST + ':' + PORT + ' · home ' + HOME);
   scheduleChecks();
   if (process.env.GC_NO_AUTOCHECK !== '1') setTimeout(autoCheck, 15000);
 });

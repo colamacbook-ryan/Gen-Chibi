@@ -37,10 +37,10 @@ function selfUpdate() {
     if (fs.existsSync(next) && fs.readFileSync(next, 'utf8') !== fs.readFileSync(__filename, 'utf8')) {
       fs.copyFileSync(next, __filename + '.tmp');
       fs.renameSync(__filename + '.tmp', __filename);
-      log('đã thay launcher bằng bản đi kèm', target('current'), '— khởi động lại');
+      log('replaced the launcher with the one shipped in', target('current'), '— restarting');
       process.exit(0);
     }
-  } catch (e) { log('không thay được launcher:', e.message); }
+  } catch (e) { log('could not replace the launcher:', e.message); }
 }
 
 function health() {
@@ -67,14 +67,14 @@ async function verifyPending() {
   fs.rmSync(PENDING, { force: true });
   checking = false;
   if (ok) {
-    log((p.kind === 'rollback' ? 'chạy lại ' : 'cập nhật ') + p.to + ' khoẻ mạnh');
+    log((p.kind === 'rollback' ? 'rollback to ' : 'update to ') + p.to + ' is healthy');
     addHistory({ kind: p.kind, from: p.from, to: p.to, ok: true, backup: p.backup || null });
     return;
   }
   // bản mới không khoẻ trong thời hạn → trả con trỏ về bản cũ
   const prev = p.kind === 'update' ? p.from : null;
   if (prev && fs.existsSync(path.join(HOME, 'releases', norm(prev)))) {
-    log('bản', p.to, 'không khoẻ sau', HEALTH_WINDOW_MS / 1000, 'giây → tự rollback về', norm(prev));
+    log('version', p.to, 'not healthy after', HEALTH_WINDOW_MS / 1000, 's → rolling back to', norm(prev));
     link('current', norm(prev));
     if (p.previousBefore && fs.existsSync(path.join(HOME, 'releases', p.previousBefore))) link('previous', p.previousBefore);
     else fs.rmSync(path.join(HOME, 'previous'), { force: true });
@@ -93,8 +93,8 @@ function start() {
   if (stopping) return;
   selfUpdate();
   const entry = path.join(HOME, 'current', 'server', 'main.js');
-  if (!fs.existsSync(entry)) { log('không thấy', entry, '— thử lại sau 5 giây'); return setTimeout(start, 5000); }
-  log('chạy', target('current'));
+  if (!fs.existsSync(entry)) { log('not found:', entry, '— retrying in 5 s'); return setTimeout(start, 5000); }
+  log('starting', target('current'));
   const startedAt = Date.now();
   child = spawn(process.execPath, [entry], { stdio: 'inherit', env: Object.assign({}, process.env, { GC_HOME: HOME, GC_PORT: String(PORT) }) });
   verifyPending();
@@ -103,7 +103,7 @@ function start() {
     if (stopping) return process.exit(0);
     if (code === RESTART_CODE) { backoff = 1000; return setImmediate(start); }
     if (Date.now() - startedAt > 60000) backoff = 1000;
-    log('server dừng với mã', code, '— chạy lại sau', backoff / 1000, 'giây');
+    log('server exited with code', code, '— restarting in', backoff / 1000, 's');
     setTimeout(start, backoff);
     backoff = Math.min(backoff * 2, 30000);
   });

@@ -3,7 +3,7 @@
 # © 2026 Gen Labs — All rights reserved.
 set -euo pipefail
 
-# ---------------------------------------------------------------- ngôn ngữ (ADR 0007): GC_LANG = en (mặc định) | vi
+# ---------------------------------------------------------------- ngôn ngữ (ADR 0007): GC_LANG = en | vi; rỗng → mặc định của Studio (data/settings.json › uiLang) → en
 # Câu chữ nằm ở hai bảng _en / _vi, mỗi khoá một dòng `khoá) F="chuỗi printf" ;;` (%s = đối số, %% = dấu phần trăm).
 # m KHOÁ [đối số…] in một dòng · mn KHOÁ [đối số…] in không xuống dòng (lời hỏi). Khoá thiếu ở _vi → dùng _en.
 # Viết cho bash 3.2 (macOS): không mảng kết hợp, không ${x,,}; "$@" luôn viết ${1+"$@"} (bash < 4 báo "unbound variable" khi rỗng dưới set -u).
@@ -78,11 +78,12 @@ _en() {
     skill_clash2) F="→ pick another folder (--dir), merge by hand, or add --force to overwrite." ;;
     skill_done) F="Installed the gen-chibi guide for %s into %s (generated from agent/ of the running version — run this again after updating the app)" ;;
     agent_usage) F="genchibi agent connect | guide [topic] | topics | tools [--format openai|gemini|mcp] | skill <vendor> [--dir folder] [--force]" ;;
-    lang_now) F="Language: %s (%s)" ;;
+    lang_now) F="CLI: %s (%s) · Studio default: %s (%s)" ;;
     lang_hint) F="Change: genchibi lang en | vi  (CLI + Studio default for this install)" ;;
     lang_bad) F="Unsupported language: %s — use en (English) or vi (Vietnamese)." ;;
     lang_same) F="Language is already %s (%s) — nothing changed." ;;
     lang_set) F="Language set to %s: GC_LANG=%s written to .env." ;;
+    lang_live) F="Studio default switched to %s." ;;
     lang_restart) F="Restarting the app so the Studio default follows…" ;;
     lang_norun) F="The app is not running — the new default applies at the next start (genchibi start)." ;;
     lang_note) F="This is the default for the CLI and for everyone who opens the Studio. Each user can still switch language in the Studio (language switch); that choice is remembered in their browser." ;;
@@ -158,11 +159,12 @@ _vi() {
     skill_clash2) F="→ chọn thư mục khác (--dir), hoặc gộp tay, hoặc thêm --force để ghi đè." ;;
     skill_done) F="Đã cài hướng dẫn gen-chibi cho %s vào %s (sinh từ agent/ của bản đang chạy — cập nhật app thì chạy lại lệnh này)" ;;
     agent_usage) F="genchibi agent connect | guide [chủ đề] | topics | tools [--format openai|gemini|mcp] | skill <hãng> [--dir thư-mục] [--force]" ;;
-    lang_now) F="Ngôn ngữ: %s (%s)" ;;
+    lang_now) F="CLI: %s (%s) · Mặc định của Studio: %s (%s)" ;;
     lang_hint) F="Đổi: genchibi lang en | vi  (CLI + giao diện mặc định của bản cài)" ;;
     lang_bad) F="Không hỗ trợ ngôn ngữ: %s — dùng en (English) hoặc vi (Tiếng Việt)." ;;
     lang_same) F="Ngôn ngữ đã là %s (%s) — không đổi gì." ;;
     lang_set) F="Đã đặt ngôn ngữ %s: ghi GC_LANG=%s vào .env." ;;
+    lang_live) F="Đã đổi mặc định của Studio sang %s." ;;
     lang_restart) F="Khởi động lại app để giao diện mặc định đổi theo…" ;;
     lang_norun) F="App đang không chạy — mặc định mới có hiệu lực ở lần chạy tới (genchibi start)." ;;
     lang_note) F="Đây là mặc định cho CLI và cho mọi người mở Studio. Mỗi người vẫn đổi ngôn ngữ riêng trong Studio được (nút chuyển ngôn ngữ); lựa chọn đó được nhớ trong trình duyệt của họ." ;;
@@ -173,6 +175,8 @@ m()  { _t "$1"; shift; printf "%s$F\n" "" ${1+"$@"}; }   # "%s" + "" đứng đ�
 mn() { _t "$1"; shift; printf "%s$F" "" ${1+"$@"}; }
 pick_ui() { case "${1:-}" in vi|vi[_.-]*|VI|VI[_.-]*|Vi) UI=vi ;; *) UI=en ;; esac; }
 lang_name() { case "$1" in vi) echo "Tiếng Việt" ;; *) echo "English" ;; esac; }
+# mặc định của Studio ghi trong data/settings.json › uiLang (một nguồn sự thật — server ghi). sed thuần: không cần node / jq, chạy được với bash 3.2
+settings_lang() { sed -n 's/.*"uiLang"[[:space:]]*:[[:space:]]*"\([A-Za-z_-]*\)".*/\1/p' data/settings.json 2>/dev/null | head -1 || true; }
 ENV_LANG="${GC_LANG:-}"   # GC_LANG=vi genchibi … (biến môi trường) thắng giá trị trong .env
 pick_ui "$ENV_LANG"
 
@@ -184,7 +188,9 @@ if [ -z "${GC_CLI_INNER:-}" ] && [ -f "$INNER" ]; then GC_CLI_INNER=1 GC_HOME="$
 ORIG_PWD="$PWD"   # thư mục người gọi lệnh (agent skill cài vào dự án của họ, không phải thư mục cài)
 cd "$HOME_DIR"
 set -a; [ -f .env ] && . ./.env; set +a
-pick_ui "${ENV_LANG:-${GC_LANG:-}}"
+# GC_LANG (biến môi trường › .env) rỗng — bản cài ≤ v0.19 nâng cấp, hoặc cài lại không chọn — thì CLI nói theo mặc định của Studio (CNS-152)
+UI_SRC="${ENV_LANG:-${GC_LANG:-}}"; [ -n "$UI_SRC" ] || UI_SRC="$(settings_lang)"
+pick_ui "$UI_SRC"
 MODE="${GC_MODE:-docker}"; PORT="${GC_PORT:-7480}"
 URL="http://127.0.0.1:$PORT"
 PIDF="$HOME_DIR/logs/launcher.pid"; LOG="$HOME_DIR/logs/gen-chibi.log"
@@ -193,7 +199,7 @@ CF_IMAGE="${GC_CF_IMAGE:-cloudflare/cloudflared:2026.9.3}"
 
 # token đi qua stdin (curl -K -), không nằm trong argv → không lộ trong `ps`
 auth_cfg() { if [ -n "${GC_API_TOKEN:-}" ]; then printf 'header = "Authorization: Bearer %s"\n' "$GC_API_TOKEN"; fi; }
-api() { auth_cfg | curl -fsS -K - -X "$1" -H 'X-GC-Request: 1' -H 'Content-Type: application/json' ${3:+-d "$3"} "$URL$2"; }
+api() { auth_cfg | curl -fsS -K - -X "$1" -H 'X-GC-Request: 1' -H "X-GC-Lang: $UI" -H 'Content-Type: application/json' ${3:+-d "$3"} "$URL$2"; }   # X-GC-Lang: câu server trả về theo ngôn ngữ CLI
 running_native() { [ -f "$PIDF" ] && kill -0 "$(cat "$PIDF")" 2>/dev/null; }
 json() { node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const o=JSON.parse(s);const k=process.argv[1].split(".");let v=o;for(const x of k)v=v==null?v:v[x];console.log(v===undefined?"":typeof v==="object"?JSON.stringify(v):v)})' "$1" 2>/dev/null || sed -n "s/.*\"$1\": *\"\{0,1\}\([^\",}]*\).*/\1/p"; }
 
@@ -304,20 +310,36 @@ token_cmd() {
   if [ "$MODE" = docker ]; then start; else stop; start; fi
 }
 lang_cmd() {
-  # genchibi lang [en|vi]: không đối số → in ngôn ngữ của bản cài (GC_LANG trong .env, thiếu = en);
-  # có đối số → ghi GC_LANG vào .env, app đang chạy thì khởi động lại để giao diện mặc định của Studio đổi theo.
-  local want="${1:-}" cur
+  # genchibi lang [en|vi]: không đối số → in ngôn ngữ CLI + mặc định THẬT của Studio (/api/health khi app chạy, không thì data/settings.json).
+  # Có đối số → so với CẢ HAI (không chỉ .env — CNS-153): khác thì ghi GC_LANG vào .env và đổi mặc định của Studio:
+  #   app đang chạy → PUT /api/settings { uiLang, uiLangEnv } (đánh dấu giá trị .env đã áp: lần khởi động sau không áp lại đè lựa chọn Studio về sau);
+  #   app dừng → sửa uiLang / uiLangEnv trong data/settings.json (thiếu khoá thì server tự áp GC_LANG mới ở lần chạy tới).
+  local want="${1:-}" cur real h="" run=""
   cur="$(sed -n 's/^GC_LANG=//p' .env 2>/dev/null | tail -1)"
+  case "$cur" in en|vi) ;; *) cur="" ;; esac
+  h="$(curl -fsS -m 5 "$URL/api/health" 2>/dev/null || true)"; [ -n "$h" ] && run=1
+  if [ -n "$run" ]; then real="$(printf '%s' "$h" | sed -n 's/.*"uiLang"[[:space:]]*:[[:space:]]*"\([A-Za-z_-]*\)".*/\1/p')"; else real="$(settings_lang)"; fi
+  case "$real" in en|vi) ;; *) real="${cur:-en}" ;; esac
   if [ -z "$want" ]; then
-    case "$cur" in vi) ;; *) cur=en ;; esac
-    m lang_now "$(lang_name "$cur")" "$cur"; m lang_hint; return 0
+    m lang_now "$(lang_name "$UI")" "$UI" "$(lang_name "$real")" "$real"; m lang_hint; return 0
   fi
   case "$want" in en|EN|En) want=en ;; vi|VI|Vi) want=vi ;; *) m lang_bad "$want" >&2; exit 1 ;; esac
   UI="$want"   # từ đây nói bằng ngôn ngữ vừa chọn
-  if [ "$cur" = "$want" ]; then m lang_same "$(lang_name "$want")" "$want"; m lang_note; return 0; fi
+  if [ "$cur" = "$want" ] && [ "$real" = "$want" ]; then m lang_same "$(lang_name "$want")" "$want"; m lang_note; return 0; fi
   set_env GC_LANG "$want"
   m lang_set "$(lang_name "$want")" "$want"
-  if curl -fsS -m 5 "$URL/api/health" >/dev/null 2>&1; then m lang_restart; apply_env; else m lang_norun; fi
+  if [ -n "$run" ]; then
+    # API không nhận (app quá cũ, lỗi mạng…) → khởi động lại: server áp GC_LANG mới khi khởi động
+    if api PUT /api/settings "{\"uiLang\":\"$want\",\"uiLangEnv\":\"$want\"}" >/dev/null 2>&1; then m lang_live "$(lang_name "$want")"; else m lang_restart; apply_env; fi
+  else
+    if [ -f data/settings.json ] && grep -q '"uiLang"[[:space:]]*:' data/settings.json; then
+      local tmp; tmp="$(mktemp)"
+      sed -e "s/\"uiLang\"\([[:space:]]*:[[:space:]]*\)\"[A-Za-z_-]*\"/\"uiLang\"\1\"$want\"/" \
+          -e "s/\"uiLangEnv\"\([[:space:]]*:[[:space:]]*\)\"[A-Za-z_-]*\"/\"uiLangEnv\"\1\"$want\"/" data/settings.json > "$tmp" && cat "$tmp" > data/settings.json
+      rm -f "$tmp"
+    fi
+    m lang_norun
+  fi
   m lang_note
 }
 allow_host() { case ",${GC_ALLOWED_HOSTS:-}," in *",$1,"*) ;; *) set_env GC_ALLOWED_HOSTS "${GC_ALLOWED_HOSTS:+$GC_ALLOWED_HOSTS,}$1" ;; esac; }

@@ -310,7 +310,7 @@ const sect = async f => { try { await f(); } catch (e) { if (!process.env.GC_KEE
     fs.writeFileSync(path.join(bd, 'soundpacks', 'goi-cu.json'), JSON.stringify(Object.assign({ version: 1, savedAt: '2026-10-19T00:00:00Z', note: '' }, legacy)));
     const warns = [], ow0 = console.warn; console.warn = (...a) => warns.push(a.join(' '));
     let mb; try { mb = new MCP({ engine: loadEngine(ROOT), store: new Store(bd), version: 't', system: {} }); } finally { console.warn = ow0; }
-    no(!mb.GC.sounds.has('cu-1') || mb.GC.sounds.get('cu-1').cue !== undefined || mb.GC.sounds.cueFor({ state: 'shock' })[0] !== 'sting' || !warns.some(x => /gói âm goi-cu/.test(x)) || !(J(await mb.callTool('start_here', {})).state.warnings || []).some(x => /gói âm goi-cu.*cue: gói dùng chung/.test(x)), 'khởi động: gói chung cũ có cue vẫn nạp (bỏ cue, âm tự gán của khung y nguyên) + cảnh báo log và start_here.warnings: ' + warns.join(' | ').slice(0, 200));
+    no(!mb.GC.sounds.has('cu-1') || mb.GC.sounds.get('cu-1').cue !== undefined || mb.GC.sounds.cueFor({ state: 'shock' })[0] !== 'sting' || !warns.some(x => /^\[mcp\] sound pack goi-cu/.test(x)) || !(J(await mb.callTool('start_here', {})).state.warnings || []).some(x => /gói âm goi-cu.*cue: gói dùng chung/.test(x)), 'khởi động: gói chung cũ có cue vẫn nạp (bỏ cue, âm tự gán của khung y nguyên) + cảnh báo log và start_here.warnings: ' + warns.join(' | ').slice(0, 200));
     console.log('   ✓ CNS-100: gói dùng chung không có cue (lỗi có path, mọi kênh) · link MCP / AI chatroom bắt buộc project + không ghi đè gói dự án khác / gói chung + không force · tự gán của khung ở mọi dự án không đổi · save / validate nhắc phạm vi · gói cũ nạp khoan dung kèm cảnh báo');
   });
 
@@ -332,7 +332,7 @@ const sect = async f => { try { await f(); } catch (e) { if (!process.env.GC_KEE
     const warns = [], ow0 = console.warn; console.warn = (...a) => warns.push(a.join(' '));
     let B; try { B = fresh(dir); } finally { console.warn = ow0; }
     const acts = Object.keys(B.GC.choreo.ACTIONS).filter(k => /^ciBonk$|^ciBowDeep$/.test(k)), P0 = B.GC.choreo.PACKS['local.my/dt-a'];
-    no(acts.length !== 2 || !P0 || JSON.stringify(P0.clips.cc.events) !== '[[0.2,{"hit":true}]]' || !P0.clips.cc2.events[0][1].sfx || !warns.some(x => /gói động tác dt-a/.test(x)), 'p7: khởi động lại → gói động tác dt-a CÒN (cả hai đòn), chỉ sfx thiếu bị bỏ khỏi sự kiện: ' + acts + ' ' + JSON.stringify(P0 && P0.clips.cc.events));
+    no(acts.length !== 2 || !P0 || JSON.stringify(P0.clips.cc.events) !== '[[0.2,{"hit":true}]]' || !P0.clips.cc2.events[0][1].sfx || !warns.some(x => /^\[mcp\] motion pack dt-a/.test(x)), 'p7: khởi động lại → gói động tác dt-a CÒN (cả hai đòn), chỉ sfx thiếu bị bỏ khỏi sự kiện: ' + acts + ' ' + JSON.stringify(P0 && P0.clips.cc.events));
     no(!(J(await B.m.callTool('start_here', {})).state.warnings || []).some(x => /gói động tác dt-a.*a-bop/.test(x)), 'start_here.warnings báo gói động tác nạp khoan dung');
     // Studio nạp cùng cách (tolerant): engine ở trình duyệt dùng cùng registerPack
     const G2 = loadEngine(ROOT); G2.sounds.registerPack(S.pack('am-a'));

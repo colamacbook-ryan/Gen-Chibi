@@ -2,8 +2,10 @@
 # Kiểm ngôn ngữ của trình cài, CLI và tài liệu GitHub (ADR 0007 · INT-18). Không cần Docker, không cần mạng ngoài.
 #   1) bảng câu chữ: mọi khoá dùng tới có đủ ở _en và _vi, không khoá thừa (CLI + trình cài); không cú pháp bash 4 (macOS chạy bash 3.2)
 #   2) install.sh: --lang lạ báo lỗi rõ · không terminal → English, không hỏi, không treo · --lang vi ghi GC_LANG=vi
-#      · GC_LANG=vi (biến môi trường) · cài lại giữ ngôn ngữ cũ · .env trước v0.20 được thêm GC_LANG · câu hỏi song ngữ khi có terminal
-#   3) genchibi lang / lang xx / lang en (ghi .env + khởi động lại app) · trợ giúp en không có chữ có dấu · trợ giúp vi đủ mọi lệnh
+#      · GC_LANG=vi (biến môi trường) · cài lại giữ ngôn ngữ cũ · cài lại bản ≤ v0.19 có dữ liệu (không chọn, không terminal) → KHÔNG ghi GC_LANG,
+#        Studio + CLI giữ tiếng Việt (CNS-152) · câu hỏi song ngữ khi có terminal
+#   3) genchibi lang (CLI + mặc định THẬT của Studio) / lang xx / lang en (ghi .env + đổi mặc định Studio qua API, không khởi động lại)
+#      · Studio đã đổi mà .env vẫn cũ → lang vẫn đồng bộ được (CNS-153, app chạy và app dừng) · trợ giúp en không có chữ có dấu · trợ giúp vi đủ mọi lệnh
 #   4) README.md + tài liệu tiếng Anh không còn chữ tiếng Việt (trừ dòng chuyển ngôn ngữ, tên riêng) · en ↔ vi trỏ nhau · link tương đối không gãy
 # © 2026 Gen Labs — All rights reserved.
 set -u
@@ -65,10 +67,21 @@ HOME="$W/plain-home" "$W/plain-home/.local/bin/genchibi" stop >/dev/null 2>&1
 inst plain
 [ $IRC = 0 ] && [ "$(envlang plain)" = vi ] && echo "$INST_OUT" | grep -q 'Giữ .env cũ'; check $? "cài lại không chọn → giữ ngôn ngữ của bản cài (vi), không hỏi" "mã $IRC"
 HOME="$W/plain-home" "$W/plain-home/.local/bin/genchibi" stop >/dev/null 2>&1
+# bản cài ≤ v0.19 có dữ liệu: .env chưa có GC_LANG, data/ chưa có settings.json nhưng có tác phẩm → chạy lại trình cài, KHÔNG terminal, không chọn (CNS-152)
 grep -v '^GC_LANG=' "$W/plain/.env" > "$W/env.old" && cat "$W/env.old" > "$W/plain/.env"
+rm -f "$W/plain/data/settings.json"; mkdir -p "$W/plain/data/works"; printf '{"id":"cu","title":"Phim cũ","shots":[]}\n' > "$W/plain/data/works/cu.json"
 inst plain
-[ $IRC = 0 ] && [ "$(envlang plain)" = en ] && [ "$(grep -c '^GC_LANG=' "$W/plain/.env")" = 1 ] && grep -q '^GC_MASTER_KEY=' "$W/plain/.env"; check $? ".env trước v0.20 (chưa có GC_LANG) → thêm đúng một dòng GC_LANG=en, giữ các dòng khác" "mã $IRC"
-HOME="$W/plain-home" "$W/plain-home/.local/bin/genchibi" stop >/dev/null 2>&1
+[ $IRC = 0 ] && [ "$(grep -c '^GC_LANG' "$W/plain/.env")" = 0 ] && grep -q '^GC_MASTER_KEY=' "$W/plain/.env" && ! echo "$INST_OUT" | grep -q 'Language / '
+check $? "cài lại bản ≤ v0.19 có dữ liệu, không terminal, không chọn → không hỏi, .env KHÔNG bị ghi GC_LANG, giữ các dòng khác" "mã $IRC: $(grep -n '^GC_LANG' "$W/plain/.env")"
+echo "$INST_OUT" | grep -q 'Ngôn ngữ: giữ nguyên' && echo "$INST_OUT" | grep -q 'đang chạy' && echo "$INST_OUT" | grep -q 'Ngôn ngữ: Tiếng Việt'
+check $? "trình cài báo 'Ngôn ngữ: giữ nguyên', nói tiếng Việt như bản cài đang dùng" "$(echo "$INST_OUT" | sed -n '1,3p;$p')"
+PP="$(sed -n 's/^GC_PORT=//p' "$W/plain/.env")"
+h="$(curl -fsS "http://127.0.0.1:$PP/api/health" 2>/dev/null)"; echo "$h" | grep -q '"uiLang":"vi"'; check $? "server khởi động ra uiLang vi (luật nâng cấp: có dữ liệu → giữ tiếng Việt)" "$h"
+grep -q '"uiLang": *"vi"' "$W/plain/data/settings.json" 2>/dev/null; check $? "settings.json › uiLang = vi (một nguồn sự thật)"
+GP="$W/plain-home/.local/bin/genchibi"
+out="$(env -u GC_LANG HOME="$W/plain-home" "$GP" help)"; echo "$out" | grep -q 'quản lý gen-chibi'; check $? "CLI không có GC_LANG → đọc settings.uiLang → nói tiếng Việt (CNS-152)" "$(echo "$out" | head -1)"
+out="$(env -u GC_LANG HOME="$W/plain-home" "$GP" lang)"; echo "$out" | grep -q 'CLI: Tiếng Việt (vi) · Mặc định của Studio: Tiếng Việt (vi)'; check $? "genchibi lang → 'CLI: Tiếng Việt (vi) · Mặc định của Studio: Tiếng Việt (vi)'" "$out"
+HOME="$W/plain-home" "$GP" stop >/dev/null 2>&1
 
 P_VI="$(freeport)"
 INST_PORT="$P_VI" inst vi --lang vi
@@ -86,6 +99,15 @@ if script --version 2>/dev/null | grep -q util-linux; then
     $TO script -qec "bash '$ROOT/install.sh' --native --dir '$W/tty2' --port $(freeport)" /dev/null 2>&1)"; rc=$?
   HOME="$home" "$home/.local/bin/genchibi" stop >/dev/null 2>&1
   [ $rc = 0 ] && [ "$(envlang tty2)" = en ] && echo "$out" | grep -q 'is running'; check $? "có terminal, bấm Enter → English" "mã $rc: $(echo "$out" | tail -3)"
+  # có terminal, bản ≤ v0.19 có dữ liệu (.env chưa có GC_LANG, có tác phẩm, chưa có settings.json) → KHÔNG hỏi (Enter sẽ là English), không ghi GC_LANG
+  grep -v '^GC_LANG=' "$W/tty2/.env" > "$W/env.old" && cat "$W/env.old" > "$W/tty2/.env"
+  rm -f "$W/tty2/data/settings.json"; mkdir -p "$W/tty2/data/works"; printf '{"id":"cu","title":"Phim cũ","shots":[]}\n' > "$W/tty2/data/works/cu.json"
+  p2="$(sed -n 's/^GC_PORT=//p' "$W/tty2/.env")"
+  out="$(printf '\n' | env -u GC_LANG HOME="$home" GC_TARBALL="$TAR" GC_NO_AUTOCHECK=1 HTTPS_PROXY= https_proxy= NO_PROXY=127.0.0.1,localhost \
+    $TO script -qec "bash '$ROOT/install.sh' --native --dir '$W/tty2' --port $p2" /dev/null 2>&1)"; rc=$?
+  HOME="$home" "$home/.local/bin/genchibi" stop >/dev/null 2>&1
+  [ $rc = 0 ] && ! echo "$out" | grep -q 'Language / ' && [ "$(grep -c '^GC_LANG' "$W/tty2/.env")" = 0 ] && echo "$out" | grep -q 'đang chạy' && grep -q '"uiLang": *"vi"' "$W/tty2/data/settings.json"
+  check $? "có terminal, cài lại bản ≤ v0.19 có dữ liệu → không hỏi, không ghi GC_LANG, Studio giữ vi (settings.uiLang)" "mã $rc · $(cat "$W/tty2/data/settings.json" 2>/dev/null | tr -d '\n') · $(echo "$out" | tail -3)"
 else
   echo "   · bỏ qua ca có terminal: cần 'script' của util-linux"
 fi
@@ -93,26 +115,44 @@ fi
 echo "   3) genchibi lang + trợ giúp"
 G="$W/vi-home/.local/bin/genchibi"
 cli() { env -u GC_LANG HOME="$W/vi-home" GC_NO_AUTOCHECK=1 HTTPS_PROXY= https_proxy= NO_PROXY=127.0.0.1,localhost "$@"; }
-out="$(cli "$G" lang)"; echo "$out" | grep -q 'Ngôn ngữ: Tiếng Việt (vi)'; check $? "genchibi lang → in ngôn ngữ hiện tại (Tiếng Việt (vi))" "$out"
+out="$(cli "$G" lang)"; echo "$out" | grep -q 'CLI: Tiếng Việt (vi) · Mặc định của Studio: Tiếng Việt (vi)'; check $? "genchibi lang → in ngôn ngữ CLI + mặc định thật của Studio" "$out"
 out="$(cli "$G" lang xx 2>&1)"; rc=$?; [ $rc = 1 ] && echo "$out" | grep -q 'xx' && echo "$out" | grep -q 'en (English)' && [ "$(envlang vi)" = vi ]; check $? "genchibi lang xx → thoát 1, nói rõ chỉ có en / vi, .env không đổi" "$rc $out"
 vihelp="$(cli "$G" help)"; enhelp="$(cli env GC_LANG=en "$G" help)"
 cmds() { sed -n 's/^  \([a-z][a-z-]*\).*/\1/p'; }
 [ "$(echo "$vihelp" | cmds | tr '\n' ' ')" = "$(echo "$enhelp" | cmds | tr '\n' ' ')" ] && [ "$(echo "$vihelp" | wc -l)" = "$(echo "$enhelp" | wc -l)" ] && echo "$vihelp" | grep -q 'lang \[en|vi\]' && echo "$vihelp" | grep -q 'quản lý gen-chibi'
 check $? "trợ giúp vi đủ mọi lệnh như bản en ($(echo "$enhelp" | cmds | tr '\n' ' '))"
 ! printf '%s' "$enhelp" | has_vi && echo "$enhelp" | grep -q 'lang \[en|vi\]'; check $? "GC_LANG=en (biến môi trường) thắng .env · trợ giúp en không có chữ có dấu, có lệnh lang"
+grep -q 'X-GC-Lang: \$UI' "$ROOT/cli/genchibi"; check $? "api() của CLI gửi X-GC-Lang theo ngôn ngữ CLI (câu server trả về đúng ngôn ngữ CLI)"
+health_lang() { curl -fsS "http://127.0.0.1:$P_VI/api/health" 2>/dev/null | sed -n 's/.*"uiLang":"\([a-z]*\)".*/\1/p'; }
 P1="$(cat "$W/vi/logs/launcher.pid" 2>/dev/null)"
 out="$(cli "$G" lang en 2>&1)"; rc=$?
-[ $rc = 0 ] && [ "$(envlang vi)" = en ] && echo "$out" | grep -q 'Language set to English' && echo "$out" | grep -q 'Restarting' && echo "$out" | grep -q 'switch language in the Studio'
-check $? "genchibi lang en → ghi GC_LANG=en vào .env, khởi động lại app, nói rõ vẫn đổi riêng trong Studio được (câu báo theo ngôn ngữ mới)" "$rc $out"
-up=1; for i in $(seq 1 40); do curl -fsS "http://127.0.0.1:$P_VI/api/health" >/dev/null 2>&1 && { up=0; break; }; sleep 0.5; done
-P2="$(cat "$W/vi/logs/launcher.pid" 2>/dev/null)"
-[ $up = 0 ] && [ -n "$P2" ] && [ "$P1" != "$P2" ]; check $? "app chạy lại sau khi đổi ngôn ngữ (pid $P1 → $P2)"
-if [ -r "/proc/$P2/environ" ]; then tr '\0' '\n' < "/proc/$P2/environ" | grep -qx 'GC_LANG=en'; check $? "tiến trình app mới nhận GC_LANG=en"; fi
-out="$(cli "$G" lang en)"; echo "$out" | grep -q 'already English' && [ "$(cat "$W/vi/logs/launcher.pid")" = "$P2" ]; check $? "genchibi lang en lần nữa → báo đã là English, không khởi động lại" "$out"
+[ $rc = 0 ] && [ "$(envlang vi)" = en ] && echo "$out" | grep -q 'Language set to English' && echo "$out" | grep -q 'Studio default switched to English' && echo "$out" | grep -q 'switch language in the Studio' && [ "$(health_lang)" = en ]
+check $? "genchibi lang en (app chạy) → ghi GC_LANG=en vào .env + đổi mặc định Studio ngay qua API (/api/health › uiLang = en), câu báo theo ngôn ngữ mới" "$rc $out"
+[ "$(cat "$W/vi/logs/launcher.pid" 2>/dev/null)" = "$P1" ]; check $? "không cần khởi động lại app (pid $P1 giữ nguyên)"
+out="$(cli "$G" lang en)"; echo "$out" | grep -q 'already English' && [ "$(cat "$W/vi/logs/launcher.pid")" = "$P1" ]; check $? "genchibi lang en lần nữa → báo đã là English, không đổi gì" "$out"
 out="$(cli "$G" help)"; ! printf '%s' "$out" | has_vi && echo "$out" | grep -q '^genchibi — manage gen-chibi'; check $? "sau lang en: trợ giúp mặc định tiếng Anh, không chữ có dấu"
+# probe C (CNS-153): Studio đổi mặc định của máy sang vi trong khi .env vẫn en → genchibi lang thấy lệch, lang en vẫn đổi lại được
+curl -fsS -X PUT -H 'X-GC-Request: 1' -H 'Content-Type: application/json' -d '{"uiLang":"vi"}' "http://127.0.0.1:$P_VI/api/settings" >/dev/null
+out="$(cli "$G" lang)"; echo "$out" | grep -q 'CLI: English (en) · Studio default: Tiếng Việt (vi)'; check $? "Studio đổi sang vi, .env en → genchibi lang báo đúng cả hai: 'CLI: English (en) · Studio default: Tiếng Việt (vi)'" "$out"
+out="$(cli "$G" lang en)"; ! echo "$out" | grep -q 'already' && [ "$(health_lang)" = en ]; check $? "genchibi lang en khi .env đã en mà Studio vi → không báo 'already', mặc định Studio về en" "$out"
+cli "$G" restart >/dev/null 2>&1
+up=1; for i in $(seq 1 40); do curl -fsS "http://127.0.0.1:$P_VI/api/health" >/dev/null 2>&1 && { up=0; break; }; sleep 0.5; done
+[ $up = 0 ] && [ "$(health_lang)" = en ]; check $? "khởi động lại sau đó → vẫn en (giá trị .env đã áp qua API, không lệch)" "$(health_lang)"
 cli "$G" stop >/dev/null 2>&1
-out="$(cli "$G" lang vi)"; echo "$out" | grep -q 'Đã đặt ngôn ngữ Tiếng Việt' && echo "$out" | grep -q 'App đang không chạy' && [ "$(envlang vi)" = vi ]; check $? "app đang dừng: genchibi lang vi chỉ ghi .env, báo áp dụng ở lần chạy tới (không tự chạy app)" "$out"
+out="$(cli "$G" lang vi)"; echo "$out" | grep -q 'Đã đặt ngôn ngữ Tiếng Việt' && echo "$out" | grep -q 'App đang không chạy' && [ "$(envlang vi)" = vi ] && grep -q '"uiLang": *"vi"' "$W/vi/data/settings.json"
+check $? "app đang dừng: genchibi lang vi ghi .env + data/settings.json › uiLang, báo áp dụng ở lần chạy tới (không tự chạy app)" "$out"
 ! curl -fsS "http://127.0.0.1:$P_VI/api/health" >/dev/null 2>&1; check $? "app vẫn dừng sau lang vi"
+# app dừng, .env đã vi nhưng mặc định Studio đang en (Studio đổi trước khi dừng) → lang vi vẫn sửa settings.json; chạy lại → vi
+sed 's/"uiLang": *"vi"/"uiLang": "en"/' "$W/vi/data/settings.json" > "$W/st.tmp" && cat "$W/st.tmp" > "$W/vi/data/settings.json"
+out="$(cli "$G" lang vi)"; ! echo "$out" | grep -q 'đã là' && grep -q '"uiLang": *"vi"' "$W/vi/data/settings.json"; check $? "app dừng, .env vi + Studio en → lang vi không báo 'đã là', sửa settings.json về vi" "$out"
+cli "$G" start >/dev/null 2>&1
+up=1; for i in $(seq 1 40); do curl -fsS "http://127.0.0.1:$P_VI/api/health" >/dev/null 2>&1 && { up=0; break; }; sleep 0.5; done
+[ $up = 0 ] && [ "$(health_lang)" = vi ]; check $? "chạy lại → /api/health › uiLang = vi" "$(health_lang)"
+# chạy lại trình cài với --lang vi (lựa chọn CÓ CHỦ Ý) khi .env đã vi nhưng Studio vừa đổi sang en → trình cài đồng bộ mặc định Studio về vi
+curl -fsS -X PUT -H 'X-GC-Request: 1' -H 'Content-Type: application/json' -d '{"uiLang":"en"}' "http://127.0.0.1:$P_VI/api/settings" >/dev/null
+inst vi --lang vi
+[ $IRC = 0 ] && [ "$(envlang vi)" = vi ] && [ "$(health_lang)" = vi ]; check $? "cài lại --lang vi khi Studio đang en (.env đã vi) → mặc định Studio về vi (lựa chọn rõ thắng)" "mã $IRC · uiLang $(health_lang)"
+cli "$G" stop >/dev/null 2>&1
 
 echo "   4) README + tài liệu"
 DOCS_OUT="$(node -e '

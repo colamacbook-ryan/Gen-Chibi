@@ -523,7 +523,7 @@ try {
     const dirC = mkdtempSync(path.join(tmpdir(), 'gc-oauthbad-')), warns = [];
     writeFileSync(path.join(dirC, 'oauth.json'), '{hỏng nặng');
     const oc2 = new OAuth({ dir: dirC, publicUrl: H, now: () => now, warn: m => warns.push(m) }), left = readdirSync(dirC), kept = left.find(f => /^oauth\.json\.corrupt-\d+$/.test(f));
-    ok(kept && !left.includes('oauth.json') && readFileSync(path.join(dirC, kept), 'utf8') === '{hỏng nặng' && warns.length === 1 && /hỏng/.test(warns[0]) && Object.keys(oc2.s.clients).length === 0, 'oauth.json hỏng → đổi tên oauth.json.corrupt-<ts> (giữ nguyên nội dung) + cảnh báo + bắt đầu trống');
+    ok(kept && !left.includes('oauth.json') && readFileSync(path.join(dirC, kept), 'utf8') === '{hỏng nặng' && warns.length === 1 && /^\[oauth\] oauth\.json is corrupt /.test(warns[0]) && Object.keys(oc2.s.clients).length === 0, 'oauth.json hỏng → đổi tên oauth.json.corrupt-<ts> (giữ nguyên nội dung) + cảnh báo (log tiếng Anh, CNS-156) + bắt đầu trống');
     const dirD = mkdtempSync(path.join(tmpdir(), 'gc-oauthbad2-')); writeFileSync(path.join(dirD, 'oauth.json'), '[1,2]'); const w2 = []; new OAuth({ dir: dirD, publicUrl: H, now: () => now, warn: m => w2.push(m) });
     ok(readdirSync(dirD).some(f => f.includes('.corrupt-')) && w2.length === 1, 'oauth.json là JSON hợp lệ nhưng không phải đối tượng → cũng giữ lại + cảnh báo');
     const dirE = mkdtempSync(path.join(tmpdir(), 'gc-oauthbad3-')), w3 = []; new OAuth({ dir: dirE, publicUrl: H, now: () => now, warn: m => w3.push(m) }); ok(w3.length === 0 && readdirSync(dirE).length === 0, 'chưa có oauth.json (lần đầu) → không cảnh báo, không tạo gì');

@@ -247,16 +247,16 @@ class MCP {
     if (!this.GC.PACKS[MY_PACK]) this.GC.pack({ id: MY_PACK, name: 'Của tôi', owner: 'Bạn', group: 'mine', visibility: 'private', license: 'Thuộc người tạo' }, () => {});
     if (!this.GC.PACKS[TMP_PACK]) this.GC.pack({ id: TMP_PACK, name: 'Bàn soát (tạm)', owner: 'Bạn', group: 'mine', visibility: 'private', license: 'Thuộc người tạo' }, () => {});
     (this.store.listParts ? this.store.listParts() : []).forEach(d => this.GC.registerDataPart(MY_PACK, d));
-    (this.store.listItems ? this.store.listItems() : []).forEach(d => { const r = this.GC.registerItem(MY_PACK, d); if (r.errors.length) console.warn('bỏ item', d.id, r.errors); });
-    (this.store.listScenes ? this.store.listScenes() : []).forEach(d => { const r = this.GC.registerScene(MY_PACK, d); if (r.errors.length) console.warn('bỏ cảnh', d.id, r.errors); });
+    (this.store.listItems ? this.store.listItems() : []).forEach(d => { const r = this.GC.registerItem(MY_PACK, d); if (r.errors.length) console.warn('[mcp] dropped item', d.id, enList(r.errors)); });
+    (this.store.listScenes ? this.store.listScenes() : []).forEach(d => { const r = this.GC.registerScene(MY_PACK, d); if (r.errors.length) console.warn('[mcp] dropped scene', d.id, enList(r.errors)); });
     // gói âm (v0.18) nạp TRƯỚC gói động tác: sự kiện của gói động tác có thể gọi tên âm của gói âm cùng dự án
     // NẠP KHOAN DUNG (CNS-102): gói đã lưu từ trước mà nay có chỗ không còn hợp lệ (âm bị bỏ khỏi gói âm, cue của gói chung…) → bỏ RIÊNG chỗ sai + cảnh báo
     // (log + start_here.warnings), KHÔNG loại cả gói — cổng nghiêm vẫn ở lúc LƯU
     this.bootWarnings = [];
     // mẫu câu theo loại (msgid có placeholder: Studio / agent dịch được cả câu)
-    const bw = (tpl, id, list) => { if (list && list.length) { console.warn(tpl.split(': {msg}')[0].replace('{id}', id), list); list.slice(0, 3).forEach(m => { if (this.bootWarnings.length < 20) this.bootWarnings.push(tr(VI, tpl, { id, msg: String(m).slice(0, 240) })); }); } };
-    (this.store.listSoundPacks ? this.store.listSoundPacks() : []).forEach(d => { try { const r = this.GC.sounds.registerPack(d, { tolerant: true }); if (r.errors.length) bw(tr(VI, 'bỏ gói âm {id}: {msg}'), d.id, r.errors); else bw(tr(VI, 'gói âm {id}: {msg}'), d.id, r.notes); } catch (e) { console.warn('bỏ gói âm hỏng', d && d.id, e.message); } });
-    (this.store.listMotionPacks ? this.store.listMotionPacks() : []).forEach(d => { try { const r = this.GC.choreo.registerPack(MY_PACK, d, { tolerant: true }); if (r.errors.length) bw(tr(VI, 'bỏ gói động tác {id}: {msg}'), d.id, r.errors); else bw(tr(VI, 'gói động tác {id}: {msg}'), d.id, r.notes); } catch (e) { console.warn('bỏ gói động tác hỏng', d && d.id, e.message); } });   // tệp sửa tay hỏng không được chặn server khởi động
+    const bw = (tpl, id, list) => { if (list && list.length) { console.warn('[mcp] ' + MSG.en(tpl).split(': {msg}')[0].replace('{id}', id), enList(list)); list.slice(0, 3).forEach(m => { if (this.bootWarnings.length < 20) this.bootWarnings.push(tr(VI, tpl, { id, msg: String(m).slice(0, 240) })); }); } };
+    (this.store.listSoundPacks ? this.store.listSoundPacks() : []).forEach(d => { try { const r = this.GC.sounds.registerPack(d, { tolerant: true }); if (r.errors.length) bw(tr(VI, 'bỏ gói âm {id}: {msg}'), d.id, r.errors); else bw(tr(VI, 'gói âm {id}: {msg}'), d.id, r.notes); } catch (e) { console.warn('[mcp] dropped broken sound pack', d && d.id, MSG.en(e.message)); } });
+    (this.store.listMotionPacks ? this.store.listMotionPacks() : []).forEach(d => { try { const r = this.GC.choreo.registerPack(MY_PACK, d, { tolerant: true }); if (r.errors.length) bw(tr(VI, 'bỏ gói động tác {id}: {msg}'), d.id, r.errors); else bw(tr(VI, 'gói động tác {id}: {msg}'), d.id, r.notes); } catch (e) { console.warn('[mcp] dropped broken motion pack', d && d.id, MSG.en(e.message)); } });   // tệp sửa tay hỏng không được chặn server khởi động
   }
   sync() {
     if (this._bulk) return;

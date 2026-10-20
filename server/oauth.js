@@ -110,8 +110,8 @@ class OAuth {
       try { d = JSON.parse(fs.readFileSync(this.file, 'utf8')); if (!d || typeof d !== 'object' || Array.isArray(d)) throw new Error('không phải đối tượng JSON'); }
       catch (e) {
         d = {}; const bak = this.file + '.corrupt-' + Date.now();
-        try { fs.renameSync(this.file, bak); /* i18n-ignore(nhật ký máy chủ) */ (opts.warn || (() => {}))('[oauth] oauth.json hỏng (' + e.message + ') — đã đổi tên thành ' + path.basename(bak) + ', bắt đầu với danh sách trống'); }
-        catch (e2) { (opts.warn || (() => {}))('[oauth] oauth.json hỏng và không đổi tên được: ' + e2.message); }   // i18n-ignore(nhật ký máy chủ)
+        try { fs.renameSync(this.file, bak); /* i18n-ignore(nhật ký máy chủ) */ (opts.warn || (() => {}))('[oauth] oauth.json is corrupt (' + MSG.en(e.message) + ') — renamed to ' + path.basename(bak) + ', starting with an empty list'); }
+        catch (e2) { (opts.warn || (() => {}))('[oauth] oauth.json is corrupt and could not be renamed: ' + e2.message); }   // nhật ký máy chủ: tiếng Anh (CNS-156)
       }
     }
     this.s = { v: 1, clients: nul(d.clients), grants: nul(d.grants), tokens: nul(d.tokens) };

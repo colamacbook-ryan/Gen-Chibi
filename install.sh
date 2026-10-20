@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # gen-chibi — one-command installer (Linux, macOS). Every value has a default; the only question is the language,
 # asked once in an interactive terminal (Enter = English) and skipped when there is no terminal (CI, pipes).
+# Running it again over an existing install without --lang keeps the language in use (the Studio default is never changed).
 #   curl -fsSL https://raw.githubusercontent.com/colamacbook-ryan/Gen-Chibi/main/install.sh | bash
 #   curl -fsSL https://raw.githubusercontent.com/colamacbook-ryan/Gen-Chibi/main/install.sh | bash -s -- --lang vi
 # Options: --dir <folder> (default ~/gen-chibi) · --port <port> (7480) · --native (run with Node, no Docker)
@@ -43,6 +44,7 @@ _en() {
     tok_bad) F="GC_GITHUB_TOKEN has invalid characters — copy the token again (letters, digits, _ . - only)." ;;
     banner) F="%sgen-chibi%s · installing to %s · %s %s" ;;
     lang_ok) F="Language: English (switch later: genchibi lang vi)" ;;
+    lang_kept) F="Language: kept (Studio default unchanged; switch: genchibi lang en|vi)" ;;
     docker_installing) F="Docker not found — installing Docker (get.docker.com)…" ;;
     docker_fail) F="Could not install Docker, and Node ≥ 18 is not available." ;;
     native_fallback) F="Docker is not running: using Node mode directly." ;;
@@ -87,6 +89,7 @@ _vi() {
     tok_bad) F="GC_GITHUB_TOKEN có ký tự lạ — chép lại token (chỉ gồm chữ, số, _ . -)." ;;
     banner) F="%sgen-chibi%s · cài vào %s · %s %s" ;;
     lang_ok) F="Ngôn ngữ: Tiếng Việt (đổi sau: genchibi lang en)" ;;
+    lang_kept) F="Ngôn ngữ: giữ nguyên (mặc định của Studio không đổi; đổi: genchibi lang en|vi)" ;;
     docker_installing) F="Chưa có Docker — đang cài Docker (get.docker.com)…" ;;
     docker_fail) F="Không cài được Docker và máy chưa có Node ≥ 18." ;;
     native_fallback) F="Không thấy Docker đang chạy: dùng chế độ Node trực tiếp." ;;
@@ -144,8 +147,14 @@ ask_lang() {
   if ! read -r -t 60 a < /dev/tty; then a=""; printf "\n" > /dev/tty; fi   # hết 60 giây hay EOF → English, không treo
   case "$a" in 2|vi|VI|v|V) echo vi ;; *) echo en ;; esac
 }
+studio_lang() { # mặc định của Studio đang dùng (data/settings.json › uiLang, do server ghi) — sed, không cần node / jq
+  sed -n 's/.*"uiLang"[[:space:]]*:[[:space:]]*"\([A-Za-z_-]*\)".*/\1/p' "$DIR/data/settings.json" 2>/dev/null | head -1 || true
+}
+# MỘT nguồn sự thật cho ngôn ngữ của máy: data/settings.json › uiLang. GC_LANG trong .env chỉ là giá trị KHỞI TẠO (cài mới) hoặc ghi đè CÓ CHỦ Ý.
 LANG_SET=""   # có giá trị khi người cài chọn rõ (--lang / GC_LANG / câu hỏi) → ghi vào .env cả khi .env đã có
-OLD="$( [ -f "$DIR/.env" ] && sed -n 's/^GC_LANG=//p' "$DIR/.env" | tail -1 || true)"   # ngôn ngữ của bản cài cũ (cài lại / nâng cấp)
+KEPT=""       # bản cài đã có (.env chưa có GC_LANG — trước v0.20 — hoặc đã có settings.json) mà lần này không chọn → không hỏi, không ghi GC_LANG:
+              # server áp luật nâng cấp (có dữ liệu → giữ tiếng Việt), mặc định của Studio giữ nguyên (CNS-152)
+OLD="$( [ -f "$DIR/.env" ] && sed -n 's/^GC_LANG=//p' "$DIR/.env" | tail -1 || true)"   # ngôn ngữ ghi trong .env của bản cài cũ (cài lại / nâng cấp)
 if [ -n "$HAS_LANG_ARG" ]; then
   UI="$(lang_of "$LANG_ARG")"; [ -n "$UI" ] || bad_lang "$LANG_ARG"; LANG_SET="$UI"
 elif [ -n "${GC_LANG:-}" ]; then
@@ -153,7 +162,12 @@ elif [ -n "${GC_LANG:-}" ]; then
 else
   UI="$(lang_of "$OLD")"
   if [ -z "$UI" ]; then
-    if [ -z "$HELP$BADOPT" ] && can_ask; then UI="$(ask_lang)"; LANG_SET="$UI"; else UI=en; fi
+    if [ -f "$DIR/.env" ] || [ -f "$DIR/data/settings.json" ]; then
+      # trình cài nói theo mặc định của Studio; chưa có (bản ≤ v0.19 chưa chạy v0.20 lần nào) mà .env có sẵn → tiếng Việt (≤ v0.19 chỉ có tiếng Việt)
+      KEPT=1; UI="$(lang_of "$(studio_lang)")"
+      if [ -z "$UI" ]; then if [ -f "$DIR/.env" ]; then UI=vi; else UI=en; fi; fi
+    elif [ -z "$HELP$BADOPT" ] && can_ask; then UI="$(ask_lang)"; LANG_SET="$UI"
+    else UI=en; fi
   fi
 fi
 [ -z "$HELP" ] || { say usage; exit 0; }
@@ -168,7 +182,7 @@ case "$TOKEN" in *[!A-Za-z0-9_.-]*) die tok_bad ;; esac
 sha256() { if command -v sha256sum >/dev/null; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
 
 say banner "$B" "$N" "$DIR" "$OS" "$ARCH"
-ok lang_ok
+if [ -n "$KEPT" ]; then ok lang_kept; else ok lang_ok; fi
 
 # ---------- chọn cách chạy
 node_ok() { command -v node >/dev/null && [ "$(node -p 'process.versions.node.split(".")[0]')" -ge 18 ]; }
@@ -260,6 +274,7 @@ env_put() { # env_put KHOÁ BIẾN_CHỨA_GIÁ_TRỊ
 # ---------- .env (sinh một lần; không có bí mật mặc định)
 if [ ! -f "$DIR/.env" ]; then
   KEY="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  ENV_LANG="$UI"; [ -z "$KEPT" ] || ENV_LANG=""   # dữ liệu có sẵn mà không chọn: không đặt GC_LANG (giữ mặc định của Studio)
   cat > "$DIR/.env" <<EOF
 # gen-chibi — generated at install time. Do not share this file.
 GC_MODE=$MODE
@@ -270,8 +285,8 @@ GC_AUTO_UPDATE=1
 GC_UID=$(id -u)
 GC_GID=$(id -g)
 GC_REPO=$REPO
-# Interface language (CLI + Studio default): en | vi — change with: genchibi lang vi|en
-GC_LANG=$UI
+# Interface language (CLI + initial Studio default): en | vi — change with: genchibi lang vi|en (empty = follow the Studio default)
+GC_LANG=$ENV_LANG
 # Private repo: fine-grained read-only token (Contents: Read-only) for auto-update
 GC_GITHUB_TOKEN=$TOKEN
 # Open to other machines on the network: set GC_BIND=0.0.0.0, GC_ALLOWED_HOSTS=<host name> and GC_API_TOKEN=<long random string>
@@ -294,8 +309,8 @@ EOF
 else
   sed -i.bak "s/^GC_MODE=.*/GC_MODE=$MODE/" "$DIR/.env" && rm -f "$DIR/.env.bak"
   [ -z "$TOKEN" ] || { env_put GC_GITHUB_TOKEN TOKEN; chmod 600 "$DIR/.env"; ok env_token; }
-  # ngôn ngữ: chọn rõ lần này → ghi đè; .env cũ (trước v0.20) chưa có GC_LANG hoặc giá trị lạ → ghi giá trị đang dùng
-  if [ -n "$LANG_SET" ] || [ -z "$(lang_of "$OLD")" ]; then env_put GC_LANG UI; fi
+  # ngôn ngữ: CHỈ ghi khi người cài chọn rõ lần này. .env cũ (trước v0.20) chưa có GC_LANG → không ghi gì: server giữ ngôn ngữ đang dùng (CNS-152)
+  if [ -n "$LANG_SET" ]; then env_put GC_LANG UI; fi
   ok env_kept
 fi
 
@@ -309,7 +324,12 @@ case ":$PATH:" in *":$BIN:"*) ;; *) warn path_hint "$BIN" "$(basename "${SHELL:-
 step starting
 "$BIN/genchibi" start >/dev/null
 for i in $(seq 1 60); do
-  if curl -fsS "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1; then
+  if H="$(curl -fsS "http://127.0.0.1:$PORT/api/health" 2>/dev/null)"; then
+    SL="$(lang_of "$(printf '%s' "$H" | sed -n 's/.*"uiLang"[[:space:]]*:[[:space:]]*"\([A-Za-z_-]*\)".*/\1/p')")"
+    # chọn rõ mà mặc định của Studio vẫn khác (.env đã đúng từ trước, Studio từng đổi; hoặc app cũ còn chạy) → genchibi lang đồng bộ qua API
+    if [ -n "$LANG_SET" ] && [ -n "$SL" ] && [ "$SL" != "$UI" ]; then "$BIN/genchibi" lang "$UI" >/dev/null 2>&1 || true; fi
+    # giữ nguyên: tóm tắt nói theo mặc định THẬT của Studio (server vừa áp luật nâng cấp)
+    if [ -n "$KEPT" ] && [ -n "$SL" ]; then UI="$SL"; fi
     printf "\n%s" "$G"; _t running; printf "%s$F%s\n" "" "$VER" "$N"
     say sum_studio "$B" "http://localhost:$PORT" "$N"
     say sum_cmds
