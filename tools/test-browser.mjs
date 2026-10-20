@@ -2834,6 +2834,38 @@ if (!ONLY || ONLY === 'i18n') {
     if (uniq.length) throw new Error('chế độ en còn ' + uniq.length + ' lỗi (chữ tiếng Việt chưa dịch / bố cục chồng lấn) trên giao diện:\n      ' + uniq.slice(0, 60).join('\n      '));
     if (pendingSeen.size) console.log('  ! ' + pendingSeen.size + ' câu động của engine (core.js, cổng kiểm) còn tiếng Việt — chờ builder engine: ' + [...pendingSeen].slice(0, 4).map(x => JSON.stringify(x.slice(0, 40))).join(', ') + (pendingSeen.size > 4 ? '…' : ''));
     console.log('  ✓ Chế độ en: không còn chữ tiếng Việt trên ' + (nPages + 6) + ' trang / tab (Xưởng, Thư viện mọi mục, Tạo tác + 5 tab phòng làm phim, Hệ thống, dock Trợ lý AI) + phim HTML xuất ra (nút, bảng player, mở file://) — trừ nội dung người dùng (' + USER.length + ' chuỗi của bộ mẫu)');
+    // 6) CNS-155: chữ HỆ THỐNG điền sẵn vào ô nhập của "Tạo asset mới" (tên, mã, mô tả chép từ khung). Bước quét trên bỏ input / textarea vì coi là nội dung
+    //    người dùng — nhưng chữ điền sẵn mà người dùng giữ nguyên sẽ THÀNH nội dung người dùng (không dịch được nữa). Mở form từ MỌI khung nhân vật / vật phẩm /
+    //    bối cảnh ở chế độ en, quét ngay sau khi mở: không còn chữ Việt; tên = "New character | New item | New scene", mã sinh từ tên tiếng Anh
+    await qe.evaluate(() => localStorage.setItem('gc-route-xuong', JSON.stringify({ page: 'create' })));
+    await qe.goto(U + 'xuong?lang=en'); await ready(qe); await qe.waitForSelector('.split.create .libcard');
+    const L6 = '.split.create > .stack:first-child', pre = [];
+    let nForms = 0;
+    for (const [kind, name, idRe] of [['Character', 'New character', /^new-character(-\d+)?$/], ['Item', 'New item', /^new-item(-\d+)?$/], ['Scene', 'New scene', /^new-scene(-\d+)?$/]]) {
+      await qe.click(L6 + ' .seg button:text-is("' + kind + '")'); await qe.waitForTimeout(250);
+      const nf = await qe.$$eval(L6 + ' .libgrid .libcard', els => els.length);
+      if (!nf) throw new Error('Tạo asset mới (en): không có khung ' + kind);
+      for (let i = 0; i < nf; i++) {
+        const card = (await qe.$$(L6 + ' .libgrid .libcard'))[i], key = await card.getAttribute('title');
+        await card.click(); await qe.waitForSelector(L6 + ' input.mono'); nForms++;
+        const v = await qe.$$eval(L6 + ' input, ' + L6 + ' textarea', els => els.filter(e => e.value && !/^(color|range|number|checkbox|radio|hidden)$/.test(e.type))
+          .map(e => [(e.closest('label') ? e.closest('label').textContent.trim() : e.getAttribute('aria-label') || e.tagName.toLowerCase()).slice(0, 24), e.value, e.classList.contains('mono')]));
+        v.filter(([, val]) => VI.test(val)).forEach(([f, val]) => pre.push(kind + ' ' + key + ' · ô "' + f + '" = ' + JSON.stringify(val.slice(0, 80))));
+        const nm = (v.find(x => x[0] === 'Name') || [])[1], id = (v.find(x => x[2]) || [])[1];
+        if (nm !== name) pre.push(kind + ' ' + key + ' · tên điền sẵn = ' + JSON.stringify(nm) + ' (cần "' + name + '")');
+        if (!idRe.test(id || '')) pre.push(kind + ' ' + key + ' · mã điền sẵn = ' + JSON.stringify(id) + ' (cần ' + idRe + ')');
+      }
+    }
+    if (pre.length) throw new Error('chế độ en: form "Tạo asset mới" điền sẵn chữ chưa dịch (' + pre.length + '):\n      ' + pre.slice(0, 30).join('\n      '));
+    // chế độ vi giữ nguyên từng chữ như trước v0.20 (tên + mã + mô tả chép từ khung)
+    await qe.goto(U + 'xuong?lang=vi'); await ready(qe); await qe.waitForSelector('.split.create .libcard');
+    for (const [kind, key, name, id, desc] of [['Nhân vật', 'gen.khung/ma-no-canh', 'Nhân vật mới', 'nhan-vat-moi', null], ['Vật phẩm', 'gen.khung/khung-vu-khi-dai', 'vũ khí dài mới', 'vu-khi-dai-moi', 'Khối đại diện — gốc để tạo vật phẩm cùng dáng.'], ['Bối cảnh', 'gen.khung/san-khau-chuan', 'Cảnh mới', 'canh-moi', null]]) {
+      await qe.click(L6 + ' .seg button:text-is("' + kind + '")'); await qe.waitForTimeout(250);
+      await qe.click(L6 + ' .libgrid .libcard[title="' + key + '"]'); await qe.waitForSelector(L6 + ' input.mono');
+      const got = await qe.evaluate(L => { const f = [...document.querySelectorAll(L + ' label.fld')], val = t => { const l = f.find(x => x.firstChild && x.firstChild.textContent === t); return l && l.querySelector('input') ? l.querySelector('input').value : null; }; return [val('Tên'), val('Mã (id)'), val('Mô tả')]; }, L6);
+      if (got[0] !== name || got[1] !== id || (desc && got[2] !== desc)) throw new Error('chế độ vi: form "Tạo asset mới" (' + key + ') đổi chữ điền sẵn: ' + JSON.stringify(got) + ' (cần ' + JSON.stringify([name, id, desc]) + ')');
+    }
+    console.log('  ✓ Chế độ en: form "Tạo asset mới" mở từ ' + nForms + ' khung (nhân vật / vật phẩm / bối cảnh) — ô nhập điền sẵn không còn chữ Việt; tên "New …", mã new-character / new-item / new-scene; chế độ vi giữ nguyên "Nhân vật mới" / "vũ khí dài mới" / "Cảnh mới" + mã cũ');
     // 7) CNS-151: ô nghe thử giọng (Thư viện › Giọng) khi trình duyệt chưa chọn ngôn ngữ nghe thử → theo ngôn ngữ giao diện, không mặc định tiếng Việt
     await qe.evaluate(() => { localStorage.removeItem('gc-voice'); localStorage.setItem('gc-route-thu-vien', JSON.stringify({ page: 'lib-voices' })); });
     await qe.goto(U + 'thu-vien?lang=en'); await ready(qe); await qe.waitForSelector('#lvLang');

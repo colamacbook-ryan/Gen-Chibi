@@ -4663,19 +4663,24 @@
       if (kind === 'item') return GC.items().filter(function (x) { return groupOf(x) === 'frame'; });
       return GC.scenes().filter(function (x) { return groupOf(x) === 'frame'; });
     }
-    function uniq(base, map) { var id = base || 'asset-moi', n = 2; while (map[MY_PACK + '/' + id]) id = (base || 'asset-moi') + '-' + n++; return id; }
+    // id mặc định sinh từ TÊN ĐÃ DỊCH (CNS-155): en new-character · new-item · new-scene · new-asset; vi giữ nhan-vat-moi · vu-khi-dai-moi · canh-moi · asset-moi
+    function uniq(base, map) { var b = base || slugify(_t('Asset mới')) || 'asset', id = b, n = 2; while (map[MY_PACK + '/' + id]) id = b + '-' + n++; return id; }
     function start(kind, fr) {
       u.kind = kind; u.frame = fr; u.saved = null;
       var d = clone(fr);
       delete d.key; delete d.savedAt; delete d.note;
       d.pack = MY_PACK; d.status = 'draft'; d.version = 0; d.project = u.project;
+      // chữ HỆ THỐNG điền sẵn vào ô nhập (tên, mô tả chép từ khung) phải theo ngôn ngữ giao diện — điền rồi là nội dung người dùng, không dịch được nữa (INT-18c)
+      if (typeof d.description === 'string') d.description = _l(d.description);
       if (kind === 'character') {
-        d.name = _t('Nhân vật mới'); d.id = uniq('nhan-vat-moi', GC.ASSETS); d.code = nextCode(); d.faction = ''; d.role = ''; d.han = ''; d.persona = '';
+        d.name = _t('Nhân vật mới'); d.id = uniq(slugify(d.name), GC.ASSETS); d.code = nextCode(); d.faction = ''; d.role = ''; d.han = ''; d.persona = '';
         d.expressions = {}; d.lines = {}; d.identity = { p1: '', must: [], source: '' }; d.look.palette = clone(d.look.palette || {});
       } else if (kind === 'item') {
-        d.name = _t('{replace} mới', { replace: fr.name.replace(/^Khung /, '') }); d.id = uniq(slugify(d.name), GC.ITEMS); d.equip.palette = d.equip.palette || {}; d.equip.params = d.equip.params || {}; d.stats = d.stats || {};
+        // tiếng Việt: "<tên khung bỏ chữ Khung> mới" như trước; tên khung không có bản dịch đứng riêng (và bản dịch phải giữ đủ {replace}) → ngôn ngữ khác dùng câu chung
+        d.name = I18N.lang() === I18N.SOURCE ? _t('{replace} mới', { replace: fr.name.replace(/^Khung /, '') }) : _t('Vật phẩm mới');
+        d.id = uniq(slugify(d.name), GC.ITEMS); d.equip.palette = d.equip.palette || {}; d.equip.params = d.equip.params || {}; d.stats = d.stats || {};
       } else {
-        d.name = _t('Cảnh mới'); d.id = uniq('canh-moi', GC.SCENES); d.palette = d.palette || {};
+        d.name = _t('Cảnh mới'); d.id = uniq(slugify(d.name), GC.SCENES); d.palette = d.palette || {};
       }
       u.d = d; u.idTouched = false;
       paint();
@@ -4708,7 +4713,7 @@
       if (!u.d) { right.appendChild(h('div', { class: 'panel pad note', text: _t('Chọn một khung bên trái để bắt đầu. Nhân vật dựng từ ma-nơ-canh; vật phẩm từ khối đại diện theo dáng; bối cảnh từ sân khấu chuẩn.') })); return; }
       // ② tham số & chi tiết
       var d = u.d, f = h('div', { class: 'pad stack' });
-      var nm = h('input', { type: 'text', value: d.name, maxlength: 40, oninput: function () { d.name = nm.value; if (!u.idTouched) { var map = u.kind === 'character' ? GC.ASSETS : u.kind === 'item' ? GC.ITEMS : GC.SCENES; d.id = uniq(slugify(nm.value) || 'asset-moi', map); idI.value = d.id; } changed(); } });
+      var nm = h('input', { type: 'text', value: d.name, maxlength: 40, oninput: function () { d.name = nm.value; if (!u.idTouched) { var map = u.kind === 'character' ? GC.ASSETS : u.kind === 'item' ? GC.ITEMS : GC.SCENES; d.id = uniq(slugify(nm.value), map); idI.value = d.id; } changed(); } });
       var idI = h('input', { type: 'text', value: d.id, maxlength: 64, class: 'mono', oninput: function () { u.idTouched = true; d.id = idI.value.trim(); changed(); } });
       f.appendChild(h('div', { class: 'row' }, field(_t('Tên'), nm), field(_t('Mã (id)'), idI)));
       if (u.kind === 'character') charParams(d, f); else if (u.kind === 'item') itemParams(d, f); else sceneParams(d, f);
