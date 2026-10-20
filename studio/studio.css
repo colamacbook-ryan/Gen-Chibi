@@ -563,3 +563,5 @@ body.dock-open:not(.dock-narrow) .toast { right: calc(var(--dock-w, 0px) + 20px)
 .pagehead .actions { min-width: 0; flex: 0 1 auto; }
 .pagehead .actions > .note { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @container pane (max-width: 1000px) { .detail .panel, .split.create .panel { overflow-x: auto; } }
+/* chuyển ngôn ngữ (ADR 0007): EN | VI ở chân thanh bên — nhỏ, luôn thấy */
+.langsw .seg button { padding: 2px 9px; font-size: 11px; letter-spacing: .04em; }

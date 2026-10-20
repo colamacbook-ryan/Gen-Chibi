@@ -8,6 +8,7 @@
 (function () {
   'use strict';
   var GC = window.GenChibi, B = null;
+  var _t = GC.i18n.t, _l = GC.i18n.label;   // ngôn ngữ (ADR 0007): _t câu giao diện · _l nhãn dữ liệu (nhãn khu do server gửi, tên phần tử)
   // nhãn / vai / lời giới thiệu của từng khu do SERVER giữ (mcp.js ZONES, qua GET /api/ai › zones) — dock không chép lại; chưa có (bản xem thử không server) thì hiện id khu
   var KIND_LABEL = { asset: 'Nhân vật', item: 'Vật phẩm', scene: 'Bối cảnh', action: 'Hành động', work: 'Tác phẩm', shot: 'Phân cảnh', step: 'Bước', project: 'Dự án', panel: 'Khu vực', zone: 'Khu' };
   var ANCHOR_RE = /^(asset|item|scene|action|work|shot|step|project|panel|zone):[A-Za-z0-9][A-Za-z0-9._~\/-]{0,160}$/;
@@ -263,7 +264,7 @@
     ring: null, tag: null, banner: null, cur: null,
     init: function () {
       this.ring = h('div', { class: 'pick-ring', hidden: true, 'aria-hidden': 'true' }, this.tag = h('span', { class: 'spot-tag' }));
-      this.banner = h('div', { class: 'pick-banner', hidden: true, role: 'status' }, 'Chế độ chỉ: rê vào một phần tử rồi bấm để ghim · Shift+bấm ghim nhiều · Esc thoát');
+      this.banner = h('div', { class: 'pick-banner', hidden: true, role: 'status' });   // chữ: relabel()
       document.body.appendChild(this.ring); document.body.appendChild(this.banner);
       var self = this;
       document.addEventListener('mousemove', function (ev) { if (S.pick) self.hover(ev); }, true);
@@ -375,7 +376,7 @@
     return { kind: 'khu', id: S.info ? S.info.zone : 'xuong' };
   }
   function ctxPayload() {
-    var i = S.info || { zone: 'xuong', page: '' }, c = { zone: i.zone };
+    var i = S.info || { zone: 'xuong', page: '' }, c = { zone: i.zone, lang: GC.i18n.lang() };   // lang: AI trả lời đúng ngôn ngữ người dùng (server đọc)
     if (S.ctxOn) {
       c.page = i.page;
       if (S.obj && S.obj.id) c.object = { kind: S.obj.kind, id: S.obj.id };
@@ -532,15 +533,15 @@
   function build() {
     var host = document.getElementById('dock');
     E.dock = host; E.toggle = document.getElementById('dockToggle');
-    E.sep = h('div', { class: 'dock-sep', role: 'separator', 'aria-orientation': 'vertical', 'aria-label': 'Kéo để đổi độ rộng trợ lý AI (phím ← →)', tabindex: '0', 'aria-valuemin': String(W_MIN), 'aria-valuemax': String(W_MAX), 'aria-valuenow': String(S.w) });
+    E.sep = h('div', { class: 'dock-sep', role: 'separator', 'aria-orientation': 'vertical', tabindex: '0', 'aria-valuemin': String(W_MIN), 'aria-valuemax': String(W_MAX), 'aria-valuenow': String(S.w) });
     E.role = h('span', { class: 'role' });
     E.ctx = h('div', { class: 'dock-ctx' });
     E.gate = h('div', { class: 'dock-gate', hidden: true });
-    E.log = h('div', { class: 'dock-log', role: 'log', 'aria-live': 'polite', 'aria-label': 'Hội thoại với trợ lý AI', tabindex: '0' });
+    E.log = h('div', { class: 'dock-log', role: 'log', 'aria-live': 'polite', tabindex: '0' });
     E.quick = h('div', { class: 'dock-quick', hidden: true });
-    E.pins = h('div', { class: 'dock-pins', hidden: true, 'aria-label': 'Phần tử đã ghim' });
-    E.pop = h('div', { class: 'dock-pop', role: 'listbox', 'aria-label': 'Chọn phần tử để ghim', hidden: true });
-    E.ta = h('textarea', { class: 'dock-ta', rows: 2, 'aria-label': 'Nhắn trợ lý AI', 'aria-autocomplete': 'list', 'aria-expanded': 'false', maxlength: 4000,
+    E.pins = h('div', { class: 'dock-pins', hidden: true });
+    E.pop = h('div', { class: 'dock-pop', role: 'listbox', hidden: true });
+    E.ta = h('textarea', { class: 'dock-ta', rows: 2, 'aria-autocomplete': 'list', 'aria-expanded': 'false', maxlength: 4000,
       oninput: function () { autosize(); tokens(); mentionUpdate(); },
       onkeydown: function (ev) {
         if (Mention.at >= 0 && !E.pop.hidden && Mention.list.length) {
@@ -552,13 +553,12 @@
       },
       onclick: mentionUpdate, onblur: function () { setTimeout(mentionClose, 120); } });
     E.tok = h('span', { class: 'tok mono', text: '~0 token' });
-    E.pickB = h('button', { type: 'button', class: 'btn sm', 'aria-pressed': 'false', title: 'Chế độ chỉ (Alt+P): rê lên phần tử rồi bấm để ghim vào tin nhắn', onclick: function () { setPick(!S.pick); } }, '⌖ Chỉ vào màn hình');
-    E.atB = h('button', { type: 'button', class: 'btn sm', title: 'Gắn phần tử (hoặc gõ @ trong ô nhập)', 'aria-label': 'Gắn phần tử bằng @', onclick: function () { var p = E.ta.selectionStart, v = E.ta.value; E.ta.value = v.slice(0, p) + (p && !/\s$/.test(v.slice(0, p)) ? ' @' : '@') + v.slice(p); E.ta.focus(); E.ta.setSelectionRange(E.ta.value.length, E.ta.value.length); mentionUpdate(); } }, '@');
-    E.send = h('button', { type: 'button', class: 'btn primary sm send', onclick: function () { send(); } }, 'Gửi ', h('span', { class: 'kb', text: '⌘↵' }));
-    var head = h('div', { class: 'dock-head' }, h('b', { text: 'Trợ lý AI' }), E.role,
-      h('span', { class: 'sp' }),
-      h('button', { type: 'button', class: 'btn sm', title: 'Xoá luồng hội thoại của đối tượng đang xem', onclick: clearThread }, 'Xoá luồng'),
-      h('button', { type: 'button', class: 'btn sm ic', 'aria-label': 'Thu gọn trợ lý AI (Alt+J)', title: 'Thu gọn (Alt+J)', onclick: function () { setOpen(false); E.toggle.focus(); } }, '›'));
+    E.pickB = h('button', { type: 'button', class: 'btn sm', 'aria-pressed': 'false', onclick: function () { setPick(!S.pick); } });
+    E.atB = h('button', { type: 'button', class: 'btn sm', onclick: function () { var p = E.ta.selectionStart, v = E.ta.value; E.ta.value = v.slice(0, p) + (p && !/\s$/.test(v.slice(0, p)) ? ' @' : '@') + v.slice(p); E.ta.focus(); E.ta.setSelectionRange(E.ta.value.length, E.ta.value.length); mentionUpdate(); } }, '@');
+    E.sendL = h('span'); E.send = h('button', { type: 'button', class: 'btn primary sm send', onclick: function () { send(); } }, E.sendL, ' ', h('span', { class: 'kb', text: '⌘↵' }));
+    E.title = h('b'); E.clearB = h('button', { type: 'button', class: 'btn sm', onclick: clearThread });
+    E.foldB = h('button', { type: 'button', class: 'btn sm ic', onclick: function () { setOpen(false); E.toggle.focus(); } }, '›');
+    var head = h('div', { class: 'dock-head' }, E.title, E.role, h('span', { class: 'sp' }), E.clearB, E.foldB);
     var form = h('div', { class: 'dock-compose' }, E.pins, E.ta, E.pop, h('div', { class: 'dock-bar' }, E.pickB, E.atB, h('span', { class: 'sp' }), E.tok, E.send));
     clear(host);
     host.appendChild(E.sep); host.appendChild(h('div', { class: 'dock-in' }, head, E.ctx, E.gate, E.log, E.quick, form));
@@ -583,6 +583,22 @@
     document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && S.pick) { ev.preventDefault(); setPick(false); } }, true);
     NARROW.addEventListener && NARROW.addEventListener('change', function () { if (NARROW.matches) S.open = false; else S.open = S.openWide !== false; applyLayout(); window.dispatchEvent(new Event('resize')); });
     Spot.init(); Pick.init();
+    relabel();
+  }
+  // chữ tĩnh của dock theo ngôn ngữ hiện tại — gọi lúc dựng và mỗi lần đổi ngôn ngữ (không dựng lại: giữ chữ đang gõ, ghim, luồng)
+  function relabel() {
+    E.sep.setAttribute('aria-label', _t('Kéo để đổi độ rộng trợ lý AI (phím ← →)'));
+    E.log.setAttribute('aria-label', _t('Hội thoại với trợ lý AI'));
+    E.pins.setAttribute('aria-label', _t('Phần tử đã ghim'));
+    E.pop.setAttribute('aria-label', _t('Chọn phần tử để ghim'));
+    E.ta.setAttribute('aria-label', _t('Nhắn trợ lý AI'));
+    E.pickB.title = _t('Chế độ chỉ (Alt+P): rê lên phần tử rồi bấm để ghim vào tin nhắn'); E.pickB.textContent = _t('⌖ Chỉ vào màn hình');
+    E.atB.title = _t('Gắn phần tử (hoặc gõ @ trong ô nhập)'); E.atB.setAttribute('aria-label', _t('Gắn phần tử bằng @')); E.atB.textContent = '@';
+    E.sendL.textContent = _t('Gửi');
+    E.title.textContent = _t('Trợ lý AI');
+    E.clearB.title = _t('Xoá luồng hội thoại của đối tượng đang xem'); E.clearB.textContent = _t('Xoá luồng');
+    E.foldB.setAttribute('aria-label', _t('Thu gọn trợ lý AI (Alt+J)')); E.foldB.title = _t('Thu gọn (Alt+J)');
+    Pick.banner.textContent = _t('Chế độ chỉ: rê vào một phần tử rồi bấm để ghim · Shift+bấm ghim nhiều · Esc thoát');
   }
 
   /* ============================================================ API cho app.js */
@@ -615,6 +631,8 @@
       if (o.hasOwnProperty('shot')) { S.shot = o.shot || ''; S.shotLabel = o.shotLabel || ''; }
       paintCtx(); loadThread();
     },
+    // đổi ngôn ngữ (app.js repaint): chữ tĩnh + vẽ lại ngữ cảnh / luồng / cổng; nhãn khu (server giữ) hỏi lại theo ngôn ngữ mới
+    relang: function () { if (!ready) return; relabel(); paintPins(); paintCtx(); paintLog(); paintGate(); tokens(); if (B.Store.mode === 'server') loadCfg(); },
     pin: function (anchor, label) { return ready ? addPin(anchor, label) : false; },
     open: function (focus) { if (ready) setOpen(true, focus !== false); },
     // đặt chữ vào ô nhập (vd. "Gửi AI sửa theo ghi chú")

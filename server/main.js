@@ -15,6 +15,7 @@ const { OAuth, clientIp, isDirectLocal, SCOPES: OAUTH_SCOPES, SCOPE_INFO: OAUTH_
 const { consentPage, errorPage } = require('./oauth-page');
 const { Store, KEY, CHAT_KINDS, readJSON, writeJSON } = require('./store');
 const { loadEngine } = require('./engine-node');
+const L10N = require('./i18n');   // ngôn ngữ (ADR 0007): langOf(req) + tr(lang, msgid) — builder sau dịch câu server qua đây
 
 const APP = path.resolve(__dirname, '..');                       // thư mục phiên bản đang chạy
 const HOME = process.env.GC_HOME || (path.basename(path.dirname(APP)) === 'releases' ? path.resolve(APP, '..', '..') : path.join(APP, '.home'));
@@ -45,8 +46,11 @@ const SETTINGS = path.join(DATA, 'settings.json');
 fs.mkdirSync(DATA, { recursive: true });
 
 function log(...a) { console.log(new Date().toISOString(), ...a); }
-function settings() { return Object.assign({ autoUpdate: process.env.GC_AUTO_UPDATE !== '0', checkHours: 6, oauthRegister: true }, readJSON(SETTINGS, {})); }   // oauthRegister: cho agent tự đăng ký OAuth (v0.19; chỉ có tác dụng khi có GC_PUBLIC_URL)
+// uiLang: ngôn ngữ mặc định của máy cho Studio / câu trả lời API (người dùng vẫn chọn riêng trong trình duyệt); trình cài đặt đặt qua GC_LANG
+const UI_LANG0 = L10N.norm(process.env.GC_LANG) || 'en';
+function settings() { const s = Object.assign({ autoUpdate: process.env.GC_AUTO_UPDATE !== '0', checkHours: 6, oauthRegister: true, uiLang: UI_LANG0 }, readJSON(SETTINGS, {})); if (!L10N.norm(s.uiLang)) s.uiLang = UI_LANG0; return s; }   // oauthRegister: cho agent tự đăng ký OAuth (v0.19; chỉ có tác dụng khi có GC_PUBLIC_URL)
 
+L10N.load(APP);
 const store = new Store(DATA);
 const engine = loadEngine(APP);
 const updater = new Updater({ home: HOME, version: VERSION, repo: REPO, feedUrl: process.env.GC_FEED_URL, log, token: process.env.GC_GITHUB_TOKEN || '' });
@@ -64,7 +68,23 @@ setInterval(() => oauth.flush(), 30000).unref();   // lastUsedAt ghi đĩa trễ
 
 /* ---------------------------------------------------------------- tiện ích HTTP */
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.md': 'text/markdown; charset=utf-8' };
+// ngôn ngữ của người gọi: header X-GC-Lang (Studio) → Accept-Language → mặc định của máy
+function langOf(req) { return L10N.langOf(req, settings().uiLang); }
+// câu lỗi JSON ({ error, errors[] }) dịch theo người gọi nếu bảng có ĐÚNG câu đó (msgid); câu ghép động chưa có khoá thì giữ nguyên —
+// builder dịch server chuyển dần sang tr(langOf(req), 'mẫu {x}', { x }) ngay tại chỗ ném lỗi
+function localize(res, body) {
+  if (!res.req || !body || typeof body !== 'object' || Buffer.isBuffer(body) || Array.isArray(body)) return body;
+  const hasErr = typeof body.error === 'string', hasList = Array.isArray(body.errors) && body.errors.some(x => typeof x === 'string');
+  if (!hasErr && !hasList) return body;
+  const lang = langOf(res.req);
+  if (lang === L10N.I18N.SOURCE) return body;
+  const out = Object.assign({}, body);
+  if (hasErr) out.error = L10N.label(lang, body.error);
+  if (hasList) out.errors = body.errors.map(x => typeof x === 'string' ? L10N.label(lang, x) : x);
+  return out;
+}
 function send(res, code, body, type, extra) {
+  if (!type && body && typeof body === 'object' && !Buffer.isBuffer(body)) body = localize(res, body);
   const buf = Buffer.isBuffer(body) ? body : Buffer.from(typeof body === 'string' ? body : JSON.stringify(body));
   res.writeHead(code, Object.assign({
     'Content-Type': type || 'application/json; charset=utf-8', 'Content-Length': buf.length,
@@ -105,7 +125,7 @@ function oauthBody(req) {
 function bearerOf(req) { return String(req.headers.authorization || '').replace(/^Bearer\s+/i, '') || String(req.headers['x-gc-token'] || ''); }
 
 /* ---------------------------------------------------------------- tệp tĩnh */
-const STATIC_ROOTS = ['engine', 'kinds', 'studio'];
+const STATIC_ROOTS = ['engine', 'kinds', 'studio', 'locales'];   // locales/<lang>/*.json: bảng dịch Studio nạp trước lần vẽ đầu
 function serveStatic(req, res, urlPath) {
   let rel = decodeURIComponent(urlPath).replace(/^\/+/, '');
   const slash = rel.match(/^(xuong|thu-vien|tao-tac)\/$/);   // /xuong/ → /xuong (đường dẫn tương đối của trang chỉ đúng khi không có / cuối)
@@ -321,14 +341,15 @@ async function route(req, res) {
     if (!originOK(req)) return fail(res, 403, originMsg(req));
   }
 
-  if (p === '/api/health') return send(res, 200, { ok: true, version: VERSION });
-  if (p === '/api/info') return send(res, 200, { version: VERSION, repo: REPO, home: HOME, port: PORT, settings: settings(), mcp: { http: '/mcp', stdio: 'genchibi mcp', link: PUBLIC_URL && MCP_KEY ? PUBLIC_URL + '/mcp/' + MCP_KEY : null, oauth: oauth.enabled ? oauth.resource : null } });
+  if (p === '/api/health') return send(res, 200, { ok: true, version: VERSION, uiLang: settings().uiLang });   // uiLang công khai: màn đăng nhập (chưa có token) cũng nói đúng ngôn ngữ của máy
+  if (p === '/api/info') return send(res, 200, { version: VERSION, repo: REPO, home: HOME, port: PORT, settings: settings(), uiLang: settings().uiLang, lang: langOf(req), mcp: { http: '/mcp', stdio: 'genchibi mcp', link: PUBLIC_URL && MCP_KEY ? PUBLIC_URL + '/mcp/' + MCP_KEY : null, oauth: oauth.enabled ? oauth.resource : null } });
   if (p === '/api/settings' && m === 'PUT') {
     const b = await body(req);
     const s = settings();
     if (typeof b.autoUpdate === 'boolean') s.autoUpdate = b.autoUpdate;
     if (Number.isFinite(b.checkHours) && b.checkHours >= 1 && b.checkHours <= 168) s.checkHours = Math.round(b.checkHours);
     if (typeof b.oauthRegister === 'boolean') s.oauthRegister = b.oauthRegister;
+    if (b.uiLang !== undefined) { const l = L10N.norm(b.uiLang); if (!l) return fail(res, 400, 'uiLang phải là en hoặc vi'); s.uiLang = l; }   // ngôn ngữ mặc định của máy (Hệ thống › Ngôn ngữ)
     writeJSON(SETTINGS, s);
     scheduleChecks();
     return send(res, 200, s);

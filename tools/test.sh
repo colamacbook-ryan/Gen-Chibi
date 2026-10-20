@@ -28,6 +28,10 @@ if (bad) process.exit(1);
 ' || exit 1
 echo "   ✓ không có method trùng tên trong class (server)"
 
+echo "1b) ngôn ngữ (ADR 0007): i18n lõi (t / placeholder / số nhiều / fallback / langOf / tr) · bảng locales/en hợp lệ · độ phủ bản dịch"
+node tools/test-i18n.mjs || exit 1
+node tools/i18n-scan.mjs || exit 1
+
 echo "2) cổng kiểm thư viện"
 node -e '
 const { loadEngine } = require("./server/engine-node");

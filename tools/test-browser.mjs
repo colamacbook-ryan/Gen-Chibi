@@ -29,11 +29,16 @@ function autoTab(page) {
   page.waitForSelector = async (sel, o) => { if (typeof sel === 'string' && (!o || !o.state || o.state === 'visible')) await revealTab(page, sel, (o && o.timeout) || 8000); return ws(sel, o); };
   return page;
 }
+// NGÔN NGỮ (ADR 0007): Studio mặc định tiếng Anh. Các nhóm test CŨ so chữ tiếng Việt → chạy ở chế độ vi (gc-lang=vi đặt trước khi trang chạy,
+// chỉ khi trang chưa có lựa chọn) để giữ nguyên ý nghĩa, không sửa từng regex. Nhóm i18n tự chọn ngôn ngữ: legacyVi(false) trước khi mở trình duyệt.
+let LEGACY_VI = true;
+const legacyVi = on => { LEGACY_VI = on; };
+const viInit = () => { try { if (!localStorage.getItem('gc-lang')) localStorage.setItem('gc-lang', 'vi'); } catch (e) { /* file:// / about:blank */ } };
 { const launch = pw.chromium.launch.bind(pw.chromium);
   pw.chromium.launch = async (...a) => {
-    const b = await launch(...a), np = b.newPage.bind(b), nc = b.newContext.bind(b);
-    b.newPage = async (...x) => autoTab(await np(...x));
-    b.newContext = async (...x) => { const c = await nc(...x), cp = c.newPage.bind(c); c.newPage = async (...y) => autoTab(await cp(...y)); return c; };
+    const b = await launch(...a), np = b.newPage.bind(b), nc = b.newContext.bind(b), vi = LEGACY_VI;
+    b.newPage = async (...x) => { const pg = await np(...x); if (vi) await pg.addInitScript(viInit); return autoTab(pg); };
+    b.newContext = async (...x) => { const c = await nc(...x), cp = c.newPage.bind(c); if (vi) await c.addInitScript(viInit); c.newPage = async (...y) => autoTab(await cp(...y)); return c; };
     return b;
   }; }
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -2686,5 +2691,61 @@ if (!ONLY || ONLY === 'oauth') {
     if (errs13.length) throw new Error('lỗi trang: ' + errs13.slice(0, 3).join(' | '));
   } catch (e) { fail = 1; console.log('  ✗ OAuth (trang Cấp phép + Kết nối agent):', e.message); if (errs13.length) console.log('    lỗi trang:', errs13.slice(0, 3).join(' | ')); }
   finally { await b13.close(); srv13.kill(); srv14.kill(); srv15.kill(); }
+}
+// ---- v0.20 (ADR 0007, INT-18): giao diện tiếng Anh là mặc định, chuyển sang tiếng Việt được (nút EN | VI), nhớ theo trình duyệt,
+// mặc định của máy (settings.uiLang); lỗi server hiện theo ngôn ngữ người dùng. GC_ONLY=i18n chỉ chạy nhóm này (cổng 7668).
+if (!ONLY || ONLY === 'i18n') {
+  const home16 = mkdtempSync(path.join(tmpdir(), 'gc-'));
+  const srv16 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home16, GC_PORT: '7668', GC_NO_AUTOCHECK: '1', GC_LANG: '' }, stdio: 'ignore' }));
+  await new Promise(r => setTimeout(r, 1200));
+  legacyVi(false); const b16 = await pw.chromium.launch(); legacyVi(true);   // nhóm này tự chọn ngôn ngữ: không đặt sẵn gc-lang=vi
+  const U = 'http://localhost:7668/', errs16 = [];
+  const ready = async q => q.waitForFunction(() => /^v\d/.test((document.getElementById('verChip') || {}).textContent), null, { timeout: 8000 });
+  try {
+    const ctx = await b16.newContext({ viewport: { width: 1500, height: 950 } }), q = await ctx.newPage();
+    q.on('pageerror', e => errs16.push(e.message));
+    // 1) mặc định: tiếng Anh (máy không đặt GC_LANG, trình duyệt chưa chọn)
+    await q.goto(U + 'xuong'); await ready(q);
+    const l0 = await q.evaluate(() => [document.documentElement.lang, localStorage.getItem('gc-lang'), document.querySelector('#langSwitch [aria-pressed="true"]') && document.querySelector('#langSwitch [aria-pressed="true"]').getAttribute('data-lang')]);
+    if (l0.join() !== 'en,,en') throw new Error('mặc định phải là en: ' + l0.join());
+    await q.evaluate(() => localStorage.setItem('gc-route-xuong', JSON.stringify({ page: 'lang' }))); await q.reload(); await ready(q);
+    if ((await q.textContent('#crumbs b')) !== 'Language') throw new Error('trang Ngôn ngữ ở chế độ en: ' + await q.textContent('#crumbs'));
+    console.log('  ✓ Mặc định tiếng Anh: <html lang="en">, nút EN đang chọn, Hệ thống › Language');
+    // 2) bấm VI: có hiệu lực ngay (vẽ lại, không tải trang), nhớ theo trình duyệt; tải lại vẫn vi
+    await q.evaluate(() => { window.__noReload = 1; });
+    await q.click('#langSwitch button[data-lang="vi"]');
+    await q.waitForFunction(() => document.documentElement.lang === 'vi' && (document.querySelector('#crumbs b') || {}).textContent === 'Ngôn ngữ', null, { timeout: 4000 });
+    if (!(await q.evaluate(() => window.__noReload === 1))) throw new Error('đổi ngôn ngữ không được tải lại trang (mất bản nháp)');
+    if ((await q.evaluate(() => localStorage.getItem('gc-lang'))) !== 'vi') throw new Error('không nhớ gc-lang');
+    await q.reload(); await ready(q);
+    if ((await q.evaluate(() => document.documentElement.lang)) !== 'vi' || (await q.textContent('#crumbs b')) !== 'Ngôn ngữ') throw new Error('tải lại không nhớ tiếng Việt');
+    console.log('  ✓ Bấm VI: vẽ lại ngay (không tải trang), nhớ gc-lang; tải lại vẫn tiếng Việt');
+    // 3) lỗi server theo ngôn ngữ người dùng (toast): mở tác phẩm không có → 404 "không có tác phẩm này"
+    const toastOf = async () => { await q.waitForSelector('#toast:not([hidden])', { timeout: 6000 }); return (await q.textContent('#toast')).trim(); };
+    await q.goto(U + 'tao-tac#/tac-pham/khong-co-that'); await ready(q);
+    const tv = await toastOf();
+    if (tv !== 'không có tác phẩm này') throw new Error('toast lỗi ở chế độ vi: ' + tv);
+    await q.evaluate(() => localStorage.setItem('gc-lang', 'en'));
+    await q.goto('about:blank'); await q.goto(U + 'tao-tac#/tac-pham/khong-co-that-2'); await ready(q);   // chỉ đổi # thì không tải lại trang
+    const te = await toastOf();
+    if (te !== 'Work not found') throw new Error('toast lỗi ở chế độ en: ' + te);
+    console.log('  ✓ Lỗi server theo ngôn ngữ người dùng: "' + tv + '" (vi) · "' + te + '" (en)');
+    // 4) mặc định của máy: PUT api/settings { uiLang } → trình duyệt chưa chọn thì theo máy; ?lang= thắng; /api/info trả uiLang
+    const put = async v => (await fetch(U + 'api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify({ uiLang: v }) }));
+    if ((await put('xx')).status !== 400) throw new Error('uiLang lạ phải bị từ chối 400');
+    if ((await (await put('vi')).json()).uiLang !== 'vi') throw new Error('PUT api/settings uiLang');
+    const info = await (await fetch(U + 'api/info')).json();
+    if (info.uiLang !== 'vi') throw new Error('/api/info thiếu uiLang: ' + info.uiLang);
+    const q2 = await (await b16.newContext()).newPage(); q2.on('pageerror', e => errs16.push(e.message));
+    await q2.goto(U + 'thu-vien'); await ready(q2);
+    if ((await q2.evaluate(() => document.documentElement.lang)) !== 'vi') throw new Error('trình duyệt mới không theo mặc định máy (vi)');
+    await q2.goto(U + 'thu-vien?lang=en'); await ready(q2);
+    if ((await q2.evaluate(() => document.documentElement.lang)) !== 'en') throw new Error('?lang=en phải thắng mặc định máy');
+    if (await q2.evaluate(() => localStorage.getItem('gc-lang'))) throw new Error('?lang= không được ghi đè lựa chọn đã lưu');
+    await put('en');
+    console.log('  ✓ Mặc định của máy (PUT api/settings uiLang, /api/info): trình duyệt mới theo máy; ?lang= thắng mà không lưu');
+    if (errs16.length) throw new Error('lỗi trang: ' + errs16.slice(0, 3).join(' | '));
+  } catch (e) { fail = 1; console.log('  ✗ i18n (ngôn ngữ giao diện):', e.message); }
+  finally { await b16.close(); srv16.kill(); }
 }
 process.exit(fail);

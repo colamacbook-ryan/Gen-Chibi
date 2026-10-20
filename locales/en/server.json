@@ -1,0 +1,5 @@
+{
+ "//": "gen-chibi — English UI strings (server: API errors, authorize page). Key = existing Vietnamese msgid (ADR 0007), value = English. Keep {placeholders}; [one, other] for plurals. © 2026 Gen Labs — All rights reserved.",
+ "không có tác phẩm này": "Work not found",
+ "uiLang phải là en hoặc vi": "uiLang must be en or vi"
+}

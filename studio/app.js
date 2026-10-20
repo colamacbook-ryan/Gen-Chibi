@@ -5,6 +5,9 @@
 (function () {
   'use strict';
   var GC = window.GenChibi, LIB = GC.LIB, R = GC.render;
+  // NGÔN NGỮ (ADR 0007, engine/i18n.js): msgid = chuỗi tiếng Việt hiện có. _t = câu giao diện · _l = nhãn DỮ LIỆU (engine / người dùng:
+  // có bản dịch thì dịch, không thì giữ nguyên, không ghi "thiếu") · N_ = đánh dấu chuỗi ở bảng hằng cấp module — dịch lúc HIỂN THỊ bằng _t().
+  var I18N = GC.i18n, _t = I18N.t, _l = I18N.label, N_ = I18N.N;
   // 8 hướng (2.5D): tên góc → nhãn. Thứ tự = GC.VIEW_ORDER. Sprite 8 hướng đi vòng theo chiều kim đồng hồ từ chính diện.
   var VIEW_LABEL = { front: 'Chính diện', left: '3/4 trái', right: '3/4 phải', left45: '45° trái', right45: '45° phải', left90: '90° trái', right90: '90° phải',
     left135: '135° trái', right135: '135° phải', back: 'Sau lưng' };
@@ -36,12 +39,66 @@
   function clear(e) { while (e.firstChild) e.removeChild(e.firstChild); return e; }
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
   function norm(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase(); }   // so khớp không dấu
-  function fmtTime(s) { if (!s) return '—'; var d = new Date(s); return d.toLocaleString('vi-VN', { hour12: false }); }
+  function fmtTime(s) { if (!s) return '—'; var d = new Date(s); return d.toLocaleString(I18N.locale(), { hour12: false }); }
   function stateLabel(id) { return (LIB.states[id] || {}).label || id; }
   var toastTimer;
   function toast(msg) { var t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.hidden = true; }, 3800); }
   var OWN = ['#5B9BD5', '#4FB57A', '#8C86E0', '#E0A43A', '#C08463', '#2BB3A3', '#D9708F', '#B97BD0', '#8DA65A', '#E4785F'];
   function ownOf(a) { var i = GC.ASSET_ORDER.indexOf(a.key); return a.own || OWN[(i < 0 ? 0 : i) % OWN.length]; }
+
+  /* ============================================================ ngôn ngữ giao diện (ADR 0007) */
+  // Thứ tự chọn: ?lang= (chỉ lần mở này) → người dùng chọn (localStorage gc-lang, nhớ theo trình duyệt) → mặc định của máy chủ
+  // (settings.uiLang — trình cài đặt khởi tạo từ GC_LANG) → en. Bảng locales/<lang>/*.json nạp MỘT lần, TRƯỚC lần vẽ đầu (trang ẩn tới lúc đó → không nháy chữ Việt).
+  // Đổi ngôn ngữ: nạp bảng + vẽ lại khung, menu, dock và trang đang mở (bản nháp đang gõ trong bộ nhớ trang vẫn còn; dữ liệu đã lưu không đụng).
+  var Lang = {
+    KEY: 'gc-lang', FILES: ['studio', 'engine', 'player'], loaded: {}, server: '',
+    NAMES: { en: 'English', vi: 'Tiếng Việt' },   // tên tự gọi (endonym) — không dịch; phần tử mang lang="…"
+    query: function () { try { return I18N.norm(new URLSearchParams(location.search).get('lang')); } catch (e) { return ''; } },
+    stored: function () { try { return I18N.norm(localStorage.getItem(this.KEY)); } catch (e) { return ''; } },
+    pick: function () { return this.query() || this.stored() || I18N.norm(this.server) || I18N.DEFAULT; },
+    load: function (l) {
+      var self = this;
+      if (l === I18N.SOURCE || this.loaded[l]) { I18N.setLang(l); return Promise.resolve(l); }
+      return Promise.all(this.FILES.map(function (f) { return fetch('locales/' + l + '/' + f + '.json').then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }); }))
+        .then(function (ds) { ds.forEach(function (d) { I18N.add(l, d); }); self.loaded[l] = true; })
+        .catch(function (e) { console.warn('[i18n] không nạp được bảng ' + l + ':', e && e.message); })   // mở bằng file:// / thiếu bảng: hiện msgid (tiếng Việt) thay vì trang trắng
+        .then(function () { I18N.setLang(l); return l; });
+    },
+    // đầu trang: mặc định của máy (api/health công khai — màn đăng nhập cũng đúng ngôn ngữ) → nạp bảng → hiện trang
+    boot: function () {
+      var self = this;
+      var srv = this.query() || this.stored() ? Promise.resolve() : fetch('api/health').then(function (r) { return r.ok ? r.json() : {}; }).then(function (j) { self.server = (j && j.uiLang) || ''; }).catch(function () { /* bản xem thử: không có máy chủ */ });
+      return srv.then(function () { return self.load(self.pick()); }).then(function (l) { document.documentElement.lang = l; paintStatic(); document.documentElement.classList.add('gc-ready'); return l; });
+    },
+    // người dùng chọn: nhớ theo trình duyệt rồi vẽ lại ngay
+    set: function (l) {
+      l = I18N.norm(l);
+      if (!l) return Promise.resolve('');
+      try { localStorage.setItem(this.KEY, l); } catch (e) { /* trình duyệt chặn lưu: vẫn đổi trong phiên */ }
+      if (this.query()) { try { var u = new URL(location.href); u.searchParams.delete('lang'); history.replaceState(history.state, '', u.pathname + u.search + u.hash); } catch (e) { /* bỏ qua */ } }   // ?lang= không được thắng lựa chọn vừa bấm khi tải lại
+      return this.load(l).then(function () { document.documentElement.lang = l; repaint(); return l; });
+    }
+  };
+  // phần tĩnh của index.html: data-i18n (chữ) · data-i18n-title · data-i18n-aria-label mang msgid
+  function paintStatic() {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-i18n], [data-i18n-title], [data-i18n-aria-label]'), function (el) {
+      if (el.hasAttribute('data-i18n')) el.textContent = _t(el.getAttribute('data-i18n'));
+      if (el.hasAttribute('data-i18n-title')) el.title = _t(el.getAttribute('data-i18n-title'));
+      if (el.hasAttribute('data-i18n-aria-label')) el.setAttribute('aria-label', _t(el.getAttribute('data-i18n-aria-label')));
+    });
+    paintLangSwitch($('langSwitch'), true);
+  }
+  // nút chuyển ngôn ngữ (chân thanh bên + Hệ thống › Ngôn ngữ): EN | VI, có hiệu lực ngay
+  function paintLangSwitch(host, compact) {
+    if (!host) return;
+    clear(host);
+    var seg = h('div', { class: 'seg langseg', role: 'group', 'aria-label': _t('Ngôn ngữ giao diện') + ' · Language' });
+    I18N.LANGS.forEach(function (l) {
+      seg.appendChild(h('button', { type: 'button', lang: l, 'data-lang': l, 'aria-pressed': String(I18N.lang() === l), title: Lang.NAMES[l],
+        onclick: function () { if (I18N.lang() !== l) Lang.set(l); } }, compact ? l.toUpperCase() : Lang.NAMES[l]));
+    });
+    host.appendChild(seg);
+  }
 
   /* ============================================================ lưu trữ */
   var MY_PACK = 'local.my';
@@ -58,7 +115,7 @@
     // Bản cài có GC_API_TOKEN: Studio đăng nhập bằng token, giữ trong trình duyệt này.
     token: function () { try { return localStorage.getItem('gc-token') || ''; } catch (e) { return ''; } },
     headers: function () {
-      var hd = { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, t = this.token();
+      var hd = { 'Content-Type': 'application/json', 'X-GC-Request': '1', 'X-GC-Lang': I18N.lang() }, t = this.token();   // X-GC-Lang: server trả lỗi theo ngôn ngữ người dùng
       if (t) hd.Authorization = 'Bearer ' + t;
       return hd;
     },
@@ -161,7 +218,7 @@
     ['fab', 'Khung chuẩn', 'quy cách · kiểm (Gen Labs giữ)', [['khung', 'Bộ khung chuẩn'], ['library', 'Kho linh kiện & phông'], ['poses', 'Khung tư thế & hoạt động'], ['states', 'Khung biểu cảm & động tác'], ['gates', 'Cổng kiểm & hiệu năng']], 'khung'],
     ['lib', 'Thư viện', 'theo dự án chủ đề · lấy về dùng', [['projects', 'Dự án chủ đề'], ['lib-characters', 'Nhân vật'], ['lib-items', 'Vật phẩm'], ['lib-scenes', 'Bối cảnh'], ['lib-motions', 'Động tác'], ['lib-sounds', 'Âm thanh'], ['lib-voices', 'Giọng']]],
     ['make', 'Tạo tác', 'làm phim / truyện với AI', [['works', 'Tác phẩm']]],
-    ['sys', 'Hệ thống', '', [['ai', 'Cài đặt AI'], ['connect', 'Kết nối agent'], ['update', 'Cập nhật']]]
+    ['sys', 'Hệ thống', '', [['ai', 'Cài đặt AI'], ['connect', 'Kết nối agent'], ['update', 'Cập nhật'], ['lang', 'Ngôn ngữ']]]
   ];
   var PAGE_ALIAS = { character: 'characters', export: 'lib-characters', workshop: 'create' };   // workshop = trang chat cũ → nay là dock Trợ lý AI (mở dock rồi về trang chủ của khu)
   // BA ỨNG DỤNG ĐỘC LẬP (Ryan 2026-10-18): mỗi lớp một địa chỉ, một menu, một màu — không lẫn nhau.
@@ -5354,6 +5411,31 @@
     load();
   };
 
+  /* ============================================================ trang: Ngôn ngữ (ADR 0007) */
+  // Hai tầng: lựa chọn của NGƯỜI DÙNG (trình duyệt này, gc-lang) và mặc định của MÁY (settings.uiLang — người mới mở Studio, câu trả lời API khi không có lựa chọn).
+  PAGES.lang = function () {
+    crumbs([{ t: _t('Ngôn ngữ') }]);
+    var mine = h('div', { class: 'pad stack' }), box = h('div', { class: 'stack' },
+      h('div', { class: 'panel', 'data-anchor': 'panel:lang-mine' }, h('h3', null, _t('Ngôn ngữ của bạn')), mine));
+    paintLangSwitch(mine, false);
+    mine.appendChild(h('p', { class: 'note', text: _t('Có hiệu lực ngay và nhớ trên trình duyệt này. Nút EN | VI ở chân thanh bên đổi nhanh ở mọi trang.') }));
+    mine.appendChild(h('p', { class: 'note', text: _t('Nội dung bạn tạo (tên nhân vật, kịch bản, lời thoại) không bị dịch.') }));
+    if (Store.mode === 'server') {
+      var cur = I18N.norm(((Store.info || {}).settings || {}).uiLang) || (Store.info || {}).uiLang || I18N.DEFAULT;
+      var sel = h('select', { id: 'uiLangDefault', 'aria-label': _t('Ngôn ngữ mặc định của máy'), onchange: function () {
+        Store.api('PUT', 'api/settings', { uiLang: sel.value }).then(function (s) {
+          if (Store.info) { Store.info.settings = s; Store.info.uiLang = s.uiLang; }
+          toast(_t('Đã đặt ngôn ngữ mặc định của máy: {lang}.', { lang: Lang.NAMES[s.uiLang] || s.uiLang }));
+        }).catch(function (e) { toast(e.message); sel.value = cur; });
+      } });
+      I18N.LANGS.forEach(function (l) { sel.appendChild(h('option', { value: l, lang: l, selected: l === cur ? '' : null }, Lang.NAMES[l])); });
+      box.appendChild(h('div', { class: 'panel' }, h('h3', null, _t('Mặc định của máy')), h('div', { class: 'pad stack' },
+        h('div', { class: 'row' }, sel),
+        h('p', { class: 'note', text: _t('Dùng cho người chưa chọn ngôn ngữ và cho câu trả lời của API. Trình cài đặt đặt sẵn bằng --lang hoặc GC_LANG.') }))));
+    }
+    $('view').appendChild(box);
+  };
+
   /* ============================================================ trang: Cập nhật */
   PAGES.update = function () {
     crumbs([{ t: 'Cập nhật' }]);
@@ -5419,12 +5501,23 @@
   };
 
   /* ============================================================ khởi động */
-  Store.init().then(function () { return Projects.load(); }).then(function () {
-    $('verChip').textContent = Store.mode === 'server' ? 'v' + String(Store.info.version).replace(/^v/, '') : 'xem thử';
-    $('modeNote').textContent = Store.mode === 'server' ? 'Đang chạy trên máy · dữ liệu lưu cục bộ' : 'Bản xem thử · lưu trong trình duyệt';
-    document.title = 'gen-chibi · ' + (APP ? APP.name : 'Studio');
+  // khung trang (thanh bên, tiêu đề): vẽ lúc khởi động và mỗi lần đổi ngôn ngữ
+  function paintChrome() {
+    paintStatic();
+    $('verChip').textContent = Store.mode === 'server' ? 'v' + String(Store.info.version).replace(/^v/, '') : _t('xem thử');
+    $('modeNote').textContent = Store.mode === 'server' ? _t('Đang chạy trên máy · dữ liệu lưu cục bộ') : _t('Bản xem thử · lưu trong trình duyệt');
+    document.title = 'gen-chibi · ' + (APP ? _t(APP.name) : 'Studio');
+    $('appName').textContent = APP ? _t(APP.name) : 'Studio';
+  }
+  // đổi ngôn ngữ: vẽ lại mọi thứ đang hiện — khung, menu, dock, trang (go() dọn trang cũ như khi chuyển trang)
+  function repaint() {
+    paintChrome();
+    if (window.GCDock && window.GCDock.relang) window.GCDock.relang();
+    go(route);
+  }
+  Lang.boot().then(function () { return Store.init(); }).then(function () { return Projects.load(); }).then(function () {
+    paintChrome();
     try { var tmsg = localStorage.getItem('gc-toast'); if (tmsg) { localStorage.removeItem('gc-toast'); setTimeout(function () { toast(tmsg); }, 300); } } catch (e) { /* bỏ qua */ }
-    $('appName').textContent = APP ? APP.name : 'Studio';
     if (window.GCDock) window.GCDock.attach(DOCK_BRIDGE);   // dock Trợ lý AI ở cột phải: trước lần go() đầu tiên
     $('brand').setAttribute('href', appURL(''));
     var r = { page: APP ? APP.home : 'home' };

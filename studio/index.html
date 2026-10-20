@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="vi">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,30 +7,33 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23B9741A'/%3E%3Ccircle cx='11' cy='15' r='2.4' fill='%23fff'/%3E%3Ccircle cx='21' cy='15' r='2.4' fill='%23fff'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="studio/studio.css">
 <link rel="stylesheet" href="studio/lib-audio.css">
+<style>html:not(.gc-ready) body { visibility: hidden; }</style><!-- ẩn tới khi nạp xong bảng ngôn ngữ (app.js Lang.boot): không nháy chữ sai ngôn ngữ -->
 </head>
 <body>
 <div class="shell">
-  <aside class="side" aria-label="Điều hướng">
-    <a class="brand" id="brand" href="./" title="Chọn khu làm việc"><span class="mark" aria-hidden="true"></span><span class="bt"><b>gen-chibi</b><span id="appName">Studio</span></span><span id="verChip" class="mono"></span></a>
+  <aside class="side" aria-label="Điều hướng" data-i18n-aria-label="Điều hướng">
+    <a class="brand" id="brand" href="./" title="Chọn khu làm việc" data-i18n-title="Chọn khu làm việc"><span class="mark" aria-hidden="true"></span><span class="bt"><b>gen-chibi</b><span id="appName">Studio</span></span><span id="verChip" class="mono"></span></a>
     <nav id="nav"></nav>
     <div class="side-foot">
+      <div id="langSwitch" class="langsw"></div>
       <div id="modeNote" class="note"></div>
-      <div class="note">© 2026 Gen Labs — All rights reserved<br>Tác giả: Ryan · <a href="tel:0909198823">090.919.8823</a></div>
+      <div class="note">© 2026 Gen Labs — All rights reserved<br><span data-i18n="Tác giả:">Tác giả:</span> Ryan · <a href="tel:0909198823">090.919.8823</a></div>
     </div>
   </aside>
   <main class="main">
     <header class="pagehead">
       <div class="crumbs" id="crumbs"></div>
       <div class="actions" id="actions"></div>
-      <button type="button" class="btn dock-toggle" id="dockToggle" aria-controls="dock" aria-expanded="true" title="Mở / thu gọn Trợ lý AI (Alt+J)">Trợ lý AI <kbd>Alt+J</kbd></button>
+      <button type="button" class="btn dock-toggle" id="dockToggle" aria-controls="dock" aria-expanded="true" title="Mở / thu gọn Trợ lý AI (Alt+J)" data-i18n-title="Mở / thu gọn Trợ lý AI (Alt+J)"><span data-i18n="Trợ lý AI">Trợ lý AI</span> <kbd>Alt+J</kbd></button>
     </header>
     <div id="view" class="view"></div>
   </main>
-  <aside id="dock" class="dock" aria-label="Trợ lý AI"></aside>
+  <aside id="dock" class="dock" aria-label="Trợ lý AI" data-i18n-aria-label="Trợ lý AI"></aside>
 </div>
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 <div id="gateHost" aria-hidden="true" style="position:absolute;left:-9999px;top:0;width:200px;height:240px;visibility:hidden"></div>
 <script src="engine/core.js"></script>
+<script src="engine/i18n.js"></script>
 <script src="engine/render.js"></script>
 <script src="engine/fonts.js"></script>
 <script src="engine/voices.js"></script>
