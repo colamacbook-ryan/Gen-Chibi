@@ -10,6 +10,7 @@
 //      di chuyển, bộ phận, linh kiện khung, item / cảnh, cổng kiểm của asset / item / cảnh khung) có bản en — liệt kê TỪ DỮ LIỆU engine
 //  (f) context.lang của dock: cleanContext giữ 'en' | 'vi' (bỏ giá trị lạ) → chỉ dẫn dặn AI trả lời đúng ngôn ngữ giao diện
 //  (g) rào ngược: chính các phép kiểm ở trên ĐỎ khi bỏ một bản dịch / chèn chữ Việt vào mô tả tool / đổi mặc định máy sang vi
+//  (h) review bảo mật v0.20: dịch câu không chặn event loop (payload ReDoS < 50 ms, MCP id 5 KB) · id giữ nguyên chữ · đường của máy luôn en · error_description ASCII
 // Hook main.js (H0 MSG.run quanh route + H1 MSG.localizeBody trong localize): khi main.js CHƯA có hook, các kiểm phụ thuộc hook in "… chờ hook main.js" thay vì đỏ;
 // main.js có hook thì mọi kiểm đều nghiêm (Gen bỏ nhánh chờ này khi gộp xong).
 // Dùng: node tools/test-i18n-server.mjs   (cổng 7631 + 7632)
@@ -238,6 +239,7 @@ console.log('(d) trang Cấp phép: en mặc định, vi theo Accept-Language');
 }
 
 /* ---------------------------------------------------------------- (g) rào ngược */
+let viBase;   // máy mặc định vi — dựng ở (g), dùng lại ở (h)
 console.log('(g) rào ngược: phép kiểm đỏ khi bỏ bản dịch / chèn chữ Việt / đổi mặc định');
 {
   // 1) bỏ một bản dịch nhãn engine (bản dịch rỗng = coi như thiếu) → (e) phải bắt được, rồi trả lại
@@ -258,11 +260,60 @@ console.log('(g) rào ngược: phép kiểm đỏ khi bỏ bản dịch / chèn
   const evil2 = TOOLS.map(t => t.name === 'save_shot' ? Object.assign({}, t, { inputSchema: { type: 'object', properties: { work: { type: 'string', description: 'mã tác phẩm' } } } }) : t);
   ok(viInTools(evil).length === 1 && viInTools(evil2).length === 1 && !viInTools(TOOLS).length, 'chèn chữ Việt vào description / mô tả tham số của một tool → kiểm (c) đỏ');
   // 4) đổi mặc định của máy sang vi (GC_LANG=vi) → lời đáp "không header" thành tiếng Việt → các kiểm "không header → en" phải đỏ
-  const viBase = await boot(7632, { GC_API_TOKEN: OWNER, GC_PUBLIC_URL: PUB, GC_ALLOWED_HOSTS: 'chibi.example.test', GC_LANG: 'vi' });
+  viBase = await boot(7632, { GC_API_TOKEN: OWNER, GC_PUBLIC_URL: PUB, GC_ALLOWED_HOSTS: 'chibi.example.test', GC_LANG: 'vi' });
   const res = await typical(viBase, {}, 'en'), red = Object.entries(res).filter(([k, [c, , hook]]) => !c && (!hook || HOOKED)).map(([k]) => k);
   ok(red.includes('404 tác phẩm') && red.includes('401 thiếu token') && !red.includes('OAuth JSON (máy) luôn tiếng Anh'), 'máy đặt mặc định vi → kiểm "không header → en" đỏ (' + red.join(', ') + '); OAuth JSON cho máy vẫn tiếng Anh');
   const back = await typical(viBase, { 'X-GC-Lang': 'en' }, 'en');
   ok(back['404 tác phẩm'][0] && back['401 thiếu token'][0], 'máy mặc định vi + X-GC-Lang: en → vẫn tiếng Anh (lựa chọn của người dùng thắng mặc định máy)');
+}
+
+/* ---------------------------------------------------------------- (h) review bảo mật v0.20 */
+console.log('(h) dịch câu không bao giờ chặn event loop · id giữ nguyên chữ · đường của máy luôn tiếng Anh · error_description ASCII');
+{
+  // 1) payload của review (regex lười nối nhau O(n⁴) + "nhãn (chi tiết)" O(n²)): trước khi sửa 2,2 KB = 0,3 s · 4,4 KB = 4,3 s · 200 KB = 7,8 s
+  const ms = s => { const t = process.hrtime.bigint(); MSG.en(s); return Number(process.hrtime.bigint() - t) / 1e6; };
+  const P = { 'mẫu rỗng đầu 2,2 KB': ' hạt · diễn viên ≤ ' + '/ đạo cụ · '.repeat(200), 'mẫu rỗng đầu 4,4 KB': ' hạt · diễn viên ≤ ' + '/ đạo cụ · '.repeat(400),
+    'mẫu sát trần 1,9 KB': ' hạt · diễn viên ≤ ' + '/ đạo cụ · '.repeat(170), '"nhãn (chi tiết)" 1,9 KB': 'ạ (x, y; z) '.repeat(160),
+    '"nhãn (chi tiết)" 200 KB': 'ạ (x, y; z) '.repeat(16000), 'danh sách "; " 1,9 KB': 'Không có tác phẩm a; '.repeat(90) };
+  const slow = Object.entries(P).map(([k, v]) => [k, Math.max(ms(v), ms(v))]).filter(([, t]) => t > 50);
+  ok(!slow.length, 'payload ReDoS của review đều < 50 ms mỗi câu' + (slow.length ? ': ' + JSON.stringify(slow) : ''));
+  // mọi mẫu, giá trị dựng từ chính chữ cố định của mẫu lặp lại (kiểu đầu vào khiến khớp phải lùi nhiều nhất), sát trần độ dài
+  let worst = 0, wk = '';
+  MSG.M.templates('en').forEach(k => {
+    const lits = k.split(/\{[A-Za-z0-9_]+\}/), f = lits.filter(Boolean).join('ạ ').repeat(1 + Math.floor(1900 / Math.max(1, lits.join('').length))).slice(0, 1990);
+    [f, lits[0] + f, f + lits[lits.length - 1], lits[0] + f + 'x'].forEach(v => { const t = ms(v); if (t > worst) { worst = t; wk = k; } });
+  });
+  ok(worst < 50, 'mọi mẫu × 4 đầu vào bất lợi sát trần: chậm nhất ' + worst.toFixed(1) + ' ms (< 50) — ' + cut(wk, 60));
+  // 2) giá trị id giữ nguyên chữ (trước: "007" → 7, id 23 chữ số → 1.23e+22, "-0" → 0)
+  const k1 = Object.keys(tables['server-msg.json']).find(k => /\{id\}/.test(k) && (k.match(/\{/g) || []).length === 1 && VI_RE.test(k));
+  const keepId = ['007', '12345678901234567890123', '-0'].every(id => { const out = MSG.en(L10N.tr('vi', k1, { id })); return out === L10N.tr('en', k1, { id }) && out.includes(id); });
+  ok(k1 && keepId, 'id "007" / 23 chữ số / "-0" trong câu lỗi giữ nguyên chữ — mẫu ' + cut(k1, 60));
+  // 3) việc nền tạo trong request (timer tự kiểm phiên bản) không kế thừa ngôn ngữ của request
+  ok(MSG.run('en', () => MSG.exit(() => MSG.srcLang())) === 'vi' && MSG.run('en', () => MSG.srcLang()) === 'en', 'MSG.exit: timer tạo trong request không giữ ngôn ngữ của request');
+  // 4) máy mặc định vi (viBase, GC_LANG=vi), agent không gửi header ngôn ngữ
+  const j = r => r.json().catch(() => ({}));
+  let r = await fetch(viBase + '/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }), b = await j(r);
+  ok(r.status === 401 && isLang(b.error, 'en'), 'máy mặc định vi: POST /mcp thiếu token → 401 tiếng Anh (hợp đồng agent, CNS-067): ' + cut(b.error, 80));
+  r = await fetch(viBase + '/mcp/khoa-sai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); b = await j(r);
+  ok(r.status === 404 && isLang(b.error, 'en') && b.error !== 'none', 'link MCP sai khoá → 404 như đường không tồn tại, tiếng Anh: ' + cut(b.error, 60));
+  r = await fetch(viBase + '/.well-known/oauth-authorization-server', { method: 'POST' }); b = await j(r);
+  ok(r.status === 405 && isLang(b.error, 'en'), 'máy mặc định vi: metadata OAuth sai phương thức → 405 tiếng Anh: ' + cut(b.error, 60));
+  r = await fetch(viBase + '/api/works/khong-co-that', { headers: { Authorization: 'Bearer ' + OWNER, 'X-GC-Request': '1' } }); b = await j(r);
+  ok(r.status === 404 && isLang(b.error, 'vi'), 'máy mặc định vi: Studio / API người dùng vẫn theo máy (tiếng Việt): ' + cut(b.error, 60));
+  const ASCII = /^[\x20-\x21\x23-\x5B\x5D-\x7E]*$/;   // RFC 6749 §5.2: error_description không có " và \ và chữ ngoài ASCII
+  const descs = [];
+  for (const [ct, body] of [['application/json', '{'], ['application/json', '[1]'], ['application/x-www-form-urlencoded', 'grant_type=authorization_code&code=x&client_id=khong-co']]) {
+    r = await fetch(viBase + '/oauth/token', { method: 'POST', headers: { 'Content-Type': ct }, body }); b = await j(r); descs.push(b.error_description);
+  }
+  r = await fetch(viBase + '/oauth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ redirect_uris: [CB], response_types: ['token'] }) }); b = await j(r); descs.push(b.error_description);
+  ok(descs.every(d => typeof d === 'string' && d && ASCII.test(d)), 'error_description OAuth chỉ ASCII in được, không " (JSON hỏng · thân không phải object · code sai · response_types): ' + cut(descs.join(' | '), 140));
+  // 5) MCP đọc với id 5 KB (đường tấn công của review: 15 s chặn cả server) — trả lời nhanh, /api/health song song không phải chờ
+  const big = ' hạt · diễn viên ≤ ' + '/ đạo cụ · '.repeat(450), t0 = Date.now();
+  const call = fetch(viBase + '/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', Authorization: 'Bearer ' + OWNER },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'get_work', arguments: { id: 'Không có tác phẩm ' + big } } }) }).then(x => x.json()).then(x => Date.now() - t0);
+  const health = fetch(viBase + '/api/health').then(() => Date.now() - t0);
+  const [tCall, tHealth] = await Promise.all([call, health]);
+  ok(tCall < 2000 && tHealth < 2000, 'MCP get_work với id 5 KB: trả lời sau ' + tCall + ' ms, /api/health song song ' + tHealth + ' ms (trước khi sửa: 15 s)');
 }
 
 console.log('   (' + pass + ' kiểm tra đạt' + (pend ? ' · ' + pend + ' chờ hook main.js — Gen gộp hook rồi chạy lại để kiểm nghiêm' : '') + ')');

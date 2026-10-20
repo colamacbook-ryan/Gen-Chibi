@@ -15,7 +15,7 @@ function readLocales(appDir) {
   let langs = [];
   try { langs = fs.readdirSync(root).filter(l => I18N.norm(l) === l && l !== I18N.SOURCE); } catch (e) { return out; }   // bản cài cũ không có locales/: chạy tiếng Việt như trước
   for (const l of langs) {
-    const d = out[l] = {};
+    const d = out[l] = Object.create(null);   // khoá "__proto__" trong bảng là chữ thường, không đổi prototype
     for (const f of fs.readdirSync(path.join(root, l)).filter(x => x.endsWith('.json')).sort()) {
       let j;
       try { j = JSON.parse(fs.readFileSync(path.join(root, l, f), 'utf8')); }

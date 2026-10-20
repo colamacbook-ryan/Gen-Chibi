@@ -843,18 +843,18 @@
     ev.steps.forEach(function (s, i) {
       var n = 'steps[' + i + ']: ', pathOf = function (k) { return 'steps[' + i + '].' + k + ': '; };   // đường dẫn máy đọc được (agent sửa đúng chỗ; Studio đặt lỗi cạnh hàng)
       if (!s || typeof s !== 'object') { errs.push(n + N_('phải là object.')); return; }
-      Object.keys(s).forEach(function (k) { if (!S[k]) errs.push(pathOf(k) + N_('khoá lạ "{key}".', { key: k })); });
-      if (S.actor.enum.indexOf(s.actor) < 0) errs.push(pathOf('actor') + N_('diễn viên "{ref}" không có trong dàn diễn viên.', { ref: s.actor }));
-      if (S.state.enum.indexOf(s.state) < 0) errs.push(pathOf('state') + N_('trạng thái "{ref}" không có trong kho.', { ref: s.state }));
-      if (s.motion !== undefined && S.motion.enum.indexOf(s.motion) < 0) errs.push(pathOf('motion') + N_('động tác "{ref}" không có trong kho.', { ref: s.motion }));
+      Object.keys(s).forEach(function (k) { if (!S[k]) errs.push(pathOf(String(k).slice(0, 60)) + N_('khoá lạ "{key}".', { key: String(k).slice(0, 60) })); });
+      if (S.actor.enum.indexOf(s.actor) < 0) errs.push(pathOf('actor') + N_('diễn viên "{ref}" không có trong dàn diễn viên.', { ref: String(s.actor).slice(0, 60) }));
+      if (S.state.enum.indexOf(s.state) < 0) errs.push(pathOf('state') + N_('trạng thái "{ref}" không có trong kho.', { ref: String(s.state).slice(0, 60) }));
+      if (s.motion !== undefined && S.motion.enum.indexOf(s.motion) < 0) errs.push(pathOf('motion') + N_('động tác "{ref}" không có trong kho.', { ref: String(s.motion).slice(0, 60) }));
       ['activity', 'posture', 'move', 'facing', 'view', 'spot'].forEach(function (k) {
-        if (s[k] !== undefined && S[k].enum.indexOf(s[k]) < 0) errs.push(pathOf(k) + N_('{key} "{ref}" không có trong kho.', { key: k, ref: s[k] }));
+        if (s[k] !== undefined && S[k].enum.indexOf(s[k]) < 0) errs.push(pathOf(k) + N_('{key} "{ref}" không có trong kho.', { key: k, ref: String(s[k]).slice(0, 60) }));
       });
       var mvd = s.move && LIB.moves[s.move];
-      if (mvd && mvd.postures && s.posture && mvd.postures.indexOf(s.posture) < 0) errs.push(pathOf('move') + N_('di chuyển "{move}" không đi với tư thế "{posture}" (hợp: {ids}).', { move: s.move, posture: s.posture, ids: mvd.postures.join(', ') }));
+      if (mvd && mvd.postures && s.posture && mvd.postures.indexOf(s.posture) < 0) errs.push(pathOf('move') + N_('di chuyển "{move}" không đi với tư thế "{posture}" (hợp: {ids}).', { move: String(s.move).slice(0, 60), posture: String(s.posture).slice(0, 60), ids: mvd.postures.join(', ') }));
       if (s.fx !== undefined) {
         if (!Array.isArray(s.fx) || s.fx.length > 3) errs.push(pathOf('fx') + N_('fx phải là mảng tối đa 3 phần tử.'));
-        else s.fx.forEach(function (f) { if (S.fx.items.enum.indexOf(f) < 0) errs.push(pathOf('fx') + N_('hiệu ứng "{ref}" không có trong kho.', { ref: f })); });
+        else s.fx.forEach(function (f) { if (S.fx.items.enum.indexOf(f) < 0) errs.push(pathOf('fx') + N_('hiệu ứng "{ref}" không có trong kho.', { ref: String(f).slice(0, 60) })); });
       }
       if (s.spot !== undefined && S.spot.enum.indexOf(s.spot) >= 0) {
         if (ev.scene === undefined) errs.push(pathOf('spot') + N_('"spot" chỉ dùng khi kịch bản có "scene".'));

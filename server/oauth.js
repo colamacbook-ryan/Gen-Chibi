@@ -225,7 +225,7 @@ class OAuth {
     }
     let grants = ['authorization_code', 'refresh_token'];
     if (Array.isArray(b.grant_types)) { grants = grants.filter(g => b.grant_types.indexOf(g) >= 0); if (grants.indexOf('authorization_code') < 0) return oerr(400, 'invalid_client_metadata', 'grant_types must include authorization_code'); }
-    if (Array.isArray(b.response_types) && b.response_types.length && b.response_types.indexOf('code') < 0) return oerr(400, 'invalid_client_metadata', 'response_types must include "code"');
+    if (Array.isArray(b.response_types) && b.response_types.length && b.response_types.indexOf('code') < 0) return oerr(400, 'invalid_client_metadata', 'response_types must include code');
     if (Object.keys(this.s.clients).length >= MAX.clients && !this.evict()) return oerr(429, 'temporarily_unavailable', 'already ' + MAX.clients + ' clients in use - the owner can revoke some in Studio > System > Agent connections', { retry_after: 60 });
     const t = this.now(), id = 'gcc_' + rnd(18);
     const requested = str(b.scope, MAX.scope).split(/\s+/).filter(x => SCOPES.indexOf(x) >= 0);

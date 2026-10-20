@@ -9,6 +9,7 @@
 //   - Câu CHỈ agent đọc (mô tả tool MCP, gợi ý, kết quả tool) viết thẳng tiếng Anh trong mã (CNS-067) — không qua bảng.
 // Ngôn ngữ của yêu cầu đang chạy (nhãn khu của dock, nhãn nhà cung cấp, nhãn giọng, tên phân cảnh mặc định… tự đúng ngôn ngữ mà không truyền tham số qua mọi tầng):
 //   run(lang, fn)   chạy fn trong ngữ cảnh ngôn ngữ (AsyncLocalStorage của Node — theo được qua await); main.js bọc route() một lần (hook H0, tuỳ chọn)
+//   exit(fn)        chạy fn NGOÀI ngữ cảnh (tạo timer nền trong request)
 //   reqLang(lang)   lang hợp lệ → ngôn ngữ của yêu cầu đang chạy → 'en' (mặc định ADR 0007) — cho thứ PHẢI chọn một ngôn ngữ: trang Cấp phép, dòng dặn AI
 //   srcLang(lang)   lang hợp lệ → ngôn ngữ của yêu cầu đang chạy → 'vi' (msgid nguồn) — cho DỮ LIỆU trả Studio qua main.js: không có ngữ cảnh thì giữ
 //                   tiếng Việt để main.js dịch ở rìa (localize / aiView theo langOf(req)) — không bao giờ ra tiếng Anh cố định cho người dùng chế độ vi
@@ -34,6 +35,7 @@ const MSG_TABLES = /^(server|engine)[\w-]*\.json$/;
 
 const store = new AsyncLocalStorage();
 function run(lang, fn) { return store.run({ lang: L10N.norm(lang) || L10N.I18N.DEFAULT }, fn); }
+function exit(fn) { return store.exit(fn); }   // việc NỀN tạo trong một request (timer): không kế thừa ngôn ngữ của request đó
 function ctxLang(lang, fallback) {
   const l = L10N.norm(lang);
   if (l) return l;
@@ -65,4 +67,4 @@ function localizeBody(lang, body) {
   return out;
 }
 
-module.exports = { VI, tr: L10N.tr, _t, label, en, run, reqLang, srcLang, localizeBody, norm: L10N.norm, M };
+module.exports = { VI, tr: L10N.tr, _t, label, en, run, exit, reqLang, srcLang, localizeBody, norm: L10N.norm, M };

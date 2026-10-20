@@ -62,7 +62,8 @@ function consentPage(view, opts) {
   const tx = { loopback: _t('máy của bạn (CLI)'), known: _t('tên miền quen'), added: _t('bạn đã thêm (GC_OAUTH_REDIRECTS)'), unknown: _t('tên miền lạ'), unasked: _t('(không nói rõ — bạn chọn bên dưới)'),
     foreign: _t('Tên miền {host} không phải của claude.ai. Chỉ cấp nếu bạn tự thêm agent này.'), needToken: _t('Cần token chủ máy (GC_API_TOKEN) đúng để cấp phép.'), err: _t('Lỗi {code}'),
     badRedirect: _t('Địa chỉ quay về không hợp lệ.'), going: _t('Đang quay về agent…'), noServer: _t('Không gọi được máy chủ: {error}') };
-  const v = Object.assign({}, view, { client: MSG.label(L, view.client), scopes: (view.scopes || []).map(s => Object.assign({}, s, scopeInfo(s.id, L) || {})) });
+  const v = Object.assign({}, view, { client: view.client === 'Agent không tên' ? _t('Agent không tên') : view.client,   // tên agent tự khai: dữ liệu, không khớp mẫu — chỉ dịch tên mặc định
+    scopes: (view.scopes || []).map(s => Object.assign({}, s, scopeInfo(s.id, L) || {})) });
   const data = Object.assign({ needToken: !!opts.needToken, publicHost: opts.publicHost || '', tx }, v);
   const body = '<div class="pad">' +
     '<div>' + _t('Một agent muốn kết nối vào <b>gen-chibi</b> của bạn ({host}) để đọc / tạo asset qua MCP. Chỉ bấm <b>Cấp phép</b> nếu chính bạn vừa thêm kết nối này.').replace('{host}', '<span class="mono" id="ph"></span>') + '</div>' +
@@ -80,7 +81,7 @@ $('ph').textContent=D.publicHost;$('cn').textContent=D.client;$('cb').textConten
 var cbOk=D.callback.known||D.callback.loopback||D.callback.added;
 $('cc').textContent=D.callback.loopback?X.loopback:D.callback.known?X.known:D.callback.added?X.added:X.unknown;$('cc').className='chip '+(cbOk?'ok':'warn');
 $('rq').textContent=D.requested.length?D.requested.join(' '):X.unasked;
-if(!cbOk){$('warn').hidden=false;$('warn').textContent=X.foreign.replace('{host}',D.callback.host);}
+if(!cbOk){$('warn').hidden=false;$('warn').textContent=X.foreign.replace('{host}',function(){return D.callback.host});}
 var sel=D.scope;
 D.scopes.forEach(function(s){var l=document.createElement('label');l.className='scope';var r=document.createElement('input');r.type='radio';r.name='scope';r.value=s.id;r.checked=s.id===sel;r.addEventListener('change',function(){sel=s.id});
 var b=document.createElement('b');b.textContent=s.label+' ('+s.id+')';var d=document.createElement('span');d.textContent=s.desc;l.appendChild(r);l.appendChild(b);l.appendChild(d);$('sc').appendChild(l);});

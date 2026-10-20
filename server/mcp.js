@@ -159,7 +159,7 @@ function toolError(x, opt) {
   const msg = typeof x === 'string' ? x : String((x && x.message) || x);
   const code = opt.code || (x && typeof x === 'object' && ERR_HTTP[x.code]) || guessCode(msg);
   const list = opt.errors || (x && Array.isArray(x.errors) ? x.errors : null) || (code === 'VALIDATION_FAILED' ? msg.replace(/^[^:]*chưa đạt: /, '').split('; ') : [msg]);
-  const details = list.slice(0, 30).map(e => { const t = typeof e === 'string' ? e : JSON.stringify(e), m = /^([A-Za-z0-9_.$\[\]-]{1,80}): ([\s\S]*)$/.exec(t); return m ? { path: m[1], message: MSG.en(m[2]) } : { message: MSG.en(t) }; });
+  const details = list.slice(0, 30).map(e => { const t = (typeof e === 'string' ? e : JSON.stringify(e)).slice(0, 500), m = /^([A-Za-z0-9_.$\[\]-]{1,80}): ([\s\S]*)$/.exec(t); return m ? { path: m[1], message: MSG.en(m[2]) } : { message: MSG.en(t) }; });
   const hint = MSG.en(opt.hint || ERR_HINT[code]), en = MSG.en(msg);
   return { content: [{ type: 'text', text: '[' + code + '] ' + en + (hint ? '\n→ ' + hint : '') }], structuredContent: { error: Object.assign({ code, message: en, details, hint }, opt.retryAt ? { retryAt: opt.retryAt } : {}, opt.allowed ? { allowed: opt.allowed } : {}) }, isError: true };
 }

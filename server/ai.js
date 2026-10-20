@@ -187,7 +187,7 @@ class AI {
         else {
           let res;
           try { res = await mcp.callTool(name, args, { channel: 'ui', zone }); }   // zone: khu Thư viện không tạo asset mới (mcp.libraryGuard)
-          catch (e) { res = { isError: true, content: [{ type: 'text', text: 'Tool failed: ' + MSG.en(String(e.message)).slice(0, 300) }] }; }
+          catch (e) { res = { isError: true, content: [{ type: 'text', text: 'Tool failed: ' + MSG.en(String(e.message).slice(0, 300)).slice(0, 300) }] }; }
           ok = !!res && !res.isError;
           if (ok) { try { anchors = mcp.anchorsOf(name, args, res.structuredContent); } catch (e) { anchors = []; } }   // thứ vừa tạo / sửa → chip Soi trong dock
           const parts = (res && res.content) || [];

@@ -51,7 +51,16 @@ function log(...a) { console.log(new Date().toISOString(), ...a); }
 // uiLang: ngôn ngữ mặc định của MÁY cho Studio / câu trả lời API (người dùng vẫn chọn riêng trong trình duyệt). Quy tắc — xem initUiLang()
 const UI_LANG0 = L10N.norm(process.env.GC_LANG) || 'en';
 const SETTINGS_EXISTED = fs.existsSync(path.join(HOME, 'data', 'settings.json'));   // đo TRƯỚC mọi lần ghi: phân biệt bản cài cũ (nâng cấp) với bản cài mới
-function settings() { const s = Object.assign({ autoUpdate: process.env.GC_AUTO_UPDATE !== '0', checkHours: 6, oauthRegister: true, uiLang: UI_LANG0 }, readJSON(SETTINGS, {})); if (!L10N.norm(s.uiLang)) s.uiLang = UI_LANG0; return s; }   // oauthRegister: cho agent tự đăng ký OAuth (v0.19; chỉ có tác dụng khi có GC_PUBLIC_URL)
+// settings.json đọc lại chỉ khi tệp đổi (mtime + cỡ) — langOf() chạy MỖI request kể cả tệp tĩnh (L-42); ghi qua saveSettings() xoá nhớ ngay
+let settingsMemo = null;
+function settingsRaw() {
+  let st = null; try { st = fs.statSync(SETTINGS); } catch (e) { /* chưa có tệp */ }
+  const key = st ? st.mtimeMs + ':' + st.size : '-';
+  if (!settingsMemo || settingsMemo.key !== key) settingsMemo = { key, val: readJSON(SETTINGS, {}) };
+  return settingsMemo.val;
+}
+function saveSettings(s) { writeJSON(SETTINGS, s); settingsMemo = null; }
+function settings() { const s = Object.assign({ autoUpdate: process.env.GC_AUTO_UPDATE !== '0', checkHours: 6, oauthRegister: true, uiLang: UI_LANG0 }, settingsRaw()); if (!L10N.norm(s.uiLang)) s.uiLang = UI_LANG0; return s; }   // oauthRegister: cho agent tự đăng ký OAuth (v0.19; chỉ có tác dụng khi có GC_PUBLIC_URL)
 
 L10N.load(APP);
 const store = new Store(DATA);
@@ -64,10 +73,10 @@ const store = new Store(DATA);
 function initUiLang() {
   const env = L10N.norm(process.env.GC_LANG), s = readJSON(SETTINGS, {});
   if (env && env !== s.uiLangEnv) {
-    s.uiLang = env; s.uiLangEnv = env; writeJSON(SETTINGS, s);
+    s.uiLang = env; s.uiLangEnv = env; saveSettings(s);
     log('[i18n] GC_LANG=' + env + ' → ngôn ngữ mặc định của máy = ' + env);
   } else if (!env && !L10N.norm(s.uiLang) && (SETTINGS_EXISTED || store.listWorks().length || store.listAssets().length)) {
-    s.uiLang = 'vi'; writeJSON(SETTINGS, s);
+    s.uiLang = 'vi'; saveSettings(s);
     log('[i18n] nâng cấp bản cài cũ: giữ giao diện tiếng Việt (settings.uiLang = vi, chỉ một lần; đổi ở Hệ thống › Ngôn ngữ hoặc genchibi lang)');
   }
 }
@@ -88,8 +97,13 @@ setInterval(() => oauth.flush(), 30000).unref();   // lastUsedAt ghi đĩa trễ
 
 /* ---------------------------------------------------------------- tiện ích HTTP */
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.md': 'text/markdown; charset=utf-8' };
-// ngôn ngữ của người gọi: header X-GC-Lang (Studio) → Accept-Language → mặc định của máy
-function langOf(req) { return L10N.langOf(req, settings().uiLang); }
+// ngôn ngữ của người gọi: header X-GC-Lang (Studio) → Accept-Language → mặc định của máy. Đường của MÁY (MCP, metadata / đăng ký / token OAuth)
+// luôn tiếng Anh — hợp đồng agent một ngôn ngữ (CNS-067), không theo uiLang của chủ máy. Tính một lần mỗi request
+const MACHINE_PATH = /^\/(mcp(\/[A-Za-z0-9_-]+)?|\.well-known\/oauth-[a-z-]+(\/mcp)?|oauth\/(register|token|revoke))$/;
+function langOf(req) {
+  if (req._gcLang) return req._gcLang;
+  return (req._gcLang = MACHINE_PATH.test(String(req.url || '').split('?')[0]) ? 'en' : L10N.langOf(req, settings().uiLang));
+}
 // câu do server sinh trong JSON — error, message, errors[] (chuỗi | { error }), warnings[], conflicts[] — dịch theo người gọi (ADR 0007, v0.20):
 // khớp nguyên văn → khớp ngược MẪU có placeholder (câu ghép động: engine/i18n-msg.js) → giữ nguyên. Trường dữ liệu khác không đụng
 function localize(res, body) {
@@ -130,14 +144,14 @@ function body(req, limit = 1024 * 1024) {
 function oauthBody(req) {
   return new Promise((resolve, reject) => {
     const ct = String(req.headers['content-type'] || '').toLowerCase(), chunks = []; let n = 0;
-    req.on('data', c => { n += c.length; if (n > 32 * 1024) { reject(Object.assign(new Error('thân yêu cầu quá lớn (tối đa 32 KB)'), { code: 413 })); req.destroy(); } else chunks.push(c); });
+    req.on('data', c => { n += c.length; if (n > 32 * 1024) { reject(Object.assign(new Error('request body too large (max 32 KB)'), { code: 413 })); req.destroy(); } else chunks.push(c); });
     req.on('error', reject);
     req.on('end', () => {
       const raw = Buffer.concat(chunks).toString('utf8');
       if (/^application\/x-www-form-urlencoded\b/.test(ct)) { const o = Object.create(null); for (const [k, v] of new URLSearchParams(raw)) if (!(k in o)) o[k] = v; return resolve(o); }
       if (/^application\/json\b/.test(ct)) {
-        let j; try { j = raw ? JSON.parse(raw) : {}; } catch (e) { return reject(Object.assign(new Error('JSON không hợp lệ'), { code: 400 })); }
-        return j && typeof j === 'object' && !Array.isArray(j) ? resolve(j) : reject(Object.assign(new Error('thân phải là đối tượng JSON'), { code: 400 }));
+        let j; try { j = raw ? JSON.parse(raw) : {}; } catch (e) { return reject(Object.assign(new Error('invalid JSON'), { code: 400 })); }   // error_description: ASCII tiếng Anh (RFC 6749 §5.2)
+        return j && typeof j === 'object' && !Array.isArray(j) ? resolve(j) : reject(Object.assign(new Error('the body must be a JSON object'), { code: 400 }));
       }
       reject(Object.assign(new Error('Content-Type phải là application/x-www-form-urlencoded hoặc application/json'), { code: 415 }));
     });
@@ -261,7 +275,7 @@ async function oauthRoute(req, res, url, p, m) {
   // Giới hạn tốc độ: kiểm trần IP trước, trần toàn cục (rất cao) chỉ cộng cho request đã qua trần IP; CHỈ ĐẾM thất bại (token / revoke) hoặc mọi lần (register / authorize — mỗi lần tạo trạng thái).
   // Request loopback thật (không header proxy) được miễn. Trả true nếu đã trả 429.
   const ip = clientIp(req.headers, req.socket.remoteAddress, IP_HEADER), direct = isDirectLocal(req.headers, req.socket.remoteAddress);
-  const throttled = kind => { const w = direct ? 0 : oauth.gate(kind, ip, OAUTH_RATE); if (w) send(res, 429, { error: 'temporarily_unavailable', error_description: 'quá nhiều yêu cầu — thử lại sau ' + w + ' giây' }, null, { 'Retry-After': String(w) }); return !!w; };
+  const throttled = kind => { const w = direct ? 0 : oauth.gate(kind, ip, OAUTH_RATE); if (w) send(res, 429, { error: 'temporarily_unavailable', error_description: 'too many requests - retry after ' + w + ' seconds' }, null, { 'Retry-After': String(w) }); return !!w; };
   const tick = kind => { if (!direct) oauth.tick(kind, ip); };
   const oerr = (e) => send(res, e.code >= 400 && e.code < 600 ? e.code : 400, { error: 'invalid_request', error_description: e.message });
   if (p === '/oauth/authorize') {
@@ -277,7 +291,7 @@ async function oauthRoute(req, res, url, p, m) {
   if (p === '/oauth/register' || p === '/oauth/token' || p === '/oauth/revoke') {
     if (m !== 'POST') { send(res, 405, { error: 'chỉ POST' }, null, { Allow: 'POST' }); return true; }
     if (throttled(p === '/oauth/register' ? 'register' : 'token')) return true;
-    if (p === '/oauth/register' && !registerOn()) { send(res, 403, { error: 'access_denied', error_description: 'chủ máy đã tắt "cho phép agent tự đăng ký" (Studio › Hệ thống › Kết nối agent)' }); return true; }
+    if (p === '/oauth/register' && !registerOn()) { send(res, 403, { error: 'access_denied', error_description: 'the owner turned off agent self-registration (Studio > System > Agent connections)' }); return true; }
     let f; try { f = await oauthBody(req); } catch (e) { oerr(e); return true; }
     const r = p === '/oauth/register' ? oauth.register(f) : p === '/oauth/token' ? oauth.token(f) : oauth.revoke(f);
     if (p === '/oauth/register') tick('register'); else if (r.status >= 400) tick('token');   // token / revoke: chỉ đếm THẤT BẠI — request đúng không bao giờ bị trần
@@ -297,7 +311,7 @@ async function route(req, res) {
   let viaLink = false;
   const lm = /^\/mcp\/([A-Za-z0-9_-]+)$/.exec(p);
   if (lm) {
-    if (!MCP_KEY || !safeEq(lm[1], MCP_KEY)) return fail(res, 404, 'không có');
+    if (!MCP_KEY || !safeEq(lm[1], MCP_KEY)) return fail(res, 404, 'không có API này');   // sai khoá = như đường không tồn tại
     p = '/mcp'; viaLink = true;
   }
   // Chống DNS rebinding: chỉ phục vụ khi Host là máy cục bộ (hoặc tên được cho phép trong GC_ALLOWED_HOSTS)
@@ -372,7 +386,7 @@ async function route(req, res) {
     if (Number.isFinite(b.checkHours) && b.checkHours >= 1 && b.checkHours <= 168) s.checkHours = Math.round(b.checkHours);
     if (typeof b.oauthRegister === 'boolean') s.oauthRegister = b.oauthRegister;
     if (b.uiLang !== undefined) { const l = L10N.norm(b.uiLang); if (!l) return fail(res, 400, 'uiLang phải là en hoặc vi'); s.uiLang = l; }   // ngôn ngữ mặc định của máy (Hệ thống › Ngôn ngữ)
-    writeJSON(SETTINGS, s);
+    saveSettings(s);
     scheduleChecks();
     return send(res, 200, s);
   }
@@ -621,7 +635,7 @@ async function autoCheck() {
 }
 function scheduleChecks() {
   clearInterval(timer);
-  timer = setInterval(autoCheck, settings().checkHours * 3600 * 1000);
+  timer = MSG.exit(() => setInterval(autoCheck, settings().checkHours * 3600 * 1000));   // gọi từ PUT /api/settings: timer không giữ ngôn ngữ của request đó
 }
 
 server.listen(PORT, HOST, () => {
