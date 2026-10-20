@@ -1,29 +1,29 @@
-# gen-chibi v0.19 — Caddyfile mẫu khi có cổng đăng nhập riêng đứng trước app.
+# gen-chibi v0.19 — sample Caddyfile for when your own login gate sits in front of the app.
 # © 2026 Gen Labs — All rights reserved.
 #
-# Nguyên tắc: đường của MÁY (agent) đi THẲNG vào app, không qua cổng đăng nhập; còn lại (Studio, /api, trang Cấp phép) đi qua cổng.
-# Bảo vệ của đường máy đến từ chính Bearer token của app (access token OAuth / GC_API_TOKEN / link có khoá) + PKCE — không cần cookie của cổng.
+# Principle: MACHINE (agent) routes go STRAIGHT to the app, never through the login gate; everything else (Studio, /api, the Authorize page) goes through the gate.
+# The machine routes are protected by the app's own Bearer tokens (OAuth access token / GC_API_TOKEN / keyed link) + PKCE — no gate cookie needed.
 #
-# Vì sao không đặt forward_auth ở cấp site: nó sẽ chạy cả cho /mcp. Cổng trả 302 /login hoặc 401 của nó (không có WWW-Authenticate)
-# → agent không tự khám phá được OAuth. Đặt forward_auth BÊN TRONG handle cuối như dưới đây.
+# Why forward_auth must not sit at site level: it would also run for /mcp. The gate answers 302 /login or its own 401 (without WWW-Authenticate)
+# → the agent cannot discover OAuth by itself. Put forward_auth INSIDE the last handle, as below.
 #
-# App KHÔNG tin header Remote-User / X-Forwarded-User do cổng gắn: /oauth/authorize vẫn đòi chủ máy nhập GC_API_TOKEN (hoặc có phiên Studio).
-# Điều kiện của claude.ai: cổng 443, hostname có bản ghi A công khai, không redirect apex ↔ www (redirect làm rơi header Authorization).
-# Cloudflare: Bot Fight Mode / "Block AI bots" trả 403 cho UA Claude-User → tạo WAF skip rule cho IP 160.79.104.0/21 (egress của Anthropic)
-# hoặc tắt các tính năng đó cho các path máy bên dưới.
+# The app does NOT trust Remote-User / X-Forwarded-User headers added by the gate: /oauth/authorize still asks the owner for GC_API_TOKEN (or a Studio session).
+# claude.ai requirements: port 443, a hostname with a public A record, no apex ↔ www redirect (a redirect drops the Authorization header).
+# Cloudflare: Bot Fight Mode / "Block AI bots" return 403 to the Claude-User UA → create a WAF skip rule for IP 160.79.104.0/21 (Anthropic egress)
+# or turn those features off for the machine paths below.
 #
-# Thay: chibi.example.com → tên miền của bạn · 7480 → GC_PORT · đặt GC_PUBLIC_URL=https://chibi.example.com và GC_ALLOWED_HOSTS=chibi.example.com trong .env của gen-chibi.
+# Replace: chibi.example.com → your domain · 7480 → GC_PORT · set GC_PUBLIC_URL=https://chibi.example.com and GC_ALLOWED_HOSTS=chibi.example.com in gen-chibi's .env.
 
 chibi.example.com {
-	# đường máy: khám phá (RFC 9728 / 8414), đăng ký, đổi token, thu hồi, và chính MCP
+	# machine routes: discovery (RFC 9728 / 8414), registration, token exchange, revocation, and MCP itself
 	@machine path /mcp /mcp/* /.well-known/oauth-protected-resource* /.well-known/oauth-authorization-server* /oauth/register /oauth/token /oauth/revoke
 	handle @machine {
 		reverse_proxy 127.0.0.1:7480
 	}
 
-	# mọi thứ còn lại — Studio, /api/*, /oauth/authorize (trang Cấp phép), /api/oauth/approve — nằm SAU cổng đăng nhập hiện có
+	# everything else — Studio, /api/*, /oauth/authorize (the Authorize page), /api/oauth/approve — stays BEHIND your existing login gate
 	handle {
-		# forward_auth đặt Ở TRONG handle này (ví dụ — đổi theo cổng của bạn):
+		# forward_auth goes INSIDE this handle (example — adapt it to your gate):
 		# forward_auth 127.0.0.1:9000 {
 		# 	uri /verify
 		# 	copy_headers Remote-User

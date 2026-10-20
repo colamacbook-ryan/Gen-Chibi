@@ -14,7 +14,7 @@ a clash is rejected and names the pack that owns the name.
 - Attacks: use `action` — the hit sound plays exactly at the strike point by itself (project packs can replace the default hit /
   block / miss sound through `cue.event`). Do not stack a hand-placed impact sound on top of an `action` step.
 - You **cannot hear** anything (the server has no Web Audio): check with the gates and `lint_sound_track`, and ask the owner to press ▶ in
-  Studio › Thư viện › Âm thanh (they can also download any sound or recipe as WAV).
+  Studio › Library › Sounds (Vietnamese UI: Thư viện › Âm thanh; they can also download any sound or recipe as WAV).
 
 ## Steps A — mix sounds into a script (the everyday job)
 1. `list_sounds` with `{ "project": "<project id>" }` (+ optional `cat`, `tag`, `q`) → names you may use in that project
@@ -61,7 +61,7 @@ a clash is rejected and names the pack that owns the name.
      (what `get_sound_pack` returns with `names`) is an error — send a complete pack.
    Removing a pack is `delete_sound_pack` (owner only; same `[CONFLICT]` list while it is still called).
 6. Use it: `step.sfx = ["<sound name>"]`, `events: [[t, { "sfx": "<name>" }]]` inside a motion pack, or a `cue`.
-   Ask the owner to listen (Studio › Thư viện › Âm thanh › ▶).
+   Ask the owner to listen (Studio › Library › Sounds › ▶).
 
 ## Order matters when packs depend on each other
 Save the **sound pack before** the motion pack that calls its sounds, and before the work whose steps name them. `export_project` /

@@ -1,5 +1,7 @@
 # Hướng dẫn sử dụng gen-chibi
 
+[English](USER-GUIDE.md) | **Tiếng Việt**
+
 > gen-chibi là **nhà máy asset chibi theo chủ đề**: từ một bộ khung chuẩn dựng nhân vật, vật phẩm, bối cảnh → cất vào thư viện theo dự án chủ đề → phát hành thành **gói bán**. **Làm phim** với AI đạo diễn là cách dùng asset — và là bản demo sống của bộ thư viện.
 > © 2026 Gen Labs — All rights reserved · Tác giả: Ryan — 090.919.8823
 
@@ -236,4 +238,5 @@ tên-miền {
 
   Nếu đổi địa chỉ, xoá connector rồi thêm lại, vì claude.ai nhớ kết quả dò khoảng 5 phút.
 - **Có trang đăng nhập riêng trước app (do agent khác dựng) thì cập nhật có mất không?** Không mất, miễn là trang đó nằm **ngoài** thư mục cài: Caddyfile, service riêng, hoặc `docker-compose.override.yml`. Sẽ mất nếu nó được ghi vào `docker-compose.yml` hay sửa file trong `current/`: mỗi lần cập nhật hoặc khởi động, genchibi chép lại `docker-compose.yml` gốc, còn bản mới được giải nén vào thư mục riêng.
+- **Đổi giao diện sang tiếng Việt thế nào?** Cho cả bản cài: `genchibi lang vi` (hoặc `--lang vi` lúc cài). Chỉ cho riêng bạn: nút chuyển ngôn ngữ trong Studio. Chi tiết: [README › Ngôn ngữ](../README.vi.md#ngôn-ngữ).
 - **Hiệu năng?** Mỗi sân khấu tối đa 8 diễn viên sống; ảnh tĩnh được cache; hết phân cảnh là huỷ diễn viên.

@@ -98,7 +98,8 @@ function mkHome(name) { const h = path.join(W, name); fs.mkdirSync(path.join(h, 
   check(!(eBad && eBad.message.includes('github_pat_SAI')), 'thông báo lỗi không chứa token');
 
   console.log('4) install.sh');
-  const base = { GC_GITHUB_API: 'http://127.0.0.1:' + APIP, GC_REPO: 'o/r', NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost', HTTPS_PROXY: '', https_proxy: '', HTTP_PROXY: '', http_proxy: '' };
+  // GC_LANG rỗng = trình cài nói tiếng Anh (mặc định, ADR 0007) dù máy chạy test có đặt GC_LANG
+  const base = { GC_GITHUB_API: 'http://127.0.0.1:' + APIP, GC_REPO: 'o/r', NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost', HTTPS_PROXY: '', https_proxy: '', HTTP_PROXY: '', http_proxy: '', GC_LANG: '' };
   const inst = async (name, extra, args = []) => {
     const home = path.join(W, name + '-home'); fs.mkdirSync(home, { recursive: true });
     const port = await freePort(), dir = path.join(home, 'gc');
@@ -120,7 +121,7 @@ function mkHome(name) { const h = path.join(W, name); fs.mkdirSync(path.join(h, 
   const c = await inst('inst-badkey', { GC_GITHUB_TOKEN: 'github_pat_SAI' });
   check(c.code !== 0 && /token/i.test(c.out) && !c.out.includes('github_pat_SAI'), 'token sai: lỗi rõ, không in token');
   const d = await inst('inst-weird', { GC_GITHUB_TOKEN: 'a b"c' });
-  check(d.code !== 0 && /ký tự lạ/.test(d.out), 'token có ký tự lạ bị từ chối');
+  check(d.code !== 0 && /invalid characters/.test(d.out), 'token có ký tự lạ bị từ chối');
 
   // .env có sẵn: thêm/ghi dòng token, giữ nguyên dòng khác
   const e = await inst('inst-env', { GC_GITHUB_TOKEN: GOOD });

@@ -11,7 +11,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 echo "1) cú pháp"
 for f in $(git ls-files '*.js' 2>/dev/null || find engine kinds server studio -name '*.js') launcher.js; do node --check "$f"; done
-bash -n install.sh; bash -n cli/genchibi; bash -n tools/package.sh
+bash -n install.sh; bash -n cli/genchibi; bash -n tools/package.sh; bash -n tools/test-lang.sh
 echo "   ✓ cú pháp"
 # luật cấu trúc: không đặt animation/transform CSS lên nhóm lớp của khung xương (lỗi mắt đứng yên v0.1.3)
 if grep -nE "\[data-l=[^]]*\][^{]*\{[^}]*(animation|transform)" engine/render.js studio/*.css 2>/dev/null; then echo "   ✗ CSS đặt transform/animation lên nhóm lớp [data-l]"; exit 1; fi
@@ -732,6 +732,9 @@ node tools/test-dock-core.mjs || exit 1
 
 echo "4) khoá truy cập"
 bash tools/test-auth.sh || exit 1
+
+echo "4d) ngôn ngữ (ADR 0007): trình cài --lang / GC_LANG / câu hỏi khi có terminal · genchibi lang · trợ giúp en / vi · README + tài liệu tiếng Anh"
+bash tools/test-lang.sh || exit 1
 
 echo "4c) OAuth 2.1 cho MCP từ xa (v0.19): 401 khám phá · metadata · DCR (allowlist callback, không secret, trần, tốc độ) · authorize chỉ chủ duyệt · PKCE / resource / iss · code một lần · refresh xoay vòng · hết hạn · thu hồi · phạm vi → kênh sẵn có · oauth.json chỉ băm · đường máy qua cổng đăng nhập ngoài giả"
 node tools/test-oauth.mjs || exit 1
