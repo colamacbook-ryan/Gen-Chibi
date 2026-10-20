@@ -20,6 +20,9 @@ echo "   ✓ cú pháp"
 # luật cấu trúc: không đặt animation/transform CSS lên nhóm lớp của khung xương (lỗi mắt đứng yên v0.1.3)
 if grep -nE "\[data-l=[^]]*\][^{]*\{[^}]*(animation|transform)" engine/render.js studio/*.css 2>/dev/null; then echo "   ✗ CSS đặt transform/animation lên nhóm lớp [data-l]"; exit 1; fi
 echo "   ✓ không có CSS đè transform của khung xương"
+# Q26 (Ryan 2026-10-20: "đổi thành Gen Labs"): giao diện chạy trên máy owner không mang số điện thoại / tên cá nhân của tác giả
+if grep -nE 'tel:|090\.?919|Tác giả:' studio/*.html studio/*.js server/*.js 2>/dev/null; then echo "   ✗ Studio / server còn thông tin liên lạc cá nhân (Q26: chỉ Gen Labs)"; exit 1; fi
+echo "   ✓ chân trang Studio chỉ Gen Labs (Q26)"
 # luật cấu trúc: không có method trùng tên trong một class (method sau đè method trước, không báo lỗi — lỗi castOf v0.9.0)
 node -e '
 const fs = require("fs"); let bad = 0;

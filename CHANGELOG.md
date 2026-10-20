@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.21.1 — The Studio footer shows only Gen Labs, no personal contact details
+Ryan: "Q26 đổi thành Gen Labs" *(In English: "Q26: change it to Gen Labs")*.
+- **Changed**: the Studio sidebar footer on every install showed the author's name and personal phone number. It now reads only "© 2026 Gen Labs — All rights reserved". `LICENSE`, `README` and the user guide keep their author line as before.
+- **Guard**: `tools/test.sh` fails if the Studio or server code contains a phone link or an author contact line again.
+
 ## v0.21.0 — Online in one step: one install command, then the app takes your domain online itself (Caddy or Cloudflare Tunnel) — Studio and MCP ready
 Ryan: "hãy nghĩ cách để owner cài về bằng 1 lệnh là vào docker hết rồi docker đó tự hỗ trợ thiết lập dễ dàng tên miền step by step bằng candy và tunnel --> user chỉ hỗ trợ gán ip lên domain hay token cloudflare là xong mọi thứ sẵn sàng ngay kể cả mcp" (INT-19).
 *(In English: "Find a way for an owner to install with one command, everything in Docker, and have it guide domain setup step by step with Caddy and a tunnel — the user only points an IP at the domain or gives a Cloudflare token, and everything is ready, MCP included.")*
