@@ -8,6 +8,10 @@
   // NGÔN NGỮ (ADR 0007, engine/i18n.js): msgid = chuỗi tiếng Việt hiện có. _t = câu giao diện · _l = nhãn DỮ LIỆU (engine / người dùng:
   // có bản dịch thì dịch, không thì giữ nguyên, không ghi "thiếu") · N_ = đánh dấu chuỗi ở bảng hằng cấp module — dịch lúc HIỂN THỊ bằng _t().
   var I18N = GC.i18n, _t = I18N.t, _pt = I18N.pt, _l = I18N.label, N_ = I18N.N;   // _pt(ngữ cảnh, msgid): một chữ Việt, hai nghĩa tiếng Anh
+  // _lo(x, s): chữ của MỘT ĐỐI TƯỢNG dữ liệu (tên / nhãn / vai / mô tả của nhân vật, vật phẩm, bối cảnh, linh kiện, đòn, âm, dự án…) — CNS-158: chỉ dịch đồ của
+  // Gen Labs (GC.isGenLabs: bộ khung, đòn khung, bộ âm chuẩn); nội dung người dùng (Của tôi, bộ mẫu đã nhập, gói nhập, dự án) giữ nguyên chữ, kể cả khi trùng
+  // msgid — nhân vật "Nam" không hiện "Male", vật phẩm "Đạt" không hiện "Approved". _l chỉ còn cho nhãn từ vựng của engine (trạng thái, khe, giọng…)
+  function _lo(x, s) { return GC.isGenLabs(x) ? _l(s) : s == null ? '' : String(s); }
   // mục cổng kiểm của engine: câu có số đếm trả kèm labelId / detailId (mẫu {n}) → dịch theo mẫu; câu tĩnh → nhãn dữ liệu (v0.20)
   function gL(g) { return g.labelId ? _l(g.labelId, g.labelVars) : _l(g.label); }
   function gD(g) { return g.detailId ? _l(g.detailId, g.detailVars) : _l(g.detail || ''); }
@@ -464,10 +468,10 @@
         var st = STATUS[GC.statusOf(a.status)];
         var tr = h('tr', anc({ class: 'click', 'aria-selected': sel && sel.key === a.key ? 'true' : null,
           onclick: function () { sel = a; paint(); },
-          ondblclick: function () { go({ page: 'character', key: a.key, tab: 'look' }); } }, 'asset:' + a.key, _l(a.name)),
+          ondblclick: function () { go({ page: 'character', key: a.key, tab: 'look' }); } }, 'asset:' + a.key, _lo(a, a.name)),
           h('td', { class: 'id', text: a.code || a.id }), avCell,
-          h('td', null, h('b', { text: _l(a.name) })), h('td', { class: 'k', text: a.han || '' }), h('td', { text: _l(a.faction || '') }),
-          h('td', { text: _l(a.role || '') }), h('td', null, h('span', { class: 'tag', text: a.pack })),
+          h('td', null, h('b', { text: _lo(a, a.name) })), h('td', { class: 'k', text: a.han || '' }), h('td', { text: _lo(a, a.faction || '') }),
+          h('td', { text: _lo(a, a.role || '') }), h('td', null, h('span', { class: 'tag', text: a.pack })),
           h('td', null, h('span', { class: st[1], text: st[0] })), h('td', { class: 'v', text: 'v' + (a.version || 1) }),
           h('td', null, h('span', { class: 'chip ' + (okN === g.length ? 'ok' : 'bad'), text: okN + '/' + g.length })));
         table.appendChild(tr);
@@ -479,12 +483,12 @@
       if (instP) { instP.destroy(); instP = null; }
       clear(insp);
       if (!sel) { dockObj('asset', null); insp.appendChild(h('div', { class: 'panel empty', text: _t('Chọn một nhân vật.') })); return; }
-      dockObj('asset', sel.key, sel.name);
+      dockObj('asset', sel.key, _lo(sel, sel.name));
       var stg = h('div', { class: 'stage preview' });
       var bar = h('div', { class: 'statebar' });
-      var pnl = h('div', { class: 'panel' }, h('h3', null, _l(sel.name), h('span', { class: 'r mono', text: sel.key })), stg,
+      var pnl = h('div', { class: 'panel' }, h('h3', null, _lo(sel, sel.name), h('span', { class: 'r mono', text: sel.key })), stg,
         h('div', { class: 'pad stack' }, bar,
-          h('div', { class: 'note', text: (sel.identity && sel.identity.p1 ? _t('Nhận diện: {p1}. ', { p1: _l(sel.identity.p1) }) : '') + _l(sel.persona || '') }),
+          h('div', { class: 'note', text: (sel.identity && sel.identity.p1 ? _t('Nhận diện: {p1}. ', { p1: _lo(sel, sel.identity.p1) }) : '') + _lo(sel, sel.persona || '') }),
           h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: function () { go({ page: 'character', key: sel.key, tab: 'look' }); } }, _t('Mở hồ sơ')),
             h('button', { class: 'btn', onclick: function () { duplicate(sel); } }, _t('Nhân bản sang "Của tôi"')))));
       insp.appendChild(pnl);
@@ -523,7 +527,7 @@
     var w = clone(orig);       // bản làm việc
     w.pack = orig.pack; w.key = orig.key;
     var dirty = false, pState = 'normal';
-    crumbs([{ t: _t('Bàn chỉnh nhân vật'), go: { page: 'characters' } }, { t: _l(orig.name) }]);
+    crumbs([{ t: _t('Bàn chỉnh nhân vật'), go: { page: 'characters' } }, { t: _lo(orig, orig.name) }]);
     var saveBtn = h('button', { class: 'btn primary', disabled: true, onclick: save }, _t('Lưu phiên bản'));
     var undoBtn = h('button', { class: 'btn', disabled: true, onclick: function () { go(r); } }, _t('Huỷ thay đổi'));
     var official = orig.pack !== MY_PACK;
@@ -534,8 +538,8 @@
     var bar = h('div', { class: 'statebar' });
     var sizes = h('div', { class: 'sizes' });
     var gateBox = h('div');
-    dockObj('asset', orig.key, orig.name);
-    $('view').appendChild(h('div', anc({ class: 'detail' }, 'asset:' + orig.key, _l(orig.name)), left,
+    dockObj('asset', orig.key, _lo(orig, orig.name));
+    $('view').appendChild(h('div', anc({ class: 'detail' }, 'asset:' + orig.key, _lo(orig, orig.name)), left,
       h('div', { class: 'sticky stack' },
         h('div', { class: 'panel' }, h('h3', null, _t('Xem trước'), h('span', { class: 'r note', id: 'pvState' })), stg, h('div', { class: 'pad stack' }, bar, sizes)),
         h('div', { class: 'panel' }, h('h3', null, _t('Cổng kiểm')), gateBox))));
@@ -609,10 +613,10 @@
     }
 
     /* ---- Ngoại hình: linh kiện + tham số + màu */
-    function rangeInput(def, val, on) {
+    function rangeInput(def, val, on, owner) {   // owner: linh kiện mang tham số (nhãn của người dùng giữ nguyên); không có = tham số khung mặt của engine
       var out = h('span', { class: 'mono note', style: 'display:inline-block;min-width:38px;text-align:right', text: String(val) });
-      var inp = h('input', { type: 'range', min: def.min, max: def.max, step: def.step, value: val, 'aria-label': _l(def.label), oninput: function () { out.textContent = inp.value; on(+inp.value); } });
-      return h('span', { class: 'row', style: 'gap:6px;flex-wrap:nowrap' }, h('span', { class: 'note', style: 'min-width:120px', text: _l(def.label) }), inp, out);
+      var inp = h('input', { type: 'range', min: def.min, max: def.max, step: def.step, value: val, 'aria-label': owner ? _lo(owner, def.label) : _l(def.label), oninput: function () { out.textContent = inp.value; on(+inp.value); } });
+      return h('span', { class: 'row', style: 'gap:6px;flex-wrap:nowrap' }, h('span', { class: 'note', style: 'min-width:120px', text: owner ? _lo(owner, def.label) : _l(def.label) }), inp, out);
     }
     function setParam(slot, k, v) {
       w.look.params = w.look.params || {};
@@ -632,10 +636,10 @@
         options.forEach(function (o) { var op = h('option', { value: o[0], text: o[1] }); if (o[0] === value) op.selected = true; s.appendChild(op); });
         return s;
       }
-      function paramsOf(slot, defs) {
+      function paramsOf(slot, defs, owner) {
         if (!defs) return null;
         var vals = GC.paramValues(w, slot, defs);
-        return h('div', { class: 'stack', style: 'gap:4px' }, Object.keys(defs).map(function (k) { return rangeInput(defs[k], vals[k], function (v) { setParam(slot, k, v); }); }));
+        return h('div', { class: 'stack', style: 'gap:4px' }, Object.keys(defs).map(function (k) { return rangeInput(defs[k], vals[k], function (v) { setParam(slot, k, v); }, owner); }));
       }
       row(_t('Kiểu mắt'), sel(Object.keys(LIB.eyeStyles).map(function (k) { return [k, _l(LIB.eyeStyles[k].label)]; }), w.look.eyes, function (v) { w.look.eyes = v; changed(false); }, _t('Kiểu mắt')), paramsOf('eyes', GC.FACE_PARAMS.eyes));
       row(_t('Kiểu mày'), sel(Object.keys(LIB.browStyles).map(function (k) { return [k, _l(LIB.browStyles[k].label)]; }), w.look.brows, function (v) { w.look.brows = v; changed(false); }, _t('Kiểu mày')), paramsOf('brows', GC.FACE_PARAMS.brows));
@@ -644,8 +648,8 @@
       Object.keys(LIB.slots).forEach(function (slot) {
         var cur = GC.partRef(w, slot);
         var p = GC.getPart(slot, cur, w.pack);
-        var opts = GC.partsOfSlot(slot).map(function (x) { return [x.id, _l(x.label) + (x.pack !== 'gen.core' ? ' · ' + x.pack : '')]; });
-        row(_l(LIB.slots[slot].label), sel(opts, cur, function (v) { w.look.parts[slot] = v; changed(true); }, _l(LIB.slots[slot].label)), p && p.params ? paramsOf(slot, p.params) : null);
+        var opts = GC.partsOfSlot(slot).map(function (x) { return [x.id, _lo(x, x.label) + (x.pack !== 'gen.core' ? ' · ' + x.pack : '')]; });
+        row(_l(LIB.slots[slot].label), sel(opts, cur, function (v) { w.look.parts[slot] = v; changed(true); }, _l(LIB.slots[slot].label)), p && p.params ? paramsOf(slot, p.params, p) : null);
       });
       var pal = h('table', { class: 'grid' });
       pal.appendChild(h('tr', null, h('th', { text: _t('Màu') }), h('th', { text: '' }), h('th', { text: _t('Mã') }), h('th', { text: _t('Nguồn') })));
@@ -842,10 +846,10 @@
         n++;
         var th = h('div', { class: 'thumb' });
         var r = mannequin(slot, p);
-        var users = GC.assets().filter(function (a) { var v = GC.partRef(a, slot); return v === p.id || v === p.pack + '/' + p.id; }).map(function (a) { return _l(a.name); });
+        var users = GC.assets().filter(function (a) { var v = GC.partRef(a, slot); return v === p.id || v === p.pack + '/' + p.id; }).map(function (a) { return _lo(a, a.name); });
         t.appendChild(h('tr', { style: 'cursor:pointer', title: _t('Bấm để soát trên ma-nơ-canh'), onclick: (function (slot0, p0) { return function () { showBench(slot0, p0); }; })(slot, p) }, h('td', { class: 'id', text: 'PT-' + String(n).padStart(4, '0') }), h('td', null, th), h('td', { class: 'k', text: _l(LIB.slots[slot].label) }),
-          h('td', { class: 'v', text: p.id }), h('td', { class: 'nw' }, _l(p.label), p.views && p.views.q45 ? h('span', { class: 'tag', style: 'margin-left:6px', title: _t('Có bản vẽ nghiêng 45° thật'), text: '45°' }) : null), h('td', null, h('span', { class: 'tag', text: p.pack })),
-          h('td', { class: 'note', text: p.params ? Object.keys(p.params).map(function (k) { return _l(p.params[k].label); }).join(', ') : '—' }),
+          h('td', { class: 'v', text: p.id }), h('td', { class: 'nw' }, _lo(p, p.label), p.views && p.views.q45 ? h('span', { class: 'tag', style: 'margin-left:6px', title: _t('Có bản vẽ nghiêng 45° thật'), text: '45°' }) : null), h('td', null, h('span', { class: 'tag', text: p.pack })),
+          h('td', { class: 'note', text: p.params ? Object.keys(p.params).map(function (k) { return _lo(p, p.params[k].label); }).join(', ') : '—' }),
           h('td', { class: 'note', text: users.join(', ') || '—' })));
         R.image(th, r, 'normal', { crop: ['head', 'mask', 'hair', 'hat'].indexOf(slot) >= 0, noShadow: true });
       });
@@ -872,11 +876,11 @@
       var checks = [
         [_t('Bản vẽ chính diện'), true, _t('toạ độ khung 200 × 240, lớp đúng bộ phận')],
         [_t('Bản vẽ 45°'), has45, has45 ? _t('views.q45 — vẽ thật') : _t('chưa có: engine đang trượt tạm (bắt buộc với thư viện chính thức)')],
-        [_t('Tham số'), true, p.params ? Object.keys(p.params).map(function (k) { return _l(p.params[k].label) + ' ' + p.params[k].min + '–' + p.params[k].max; }).join(', ') : _t('không có')],
+        [_t('Tham số'), true, p.params ? Object.keys(p.params).map(function (k) { return _lo(p, p.params[k].label) + ' ' + p.params[k].min + '–' + p.params[k].max; }).join(', ') : _t('không có')],
         ['License', !!p.license, p.license || _t('thiếu')],
-        [_t('Nguồn'), !!p.source, _l(p.source) || _t('thiếu')]
+        [_t('Nguồn'), !!p.source, _lo(p, p.source) || _t('thiếu')]
       ];
-      bench.appendChild(h('div', { class: 'panel' }, h('h3', null, _t('Bàn soát · {label}', { label: _l(p.label) }), h('span', { class: 'r mono', text: slot + ':' + p.id })),
+      bench.appendChild(h('div', { class: 'panel' }, h('h3', null, _t('Bàn soát · {label}', { label: _lo(p, p.label) }), h('span', { class: 'r mono', text: slot + ':' + p.id })),
         h('div', { class: 'pad stack' }, g,
           h('table', { class: 'grid' }, checks.map(function (c) { return h('tr', null, h('td', { text: c[1] ? '✓' : '✗', style: 'color:' + (c[1] ? 'var(--ok, #2e8b57)' : 'var(--danger)') }), h('td', { text: c[0] }), h('td', { class: 'note', text: c[2] })); })),
           h('div', { class: 'note', text: _t('Quy trình: vẽ chính diện → vẽ 45° (face45 / body45 / vẽ tay) → soát ở đây → test → phát hành. Chi tiết: docs/QUY-TRINH-LINH-KIEN.md') }))));
@@ -895,18 +899,18 @@
       GC.scenery(slot).forEach(function (p) {
         nf++;
         var ref = p.pack + '/' + p.id;
-        var used = GC.scenes().filter(function (sc) { return Object.keys(sc.layers).some(function (k) { return sc.layers[k].part === ref; }) || sc.deco.some(function (x) { return x.part === ref; }); }).map(function (sc) { return _l(sc.name); });
+        var used = GC.scenes().filter(function (sc) { return Object.keys(sc.layers).some(function (k) { return sc.layers[k].part === ref; }) || sc.deco.some(function (x) { return x.part === ref; }); }).map(function (sc) { return _lo(sc, sc.name); });
         ft.appendChild(h('tr', { style: 'cursor:pointer', title: _t('Bấm để soát trong cảnh'), onclick: function () { showSceneryBench(slot, p, used); } },
-          h('td', { class: 'id', text: 'SC-' + String(nf).padStart(4, '0') }), h('td', null, h('img', { src: svgURL(benchScene(slot, p, { size: 120 })), alt: _l(p.label), style: 'width:96px;display:block;border-radius:3px' })),
-          h('td', { class: 'k', text: _l(S.slots[slot].label) }), h('td', { class: 'v', text: p.id }), h('td', { text: _l(p.label) }), h('td', null, h('span', { class: 'tag', text: p.pack })),
+          h('td', { class: 'id', text: 'SC-' + String(nf).padStart(4, '0') }), h('td', null, h('img', { src: svgURL(benchScene(slot, p, { size: 120 })), alt: _lo(p, p.label), style: 'width:96px;display:block;border-radius:3px' })),
+          h('td', { class: 'k', text: _l(S.slots[slot].label) }), h('td', { class: 'v', text: p.id }), h('td', { text: _lo(p, p.label) }), h('td', null, h('span', { class: 'tag', text: p.pack })),
           h('td', { class: 'note', text: used.join(', ') || '—' })));
       });
     });
     function showSceneryBench(slot, p, used) {
       clear(bench);
       var demo = GC.getAsset('ma-no-canh'), cast = demo ? [{ asset: demo, spot: 'center' }] : [];
-      var checks = [[_t('Khung'), true, slot === 'deco' ? _t('đạo cụ: gốc (0,0) ở chân vật') : _t('toàn khung 640 × 360')], ['License', !!p.license, p.license || _t('thiếu')], [_t('Nguồn'), !!p.source, _l(p.source) || _t('thiếu')], [_t('Dùng trong'), used.length > 0, used.join(', ') || _t('chưa cảnh nào')]];
-      bench.appendChild(h('div', { class: 'panel' }, h('h3', null, _t('Bàn soát phông · {label}', { label: _l(p.label) }), h('span', { class: 'r mono', text: slot + ':' + p.id })),
+      var checks = [[_t('Khung'), true, slot === 'deco' ? _t('đạo cụ: gốc (0,0) ở chân vật') : _t('toàn khung 640 × 360')], ['License', !!p.license, p.license || _t('thiếu')], [_t('Nguồn'), !!p.source, _lo(p, p.source) || _t('thiếu')], [_t('Dùng trong'), used.length > 0, used.join(', ') || _t('chưa cảnh nào')]];
+      bench.appendChild(h('div', { class: 'panel' }, h('h3', null, _t('Bàn soát phông · {label}', { label: _lo(p, p.label) }), h('span', { class: 'r mono', text: slot + ':' + p.id })),
         h('div', { class: 'pad stack' },
           h('img', { src: svgURL(benchScene(slot, p, { cast: cast })), alt: _t('ban ngày'), style: 'width:100%;border-radius:4px' }),
           h('img', { src: svgURL(benchScene(slot, p, { cast: cast, time: 'night' })), alt: _t('ban đêm'), style: 'width:100%;border-radius:4px' }),
@@ -996,20 +1000,20 @@
         list.sort(function (a, b) { return I.rarityOrder.indexOf(b.rarity) - I.rarityOrder.indexOf(a.rarity); });
         var row = h('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px' });
         list.forEach(function (it) {
-          row.appendChild(h('button', anc({ class: 'state-cell', 'aria-pressed': String(it === sel), title: it.key, onclick: function () { sel = it; paintGrid(); paintInsp(); } }, 'item:' + it.key, _l(it.name)),
-            h('img', { src: u(GC.itemSvg(it, { size: 112 })), alt: _l(it.name), style: 'width:100%;display:block' }),
-            h('div', { class: 'lb' }, h('b', { text: _l(it.name) }), h('div', { class: 'note', style: 'color:' + I.rarity[it.rarity].color, text: _l(I.rarity[it.rarity].label) + (it.pack === MY_PACK ? _t(' · của tôi') : '') }))));
+          row.appendChild(h('button', anc({ class: 'state-cell', 'aria-pressed': String(it === sel), title: it.key, onclick: function () { sel = it; paintGrid(); paintInsp(); } }, 'item:' + it.key, _lo(it, it.name)),
+            h('img', { src: u(GC.itemSvg(it, { size: 112 })), alt: _lo(it, it.name), style: 'width:100%;display:block' }),
+            h('div', { class: 'lb' }, h('b', { text: _lo(it, it.name) }), h('div', { class: 'note', style: 'color:' + I.rarity[it.rarity].color, text: _l(I.rarity[it.rarity].label) + (it.pack === MY_PACK ? _t(' · của tôi') : '') }))));
         });
         grid.appendChild(h('div', { class: 'panel' }, h('h3', null, _l(I.types[t].label), h('span', { class: 'r note', text: _t('{n} item · mặc ở {slots}', { n: list.length, slots: I.types[t].slots.join('/') }) })), h('div', { class: 'pad' }, row)));
       });
     }
     function paintInsp() {
       clear(insp);
-      dockObj('asset', sel && sel.key, sel && sel.name);
+      dockObj('asset', sel && sel.key, sel && _lo(sel, sel.name));
       if (!sel) return;
       var it = sel, mine = it.pack === MY_PACK;
       var whoSel = h('select', { onchange: function () { who = whoSel.value; paintTry(); } });
-      GC.assets().forEach(function (a) { whoSel.appendChild(h('option', { value: a.id, text: _l(a.name), selected: a.id === who })); });
+      GC.assets().forEach(function (a) { whoSel.appendChild(h('option', { value: a.id, text: _lo(a, a.name), selected: a.id === who })); });
       var vs = h('div', { class: 'seg' });
       [['front', _t('Chính diện')], ['left45', '45°'], ['attack', _t('Tấn công')], ['run', _t('Chạy')]].forEach(function (v) {
         vs.appendChild(h('button', { 'aria-pressed': String(view === v[0]), onclick: function () { view = v[0]; Array.prototype.forEach.call(vs.children, function (b) { b.setAttribute('aria-pressed', String(b.textContent === v[1])); }); paintTry(); } }, v[1]));
@@ -1024,7 +1028,7 @@
         R.image(tryBox, a, (LIB.activities[d.activity] || {}).state || 'normal', { director: d });
       }
       var g = GC.itemGate(it);
-      insp.appendChild(h('div', { class: 'panel' }, h('h3', null, _l(it.name), h('span', { class: 'r mono', text: it.key })),
+      insp.appendChild(h('div', { class: 'panel' }, h('h3', null, _lo(it, it.name), h('span', { class: 'r mono', text: it.key })),
         h('div', { class: 'pad stack' },
           h('div', { class: 'row', style: 'align-items:flex-start;gap:12px' },
             h('img', { src: u(GC.itemSvg(it, { mode: 'card' })), alt: _t('thẻ {name}', { name: it.name }), style: 'width:180px' }),
@@ -1039,7 +1043,7 @@
       var f = h('div', { class: 'kv' });
       var name = h('input', { type: 'text', value: d.name });
       var rar = h('select'); I.rarityOrder.forEach(function (k) { rar.appendChild(h('option', { value: k, text: _l(I.rarity[k].label), selected: k === d.rarity })); });
-      var part = h('select'); GC.partsOfSlot(d.equip.slot).filter(function (p) { return p.id !== 'none'; }).forEach(function (p) { var ref = p.pack + '/' + p.id; part.appendChild(h('option', { value: ref, text: _l(p.label) + ' · ' + p.pack, selected: ref === d.equip.part })); });
+      var part = h('select'); GC.partsOfSlot(d.equip.slot).filter(function (p) { return p.id !== 'none'; }).forEach(function (p) { var ref = p.pack + '/' + p.id; part.appendChild(h('option', { value: ref, text: _lo(p, p.label) + ' · ' + p.pack, selected: ref === d.equip.part })); });
       var pal = h('div', { class: 'row' });
       ['metal', 'wood', 'tassel', 'accent', 'armor', 'robe', 'trim', 'hat', 'cape', 'boots'].forEach(function (k) {
         var c = h('input', { type: 'color', value: d.equip.palette[k] || LIB.defaults[k], title: k, oninput: function () { d.equip.palette[k] = c.value; } });
@@ -1077,7 +1081,7 @@
     var cur = GC.ASSETS[r.key] || all[0];
     var sel = { activity: r.activity || 'walk', state: null, posture: '', move: '', motion: '', facing: 'right', view: '' };
     var selA = h('select', { 'aria-label': _pt('số ít', 'Nhân vật'), onchange: function () { cur = GC.ASSETS[selA.value]; paintGrid(); play(); } });
-    all.forEach(function (a) { selA.appendChild(h('option', { value: a.key, text: _l(a.name) + ' · ' + a.pack, selected: a === cur })); });
+    all.forEach(function (a) { selA.appendChild(h('option', { value: a.key, text: _lo(a, a.name) + ' · ' + a.pack, selected: a === cur })); });
     var grid = h('div', { class: 'stack' });
     var stg = h('div', { class: 'stage preview', style: 'height:340px' });
     var info = h('div', { class: 'note' });
@@ -1918,7 +1922,7 @@
       var canList = who && C ? C.actionsFor(who) : [];
       var acts = (SCH.action.enum || []).filter(function (k) { return canList.indexOf(k) >= 0; }).map(function (k) {
         var X = C.ACTIONS[k];
-        return [k, _l(X.label) + (X.ranged ? _t(' · ném') : '') + (X.needs ? _t(' · cần binh khí') : ''), X.attack ? _t('Đòn đánh') : _t('Động tác')];
+        return [k, _lo(X, X.label) + (X.ranged ? _t(' · ném') : '') + (X.needs ? _t(' · cần binh khí') : ''), X.attack ? _t('Đòn đánh') : _t('Động tác')];
       });
       var say = h('input', { type: 'text', 'data-cell': i + ':say', value: r.say || '', maxlength: 120, placeholder: A ? _t('(ra đòn không hô)') : _t('Lời thoại…'), 'aria-label': _t('Lời thoại · bước {n}', { n: i + 1 }),
         oninput: function () { r.say = say.value; touch(); check(); } });
@@ -1935,7 +1939,7 @@
         action: h('div', { class: 'actcell' },
           pick(i, 'action', _t('Hành động'), [['', _t('— không —')]].concat(acts), r.action || '', function (v) { set(i, 'action', v); }, false,
             who ? _t('{name} làm được {n} đòn{x}', { name: who.name, n: acts.length, x: C && !C.hasWeapon(who) ? _t(' (tay không — đòn binh khí bị ẩn)') : '' }) : null,
-            function (v) { var X = C && C.ACTIONS[v]; return X ? _t('{label} — {x} không làm được', { label: _l(X.label), x: who ? who.name : _t('người này') }) : _t('{v} — chưa có đòn này', { v: v }); }),
+            function (v) { var X = C && C.ACTIONS[v]; return X ? _t('{label} — {x} không làm được', { label: _lo(X, X.label), x: who ? who.name : _t('người này') }) : _t('{v} — chưa có đòn này', { v: v }); }),
           A ? h('span', { class: 'badges' }, badgeEls(A)) : null),
         target: pick(i, 'target', _t('Đối thủ'), [['', atk ? _t('— chọn đối thủ —') : _t('— chỉ cho đòn đánh —')]].concat(atk ? others(r.actor).map(function (id) { return [id, nameOf(id)]; }) : []), r.target || '', function (v) { set(i, 'target', v); }, !atk && !r.target),
         react: pick(i, 'react', _t('Phản ứng'), [['', r.target ? _t('— mặc định: {enumLabel} —', { enumLabel: enumLabel('react', 'hit') }) : _t('— cần đối thủ —')]].concat(r.target ? enumOpts('react') : []), r.react || '', function (v) { set(i, 'react', v); }, !r.target && !r.react),
@@ -1972,7 +1976,7 @@
           var j = cast.indexOf(a.key);
           if (j >= 0) cast.splice(j, 1); else if (cast.length < 8) cast.push(a.key); else { toast(_t('Tối đa 8 diễn viên một cảnh.')); return; }
           touch(); schema(); paintCast(); paint();
-        } }, _l(a.name)));
+        } }, _lo(a, a.name)));
       });
     }
     function paint() {
@@ -2132,7 +2136,7 @@
   function stepLine(st, nameOf) {
     var o = [nameOf(st.actor) + (st.state && st.state !== 'normal' ? ' (' + stateLabel(st.state) + ')' : '')];
     if (st.say) o.push('“' + st.say + '”');
-    if (st.action) o.push(_t('đòn {x}{x2}', { x: (GC.choreo && GC.choreo.ACTIONS[st.action] && _l(GC.choreo.ACTIONS[st.action].label)) || st.action, x2: st.target ? ' → ' + nameOf(st.target) : '' }));
+    if (st.action) o.push(_t('đòn {x}{x2}', { x: (GC.choreo && GC.choreo.ACTIONS[st.action] && _lo(GC.choreo.ACTIONS[st.action], GC.choreo.ACTIONS[st.action].label)) || st.action, x2: st.target ? ' → ' + nameOf(st.target) : '' }));
     if (st.spot) o.push(_t('chỗ {spot}', { spot: st.spot }));
     return o.join(' · ');
   }
@@ -2183,7 +2187,7 @@
       clear(projF);
       projF.appendChild(h('option', { value: '*', text: _t('Mọi dự án') }));
       var ids = {}; list.forEach(function (w) { ids[w.project || ''] = 1; });
-      Projects.all().forEach(function (p) { projF.appendChild(h('option', { value: p.id, text: _l(p.name) })); delete ids[p.id]; });
+      Projects.all().forEach(function (p) { projF.appendChild(h('option', { value: p.id, text: _lo(p, p.name) })); delete ids[p.id]; });
       Object.keys(ids).forEach(function (id) { projF.appendChild(h('option', { value: id, text: id ? Projects.name(id) : _t('Chưa xếp dự án') })); });
       projF.value = fp; if (projF.value !== fp) { fp = '*'; projF.value = '*'; }
     }
@@ -2586,8 +2590,8 @@
         var nShot = W.shots.filter(function (s) { return (s.cast || []).some(function (k) { return GC.canon(k) === a.key; }); }).length;
         var nLine = W.shots.reduce(function (n, s) { return n + ((s.event && s.event.steps) || []).filter(function (st) { return st.actor === a.id && String(st.say || '').trim(); }).length; }, 0);
         var av = h('div', { class: 'av', style: '--own:' + ownOf(a) });
-        var tr = h('tr', anc({ class: 'click', onclick: function () { go({ page: 'lib-characters', key: a.key }); } }, 'asset:' + a.key, _l(a.name)),
-          h('td', null, h('div', { class: 'row', style: 'flex-wrap:nowrap' }, av, h('div', null, h('b', { text: _l(a.name) }), h('div', { class: 'note mono', text: a.key })))),
+        var tr = h('tr', anc({ class: 'click', onclick: function () { go({ page: 'lib-characters', key: a.key }); } }, 'asset:' + a.key, _lo(a, a.name)),
+          h('td', null, h('div', { class: 'row', style: 'flex-wrap:nowrap' }, av, h('div', null, h('b', { text: _lo(a, a.name) }), h('div', { class: 'note mono', text: a.key })))),
           h('td', { text: _l(GC.voices.ROLES[AiVoice.roleOf(a)].label) }), h('td', { class: 'v num', text: String(nShot) }), h('td', { class: 'v num', text: String(nLine) }),
           h('td', { class: 'mono' }, chosen[a.id] ? chosen[a.id] : h('span', { class: 'muted', text: _t('chưa chốt') })));
         t.appendChild(tr);
@@ -2626,14 +2630,14 @@
       var dr = drafts[s.id] || (drafts[s.id] = null), keep = function () { drafts[s.id] = { title: t.value, description: d.value, scene: sc.value, cast: cast.slice() }; };
       var t = h('input', { type: 'text', 'aria-label': _t('Tên phân cảnh {n}', { n: i + 1 }), value: dr ? dr.title : s.title, maxlength: 80, oninput: function () { keep(); } }), d = h('textarea', { rows: 2, maxlength: 1000, 'aria-label': _t('Mô tả phân cảnh {n}', { n: i + 1 }), placeholder: _t('Mô tả phân cảnh'), oninput: function () { keep(); } }); d.value = dr ? dr.description : s.description || '';
       var sc = h('select', { 'aria-label': _pt('số ít', 'Bối cảnh') }); sc.appendChild(h('option', { value: '', text: _t('— bối cảnh —') }));
-      scenes.forEach(function (x) { sc.appendChild(h('option', { value: x.key, text: _l(x.name) + (x.project ? ' · ' + Projects.name(x.project) : '') })); });
+      scenes.forEach(function (x) { sc.appendChild(h('option', { value: x.key, text: _lo(x, x.name) + (x.project ? ' · ' + Projects.name(x.project) : '') })); });
       sc.value = GC.canon(dr ? dr.scene : s.scene || ''); sc.onchange = keep;   // phân cảnh cũ trỏ afi.* vẫn chọn đúng (không âm thầm thành "không bối cảnh")
       var cast = (dr ? dr.cast : s.cast || []).map(GC.canon), cb = h('div', { class: 'fxchips', role: 'group', 'aria-label': _t('Dàn diễn viên') });
       chars.forEach(function (a) {
         var b = h('button', { 'aria-pressed': String(cast.indexOf(a.key) >= 0), onclick: function () {
           var j = cast.indexOf(a.key); if (j >= 0) cast.splice(j, 1); else if (cast.length < 8) cast.push(a.key); else { toast(_t('Tối đa 8 diễn viên một cảnh.')); return; }
           b.setAttribute('aria-pressed', String(j < 0)); keep();
-        } }, _l(a.name));
+        } }, _lo(a, a.name));
         cb.appendChild(b);
       });
       var steps = (s.event && s.event.steps) || [], miss = GC.film.issues(s), sec = steps.length ? shotSeconds(s) : 0;
@@ -2814,14 +2818,14 @@
       if (!x) { vcInsp.appendChild(h('div', { class: 'panel pad note', text: _t('Chọn một nhân vật trong bảng.') })); return; }
       var ictl = vcCtl(x, true), sample = vcSample(x), R = GC.voices.ROLES[x.role];
       var mBtn = h('button', { class: 'btn primary lc-ic', type: 'button', 'aria-label': _t('Nghe giọng máy — {name}', { name: x.a.name }), onclick: function () { vcSpeak(x); } }, lcIcon('play'), _t('Nghe giọng máy'));
-      vcInsp.appendChild(h('div', { class: 'panel' }, h('h3', null, h('span', { text: _l(x.a.name) }), h('span', { class: 'r mono', text: x.id })),
+      vcInsp.appendChild(h('div', { class: 'panel' }, h('h3', null, h('span', { text: _lo(x.a, x.a.name) }), h('span', { class: 'r mono', text: x.id })),
         h('div', { class: 'pad stack' },
           h('dl', { class: 'lc-kv' }, h('dt', { text: _t('Vai giọng') }), h('dd', null, _l(R.label), ' ', h('span', { class: x.explicit ? 'chip ok' : 'chip', text: x.explicit ? _t('đã chọn') : _t('đoán') })),
             h('dt', { text: _t('Phong cách') }), h('dd', { class: 'mono', text: R.style }), h('dt', { text: _t('Giọng vùng') }), h('dd', { text: vcAcc(vcL.lang, x.accent) }),
             h('dt', { text: _t('Giọng chốt') }), h('dd', null, x.voice ? h('b', { class: 'mono', text: x.voice }) : h('span', { class: 'muted', text: _t('chưa chốt') }), ' ', h('span', { class: CHOT_SRC[x.src][1], title: _t(CHOT_SRC[x.src][2]), text: _t(CHOT_SRC[x.src][0]) })),
             h('dt', { text: 'work.voices' }), h('dd', { class: 'note', text: _t('khoá {lang}|{accent} của “{x}”', { lang: vcL.lang, accent: vcL.accent, x: W ? W.title : '' }) })),
           h('div', null, h('div', { class: 'lc-sec', text: _t('Câu mẫu · {label}', { label: _l(GC.voices.LANGS[vcL.lang].label) }) }), h('p', { class: 'lv-line', lang: GC.voices.LANGS[vcL.lang].bcp, text: sample }), h('div', { class: 'row', style: 'margin-top:8px' }, mBtn, ictl.el), ictl.note),
-          h('div', { class: 'usebar' }, h('b', { text: _t('Hồ sơ') }), h('span', { class: 'note', text: _l(x.a.faction || x.a.role || '') }),
+          h('div', { class: 'usebar' }, h('b', { text: _t('Hồ sơ') }), h('span', { class: 'note', text: _lo(x.a, x.a.faction || x.a.role || '') }),
             h('button', { class: 'btn sm', type: 'button', onclick: function () { go({ page: 'lib-characters', key: x.a.key }); } }, _t('Mở hồ sơ nhân vật ›'))))));
       if (ictl.phase === 'idle') ictl.check();
     }
@@ -3024,15 +3028,15 @@
         if (!part.length) return;
         var row = h('div', { class: 'libgrid' });
         part.forEach(function (x) {
-          row.appendChild(h('button', anc({ class: 'libcard', 'aria-pressed': String(sel && x.key === sel.key), title: x.key, onclick: function () { sel = x; paint(); paintInsp(); } }, cfg.anchor ? cfg.anchor + ':' + x.key : null, _l(x.name)),
-            h('div', { class: 'im' }, h('img', { src: cfg.thumb(x), alt: _l(x.name), loading: 'lazy' })),
-            h('div', { class: 'lb' }, h('b', { text: _l(x.name) }), h('span', { class: 'note', text: cfg.sub(x) }))));
+          row.appendChild(h('button', anc({ class: 'libcard', 'aria-pressed': String(sel && x.key === sel.key), title: x.key, onclick: function () { sel = x; paint(); paintInsp(); } }, cfg.anchor ? cfg.anchor + ':' + x.key : null, _lo(x, x.name)),
+            h('div', { class: 'im' }, h('img', { src: cfg.thumb(x), alt: _lo(x, x.name), loading: 'lazy' })),
+            h('div', { class: 'lb' }, h('b', { text: _lo(x, x.name) }), h('span', { class: 'note', text: cfg.sub(x) }))));
         });
         body.appendChild(h('div', { class: 'panel' }, h('h3', null, g[1], h('span', { class: 'r note', text: part.length + ' / ' + all.filter(function (x) { return secOf(x) === g[0]; }).length })), h('div', { class: 'pad' }, row)));
       });
       if (!body.children.length) body.appendChild(h('div', { class: 'panel pad note lib-empty', text: all.length ? _t('Không có gì khớp bộ lọc.') : _t('Thư viện chưa có {toLowerCase} nào. Asset được tạo từ bộ khung chuẩn (Xưởng) rồi mới lưu vào đây theo dự án chủ đề.', { toLowerCase: cfg.title.toLowerCase() }) }));
     }
-    function paintInsp() { clear(insp); dockObj('asset', sel && sel.key, sel && sel.name); if (sel) cfg.inspect(sel, insp); }
+    function paintInsp() { clear(insp); dockObj('asset', sel && sel.key, sel && _lo(sel, sel.name)); if (sel) cfg.inspect(sel, insp); }
     onData(function () { paint(); paintInsp(); });   // AI vừa tạo / sửa asset: danh sách vẽ lại
     paint(); paintInsp();
   }
@@ -3049,7 +3053,7 @@
         var d = clone(x); d.status = pub ? 'draft' : 'published';
         resave(d, pub ? _t('Về nháp') : _t('Phát hành')).then(function () { toast(pub ? _t('Đã đưa {name} về nháp.', { name: x.name }) : _t('Đã phát hành {name} — có trong gói bán của dự án.', { name: x.name })); go(stay); }).catch(function (e) { toast(e.message); });
       } }, pub ? _t('Về nháp') : _t('Phát hành'))) : null;
-    box.appendChild(h('div', { class: 'panel' }, h('h3', null, _l(x.name) + (x.han ? ' · ' + x.han : ''), h('span', { class: 'r mono', text: x.key })),
+    box.appendChild(h('div', { class: 'panel' }, h('h3', null, _lo(x, x.name) + (x.han ? ' · ' + x.han : ''), h('span', { class: 'r mono', text: x.key })),
       h('div', { class: 'pad stack' }, pj, extra)));
   }
 
@@ -3058,7 +3062,7 @@
   PAGES['lib-characters'] = function (r) {
     libPage({
       title: _t('Nhân vật'), anchor: 'asset', fab: 'characters', list: function () { return GC.assets(); }, find: function (k) { return GC.ASSETS[k]; },
-      sub: function (a) { return a.faction ? _l(a.faction) : _t('Khác'); },
+      sub: function (a) { return a.faction ? _lo(a, a.faction) : _t('Khác'); },
       thumb: function (a) { return R.imageURL(a, 'normal', {}); },
       inspect: function (a, box) {
         var u = { state: 'normal', activity: '', view: 'front' };
@@ -3146,7 +3150,7 @@
       inspect: function (it, box) {
         var who = 'ma-no-canh', tryBox = h('div', { class: 'stage', style: 'height:200px;border-radius:6px;overflow:hidden;flex:1' });
         var whoSel = h('select', { onchange: function () { who = whoSel.value; paintTry(); } });
-        GC.assets().forEach(function (a) { whoSel.appendChild(h('option', { value: a.id, text: _l(a.name), selected: a.id === who })); });
+        GC.assets().forEach(function (a) { whoSel.appendChild(h('option', { value: a.id, text: _lo(a, a.name), selected: a.id === who })); });
         function paintTry() {
           clear(tryBox);
           var base = GC.assets().filter(function (a) { return a.id === who; })[0] || GC.assets()[0];
@@ -3193,7 +3197,7 @@
     cast.forEach(function (c) {
       var sel = h('select', { 'aria-label': _t('Diễn viên ở {label}', { label: _l(GC.SCENE.spots[c.spot].label) }), onchange: function () { c.id = sel.value; onChange(); } });
       sel.appendChild(h('option', { value: '', text: _t('— trống —') }));
-      GC.assets().forEach(function (a) { sel.appendChild(h('option', { value: a.id, text: _l(a.name), selected: a.id === c.id })); });
+      GC.assets().forEach(function (a) { sel.appendChild(h('option', { value: a.id, text: _lo(a, a.name), selected: a.id === c.id })); });
       row.appendChild(h('label', { class: 'note', style: 'display:flex;gap:6px;align-items:center' }, _l(GC.SCENE.spots[c.spot].label), sel));
     });
     row.cast = function () { return cast.filter(function (c) { return c.id; }).map(function (c) { return { character: GC.getAsset(c.id, MY_PACK) ? GC.getAsset(c.id, MY_PACK).key : c.id, spot: c.spot }; }); };
@@ -3207,7 +3211,7 @@
       thumb: function (sc) { return sceneURL(sc, { size: 320 }); },
       inspect: function (sc, box) {
         var u = { time: sc.time, weather: sc.weather };
-        var img = h('img', { alt: _l(sc.name), style: 'width:100%;display:block;border-radius:6px' });
+        var img = h('img', { alt: _lo(sc, sc.name), style: 'width:100%;display:block;border-radius:6px' });
         var tseg = h('div', { class: 'seg' });
         S.timeOrder.forEach(function (t) { tseg.appendChild(h('button', { 'aria-pressed': String(u.time === t), onclick: function () { u.time = t; Array.prototype.forEach.call(tseg.children, function (b, i) { b.setAttribute('aria-pressed', String(S.timeOrder[i] === t)); }); paintU(); } }, _l(S.times[t].label))); });
         var wsel = h('select', { 'aria-label': _t('Thời tiết'), onchange: function () { u.weather = wsel.value; paintU(); } });
@@ -3231,7 +3235,7 @@
         ]);
         useHead(sc, box, [
           img, h('div', { class: 'row' }, tseg, wsel), picker,
-          h('div', { class: 'note', text: _l(sc.description) || '' }),
+          h('div', { class: 'note', text: _lo(sc, sc.description) || '' }),
           h('div', { class: 'usebar' }, h('b', { text: _t('Tải ảnh') }),
             h('button', { class: 'btn sm', onclick: function () { download(name() + '.svg', svg(), 'image/svg+xml'); } }, 'SVG'),
             h('button', { class: 'btn sm', onclick: function () { savePng(name() + '-1280.png', svgURL(svg()), 1280, 720); } }, 'PNG 1280×720'),
@@ -3297,23 +3301,23 @@
       clear(body);
       groups().forEach(function (g) {
         var list = ids.filter(function (k) { return C.ACTIONS[k].pack === g.key; });
-        var shown = list.filter(function (k) { var A = C.ACTIONS[k]; return !q || [k, _l(A.label), A.hint, _l(A.hint || ''), g.name, g.key].join(' ').toLowerCase().indexOf(q) >= 0; });
+        var shown = list.filter(function (k) { var A = C.ACTIONS[k]; return !q || [k, _lo(A, A.label), A.hint, _lo(A, A.hint || ''), g.name, g.key].join(' ').toLowerCase().indexOf(q) >= 0; });
         if (!shown.length && (q || !g.P)) return;
         var grid = h('div', { class: 'libgrid acts' });
         shown.forEach(function (k) {
           var A = C.ACTIONS[k];
-          grid.appendChild(h('button', { class: 'libcard act', 'aria-pressed': String(u.action === k), title: k, 'data-action': k, 'data-anchor': 'action:' + k, 'data-anchor-label': _l(A.label), onclick: function () { u.action = k; route.action = k; remember(); paintList(); paintInsp(); } },
-            h('div', { class: 'lb' }, h('b', { text: _l(A.label) }), h('span', { class: 'mono note', text: k }),
+          grid.appendChild(h('button', { class: 'libcard act', 'aria-pressed': String(u.action === k), title: k, 'data-action': k, 'data-anchor': 'action:' + k, 'data-anchor-label': _lo(A, A.label), onclick: function () { u.action = k; route.action = k; remember(); paintList(); paintInsp(); } },
+            h('div', { class: 'lb' }, h('b', { text: _lo(A, A.label) }), h('span', { class: 'mono note', text: k }),
               h('span', { class: 'badges' }, badgeEls(A).length ? badgeEls(A) : h('span', { class: 'tag badge', text: _t('diễn') })),
-              A.hint ? h('span', { class: 'note hint', text: _l(A.hint) }) : null)));
+              A.hint ? h('span', { class: 'note hint', text: _lo(A, A.hint) }) : null)));
         });
         var P = g.P, smp = sampleOf(P), pub = P && P.status === 'published';
-        var head = h('h3', null, _l(g.name), h('span', { class: 'r note mono', text: _t('{n} / {n2} đòn', { n: shown.length, n2: list.length }) }));
+        var head = h('h3', null, g.name, h('span', { class: 'r note mono', text: _t('{n} / {n2} đòn', { n: shown.length, n2: list.length }) }));
         var meta = h('div', { class: 'packmeta row' },
           P ? h('span', { class: 'note', text: P.project ? _t('Dự án · {name}', { name: Projects.name(P.project) }) : _t('Chưa xếp dự án') }) : h('span', { class: 'note', text: _t('Đòn trung lập của bộ khung — có sẵn trong mọi bản cài và mọi phim xuất ra.') }),
           h('span', { class: 'tag', text: g.key }),
           P ? (smp ? h('span', { class: 'chip', title: smp.license || '', text: _t('Bộ mẫu {x}', { x: smp.owner || 'Gen Labs' }) }) : h('span', { class: pub ? 'chip ok' : 'chip', text: pub ? _t('Phát hành') : _t('Nháp') })) : null,
-          P && P.description ? h('span', { class: 'note', style: 'flex-basis:100%', text: _l(P.description) }) : null,
+          P && P.description ? h('span', { class: 'note', style: 'flex-basis:100%', text: _lo(P, P.description) }) : null,
           P ? h('button', { class: 'btn sm', style: 'margin-left:auto', title: smp ? _t('Bản sao lưu của gói bộ mẫu — xem, sửa thử, làm phim; không bán lại') : _t('Tải gói động tác (.json) — nhập lại được ở bản cài khác'), onclick: function () { download(P.id + '.json', JSON.stringify(motionPackOut(P, smp), null, 2), 'application/json'); } }, _t('Tải gói (.json)')) : null);
         body.appendChild(h('div', { class: 'panel', 'data-pack': g.key }, head, meta, h('div', { class: 'pad' }, shown.length ? grid : h('div', { class: 'note', text: _t('Gói chưa có đòn nào (chỉ có tư thế / màn diễn).') }))));
       });
@@ -3351,7 +3355,7 @@
         if (!groupsOf[g]) { groupsOf[g] = h('optgroup', { label: g }); s.appendChild(groupsOf[g]); }
         var no = need && !C.canDo(a, need);
         groupsOf[g].appendChild(h('option', { value: a.key, disabled: no ? true : null, title: no ? _t('{name} không làm được: đòn này cần {x}', { name: a.name, x: C.MOTION.needs[need.needs] || need.needs }) : null,
-          text: _l(a.name) + (no ? _t(' — cần {x}', { x: need.needs === 'weapon' ? _t('binh khí') : C.MOTION.needs[need.needs] || need.needs }) : C.hasWeapon(a) ? _t(' · có binh khí') : '') }));
+          text: _lo(a, a.name) + (no ? _t(' — cần {x}', { x: need.needs === 'weapon' ? _t('binh khí') : C.MOTION.needs[need.needs] || need.needs }) : C.hasWeapon(a) ? _t(' · có binh khí') : '') }));
       });
       s.value = cur;
       return s;
@@ -3427,7 +3431,7 @@
       var A = C.ACTIONS[u.action];
       if (!A) { insp.appendChild(h('div', { class: 'panel pad note', text: _t('Chọn một đòn.') })); return; }
       var who = GC.ASSETS[u.who], partner = GC.ASSETS[u.partner], P = C.PACKS[A.pack] || null;
-      img = h('img', { alt: _t('Xem trước {label}', { label: _l(A.label) }), draggable: 'false' });
+      img = h('img', { alt: _t('Xem trước {label}', { label: _lo(A, A.label) }), draggable: 'false' });
       stg = h('div', { class: 'mstage' }, img);
       clock = h('span', { class: 'note mono' });
       playB = h('button', { class: 'btn sm', 'aria-label': _t('Phát / dừng'), onclick: function () { playing = !playing; playB.textContent = playing ? _t('❚❚ Dừng') : _t('▶ Phát'); play(); } }, playing ? _t('❚❚ Dừng') : _t('▶ Phát'));
@@ -3446,7 +3450,7 @@
       csel.value = String(u.cell);
       var info = h('div', { class: 'note mono' }), bar = null, can = !!(who && C.canDo(who, A)), err = '';
       if (!who) err = _t('Không có nhân vật này trong Thư viện.');
-      else if (!can) err = _t('{name} không làm được "{label}": đòn này cần {x}. Chọn nhân vật có binh khí (nhãn "có binh khí"), hoặc trang bị vũ khí cho {name} ở Xưởng.', { name: who.name, label: _l(A.label), x: C.MOTION.needs[A.needs] || A.needs });
+      else if (!can) err = _t('{name} không làm được "{label}": đòn này cần {x}. Chọn nhân vật có binh khí (nhãn "có binh khí"), hoặc trang bị vũ khí cho {name} ở Xưởng.', { name: who.name, label: _lo(A, A.label), x: C.MOTION.needs[A.needs] || A.needs });
       else {
         try { anim = C.animate(C.actionTimeline({ asset: who, action: u.action, partner: A.attack ? partner : undefined, react: A.attack ? u.react : undefined }), { fps: u.fps }); }
         catch (e) { err = _t('Không dựng được đòn: {message}', { message: e.message }); anim = null; }
@@ -3479,9 +3483,9 @@
       var packBar = h('div', { class: 'usebar' }, h('b', { text: _t('Gói') }),
         P ? h('span', { class: 'note', text: P.name + ' · ' + (P.project ? Projects.name(P.project) : _t('chưa xếp dự án')) }) : h('span', { class: 'note', text: _t('Đòn của bộ khung — có sẵn trong mọi bản cài và mọi phim xuất ra.') }),
         P ? h('button', { class: 'btn sm', onclick: function () { download(P.id + '.json', JSON.stringify(motionPackOut(P, sampleOf(P)), null, 2), 'application/json'); } }, _t('Tải gói (.json)')) : null);
-      insp.appendChild(h('div', { class: 'panel' }, h('h3', null, _l(A.label), h('span', { class: 'r mono', text: u.action })),
+      insp.appendChild(h('div', { class: 'panel' }, h('h3', null, _lo(A, A.label), h('span', { class: 'r mono', text: u.action })),
         h('div', { class: 'pad stack' },
-          h('div', { class: 'row' }, badgeEls(A), A.hint ? h('span', { class: 'note', text: _l(A.hint) }) : null),
+          h('div', { class: 'row' }, badgeEls(A), A.hint ? h('span', { class: 'note', text: _lo(A, A.hint) }) : null),
           ctl, err ? h('div', { class: 'banner bad', role: 'alert' }, h('span', { text: err })) : stg,
           anim ? h('div', { class: 'row' }, playB, clock, h('span', { class: 'sp', style: 'flex:1' }), fseg) : h('div', { class: 'row' }, fseg),
           info, fpsBox, h('div', { class: 'row' }, h('span', { class: 'note', text: _t('Cỡ khung khi tải') }), csel), bar, packBar, code)));
@@ -3791,10 +3795,10 @@
         cols: [
           { t: _t('Nghe'), w: 56, frozen: true, cell: function (x) { var b = lcPlay(_t('Nghe {name}', { name: x.name }), function (btn) { play(x.name, btn); }); b.setAttribute('data-play', x.name); return b; } },
           { t: _t('ID âm'), w: 132, frozen: true, cls: 'id', v: function (x) { return x.name; }, cell: function (x) { return x.name; }, tip: function (x) { return x.name; } },
-          { t: _t('Nhãn'), w: 196, v: function (x) { return _l(x.label); }, cell: function (x) { return _l(x.label); }, tip: function (x) { return _l(x.label); } },
+          { t: _t('Nhãn'), w: 196, v: function (x) { return _lo(x, x.label); }, cell: function (x) { return _lo(x, x.label); }, tip: function (x) { return _lo(x, x.label); } },
           { t: _t('Nhóm'), w: 132, v: function (x) { return _l(x.catLabel); }, cell: function (x) { return [_l(x.catLabel), x.accent ? h('span', { class: 'tag acc', title: _t('Âm NHẤN: mỗi bước tối đa 1 (S1)'), text: _t('nhấn') }) : null]; } },
           { t: _t('Giây'), w: 56, cls: 'num', v: function (x) { return x.dur; }, cell: function (x) { return vn(x.dur); } },
-          { t: _t('Dùng khi'), w: 300, cls: 'mut', v: function (x) { return _l(x.use); }, cell: function (x) { return _l(x.use); }, tip: function (x) { return _l(x.use); } },
+          { t: _t('Dùng khi'), w: 300, cls: 'mut', v: function (x) { return _lo(x, x.use); }, cell: function (x) { return _lo(x, x.use); }, tip: function (x) { return _lo(x, x.use); } },
           { t: _t('Thẻ'), w: 190, cell: function (x) { return x.tags.map(function (t) { return h('span', { class: 'tag', text: _l(t) }); }); }, tip: function (x) { return x.tags.map(function (t) { return _l(t); }).join(', '); } },
           { t: _t('Gói'), w: 124, v: function (x) { return x.pack; }, cell: function (x) { var p = S.packs().filter(function (k) { return k.id === x.pack; })[0]; return p ? packName(p) : x.pack; } },
           { t: _t('Dự án'), w: 124, v: function (x) { return x.project; }, cell: function (x) { return x.project ? Projects.name(x.project) : '—'; } },
@@ -3858,9 +3862,9 @@
         if (x.accent) notes.push(_t('Âm NHẤN: mỗi bước tối đa 1 âm nhấn, để ở bước không có lời hoặc trước câu thoại (S1, S3).'));
         if (x.hitAt != null) notes.push(_t('Điểm va ở {lsSec} sau khi bắt đầu — đặt ở bước TRƯỚC khung trúng đòn.', { lsSec: lsSec(x.hitAt) }));
         if (x.dur > S.RULES.long.dur) notes.push(_t('Âm dài ({vn} s) chỉ ở bước đầu / cuối cảnh (S7).', { vn: vn(x.dur) }));
-        insp.appendChild(h('div', { class: 'panel' }, h('h3', null, h('span', { text: _l(x.label) }), h('span', { class: 'r mono', text: _l(x.name) })),
+        insp.appendChild(h('div', { class: 'panel' }, h('h3', null, h('span', { text: _lo(x, x.label) }), h('span', { class: 'r mono', text: _lo(x, x.name) })),
           h('div', { class: 'pad stack' }, acts, kv,
-            h('div', null, h('div', { class: 'lc-sec', text: _t('Dùng khi') }), h('p', { class: 'lc-use', text: _l(x.use) })),
+            h('div', null, h('div', { class: 'lc-sec', text: _t('Dùng khi') }), h('p', { class: 'lc-use', text: _lo(x, x.use) })),
             h('div', null, h('div', { class: 'lc-sec', text: _t('Thẻ') }), tags),
             h('div', null, h('div', { class: 'lc-sec', text: _t('Cảnh tự gán (cue)') }),
               cueEls.length ? h('div', { class: 'stack', style: 'gap:4px' }, cueEls, x.cue && x.cue.mood ? h('p', { class: 'lc-hint', text: _t('Chỉ khi không khí cảnh là: {mood}', { mood: x.cue.mood.join(' · ') }) }) : null)
@@ -4244,7 +4248,7 @@
     // một dòng nhân vật trong danh sách "đang dùng vai này"
     function charItem(a, explicit) {
       return h('li', null, h('button', { type: 'button', 'data-char': a.key, title: _t('Mở hồ sơ {name}', { name: a.name }), onclick: function () { go({ page: 'lib-characters', key: a.key }); } },
-        h('span', { class: 'dot', style: '--own:' + ownOf(a) }), h('span', { text: _l(a.name) }), h('span', { class: 'note mono', text: a.id }), h('span', { class: 'sp', style: 'flex:1' }),
+        h('span', { class: 'dot', style: '--own:' + ownOf(a) }), h('span', { text: _lo(a, a.name) }), h('span', { class: 'note mono', text: a.id }), h('span', { class: 'sp', style: 'flex:1' }),
         h('span', { class: explicit ? 'chip ok' : 'chip', title: explicit ? _t('Đã chọn vai này trong hồ sơ nhân vật') : _t('Chưa chọn vai — Studio đoán từ vai trò / tính cách / tên'), text: explicit ? _t('đã chọn') : _t('đoán') })));
     }
 
@@ -4494,7 +4498,7 @@
     function fill(v) {
       clear(s);
       s.appendChild(h('option', { value: '', text: _t('— Chưa xếp dự án —') }));
-      Projects.all().forEach(function (p) { s.appendChild(h('option', { value: p.id, text: _l(p.name) })); });
+      Projects.all().forEach(function (p) { s.appendChild(h('option', { value: p.id, text: _lo(p, p.name) })); });
       s.appendChild(h('option', { value: '__new', text: _t('+ Dự án mới…') }));
       s.value = v || ''; cur = v;
     }
@@ -4532,9 +4536,9 @@
       var grid = h('div', { class: 'libgrid' });
       ps.forEach(function (p) {
         var c = counts(p.id), first = [].concat(inProject(GC.assets(), p.id), inProject(GC.items(), p.id), inProject(GC.scenes(), p.id))[0];
-        grid.appendChild(h('button', anc({ class: 'libcard proj', 'aria-pressed': String(sel === p.id), title: p.id || _t('(chưa xếp)'), onclick: function () { sel = p.id; paint(); } }, p.id ? 'project:' + p.id : null, _l(p.name)),
+        grid.appendChild(h('button', anc({ class: 'libcard proj', 'aria-pressed': String(sel === p.id), title: p.id || _t('(chưa xếp)'), onclick: function () { sel = p.id; paint(); } }, p.id ? 'project:' + p.id : null, _lo(p, p.name)),
           h('div', { class: 'im' }, first ? h('img', { src: thumbOf(first), alt: '' }) : h('div', { class: 'note', style: 'padding:28px 0', text: _t('trống') })),
-          h('div', { class: 'lb' }, h('b', { text: _l(p.name) }), h('span', { class: 'note', text: _t('{x} nhân vật · {x2} vật phẩm · {x3} bối cảnh', { x: c[0], x2: c[1], x3: c[2] }) }),
+          h('div', { class: 'lb' }, h('b', { text: _lo(p, p.name) }), h('span', { class: 'note', text: _t('{x} nhân vật · {x2} vật phẩm · {x3} bối cảnh', { x: c[0], x2: c[1], x3: c[2] }) }),
             p.sample ? h('span', { class: 'chip', title: p.sample.license || '', text: _t('Bộ mẫu {x}', { x: p.sample.owner || 'Gen Labs' }) }) : null)));
       });
       if (ps.length) listBox.appendChild(h('div', { class: 'panel' }, h('h3', null, _t('Dự án'), h('span', { class: 'r note', text: ps.length })), h('div', { class: 'pad' }, grid)));
@@ -4546,7 +4550,7 @@
       var P = Projects.all().filter(function (p) { return p.id === sel; })[0] || { id: '', name: _t('Chưa xếp dự án'), description: '' };
       dockObj('project', sel || null, P.name);
       var parts = [[_t('Nhân vật'), inProject(GC.assets(), sel), 'lib-characters'], [_t('Vật phẩm'), inProject(GC.items(), sel), 'lib-items'], [_t('Bối cảnh'), inProject(GC.scenes(), sel), 'lib-scenes']];
-      var body = h('div', { class: 'pad stack' }, P.description ? h('div', { class: 'note', text: _l(P.description) }) : null,
+      var body = h('div', { class: 'pad stack' }, P.description ? h('div', { class: 'note', text: _lo(P, P.description) }) : null,
         P.sample ? h('div', { class: 'banner' }, h('span', { text: _t('Bộ mẫu của {x} — {x2}. Muốn bán: dựng bộ của bạn trong một dự án riêng rồi phát hành.', { x: P.sample.owner || 'Gen Labs', x2: P.sample.license || _t('chỉ để xem và làm phim thử') }) }),
           Store.mode === 'server' ? samplesStale().filter(function (S) { return S.id === P.id; }).map(function (S) { return h('button', { class: 'btn sm primary', onclick: function () { updateDemo(S); } }, _t('⟳ Có bản mới của bộ mẫu — cập nhật')); }) : null) : null);
       parts.forEach(function (g) {
@@ -4554,7 +4558,7 @@
         var row = h('div', { class: 'libgrid sm' });
         g[1].forEach(function (x) {
           row.appendChild(h('button', { class: 'libcard', title: x.key, onclick: function () { go({ page: g[2], key: x.key }); } },
-            h('div', { class: 'im' }, h('img', { src: thumbOf(x), alt: _l(x.name), loading: 'lazy' })), h('div', { class: 'lb' }, h('b', { text: _l(x.name) }))));
+            h('div', { class: 'im' }, h('img', { src: thumbOf(x), alt: _lo(x, x.name), loading: 'lazy' })), h('div', { class: 'lb' }, h('b', { text: _lo(x, x.name) }))));
         });
         body.appendChild(h('div', { class: 'stack' }, h('b', { text: g[0] + ' (' + g[1].length + ')' }), row));
       });
@@ -4567,7 +4571,7 @@
         sel ? h('button', { class: 'btn sm', title: _t('Gói để bán / chia sẻ: chỉ asset đã PHÁT HÀNH, không kèm tác phẩm'), onclick: function () { exportBundle(P, true); } },
           _t('Gói bán · {n} asset phát hành', { n: [].concat(inProject(GC.assets(), sel), inProject(GC.items(), sel), inProject(GC.scenes(), sel)).filter(function (x) { return GC.statusOf(x.status) === 'published'; }).length }))
           : h('span', { class: 'note', text: _t('Xếp asset vào một dự án (ở khung "Dùng" của từng asset) để tải gói.') })));
-      detail.appendChild(h('div', { class: 'panel' }, h('h3', null, _l(P.name), h('span', { class: 'r mono', text: P.id || '—' })), body));
+      detail.appendChild(h('div', { class: 'panel' }, h('h3', null, _lo(P, P.name), h('span', { class: 'r mono', text: P.id || '—' })), body));
     }
     paint();
   };
@@ -4731,7 +4735,7 @@
     function slider(p, val, set) {
       var out = h('span', { class: 'mono note', text: (+val).toFixed(2) });
       var s = h('input', { type: 'range', min: p.min, max: p.max, step: p.step || 0.01, value: val, oninput: function () { out.textContent = (+s.value).toFixed(2); set(+s.value); changed(); } });
-      return h('label', { class: 'fld' }, h('span', { class: 'note', text: _l(p.label) }), h('span', { class: 'row', style: 'gap:6px' }, s, out));
+      return h('label', { class: 'fld' }, h('span', { class: 'note', text: p.label }), h('span', { class: 'row', style: 'gap:6px' }, s, out));
     }
     function charParams(d, f) {
       var es = h('select', { onchange: function () { d.look.eyes = es.value; changed(); } }), bs = h('select', { onchange: function () { d.look.brows = bs.value; changed(); } });
@@ -4748,7 +4752,7 @@
           if (!p || !p.params) return;
           Object.keys(p.params).forEach(function (k) {
             var cur = ((d.look.params[slot] || {})[k]);
-            prm.appendChild(slider({ label: _l(LIB.slots[slot].label) + ' · ' + _l(p.params[k].label), min: p.params[k].min, max: p.params[k].max, step: p.params[k].step }, cur == null ? p.params[k].def : cur,
+            prm.appendChild(slider({ label: _l(LIB.slots[slot].label) + ' · ' + _lo(p, p.params[k].label), min: p.params[k].min, max: p.params[k].max, step: p.params[k].step }, cur == null ? p.params[k].def : cur,
               function (v) { d.look.params[slot] = d.look.params[slot] || {}; d.look.params[slot][k] = v; }));
           });
         });
@@ -4765,13 +4769,13 @@
           idBox.appendChild(h('button', { 'aria-pressed': String(on), title: tag, onclick: function () {
             if (on) d.identity.must = d.identity.must.filter(function (m) { return m !== tag; }); else d.identity.must.push(tag);
             paintId(); changed();
-          } }, _l(LIB.slots[slot].label) + ': ' + _l(p.label)));
+          } }, _l(LIB.slots[slot].label) + ': ' + _lo(p, p.label)));
         });
         if (!idBox.children.length) idBox.appendChild(h('span', { class: 'note', text: _t('Chọn linh kiện riêng (không phải khung trần) để đánh dấu nhận diện.') }));
       }
       LIB_SLOTS().forEach(function (slot) {
         var s = h('select', { onchange: function () { d.look.parts[slot] = s.value; paintParams(); paintId(); changed(); } });
-        GC.partsOfSlot(slot).forEach(function (p) { s.appendChild(h('option', { value: p.pack + '/' + p.id, text: _l(p.label) + (p.pack === MY_PACK ? _t(' · của tôi') : '') })); });
+        GC.partsOfSlot(slot).forEach(function (p) { s.appendChild(h('option', { value: p.pack + '/' + p.id, text: _lo(p, p.label) + (p.pack === MY_PACK ? _t(' · của tôi') : '') })); });
         var cur = GC.getPart(slot, GC.partRef(d, slot), d.pack);
         if (cur) s.value = cur.pack + '/' + cur.id;
         t.appendChild(field(_l(LIB.slots[slot].label), s));
@@ -4793,7 +4797,7 @@
       ty.value = d.type; ra.value = d.rarity;
       f.appendChild(h('div', { class: 'row' }, field(_t('Loại'), ty), field(_t('Độ hiếm'), ra)));
       if (p && p.params) Object.keys(p.params).forEach(function (k) {
-        f.appendChild(slider(p.params[k], d.equip.params[k] == null ? p.params[k].def : d.equip.params[k], function (v) { d.equip.params[k] = v; }));
+        f.appendChild(slider(Object.assign({}, p.params[k], { label: _lo(p, p.params[k].label) }), d.equip.params[k] == null ? p.params[k].def : d.equip.params[k], function (v) { d.equip.params[k] = v; }));
       });
       f.appendChild(h('b', { text: _t('Màu') }));
       f.appendChild(colors([['metal', _t('Kim loại')], ['wood', _t('Gỗ')], ['accent', _t('Điểm nhấn')], ['hat', _t('Mũ')], ['robe', _t('Áo')], ['trim', _t('Viền')], ['cape', _t('Choàng')], ['boots', _t('Giày')]], d.equip.palette, LIB.defaults, function (k, v) { d.equip.palette[k] = v; }));
@@ -4811,7 +4815,7 @@
       S.layerOrder.forEach(function (slot) {
         var s = h('select', { onchange: function () { if (s.value) d.layers[slot] = { part: s.value }; else delete d.layers[slot]; changed(); } });
         if (!S.slots[slot].required) s.appendChild(h('option', { value: '', text: _t('— không —') }));
-        GC.scenery(slot).forEach(function (p) { s.appendChild(h('option', { value: p.pack + '/' + p.id, text: _l(p.label) + (p.pack === MY_PACK ? _t(' · của tôi') : '') })); });
+        GC.scenery(slot).forEach(function (p) { s.appendChild(h('option', { value: p.pack + '/' + p.id, text: _lo(p, p.label) + (p.pack === MY_PACK ? _t(' · của tôi') : '') })); });
         s.value = d.layers[slot] ? d.layers[slot].part : '';
         t.appendChild(field(_l(S.slots[slot].label), s));
       });
@@ -4975,8 +4979,8 @@
       h('button', { class: 'btn', onclick: function () { go({ page: 'create', kind: 'scene' }); } }, _t('+ Bối cảnh mới')),
       saveBtn);
     var left = h('div', { class: 'stack' }), right = h('div', { class: 'stack' });
-    dockObj('asset', base.key, base.name);
-    $('view').appendChild(h('div', anc({ class: 'detail scenefab' }, 'scene:' + base.key, _l(base.name)), left, h('div', { class: 'sticky stack' }, right)));
+    dockObj('asset', base.key, _lo(base, base.name));
+    $('view').appendChild(h('div', anc({ class: 'detail scenefab' }, 'scene:' + base.key, _lo(base, base.name)), left, h('div', { class: 'sticky stack' }, right)));
     var img = h('img', { alt: _t('xem trước cảnh'), style: 'width:100%;display:block;border-radius:6px' });
     var gateBox = h('div'), errBox = h('ul', { class: 'errs' });
     var castRows = [{ id: 'ma-no-canh', spot: 'midLeft', activity: '' }, { id: 'ma-no-canh', spot: 'midRight', activity: 'attack' }];
@@ -4997,7 +5001,7 @@
     function sceneryOpts(slot, cur, optional) {
       var sel = h('select', { 'aria-label': _l(S.slots[slot].label) });
       if (optional) sel.appendChild(h('option', { value: '', text: _t('— không —') }));
-      GC.scenery(slot).forEach(function (p) { var ref = p.pack + '/' + p.id; sel.appendChild(h('option', { value: ref, text: _l(p.label) + (p.pack !== 'gen.khung' ? ' · ' + p.pack : ''), selected: ref === cur })); });
+      GC.scenery(slot).forEach(function (p) { var ref = p.pack + '/' + p.id; sel.appendChild(h('option', { value: ref, text: _lo(p, p.label) + (p.pack !== 'gen.khung' ? ' · ' + p.pack : ''), selected: ref === cur })); });
       return sel;
     }
     function num(label, val, min, max, step, set) {
@@ -5065,7 +5069,7 @@
       castRows.forEach(function (x) {
         var a = h('select', { onchange: function () { x.id = a.value; preview(); } });
         a.appendChild(h('option', { value: '', text: _t('— trống —') }));
-        GC.assets().forEach(function (as) { a.appendChild(h('option', { value: as.id, text: _l(as.name), selected: as.id === x.id })); });
+        GC.assets().forEach(function (as) { a.appendChild(h('option', { value: as.id, text: _lo(as, as.name), selected: as.id === x.id })); });
         var sp = h('select', { onchange: function () { x.spot = sp.value; preview(); } });
         S.spotOrder.forEach(function (k) { sp.appendChild(h('option', { value: k, text: _l(S.spots[k].label), selected: k === x.spot })); });
         var ac = h('select', { onchange: function () { x.activity = ac.value; preview(); } });
@@ -5079,7 +5083,7 @@
       var pick = h('div', { class: 'libgrid sm' });
       GC.scenes().forEach(function (sc) {
         pick.appendChild(h('button', { class: 'libcard', title: sc.key, onclick: function () { base = sc; load(sc); paintAll(); } },
-          h('div', { class: 'im' }, h('img', { src: sceneURL(sc, { size: 200 }), alt: _l(sc.name), loading: 'lazy' })), h('div', { class: 'lb' }, h('b', { text: _l(sc.name) }))));
+          h('div', { class: 'im' }, h('img', { src: sceneURL(sc, { size: 200 }), alt: _lo(sc, sc.name), loading: 'lazy' })), h('div', { class: 'lb' }, h('b', { text: _lo(sc, sc.name) }))));
       });
       right.appendChild(h('div', { class: 'panel' }, h('h3', null, _t('Mở cảnh để phối'), h('span', { class: 'r note', text: _t('{n} cảnh', { n: GC.scenes().length }) })), h('div', { class: 'pad' }, pick)));
       saveBtn.disabled = Store.mode !== 'server';
@@ -5324,7 +5328,7 @@
     t.appendChild(h('tr', null, h('th', { text: _pt('cột', 'Nhân vật') }), head.map(function (x) { return h('th', { text: x }); }), h('th', { text: _t('Xuất') })));
     all.forEach(function (a) {
       var gs = GC.gate(a, { poses: true }), ok = gs.every(function (g) { return g.ok; });
-      t.appendChild(h('tr', null, h('td', null, h('span', { class: 'mono note', text: (a.code || '') + ' ' }), _l(a.name)),
+      t.appendChild(h('tr', null, h('td', null, h('span', { class: 'mono note', text: (a.code || '') + ' ' }), _lo(a, a.name)),
         gs.map(function (g) { return h('td', { class: g.ok ? 'ok' : 'bad', title: gD(g), style: 'font-weight:600', text: g.ok ? _pt('cổng kiểm', 'Đạt') : _t('Không đạt') }); }),
         h('td', { class: ok ? 'ok' : 'bad', style: 'font-weight:600', text: ok ? _t('Được xuất') : _t('Chặn') })));
     });

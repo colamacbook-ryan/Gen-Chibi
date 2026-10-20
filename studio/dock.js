@@ -413,7 +413,7 @@
     var i = S.info; if (!i) return '';
     var parts = [zoneLabel(i.zone)];
     parts.push(S.tabLabel || i.pageLabel);
-    if (S.obj && S.obj.label) parts.push(_l(S.obj.label) + (S.shotLabel ? ' · ' + S.shotLabel : ''));
+    if (S.obj && S.obj.label) parts.push(S.obj.label + (S.shotLabel ? ' · ' + S.shotLabel : ''));   // Studio gửi nhãn ĐÃ theo ngôn ngữ (_lo: chỉ dịch đồ Gen Labs) — dịch lại ở đây thì tên người dùng "Nam" thành "Male" (CNS-158)
     return parts.filter(Boolean);
   }
   function paintCtx() {

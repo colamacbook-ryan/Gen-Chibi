@@ -1,8 +1,8 @@
 {
-  "id": "vi-du-san-tap",
-  "name": "Sân tập",
-  "description": "Sân tập võ buổi sáng: tường kem, nền gỗ, chậu cây.",
-  "project": "vi-du-agent",
+  "id": "example-training-yard",
+  "name": "Training yard",
+  "description": "A martial arts training yard in the morning: cream walls, wooden floor, a potted plant.",
+  "project": "agent-example",
   "layers": {
     "sky": "gen.khung/khung-tuong",
     "ground": "gen.khung/khung-nen"

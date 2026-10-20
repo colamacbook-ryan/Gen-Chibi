@@ -1,9 +1,9 @@
 {
-  "id": "vi-du-dong-tac",
-  "name": "Đòn hài của Thủ Thư",
-  "project": "vi-du-agent",
+  "id": "example-moves",
+  "name": "Pip's comedy moves",
+  "project": "agent-example",
   "status": "draft",
-  "description": "Ví dụ gói động tác: một đòn đánh tay không (cốc đầu) + một động tác một mình (cúi chào sâu).",
+  "description": "Example motion pack: one unarmed attack (a bonk on the head) + one solo move (a deep bow).",
   "poses": {
     "bonkUp": {
       "$": "fistGuard",
@@ -39,7 +39,7 @@
   },
   "clips": {
     "bonk": {
-      "label": "Cốc đầu",
+      "label": "Bonk",
       "view": "q90",
       "face": {
         "eyes": "smug",
@@ -103,7 +103,7 @@
           {
             "at": "hand",
             "fx": "text",
-            "text": "CỐC!",
+            "text": "BONK!",
             "dy": -26,
             "size": 1,
             "color": "#ff9a3c"
@@ -124,7 +124,7 @@
       ]
     },
     "bowDeep": {
-      "label": "Cúi chào sâu",
+      "label": "Deep bow",
       "view": "front",
       "face": {
         "eyes": "closed",
@@ -166,16 +166,16 @@
   },
   "actions": {
     "bonk": {
-      "label": "Cốc đầu",
+      "label": "Bonk",
       "clips": [
         "bonk"
       ],
       "attack": true,
       "aim": "head",
-      "hint": "hài, tay không, đánh vào đầu"
+      "hint": "comic, unarmed, hits the head"
     },
     "bowDeep": {
-      "label": "Cúi chào sâu",
+      "label": "Deep bow",
       "clips": [
         "bowDeep"
       ]

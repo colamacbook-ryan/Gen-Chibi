@@ -290,7 +290,7 @@ if (!ONLY) {
     console.log('  ✓ Dữ liệu cũ (afi.*): Studio chọn đúng bối cảnh, Lưu giữ nguyên bối cảnh + lời thoại; bản ghi trong pack khung thành bản sao Của tôi');
     // PHIM SỐNG (L-51): đo đúng thứ người xem thấy — nhân vật di chuyển thật, miệng nhép thật, bong bóng vẽ thật, máy quay cận, âm thanh bật
     await q.evaluate(() => { localStorage.setItem('gc-audio', JSON.stringify({ voice: 'blip' })); localStorage.setItem('gc-route-tao-tac', JSON.stringify({ page: 'works', work: 'mau-ngay-dau-di-lam' })); });
-    await q.goto('http://localhost:7494/tao-tac'); await q.waitForSelector('.readybar');
+    await q.goto('http://localhost:7494/tao-tac'); await q.waitForSelector('.readybar:not(.dubbar)');
     await q.click('button[data-playall]');
     const seen = { left: new Set(), mouth: new Set(), scale: 0, bubble: 0, tail: 0, name: 0 };
     for (let k = 0; k < 26; k++) {
@@ -318,7 +318,7 @@ if (!ONLY) {
     await q.click('.libcard.proj[title="mau-tam-quoc"]'); await q.waitForSelector('text=Gói bán · bộ mẫu, không bán');
     if (await q.$('button:has-text("Gói bán ·")')) throw new Error('bộ mẫu Gen Labs không được có nút xuất gói bán');
     await q.evaluate(() => localStorage.setItem('gc-route-tao-tac', JSON.stringify({ page: 'works', work: 'tq-vuon-dao-xich-bich' })));
-    await q.goto('http://localhost:7494/tao-tac'); await q.waitForSelector('.readybar');
+    await q.goto('http://localhost:7494/tao-tac'); await q.waitForSelector('.readybar:not(.dubbar)');
     if (!/Sẵn sàng diễn cả 6 phân cảnh/.test(await q.textContent('.readybar'))) throw new Error('phim Tam Quốc chưa sẵn sàng: ' + await q.textContent('.readybar'));
     if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
     // máy đã nhập bộ mẫu bản cũ (trước phân cảnh đấu): Thư viện mời cập nhật → nhập đè → đủ phân cảnh mới (CNS-036)
@@ -337,7 +337,7 @@ if (!ONLY) {
     if (await q.$('button:has-text("⟳ Cập nhật Tam Quốc")')) throw new Error('cập nhật xong vẫn còn mời cập nhật (sau ' + ((Date.now() - tUp) / 1000).toFixed(1) + ' s)');
     console.log('    (cập nhật bộ mẫu Tam Quốc xong sau ' + ((Date.now() - tUp) / 1000).toFixed(1) + ' s)');
     await q.evaluate(() => localStorage.setItem('gc-route-tao-tac', JSON.stringify({ page: 'works', work: 'tq-vuon-dao-xich-bich' })));
-    await q.goto('http://localhost:7494/tao-tac'); await q.waitForSelector('.readybar');
+    await q.goto('http://localhost:7494/tao-tac'); await q.waitForSelector('.readybar:not(.dubbar)');
     if (!/Sẵn sàng diễn cả 6 phân cảnh/.test(await q.textContent('.readybar'))) throw new Error('cập nhật bộ mẫu chưa có phân cảnh mới: ' + await q.textContent('.readybar'));
     if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
     console.log('  ✓ Bộ mẫu cũ trên máy → nút "Cập nhật Tam Quốc" → nhập đè → đủ 6 phân cảnh (có màn đấu)');
@@ -2882,6 +2882,37 @@ if (!ONLY || ONLY === 'i18n') {
     await put('en');
     if (sent8.lang !== 'en' || w8.lang !== 'en' || (w8.stats || {}).lang !== 'en') throw new Error('Studio en tạo tác phẩm trên máy vi: gửi lang=' + sent8.lang + ', lưu lang=' + w8.lang + ' (cần en)');
     console.log('  ✓ Studio (giao diện en, máy mặc định vi) tạo "My first film": gửi lang en → tác phẩm lang en');
+    // 9) CNS-158: tên do NGƯỜI DÙNG đặt không bị dịch dù trùng msgid (bảng en có "Nam" → "Male", "Đạt" → "Approved"); nhãn của bộ khung vẫn dịch.
+    //    Tạo SAU lượt quét (5) để không lẫn vào danh sách nội dung người dùng của lượt quét
+    const fr16 = await qe.evaluate(() => JSON.parse(JSON.stringify(window.GenChibi.ASSETS['gen.khung/ma-no-canh'])));
+    Object.assign(fr16, { id: 'nam', pack: 'local.my', name: 'Nam', role: 'Đạt', faction: '', persona: 'Văn võ song toàn', status: 'draft' }); delete fr16.key;
+    const putN = await fetch(U + 'api/assets/local.my/nam', { method: 'PUT', headers: H, body: JSON.stringify(fr16) });
+    const putD = await fetch(U + 'api/items', { method: 'POST', headers: H, body: JSON.stringify({ item: { id: 'dat', name: 'Đạt', type: 'weapon', rarity: 'common', equip: { slot: 'heldR', part: 'gen.khung/khoi-que-ngan' } } }) });
+    if (!putN.ok || !putD.ok) throw new Error('không lưu được nhân vật "Nam" / vật phẩm "Đạt": ' + putN.status + ' / ' + putD.status);
+    const at = async (app, route, sel) => { await qe.evaluate(([k, v]) => localStorage.setItem(k, v), ['gc-route-' + app, JSON.stringify(route)]); await qe.goto(U + app + '?lang=en'); await ready(qe); await qe.waitForSelector(sel, { timeout: 6000 }); };
+    const lbl = sel => qe.$eval(sel, el => [el.getAttribute('data-anchor-label'), (el.querySelector('b') || {}).textContent].join('|'));
+    const names = [];
+    await at('xuong', { page: 'characters' }, '[data-anchor="asset:local.my/nam"]');   // Xưởng › Bàn chỉnh nhân vật: bảng có cả khung lẫn của tôi
+    const rowN = await qe.$eval('[data-anchor="asset:local.my/nam"]', el => [el.getAttribute('data-anchor-label'), ...[...el.querySelectorAll('td')].map(td => td.textContent.trim())].join('|'));
+    names.push(['Xưởng › nhân vật "Nam" (tên | vai)', rowN, /^Nam\|/.test(rowN) && /\|Đạt\|/.test(rowN) && !/Male|Approved/.test(rowN)]);
+    const rowF = await qe.$eval('[data-anchor="asset:gen.khung/ma-no-canh"]', el => [el.getAttribute('data-anchor-label'), ...[...el.querySelectorAll('td')].map(td => td.textContent.trim())].join('|'));
+    names.push(['Xưởng › khung ma-nơ-canh', rowF, /^Mannequin\|/.test(rowF) && /\|Standard character frame\|/.test(rowF)]);
+    await at('xuong', { page: 'items' }, '[data-anchor="item:local.my/dat"]');
+    names.push(['Xưởng › vật phẩm "Đạt"', await lbl('[data-anchor="item:local.my/dat"]'), null]);
+    names[names.length - 1][2] = names[names.length - 1][1] === 'Đạt|Đạt';
+    names.push(['Xưởng › vật phẩm khung', await lbl('[data-anchor="item:gen.khung/khung-vu-khi-dai"]'), null]);
+    names[names.length - 1][2] = names[names.length - 1][1] === 'Long weapon frame|Long weapon frame';
+    await at('thu-vien', { page: 'lib-characters', key: 'local.my/nam' }, '.libcard[data-anchor="asset:local.my/nam"]');   // Thư viện › Nhân vật: thẻ + hồ sơ đang mở
+    names.push(['Thư viện › thẻ "Nam"', await lbl('.libcard[data-anchor="asset:local.my/nam"]'), null]);
+    names[names.length - 1][2] = names[names.length - 1][1] === 'Nam|Nam';
+    await qe.waitForSelector('.sticky .panel h3', { timeout: 6000 }); const insp16 = await qe.$eval('.sticky .panel h3', el => el.textContent);
+    names.push(['Thư viện › hồ sơ "Nam"', insp16, /^Nam/.test(insp16) && !/Male/.test(insp16)]);
+    await at('thu-vien', { page: 'lib-items', key: 'local.my/dat' }, '.libcard[data-anchor="item:local.my/dat"]');
+    names.push(['Thư viện › thẻ "Đạt"', await lbl('.libcard[data-anchor="item:local.my/dat"]'), null]);
+    names[names.length - 1][2] = names[names.length - 1][1] === 'Đạt|Đạt';
+    const badN = names.filter(x => !x[2]);
+    if (badN.length) throw new Error('CNS-158 — tên người dùng bị dịch / nhãn khung không dịch: ' + badN.map(x => x[0] + ': "' + x[1] + '"').join(' · '));
+    console.log('  ✓ CNS-158: tên người dùng không bị dịch dù trùng msgid — "Nam" (vai "Đạt"), vật phẩm "Đạt" ở Xưởng + Thư viện (thẻ, hồ sơ, nhãn neo); nhãn khung vẫn dịch ("' + rowF.split('|')[0] + '", "Long weapon frame")');
     await ctxE.close();
     if (errs16.length) throw new Error('lỗi trang: ' + errs16.slice(0, 3).join(' | '));
   } catch (e) { fail = 1; console.log('  ✗ i18n (ngôn ngữ giao diện):', e.message); }

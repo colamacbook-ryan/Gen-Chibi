@@ -88,7 +88,7 @@ await good('list_sounds', { project: project.id, cat: 'danh' }, r => r.structure
 await good('get_sound_pack', { id: 'gen.am', names: ['bonk'] }, r => r.structuredContent.sounds.bonk && Object.keys(r.structuredContent.sounds).length === 1);
 await good('validate_sound_pack', { pack: sndPack }, r => r.structuredContent.sounds === 2);
 await good('save_sound_pack', { pack: sndPack }, r => r.structuredContent.version === 1);
-await good('list_sounds', { project: project.id, q: 'cốc' }, r => r.structuredContent.sounds.some(x => x.name === 'coc-dau-go' && x.pack === sndPack.id));
+await good('list_sounds', { project: project.id, q: 'bonk' }, r => r.structuredContent.sounds.some(x => x.name === 'wooden-bonk' && x.pack === sndPack.id));
 await good('lint_sound_track', sndTrack, r => r.structuredContent.ok === true && r.structuredContent.issues.length === 0);
 const work = exampleIn(G.film, 'work.json'), shot = exampleIn(G.film, 'shot.json');
 await good('save_work', work);
@@ -115,8 +115,8 @@ const e5 = await call('lint_sound_track', { steps: [{ actor: 'a', state: 'normal
 ok(e5.isError && /^\[VALIDATION_FAILED\]/.test(e5.content[0].text) && er5.details.some(d => d.path === 'steps[0].sfx[0]' && /closest: "bonk"/.test(d.message)), 'lint_sound_track: tên âm lạ phải là lỗi có path + gợi ý tên gần nhất: ' + e5.content[0].text.slice(0, 240));
 const e6 = await call('save_shot', { work: work.id, shot: Object.assign({}, shot, { id: 'canh-am-sai', event: Object.assign({}, shot.event, { steps: shot.event.steps.map((s, i) => i === 0 ? Object.assign({}, s, { sfx: ['bonkk'] }) : s) }) }) });
 ok(e6.isError && e6.structuredContent.error.details.some(d => d.path === 'shot.event.steps[0].sfx' && /closest: "bonk"/.test(d.message)), 'save_shot với âm lạ phải bị chặn tại shot.event.steps[0].sfx kèm gợi ý: ' + e6.content[0].text.slice(0, 240));
-const e7 = await call('validate_sound_pack', { pack: Object.assign({}, sndPack, { id: 'am-sai', sounds: { 'coc-dau-go': sndPack.sounds['coc-dau-go'] } }) });
-ok(e7.isError && e7.structuredContent.error.details.some(d => d.path === 'sounds.coc-dau-go' && /sound name already used by pack "am-vi-du-agent"/.test(d.message)), 'tên âm trùng gói khác phải bị chặn, nêu gói giữ tên: ' + e7.content[0].text.slice(0, 240));
+const e7 = await call('validate_sound_pack', { pack: Object.assign({}, sndPack, { id: 'am-sai', sounds: { 'wooden-bonk': sndPack.sounds['wooden-bonk'] } }) });
+ok(e7.isError && e7.structuredContent.error.details.some(d => d.path === 'sounds.wooden-bonk' && /sound name already used by pack "example-agent-sounds"/.test(d.message)), 'tên âm trùng gói khác phải bị chặn, nêu gói giữ tên: ' + e7.content[0].text.slice(0, 240));
 const e3 = await call('get_guide', { topic: 'khong-co' });
 ok(e3.isError && e3.structuredContent.error.code === 'NOT_FOUND' && e3.structuredContent.error.allowed.indexOf('film') >= 0, 'chủ đề lạ phải NOT_FOUND kèm danh sách');
 const e4 = await call('save_motion_pack', { pack: Object.assign({}, pack, { id: 'zero-trung', actions: { punch: pack.actions.bonk } }) });

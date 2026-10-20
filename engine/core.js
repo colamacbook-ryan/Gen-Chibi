@@ -101,6 +101,17 @@
   var PACK_ALIAS = {};
   function canonPack(id) { return typeof id === 'string' && own(PACK_ALIAS, id) ? PACK_ALIAS[id] : id; }
   function canon(ref) { if (typeof ref !== 'string') return ref; var i = ref.indexOf('/'); return i > 0 ? canonPack(ref.slice(0, i)) + ref.slice(i) : ref; }
+  // ĐỒ CỦA GEN LABS (ADR 0007, CNS-154 / CNS-158) — x: mục dữ liệu (nhân vật, vật phẩm, cảnh, linh kiện, đòn, âm…) hoặc id pack.
+  // true khi mục thuộc pack nhóm "frame" (khung lõi gen.core, bộ khung chuẩn gen.khung), bộ đòn khung (choreo.FRAME_PACK) hay bộ âm chuẩn (sounds.FRAME):
+  // chữ của chúng là msgid tiếng Việt → dịch được. Còn lại — "Của tôi", bộ mẫu đã nhập (ADR 0007 §4: giữ nội dung gốc), gói nhập, gói của người dùng —
+  // là NỘI DUNG: không dịch, kể cả khi trùng msgid (nhân vật "Nam" không thành "Male", vật phẩm "Đạt" không thành "Approved")
+  function isGenLabs(x) {
+    var pk = x && typeof x === 'object' ? x.pack : x, E = G.GenChibi;
+    if (typeof pk !== 'string' || !pk) return false;
+    pk = canonPack(pk);
+    if (own(PACKS, pk)) return PACKS[pk].group === 'frame';
+    return !!E && !!((E.choreo && pk === E.choreo.FRAME_PACK) || (E.sounds && pk === E.sounds.FRAME));
+  }
   // Mỗi mục đăng ký mang theo `pack` để biết chủ, license, nhóm thư viện.
   function pack(meta, fill) {
     if (!meta || !/^[a-z0-9]+(\.[a-z0-9-]+)+$/.test(meta.id)) throw new Error(N_('id thư viện phải dạng chu.ten: {id}', { id: meta && meta.id }));
@@ -898,7 +909,8 @@
     L.push('Write a short script (3–6 beats) for the event described at the end. Expressions are always exaggerated and funny — no violence, no blood.');
     L.push('Return ONLY ONE JSON object that matches the schema — no explanation, no markdown.');
     L.push('', 'Actors:');
-    cast.forEach(function (a) { L.push('- ' + a.id + ': ' + a.name + ' — ' + (a.persona || '')); });
+    var G0 = function (x, t) { return isGenLabs(x) ? E(t) : t; };   // chữ của bộ khung (ma-nơ-canh, sân khấu chuẩn) tiếng Anh; tên / tính cách người dùng đặt giữ nguyên (CNS-154/158)
+    cast.forEach(function (a) { L.push('- ' + a.id + ': ' + G0(a, a.name) + ' — ' + G0(a, a.persona || '')); });
     L.push('', 'States (state):');
     LIB.stateOrder.forEach(function (id) { L.push('- ' + id + ': ' + E(LIB.states[id].label) + ' — ' + E(LIB.states[id].hint)); });
     L.push('', 'Activities (activity, optional — preset posture + move + motion + props; state still decides the face):');
@@ -910,7 +922,7 @@
     if (SCENE_ORDER.length) {
       L.push('', 'Scenes (scene, optional — put the whole event in an existing scene; each step picks spot = where the actor stands):');
       var one = function (t) { return String(t || '').replace(/\s+/g, ' ').trim(); };   // chữ do người dùng / agent đặt không tạo được dòng giả trong prompt
-      SCENE_ORDER.forEach(function (k) { L.push('- ' + k + ': ' + one(SCENES[k].name) + (SCENES[k].description ? ' — ' + one(SCENES[k].description) : '')); });
+      SCENE_ORDER.forEach(function (k) { var x = SCENES[k]; L.push('- ' + k + ': ' + one(G0(x, x.name)) + (x.description ? ' — ' + one(G0(x, x.description)) : '')); });
       L.push('- spot: ' + SCENE.spotOrder.map(function (k) { return k + ' (' + E(SCENE.spots[k].label) + ')'; }).join(', '));
     }
     L.push('', 'Film staging (optional — the player stages it automatically if left empty: characters walk on, walk to a new place when the spot changes, turn to the listener, gesture while talking, the camera closes in on the speaker, lip sync, own voice):');
@@ -1699,7 +1711,7 @@
     getScene: getScene, getAsset: getAsset, checkScene: checkScene, registerScene: registerScene, sceneSvg: sceneSvg, sceneLayers: sceneLayers, sceneGate: sceneGate,
     checkCast: checkCast, checkScenery: checkScenery, svgBody: svgBody,
     scenery: function (slot) { return Object.keys(LIB.parts).map(function (k) { return LIB.parts[k]; }).filter(function (p) { return p.kind === 'scenery' && (!slot || p.slot === slot); }); },
-    canon: canon, canonPack: canonPack, statusOf: statusOf, projectId: projectId, getItem: getItem, checkItem: checkItem, registerItem: registerItem, itemSvg: itemSvg, itemGate: itemGate, partAlone: partAlone, sanitizeSvg: function (s0) { var e = []; var r = sanitizeSvg(s0, e, 'svg'); return { svg: r, errors: e }; },
+    canon: canon, canonPack: canonPack, isGenLabs: isGenLabs, statusOf: statusOf, projectId: projectId, getItem: getItem, checkItem: checkItem, registerItem: registerItem, itemSvg: itemSvg, itemGate: itemGate, partAlone: partAlone, sanitizeSvg: function (s0) { var e = []; var r = sanitizeSvg(s0, e, 'svg'); return { svg: r, errors: e }; },
     assets: function () { return ASSET_ORDER.map(function (k) { return ASSETS[k]; }); },
     director: { schema: directorSchema, validate: validateEvent, prompt: directorPrompt },
     gate: gate,
