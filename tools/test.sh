@@ -680,7 +680,7 @@ ok(/Đao CI/.test(by(12).result.content[1].resource.text), "render_item card");
 ok(!by(13).result.isError, "nhân vật mặc item của tôi");
 ok(!by(14).result.isError && /<svg/.test(by(14).result.content[1].resource.text), "render_item equipped 45° + tấn công");
 console.log("   ✓ MCP item: lưu → thẻ → nhân vật mặc → dựng 45° tấn công");
-ok(by(15).result.isError && /bộ phận/.test(by(15).result.content[0].text), "chặn đổi bộ phận của item đã lưu");
+ok(by(15).result.isError && /is in slot/.test(by(15).result.content[0].text), "chặn đổi bộ phận của item đã lưu");
 ok(!by(16).result.isError && /12ab34/i.test(by(16).result.content[1].resource.text), "render_item equipped với item nháp phải mặc thử được");
 ok(!/ci-nhap/.test(JSON.stringify(by(17).result)), "item nháp không được lưu lại sau khi dựng");
 console.log("   ✓ MCP item: chặn đổi bộ phận · mặc thử item nháp không để lại dấu");
@@ -690,10 +690,10 @@ ok(!by(19).result.isError && /<svg/.test(by(19).result.content[1].resource.text)
 ok(JSON.parse(by(20).result.content[0].text).saved, "save_part lưu phông");
 ok(JSON.parse(by(21).result.content[0].text).saved, "save_scene phối phông tự tạo");
 ok(!by(22).result.isError && /<svg/.test(by(22).result.content[1].resource.text), "render_scene có dàn diễn viên (nhân vật mặc item của tôi)");
-ok(by(23).result.isError && /chính thức/.test(by(23).result.content[0].text), "không ghi đè cảnh chính thức");
+ok(by(23).result.isError && /official library/.test(by(23).result.content[0].text), "không ghi đè cảnh chính thức");
 ok(JSON.parse(by(24).result.content[0].text).ok, "kịch bản đặt vào cảnh của tôi");
-ok(by(25).result.isError && /chỗ đứng/.test(by(25).result.content[0].text), "render_scene chặn chỗ đứng lạ");
-ok(by(26).result && by(26).result.isError && /time: chọn/.test(by(26).result.content[0].text), "render_scene giờ lạ phải báo lỗi rõ");
+ok(by(25).result.isError && /spot "san-khau"/.test(by(25).result.content[0].text), "render_scene chặn chỗ đứng lạ");
+ok(by(26).result && by(26).result.isError && /time: choose/.test(by(26).result.content[0].text), "render_scene giờ lạ phải báo lỗi rõ");
 const pj = JSON.parse(by(30).result.content[0].text).find(p => p.id === "ci-chu-de");
 ok(pj && pj.name === "Chủ đề CI" && pj.items === 1 && pj.characters === 1, "list_projects đếm asset theo dự án: " + JSON.stringify(pj));
 ok(by(31).result.isError, "chặn id dự án sai");
@@ -714,6 +714,10 @@ console.log("   ✓ MCP dự án chủ đề: tạo → lưu item / nhân vật 
 console.log("   ✓ MCP cảnh: chuẩn phông → soát → lưu phông → phối cảnh → dựng có diễn viên → kịch bản trong cảnh; chặn đè chính thức");
 ' "$H/mcp.out"
 kill $SP 2>/dev/null || true
+
+echo "3a) ngôn ngữ phía server (ADR 0007, v0.20): msgid server / engine có bản en · khớp ngược mẫu · HTTP en / vi theo header · MCP cho agent tiếng Anh · trang Cấp phép · nhãn engine · rào ngược"
+for P in 7631 7632; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done
+node tools/test-i18n-server.mjs || exit 1
 
 echo "3c) agent từ số 0 (mọi hãng): chỉ dùng hướng dẫn agent/ + JSON-RPC thuần — trọn luồng, lỗi có mã, đường không-MCP, lớp bọc từng hãng"
 (echo > /dev/tcp/127.0.0.1/7493) 2>/dev/null && { echo "Cổng 7493 đang bị chiếm"; exit 1; }

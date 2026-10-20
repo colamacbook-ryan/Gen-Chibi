@@ -61,7 +61,7 @@ const clone = o => JSON.parse(JSON.stringify(o));
     // nhánh từ chối: hạn chót dựng thử (tiêm 30 ms) — gói "quá nặng" bị trả lỗi, gỡ sạch, không lưu
     { const T = loadEngine(ROOT), mt = new MCP({ engine: T, store: new Store(fs.mkdtempSync(path.join(os.tmpdir(), 'gc-mo-'))), version: 't', system: {}, smokeMs: 30 });
       const rs = await mt.callTool('validate_motion_pack', { pack: big }), ss = await mt.callTool('save_motion_pack', { pack: Object.assign({}, big, { id: 'ci-nang-2' }) });
-      no(!rs.isError || !/quá nặng/.test(rs.content[0].text), 'hết hạn chót dựng thử phải báo "quá nặng": ' + rs.content[0].text.slice(0, 120));
+      no(!rs.isError || !/too heavy/.test(rs.content[0].text), 'hết hạn chót dựng thử phải báo "quá nặng" (MCP trả agent tiếng Anh: "too heavy"): ' + rs.content[0].text.slice(0, 120));
       no(!ss.isError || mt.store.listMotionPacks().length || Object.keys(T.choreo.ACTIONS).some(k => /^a\d+x$/.test(k)), 'gói quá nặng không được lưu / để sót đòn'); }
     // ≤ 8 gói động tác mỗi gói dự án (mỗi gói phải dựng thử)
     { const { m: m9 } = fresh(), b9 = { format: 'gen-chibi.project/1', project: { id: 'ci-chin', name: 'Chín gói' }, motionPacks: Array.from({ length: 9 }, (x, i) => Object.assign(base(), { id: 'ci-goi-' + i, actions: { ['ciHit' + i]: base().actions.ciHit } })) };

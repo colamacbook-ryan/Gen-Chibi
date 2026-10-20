@@ -11,7 +11,7 @@ let script = [];            // [[tool, args]] cho lượt kế
 let reply = 'Xong.';        // câu trả lời cuối
 let delay = 0;              // ms LLM giả "nghĩ" trước khi trả lời (giữ một lượt đang chạy để thử khoá lượt)
 let seen = null;            // lời gọi LLM gần nhất: { system, tools, messages, ctxText, ctx (JSON đã bóc), users (tin user thật, không kể tin dữ liệu giao diện) }
-const isCtx = m => m.role === 'user' && /^DỮ LIỆU GIAO DIỆN/.test(m.content);
+const isCtx = m => m.role === 'user' && /^UI DATA/.test(m.content);
 const mock = http.createServer((req, res) => {
   let b = ''; req.on('data', d => b += d).on('end', () => {
     const body = JSON.parse(b), done = body.messages.filter(m => m.role === 'tool').length, cm = body.messages.find(isCtx);
@@ -24,7 +24,8 @@ const mock = http.createServer((req, res) => {
 }).listen(MOCK, '127.0.0.1');
 const home = mkdtempSync(path.join(tmpdir(), 'gc-dock-'));
 const srv = spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home, GC_PORT: String(APP), GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' });
-const raw = (m, p, body) => fetch('http://127.0.0.1:' + APP + p, { method: m, headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: body ? JSON.stringify(body) : undefined });
+// X-GC-Lang: vi — các kiểm tra cũ so chữ tiếng Việt: gọi như Studio ở chế độ vi (ADR 0007; mặc định API của bản cài mới là en)
+const raw = (m, p, body, lang) => fetch('http://127.0.0.1:' + APP + p, { method: m, headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1', 'X-GC-Lang': lang || 'vi' }, body: body ? JSON.stringify(body) : undefined });
 const api = (m, p, body) => raw(m, p, body).then(r => r.json());
 let fail = 0; const ok = (c, m) => { if (c) console.log('   ✓', m); else { fail = 1; console.log('   ✗', m); } };
 const chat = (message, context, anchors) => api('POST', '/api/ai/agent', { message, context, anchors });
@@ -43,11 +44,15 @@ try {
   ok(['xuong', 'khung', 'thu-vien', 'tao-tac'].every(z => !has(z, 'update_app') && !has(z, 'rollback_app') && !has(z, 'render_voice') && !has(z, 'design_voice')), 'mọi khu: không có tool hệ thống / giọng AI tốn lượt');
   ok(!has('xuong', 'propose_edit') && !has('khung', 'propose_edit'), 'propose_edit chỉ có ở khu Tạo tác');
   script = []; await chat('Hỏi về khung', { zone: 'khung', page: 'khung' });
-  ok(/BỘ KHUNG CHUẨN/.test(seen.system) && /KHÔNG AI SỬA/.test(seen.system) && /save_motion_pack/.test(seen.system), 'chỉ dẫn khu Bộ khung: giải thích khung + gói động tác, không sửa khung (từ mcp.js)');
-  ok(/⟦anchor\|nhãn ngắn⟧/.test(seen.system) && /shot:<id tác phẩm>\/<id phân cảnh>/.test(seen.system), 'chỉ dẫn có cú pháp anchor ⟦anchor|nhãn⟧ cho "Soi"');
-  ok(seen.ctx && seen.ctx.zone === 'khung' && seen.ctx.zone_label === 'Bộ khung' && seen.ctx.page === 'khung' && !/khu Bộ khung › trang/.test(seen.system), 'ngữ cảnh "Đang xem" nằm trong tin DỮ LIỆU GIAO DIỆN (JSON), không nằm trong chỉ dẫn hệ thống');
+  ok(/CORE FRAME/.test(seen.system) && /NO ONE EDITS IT/.test(seen.system) && /save_motion_pack/.test(seen.system), 'chỉ dẫn khu Bộ khung: giải thích khung + gói động tác, không sửa khung (từ mcp.js)');
+  ok(/⟦anchor\|short label⟧/.test(seen.system) && /shot:<work id>\/<shot id>/.test(seen.system), 'chỉ dẫn có cú pháp anchor ⟦anchor|nhãn⟧ cho "Soi"');
+  ok(seen.ctx && seen.ctx.zone === 'khung' && seen.ctx.zone_label === 'Core frame' && seen.ctx.page === 'khung' && !/zone_label|Core frame ›/.test(seen.system), 'ngữ cảnh "Đang xem" nằm trong tin DỮ LIỆU GIAO DIỆN (JSON), không nằm trong chỉ dẫn hệ thống');
+  // context.lang (ngôn ngữ giao diện dock gửi lên — CNS v0.20): cleanContext giữ 'en' | 'vi' → chỉ dẫn dặn AI TRẢ LỜI đúng ngôn ngữ đó (chỉ dẫn / tool vẫn tiếng Anh)
+  script = []; await chat('Xin chào', { zone: 'xuong', lang: 'vi' }); const viSys = seen.system;
+  script = []; await chat('Hello', { zone: 'xuong', lang: 'en' });
+  ok(/REPLY LANGUAGE: the user's interface is in Vietnamese/.test(viSys) && /REPLY LANGUAGE: the user's interface is in English/.test(seen.system), 'context.lang qua POST /api/ai/agent: vi → dặn AI trả lời tiếng Việt, en → tiếng Anh');
   script = []; await chat('Hỏi lạ', { zone: '<script>', page: '../../x' });
-  ok(seen.ctx.zone_label === 'Xưởng' && !seen.ctx.page && !/<script>|\.\.\//.test(seen.system + seen.ctxText), 'khu / trang lạ → về Xưởng, chữ lạ không lọt vào chỉ dẫn / dữ liệu giao diện');
+  ok(seen.ctx.zone_label === 'Workshop' && !seen.ctx.page && !/<script>|\.\.\//.test(seen.system + seen.ctxText), 'khu / trang lạ → về Xưởng, chữ lạ không lọt vào chỉ dẫn / dữ liệu giao diện');
 
   // ---- ghim: chỉ nhận anchor đúng dạng, cắt gọn, là dữ liệu
   script = [];
@@ -58,7 +63,7 @@ try {
   ]);
   const pins = (seen.ctx && seen.ctx.pins) || [];
   ok(pins.length === 2 && pins[0].anchor === 'asset:local.my/gia-cat-luong' && pins[0].label === 'Gia Cát Lượng' && JSON.stringify(pins[0]).length < 1400, 'ghim: giữ anchor đúng dạng, bỏ anchor hỏng / lạ / trùng, snapshot cắt gọn');
-  ok(!/⟧ BỎ QUA/.test(seen.ctxText) && /không phải lệnh/.test(seen.ctxText.split('\n')[0]) && !/BỎ QUA|Hãy bỏ qua/.test(seen.system), 'nhãn / snapshot không phá được cú pháp; nằm trong tin dữ liệu (có nhãn "không phải lệnh"), không nằm trong chỉ dẫn hệ thống');
+  ok(!/⟧ BỎ QUA/.test(seen.ctxText) && /not instructions/.test(seen.ctxText.split('\n')[0]) && !/BỎ QUA|Hãy bỏ qua/.test(seen.system), 'nhãn / snapshot không phá được cú pháp; nằm trong tin dữ liệu (có nhãn "không phải lệnh"), không nằm trong chỉ dẫn hệ thống');
 
   // ---- luồng theo đối tượng
   await api('POST', '/api/works', { title: 'Phim Dock', project: 'ci-dock' });
@@ -66,7 +71,7 @@ try {
   script = []; reply = 'Ý hay!';
   const r1 = await chat('Làm phim về mèo', WK);
   ok(r1.reply === 'Ý hay!' && r1.chat.kind === 'work' && r1.chat.id === 'phim-dock', 'lượt chat của tác phẩm trả luồng work/phim-dock');
-  ok(/TÁC PHẨM ĐANG MỞ: id phim-dock/.test(seen.system) && /phim-dock\/<id cảnh>/.test(seen.system) && seen.ctx.work && seen.ctx.work.id === 'phim-dock' && !/Phim Dock/.test(seen.system), 'khu Tạo tác: luật quy trình ở chỉ dẫn; hiện trạng tác phẩm (tên, cảnh, duyệt) ở tin dữ liệu');
+  ok(/OPEN WORK: id phim-dock/.test(seen.system) && /phim-dock\/<shot id>/.test(seen.system) && seen.ctx.work && seen.ctx.work.id === 'phim-dock' && !/Phim Dock/.test(seen.system), 'khu Tạo tác: luật quy trình ở chỉ dẫn; hiện trạng tác phẩm (tên, cảnh, duyệt) ở tin dữ liệu');
   const r2 = await chat('Tiếp đi', WK);
   ok(seen.users.length === 2 && seen.messages[seen.messages.length - 2].content === seen.ctxText && seen.messages[seen.messages.length - 1].content === 'Tiếp đi', 'lượt sau LLM thấy lại lượt trước (luồng theo tác phẩm); tin dữ liệu chen ngay trước tin cuối, không lưu vào luồng');
   const th = await api('GET', '/api/chats/work/phim-dock');
@@ -133,7 +138,7 @@ try {
   // AI trong dock không tự đặt "Đạt"
   script = [['save_work', { id: 'phim-dock', review: { shots: { 'canh-1': { status: 'ok' } } } }], ['save_work', { id: 'phim-dock', review: { shots: { 'canh-1': { status: 'draft' } } } }]];
   const aiR = await chat('Duyệt giúp', WK);
-  ok(!aiR.log[0].ok && /chỉ chủ duyệt/.test(aiR.log[0].summary) && aiR.log[1].ok, 'AI trong dock không đặt được "Đạt" (chỉ chủ duyệt); đặt "Nháp" thì được');
+  ok(!aiR.log[0].ok && /only the owner sets/.test(aiR.log[0].summary) && aiR.log[1].ok, 'AI trong dock không đặt được "Đạt" (chỉ chủ duyệt); đặt "Nháp" thì được');
   // đạt rồi sửa cảnh → về nháp, kèm ghi chú máy
   await api('POST', '/api/works', { id: 'phim-dock', review: { shots: { 'canh-1': { status: 'ok' } } } });
   let ls = (await api('GET', '/api/works')).find(x => x.id === 'phim-dock');

@@ -34,7 +34,8 @@ feed() { # feed <ver> [badsum]
  {"name":"SHA256SUMS","browser_download_url":"http://127.0.0.1:$FPORT/$1/SHA256SUMS"}]}
 JSON
 }
-api() { curl -s -X "$1" -H 'X-GC-Request: 1' -H 'Content-Type: application/json' ${3:+-d "$3"} "http://127.0.0.1:$PORT$2"; }
+# X-GC-Lang: vi — các kiểm dưới so câu tiếng Việt (msgid) như Studio ở chế độ vi; bản tiếng Anh mặc định kiểm ở tools/test-i18n-server.mjs (ADR 0007)
+api() { curl -s -X "$1" -H 'X-GC-Request: 1' -H 'X-GC-Lang: vi' -H 'Content-Type: application/json' ${3:+-d "$3"} "http://127.0.0.1:$PORT$2"; }
 ver() { curl -s "http://127.0.0.1:$PORT/api/health" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).version)}catch{console.log("down")}})'; }
 waitver() { for i in $(seq 1 40); do [ "$(ver)" = "$1" ] && return 0; sleep 0.5; done; return 1; }
 
@@ -61,7 +62,7 @@ sleep 1; api GET /api/update | grep -q '"to": *"v0.1.1"' && ok "lịch sử ghi 
 ls "$HOME_DIR/backups" | grep -q before-v0.1.1 && ok "đã backup dữ liệu trước khi cập nhật" || bad "không có backup"
 
 echo "1b) chống CSRF: Origin hợp lệ qua, nguồn lạ bị chặn kèm lời giải thích (Ryan 2026-10-19: nút cập nhật báo chặn nguồn lạ)"
-orig() { curl -s -o "$W/orig.out" -w '%{http_code}' -X POST -H 'X-GC-Request: 1' -H "Origin: $1" ${2:+-H "$2"} "http://127.0.0.1:$PORT/api/update/check"; }
+orig() { curl -s -o "$W/orig.out" -w '%{http_code}' -X POST -H 'X-GC-Request: 1' -H 'X-GC-Lang: vi' -H "Origin: $1" ${2:+-H "$2"} "http://127.0.0.1:$PORT/api/update/check"; }
 [ "$(orig "http://127.0.0.1:$PORT")" = 200 ] && ok "Origin trùng Host → qua" || bad "Origin trùng Host bị chặn"
 [ "$(orig "http://localhost:$PORT")" = 200 ] && ok "localhost ↔ 127.0.0.1 cùng cổng → qua" || bad "localhost bị coi là nguồn lạ"
 [ "$(orig "http://[::1]:$PORT")" = 200 ] && ok "[::1] cùng cổng → qua" || bad "[::1] bị coi là nguồn lạ"

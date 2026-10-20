@@ -126,7 +126,7 @@ try {
   const pk = pkce(), st = 'giu-nguyen-state-123';
   const A = (o, cl) => fetch(M + '/oauth/authorize?' + authQ(cl || c1, { code_challenge: pk.challenge, state: st, ...o }), { redirect: 'manual', headers: noise(M) });
   r = await A({}); const page = await r.text();
-  ok(r.status === 200 && /text\/html/.test(r.headers.get('content-type')) && page.includes('Cấp phép kết nối agent') && /nonce-/.test(r.headers.get('content-security-policy') || ''), 'GET /oauth/authorize → trang "Cấp phép kết nối agent" (HTML, có CSP nonce)');
+  ok(r.status === 200 && /text\/html/.test(r.headers.get('content-type')) && page.includes('Authorize agent connection') && /nonce-/.test(r.headers.get('content-security-policy') || ''), 'GET /oauth/authorize → trang "Cấp phép kết nối agent" (HTML, có CSP nonce)');
   ok(!/\sstyle\s*=/.test(page) && /style-src 'nonce-/.test(r.headers.get('content-security-policy') || ''), 'trang Cấp phép không có style="…" inline (CSP style-src chỉ nonce)');
   const rid = reqId(page);
   const aprBody = { request: rid, decision: 'approve', scope: 'mcp:write' };
@@ -147,16 +147,16 @@ try {
   // redirect_uri lệch / client lạ → trang lỗi, KHÔNG redirect
   for (const [uri, why] of [['https://evil.example/cb', 'domain lạ'], [CB + '/', 'khác đuôi /'], [CB + '?x=1', 'thêm query'], ['https://claude.com/api/mcp/auth_callback', 'callback hợp lệ nhưng không phải bản đã đăng ký'], ['', 'thiếu']]) {
     r = await A({ redirect_uri: uri }); const t = await r.text();
-    ok(r.status === 400 && !r.headers.get('location') && t.includes('không chuyển hướng'), 'authorize redirect_uri lệch (' + why + ') → trang lỗi 400, KHÔNG Location');
+    ok(r.status === 400 && !r.headers.get('location') && t.includes('no redirect'), 'authorize redirect_uri lệch (' + why + ') → trang lỗi 400, KHÔNG Location');   // trang mặc định tiếng Anh (ADR 0007); bản tiếng Việt: tools/test-i18n-server.mjs
   }
   r = await A({}, { client_id: 'gcc_khong_co' }); ok(r.status === 400 && !r.headers.get('location'), 'authorize client_id lạ → trang lỗi, không redirect');
   // cổng đăng nhập riêng làm rơi / cắt query khi chuyển hướng về (CNS-130) → trang lỗi nói đúng nguyên nhân
   r = await fetch(M + '/oauth/authorize'); let gt = await r.text();
-  ok(r.status === 400 && !r.headers.get('location') && /trang đăng nhập riêng/.test(gt) && /Connect lần nữa/.test(gt), 'authorize mất hết query (cổng login làm rơi) → gợi ý đúng nguyên nhân');
+  ok(r.status === 400 && !r.headers.get('location') && /separate login page/.test(gt) && /press Connect again/.test(gt), 'authorize mất hết query (cổng login làm rơi) → gợi ý đúng nguyên nhân');
   r = await A({ redirect_uri: '' }); gt = await r.text();
-  ok(r.status === 400 && /bị thiếu/.test(gt) && /trang đăng nhập riêng/.test(gt), 'authorize bị cắt sau client_id (thiếu redirect_uri) → gợi ý cổng login');
+  ok(r.status === 400 && /is missing/.test(gt) && /separate login page/.test(gt), 'authorize bị cắt sau client_id (thiếu redirect_uri) → gợi ý cổng login');
   r = await A({ redirect_uri: 'https://evil.example/cb' }); gt = await r.text();
-  ok(r.status === 400 && !/trang đăng nhập riêng/.test(gt), 'redirect_uri lệch thật → không đổ lỗi cho cổng login');
+  ok(r.status === 400 && !/separate login page/.test(gt), 'redirect_uri lệch thật → không đổ lỗi cho cổng login');
   const lb = await (await dcr(M, { client_name: 'CLI', redirect_uris: ['http://127.0.0.1:40001/callback'] })).json();
   r = await A({ redirect_uri: 'http://127.0.0.1:40002/callback' }, lb); ok(r.status === 200, 'loopback: authorize bỏ qua port (CLI chọn port lúc chạy)');
   r = await A({ redirect_uri: 'http://127.0.0.1:40002/khac' }, lb); ok(r.status === 400, 'loopback: khác đường dẫn vẫn lệch');
@@ -425,7 +425,7 @@ try {
   const pp = pkce();
   const q0 = authQ(pc, { code_challenge: pp.challenge });
   r = await fetch(X + '/oauth/authorize?' + q0, { redirect: 'manual' }); ok(r.status === 401, 'qua cổng: trang authorize nằm SAU cổng (chưa đăng nhập → bị cổng chặn)');
-  r = await fetch(X + '/oauth/authorize?' + q0, { headers: GATE }); const ppage = await r.text(); ok(r.status === 200 && ppage.includes('Cấp phép kết nối agent'), 'qua cổng + đã đăng nhập cổng: thấy trang Cấp phép');
+  r = await fetch(X + '/oauth/authorize?' + q0, { headers: GATE }); const ppage = await r.text(); ok(r.status === 200 && ppage.includes('Authorize agent connection'), 'qua cổng + đã đăng nhập cổng: thấy trang Cấp phép');
   const prid = reqId(ppage);
   r = await fetch(X + '/api/oauth/approve', { method: 'POST', headers: { ...jh, ...GATE, 'X-GC-Request': '1' }, body: JSON.stringify({ request: prid, decision: 'approve', scope: 'mcp:write' }) });
   ok(r.status === 401, 'đã qua cổng ngoài NHƯNG chưa có token chủ máy → app vẫn từ chối duyệt (không tin "đã qua cổng là chủ")');

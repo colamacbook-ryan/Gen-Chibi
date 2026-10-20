@@ -42,7 +42,7 @@ try {
   ok(L[2] && L[2].ok, 'linh kiện hợp lệ được lưu qua save_part');
   ok(L[3] && !L[3].ok && /identity|nhận diện/.test(L[3].summary), 'nhân vật "phát hành" thiếu dấu nhận diện bị chặn (luật chung)');
   ok(L[4] && L[4].ok, 'sửa xong thì lưu được');
-  ok(L[5] && !L[5].ok && /không có trong nhà xưởng/.test(L[5].summary), 'tool hệ thống (update_app) bị từ chối với AI trong chatroom');
+  ok(L[5] && !L[5].ok && /not available in this area/.test(L[5].summary), 'tool hệ thống (update_app) bị từ chối với AI trong chatroom');
   const parts = await api('GET', '/api/parts'), assets = await api('GET', '/api/assets');
   ok(parts.some(p => p.id === 'ai-hat') && assets.some(a => a.id === 'ai-mix' && a.look.parts.hat === 'local.my/ai-hat'), 'kết quả nằm trong kho, đúng chuẩn');
   const put = await fetch('http://127.0.0.1:' + APP + '/api/assets/local.my/lach-cong', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify({ name: 'Lách', look: { eyes: 'round', brows: 'normal', parts: { hat: 'ufo' } } }) });
