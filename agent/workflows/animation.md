@@ -14,4 +14,4 @@
 
 Frames have a transparent background and a fixed frame that contains every pose and effect, so they line up
 as sprites. Rasterise SVG to PNG / GIF on your side if you need bitmaps (the Studio does this for people:
-Library › Motions).
+Library › Motions, in Vietnamese UI: Thư viện › Động tác).

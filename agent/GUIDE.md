@@ -114,11 +114,11 @@ with a runnable JSON example.
 | `UNAVAILABLE` | the app is restarting or busy | wait ~15 s, then call `get_app_version` |
 | `INTERNAL` | unexpected failure | report the message to the owner |
 
-## 6. Glossary (Studio UI: English by default, Vietnamese when the user switches)
+## 6. Glossary (the Studio UI is English by default, Vietnamese on request)
 
-The owner may talk to you in either language; answer in the language they use (or their interface language).
+The owner may use either the English or the Vietnamese UI label; both map to the same API term.
 
-| Studio (English) | Studio (Vietnamese) | API term |
+| English UI | Vietnamese UI | API term |
 |---|---|---|
 | Workshop | Xưởng | creating parts / assets |
 | Library | Thư viện | saved assets, projects |
@@ -127,7 +127,7 @@ The owner may talk to you in either language; answer in the language they use (o
 | Character · Item · Scene | Nhân vật · Vật phẩm / Trang bị · Bối cảnh | character · item · scene |
 | Part · Backdrop | Linh kiện · Phông | part · scenery part |
 | Motion pack | Gói động tác | motion pack (`gen-chibi.motion/1`) — not the same as `LIB.motions` (looping idle motions) |
-| Sounds · Sound pack · Accent sound | Thư viện âm thanh · Gói âm · Âm nhấn | sound library · sound pack (`gen-chibi.sound/1`) · accent sound (group `cam-xuc` / `nhac-cu`, ≤ 1 per step) |
+| Sound library · Sound pack · Accent sound | Thư viện âm thanh · Gói âm · Âm nhấn | sound library · sound pack (`gen-chibi.sound/1`) · accent sound (group `cam-xuc` / `nhac-cu`, ≤ 1 per step) |
 | Action · Attack · Reaction | Hành động · Đòn đánh · Phản ứng | action · attack action · reaction (`react`) |
 | Shot · Script · Step | Phân cảnh · Kịch bản · Bước | shot · event · step |
 | Draft · Published | Nháp · Phát hành | draft · published |

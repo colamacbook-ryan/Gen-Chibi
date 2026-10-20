@@ -91,8 +91,8 @@ function viStrings(x, p, out) {
   return out;
 }
 const viInTools = tools => [].concat(...tools.map(t => viStrings({ title: t.title, description: t.description, inputSchema: t.inputSchema, annotations: t.annotations }, t.name)));
-// lời văn hướng dẫn agent (bỏ khối mã / ví dụ JSON, bảng thuật ngữ có cột tiếng Việt, tên riêng của bộ mẫu)
-const proseVI = md => { let code = false; return md.split('\n').filter(l => { if (/^\s*```/.test(l)) { code = !code; return false; } return !code && !/^\s*\|/.test(l) && VI_RE.test(l.replace(/Tam Quốc/g, '')); }); };
+// lời văn hướng dẫn agent (bỏ khối mã / ví dụ JSON, bảng thuật ngữ có cột tiếng Việt, nhãn giao diện tiếng Việt trong ngoặc / ngoặc kép, tên riêng của bộ mẫu)
+const proseVI = md => { let code = false; return md.split('\n').filter(l => { if (/^\s*```/.test(l)) { code = !code; return false; } return !code && !/^\s*\|/.test(l) && VI_RE.test(l.replace(/\([^()]*\)|"[^"]*"|Vietnamese UI:[^;)]*|Tam Quốc/g, '')); }); };
 
 const fresh = () => { const store = new Store(mkdtempSync(path.join(tmpdir(), 'gc-i18nsrv-'))); return new MCP({ engine: loadEngine(ROOT), store, version: 't', system: {} }); };
 const M0 = fresh(), GC = M0.GC;

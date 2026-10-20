@@ -30,7 +30,7 @@
    Google AI voice (JSON with `clip`; add `"include_audio": true` for the WAV) — the app picks the voice: designed voice of that role → Google voice library
    (right language, gender, age) → prebuilt voice. `design_voice` with `{ "role", "lang", "accent" }` creates a better voice
    for an adult role (elders, generals, regional accents; costs one Google call; child roles are refused by Google policy).
-   It only works when the owner pasted a Google AI Studio key (Studio › AI settings › AI voice). Spending is owner-only: through a
+   It only works when the owner pasted a Google AI Studio key (Studio › System › AI settings › AI voice; Vietnamese UI: Cài đặt AI › Giọng AI). Spending is owner-only: through a
    shared MCP link `render_voice` only returns lines the owner already voiced and `design_voice` is `FORBIDDEN`. The free tier
    allows 10 lines per day per model and the owner sets a daily cap — on `UNAVAILABLE` stop and tell the owner (`retryAt`), do not loop. Lines already read are cached (no quota used).
 
@@ -41,7 +41,7 @@
 
 ## Owner's review notes (read them before fixing a film)
 - `get_work` returns `review`: `{ "shots": { "<shot id>": { "status": "draft" | "fix" | "ok", "notes": [{ "id", "text", "step"?, "at", "by" }] } }, "note" }` (`by`: `owner` | `ai` | `agent` | `system` — set by the server).
-  The owner marks each shot in Studio › Create › Review: `fix` = needs changes, `ok` = approved ("Approved"). `step` (1-based) points at one step of the shot.
+  The owner marks each shot in Studio › Create › Review (Vietnamese UI: Tạo tác › Xem & duyệt): `fix` = Needs changes, `ok` = Approved ("Đạt"). `step` (1-based) points at one step of the shot.
 - When asked to fix a film "according to the notes": read `review`, edit only the shots with status `fix` (or the noted steps) with `save_shot`,
   then tell the owner what changed. You cannot set `ok` — the server rejects it; only the owner approves, in Studio. A shot edited after `ok` returns to `draft` automatically.
 - `save_work` accepts `review` (same shape, merged per shot; unknown keys are rejected; notes are clamped to 400 characters) but only to set `draft` / `fix` and to ADD notes
@@ -51,7 +51,7 @@
 ## Staging tips
 - Fighters stand in the front row (`left`, `midLeft`, `center`, `midRight`, `right`), at least one spot apart.
 - Change `spot` between steps so people move; mix dialogue with short actions (≤ 3 attacks per shot).
-- The owner plays and exports the film (HTML) in the Studio › Create.
+- The owner plays and exports the film (HTML) in Studio › Create (Tạo tác).
 
 ## Example (shot.json — event.json is the same event alone)
 <!-- example: work.json -->

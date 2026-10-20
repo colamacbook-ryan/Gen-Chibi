@@ -14,7 +14,7 @@ a clash is rejected and names the pack that owns the name.
 - Attacks: use `action` — the hit sound plays exactly at the strike point by itself (project packs can replace the default hit /
   block / miss sound through `cue.event`). Do not stack a hand-placed impact sound on top of an `action` step.
 - You **cannot hear** anything (the server has no Web Audio): check with the gates and `lint_sound_track`, and ask the owner to press ▶ in
-  Studio › Library › Sounds (they can also download any sound or recipe as WAV).
+  Studio › Library › Sounds (Vietnamese UI: Thư viện › Âm thanh; they can also download any sound or recipe as WAV).
 
 ## Steps A — mix sounds into a script (the everyday job)
 1. `list_sounds` with `{ "project": "<project id>" }` (+ optional `cat`, `tag`, `q`) → names you may use in that project
