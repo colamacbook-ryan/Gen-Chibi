@@ -339,6 +339,8 @@ async function route(req, res) {
 
   // ---- OAuth (v0.19): khám phá + đăng ký + token + thu hồi là đường MÁY (công khai, bảo vệ bằng PKCE / token — không cần cookie hay phiên Studio); authorize là trang cho chủ
   if (p.startsWith('/oauth/') || p.startsWith('/.well-known/oauth-')) { const done = await oauthRoute(req, res, url, p, m); if (done) return; }
+  // ---- Go online (v0.21): kiểm từ ngoài vào của proxy riêng — công khai, chỉ trả lời đúng nonce của luồng đang chạy (server/online.js)
+  if (p.startsWith('/.well-known/gen-chibi-check/')) return online.checkRoute(req, res, p, send);
 
   // Đã đặt token: mọi /api (trừ health) và /mcp đều cần token, bất kể Host hay địa chỉ. Studio đăng nhập bằng token.
   // /mcp còn nhận access token OAuth (Authorization: Bearer): phạm vi → kênh SẴN CÓ (scopeCtx). Không có / sai token → 401 + WWW-Authenticate trỏ metadata để agent tự khám phá.
@@ -388,6 +390,7 @@ async function route(req, res) {
     if (!originOK(req)) return fail(res, 403, originMsg(req));
   }
 
+  if (p === '/api/online' || p.startsWith('/api/online/')) return online.route(req, res, p, m, { send, body, lang: langOf(req) });   // Go online (v0.21): chỉ chủ máy — server/online.js
   if (p === '/api/health') return send(res, 200, { ok: true, version: VERSION, uiLang: settings().uiLang });   // uiLang công khai: màn đăng nhập (chưa có token) cũng nói đúng ngôn ngữ của máy
   if (p === '/api/info') return send(res, 200, { version: VERSION, repo: REPO, home: HOME, port: PORT, settings: settings(), uiLang: settings().uiLang, lang: langOf(req), mcp: { http: '/mcp', stdio: 'genchibi mcp', link: PUBLIC_URL && MCP_KEY ? PUBLIC_URL + '/mcp/' + MCP_KEY : null, oauth: oauth.enabled ? oauth.resource : null } });
   if (p === '/api/settings' && m === 'PUT') {
@@ -629,10 +632,23 @@ async function route(req, res) {
   return fail(res, 404, 'không có API này');
 }
 
-const server = http.createServer((req, res) => {
+/* ---------------------------------------------------------------- Go online (v0.21): edge của app + /api/online/* */
+// Lớp edge của request (server/edge.js — chỉ cho trần tần suất + chẩn đoán, không cấp quyền): Caddy = X-GC-Edge đúng bí mật edge/edge-secret
+// (IP khách = mục cuối X-Forwarded-For); cloudflared = request đến trên CỔNG NGHE RIÊNG 127.0.0.1:<GC_PORT+2> (IP khách = Cf-Connecting-Ip chỉ ở đó).
+// Cổng riêng chỉ mở khi tunnel bật (run/edge-intent.json), không giành cổng khi không cần. P1 đọc req.gcEdge / req.gcIp.
+const { createEdge, createTunnelListener } = require('./edge');
+const edge = createEdge({ edgeDir: path.join(HOME, 'edge') });
+const tunnelListener = createTunnelListener({ port: PORT + 2, handler: (req, res) => handle(req, res, 'tunnel'), log });
+const onlineConfig = require('./online-config-shim').createOnlineConfig({ dataDir: DATA });   // GỘP P1: thay bằng ./online-config (get / set / setPending / commit / revert) rồi xoá shim
+const online = require('./online').createOnline({ home: HOME, dataDir: DATA, port: PORT, inDocker: IN_DOCKER, config: onlineConfig, secrets, log, edge, tunnel: tunnelListener,
+  isOwner: req => !!API_TOKEN && tokenOk(bearerOf(req)) });   // GỘP P1: isOwner = bằng chứng dương S / T (ownerOf), thêm hasPassword + legacy (data/legacy.json)
+
+function handle(req, res, via) {
+  edge.mark(req, via);
   MSG.run(langOf(req), () => route(req, res)).catch(e => {   // ngôn ngữ của yêu cầu cho trang Cấp phép, nhãn khu / nhà cung cấp / giọng, tên phân cảnh mặc định…
     log('[server] error', MSG.en(e.message)); if (!res.headersSent) fail(res, e.code && e.code >= 400 && e.code < 600 ? e.code : 500, e.message); });
-});
+}
+const server = http.createServer((req, res) => handle(req, res, 'main'));
 
 /* ---------------------------------------------------------------- tự kiểm tra phiên bản */
 let timer = null;
@@ -656,5 +672,6 @@ server.listen(PORT, HOST, () => {
   log('[server] gen-chibi v' + VERSION.replace(/^v/, '') + ' running at http://' + HOST + ':' + PORT + ' · home ' + HOME);
   scheduleChecks();
   if (process.env.GC_NO_AUTOCHECK !== '1') setTimeout(autoCheck, 15000);
+  online.init();   // tunnel đang bật → mở cổng nghe riêng cho cloudflared
 });
-process.on('SIGTERM', () => server.close(() => { oauth.flush(); process.exit(0); }));
+process.on('SIGTERM', () => { tunnelListener.set(false); server.close(() => { oauth.flush(); process.exit(0); }); });
