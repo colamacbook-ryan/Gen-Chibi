@@ -13,7 +13,9 @@
 // loopback / link-local và ghim kết nối vào IP đã kiểm (không DNS rebinding), không theo redirect, trần tần suất.
 // Chạy dài → 202 + trạng thái ngay, việc chạy nền; client hỏi lại GET /api/online (CNS-175 cùng tinh thần).
 // Token API Cloudflare: chỉ trong bộ nhớ của phiên wizard (≤ 30 phút không dùng); xong → bỏ (giữ chỉ khi chủ chọn: kho bí mật AES-GCM, GC_MASTER_KEY).
-// Hợp đồng với launcher (P2, STD-11): app chỉ ghi run/edge-intent.json { tunnel: "off" | "token" | "quick" } + edge/tunnel.token (0600); đọc run/edge-status.json.
+// Hợp đồng với launcher (P2, STD-11): app chỉ ghi run/edge-intent.json { tunnel: "off" | "token" | "quick", online: bool } + run/tunnel.token (0600 — run/ KHÔNG
+// mount vào container Caddy); đọc run/edge-status.json + logs/tunnel.log (link tạm). Cấu hình: server/online-config.js (P1) — mode lưu theo từ vựng của nó
+// (off | caddy | tunnel | proxy | quick): luồng 'cloudflare' ở đây = mode 'tunnel' ở online.json (cfgMode / flowMode).
 'use strict';
 const fs = require('fs');
 const net = require('net');
@@ -64,6 +66,8 @@ const QUICK_RE = /^https:\/\/[a-z0-9-]{1,63}\.trycloudflare\.com$/;
 const SECRET_KEY = 'cloudflareApiToken';
 const UA_CLAUDE = 'Claude-User';
 const TOKEN_TTL = 30 * 60 * 1000;
+const cfgMode = m => m === 'cloudflare' ? 'tunnel' : m;    // luồng → online.json
+const flowMode = m => m === 'tunnel' ? 'cloudflare' : m;   // online.json → luồng / API
 
 // ---------------------------------------------------------------- mạng (mặc định; test tiêm bản giả)
 // một yêu cầu HTTP(S) ghim vào IP đã kiểm (lookup cố định), không agent / proxy, không theo redirect; không bao giờ ném — lỗi trong .error
@@ -199,7 +203,7 @@ function createOnline(opts) {
   if (!d.config) throw new Error('online: config missing');
   const home = d.home, dataDir = d.dataDir || path.join(home, 'data');
   const edgeDir = path.join(home, 'edge'), runDir = path.join(home, 'run');
-  const files = { intent: path.join(runDir, 'edge-intent.json'), status: path.join(runDir, 'edge-status.json'), tunnelToken: path.join(edgeDir, 'tunnel.token'), installId: path.join(dataDir, 'install-id'), cfLog: path.join(home, 'logs', 'cloudflared.log') };
+  const files = { intent: path.join(runDir, 'edge-intent.json'), status: path.join(runDir, 'edge-status.json'), tunnelToken: path.join(runDir, 'tunnel.token'), installId: path.join(dataDir, 'install-id'), cfLog: path.join(home, 'logs', 'tunnel.log') };
   const caddy = d.caddy || createCaddy({ edgeDir });
   const edge = d.edge || createEdge({ edgeDir });
   const tunnelPort = (+d.port || 7480) + 2;
@@ -232,7 +236,11 @@ function createOnline(opts) {
   const urlOf = () => flow.mode === 'quick' ? flow.url : (flow.domain ? 'https://' + flow.domain : '');
 
   // ---- tệp hợp đồng với launcher (P2)
-  function writeIntent(tunnel) { writeAtomic(files.intent, JSON.stringify({ tunnel }) + '\n', 0o600); d.tunnel.set(tunnel !== 'off'); }
+  // online: máy đang ra Internet qua bất kỳ đường nào (launcher không tự rollback xuống bản không có edge). Mặc định: tunnel bật hoặc mode đã lưu ≠ off
+  function writeIntent(tunnel, online) {
+    if (online === undefined) online = tunnel !== 'off' || ((d.config.get() || {}).mode || 'off') !== 'off';
+    writeAtomic(files.intent, JSON.stringify({ tunnel, online: !!online }) + '\n', 0o600); d.tunnel.set(tunnel !== 'off');
+  }
   function intent() { try { const j = JSON.parse(fs.readFileSync(files.intent, 'utf8')); return ['token', 'quick'].includes(j.tunnel) ? j.tunnel : 'off'; } catch (e) { return 'off'; } }
   function edgeStatus() {
     let j = null; try { j = JSON.parse(fs.readFileSync(files.status, 'utf8')); } catch (e) { return null; }
@@ -338,7 +346,12 @@ function createOnline(opts) {
   // publicUrl tạm → (đường B: connector healthy) → health + metadata OAuth qua tên miền
   async function stepPublic(live) {
     const url = urlOf();
-    if (!live) { d.config.setPending(url); flow.pending = true; save(); }
+    if (!live) {
+      // force: đổi địa chỉ đã được chủ xác nhận ở route (confirmUrlChange) trước khi luồng chạy
+      const sp = d.config.setPending(url, { force: true });
+      if (!sp || sp.ok === false) return fail(N_('Không bật tạm được publicUrl {url}: {error}', { url, error: cut(sp && sp.error, 160) }));
+      flow.pending = true; save();
+    }
     if (flow.mode === 'cloudflare') {
       const w = await tunnelReady(live);
       if (w) return w;
@@ -542,11 +555,12 @@ function createOnline(opts) {
   }
   // xong: publicUrl chính thức, mode mới, dọn edge cục bộ của mode cũ, bỏ token API (giữ chỉ khi chủ chọn)
   function finish() {
-    const prev = (d.config.get() || {}).mode || 'off';
+    const prev = flowMode((d.config.get() || {}).mode || 'off');
     d.config.commit(); flow.pending = false;
-    d.config.set({ mode: flow.mode, domain: flow.domain, clientIpHeader: flow.mode === 'proxy' ? 'x-forwarded-for' : '' });
+    d.config.set({ mode: cfgMode(flow.mode), domain: flow.domain, clientIpHeader: flow.mode === 'proxy' ? 'x-forwarded-for' : '' });
     if (prev === 'caddy' && flow.mode !== 'caddy') clearCaddy().catch(e => d.log('[online] caddy cleanup: ' + cut(e.message)));
-    if (['cloudflare', 'quick'].includes(prev) && !['cloudflare', 'quick'].includes(flow.mode)) { writeIntent('off'); try { fs.rmSync(files.tunnelToken, { force: true }); } catch (e) { /* không có */ } }
+    if (['cloudflare', 'quick'].includes(prev) && !['cloudflare', 'quick'].includes(flow.mode)) { try { fs.rmSync(files.tunnelToken, { force: true }); } catch (e) { /* không có */ } }
+    writeIntent(flow.mode === 'cloudflare' ? 'token' : flow.mode === 'quick' ? 'quick' : 'off', true);   // online: true — launcher giữ edge khi cập nhật
     if (flow.mode === 'cloudflare') { if (mem && mem.keep && d.secrets) d.secrets.set(SECRET_KEY, mem.token); dropToken(); }
     flow.done = true; flow.doneAt = iso(); flow.needs = null;
     save();
@@ -563,11 +577,12 @@ function createOnline(opts) {
     // cục bộ: dừng tunnel, bỏ site Caddy, bỏ publicUrl
     const local = stepOf('local');
     try {
-      writeIntent('off');
+      writeIntent('off', false);
       fs.rmSync(files.tunnelToken, { force: true });
       let c = 'skipped'; try { c = await clearCaddy(); } catch (e) { c = 'error'; d.log('[online] caddy cleanup: ' + cut(e.message)); }
-      d.config.setPending(''); d.config.commit();
-      d.config.set({ mode: 'off', domain: '', clientIpHeader: '' });
+      d.config.revert();
+      const r = d.config.set({ mode: 'off', domain: '', clientIpHeader: '', publicUrl: '' });
+      if (r && r.ok === false) throw new Error(r.error);
       put(local, c === 'error' ? fail(N_('Đã dừng tunnel và bỏ publicUrl; Caddy không nạp được cấu hình trống'), N_('Xem log của edge: docker logs gen-chibi-edge')) : ok(N_('Đã dừng tunnel, bỏ site Caddy và publicUrl')));
     } catch (e) { put(local, fail(N_('Lỗi không lường trước: {error}', { error: cut(e.message) }))); }
     // Cloudflare: xoá DNS + tunnel + luật WAF do app tạo (cần token: vừa dán hoặc đã giữ mã hoá)
@@ -621,7 +636,7 @@ function createOnline(opts) {
       cloudflare: flow.cf ? { zone: flow.cf.zone || '', sub: flow.cf.sub || '', tunnelName: flow.cf.tunnelName || '', cname: flow.cf.cname || '', waf: !!flow.cf.waf, overwrite: !!flow.cf.overwrite } : null
     };
     return {
-      mode: c.mode || 'off', domain: c.domain || '', publicUrl: c.publicUrl || '', busy: !!running || offQueued, flow: f,
+      mode: flowMode(c.mode || 'off'), domain: c.domain || '', publicUrl: c.publicUrl || '', publicUrlPending: c.publicUrlPending || '', busy: !!running || offQueued, flow: f,
       edge: { docker: !!d.inDocker, caddyEnabled: caddy.enabled(), tunnelPort, tunnelListening: !!d.tunnel.listening(), intent: intent(), status: edgeStatus() },
       legacy: d.legacy(),
       request: { edge: (req && req.gcEdge) || null, ip: (req && req.gcIp) || null, forwarded: !!(h['x-forwarded-for'] || h.forwarded) },
@@ -646,7 +661,9 @@ function createOnline(opts) {
       const lg = d.legacy();
       if (lg && lg.active) return send(res, 409, { error: tr(SRC, 'máy đang cấu hình ra ngoài bằng .env (GC_PUBLIC_URL / GC_ALLOWED_HOSTS) — di chuyển sang Go online trước'), needs: 'legacy' });
       const cur = String((d.config.get() || {}).publicUrl || '');
-      if (cur && (!url || url !== cur) && b.confirmUrlChange !== true) return send(res, 409, { error: tr(SRC, 'đổi địa chỉ công khai sẽ ngắt các agent đã nối (phải nối lại) — gửi lại với confirmUrlChange: true'), needs: 'urlChange', from: cur, to: url || null });
+      // kết nối OAuth của địa chỉ khác (kể cả còn sót sau Go offline) sẽ bị thu hồi khi chính thức hoá → cũng hỏi chủ (online-config preview đếm)
+      const pv = url && typeof d.config.preview === 'function' ? d.config.preview(url) : null, revokes = pv && pv.ok ? +pv.revokes || 0 : 0;
+      if (((cur && (!url || url !== cur)) || revokes > 0) && b.confirmUrlChange !== true) return send(res, 409, { error: tr(SRC, 'đổi địa chỉ công khai sẽ ngắt các agent đã nối (phải nối lại) — gửi lại với confirmUrlChange: true'), needs: 'urlChange', from: cur, to: url || null, revokes });
       flow = newFlow(mode, extra); save();
       kick(() => advance(false));
       return send(res, 202, view(req, lang));
@@ -699,8 +716,13 @@ function createOnline(opts) {
     const h = req.headers || {};
     return send(res, 200, { nonce: flow.nonce, forwarded: !!(h['x-forwarded-for'] || h.forwarded), edge: req.gcEdge || null });
   }
-  // khởi động: tunnel đang bật (intent token | quick) → mở cổng nghe riêng cho cloudflared
-  function init() { if (intent() !== 'off') d.tunnel.set(true); }
+  // khởi động: tunnel đang bật (intent token | quick) → mở cổng nghe riêng cho cloudflared; sau đó cổng đi theo run/edge-intent.json (nguồn duy nhất của
+  // hợp đồng với launcher — ai ghi tệp, kể cả CLI / trình cài, cổng cũng mở / đóng theo) — đọc một tệp nhỏ mỗi 2 s
+  let watch = null;
+  function init() {
+    d.tunnel.set(intent() !== 'off');
+    if (!watch) { watch = setInterval(() => { if (!running) d.tunnel.set(intent() !== 'off'); }, 2000); if (watch.unref) watch.unref(); }
+  }
 
   return { route, checkRoute, view, init, intent, idle, files, tunnelPort, _flow: () => flow };
 }

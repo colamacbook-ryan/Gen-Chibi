@@ -10,6 +10,7 @@ const https = require('https');
 const tls = require('tls');
 const zlib = require('zlib');
 const crypto = require('crypto');
+const net = require('net');
 const { spawn, execFileSync } = require('child_process');
 
 const HOME = process.env.GC_HOME || __dirname;
@@ -54,7 +55,7 @@ function releaseHasEdge(tag) { return abiOf(path.join(HOME, 'releases', norm(tag
 // Hợp đồng app → launcher (STD-11): app CHỈ ghi run/edge-intent.json (ghi nguyên tử: tệp tạm + rename), schema ĐÓNG
 //   { "tunnel": "off" | "token" | "quick", "online": true | false }
 //   tunnel  off   = không chạy cloudflared
-//           token = tunnel do Cloudflare quản: cloudflared đọc edge/tunnel.token (0600, app ghi) MỘT LẦN lúc khởi động
+//           token = tunnel do Cloudflare quản: cloudflared đọc run/tunnel.token (0600, app ghi; run/ KHÔNG mount vào container Caddy) MỘT LẦN lúc khởi động
 //                   → tệp token đổi (nội dung / quyền) = launcher tự khởi động lại cloudflared
 //           quick = link tạm *.trycloudflare.com (đổi mỗi lần khởi động)
 //   online  máy đang ra Internet qua BẤT KỲ đường nào (Caddy, tunnel, proxy riêng) → không tự rollback xuống bản không có edge.
@@ -63,20 +64,27 @@ function releaseHasEdge(tag) { return abiOf(path.join(HOME, 'releases', norm(tag
 // kiểm SHA-256 trước MỖI lần spawn; không nhận đường dẫn / tham số nào từ tệp.
 // Launcher ghi run/edge-status.json (chỉ khi đổi) cho app / CLI đọc:
 //   { tunnel, online, running, pid?, ready, since, error?, detail?, url?, version, abi, launcherPid }
-//   ready  = GET http://127.0.0.1:<METRICS_PORT>/ready của cloudflared trả 200 (đã nối Cloudflare)
+//   ready  = GET http://127.0.0.1:<cổng metrics>/ready trả 200 (đã nối Cloudflare) — cổng metrics do launcher chọn ngẫu nhiên (cổng rảnh) mỗi lần spawn,
+//            truyền qua argv, và (Linux) socket đang nghe cổng đó phải thuộc đúng PID cloudflared đã spawn (/proc/net/tcp → inode → /proc/<pid>/fd)
 //   since  = lúc (tunnel, running, ready) đổi lần cuối · url = link *.trycloudflare.com (quick)
-//   error  = mã ổn định cho giao diện dịch: token-missing | token-perms | unsupported-platform | download-failed | sha-mismatch | exited
+//   error  = mã ổn định cho giao diện dịch: token-missing | token-perms | unsupported-platform | download-failed | sha-mismatch | exited | ingress-unverified
+// Chứng minh cổng ingress (sửa bảo mật B): launcher sinh GC_INGRESS_NONCE (32 byte ngẫu nhiên) mỗi lần khởi động, truyền cho app con qua env (không log).
+// CHỈ spawn cloudflared khi GET http://127.0.0.1:<GC_PORT+2>/api/health kèm X-GC-Ingress-Challenge: <ngẫu nhiên> trả X-GC-Ingress = HMAC-SHA256(nonce,
+// "ingress:" + challenge) + đúng version của `current`; kiểm lại mỗi 30 s, sai hai lần liền → dừng cloudflared, error ingress-unverified, tự bật lại khi đúng.
+// Tiến trình lạ chiếm cổng ingress trước app (app không bind được) → không bao giờ nhận lưu lượng từ Internet.
 const RUN = path.join(HOME, 'run');
 const INTENT = path.join(RUN, 'edge-intent.json');
 const EDGE_STATUS = path.join(RUN, 'edge-status.json');
 const CF_PIDF = path.join(RUN, 'cloudflared.pid');
 const CF_HOME = path.join(RUN, 'cloudflared-home');   // HOME rỗng cho cloudflared: không vớ phải ~/.cloudflared của người dùng
-const TOKEN_FILE = path.join(HOME, 'edge', 'tunnel.token');
+const TOKEN_FILE = path.join(RUN, 'tunnel.token');   // run/ = chỉ app + launcher; edge/ một phần mount vào Caddy — token không ở đó
 const BIN = path.join(HOME, 'bin');
 const TUNNEL_LOG = path.join(HOME, 'logs', 'tunnel.log');
 const TUNNEL_LOG_MAX = 1024 * 1024;   // xoay vòng: tunnel.log ≤ 1 MiB + một bản tunnel.log.1
 const INGRESS_PORT = PORT + 2;   // cổng nghe riêng của app, chỉ cloudflared gửi tới (lớp E, spec §3.4) — app mở, launcher chỉ trỏ tới
-const METRICS_PORT = PORT + 4;   // /ready của cloudflared, chỉ 127.0.0.1. Không dùng +1 / +3: chừa cho bản cài thứ hai --port 7481 (+2 của nó = 7483)
+const INGRESS_NONCE = crypto.randomBytes(32).toString('hex');   // một lần chạy launcher; chỉ app con nhận (env), không bao giờ ghi log / tệp
+// kiểm lại cổng ingress định kỳ; GC_TEST=1 cho phép test rút ngắn (thiếu GC_TEST thì bỏ qua hẳn)
+const INGRESS_RECHECK_MS = process.env.GC_TEST === '1' && +process.env.GC_TEST_INGRESS_RECHECK_MS > 0 ? +process.env.GC_TEST_INGRESS_RECHECK_MS : 30000;
 
 // cloudflared ghim — nguồn: Cloudflare, https://github.com/cloudflare/cloudflared/releases/tag/2026.10.2 (kiểm 2026-10-20).
 // sha256 = SHA-256 của CHÍNH tệp chạy (macOS: tệp `cloudflared` bên trong .tgz — launcher giải nén rồi mới kiểm).
@@ -111,11 +119,11 @@ function readIntent() {
 // tệp token: tồn tại, tệp thường (không symlink), chỉ chủ đọc được (0600 / 0400), đúng chủ, cỡ hợp lý
 function tokenProblem() {
   let st;
-  try { st = fs.lstatSync(TOKEN_FILE); } catch { return { code: 'token-missing', detail: 'edge/tunnel.token not found' }; }
-  if (!st.isFile()) return { code: 'token-perms', detail: 'edge/tunnel.token is not a regular file' };
-  if (st.mode & 0o077) return { code: 'token-perms', detail: 'edge/tunnel.token must be readable by the owner only (chmod 600), found ' + (st.mode & 0o777).toString(8) };
-  if (typeof process.getuid === 'function' && st.uid !== process.getuid()) return { code: 'token-perms', detail: 'edge/tunnel.token belongs to another user' };
-  if (st.size < 16 || st.size > 8192) return { code: 'token-perms', detail: 'edge/tunnel.token has an unexpected size' };
+  try { st = fs.lstatSync(TOKEN_FILE); } catch { return { code: 'token-missing', detail: 'run/tunnel.token not found' }; }
+  if (!st.isFile()) return { code: 'token-perms', detail: 'run/tunnel.token is not a regular file' };
+  if (st.mode & 0o077) return { code: 'token-perms', detail: 'run/tunnel.token must be readable by the owner only (chmod 600), found ' + (st.mode & 0o777).toString(8) };
+  if (typeof process.getuid === 'function' && st.uid !== process.getuid()) return { code: 'token-perms', detail: 'run/tunnel.token belongs to another user' };
+  if (st.size < 16 || st.size > 8192) return { code: 'token-perms', detail: 'run/tunnel.token has an unexpected size' };
   return null;
 }
 // dấu của tệp token: đổi nội dung / quyền / thay tệp → khởi động lại cloudflared (nó chỉ đọc token một lần)
@@ -225,11 +233,11 @@ function tlogWrite(buf) {
 }
 function edgeLog(msg) { log('edge:', msg); tlogWrite(Buffer.from(new Date().toISOString() + ' [launcher] ' + msg + '\n')); }
 
-const cf = { proc: null, mode: 'off', key: '', ready: false, url: null, error: null, detail: null, nextTry: 0, backoff: 2000, startedAt: 0, intent: { tunnel: 'off', online: false } };
+const cf = { proc: null, mode: 'off', key: '', ready: false, metricsPort: 0, ingressAt: 0, ingressFails: 0, url: null, error: null, detail: null, nextTry: 0, backoff: 2000, startedAt: 0, intent: { tunnel: 'off', online: false } };
 let edgeBusy = false, edgeHalted = false, statusKey = '', statusSince = new Date().toISOString(), edgeTimer = null, edgeWatch = null;
 
-function cfArgs(mode) {
-  const a = ['--no-autoupdate', 'tunnel', '--config', '/dev/null', '--metrics', '127.0.0.1:' + METRICS_PORT, '--grace-period', '5s', '--management-diagnostics=false'];
+function cfArgs(mode, metricsPort) {
+  const a = ['--no-autoupdate', 'tunnel', '--config', '/dev/null', '--metrics', '127.0.0.1:' + metricsPort, '--grace-period', '5s', '--management-diagnostics=false'];
   return mode === 'token' ? a.concat(['run', '--token-file', TOKEN_FILE]) : a.concat(['--url', 'http://127.0.0.1:' + INGRESS_PORT]);
 }
 // môi trường tối thiểu: không GC_MASTER_KEY / GC_API_TOKEN / TUNNEL_* của máy — cloudflared không cần, và không để token lọt vào env
@@ -277,9 +285,14 @@ async function cfStart(mode, key) {
   }
   await killOrphan();
   if (stopping || edgeHalted) return;
+  // cổng ingress phải là CHÍNH app này (thách thức-đáp HMAC + đúng version) — kiểm NGAY TRƯỚC spawn (sau tải / killOrphan có thể đã lâu)
+  if (!(await ingressOK(currentVersion()))) return ingressFail();
+  if (stopping || edgeHalted || readIntent().tunnel !== mode) return;
+  const mport = await freePort();
+  if (!mport) return cfFail('exited', 'no free local port for cloudflared metrics');
   fs.mkdirSync(CF_HOME, { recursive: true, mode: 0o700 });
-  const p = spawn(bin, cfArgs(mode), { cwd: CF_HOME, env: cfEnv(), stdio: ['ignore', 'pipe', 'pipe'] });
-  cf.proc = p; cf.startedAt = Date.now(); cf.error = null; cf.detail = null;
+  const p = spawn(bin, cfArgs(mode, mport), { cwd: CF_HOME, env: cfEnv(), stdio: ['ignore', 'pipe', 'pipe'] });
+  cf.proc = p; cf.startedAt = Date.now(); cf.error = null; cf.detail = null; cf.metricsPort = mport; cf.ingressAt = Date.now() + INGRESS_RECHECK_MS; cf.ingressFails = 0;
   try { writeJSON(CF_PIDF, p.pid); } catch { /* chỉ để dọn mồ côi */ }
   edgeLog('started cloudflared ' + pin.version + ' (' + mode + ', pid ' + p.pid + ')');
   const onOut = d => {
@@ -313,16 +326,54 @@ function cfStop(why) {
     try { p.kill('SIGTERM'); } catch { clearTimeout(t); resolve(); }
   });
 }
-function getOK(port, p) {
+function getOK(port, p, headers) {
   return new Promise(resolve => {
-    const req = http.get({ host: '127.0.0.1', port, path: p, timeout: 1500 }, res => {
-      let s = ''; res.on('data', c => (s += c)); res.on('end', () => resolve({ code: res.statusCode, body: s }));
+    const req = http.get({ host: '127.0.0.1', port, path: p, timeout: 1500, headers: headers || {} }, res => {
+      let s = ''; res.on('data', c => { if (s.length < 65536) s += c; }); res.on('end', () => resolve({ code: res.statusCode, body: s, headers: res.headers }));
     });
     req.on('error', () => resolve(null));
     req.on('timeout', () => { req.destroy(); resolve(null); });
   });
 }
-async function cfReady() { if (!cf.proc) return false; const r = await getOK(METRICS_PORT, '/ready'); return !!r && r.code === 200; }
+function safeEq(a, b) { const x = Buffer.from(String(a || '')), y = Buffer.from(String(b || '')); return x.length === y.length && crypto.timingSafeEqual(x, y); }
+function currentVersion() { try { return norm(fs.readFileSync(path.join(HOME, 'current', 'VERSION'), 'utf8')); } catch { return null; } }
+// cổng ingress trả lời đúng là app CON của launcher này (biết nonce) + đúng version (ver null = không so version)
+async function ingressOK(ver) {
+  const ch = crypto.randomBytes(16).toString('hex');
+  const r = await getOK(INGRESS_PORT, '/api/health', { 'X-GC-Ingress-Challenge': ch });
+  if (!r || r.code !== 200 || !safeEq(r.headers['x-gc-ingress'], crypto.createHmac('sha256', INGRESS_NONCE).update('ingress:' + ch).digest('hex'))) return false;
+  try { const h = JSON.parse(r.body); return h.ok === true && (!ver || norm(h.version) === norm(ver)); } catch { return false; }
+}
+// không spawn: thử lại sau 2 s (app có thể đang khởi động), không lùi theo cấp số — chỉ ghi log khi trạng thái đổi
+function ingressFail() {
+  if (cf.error !== 'ingress-unverified') edgeLog('cloudflared not started: 127.0.0.1:' + INGRESS_PORT + ' does not answer as this gen-chibi (app still starting, or another process holds the port)');
+  cf.error = 'ingress-unverified'; cf.detail = '127.0.0.1:' + INGRESS_PORT + ' did not prove it is this gen-chibi'; cf.nextTry = Date.now() + 2000;
+}
+// cổng rảnh do hệ điều hành chọn (bind 0 rồi đóng) — cổng metrics mỗi lần spawn một khác, tiến trình lạ không giữ sẵn được
+function freePort() {
+  return new Promise(resolve => {
+    const s = net.createServer();
+    s.on('error', () => resolve(0));
+    s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => resolve(p)); });
+  });
+}
+// (Linux) socket đang LISTEN ở cổng này thuộc đúng tiến trình pid? Không đọc được /proc/net/tcp (macOS…) → dựa vào cổng ngẫu nhiên (true)
+function portOwnedBy(pid, port) {
+  const hex = ':' + port.toString(16).toUpperCase().padStart(4, '0'), inodes = new Set();
+  let readable = false;
+  for (const f of ['/proc/net/tcp', '/proc/net/tcp6']) {
+    let t = ''; try { t = fs.readFileSync(f, 'utf8'); readable = true; } catch { continue; }
+    t.split('\n').slice(1).forEach(l => { const c = l.trim().split(/\s+/); if (c.length > 9 && c[3] === '0A' && c[1].endsWith(hex)) inodes.add(c[9]); });
+  }
+  if (!readable) return true;
+  if (!inodes.size) return false;
+  let fds = []; try { fds = fs.readdirSync('/proc/' + pid + '/fd'); } catch { return false; }
+  return fds.some(fd => { try { const m = /^socket:\[(\d+)\]$/.exec(fs.readlinkSync('/proc/' + pid + '/fd/' + fd)); return !!m && inodes.has(m[1]); } catch { return false; } });
+}
+async function cfReady() {
+  if (!cf.proc || !cf.metricsPort || !portOwnedBy(cf.proc.pid, cf.metricsPort)) return false;
+  const r = await getOK(cf.metricsPort, '/ready'); return !!r && r.code === 200;
+}
 function writeEdgeStatus() {
   const st = { tunnel: cf.intent.tunnel, online: cf.intent.online, running: !!cf.proc, pid: cf.proc ? cf.proc.pid : undefined, ready: !!cf.proc && cf.ready };
   const key = [st.tunnel, st.running, st.ready].join('|');
@@ -344,6 +395,11 @@ async function edgeTick() {
     if (cf.proc && (want.tunnel !== cf.mode || key !== cf.key)) await cfStop(want.tunnel === 'off' ? 'tunnel off' : 'intent / token changed');
     if (want.tunnel === 'off') { cf.key = key; cf.mode = 'off'; cf.error = null; cf.detail = null; cf.url = null; }
     else if (!cf.proc && Date.now() >= cf.nextTry) await cfStart(want.tunnel, key);
+    else if (cf.proc && Date.now() >= cf.ingressAt) {   // kiểm lại cổng ingress: sai hai lần liền (cách 3 s — app khởi động lại thì kịp lên) → dừng cloudflared
+      if (await ingressOK(null)) { cf.ingressFails = 0; cf.ingressAt = Date.now() + INGRESS_RECHECK_MS; }
+      else if (++cf.ingressFails < 2) cf.ingressAt = Date.now() + 3000;
+      else { await cfStop('ingress port no longer proves it is this gen-chibi'); cf.ingressFails = 0; ingressFail(); }
+    }
     cf.ready = await cfReady();
     writeEdgeStatus();
   } catch (e) { edgeLog('edge loop: ' + e.message); }
@@ -356,11 +412,9 @@ function edgeInit() {
   try { edgeWatch = fs.watch(RUN, () => { clearTimeout(t); t = setTimeout(edgeTick, 200); }); edgeWatch.on('error', () => {}); } catch { /* chỉ còn nhịp 2 s */ }
   edgeTick();
 }
-// cloudflared còn sống + /ready + cổng nghe riêng của app (đường request thật đi qua tunnel) trả đúng phiên bản
+// cloudflared còn sống + /ready (đúng tiến trình) + cổng nghe riêng của app (đường request thật đi qua tunnel) chứng minh là app này, đúng phiên bản
 async function edgeHealthy(ver) {
-  if (!(await cfReady())) return false;
-  const r = await getOK(INGRESS_PORT, '/api/health');
-  try { const h = JSON.parse(r.body); return r.code === 200 && h.ok && norm(h.version) === norm(ver); } catch { return false; }
+  return (await cfReady()) && (await ingressOK(ver));
 }
 
 // ---------------------------------------------------------------- cập nhật: launcher mới, sức khoẻ, rollback
@@ -456,7 +510,7 @@ async function start() {
   if (!fs.existsSync(entry)) { log('not found:', entry, '— retrying in 5 s'); return setTimeout(start, 5000); }
   log('starting', target('current'));
   const startedAt = Date.now();
-  child = spawn(process.execPath, [entry], { stdio: 'inherit', env: Object.assign({}, process.env, { GC_HOME: HOME, GC_PORT: String(PORT) }) });
+  child = spawn(process.execPath, [entry], { stdio: 'inherit', env: Object.assign({}, process.env, { GC_HOME: HOME, GC_PORT: String(PORT), GC_INGRESS_NONCE: INGRESS_NONCE }) });
   verifyPending();
   child.on('exit', code => {
     child = null;
@@ -487,5 +541,5 @@ if (require.main === module) {
   selfUpdate().then(() => { edgeInit(); start(); });
 } else {
   // tools/test-update.sh kiểm các hàm thuần (schema ý định, hợp đồng, giải nén) mà không chạy launcher
-  module.exports = { readIntent, abiOf, untarOne, cfArgs, cfPin, tokenProblem, LAUNCHER_ABI, EDGE_ABI, CF_VERSION, CF_ASSETS, METRICS_PORT, INGRESS_PORT };
+  module.exports = { readIntent, abiOf, untarOne, cfArgs, cfPin, tokenProblem, portOwnedBy, freePort, LAUNCHER_ABI, EDGE_ABI, CF_VERSION, CF_ASSETS, INGRESS_PORT };
 }

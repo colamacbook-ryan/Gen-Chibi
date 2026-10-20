@@ -137,10 +137,8 @@ waitest() { for i in $(seq 1 ${3:-40}); do [ "$(est "$1")" = "$2" ] && return 0;
 intent() { mkdir -p "$HOME_DIR/run"; printf '%s' "$1" > "$HOME_DIR/run/edge-intent.json.tmp" && mv "$HOME_DIR/run/edge-intent.json.tmp" "$HOME_DIR/run/edge-intent.json"; }
 alive() { [ -n "$1" ] && kill -0 "$1" 2>/dev/null; }
 nfake() { ps -eo args 2>/dev/null | grep -F "$HOME_DIR/bin/cloudflared-test" | grep -v grep | wc -l | tr -d ' '; }   # số cloudflared giả đang chạy
-# cổng nghe riêng của app cho cloudflared (P3 mở trong server). Bản thử chưa có → test tự chuyển tiếp IPORT → PORT; app đã có thì để app giữ.
-if ! (echo > /dev/tcp/127.0.0.1/$IPORT) 2>/dev/null; then
-  node -e 'const n=require("net");n.createServer(c=>{const u=n.connect(+process.argv[2],"127.0.0.1");c.pipe(u).pipe(c);u.on("error",()=>c.destroy());c.on("error",()=>u.destroy())}).listen(+process.argv[1],"127.0.0.1")' $IPORT $PORT & XPID=$!
-fi
+# cổng nghe riêng cho cloudflared: app tự mở theo run/edge-intent.json; launcher chỉ spawn cloudflared khi cổng đó chứng minh là app con của nó
+# (X-GC-Ingress — sửa bảo mật B). Không còn bộ chuyển tiếp giả: nó chính là "tiến trình lạ chiếm cổng" mà launcher phải từ chối (tools/test-ingress.mjs)
 
 echo " 8a) hàm thuần: schema ý định đóng, argv tự dựng, hợp đồng, giải nén .tgz, móc test chỉ khi GC_TEST=1"
 U="$W/unit"; mkdir -p "$U/run" "$U/tgz"; printf '#!/bin/sh\necho cf\n' > "$U/tgz/cloudflared"; tar -czf "$U/cf.tgz" -C "$U" tgz/cloudflared
@@ -152,8 +150,8 @@ const cases = [["{\"tunnel\":\"token\"}", "token/true"], ["{\"tunnel\":\"quick\"
   ["{\"tunnel\":\"/bin/sh\",\"online\":\"yes\"}", "off/false"], ["{\"tunnel\":\"off\",\"online\":true}", "off/true"], ["{oops", "off/false"],
   ["{\"tunnel\":\"quick\",\"pad\":\"" + "x".repeat(5000) + "\"}", "off/false"], ["[\"quick\"]", "off/false"]];
 cases.forEach(([s, want]) => { const got = put(s); if (got !== want) out.push("intent " + s.slice(0, 40) + " → " + got + " (cần " + want + ")"); });
-const t = L.cfArgs("token"), q = L.cfArgs("quick");
-if (t.join(" ") !== "--no-autoupdate tunnel --config /dev/null --metrics 127.0.0.1:7484 --grace-period 5s --management-diagnostics=false run --token-file " + U + "/edge/tunnel.token") out.push("argv token: " + t.join(" "));
+const t = L.cfArgs("token", 7484), q = L.cfArgs("quick", 7484);
+if (t.join(" ") !== "--no-autoupdate tunnel --config /dev/null --metrics 127.0.0.1:7484 --grace-period 5s --management-diagnostics=false run --token-file " + U + "/run/tunnel.token") out.push("argv token: " + t.join(" "));
 if (q.slice(-2).join(" ") !== "--url http://127.0.0.1:7482" || q.indexOf("run") >= 0) out.push("argv quick: " + q.join(" "));
 if (L.abiOf(U + "/abi7.js") !== 7 || L.abiOf(U + "/abi-none.js") !== 1 || L.abiOf(U + "/nope.js") !== 0) out.push("abiOf");
 const x = L.untarOne(zlib.gunzipSync(fs.readFileSync(U + "/cf.tgz")), "cloudflared");
@@ -176,23 +174,24 @@ waitest ready true 60 && ok "quick: cloudflared giả chạy + /ready → ready"
 est url | grep -qE '^https://fake-[0-9]+\.trycloudflare\.com$' && ok "edge-status có link tạm: $(est url)" || bad "thiếu link tạm trong edge-status"
 RUNF="$HOME_DIR/fake-cf-run.json"
 node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")),a=r.argv.join(" ");
-const need=["--no-autoupdate tunnel","--config /dev/null","--metrics 127.0.0.1:"+process.argv[2],"--url http://127.0.0.1:"+process.argv[3]];
-const miss=need.filter(n=>a.indexOf(n)<0), env=r.env.filter(k=>/^(GC_|TUNNEL_)/.test(k));
-if(miss.length||env.length){console.error(miss,env);process.exit(1)}' "$RUNF" $MPORT $IPORT && ok "argv do launcher dựng (--no-autoupdate, metrics 127.0.0.1:$MPORT, --url 127.0.0.1:$IPORT); env không có GC_* / TUNNEL_*" || bad "argv / env của cloudflared sai"
+const need=["--no-autoupdate tunnel","--config /dev/null","--url http://127.0.0.1:"+process.argv[3]];
+const miss=need.filter(n=>a.indexOf(n)<0), env=r.env.filter(k=>/^(GC_|TUNNEL_)/.test(k)), mp=(/--metrics 127\.0\.0\.1:(\d+)/.exec(a)||[])[1];
+if(!mp||+mp===+process.argv[2])miss.push("metrics cổng ngẫu nhiên: "+mp);
+if(miss.length||env.length){console.error(miss,env);process.exit(1)}' "$RUNF" $MPORT $IPORT && ok "argv do launcher dựng (--no-autoupdate, metrics 127.0.0.1:<cổng rảnh ngẫu nhiên>, --url 127.0.0.1:$IPORT); env không có GC_* / TUNNEL_* (kể cả GC_INGRESS_NONCE)" || bad "argv / env của cloudflared sai"
 grep -q 'started cloudflared test (quick' "$HOME_DIR/logs/tunnel.log" && ok "logs/tunnel.log ghi sự kiện + log của cloudflared" || bad "logs/tunnel.log thiếu"
 
 echo " 8d) token: tệp 0600, không lộ token, đổi token → khởi động lại"
 SECRET="eyJhIjoiZ2VuLWNoaWJpLXRlc3QiLCJzIjoiU0VDUkVULVRPS0VOLTQyIn0"
-mkdir -p "$HOME_DIR/edge"; printf '%s\n' "$SECRET" > "$HOME_DIR/edge/tunnel.token"; chmod 644 "$HOME_DIR/edge/tunnel.token"
+mkdir -p "$HOME_DIR/run"; printf '%s\n' "$SECRET" > "$HOME_DIR/run/tunnel.token"; chmod 644 "$HOME_DIR/run/tunnel.token"
 intent '{"tunnel":"token"}'
 waitest error token-perms && [ "$(est running)" = false ] && ok "token 0644 → không chạy, error token-perms" || bad "token 0644 vẫn chạy / sai mã lỗi: $(cat "$EST" | tr -d '\n')"
-chmod 600 "$HOME_DIR/edge/tunnel.token"
+chmod 600 "$HOME_DIR/run/tunnel.token"
 waitest ready true 30 && [ "$(est tunnel)" = token ] && ok "chmod 600 → tự chạy lại ở chế độ token" || bad "token 0600 không chạy: $(cat "$EST" | tr -d '\n')"
-grep -q -- "run --token-file $HOME_DIR/edge/tunnel.token" <(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).argv.join(" "))' "$RUNF") && ok "argv: run --token-file <thư mục cài>/edge/tunnel.token" || bad "argv token sai"
+grep -q -- "run --token-file $HOME_DIR/run/tunnel.token" <(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).argv.join(" "))' "$RUNF") && ok "argv: run --token-file <thư mục cài>/run/tunnel.token" || bad "argv token sai"
 leak=""; for f in "$RUNF" "$HOME_DIR/logs/tunnel.log" "$W/launcher.log" "$EST"; do grep -q "$SECRET" "$f" 2>/dev/null && leak="$leak $f"; done
 ps -eo args 2>/dev/null | grep -v grep | grep -q "$SECRET" && leak="$leak ps"
 [ -z "$leak" ] && ok "token không nằm trong argv / env / log / edge-status / danh sách tiến trình" || bad "lộ token ở:$leak"
-P1="$(est pid)"; printf '%s-v2\n' "$SECRET" > "$HOME_DIR/edge/tunnel.token"; chmod 600 "$HOME_DIR/edge/tunnel.token"
+P1="$(est pid)"; printf '%s-v2\n' "$SECRET" > "$HOME_DIR/run/tunnel.token"; chmod 600 "$HOME_DIR/run/tunnel.token"
 for i in $(seq 1 30); do P2="$(est pid)"; [ -n "$P2" ] && [ "$P2" != "$P1" ] && [ "$(est ready)" = true ] && break; sleep 0.5; done
 [ "$P2" != "$P1" ] && ! alive "$P1" && ok "đổi token → cloudflared khởi động lại (pid $P1 → $P2), bản cũ đã dừng" || bad "đổi token không khởi động lại"
 

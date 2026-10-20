@@ -8,6 +8,7 @@
 #   4c) OAuth cho MCP từ xa (tools/test-oauth.mjs)
 #   4e) đăng nhập chủ máy + bảng truy cập v0.21 (tools/test-auth-owner.mjs)
 #   4f) Go online — edge, Caddy, Cloudflare API giả, wizard (tools/test-online.mjs)
+#   4g) cổng ingress của cloudflared + Go online link tạm đầu-cuối (tools/test-ingress.mjs)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -760,6 +761,10 @@ node tools/test-oauth.mjs || exit 1
 
 echo "4f) Go online (v0.21): cổng nghe riêng cho cloudflared + X-GC-Edge của Caddy · sites.caddy (regex hostname) + nạp lại kèm admin qua unix socket · Cloudflare API giả (luồng đủ, idempotent, zone pending / partial, thiếu quyền, CNAME có sẵn không đè, WAF, Go offline) · đường A / proxy / link tạm với DNS / IP giả · publicUrl tạm trả về khi lỗi · không gọi IP nội bộ · token API không lọt · rào ngược"
 node tools/test-online.mjs || exit 1
+
+echo "4g) cổng ingress của cloudflared (v0.21, sửa bảo mật B) + Go online link tạm từ đầu tới cuối: kẻ lạ chiếm cổng trước app → không spawn · kiểm định kỳ · /ready đúng tiến trình · đột biến · launcher + app + online-config + cloudflared giả"
+for P in 7811 7813 7815 7821 7823 7825 7831 7833; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done
+node tools/test-ingress.mjs || exit 1
 
 echo "5) tự cập nhật"
 bash tools/test-update.sh

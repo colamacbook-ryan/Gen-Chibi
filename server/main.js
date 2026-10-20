@@ -343,6 +343,9 @@ async function route(req, res) {
     if (!MCP_KEY || !safeEq(lm[1], MCP_KEY)) return fail(res, 404, 'không có API này');   // sai khoá = như đường không tồn tại
     p = '/mcp'; viaLink = true;
   }
+  // ---- Go online (v0.21): kiểm từ ngoài vào (bậc cổng / proxy riêng) — công khai, chỉ GET, chỉ trả lời đúng nonce 128 bit của luồng đang chạy (server/online.js).
+  // Đặt TRƯỚC rào Host: lúc kiểm, tên miền của luồng chưa thành Host được phép (chỉ thành khi publicUrl bật tạm ở bậc sau); không lộ gì ngoài nonce người gọi đã biết
+  if (p.startsWith('/.well-known/gen-chibi-check/')) return m === 'GET' ? goOnline.checkRoute(req, res, p, send) : fail(res, 405, 'chỉ GET');
   // Chống DNS rebinding: chỉ phục vụ khi Host là máy cục bộ (hoặc tên được cho phép trong GC_ALLOWED_HOSTS)
   const hostName = String(req.headers.host || '').replace(/:\d+$/, '').replace(/^\[|\]$/g, '').toLowerCase();
   if (!hostAllowed(hostName)) return fail(res, 403, 'Host không được phép');
@@ -352,8 +355,6 @@ async function route(req, res) {
   //   /api/online/*) → S hoặc T (chưa có mật khẩu thì chỉ T — S không tồn tại) · /mcp → K, O, T. Lớp E / P / N chỉ dùng cho trần tần suất (auth.ipOf).
   // ---- OAuth (v0.19): khám phá + đăng ký + token + thu hồi là đường MÁY (công khai, bảo vệ bằng PKCE / token — không cần cookie hay phiên Studio); authorize là trang cho chủ
   if (p.startsWith('/oauth/') || p.startsWith('/.well-known/oauth-')) { const done = await oauthRoute(req, res, url, p, m); if (done) return; }
-  // ---- Go online (v0.21): kiểm từ ngoài vào của proxy riêng — công khai, chỉ trả lời đúng nonce của luồng đang chạy (server/online.js)
-  if (p.startsWith('/.well-known/gen-chibi-check/')) return goOnline.checkRoute(req, res, p, send);
 
   // Đã đặt token: mọi /api (trừ health) và /mcp đều cần token, bất kể Host hay địa chỉ. Studio đăng nhập bằng token.
   // /mcp còn nhận access token OAuth (Authorization: Bearer): phạm vi → kênh SẴN CÓ (scopeCtx). Không có / sai token → 401 + WWW-Authenticate trỏ metadata để agent tự khám phá.
@@ -655,7 +656,7 @@ async function route(req, res) {
 }
 
 /* ---------------------------------------------------------------- Go online (v0.21): edge của app + /api/online/* */
-// Lớp edge của request (server/edge.js — chỉ cho trần tần suất + chẩn đoán, không cấp quyền): Caddy = X-GC-Edge đúng bí mật edge/edge-secret
+// Lớp edge của request (server/edge.js — chỉ cho trần tần suất + chẩn đoán, không cấp quyền): Caddy = X-GC-Edge đúng bí mật edge/conf/edge-secret
 // (IP khách = mục cuối X-Forwarded-For); cloudflared = request đến trên CỔNG NGHE RIÊNG 127.0.0.1:<GC_PORT+2> (IP khách = Cf-Connecting-Ip chỉ ở đó).
 // Cổng riêng chỉ mở khi tunnel bật (run/edge-intent.json), không giành cổng khi không cần. P1 đọc req.gcEdge / req.gcIp.
 const { createEdge, createTunnelListener } = require('./edge');
@@ -663,12 +664,33 @@ const edge = createEdge({ edgeDir: path.join(HOME, 'edge') });
 const tunnelListener = createTunnelListener({ port: PORT + 2, handler: (req, res) => handle(req, res, 'tunnel'), log });
 // online-config (P1) là nguồn duy nhất của mode / domain / publicUrl + trạng thái luồng (flow) + tài nguyên Cloudflare đã tạo (cfResources).
 // isOwner = bằng chứng dương S / T (auth.ownerOf); legacy.active = đang chạy bằng .env kế thừa (chỉ đọc — di chuyển trước), marked = dấu data/legacy.json
-const goOnline = require('./online').createOnline({ home: HOME, dataDir: DATA, port: PORT, inDocker: process.env.GC_IN_DOCKER === '1', config: online, secrets, log, edge, tunnel: tunnelListener,
+// CHỈ cho kiểm thử (tools/test-ingress.mjs): GC_TEST=1 + GC_TEST_ONLINE_VIA=127.0.0.1:<cổng> — lời gọi "từ Internet" của wizard đi tới cổng loopback đó
+// (cloudflared giả đóng vai Cloudflare, Host giữ nguyên), tên miền phân giải ra một IP công khai giả không bao giờ được gọi. Thiếu GC_TEST=1 → bỏ qua hẳn.
+const ONLINE_TEST_VIA = process.env.GC_TEST === '1' && /^127\.0\.0\.1:\d{2,5}$/.test(process.env.GC_TEST_ONLINE_VIA || '') ? process.env.GC_TEST_ONLINE_VIA : '';
+const onlineTestNet = !ONLINE_TEST_VIA ? {} : {
+  resolve: async () => ({ a: ['192.0.32.10'], aaaa: [], via: 'system', error: '' }), publicIp: async () => ({ v4: '192.0.32.10', v6: '' }),
+  probe: (url, o) => { const u = new URL(url); return require('./online').probeUrl('http://' + ONLINE_TEST_VIA + u.pathname + u.search, Object.assign({}, o, { ip: null, headers: Object.assign({}, o && o.headers, { Host: u.host }) })); }
+};
+const goOnline = require('./online').createOnline(Object.assign({ home: HOME, dataDir: DATA, port: PORT, inDocker: process.env.GC_IN_DOCKER === '1', config: online, secrets, log, edge, tunnel: tunnelListener,
   isOwner: req => !!auth.ownerOf(req), hasPassword: () => auth.hasPassword(),
-  legacy: () => { const c = online.get(); return { active: !!c.readOnly, marked: auth.isLegacy(), publicUrl: c.env.publicUrl, allowedHosts: c.env.allowedHosts.join(','), tunnel: c.env.tunnel }; } });
+  legacy: () => { const c = online.get(); return { active: !!c.readOnly, marked: auth.isLegacy(), publicUrl: c.env.publicUrl, allowedHosts: c.env.allowedHosts.join(','), tunnel: c.env.tunnel }; } }, onlineTestNet));
 
+// Chứng minh cổng ingress (launcher, CNS-B v0.21): launcher sinh GC_INGRESS_NONCE ngẫu nhiên mỗi lần khởi động, truyền cho app con qua env; trước khi
+// spawn cloudflared (và định kỳ) nó GET http://127.0.0.1:<GC_PORT+2>/api/health kèm X-GC-Ingress-Challenge: <hex ngẫu nhiên>. CHỈ listener ingress của app trả
+// X-GC-Ingress = HMAC-SHA256(nonce, "ingress:" + challenge) → tiến trình lạ chiếm cổng trước app không trả lời đúng → launcher không trỏ tunnel vào nó.
+// Thách thức-đáp thay vì nonce trần: /api/health trên cổng này cũng tới được từ Internet qua tunnel — giá trị cố định sẽ bị đọc rồi phát lại.
+// Nonce xoá khỏi process.env ngay (không lọt sang tiến trình con), không bao giờ ghi log.
+const INGRESS_NONCE = String(process.env.GC_INGRESS_NONCE || '');
+delete process.env.GC_INGRESS_NONCE;
+function ingressProof(req, res) {
+  const c = String(req.headers['x-gc-ingress-challenge'] || '');
+  if (!INGRESS_NONCE || !/^[a-f0-9]{32,128}$/.test(c)) return;
+  if (String(req.url || '').split('?')[0] !== '/api/health') return;
+  res.setHeader('X-GC-Ingress', require('crypto').createHmac('sha256', INGRESS_NONCE).update('ingress:' + c).digest('hex'));
+}
 function handle(req, res, via) {
   edge.mark(req, via);
+  if (via === 'tunnel') ingressProof(req, res);
   MSG.run(langOf(req), () => route(req, res)).catch(e => {   // ngôn ngữ của yêu cầu cho trang Cấp phép, nhãn khu / nhà cung cấp / giọng, tên phân cảnh mặc định…
     log('[server] error', MSG.en(e.message)); if (!res.headersSent) fail(res, e.code && e.code >= 400 && e.code < 600 ? e.code : 500, e.message); });
 }

@@ -5,6 +5,8 @@
 //   - ghi <GC_HOME>/fake-cf-run.json: pid, argv, tên biến môi trường nhận được (test kiểm: không token / GC_* trong argv / env)
 //   - token: đọc tệp --token-file như cloudflared thật (một lần), KHÔNG in nội dung · quick: in link *.trycloudflare.com giả
 //   - mở /ready trên cổng --metrics: 200, trừ khi <GC_HOME>/fake-cf-notready chứa "*" hoặc đúng tên bản `current` đang trỏ tới → 503
+//   - quick + tệp <GC_HOME>/fake-cf-proxy-port (một số cổng): đóng vai Cloudflare — nghe 127.0.0.1:<cổng đó>, chuyển mọi request tới --url
+//     (cổng ingress của app) kèm Cf-Connecting-Ip giả, giữ Host (tools/test-ingress.mjs: bậc public / mcp đi qua đúng đường của tunnel)
 //   - SIGTERM: thoát 0
 'use strict';
 const fs = require('fs');
@@ -32,4 +34,13 @@ http.createServer((req, res) => {
   res.writeHead(ok ? 200 : 503, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ status: ok ? 200 : 503, readyConnections: ok ? 4 : 0 }));
 }).listen(+port, host, () => console.log(new Date().toISOString() + ' INF Starting metrics server on ' + host + ':' + port + '/metrics'));
+let proxyPort = 0; try { proxyPort = +fs.readFileSync(path.join(HOME, 'fake-cf-proxy-port'), 'utf8').trim(); } catch { /* không đóng vai Cloudflare */ }
+if (arg('--url') && proxyPort > 0) {
+  const to = new URL(arg('--url'));
+  http.createServer((req, res) => {
+    const up = http.request({ host: to.hostname, port: to.port, method: req.method, path: req.url, headers: Object.assign({}, req.headers, { 'cf-connecting-ip': '198.51.100.77' }) }, r => { res.writeHead(r.statusCode, r.headers); r.pipe(res); });
+    up.on('error', () => { res.writeHead(502); res.end('bad gateway'); });
+    req.pipe(up);
+  }).listen(proxyPort, '127.0.0.1');
+}
 process.on('SIGTERM', () => { console.log(new Date().toISOString() + ' INF Initiating graceful shutdown due to signal terminated'); process.exit(0); });

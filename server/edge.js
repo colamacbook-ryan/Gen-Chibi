@@ -4,7 +4,7 @@
 // Hai edge do app điều khiển; chỉ dùng cho TRẦN TẦN SUẤT + CHẨN ĐOÁN, KHÔNG cấp quyền (CNS-191):
 //   - cloudflared: request đến trên CỔNG NGHE RIÊNG 127.0.0.1:<GC_PORT+2> (chỉ cloudflared dùng) → req.gcEdge = 'tunnel',
 //     IP khách = Cf-Connecting-Ip — CHỈ trên socket đó (cổng chính: header này do client gửi, không tin).
-//   - Caddy (container gen-chibi-edge): header X-GC-Edge khớp bí mật trong edge/edge-secret (0600, so sánh hằng thời gian) → req.gcEdge = 'caddy',
+//   - Caddy (container gen-chibi-edge): header X-GC-Edge khớp bí mật trong edge/conf/edge-secret (0600, so sánh hằng thời gian; Caddy mount edge/conf chỉ đọc) → req.gcEdge = 'caddy',
 //     IP khách = mục CUỐI của X-Forwarded-For (Caddy thay XFF của client không tin bằng IP thật — peer luôn là container Caddy).
 //   - Còn lại: không gắn gì (P1 tự quyết IP theo peer / chế độ proxy).
 // Header X-GC-Edge luôn bị gỡ khỏi request sau khi xét → bí mật không trôi xuống handler / log.
@@ -25,7 +25,7 @@ function lastXff(v) { const parts = String(v || '').split(','); return ipOnly(pa
 function peerOf(req) { return String((req.socket && req.socket.remoteAddress) || '').replace(/^::ffff:/, ''); }
 
 function createEdge({ edgeDir }) {
-  const file = path.join(edgeDir, 'edge-secret');
+  const file = path.join(edgeDir, 'conf', 'edge-secret');
   let memo = null;   // đọc lại chỉ khi tệp đổi (mtime + cỡ) — mark() chạy mỗi request (L-42)
   function secret() {
     let st = null; try { st = fs.statSync(file); } catch (e) { memo = null; return ''; }
@@ -36,7 +36,7 @@ function createEdge({ edgeDir }) {
   // sinh bí mật khi bật Caddy (một lần; đã có thì giữ — Caddy đọc tệp mỗi request qua {file.*}, đổi bí mật không cần reload)
   function ensureSecret() {
     if (secret()) return false;
-    fs.mkdirSync(edgeDir, { recursive: true });
+    fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
     const tmp = file + '.tmp';
     fs.writeFileSync(tmp, crypto.randomBytes(32).toString('hex') + '\n', { mode: 0o600 });
     fs.chmodSync(tmp, 0o600);

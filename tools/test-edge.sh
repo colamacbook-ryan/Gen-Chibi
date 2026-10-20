@@ -2,7 +2,8 @@
 # gen-chibi — kiểm edge v0.21 phía máy chủ (không cần Docker daemon):
 #   1) CLI ghép compose: -f docker-compose.yml [-f docker-compose.edge.yml] [-f override] — không bao giờ COMPOSE_FILE (CNS-169),
 #      service edge tên riêng, không trộn với `caddy` của override (CNS-194). Dùng `docker compose config` thật nếu có.
-#   2) sync_compose / edge_prepare: chép tệp của bản mới; không đụng override, edge/Caddyfile (bản sống), edge/sites.caddy (app sinh)
+#   2) sync_compose / edge_prepare: chép tệp của bản mới; không đụng override, edge/conf/Caddyfile (bản sống), edge/conf/sites.caddy (app sinh)
+#   1b) Caddy chỉ mount đúng thứ nó cần (edge/conf chỉ đọc, edge/run, caddy-data, caddy-config) — KHÔNG thấy run/tunnel.token (sửa bảo mật A)
 #   3) genchibi online --caddy / --caddy-off với docker giả: kiểm cổng, dấu edge/caddy.enabled, -f đúng, native từ chối
 #   4) Caddy thật (binary chính thức, không Docker): Caddyfile.base hợp lệ, admin CHỈ unix socket 0660, nạp lại qua socket vẫn giữ admin,
 #      tls internal phục vụ được, khởi động lại vẫn đọc cấu hình từ tệp. Không có binary (máy không mạng) → bỏ qua, ghi rõ.
@@ -51,7 +52,26 @@ if [ -n "$HAVE_COMPOSE" ]; then
   img="$(cd "$I"; eval "$CLI_FUNCS"; compose config 2>/dev/null | sed -n '/^  caddy:/,/^  [a-z]/p' | grep -c 'image: caddy:2$' || true)"
   [ "$img" = 1 ] && ok "service caddy của override không bị trộn với gen-chibi-edge (CNS-194)" || bad "caddy của override bị trộn"
   ports="$(cd "$I"; eval "$CLI_FUNCS"; compose config --format json 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const e=JSON.parse(s).services["gen-chibi-edge"];console.log(e.ports.map(p=>p.published+">"+p.target).join(" ")+" "+e.user+" "+e.volumes.map(v=>v.target).join(","))})')"
-  [ "$ports" = "80>8080 443>8443 1000:1000 /edge" ] && ok "edge: 80→8080, 443→8443, chạy bằng GC_UID:GC_GID, volume ./edge:/edge" || bad "cấu hình edge: $ports"
+  [ "$ports" = "80>8080 443>8443 1000:1000 /edge/conf,/edge/run,/edge/caddy-data,/edge/caddy-config" ] && ok "edge: 80→8080, 443→8443, chạy bằng GC_UID:GC_GID, chỉ mount edge/conf · edge/run · caddy-data · caddy-config" || bad "cấu hình edge: $ports"
+  # sửa bảo mật A: tunnel token (run/tunnel.token) không bao giờ nằm dưới một nguồn mount của Caddy; không mount cả ./edge / thư mục cài; edge/conf chỉ đọc
+  mkdir -p "$I/run" "$I/edge"; : > "$I/run/tunnel.token"; : > "$I/edge/tunnel.token"   # tệp cũ (P2 đặt ở edge/) cũng không được lộ
+  mounts_ok() { # mounts_ok <tệp compose edge> → "ok" | danh sách lỗi
+    ( cd "$I"; docker compose -f docker-compose.yml -f "$1" config --format json 2>/dev/null ) | I="$I" node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+      const path=require("path"),fs=require("fs"),I=fs.realpathSync(process.env.I),e=JSON.parse(s).services["gen-chibi-edge"],bad=[];
+      const toks=[path.join(I,"run","tunnel.token"),path.join(I,"edge","tunnel.token")];
+      (e.volumes||[]).forEach(v=>{const src=fs.existsSync(v.source)?fs.realpathSync(v.source):path.resolve(v.source);
+        toks.forEach(t=>{if(t===src||t.startsWith(src+path.sep))bad.push("thấy "+path.relative(I,t)+" qua "+v.source)});
+        if(src===I||src===path.join(I,"edge"))bad.push("mount cả "+v.source);
+        if(v.target==="/edge/conf"&&!v.read_only)bad.push("/edge/conf không chỉ đọc")});
+      console.log(bad.join("; ")||"ok")})'
+  }
+  vis="$(mounts_ok docker-compose.edge.yml)"
+  [ "$vis" = ok ] && ok "Caddy không thấy tunnel token (run/ lẫn edge/); không mount cả ./edge hay thư mục cài; edge/conf chỉ đọc" || bad "mount của Caddy: $vis"
+  # đột biến: mount cả ./edge như P2 → kiểm trên phải ĐỎ
+  sed -e 's#^      - ./edge/conf:/edge/conf:ro.*#      - ./edge:/edge#' -e '/^      - .\/edge\/\(run\|caddy-data\|caddy-config\):/d' "$I/docker-compose.edge.yml" > "$I/edge-mut.yml"
+  mvis="$(mounts_ok edge-mut.yml)"
+  [ "$mvis" != ok ] && grep -q 'thấy edge/tunnel.token' <<< "$mvis" && ok "đột biến (mount cả ./edge) → kiểm mount ĐỎ: $mvis" || bad "đột biến không bị bắt: $mvis"
+  rm -f "$I/edge-mut.yml" "$I/edge/tunnel.token"
   rm "$I/edge/caddy.enabled"
   [ "$(svc)" = "app caddy login " ] && ok "tắt edge (bỏ dấu) → không còn gen-chibi-edge, override vẫn đủ" || bad "services khi tắt edge: $(svc)"
 else
@@ -63,25 +83,25 @@ echo "2) sync_compose / edge_prepare"
 S="$W/sync"; mkinst "$S"; mkdir -p "$S/edge"
 echo "# compose bản mới" > "$S/current/docker-compose.yml"; echo "# edge bản mới" > "$S/current/docker-compose.edge.yml"; echo "# caddy gốc bản mới" > "$S/current/edge/Caddyfile.base"
 echo "# compose bản cũ" > "$S/docker-compose.yml"
-echo "# Caddyfile sống (đã sửa)" > "$S/edge/Caddyfile"; echo "chibi.example.com { respond ok }" > "$S/edge/sites.caddy"
-cp "$S/docker-compose.override.yml" "$W/ovr.orig"; cp "$S/edge/Caddyfile" "$W/cf.orig"; cp "$S/edge/sites.caddy" "$W/sites.orig"
+mkdir -p "$S/edge/conf"; echo "# Caddyfile sống (đã sửa)" > "$S/edge/conf/Caddyfile"; echo "chibi.example.com { respond ok }" > "$S/edge/conf/sites.caddy"
+cp "$S/docker-compose.override.yml" "$W/ovr.orig"; cp "$S/edge/conf/Caddyfile" "$W/cf.orig"; cp "$S/edge/conf/sites.caddy" "$W/sites.orig"
 ( cd "$S"; MODE=docker; eval "$CLI_FUNCS"; sync_compose )
 cmp -s "$S/docker-compose.yml" "$S/current/docker-compose.yml" && cmp -s "$S/docker-compose.edge.yml" "$S/current/docker-compose.edge.yml" && cmp -s "$S/edge/Caddyfile.base" "$S/current/edge/Caddyfile.base" \
   && ok "chép docker-compose.yml + docker-compose.edge.yml + edge/Caddyfile.base của bản mới" || bad "sync_compose không chép đủ tệp của bản mới"
-cmp -s "$S/docker-compose.override.yml" "$W/ovr.orig" && cmp -s "$S/edge/Caddyfile" "$W/cf.orig" && cmp -s "$S/edge/sites.caddy" "$W/sites.orig" \
-  && ok "không đụng docker-compose.override.yml, edge/Caddyfile, edge/sites.caddy" || bad "sync_compose ghi đè tệp của chủ / của app"
+cmp -s "$S/docker-compose.override.yml" "$W/ovr.orig" && cmp -s "$S/edge/conf/Caddyfile" "$W/cf.orig" && cmp -s "$S/edge/conf/sites.caddy" "$W/sites.orig" \
+  && ok "không đụng docker-compose.override.yml, edge/conf/Caddyfile, edge/conf/sites.caddy" || bad "sync_compose ghi đè tệp của chủ / của app"
 ( cd "$S"; MODE=native; eval "$CLI_FUNCS"; echo "# đổi" > current/docker-compose.edge.yml; sync_compose )
 grep -q 'đổi' "$S/docker-compose.edge.yml" && bad "native mà vẫn chép tệp compose" || ok "chế độ native: sync_compose không làm gì"
 P="$W/prep"; mkinst "$P"; mkdir -p "$P/edge"; cp "$ROOT/edge/Caddyfile.base" "$P/edge/"
 ( cd "$P"; eval "$CLI_FUNCS"; edge_prepare )
-[ ! -e "$P/edge/run" ] && [ ! -e "$P/edge/Caddyfile" ] && ok "chưa bật edge: edge_prepare không tạo gì" || bad "edge_prepare chạy khi chưa bật"
+[ ! -e "$P/edge/run" ] && [ ! -e "$P/edge/conf" ] && ok "chưa bật edge: edge_prepare không tạo gì" || bad "edge_prepare chạy khi chưa bật"
 : > "$P/edge/caddy.enabled"
 ( cd "$P"; eval "$CLI_FUNCS"; edge_prepare )
-[ -d "$P/edge/caddy-data" ] && [ -d "$P/edge/caddy-config" ] && [ "$(mode "$P/edge/run")" = 700 ] && cmp -s "$P/edge/Caddyfile" "$ROOT/edge/Caddyfile.base" && [ -f "$P/edge/sites.caddy" ] && [ ! -s "$P/edge/sites.caddy" ] \
-  && ok "bật edge: tạo run/ (700), caddy-data, caddy-config bằng user này; Caddyfile từ bản gốc; sites.caddy rỗng" || bad "edge_prepare thiếu thư mục / tệp"
-echo "site { }" > "$P/edge/sites.caddy"; echo "# sửa tay" >> "$P/edge/Caddyfile"; cp "$P/edge/Caddyfile" "$W/cf2.orig"
+[ -d "$P/edge/caddy-data" ] && [ -d "$P/edge/caddy-config" ] && [ "$(mode "$P/edge/run")" = 700 ] && [ "$(mode "$P/edge/conf")" = 700 ] && cmp -s "$P/edge/conf/Caddyfile" "$ROOT/edge/Caddyfile.base" && [ -f "$P/edge/conf/sites.caddy" ] && [ ! -s "$P/edge/conf/sites.caddy" ] \
+  && ok "bật edge: tạo conf/ + run/ (700), caddy-data, caddy-config bằng user này; conf/Caddyfile từ bản gốc; conf/sites.caddy rỗng" || bad "edge_prepare thiếu thư mục / tệp"
+echo "site { }" > "$P/edge/conf/sites.caddy"; echo "# sửa tay" >> "$P/edge/conf/Caddyfile"; cp "$P/edge/conf/Caddyfile" "$W/cf2.orig"
 ( cd "$P"; eval "$CLI_FUNCS"; edge_prepare )
-grep -q 'site' "$P/edge/sites.caddy" && cmp -s "$P/edge/Caddyfile" "$W/cf2.orig" && ok "edge_prepare không ghi đè Caddyfile / sites.caddy đã có" || bad "edge_prepare ghi đè tệp đã có"
+grep -q 'site' "$P/edge/conf/sites.caddy" && cmp -s "$P/edge/conf/Caddyfile" "$W/cf2.orig" && ok "edge_prepare không ghi đè Caddyfile / sites.caddy đã có" || bad "edge_prepare ghi đè tệp đã có"
 
 echo "3) genchibi online --caddy / --caddy-off (docker giả, ghi lại lệnh)"
 C="$W/cli"; mkinst "$C"; mkdir -p "$W/fakebin"
@@ -94,7 +114,7 @@ if [ -z "$P80$P443" ]; then
   out="$(gc online --caddy 2>&1)" && rc=0 || rc=$?
   [ $rc = 0 ] && [ -f "$C/edge/caddy.enabled" ] && grep -q 'compose -f docker-compose.yml -f docker-compose.edge.yml -f docker-compose.override.yml up -d' "$W/docker.log" \
     && ok "cổng 80/443 rảnh → bật: dấu edge/caddy.enabled, compose -f base -f edge -f override up -d" || bad "online --caddy ($rc): $out | $(cat "$W/docker.log")"
-  [ -d "$C/edge/run" ] && [ -f "$C/edge/sites.caddy" ] && [ -f "$C/edge/Caddyfile" ] && [ -f "$C/docker-compose.edge.yml" ] && ok "đã chép docker-compose.edge.yml + chuẩn bị ./edge trước khi compose up" || bad "thiếu tệp / thư mục edge sau online --caddy"
+  [ -d "$C/edge/run" ] && [ -f "$C/edge/conf/sites.caddy" ] && [ -f "$C/edge/conf/Caddyfile" ] && [ -f "$C/docker-compose.edge.yml" ] && ok "đã chép docker-compose.edge.yml + chuẩn bị ./edge trước khi compose up" || bad "thiếu tệp / thư mục edge sau online --caddy"
   : > "$W/docker.log"; gc stop >/dev/null 2>&1 || true
   grep -q 'compose -f docker-compose.yml -f docker-compose.edge.yml -f docker-compose.override.yml stop' "$W/docker.log" && ok "genchibi stop dùng cùng bộ -f (gồm edge)" || bad "stop: $(cat "$W/docker.log")"
   : > "$W/docker.log"; out="$(gc online --caddy-off 2>&1)" || true
@@ -150,18 +170,18 @@ CADDY="$(get_caddy || true)"
 if [ -z "$CADDY" ]; then
   skp "chưa có binary caddy $CADDY_VER (máy không mạng / không phải linux-amd64) — đặt GC_TEST_CADDY hoặc chạy một lần khi có mạng"
 else
-  E="$W/edge"; mkdir -p "$E/run" "$E/caddy-data" "$E/caddy-config"; chmod 700 "$E/run"
-  sed "s#/edge/#$E/#g" "$ROOT/edge/Caddyfile.base" > "$E/Caddyfile"; : > "$E/sites.caddy"
+  E="$W/edge"; mkdir -p "$E/conf" "$E/run" "$E/caddy-data" "$E/caddy-config"; chmod 700 "$E/run"
+  sed "s#/edge/#$E/#g" "$ROOT/edge/Caddyfile.base" > "$E/conf/Caddyfile"; : > "$E/conf/sites.caddy"
   cx() { XDG_DATA_HOME="$E/caddy-data" XDG_CONFIG_HOME="$E/caddy-config" HOME="$E" "$CADDY" ${1+"$@"}; }
-  J="$(cx adapt --config "$E/Caddyfile" --adapter caddyfile 2>/dev/null || true)"
+  J="$(cx adapt --config "$E/conf/Caddyfile" --adapter caddyfile 2>/dev/null || true)"
   grep -q "\"listen\":\"unix/$E/run/caddy-admin.sock|0660\"" <<< "$J" && ok "Caddyfile.base hợp lệ (caddy $CADDY_VER adapt), admin = unix socket 0660" || bad "adapt: $J"
-  cx run --config "$E/Caddyfile" --adapter caddyfile > "$W/caddy.log" 2>&1 & CPID=$!
+  cx run --config "$E/conf/Caddyfile" --adapter caddyfile > "$W/caddy.log" 2>&1 & CPID=$!
   SOCK="$E/run/caddy-admin.sock"
   for i in $(seq 1 40); do [ -S "$SOCK" ] && break; sleep 0.25; done
   [ -S "$SOCK" ] && [ "$(mode "$SOCK")" = 660 ] && ok "admin socket ./edge/run/caddy-admin.sock, quyền 660" || bad "không có admin socket 660 ($(ls -l "$SOCK" 2>&1))"
   curl -s --noproxy "*" -m 2 -o /dev/null http://127.0.0.1:2019/config/ && bad "admin còn nghe TCP 2019" || ok "không có admin trên TCP (2019)"
-  printf 'chibi.test {\n\ttls internal\n\trespond "gen-chibi edge ok"\n}\n' > "$E/sites.caddy"
-  code="$(curl -s -o "$W/load.out" -w '%{http_code}' --unix-socket "$SOCK" -H 'Content-Type: text/caddyfile' --data-binary @"$E/Caddyfile" http://localhost/load || true)"
+  printf 'chibi.test {\n\ttls internal\n\trespond "gen-chibi edge ok"\n}\n' > "$E/conf/sites.caddy"
+  code="$(curl -s -o "$W/load.out" -w '%{http_code}' --unix-socket "$SOCK" -H 'Content-Type: text/caddyfile' --data-binary @"$E/conf/Caddyfile" http://localhost/load || true)"
   [ "$code" = 200 ] && ok "app nạp lại cấu hình qua unix socket (POST /load, text/caddyfile)" || bad "POST /load: $code $(cat "$W/load.out")"
   body=""; for i in $(seq 1 40); do body="$(curl -sk --noproxy "*" -m 3 --resolve chibi.test:8443:127.0.0.1 https://chibi.test:8443/ 2>/dev/null || true)"; [ "$body" = "gen-chibi edge ok" ] && break; sleep 0.25; done
   [ "$body" = "gen-chibi edge ok" ] && ok "site trong sites.caddy phục vụ HTTPS trên 8443 (tls internal)" || bad "HTTPS 8443: '$body' $(tail -3 "$W/caddy.log")"
@@ -171,7 +191,7 @@ else
   r="$(curl -s --noproxy "*" -m 3 -o /dev/null -w "%{http_code} %{redirect_url}" -H 'Host: chibi.test' http://127.0.0.1:8080/ || true)"
   [ "$r" = "308 https://chibi.test/" ] && ok "8080 (HTTP) chuyển sang https://tên/ — không lộ cổng 8443 trong container" || bad "8080: $r"
   kill "$CPID"; wait "$CPID" 2>/dev/null || true; CPID=""
-  cx run --config "$E/Caddyfile" --adapter caddyfile >> "$W/caddy.log" 2>&1 & CPID=$!
+  cx run --config "$E/conf/Caddyfile" --adapter caddyfile >> "$W/caddy.log" 2>&1 & CPID=$!
   body=""; for i in $(seq 1 40); do body="$(curl -sk --noproxy "*" -m 3 --resolve chibi.test:8443:127.0.0.1 https://chibi.test:8443/ 2>/dev/null || true)"; [ "$body" = "gen-chibi edge ok" ] && break; sleep 0.25; done
   [ "$body" = "gen-chibi edge ok" ] && ok "khởi động lại Caddy: cấu hình đọc lại từ tệp, site vẫn chạy" || bad "sau khởi động lại: '$body'"
   kill "$CPID"; wait "$CPID" 2>/dev/null || true; CPID=""

@@ -393,7 +393,7 @@ password_cmd() {
 # genchibi expose <tên-miền>: tạo tunnel có tên, trỏ DNS, chỉ cho đường /mcp + OAuth (xem config.yml bên dưới) đi qua, sinh khoá, in link nối.
 sync_compose() {
   # chép tệp compose + Caddyfile gốc của bản đang chạy. KHÔNG đụng docker-compose.override.yml (của chủ),
-  # edge/Caddyfile (bản sống) và edge/sites.caddy (app sinh).
+  # edge/conf/Caddyfile (bản sống) và edge/conf/sites.caddy (app sinh).
   [ "$MODE" = docker ] || return 0
   local f
   for f in docker-compose.yml docker-compose.edge.yml; do
@@ -403,12 +403,13 @@ sync_compose() {
   return 0
 }
 edge_prepare() {
-  # chỉ khi đã bật edge Caddy: tạo trước thư mục của volume ./edge bằng user này (Docker tự tạo sẽ mang chủ root → Caddy / app không ghi được),
-  # Caddyfile sống từ bản gốc nếu chưa có, sites.caddy rỗng nếu chưa có (Caddy dừng khi tệp import không tồn tại). Không ghi đè tệp nào đã có.
+  # chỉ khi đã bật edge Caddy: tạo trước các thư mục Caddy mount (edge/conf chỉ đọc, edge/run, caddy-data, caddy-config) bằng user này
+  # (Docker tự tạo sẽ mang chủ root → Caddy / app không ghi được), Caddyfile sống từ bản gốc nếu chưa có, sites.caddy rỗng nếu chưa có
+  # (Caddy dừng khi tệp import không tồn tại). Không ghi đè tệp nào đã có. Caddy KHÔNG thấy phần còn lại của edge/ hay run/ (tunnel token).
   [ -f "$EDGE_MARK" ] || return 0
-  mkdir -p edge/run edge/caddy-data edge/caddy-config && chmod 700 edge/run
-  [ -f edge/Caddyfile ] || { [ -f edge/Caddyfile.base ] && cp edge/Caddyfile.base edge/Caddyfile; }
-  [ -f edge/sites.caddy ] || : > edge/sites.caddy
+  mkdir -p edge/conf edge/run edge/caddy-data edge/caddy-config && chmod 700 edge/conf edge/run
+  [ -f edge/conf/Caddyfile ] || { [ -f edge/Caddyfile.base ] && cp edge/Caddyfile.base edge/conf/Caddyfile; }
+  [ -f edge/conf/sites.caddy ] || : > edge/conf/sites.caddy
   return 0
 }
 port_busy() { # port_busy <cổng> → 0 khi có tiến trình đang nghe trên máy này

@@ -6,7 +6,8 @@
 // Không trộn từng khoá giữa hai nguồn (CNS-177). Đọc lúc chạy (OAuth, Host được phép, header IP) — đổi không cần khởi động lại.
 // publicUrl hai bậc: setPending(url) bật TẠM (OAuth phục vụ metadata theo url mới để wizard kiểm từ ngoài vào) → commit() chính thức | revert() về giá trị cũ.
 // Đổi sang audience khác khi đang có kết nối OAuth = thu hồi kết nối cũ (oauth.js) → setPending trả needConfirm, gọi lại với { force: true } sau khi chủ đồng ý.
-// Thuần Node (không DOM, không HTTP). main.js tạo một thể hiện; P3 (/api/online/*) gọi get / preview / setPending / commit / revert / setMode / migrate.
+// Thuần Node (không DOM, không HTTP). main.js tạo một thể hiện; server/online.js (/api/online/*) gọi get / preview / setPending / commit / revert / set / setMode / migrate.
+// online.json còn giữ flow (trạng thái wizard) + cfResources (tunnel / CNAME app đã tạo, để Go offline dọn được) — set({ flow }) / set({ cfResources }).
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -27,6 +28,8 @@ function normUrl(u) {
   if (!LOOP.has(host) && !HOST_RE.test(host)) return { why: 'tên miền không hợp lệ' };
   return { url: x.origin, host };
 }
+const plainObj = v => v && typeof v === 'object' && !Array.isArray(v) ? v : null;
+const clone = v => v == null ? null : JSON.parse(JSON.stringify(v));
 const splitHosts = s => String(s || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
 
 class OnlineConfig {
@@ -50,7 +53,8 @@ class OnlineConfig {
       adopted: d.adopted === true, mode: MODES.indexOf(d.mode) >= 0 ? d.mode : 'off', domain: typeof d.domain === 'string' && HOST_RE.test(d.domain) ? d.domain : '',
       publicUrl: normUrl(d.publicUrl).url || '', publicUrlPending: normUrl(d.publicUrlPending).url || '',
       clientIpHeader: IP_HEADERS.indexOf(d.clientIpHeader) >= 0 ? d.clientIpHeader : '', hosts: Array.isArray(d.hosts) ? d.hosts.map(h => String(h).toLowerCase()).filter(h => HOST_RE.test(h) || WILD_RE.test(h)) : [],
-      updatedAt: typeof d.updatedAt === 'string' ? d.updatedAt : null
+      updatedAt: typeof d.updatedAt === 'string' ? d.updatedAt : null,
+      flow: plainObj(d.flow), cfResources: plainObj(d.cfResources)   // trạng thái wizard Go online + tài nguyên Cloudflare app đã tạo (server/online.js) — dữ liệu trung lập, không bí mật
     };
     const envOn = !!(this.env.publicUrl || this.env.allowedHosts.length);
     const source = !f.adopted && envOn ? 'env' : 'app';
@@ -69,7 +73,8 @@ class OnlineConfig {
     const base = r.source === 'env'
       ? { mode: this.env.tunnel === 'quick' ? 'quick' : this.env.tunnel === 'named' ? 'tunnel' : this.env.publicUrl ? 'proxy' : 'off', domain: normUrl(this.env.publicUrl).host || '', publicUrl: this.env.publicUrl, publicUrlPending: '', clientIpHeader: this.env.clientIpHeader }
       : { mode: f.mode, domain: f.domain, publicUrl: f.publicUrl, publicUrlPending: f.publicUrlPending, clientIpHeader: f.clientIpHeader };
-    return Object.assign(base, { source: r.source, readOnly: r.source === 'env', hosts: [...r.exact].concat(r.wild.map(w => '*' + w)), env: { publicUrl: this.env.publicUrl, allowedHosts: this.env.allowedHosts.slice(), tunnel: this.env.tunnel }, updatedAt: f.updatedAt });
+    return Object.assign(base, { source: r.source, readOnly: r.source === 'env', hosts: [...r.exact].concat(r.wild.map(w => '*' + w)), env: { publicUrl: this.env.publicUrl, allowedHosts: this.env.allowedHosts.slice(), tunnel: this.env.tunnel }, updatedAt: f.updatedAt,
+      flow: r.source === 'app' ? clone(f.flow) : null, cfResources: r.source === 'app' ? clone(f.cfResources) : null });
   }
   // publicUrl ĐANG HIỆU LỰC (OAuth đọc mỗi lần): .env kế thừa → GC_PUBLIC_URL; app → bản tạm nếu đang bật tạm, không thì bản chính thức
   publicUrl() { return this.raw().pub || ''; }
@@ -81,13 +86,14 @@ class OnlineConfig {
 
   /* ------------------------------------------------------------ ghi (chỉ nguồn app) */
   write(f) {
-    const out = { v: 1, adopted: true, mode: f.mode, domain: f.domain, publicUrl: f.publicUrl, publicUrlPending: f.publicUrlPending, clientIpHeader: f.clientIpHeader, hosts: f.hosts, updatedAt: new Date().toISOString() };
+    const out = { v: 1, adopted: true, mode: f.mode, domain: f.domain, publicUrl: f.publicUrl, publicUrlPending: f.publicUrlPending, clientIpHeader: f.clientIpHeader, hosts: f.hosts, updatedAt: new Date().toISOString(),
+      flow: f.flow || null, cfResources: f.cfResources || null };
     fs.mkdirSync(path.dirname(this.file), { recursive: true });
     fs.writeFileSync(this.file + '.tmp', JSON.stringify(out, null, 1) + '\n'); fs.renameSync(this.file + '.tmp', this.file);
     this.memo = null;
     return this.get();
   }
-  cur() { return Object.assign({}, this.raw().f, { hosts: this.raw().f.hosts.slice() }); }
+  cur() { const f = this.raw().f; return Object.assign({}, f, { hosts: f.hosts.slice(), flow: clone(f.flow), cfResources: clone(f.cfResources) }); }
   guardEnv() { return this.raw().source === 'env' ? { ok: false, readOnly: true, error: 'đang cấu hình ra ngoài bằng .env (GC_PUBLIC_URL / GC_ALLOWED_HOSTS) — chỉ đọc; di chuyển sang app trước' } : null; }
   // xem trước: url hợp lệ? đổi sang url này thu hồi bao nhiêu kết nối OAuth? (không đổi gì)
   preview(url) {
@@ -138,6 +144,27 @@ class OnlineConfig {
     if (o.domain !== undefined) f.domain = String(o.domain).toLowerCase();
     f.mode = mode;
     if (mode === 'off') { f.publicUrlPending = ''; }
+    return Object.assign({ ok: true }, this.write(f));
+  }
+  // ghi nông nhiều khoá một lần (nguyên tử) — cho máy trạng thái Go online (server/online.js). Khoá nhận: mode, domain, clientIpHeader (cùng luật setMode,
+  // nhưng KHÔNG tự xoá clientIpHeader — người gọi truyền đủ), flow, cfResources (đối tượng thuần | null, ≤ 64 KiB JSON), publicUrl CHỈ nhận '' (Go offline:
+  // bỏ cả bản chính thức lẫn bản tạm; đặt địa chỉ mới phải qua setPending → commit để OAuth hỏi chủ trước). Khoá khác → lỗi, không ghi gì
+  set(patch) {
+    const g = this.guardEnv(); if (g) return g;
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) return { ok: false, error: 'patch phải là đối tượng' };
+    const f = this.cur();
+    for (const k of Object.keys(patch)) {
+      const v = patch[k];
+      if (k === 'mode') { if (MODES.indexOf(v) < 0) return { ok: false, error: 'mode phải là off | caddy | tunnel | proxy | quick' }; f.mode = v; if (v === 'off') f.publicUrlPending = ''; }
+      else if (k === 'domain') { const x = String(v == null ? '' : v).toLowerCase(); if (x && !HOST_RE.test(x)) return { ok: false, error: 'tên miền không hợp lệ' }; f.domain = x; }
+      else if (k === 'clientIpHeader') { const x = String(v == null ? '' : v); if (x && IP_HEADERS.indexOf(x) < 0) return { ok: false, error: 'clientIpHeader phải là x-forwarded-for | cf-connecting-ip | x-real-ip' }; f.clientIpHeader = x; }
+      else if (k === 'flow' || k === 'cfResources') {
+        if (v !== null && plainObj(v) === null) return { ok: false, error: k + ' phải là đối tượng hoặc null' };
+        if (v !== null && JSON.stringify(v).length > 65536) return { ok: false, error: k + ' quá lớn' };
+        f[k] = v === null ? null : clone(v);
+      } else if (k === 'publicUrl') { if (v !== '') return { ok: false, error: 'đặt địa chỉ công khai qua setPending rồi commit' }; f.publicUrl = ''; f.publicUrlPending = ''; }
+      else return { ok: false, error: 'khoá không được ghi: ' + k };
+    }
     return Object.assign({ ok: true }, this.write(f));
   }
   // nút "di chuyển": chép cấu hình .env kế thừa vào online.json rồi app nhận quyền (từ đây online.json thắng; .env còn biến cũ cũng không đọc nữa)

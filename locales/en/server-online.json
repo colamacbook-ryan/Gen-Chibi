@@ -73,6 +73,7 @@
  "Thêm vào proxy: X-Forwarded-For = IP khách (nginx: proxy_set_header X-Forwarded-For $remote_addr; Caddy tự thêm)": "Add to the proxy: X-Forwarded-For = visitor IP (nginx: proxy_set_header X-Forwarded-For $remote_addr; Caddy adds it by itself)",
  "{url} trả lời (health + metadata OAuth)": "{url} answers (health + OAuth metadata)",
  "{url} trả lời (health + metadata OAuth); publicUrl đang bật tạm": "{url} answers (health + OAuth metadata); publicUrl is on temporarily",
+ "Không bật tạm được publicUrl {url}: {error}": "Could not turn on publicUrl {url} temporarily: {error}",
  "Connector cloudflared chưa healthy ({state})": "The cloudflared connector is not healthy ({state})",
  "Máy cần ra Internet qua cổng 7844 (QUIC / HTTP2); xem log của launcher rồi bấm Kiểm lại": "The machine needs outbound Internet on port 7844 (QUIC / HTTP2); see the launcher log, then press Check again",
  "Đang chờ connector cloudflared kết nối ({state})": "Waiting for the cloudflared connector ({state})",

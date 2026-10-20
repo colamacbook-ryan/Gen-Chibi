@@ -5,8 +5,9 @@
 # and never sets COMPOSE_FILE (that would silently drop your override — CNS-169).
 # Own container: if ports 80/443 are taken, only this service fails; the app keeps running.
 # Caddy runs as your user (not root) on 8080/8443 inside the container; Docker publishes 80→8080, 443→8443 (CNS-187).
-# Config comes from files in ./edge (Caddyfile + sites.caddy written by the app) — a restart re-reads them; the app reloads
-# Caddy through the admin unix socket ./edge/run/caddy-admin.sock (no admin port, no docker.sock — spec §3.1).
+# Config comes from files in ./edge/conf (Caddyfile + sites.caddy + edge-secret written by the app), mounted READ-ONLY — a restart re-reads them;
+# the app reloads Caddy through the admin unix socket ./edge/run/caddy-admin.sock (no admin port, no docker.sock — spec §3.1).
+# Caddy gets only what it needs: never the whole install dir, never ./run (cloudflared's tunnel token lives in ./run/tunnel.token).
 # Service name is prefixed so it never merges with a `caddy` service in your override (CNS-194).
 services:
   gen-chibi-edge:
@@ -14,7 +15,7 @@ services:
     image: caddy:2.11.7
     container_name: gen-chibi-edge
     user: "${GC_UID:-1000}:${GC_GID:-1000}"
-    command: ["caddy", "run", "--config", "/edge/Caddyfile", "--adapter", "caddyfile"]
+    command: ["caddy", "run", "--config", "/edge/conf/Caddyfile", "--adapter", "caddyfile"]
     environment:
       XDG_DATA_HOME: /edge/caddy-data      # certificates + ACME account (kept across restarts)
       XDG_CONFIG_HOME: /edge/caddy-config  # Caddy's autosave of the last loaded config
@@ -22,6 +23,9 @@ services:
       - "80:8080"
       - "443:8443"
     volumes:
-      - ./edge:/edge
+      - ./edge/conf:/edge/conf:ro          # Caddyfile, sites.caddy, edge-secret ({file.…} placeholder) — app writes, Caddy only reads
+      - ./edge/run:/edge/run               # admin unix socket (0660)
+      - ./edge/caddy-data:/edge/caddy-data
+      - ./edge/caddy-config:/edge/caddy-config
     depends_on: [app]
     restart: unless-stopped

@@ -16,7 +16,7 @@ const CADDY = require('../server/caddy');
 const CF = require('../server/cloudflare');
 const ONLINE = require('../server/online');
 const { createEdge, createTunnelListener } = require('../server/edge');
-const { createOnlineConfig } = require('../server/online-config-shim');
+const { OnlineConfig } = require('../server/online-config');
 const { Secrets } = require('../server/secrets');
 
 let failn = 0, passn = 0;
@@ -149,13 +149,13 @@ async function fakeCaddyAdmin(edgeDir, o = {}) {
   await new Promise(r => srv.listen(sock, r));
   return { sock, calls, close: () => srv.close() };
 }
-const ROOT_CADDYFILE = '{\n\tadmin unix//edge/run/caddy-admin.sock|0660\n\thttp_port 8080\n\thttps_port 8443\n}\nimport /edge/sites.caddy\n';
+const ROOT_CADDYFILE = '{\n\tadmin unix//edge/run/caddy-admin.sock|0660\n\thttp_port 8080\n\thttps_port 8443\n}\nimport /edge/conf/sites.caddy\n';
 
 // ---------------------------------------------------------------- dựng online.js trong tiến trình + một server HTTP mỏng như main.js
 async function mkOnline(o = {}) {
   const home = tmp(o.name || 'x'), dataDir = path.join(home, 'data');
   fs.mkdirSync(dataDir, { recursive: true });
-  const cfg = createOnlineConfig({ dataDir });
+  const cfg = new OnlineConfig({ dir: dataDir, env: {} });   // online-config thật (P1): nguồn app, không .env kế thừa
   if (o.publicUrl) { cfg.setPending(o.publicUrl); cfg.commit(); cfg.set({ mode: 'proxy', domain: new URL(o.publicUrl).hostname }); }
   const logs = [], responses = [];
   const netf = fakeNet(o.net || {});
@@ -211,7 +211,7 @@ console.log('   — tên miền + sites.caddy');
   ok(!bad.length, 'regex hostname chặn ' + BAD_DOMAINS.length + ' tên xấu (xuống dòng + "}", wildcard, IPv4 / IPv6, nhãn > 63, tổng > 253, localhost / .local, khoảng trắng, cổng, đường dẫn, dấu nháy)' + (bad.length ? ': ' + bad.join(' ') : ''));
   const nonce = crypto.randomBytes(16).toString('hex'), s = CADDY.sitesFile([{ domain: 'chibi.example.com', nonce }]);
   ok(/^http:\/\/chibi\.example\.com \{$/m.test(s) && /^https:\/\/chibi\.example\.com \{$/m.test(s) && (s.match(/example\.com/g) || []).length === 3, 'sites.caddy: một site http (kiểm cổng + chuyển https) + một site https cho đúng tên miền');
-  ok(s.includes('\treverse_proxy app:7480 {') && s.includes('header_up -Cf-Connecting-Ip') && s.includes('header_up -X-Real-Ip') && s.includes('header_up X-GC-Edge {file./edge/edge-secret}'), 'https → reverse_proxy app:7480, xoá header IP do client gửi, X-GC-Edge đọc từ tệp lúc chạy (không chép bí mật)');
+  ok(s.includes('\treverse_proxy app:7480 {') && s.includes('header_up -Cf-Connecting-Ip') && s.includes('header_up -X-Real-Ip') && s.includes('header_up X-GC-Edge {file./edge/conf/edge-secret}'), 'https → reverse_proxy app:7480, xoá header IP do client gửi, X-GC-Edge đọc từ tệp lúc chạy (không chép bí mật)');
   ok(s.includes('handle /.well-known/gen-chibi-check/' + nonce + ' {') && s.includes('respond "' + nonce + '" 200') && s.includes('redir https://chibi.example.com{uri} 308'), 'http: /.well-known/gen-chibi-check/<nonce> trả nonce, còn lại 308 sang https');
   let t1 = false; try { CADDY.sitesFile([{ domain: 'chibi.example.com', nonce: 'x"}\n' }]); } catch (e) { t1 = true; }
   let t2 = false; try { CADDY.sitesFile([{ domain: 'Chibi.example.com', nonce }]); } catch (e) { t2 = true; }
@@ -228,8 +228,8 @@ console.log('   — Caddy: admin unix socket giả');
   c.writeSites([{ domain: 'chibi.example.com', nonce: 'b'.repeat(32) }]);
   ok(fs.existsSync(c.files.sites) && mode(c.files.sites) === 0o600 && !fs.existsSync(c.files.sites + '.tmp'), 'sites.caddy ghi nguyên tử (tmp → rename), quyền 0600');
   let e1 = null; try { await c.reload(); } catch (e) { e1 = e; }
-  ok(e1 && e1.code === 'ROOT_MISSING' && !adm.calls.some(x => x.p === '/load'), 'chưa có edge/Caddyfile → từ chối nạp, không gọi /load');
-  fs.writeFileSync(c.files.root, '{\n\thttp_port 8080\n}\nimport /edge/sites.caddy\n');
+  ok(e1 && e1.code === 'ROOT_MISSING' && !adm.calls.some(x => x.p === '/load'), 'chưa có edge/conf/Caddyfile → từ chối nạp, không gọi /load');
+  fs.writeFileSync(c.files.root, '{\n\thttp_port 8080\n}\nimport /edge/conf/sites.caddy\n');
   e1 = null; try { await c.reload(); } catch (e) { e1 = e; }
   ok(e1 && e1.code === 'ROOT_NO_ADMIN' && !adm.calls.some(x => x.p === '/load'), 'Caddyfile gốc thiếu "admin unix//…" → từ chối nạp (nạp sẽ đưa admin về TCP, mất điều khiển — CNS-194)');
   fs.writeFileSync(c.files.root, ROOT_CADDYFILE);
@@ -239,7 +239,7 @@ console.log('   — Caddy: admin unix socket giả');
   adm.close();
   const adm2 = await fakeCaddyAdmin(path.join(tmp('caddy2'), 'edge'), { loadFail: 'unrecognized directive: bogus' });
   const c2 = CADDY.createCaddy({ edgeDir: path.dirname(path.dirname(adm2.sock)) });
-  fs.writeFileSync(c2.files.root, ROOT_CADDYFILE);
+  fs.mkdirSync(path.dirname(c2.files.root), { recursive: true }); fs.writeFileSync(c2.files.root, ROOT_CADDYFILE);
   e1 = null; try { await c2.reload(); } catch (e) { e1 = e; }
   ok(e1 && e1.code === 'LOAD_400' && /unrecognized directive/.test(e1.message), 'Caddy từ chối cấu hình → lỗi mang câu gốc của Caddy');
   adm2.close();
@@ -330,9 +330,9 @@ console.log('   — đường B (Cloudflare) trọn luồng');
   const ing = x.cf.st.configs[t[0].id].ingress;
   ok(ing.length === 2 && ing[0].hostname === 'chibi.example.com' && ing[0].service === 'http://127.0.0.1:7482' && ing[1].service === 'http_status:404', 'ingress: tên → http://127.0.0.1:<GC_PORT+2> (cổng nghe riêng) + catch-all 404');
   ok(x.cf.st.dns.some(d => d.type === 'CNAME' && d.name === 'chibi.example.com' && d.content === t[0].id + '.cfargotunnel.com' && d.proxied), 'CNAME proxied → tunnel');
-  const tf = path.join(x.home, 'edge', 'tunnel.token');
-  ok(fs.readFileSync(tf, 'utf8') === tunnelTokenOf(t[0]) && mode(tf) === 0o600, 'tunnel token → edge/tunnel.token (0600)');
-  ok(JSON.stringify(JSON.parse(fs.readFileSync(path.join(x.home, 'run', 'edge-intent.json'), 'utf8'))) === '{"tunnel":"token"}' && x.tl.on, 'run/edge-intent.json = {"tunnel":"token"} (schema đóng) + mở cổng nghe riêng');
+  const tf = path.join(x.home, 'run', 'tunnel.token');
+  ok(fs.readFileSync(tf, 'utf8') === tunnelTokenOf(t[0]) && mode(tf) === 0o600 && !fs.existsSync(path.join(x.home, 'edge', 'tunnel.token')), 'tunnel token → run/tunnel.token (0600), không nằm trong edge/ (thư mục Caddy thấy)');
+  ok(JSON.stringify(JSON.parse(fs.readFileSync(path.join(x.home, 'run', 'edge-intent.json'), 'utf8'))) === '{"tunnel":"token","online":true}' && x.tl.on, 'run/edge-intent.json = {"tunnel":"token","online":true} (schema đóng) + mở cổng nghe riêng');
   ok(x.cf.st.ruleset && x.cf.st.ruleset.rules.length === 1 && x.cf.st.ruleset.rules[0].action === 'skip', 'có quyền WAF → app tự tạo luật skip cho đường máy');
   const mcpCalls = x.net.calls.probe.filter(c => /oauth-protected-resource|\/mcp$/.test(c.url));
   ok(mcpCalls.length >= 2 && mcpCalls.every(c => c.ua === 'Claude-User'), 'bậc MCP từ Internet gọi với User-Agent Claude-User');
@@ -492,7 +492,7 @@ async function flowA(o = {}) {
   const x = await mkOnline(Object.assign({ name: 'a', net: Object.assign({ dns: { 'chibi.example.com': { a: [PUB4] } } }, o.net) }, o.mk));
   const edgeDir = path.join(x.home, 'edge');
   x.adm = await fakeCaddyAdmin(edgeDir);
-  fs.writeFileSync(path.join(edgeDir, 'Caddyfile'), ROOT_CADDYFILE);
+  fs.mkdirSync(path.join(edgeDir, 'conf'), { recursive: true }); fs.writeFileSync(path.join(edgeDir, 'conf', 'Caddyfile'), ROOT_CADDYFILE);
   if (o.enabled !== false) fs.writeFileSync(path.join(edgeDir, 'caddy.enabled'), '');
   return x;
 }
@@ -503,9 +503,9 @@ console.log('   — đường A (Caddy)');
   await x.idle();
   const v = await x.view();
   ok(r.status === 202 && v.flow.done && v.flow.steps.every(s => s.state === 'ok') && v.mode === 'caddy' && v.publicUrl === 'https://chibi.example.com', 'đủ 7 bậc ✓: ' + v.flow.steps.map(s => s.id + (s.state === 'ok' ? '✓' : '✗(' + s.detail + ')')).join(' '));
-  const sites = fs.readFileSync(path.join(x.home, 'edge', 'sites.caddy'), 'utf8'), nonce = x.online._flow().nonce;
+  const sites = fs.readFileSync(path.join(x.home, 'edge', 'conf', 'sites.caddy'), 'utf8'), nonce = x.online._flow().nonce;
   ok(sites.includes('https://chibi.example.com {') && sites.includes('respond "' + nonce + '" 200') && x.adm.calls.some(c => c.p === '/load' && c.body === ROOT_CADDYFILE), 'sites.caddy cho đúng tên + nonce của luồng; nạp lại qua admin kèm Caddyfile gốc');
-  ok(/^[a-f0-9]{64}$/.test(fs.readFileSync(path.join(x.home, 'edge', 'edge-secret'), 'utf8').trim()) && mode(path.join(x.home, 'edge', 'edge-secret')) === 0o600, 'bật Caddy → sinh edge/edge-secret (0600)');
+  ok(/^[a-f0-9]{64}$/.test(fs.readFileSync(path.join(x.home, 'edge', 'conf', 'edge-secret'), 'utf8').trim()) && mode(path.join(x.home, 'edge', 'conf', 'edge-secret')) === 0o600, 'bật Caddy → sinh edge/conf/edge-secret (0600)');
   ok(x.net.calls.probe.some(c => c.url === 'http://chibi.example.com/.well-known/gen-chibi-check/' + nonce) && /hết hạn 2027-01-18/.test(x.step(v, 'cert').detail), 'bậc cổng gọi http://tên/.well-known/gen-chibi-check/<nonce>; bậc chứng chỉ báo hạn');
   ok(x.net.calls.probe.every(c => c.host === 'chibi.example.com' && c.ip === PUB4), 'mọi lời gọi chỉ tới tên miền đã lưu, ghim IP đã kiểm');
   x.close(); x.adm.close();
@@ -571,7 +571,7 @@ console.log('   — chống thành công cụ quét (CNS-180) + publicUrl tạm'
   await x.post('/api/online/caddy', { domain: 'chibi.example.com', confirmUrlChange: true }); await x.idle();
   const v = await x.view(), m = x.step(v, 'mcp');
   ok(m.state === 'fail' && /403/.test(m.detail) && /Claude-User/.test(m.detail) && /160\.79\.104\.0\/21/.test(m.fix), 'Claude-User bị chặn (403) → bậc MCP ✗ kèm dải IP Anthropic + nguồn');
-  ok(v.publicUrl === 'https://old.example.org' && x.step(v, 'public').state === 'pending' && /trả về giá trị cũ/.test(x.step(v, 'public').detail) && JSON.parse(fs.readFileSync(path.join(x.dataDir, 'online.json'), 'utf8')).pendingUrl === undefined, 'publicUrl bật tạm → lỗi giữa chừng → về giá trị cũ; bậc public sẽ chạy lại');
+  ok(v.publicUrl === 'https://old.example.org' && x.step(v, 'public').state === 'pending' && /trả về giá trị cũ/.test(x.step(v, 'public').detail) && JSON.parse(fs.readFileSync(path.join(x.dataDir, 'online.json'), 'utf8')).publicUrlPending === '', 'publicUrl bật tạm → lỗi giữa chừng → về giá trị cũ; bậc public sẽ chạy lại');
   x.close(); x.adm.close();
   // trần tần suất
   const y = await flowA({ mk: { rate: { minGapMs: 60000, perHour: 100 } } });
@@ -671,17 +671,33 @@ function mutated(file, from, to) {
   x4.close(); x4.cf.close();
 }
 
+// ---------------------------------------------------------------- 7b) online-config (P1) — API ghi mà online.js dùng: set(patch)
+console.log('   — online-config: set(patch) cho máy trạng thái');
+{
+  const dir = tmp('cfg'), c = new OnlineConfig({ dir, env: {} });
+  const r1 = c.set({ mode: 'tunnel', domain: 'chibi.example.com', clientIpHeader: '', flow: { mode: 'cloudflare', steps: [] }, cfResources: { tunnelId: 't1' } });
+  const g = c.get();
+  ok(r1.ok && g.mode === 'tunnel' && g.domain === 'chibi.example.com' && g.flow.mode === 'cloudflare' && g.cfResources.tunnelId === 't1' && c.hostAllowed('chibi.example.com'), 'set ghi nông mode / domain / flow / cfResources một lần; domain thành Host được phép');
+  const bad = [c.set({ mode: 'cloudflare' }), c.set({ publicUrl: 'https://evil.example.com' }), c.set({ flow: [1] }), c.set({ nope: 1 }), c.set({ domain: 'a.com\n}' }), c.set({ clientIpHeader: 'x-evil' })];
+  ok(bad.every(x => x.ok === false) && c.get().mode === 'tunnel', 'set từ chối mode lạ, publicUrl khác rỗng (phải qua setPending → commit), flow không phải đối tượng, khoá lạ, domain / header xấu — không ghi gì');
+  c.setPending('https://chibi.example.com', { force: true }); c.commit();
+  const r2 = c.set({ mode: 'off', domain: '', publicUrl: '' });
+  ok(r2.ok && c.get().publicUrl === '' && c.get().publicUrlPending === '' && c.publicUrl() === '' && c.get().flow.mode === 'cloudflare', 'set({ publicUrl: "" }) = Go offline: bỏ cả bản chính thức lẫn bản tạm, giữ flow');
+  const e = new OnlineConfig({ dir: tmp('cfg2'), env: { publicUrl: 'https://legacy.example.com' } });
+  ok(e.set({ flow: {} }).ok === false && e.get().readOnly === true, '.env kế thừa (chỉ đọc) → set từ chối');
+}
+
 // ---------------------------------------------------------------- 8) server thật: cổng nghe riêng + route + token không lọt
 console.log('   — server thật (main.js): cổng thứ hai, quyền, token');
 {
   const OWNER = 'owner-' + crypto.randomBytes(12).toString('hex');
   const kids = [];
   process.on('exit', () => kids.forEach(k => { try { k.kill(); } catch (e) { /* đã tắt */ } }));
-  function spawnServer(port, pre) {
+  function spawnServer(port, pre, extraEnv) {
     const home = tmp('srv');
     pre(home);
     // HTTPS_PROXY trỏ cổng đóng: mọi lời gọi Cloudflare API thật (nếu có) chết ngay — test không bao giờ chạm Cloudflare
-    const c = spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: Object.assign({}, process.env, { GC_HOME: home, GC_PORT: String(port), GC_NO_AUTOCHECK: '1', GC_API_TOKEN: OWNER, GC_PUBLIC_URL: '', GC_ALLOWED_HOSTS: '', HTTPS_PROXY: 'http://127.0.0.1:9', https_proxy: '', NO_PROXY: '', no_proxy: '' }), stdio: ['ignore', 'pipe', 'pipe'] });
+    const c = spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: Object.assign({}, process.env, { GC_HOME: home, GC_PORT: String(port), GC_NO_AUTOCHECK: '1', GC_API_TOKEN: OWNER, GC_PUBLIC_URL: '', GC_ALLOWED_HOSTS: '', HTTPS_PROXY: 'http://127.0.0.1:9', https_proxy: '', NO_PROXY: '', no_proxy: '' }, extraEnv || {}), stdio: ['ignore', 'pipe', 'pipe'] });
     kids.push(c);
     let log = ''; c.stdout.on('data', d => { log += d; }); c.stderr.on('data', d => { log += d; });
     return { home, c, log: () => log, base: 'http://127.0.0.1:' + port, tbase: 'http://127.0.0.1:' + (port + 2) };
@@ -689,11 +705,12 @@ console.log('   — server thật (main.js): cổng thứ hai, quyền, token');
   async function ready(s) { for (let i = 0; i < 100; i++) { try { const r = await fetch(s.base + '/api/health'); if (r.ok) return true; } catch (e) { /* chưa lên */ } await sleep(100); } throw new Error('server không lên: ' + s.log()); }
   const portOpen = port => new Promise(r => { const s = net.connect(port, '127.0.0.1'); s.on('connect', () => { s.destroy(); r(true); }); s.on('error', () => r(false)); });
   let secret = '';
+  const NONCE = crypto.randomBytes(32).toString('hex');
   const A = spawnServer(7761, home => {
-    fs.mkdirSync(path.join(home, 'run'), { recursive: true }); fs.mkdirSync(path.join(home, 'edge'), { recursive: true });
+    fs.mkdirSync(path.join(home, 'run'), { recursive: true }); fs.mkdirSync(path.join(home, 'edge', 'conf'), { recursive: true });
     fs.writeFileSync(path.join(home, 'run', 'edge-intent.json'), '{"tunnel":"token"}');
-    secret = crypto.randomBytes(32).toString('hex'); fs.writeFileSync(path.join(home, 'edge', 'edge-secret'), secret + '\n', { mode: 0o600 });
-  });
+    secret = crypto.randomBytes(32).toString('hex'); fs.writeFileSync(path.join(home, 'edge', 'conf', 'edge-secret'), secret + '\n', { mode: 0o600 });
+  }, { GC_INGRESS_NONCE: NONCE });
   const B = spawnServer(7771, () => {});
   await ready(A); await ready(B);
   for (let i = 0; i < 50 && !(await portOpen(7763)); i++) await sleep(50);
@@ -706,6 +723,18 @@ console.log('   — server thật (main.js): cổng thứ hai, quyền, token');
   const c1 = await get(A.base, { 'X-GC-Edge': secret, 'X-Forwarded-For': '1.2.3.4, 9.9.9.9' });
   const c2 = await get(A.base, { 'X-GC-Edge': 'f'.repeat(64), 'X-Forwarded-For': '9.9.9.9' });
   ok(c1.j.request.edge === 'caddy' && c1.j.request.ip === '9.9.9.9' && c2.j.request.edge === null, 'X-GC-Edge đúng bí mật → caddy + mục cuối XFF; sai → không phải caddy');
+  // chứng minh cổng ingress cho launcher (thách thức-đáp HMAC(GC_INGRESS_NONCE, "ingress:" + challenge)) — chỉ trên cổng ingress, chỉ /api/health
+  const chal = crypto.randomBytes(16).toString('hex'), want = crypto.createHmac('sha256', NONCE).update('ingress:' + chal).digest('hex');
+  const ih = await fetch(A.tbase + '/api/health', { headers: { 'X-GC-Ingress-Challenge': chal } });
+  const im = await fetch(A.base + '/api/health', { headers: { 'X-GC-Ingress-Challenge': chal } });
+  const inc = await fetch(A.tbase + '/api/health');
+  const io = await fetch(A.tbase + '/api/info', { headers: { 'X-GC-Ingress-Challenge': chal } });
+  ok(ih.status === 200 && ih.headers.get('x-gc-ingress') === want && !im.headers.get('x-gc-ingress') && !inc.headers.get('x-gc-ingress') && !io.headers.get('x-gc-ingress'),
+    'cổng ingress: /api/health + challenge → X-GC-Ingress = HMAC(nonce, challenge); cổng chính / thiếu challenge / đường khác → không có');
+  ok(!A.log().includes(NONCE), 'GC_INGRESS_NONCE không vào log của app');
+  // /.well-known/gen-chibi-check đi trước rào Host (tên miền của luồng chưa là Host được phép lúc kiểm cổng)
+  const wh = await fetch(A.base + '/.well-known/gen-chibi-check/' + 'b'.repeat(32), { headers: { Host: 'chibi.example.com' } });
+  ok(wh.status === 404 && /không tìm thấy|not found/i.test(await wh.text()), 'gen-chibi-check với Host lạ → tới route (404 nonce lạ), không phải 403 Host');
   ok(!(await portOpen(7773)), 'không bật tunnel → cổng GC_PORT+2 không mở (không giành cổng của dịch vụ khác)');
   const u1 = await fetch(A.base + '/api/online');
   const u2 = await fetch(A.base + '/api/online/caddy', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, own), body: '{"domain":"chibi.example.com"}' });
@@ -734,7 +763,21 @@ console.log('   — server thật (main.js): cổng thứ hai, quyền, token');
   const po = await fetch(B.base + '/api/online/off', { method: 'POST', headers: hdr, body: '{}' });
   let closed = false; for (let i = 0; i < 200 && !(closed = !(await portOpen(7773))); i++) await sleep(50);
   ok(po.status === 202 && closed && JSON.parse(fs.readFileSync(path.join(B.home, 'run', 'edge-intent.json'), 'utf8')).tunnel === 'off', 'POST off (giữa lúc chờ link tạm) → huỷ lượt đang chạy, intent off, cổng riêng đóng');
-  A.c.kill(); B.c.kill();
+  // máy đang cấu hình ra ngoài bằng .env (online-config nguồn env, chỉ đọc) → Go online đòi di chuyển trước; S (phiên mật khẩu) cũng điều khiển được
+  const C = spawnServer(7781, () => {}, { GC_PUBLIC_URL: 'https://legacy.example.com', GC_ALLOWED_HOSTS: 'legacy.example.com' });
+  await ready(C);
+  const lc = await fetch(C.base + '/api/online/quick', { method: 'POST', headers: hdr, body: '{}' });
+  const lj = await lc.json().catch(() => ({}));
+  const lv = await (await fetch(C.base + '/api/online', { headers: own })).json();
+  ok(lc.status === 409 && lj.needs === 'legacy' && lv.legacy.active === true && lv.legacy.marked === true, '.env kế thừa (GC_PUBLIC_URL) → 409 needs legacy; legacy.marked từ data/legacy.json');
+  const pw = 'correct horse battery staple';
+  const sp = await fetch(C.base + '/api/auth/password', { method: 'POST', headers: hdr, body: JSON.stringify({ password: pw }) });
+  const lg = await fetch(C.base + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify({ password: pw }) });
+  const ck = (lg.headers.getSetCookie ? lg.headers.getSetCookie() : [lg.headers.get('set-cookie')]).map(x => String(x).split(';')[0]).join('; ');
+  const sv = await fetch(C.base + '/api/online', { headers: { Cookie: ck } });
+  const nv = await fetch(C.base + '/api/online', { headers: { Cookie: 'gc_session=bogus' } });
+  ok(sp.status === 200 && lg.status === 200 && sv.status === 200 && nv.status === 401, 'isOwner = auth.ownerOf: phiên mật khẩu (S) xem được /api/online; cookie giả → 401');
+  A.c.kill(); B.c.kill(); C.c.kill();
 }
 
 // chỉ xoá đúng các thư mục mkdtemp của chính bộ test này (tiền tố gco- trong thư mục tạm của hệ thống)

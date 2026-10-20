@@ -1,12 +1,13 @@
 // gen-chibi — edge Caddy của đường A (v0.21, spec §2 A / §3.1, CNS-169 / 186 / 187 / 188 / 194)
 // © 2026 Gen Labs — All rights reserved.
 //
-// Caddy chạy ở container riêng `gen-chibi-edge` (docker-compose.edge.yml, P2): Caddyfile gốc edge/Caddyfile có khối global
-// (admin unix//edge/run/caddy-admin.sock, http_port 8080, https_port 8443) + `import /edge/sites.caddy`. Tệp sites.caddy do app sinh ở đây:
+// Caddy chạy ở container riêng `gen-chibi-edge` (docker-compose.edge.yml, P2): Caddyfile gốc edge/conf/Caddyfile có khối global
+// (admin unix//edge/run/caddy-admin.sock, http_port 8080, https_port 8443) + `import /edge/conf/sites.caddy`. Caddy chỉ mount edge/conf (chỉ đọc),
+// edge/run (socket), caddy-data, caddy-config — không thấy run/ của bản cài (tunnel token). Tệp sites.caddy do app sinh ở đây:
 //   - chỉ từ dữ liệu ĐÃ KIỂM: tên miền theo regex hostname RFC 1123 (≤ 253, nhãn ≤ 63, không wildcard, không IP), nonce hex — KHÔNG ghép chuỗi tự do
 //   - http://<tên>: /.well-known/gen-chibi-check/<nonce> trả nonce (bậc kiểm cổng A3), còn lại chuyển https (thử thách ACME HTTP-01 Caddy luôn tự xử lý trước mọi route)
 //   - https://<tên>: reverse_proxy app:7480 (service `app` của compose; bản native không có đường A) + xoá header IP do client gửi
-//     + X-GC-Edge = bí mật đọc LÚC CHẠY bằng placeholder {file./edge/edge-secret} (Caddy ≥ 2.8, replacer.go fileReplacementProvider — kiểm 2026-10-20):
+//     + X-GC-Edge = bí mật đọc LÚC CHẠY bằng placeholder {file./edge/conf/edge-secret} (Caddy ≥ 2.8, replacer.go fileReplacementProvider — kiểm 2026-10-20):
 //     bí mật không nằm trong sites.caddy / config JSON; đổi bí mật không cần reload. Thiếu tệp → header rỗng → app không coi là edge (an toàn)
 // Nạp lại: POST /load (Content-Type: text/caddyfile) qua unix socket admin, thân = Caddyfile GỐC ĐẦY ĐỦ (có khối admin) → cấu hình mới giữ admin (CNS-194).
 // Chứng chỉ: Caddy tự xin + tự thử lại (staging khi lỗi — CNS-188); app chỉ ĐỌC tình trạng qua bắt tay TLS, không bao giờ xin lại.
@@ -23,7 +24,7 @@ const HOST_RE = new RegExp('^(?=.{1,253}$)(?:' + LABEL + '\\.)+[a-z](?:[a-z0-9-]
 const LOCAL_SUFFIX = /(^|\.)(localhost|local|internal|invalid|arpa|onion)$/;
 const NONCE_RE = /^[a-f0-9]{32}$/;
 const UPSTREAM = 'app:7480';                         // service `app`, cổng trong container cố định (docker-compose.yml)
-const SECRET_PLACEHOLDER = '{file./edge/edge-secret}';   // đường dẫn PHÍA CADDY (volume ./edge → /edge)
+const SECRET_PLACEHOLDER = '{file./edge/conf/edge-secret}';   // đường dẫn PHÍA CADDY (volume ./edge/conf → /edge/conf, chỉ đọc)
 
 // tên miền hợp lệ → dạng chuẩn (chữ thường); không hợp lệ → ''
 function validDomain(d) {
@@ -105,8 +106,8 @@ function tlsInfo(domain, ip, { port = 443, timeoutMs = 8000 } = {}) {
 
 function createCaddy({ edgeDir, adminCallFn = adminCall }) {
   const files = {
-    root: path.join(edgeDir, 'Caddyfile'),
-    sites: path.join(edgeDir, 'sites.caddy'),
+    root: path.join(edgeDir, 'conf', 'Caddyfile'),
+    sites: path.join(edgeDir, 'conf', 'sites.caddy'),
     enabled: path.join(edgeDir, 'caddy.enabled'),          // dấu do lệnh host `genchibi online --caddy` ghi (P2): edge đã publish 80/443
     socket: path.join(edgeDir, 'run', 'caddy-admin.sock')
   };
@@ -117,9 +118,9 @@ function createCaddy({ edgeDir, adminCallFn = adminCall }) {
   // Caddyfile gốc phải có admin unix socket + import sites — thiếu admin thì /load sẽ đưa admin về localhost:2019 trong container (mất điều khiển) → từ chối
   function rootText() {
     let t = '';
-    try { t = fs.readFileSync(files.root, 'utf8'); } catch (e) { throw Object.assign(new Error('caddy: edge/Caddyfile missing'), { code: 'ROOT_MISSING' }); }
-    if (!/^\s*admin\s+unix\/\/\S+/m.test(t)) throw Object.assign(new Error('caddy: edge/Caddyfile has no "admin unix//…" line'), { code: 'ROOT_NO_ADMIN' });
-    if (!/^\s*import\s+\/edge\/sites\.caddy\s*$/m.test(t)) throw Object.assign(new Error('caddy: edge/Caddyfile does not import /edge/sites.caddy'), { code: 'ROOT_NO_IMPORT' });
+    try { t = fs.readFileSync(files.root, 'utf8'); } catch (e) { throw Object.assign(new Error('caddy: edge/conf/Caddyfile missing'), { code: 'ROOT_MISSING' }); }
+    if (!/^\s*admin\s+unix\/\/\S+/m.test(t)) throw Object.assign(new Error('caddy: edge/conf/Caddyfile has no "admin unix//…" line'), { code: 'ROOT_NO_ADMIN' });
+    if (!/^\s*import\s+\/edge\/conf\/sites\.caddy\s*$/m.test(t)) throw Object.assign(new Error('caddy: edge/conf/Caddyfile does not import /edge/conf/sites.caddy'), { code: 'ROOT_NO_IMPORT' });
     return t;
   }
   function writeSites(sites) { const text = sitesFile(sites); writeAtomic(files.sites, text); return text; }
