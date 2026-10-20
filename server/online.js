@@ -501,8 +501,12 @@ function createOnline(opts) {
       url = quickUrl();
       const s = edgeStatus();
       if (url) break;
-      if (s && s.error) return fail(N_('cloudflared báo lỗi: {error}', { error: s.error }), N_('Máy cần ra Internet qua cổng 7844 (QUIC / HTTP2); xem log của launcher rồi bấm Kiểm lại'));
-      if (cancel || d.now() + d.waits.everyMs > until) return wait(N_('Đang chờ cloudflared mở link tạm…'), N_('Đợi vài giây rồi bấm Kiểm lại'));
+      // ingress-unverified: launcher chưa thấy cổng riêng chứng minh là app này (app vừa mở cổng — đợi tới hết hạn; còn mãi = tiến trình khác giữ cổng)
+      if (s && s.error && s.error !== 'ingress-unverified') return fail(N_('cloudflared báo lỗi: {error}', { error: s.error }), N_('Máy cần ra Internet qua cổng 7844 (QUIC / HTTP2); xem log của launcher rồi bấm Kiểm lại'));
+      if (cancel || d.now() + d.waits.everyMs > until) {
+        if (s && s.error === 'ingress-unverified') return fail(N_('Cổng nghe riêng 127.0.0.1:{port} không chứng minh được là gen-chibi này — launcher không bật cloudflared', { port: tunnelPort }), N_('Có tiến trình khác đang giữ cổng {port}: dừng nó (xem ss -ltnp) rồi bấm Kiểm lại', { port: tunnelPort }));
+        return wait(N_('Đang chờ cloudflared mở link tạm…'), N_('Đợi vài giây rồi bấm Kiểm lại'));
+      }
       await sleep(d.waits.everyMs);
     }
     flow.url = url; flow.domain = new URL(url).hostname;

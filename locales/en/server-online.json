@@ -74,6 +74,8 @@
  "{url} trả lời (health + metadata OAuth)": "{url} answers (health + OAuth metadata)",
  "{url} trả lời (health + metadata OAuth); publicUrl đang bật tạm": "{url} answers (health + OAuth metadata); publicUrl is on temporarily",
  "Không bật tạm được publicUrl {url}: {error}": "Could not turn on publicUrl {url} temporarily: {error}",
+ "Cổng nghe riêng 127.0.0.1:{port} không chứng minh được là gen-chibi này — launcher không bật cloudflared": "The private port 127.0.0.1:{port} could not prove it is this gen-chibi — the launcher does not start cloudflared",
+ "Có tiến trình khác đang giữ cổng {port}: dừng nó (xem ss -ltnp) rồi bấm Kiểm lại": "Another process holds port {port}: stop it (see ss -ltnp), then press Check again",
  "Connector cloudflared chưa healthy ({state})": "The cloudflared connector is not healthy ({state})",
  "Máy cần ra Internet qua cổng 7844 (QUIC / HTTP2); xem log của launcher rồi bấm Kiểm lại": "The machine needs outbound Internet on port 7844 (QUIC / HTTP2); see the launcher log, then press Check again",
  "Đang chờ connector cloudflared kết nối ({state})": "Waiting for the cloudflared connector ({state})",

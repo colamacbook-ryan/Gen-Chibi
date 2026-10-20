@@ -630,6 +630,13 @@ console.log('   — proxy riêng + link tạm');
   const vq = await q.view();
   ok(vq.flow.done && vq.publicUrl === 'https://abc-def-ghi.trycloudflare.com' && vq.edge.intent === 'quick' && q.tl.on && /đổi mỗi lần khởi động/.test(q.step(vq, 'tunnel').detail), 'link tạm: intent quick + cổng riêng mở, URL đọc từ run/edge-status.json, bậc ghi rõ "đổi mỗi lần khởi động"');
   q.close();
+  const qu = await mkOnline({ name: 'qu' });
+  fs.mkdirSync(path.join(qu.home, 'run'), { recursive: true });
+  fs.writeFileSync(path.join(qu.home, 'run', 'edge-status.json'), JSON.stringify({ tunnel: 'quick', running: false, ready: false, since: 'x', error: 'ingress-unverified' }));
+  await qu.post('/api/online/quick', {}); await qu.idle();
+  const vu = await qu.view(), su = qu.step(vu, 'tunnel');
+  ok(su.state === 'fail' && /127\.0\.0\.1:7482/.test(su.detail) && /ss -ltnp/.test(su.fix) && !vu.flow.done, 'launcher báo ingress-unverified tới hết hạn chờ → bậc tunnel ✗ nói rõ cổng 7482 bị tiến trình khác giữ + cách sửa');
+  qu.close();
 }
 
 // ---------------------------------------------------------------- 7) rào ngược: đột biến → test phải đỏ
