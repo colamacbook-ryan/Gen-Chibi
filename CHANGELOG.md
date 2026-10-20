@@ -1,5 +1,59 @@
 # Changelog
 
+## v0.21.0 — Online in one step: one install command, then the app takes your domain online itself (Caddy or Cloudflare Tunnel) — Studio and MCP ready
+Ryan: "hãy nghĩ cách để owner cài về bằng 1 lệnh là vào docker hết rồi docker đó tự hỗ trợ thiết lập dễ dàng tên miền step by step bằng candy và tunnel --> user chỉ hỗ trợ gán ip lên domain hay token cloudflare là xong mọi thứ sẵn sàng ngay kể cả mcp" (INT-19).
+*(In English: "Find a way for an owner to install with one command, everything in Docker, and have it guide domain setup step by step with Caddy and a tunnel — the user only points an IP at the domain or gives a Cloudflare token, and everything is ready, MCP included.")*
+
+### Breaking — read before updating
+- **Every install now has an owner token.** Installs without `GC_API_TOKEN` (the v0.20 default) get one generated in `data/owner-token` on first start. HTTP agents that called `/mcp` or `/api` without a header now get `401` with a hint: reconnect with `genchibi agent connect` (prints a config with the token) or use `genchibi mcp` (stdio, unchanged — it reads the token itself).
+- **The Studio asks you to sign in, also on localhost.** First time: run `genchibi open` on the machine (it opens `/setup` with a one-time setup code) and choose a password (≥ 12 characters). The browser remembers you for 30 days. Forgot it: `genchibi password`. Exception: installs configured for the Internet through `.env` before v0.21 (`GC_PUBLIC_URL` / `GC_ALLOWED_HOSTS`) keep working with the token as before and show a "Set a password" banner.
+- **The app no longer treats "no proxy header" or "inside Docker" as the owner.** Owner rights come only from positive proof: a signed-in session, the owner token, the one-time setup code (and MCP links / OAuth for `/mcp`). A minimal reverse proxy that adds no headers can no longer make Internet requests look local.
+- **Rolling back to v0.20 or earlier while online takes the machine offline** (the app asks first; automatic rollback below v0.21 is blocked while online). The v0.21 launcher stays in place; remove the `gen-chibi-edge` container by hand (`genchibi online --caddy-off`) if you had Caddy on.
+
+### New
+- **System › Go online** (Studio) and **`genchibi online`** (CLI) — one wizard, four paths, each step shown as ✓ / ✗ with how to fix it:
+  - **Server with a public IP → Caddy** *(beta)*: point an A record at the machine, run `genchibi online caddy <domain>` (or install with `--domain <domain>`); Caddy gets HTTPS by itself.
+  - **Home computer / behind a router → Cloudflare Tunnel** *(beta)*: paste one Cloudflare API token (4 permissions, short TTL — the wizard links to the token page); the app creates the tunnel, the route, the DNS record and the WAF skip rule for agents, then deletes the API token from the machine.
+  - **I already have a proxy**: the app prints the exact Caddy / nginx snippet (machine routes straight through, people through your login) and checks from the outside.
+  - **Temporary link** *(beta)*: `*.trycloudflare.com`, no account; changes on every restart.
+  - Done page: Studio and MCP addresses with copy buttons; claude.ai connects to `https://<domain>/mcp` with OAuth as in v0.19. **Go offline** removes what the app created.
+- **Installer:** `--domain <domain>` (Caddy path; checks the A record and waits for it), `--domain <domain> --cloudflare` (token asked hidden, or `GC_CF_TOKEN` without a terminal — never on the command line); on a fresh Linux it installs Docker and carries on in the same session; the last line prints the setup code or the online addresses.
+- **System › Owner account**: change password, see and revoke sessions and devices, failed sign-in alerts.
+- **AI assistant / AI director** answer long turns without being cut by proxies (the request returns at once, the Studio polls the turn) — needed behind Cloudflare's ~100 s limit.
+
+### Security (reviewed before release, each with a test)
+- Passwords hashed with scrypt; **rate limit checked before the password is verified**, per address and per account (100 failures → strangers blocked for ≤ 15 minutes; your signed-in browsers, your device cookie and the owner token still get in; the Studio shows an alert). Signed device cookies; changing the password revokes every session.
+- One-time setup code: 50 bits, 1 hour, single use (also under parallel requests), never in a URL or on a command line.
+- Edge: Caddy runs in its own container (`gen-chibi-edge`, `caddy:2.11.7`) as your user, sees only `edge/conf` read-only, admin only on a unix socket, and proves itself to the app with a secret header; cloudflared runs under the launcher, pinned to 2026.10.2 with SHA-256 checked before every start, token in `run/tunnel.token` (0600, never visible to Caddy); its local port proves it belongs to this app (HMAC challenge) before the tunnel starts.
+- Every connection the wizard makes to your domain goes through one check that refuses private / loopback / link-local / NAT64 / 6to4-private addresses and pins the checked IP; domain names are validated before they reach the Caddy config.
+- Studio pages send a Content-Security-Policy and refuse framing.
+- `genchibi open` hands the setup code to the browser through a private redirect file in `run/`, never on a command line; test switches (`GC_TEST_*`) only work when `GC_TEST=1`.
+
+### Deprecated (removed in v0.22)
+- `genchibi expose` / `genchibi link` (still work as before; use `genchibi online`), compose profiles `tunnel` / `quick`, `GC_TUNNEL`. Installs configured through `.env` can move to the app with `genchibi online migrate` (or *Migrate* in the Studio).
+
+### Files and ports
+- New: `data/auth.json`, `data/owner-token`, `data/setup-code*`, `data/legacy.json`, `data/online.json`, `data/install-id`, `run/edge-intent.json`, `run/edge-status.json`, `run/tunnel.token`, `edge/conf/{Caddyfile,sites.caddy,edge-secret}`, `docker-compose.edge.yml`, `logs/tunnel.log`. Ports: tunnel ingress `GC_PORT + 2` (loopback, only while a tunnel is on), cloudflared metrics on a random loopback port.
+- **Backups now contain your password hash, sessions and online settings.** Restoring a backup turns online off, gives the install a new id and revokes all sessions.
+
+### Not yet run for real (tested only against fakes)
+| | Status |
+|---|---|
+| Caddy path | Caddy 2.11.7 ran for real in Docker with an internal certificate; **not yet on a VPS with Let's Encrypt** |
+| Cloudflare path | full flow against a Cloudflare API fake; **not yet against a real account** (permission names, Zero Trust requirement, CNAME at the apex, WAF on the Free plan) |
+| Temporary link | end to end with a fake cloudflared through the real launcher; real cloudflared not run (no outbound 7844 in our test machine) |
+| Others | proxies cutting at 100 s (simulated), arm64, macOS native, Podman, corporate proxies |
+Ryan will run *Go online* on a fresh install of this release as the first real acceptance.
+
+### Known issues
+- Native installs on v0.20.0 or earlier stop once while updating (fixed from v0.20.1 on): run `genchibi start`.
+- Machines with their own login page at `/login` in front of the app: the app's own sign-in page is also at `/login` — keep your proxy protecting people routes only and let the app's `/login` pass behind your login.
+- Restoring a backup on a *different* machine keeps the record of the Cloudflare tunnel the old machine created, so *Go offline* there could remove the old machine's tunnel. Restore on the same machine, or run *Go online* again on the new one before going offline.
+- Installing as root without `sudo` (no `SUDO_USER`) runs the app as uid 1000 and gives that uid the install folder (the installer prints this). Before v0.21 the app ran as root. If uid 1000 is someone else's account on that server, install with `sudo` from your own account. A dedicated system user is planned for v0.22.
+
+### Tests
+`tools/test.sh` 1380 ✓ (v0.20.1: 899) · browser suite 95 ✓ (v0.20.1: 79) · new: `tools/test-auth-owner.mjs` (access table cell by cell, L-66-style guessing, setup code, legacy machine, upgrade without token), `tools/test-online.mjs` (Cloudflare API fake, Caddy fake, SSRF), `tools/test-online-cli.mjs` (CLI end to end, no token in argv), `tools/test-ingress.mjs` (port squatting), `tools/test-edge.sh` (compose mounts, real Caddy), `tools/test-update.sh` §8 (edge health, ABI, SHA).
+
 ## v0.20.1 — Native installs keep running after an update that ships a new launcher
 Found by the review of the v0.21 plan (CNS-171) and reproduced on a real native install: v0.19.1 → v0.20.0 updated, then stopped for good.
 - **Fixed**: when an update brings a new `launcher.js`, the launcher replaces itself and must restart. In Docker the container restarts it; in native mode (`--native`, started with `nohup`) nothing did, so the app stopped after the update. The launcher now starts the new launcher itself (same environment, same log file), hands over `logs/launcher.pid` so `genchibi stop` / `status` keep working, then exits. Docker mode is unchanged.
