@@ -97,6 +97,15 @@ _en() {
     lang_restart) F="Restarting the app so the Studio default follows…" ;;
     lang_norun) F="The app is not running — the new default applies at the next start (genchibi start)." ;;
     lang_note) F="This is the default for the CLI and for everyone who opens the Studio. Each user can still switch language in the Studio (language switch); that choice is remembered in their browser." ;;
+    expose_moved) F="Note: genchibi expose is replaced by genchibi online (Studio › System › Go online) — it still works in this version." ;;
+    caddy_native) F="genchibi online --caddy needs Docker mode: Caddy publishes ports 80/443 (below 1024). Native mode: use the Cloudflare path instead (Studio › System › Go online › Cloudflare)." ;;
+    caddy_busy) F="Port(s) %s already in use on this machine — Caddy was NOT turned on (the app keeps running). Stop the service holding them, or use the Cloudflare path (Studio › System › Go online › Cloudflare, no open ports needed)." ;;
+    caddy_old) F="The running version has no edge Caddy yet (needs v0.21 or newer) — run genchibi update first." ;;
+    caddy_on) F="Edge Caddy is on: ports 80 and 443 now go to container gen-chibi-edge. Continue in Studio › System › Go online." ;;
+    caddy_already) F="Edge Caddy was already on — making sure it is running." ;;
+    caddy_off) F="Edge Caddy is off: ports 80/443 released. Certificates are kept in %s/edge (turn it on again: genchibi online --caddy)." ;;
+    caddy_not_on) F="Edge Caddy is not on — nothing to do." ;;
+    online_help) F="genchibi online --caddy       publish ports 80/443 with the edge Caddy (Docker; path A: your domain's A record → this machine)\ngenchibi online --caddy-off   stop the edge Caddy and release 80/443 (certificates are kept)\nEverything else (domain, Cloudflare, temporary link): Studio › System › Go online" ;;
   esac
 }
 _vi() {
@@ -188,6 +197,15 @@ _vi() {
     lang_restart) F="Khởi động lại app để giao diện mặc định đổi theo…" ;;
     lang_norun) F="App đang không chạy — mặc định mới có hiệu lực ở lần chạy tới (genchibi start)." ;;
     lang_note) F="Đây là mặc định cho CLI và cho mọi người mở Studio. Mỗi người vẫn đổi ngôn ngữ riêng trong Studio được (nút chuyển ngôn ngữ); lựa chọn đó được nhớ trong trình duyệt của họ." ;;
+    expose_moved) F="Lưu ý: genchibi expose đã được thay bằng genchibi online (Studio › Hệ thống › Go online) — bản này vẫn chạy được." ;;
+    caddy_native) F="genchibi online --caddy cần chế độ Docker: Caddy mở cổng 80/443 (dưới 1024). Chế độ native: dùng đường Cloudflare (Studio › Hệ thống › Go online › Cloudflare)." ;;
+    caddy_busy) F="Cổng %s trên máy này đang bị chiếm — CHƯA bật Caddy (app vẫn chạy). Dừng dịch vụ đang giữ cổng, hoặc dùng đường Cloudflare (Studio › Hệ thống › Go online › Cloudflare, không cần mở cổng)." ;;
+    caddy_old) F="Bản đang chạy chưa có edge Caddy (cần v0.21 trở lên) — chạy genchibi update trước." ;;
+    caddy_on) F="Đã bật edge Caddy: cổng 80 và 443 vào container gen-chibi-edge. Làm tiếp ở Studio › Hệ thống › Go online." ;;
+    caddy_already) F="Edge Caddy đã bật từ trước — kiểm cho chắc nó đang chạy." ;;
+    caddy_off) F="Đã tắt edge Caddy: trả cổng 80/443. Chứng chỉ vẫn giữ trong %s/edge (bật lại: genchibi online --caddy)." ;;
+    caddy_not_on) F="Edge Caddy chưa bật — không có gì để tắt." ;;
+    online_help) F="genchibi online --caddy       mở cổng 80/443 bằng edge Caddy (Docker; đường A: bản ghi A của tên miền → máy này)\ngenchibi online --caddy-off   tắt edge Caddy, trả cổng 80/443 (giữ chứng chỉ)\nPhần còn lại (tên miền, Cloudflare, link tạm): Studio › Hệ thống › Go online" ;;
   esac
 }
 _t() { F=""; if [ "$UI" = vi ]; then _vi "$1"; fi; if [ -z "$F" ]; then _en "$1"; fi; if [ -z "$F" ]; then F="$1"; fi; }
@@ -228,6 +246,25 @@ api() { auth_cfg | curl -fsS -K - -X "$1" -H 'X-GC-Request: 1' -H "X-GC-Lang: $U
 running_native() { [ -f "$PIDF" ] && kill -0 "$(cat "$PIDF")" 2>/dev/null; }
 json() { node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const o=JSON.parse(s);const k=process.argv[1].split(".");let v=o;for(const x of k)v=v==null?v:v[x];console.log(v===undefined?"":typeof v==="object"?JSON.stringify(v):v)})' "$1" 2>/dev/null || sed -n "s/.*\"$1\": *\"\{0,1\}\([^\",}]*\).*/\1/p"; }
 
+# ---------------------------------------------------------------- docker compose: LUÔN ghép -f tường minh, KHÔNG BAO GIỜ đặt / ghi COMPOSE_FILE
+# (CNS-169: COMPOSE_FILE=a:b làm compose bỏ qua docker-compose.override.yml → mất service riêng của chủ, vd cổng đăng nhập của Ryan).
+# Thứ tự: docker-compose.yml · docker-compose.edge.yml (khi đã bật edge Caddy) · override của chủ (sau cùng, để chủ chỉnh được cả edge).
+EDGE_MARK="edge/caddy.enabled"
+compose_override() { # tệp override compose tự nạp khi không có -f (cùng thứ tự tìm của docker compose)
+  local f; for f in compose.override.yml compose.override.yaml docker-compose.override.yml docker-compose.override.yaml; do [ -f "$f" ] && { echo "$f"; return 0; }; done; return 0
+}
+compose_files() { # in các cặp "-f tệp", mỗi phần một dòng
+  local ov; ov="$(compose_override)"
+  printf '%s\n' -f docker-compose.yml
+  if [ -f "$EDGE_MARK" ] && [ -f docker-compose.edge.yml ]; then printf '%s\n' -f docker-compose.edge.yml; fi
+  if [ -n "$ov" ]; then printf '%s\n' -f "$ov"; fi
+  return 0
+}
+compose() { # compose <lệnh docker compose…> — chạy trong thư mục cài (đã cd)
+  local a=() l
+  while IFS= read -r l; do a+=("$l"); done < <(compose_files)
+  docker compose "${a[@]}" ${1+"$@"}
+}
 guard_exposure() {
   # đóng khi nghi ngờ: mở ra ngoài máy này mà không có token thì không chạy
   case "${GC_BIND:-127.0.0.1}" in 127.0.0.1|localhost|::1) ;; *)
@@ -236,7 +273,7 @@ guard_exposure() {
 }
 start() {
   guard_exposure
-  if [ "$MODE" = docker ]; then sync_compose; docker compose up -d --quiet-pull 2>&1 | grep -vE "Creating|Created|Starting|Network|Container .* (Running|Waiting)" || true
+  if [ "$MODE" = docker ]; then sync_compose; edge_prepare; compose up -d --quiet-pull 2>&1 | grep -vE "Creating|Created|Starting|Network|Container .* (Running|Waiting)" || true
   else
     running_native && { m already_running "$(cat "$PIDF")"; return; }
     mkdir -p logs
@@ -247,7 +284,7 @@ start() {
   fi
 }
 stop() {
-  if [ "$MODE" = docker ]; then docker compose stop
+  if [ "$MODE" = docker ]; then compose stop
   else
     tunnel_stop
     if running_native; then kill "$(cat "$PIDF")"; rm -f "$PIDF"; m stopped; else m not_running; fi
@@ -271,7 +308,10 @@ update() {
   echo "$r" | json message
   if echo "$r" | grep -q '"restart":true'; then
     for i in $(seq 1 60); do sleep 1; curl -fsS "$URL/api/health" >/dev/null 2>&1 && break; done
-    sleep 2; status
+    sleep 2
+    # compose của bản đang chạy (sau cập nhật, hoặc bản cũ nếu đã tự rollback) — app áp ở lần start tới; edge Caddy (nếu bật) nhận image mới ngay
+    if [ "$MODE" = docker ]; then sync_compose; if [ -f "$EDGE_MARK" ]; then edge_prepare; compose up -d --no-deps --quiet-pull gen-chibi-edge >/dev/null 2>&1 || true; fi; fi
+    status
   fi
 }
 backup() {
@@ -291,17 +331,17 @@ uninstall() {
   # câu trả lời xoá dữ liệu: k/K (tiếng Việt, "không") · n/N (tiếng Anh, "no"); mọi câu khác giữ dữ liệu
   if [ "$UI" = vi ]; then case "$a" in k|K) wipe=1 ;; esac; else case "$a" in n|N) wipe=1 ;; esac; fi
   stop || true
-  [ "$MODE" = docker ] && docker compose down || true
+  [ "$MODE" = docker ] && compose down || true
   rm -f "$HOME/.local/bin/genchibi"
   if [ -n "$wipe" ]; then cd / && rm -rf "$HOME_DIR"; m un_wiped
-  else rm -rf "$HOME_DIR/releases" "$HOME_DIR/current" "$HOME_DIR/previous" "$HOME_DIR/launcher.js" "$HOME_DIR/docker-compose.yml"; m un_kept "$HOME_DIR" "$HOME_DIR"; fi
+  else rm -rf "$HOME_DIR/releases" "$HOME_DIR/current" "$HOME_DIR/previous" "$HOME_DIR/launcher.js" "$HOME_DIR/docker-compose.yml" "$HOME_DIR/docker-compose.edge.yml"; m un_kept "$HOME_DIR" "$HOME_DIR"; fi
 }
 mcp() {
   # cầu stdio cho agent (Claude Code, Claude Desktop…)
-  if [ "$MODE" = docker ]; then exec docker compose exec -T app node /install/current/server/mcp-stdio.js
+  if [ "$MODE" = docker ]; then a=(); while IFS= read -r l; do a+=("$l"); done < <(compose_files); exec docker compose "${a[@]}" exec -T app node /install/current/server/mcp-stdio.js
   else GC_HOME="$HOME_DIR" GC_PORT="$PORT" exec node "$HOME_DIR/current/server/mcp-stdio.js"; fi   # GC_HOME: cầu đọc data/owner-token khi .env trống (CNS-197)
 }
-logs() { if [ "$MODE" = docker ]; then docker compose logs -f --tail 200; else tail -n 200 -f "$LOG"; fi; }
+logs() { if [ "$MODE" = docker ]; then compose logs -f --tail 200; else tail -n 200 -f "$LOG"; fi; }
 # mã setup (v0.21 §3.4): server ghi data/setup-code.txt (0600) — dòng 1 "XXXXX-XXXXX", dòng 2 "expires=<epoch giây>"; có tệp = chưa có mật khẩu chủ.
 # setup_code [phút]: in mã nếu còn hạn ít nhất <phút> (mặc định 0); không thì in rỗng
 setup_code() {
@@ -343,7 +383,7 @@ password_cmd() {
     code="$(printf '%s' "$r" | tail -1)"
     if [ "$code" = 200 ]; then m pw_done "$(printf '%s' "$r" | sed -n '1p' | json revoked)"; else m pw_fail "$(printf '%s' "$r" | sed -n '1p' | json error)" >&2; exit 1; fi
   else
-    if [ "$MODE" = docker ]; then r="$(printf '%s\n' "$p1" | docker compose run --rm -T --no-deps app node /install/current/server/auth-cli.js password "$UI" 2>&1)" || { m pw_fail "$r" >&2; exit 1; }
+    if [ "$MODE" = docker ]; then r="$(printf '%s\n' "$p1" | compose run --rm -T --no-deps app node /install/current/server/auth-cli.js password "$UI" 2>&1)" || { m pw_fail "$r" >&2; exit 1; }
     else r="$(printf '%s\n' "$p1" | GC_HOME="$HOME_DIR" node "$HOME_DIR/current/server/auth-cli.js" password "$UI" 2>&1)" || { m pw_fail "$r" >&2; exit 1; }; fi
     m pw_done_off
   fi
@@ -352,8 +392,63 @@ password_cmd() {
 # ---------------------------------------------------------------- MCP ra ngoài (Cloudflare Tunnel)
 # genchibi expose <tên-miền>: tạo tunnel có tên, trỏ DNS, chỉ cho đường /mcp + OAuth (xem config.yml bên dưới) đi qua, sinh khoá, in link nối.
 sync_compose() {
-  [ "$MODE" = docker ] && [ -f current/docker-compose.yml ] && ! cmp -s current/docker-compose.yml docker-compose.yml && cp current/docker-compose.yml docker-compose.yml
+  # chép tệp compose + Caddyfile gốc của bản đang chạy. KHÔNG đụng docker-compose.override.yml (của chủ),
+  # edge/Caddyfile (bản sống) và edge/sites.caddy (app sinh).
+  [ "$MODE" = docker ] || return 0
+  local f
+  for f in docker-compose.yml docker-compose.edge.yml; do
+    [ -f "current/$f" ] && ! cmp -s "current/$f" "$f" && cp "current/$f" "$f"
+  done
+  if [ -f current/edge/Caddyfile.base ] && ! cmp -s current/edge/Caddyfile.base edge/Caddyfile.base; then mkdir -p edge && cp current/edge/Caddyfile.base edge/Caddyfile.base; fi
   return 0
+}
+edge_prepare() {
+  # chỉ khi đã bật edge Caddy: tạo trước thư mục của volume ./edge bằng user này (Docker tự tạo sẽ mang chủ root → Caddy / app không ghi được),
+  # Caddyfile sống từ bản gốc nếu chưa có, sites.caddy rỗng nếu chưa có (Caddy dừng khi tệp import không tồn tại). Không ghi đè tệp nào đã có.
+  [ -f "$EDGE_MARK" ] || return 0
+  mkdir -p edge/run edge/caddy-data edge/caddy-config && chmod 700 edge/run
+  [ -f edge/Caddyfile ] || { [ -f edge/Caddyfile.base ] && cp edge/Caddyfile.base edge/Caddyfile; }
+  [ -f edge/sites.caddy ] || : > edge/sites.caddy
+  return 0
+}
+port_busy() { # port_busy <cổng> → 0 khi có tiến trình đang nghe trên máy này
+  # ss thấy cả tiến trình chỉ nghe trên IP công khai; không có ss (macOS) / ss lỗi → thử nối 127.0.0.1 bằng /dev/tcp (bash 3.2 có).
+  # Đếm dòng bằng wc (đọc hết) — không dùng grep -q sau ống: pipefail + SIGPIPE làm kết quả sai.
+  local n=0
+  if command -v ss >/dev/null 2>&1; then n="$(ss -ltn "sport = :$1" 2>/dev/null | wc -l | tr -d ' ')"; fi
+  if [ "${n:-0}" -ge 1 ]; then [ "$n" -gt 1 ]; return; fi
+  (echo > "/dev/tcp/127.0.0.1/$1") 2>/dev/null
+}
+online_caddy() {
+  [ "$MODE" = docker ] || { m caddy_native >&2; exit 1; }
+  sync_compose
+  { [ -f docker-compose.edge.yml ] && [ -f edge/Caddyfile.base ]; } || { m caddy_old >&2; exit 1; }
+  if [ -f "$EDGE_MARK" ]; then m caddy_already
+  else
+    local busy=""
+    port_busy 80 && busy="80"
+    port_busy 443 && busy="${busy:+$busy, }443"
+    [ -z "$busy" ] || { m caddy_busy "$busy" >&2; exit 1; }
+    mkdir -p edge && : > "$EDGE_MARK"
+  fi
+  edge_prepare
+  compose up -d --quiet-pull 2>&1 | grep -vE "Creating|Created|Starting|Network|Container .* (Running|Waiting)" || true
+  m caddy_on
+}
+online_caddy_off() {
+  [ "$MODE" = docker ] || { m caddy_native >&2; exit 1; }
+  [ -f "$EDGE_MARK" ] || { m caddy_not_on; return 0; }
+  compose rm -sf gen-chibi-edge >/dev/null 2>&1 || true   # dấu còn → compose còn tệp edge, gỡ đúng container của nó
+  rm -f "$EDGE_MARK"
+  m caddy_off "$HOME_DIR"
+}
+online_cmd() {
+  case "${1:-}" in
+    --caddy) online_caddy ;;
+    --caddy-off) online_caddy_off ;;
+    ""|-h|--help) m online_help ;;
+    *) m bad_opt "$1" >&2; m online_help >&2; exit 1 ;;
+  esac
 }
 set_env() { # set_env KHOÁ GIÁ_TRỊ — sửa hoặc thêm dòng trong .env
   local k="$1" v="$2" tmp; touch .env
@@ -435,7 +530,7 @@ need_cf() {
 }
 origin_url() { if [ "$MODE" = docker ]; then echo "http://app:7480"; else echo "http://127.0.0.1:$PORT"; fi; }
 quick_url() {
-  if [ "$MODE" = docker ]; then docker compose logs --no-log-prefix tunnel-quick 2>/dev/null | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1 || true
+  if [ "$MODE" = docker ]; then compose logs --no-log-prefix tunnel-quick 2>/dev/null | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1 || true
   else grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' "$TLOG" 2>/dev/null | tail -1 || true; fi
 }
 tunnel_start() { # chế độ Node: chạy cloudflared nền (Docker do compose lo)
@@ -450,7 +545,7 @@ tunnel_start() { # chế độ Node: chạy cloudflared nền (Docker do compose
 }
 tunnel_stop() { [ -f "$TPID" ] && { kill "$(cat "$TPID")" 2>/dev/null || true; rm -f "$TPID"; }; return 0; }
 apply_env() { # khởi động lại để app nhận khoá/tên miền/ngôn ngữ mới
-  if [ "$MODE" = docker ]; then sync_compose; docker compose up -d --quiet-pull 2>&1 | grep -vE "Creating|Created|Starting|Started|Stopping|Stopped|Removing|Removed|Recreate|Network|Container .* (Running|Waiting)" || true
+  if [ "$MODE" = docker ]; then sync_compose; edge_prepare; compose up -d --quiet-pull 2>&1 | grep -vE "Creating|Created|Starting|Started|Stopping|Stopped|Removing|Removed|Recreate|Network|Container .* (Running|Waiting)" || true
   else tunnel_stop; stop >/dev/null; start >/dev/null; fi
 }
 link_url() {
@@ -607,7 +702,7 @@ expose_quick() {
   need_cf
   ensure_keys; allow_host "*.trycloudflare.com"
   set_env GC_TUNNEL quick; set_env GC_PUBLIC_URL ""
-  if [ "$MODE" = docker ]; then set_env COMPOSE_PROFILES quick; docker compose rm -sf tunnel >/dev/null 2>&1 || true; fi
+  if [ "$MODE" = docker ]; then set_env COMPOSE_PROFILES quick; compose rm -sf tunnel >/dev/null 2>&1 || true; fi
   apply_env
   local i u=""
   for i in $(seq 1 30); do u="$(quick_url)"; [ -n "$u" ] && break; sleep 1; done
@@ -620,7 +715,7 @@ expose_off() {
   set_env GC_TUNNEL ""; set_env GC_PUBLIC_URL ""
   if [ "$MODE" = docker ]; then
     set_env COMPOSE_PROFILES ""
-    docker compose --profile tunnel --profile quick rm -sf tunnel tunnel-quick >/dev/null 2>&1 || true
+    compose --profile tunnel --profile quick rm -sf tunnel tunnel-quick >/dev/null 2>&1 || true
   fi
   apply_env
   m off_1 "$TDIR"
@@ -644,6 +739,7 @@ EOF
   fi
 }
 expose() {
+  m expose_moved >&2   # P4 (v0.21) nối expose vào online; bản này vẫn chạy như cũ
   case "${1:-}" in
     --quick) expose_quick ;;
     --off) expose_off ;;
@@ -753,7 +849,8 @@ genchibi — quản lý gen-chibi ($HOME_DIR, chế độ $MODE)
   logs                              xem log
   backup | restore <tệp>            sao lưu / khôi phục dữ liệu
   mcp                               cầu MCP (stdio) cho agent: claude mcp add gen-chibi -- genchibi mcp
-  expose <tên-miền> | --quick       mở MCP ra Internet qua Cloudflare Tunnel, in link nối agent (--off, --rotate)
+  online --caddy | --caddy-off      bật / tắt edge Caddy (cổng 80/443, Docker); phần còn lại: Studio › Hệ thống › Go online
+  expose <tên-miền> | --quick       (cũ, thay bằng online) mở MCP ra Internet qua Cloudflare Tunnel (--off, --rotate)
   link [--check]                    in link MCP + lệnh nối agent
   agent connect|guide|tools|skill   bootstrap cho agent mọi hãng: cấu hình nối, hướng dẫn, schema tool, cài skill
   token [giá-trị|--clear]           đặt token GitHub (repo private) cho tự cập nhật; bỏ trống = nhập ẩn
@@ -769,7 +866,8 @@ genchibi — manage gen-chibi ($HOME_DIR, mode $MODE)
   logs                              show logs
   backup | restore <file>           back up / restore data
   mcp                               MCP bridge (stdio) for agents: claude mcp add gen-chibi -- genchibi mcp
-  expose <domain> | --quick         open MCP to the Internet via Cloudflare Tunnel, print the agent link (--off, --rotate)
+  online --caddy | --caddy-off      turn the edge Caddy on / off (ports 80/443, Docker); the rest: Studio › System › Go online
+  expose <domain> | --quick         (legacy, replaced by online) open MCP via Cloudflare Tunnel (--off, --rotate)
   link [--check]                    print the MCP link + agent connect commands
   agent connect|guide|tools|skill   bootstrap for agents of any vendor: connect config, guide, tool schema, skill install
   token [value|--clear]             set the GitHub token (private repo) for auto-update; empty = hidden prompt
@@ -786,6 +884,7 @@ case "${1:-help}" in
   logs) logs ;; backup) backup ;; restore) shift; restore "${1:-}" ;; uninstall) uninstall ;;
   mcp) mcp ;; open) open_ui ;; version) status ;; password) password_cmd ;;
   expose) shift; expose ${1+"$@"} ;; link) shift; link_cmd ${1+"$@"} ;;
+  online) shift; online_cmd "${1:-}" ;;
   token|github-token) shift; token_cmd "${1:-}" ;;
   lang|language) shift; lang_cmd "${1:-}" ;;
   agent) shift; agent_cmd ${1+"$@"} ;;

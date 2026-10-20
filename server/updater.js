@@ -15,6 +15,17 @@ const { VI, tr } = require('./i18n-msg');
 
 const RESTART_CODE = 75;
 
+// edge (v0.21, CNS-170) — cùng hợp đồng với launcher.js ở thư mục cài:
+//   bản "có edge" = launcher.js đi kèm bản đó có hằng LAUNCHER_ABI ≥ 2 (đọc bằng regex, không require);
+//   máy "đang online" = run/edge-intent.json (app ghi) có tunnel token|quick hoặc online: true.
+const EDGE_ABI = 2;
+function releaseHasEdge(home, tag) {
+  try { const m = /^const LAUNCHER_ABI = (\d+);/m.exec(fs.readFileSync(path.join(home, 'releases', tag, 'launcher.js'), 'utf8')); return !!m && +m[1] >= EDGE_ABI; } catch { return false; }
+}
+function edgeOnline(home) {
+  try { const j = JSON.parse(fs.readFileSync(path.join(home, 'run', 'edge-intent.json'), 'utf8')); return j.tunnel === 'token' || j.tunnel === 'quick' || j.online === true; } catch { return false; }
+}
+
 function semver(v) {
   const m = String(v || '').replace(/^v/, '').match(/^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?/);
   return m ? [+m[1], +m[2], +m[3], m[4] || ''] : null;
@@ -98,9 +109,12 @@ class Updater {
 
   status() {
     const releases = this.listReleases();
+    const prev = this.target('previous');
     return Object.assign({}, this.state, {
       current: this.version, busy: this.busy, history: this.history(),
-      canRollback: !!this.target('previous'), previous: this.target('previous'), installed: releases
+      canRollback: !!prev, previous: prev, installed: releases,
+      // rollback tay vẫn được, nhưng bản cũ không có edge → máy đang online sẽ offline: Studio cảnh báo TRƯỚC khi bấm
+      rollbackOffline: !!prev && edgeOnline(this.home) && !releaseHasEdge(this.home, prev)
     });
   }
   target(link) {
@@ -176,7 +190,8 @@ class Updater {
       const backup = this.backup('before-' + tag);
       const previousBefore = this.target('previous');
       this.switchTo(tag);
-      this.write(path.join(this.dataDir, 'update-pending.json'), { kind: 'update', from: 'v' + this.version.replace(/^v/, ''), to: tag, previousBefore, backup, at: new Date().toISOString() });
+      // edge: ảnh chụp tunnel lúc bắt đầu (launcher ghi run/edge-status.json) — đang sẵn sàng thì launcher đòi bản mới giữ được nó (CNS-170)
+      this.write(path.join(this.dataDir, 'update-pending.json'), { kind: 'update', from: 'v' + this.version.replace(/^v/, ''), to: tag, previousBefore, backup, edge: this.edgeSnapshot(), at: new Date().toISOString() });
       this.log('[updater] switched to ' + tag + ', restarting to run the new version');
       return { restart: true, message: tr(VI, 'Đã tải {tag}. Đang khởi động lại…', { tag }) };
     } catch (e) {
@@ -197,7 +212,13 @@ class Updater {
     this.link('current', prev);
     if (cur) this.link('previous', cur);
     this.write(path.join(this.dataDir, 'update-pending.json'), { kind: 'rollback', from: cur, to: prev, at: new Date().toISOString() });
+    // bản cũ không có edge mà máy đang online: vẫn làm theo yêu cầu của chủ, nhưng nói rõ hậu quả (launcher tự rollback thì KHÔNG làm)
+    if (edgeOnline(this.home) && !releaseHasEdge(this.home, prev)) return { restart: true, offline: true, message: tr(VI, 'Đang chạy lại {tag}… Cảnh báo: {tag} không có edge — máy sẽ offline (mất tên miền / tunnel) cho tới khi cập nhật lại.', { tag: prev }) };
     return { restart: true, message: tr(VI, 'Đang chạy lại {tag}…', { tag: prev }) };
+  }
+  edgeSnapshot() {
+    const s = this.read(path.join(this.home, 'run', 'edge-status.json'), null);
+    return s && (s.tunnel === 'token' || s.tunnel === 'quick') ? { tunnel: s.tunnel, ready: s.ready === true } : null;
   }
 
   switchTo(tag) {
