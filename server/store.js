@@ -1,6 +1,7 @@
 // gen-chibi — lưu trữ cục bộ dùng chung cho API HTTP và MCP: asset có phiên bản, kịch bản sự kiện.
 // © 2026 Gen Labs — All rights reserved.
 'use strict';
+const { tr } = require('./i18n');   // tr('vi', mẫu, biến): điền biến vào msgid — câu vẫn tiếng Việt như cũ, dịch ở rìa (ADR 0007)
 const fs = require('fs');
 const path = require('path');
 
@@ -86,7 +87,7 @@ class Store {
     return fs.readdirSync(dir).filter(f => f.endsWith('.json')).map(f => readJSON(path.join(dir, f), null)).filter(Boolean);
   }
   saveKind(dir, kind, def, note) {
-    if (!/^[a-z0-9][a-z0-9-]{1,63}$/.test(def.id)) throw Object.assign(new Error('id ' + kind + ' không hợp lệ'), { code: 400 });
+    if (!/^[a-z0-9][a-z0-9-]{1,63}$/.test(def.id)) throw Object.assign(new Error(tr('vi', 'id {kind} không hợp lệ', { kind })), { code: 400 });   // msgid tiếng Việt, dịch ở rìa (ADR 0007)
     const file = path.join(dir, def.id + '.json'), old = readJSON(file, null);
     const rec = Object.assign({}, def, { version: old ? (old.version || 1) + 1 : 1, savedAt: new Date().toISOString(), note: String(note || '').slice(0, 200) });
     if (old) writeJSON(path.join(this.verDir, kind + '~' + def.id, old.version + '.json'), old);

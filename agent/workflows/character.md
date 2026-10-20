@@ -9,7 +9,7 @@
 3. Optional: `get_character` with `key: "gen.khung/ma-no-canh"` (the bald frame) or any existing character, to copy its shape
    (the frame is data of Gen Labs and never changes: a copy saved from it always starts as `draft`, whatever the frame says).
 4. Write the recipe (see example):
-   - `id` slug, `name` (Vietnamese), `role`, `persona`, `"project": "<id>"`;
+   - `id` slug, `name` (in the user's / project's language — Vietnamese with full diacritics when it is Vietnamese), `role`, `persona`, `"project": "<id>"`;
    - `look.eyes` / `look.brows` = an id from `eyeStyles` / `browStyles`;
    - `look.parts.<slot>` = `"<pack>/<id>"` of a part listed in `slots.<slot>.parts` (`gen.khung/…` frame blocks, `local.my/…` your parts);
    - `look.equip.<slot>` = item keys (`local.my/<item-id>`), e.g. a weapon in `heldR`;

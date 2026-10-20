@@ -5,6 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
+const { tr } = require('./i18n');   // tr('vi', mẫu, biến): msgid tiếng Việt có placeholder, dịch ở rìa (ADR 0007)
 
 function cstr(buf, start, len) {
   const s = buf.subarray(start, start + len);
@@ -53,11 +54,11 @@ function extractTarGz(file, dest, { stripTop = true } = {}) {
     let rel = name.replace(/\\/g, '/');
     if (stripTop) rel = rel.split('/').slice(1).join('/');
     if (!rel) continue;
-    if (rel.startsWith('/') || rel.split('/').includes('..')) throw new Error('đường dẫn không an toàn trong gói: ' + name);
+    if (rel.startsWith('/') || rel.split('/').includes('..')) throw new Error(tr('vi', 'đường dẫn không an toàn trong gói: {name}', { name }));
     const target = path.resolve(root, rel);
-    if (target !== root && !target.startsWith(root + path.sep)) throw new Error('đường dẫn thoát khỏi thư mục đích: ' + name);
+    if (target !== root && !target.startsWith(root + path.sep)) throw new Error(tr('vi', 'đường dẫn thoát khỏi thư mục đích: {name}', { name }));
     if (type === '5') { fs.mkdirSync(target, { recursive: true }); continue; }
-    if (type !== '0' && type !== '\0' && type !== '7') throw new Error('loại mục không hỗ trợ (' + type + '): ' + name);
+    if (type !== '0' && type !== '\0' && type !== '7') throw new Error(tr('vi', 'loại mục không hỗ trợ ({type}): {name}', { type, name }));
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, body);
     const mode = octal(h, 100, 8);
@@ -73,7 +74,7 @@ function packTar(files) {
   const put = (buf, off, str, len) => { buf.write(String(str).slice(0, len), off, len, 'utf8'); };
   files.forEach(f => {
     const name = String(f.path).replace(/^\/+/, ''), data = Buffer.from(f.content, 'utf8'), h = Buffer.alloc(512);
-    if (Buffer.byteLength(name) > 100 || /(^|\/)\.\.(\/|$)/.test(name)) throw new Error('tar: tên tệp không hợp lệ ' + name);
+    if (Buffer.byteLength(name) > 100 || /(^|\/)\.\.(\/|$)/.test(name)) throw new Error('tar: ' + tr('vi', 'tên tệp không hợp lệ {name}', { name }));
     put(h, 0, name, 100); put(h, 100, '0000644\0', 8); put(h, 108, '0000000\0', 8); put(h, 116, '0000000\0', 8);
     put(h, 124, data.length.toString(8).padStart(11, '0') + '\0', 12); put(h, 136, now.toString(8).padStart(11, '0') + '\0', 12);
     h.fill(0x20, 148, 156); h[156] = 0x30; put(h, 257, 'ustar\0', 6); put(h, 263, '00', 2);

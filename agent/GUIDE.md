@@ -68,7 +68,9 @@ with a runnable JSON example.
 5. **Ids**: assets, projects, works, motion packs → lowercase slug `[a-z0-9-]`, 2–40 chars (valid for every type;
    characters, items and scenes also accept up to 64). Inside a motion pack,
    pose / clip / action ids → camelCase `[a-z][A-Za-z0-9]` (e.g. `spinSlash`).
-6. **Viewer-facing text**: names and labels are **Vietnamese with full diacritics**; **dialogue (`say`) is written in the work's language** — `get_work` › `lang` (`vi` default, `en`, `zh`, `yue` = Cantonese in Traditional characters with colloquial words 喺 / 咩 / 我哋)
+6. **Viewer-facing text**: names and labels are written **in the language of the user / project** — follow the work's `lang`
+   or the user's interface language, and **ask if it is unclear**; when that language is Vietnamese, always use **full diacritics**.
+   **Dialogue (`say`) is written in the work's language** — `get_work` › `lang` (`vi` default, `en`, `zh`, `yue` = Cantonese in Traditional characters with colloquial words 喺 / 咩 / 我哋)
    unless the owner says otherwise. Keep comedy light: no gore, no blood.
 7. **Errors are data.** Every failed call — including a `validate_*` call whose data does not pass — starts
    with `[CODE]` and carries `structuredContent.error = { code, message, details: [{ path, message }], hint }`
@@ -112,22 +114,24 @@ with a runnable JSON example.
 | `UNAVAILABLE` | the app is restarting or busy | wait ~15 s, then call `get_app_version` |
 | `INTERNAL` | unexpected failure | report the message to the owner |
 
-## 6. Glossary (Studio UI is Vietnamese)
+## 6. Glossary (Studio UI: English by default, Vietnamese when the user switches)
 
-| Vietnamese (UI / owner) | API term |
-|---|---|
-| Xưởng | Workshop — creating parts / assets |
-| Thư viện | Library — saved assets, projects |
-| Tạo tác | Create — works, shots, films |
-| Dự án chủ đề | project (themed collection) |
-| Nhân vật · Vật phẩm / Trang bị · Bối cảnh | character · item · scene |
-| Linh kiện · Phông | part · scenery part |
-| Gói động tác | motion pack (`gen-chibi.motion/1`) — not the same as `LIB.motions` (looping idle motions) |
-| Thư viện âm thanh · Gói âm · Âm nhấn | sound library · sound pack (`gen-chibi.sound/1`) · accent sound (group `cam-xuc` / `nhac-cu`, ≤ 1 per step) |
-| Hành động · Đòn đánh · Phản ứng | action · attack action · reaction (`react`) |
-| Phân cảnh · Kịch bản · Bước | shot · event · step |
-| Nháp · Phát hành | draft · published |
-| Gói bán · Gói sao lưu · Bộ mẫu | sale bundle · backup bundle · sample bundle |
+The owner may talk to you in either language; answer in the language they use (or their interface language).
+
+| Studio (English) | Studio (Vietnamese) | API term |
+|---|---|---|
+| Workshop | Xưởng | creating parts / assets |
+| Library | Thư viện | saved assets, projects |
+| Create | Tạo tác | works, shots, films |
+| Theme project | Dự án chủ đề | project (themed collection) |
+| Character · Item · Scene | Nhân vật · Vật phẩm / Trang bị · Bối cảnh | character · item · scene |
+| Part · Backdrop | Linh kiện · Phông | part · scenery part |
+| Motion pack | Gói động tác | motion pack (`gen-chibi.motion/1`) — not the same as `LIB.motions` (looping idle motions) |
+| Sounds · Sound pack · Accent sound | Thư viện âm thanh · Gói âm · Âm nhấn | sound library · sound pack (`gen-chibi.sound/1`) · accent sound (group `cam-xuc` / `nhac-cu`, ≤ 1 per step) |
+| Action · Attack · Reaction | Hành động · Đòn đánh · Phản ứng | action · attack action · reaction (`react`) |
+| Shot · Script · Step | Phân cảnh · Kịch bản · Bước | shot · event · step |
+| Draft · Published | Nháp · Phát hành | draft · published |
+| Sale bundle · Backup bundle · Sample | Gói bán · Gói sao lưu · Bộ mẫu | sale bundle · backup bundle · sample bundle |
 
 ## 7. Before you report "done"
 
