@@ -7,6 +7,7 @@
 #   4) tự cập nhật end-to-end (tools/test-update.sh)
 #   4c) OAuth cho MCP từ xa (tools/test-oauth.mjs)
 #   4e) đăng nhập chủ máy + bảng truy cập v0.21 (tools/test-auth-owner.mjs)
+#   4f) Go online — edge, Caddy, Cloudflare API giả, wizard (tools/test-online.mjs)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -753,6 +754,9 @@ bash tools/test-lang.sh || exit 1
 
 echo "4c) OAuth 2.1 cho MCP từ xa (v0.19): 401 khám phá · metadata · DCR (allowlist callback, không secret, trần, tốc độ) · authorize chỉ chủ duyệt · PKCE / resource / iss · code một lần · refresh xoay vòng · hết hạn · thu hồi · phạm vi → kênh sẵn có · oauth.json chỉ băm · đường máy qua cổng đăng nhập ngoài giả"
 node tools/test-oauth.mjs || exit 1
+
+echo "4f) Go online (v0.21): cổng nghe riêng cho cloudflared + X-GC-Edge của Caddy · sites.caddy (regex hostname) + nạp lại kèm admin qua unix socket · Cloudflare API giả (luồng đủ, idempotent, zone pending / partial, thiếu quyền, CNAME có sẵn không đè, WAF, Go offline) · đường A / proxy / link tạm với DNS / IP giả · publicUrl tạm trả về khi lỗi · không gọi IP nội bộ · token API không lọt · rào ngược"
+node tools/test-online.mjs || exit 1
 
 echo "5) tự cập nhật"
 bash tools/test-update.sh

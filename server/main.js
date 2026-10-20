@@ -352,6 +352,8 @@ async function route(req, res) {
   //   /api/online/*) → S hoặc T (chưa có mật khẩu thì chỉ T — S không tồn tại) · /mcp → K, O, T. Lớp E / P / N chỉ dùng cho trần tần suất (auth.ipOf).
   // ---- OAuth (v0.19): khám phá + đăng ký + token + thu hồi là đường MÁY (công khai, bảo vệ bằng PKCE / token — không cần cookie hay phiên Studio); authorize là trang cho chủ
   if (p.startsWith('/oauth/') || p.startsWith('/.well-known/oauth-')) { const done = await oauthRoute(req, res, url, p, m); if (done) return; }
+  // ---- Go online (v0.21): kiểm từ ngoài vào của proxy riêng — công khai, chỉ trả lời đúng nonce của luồng đang chạy (server/online.js)
+  if (p.startsWith('/.well-known/gen-chibi-check/')) return goOnline.checkRoute(req, res, p, send);
 
   // Đã đặt token: mọi /api (trừ health) và /mcp đều cần token, bất kể Host hay địa chỉ. Studio đăng nhập bằng token.
   // /mcp còn nhận access token OAuth (Authorization: Bearer): phạm vi → kênh SẴN CÓ (scopeCtx). Không có / sai token → 401 + WWW-Authenticate trỏ metadata để agent tự khám phá.
@@ -412,6 +414,7 @@ async function route(req, res) {
   // đăng nhập chủ: state (công khai) · setup (C / T) · login (mọi lớp, trần §3.3) · logout · password / setup-code / sessions (S / T) — luật trong auth.handle
   if (p.startsWith('/api/auth/')) return auth.handle(req, res, p, m, { send, body });
   if (p === '/api/info') { const pub = online.publicUrl(); return send(res, 200, { version: VERSION, repo: REPO, home: HOME, port: PORT, settings: settings(), uiLang: settings().uiLang, lang: langOf(req), auth: auth.view(req), mcp: { http: '/mcp', stdio: 'genchibi mcp', link: pub && MCP_KEY ? pub + '/mcp/' + MCP_KEY : null, oauth: oauth.enabled ? oauth.resource : null } }); }
+  if (p === '/api/online' || p.startsWith('/api/online/')) return goOnline.route(req, res, p, m, { send, body, lang: langOf(req) });   // Go online (v0.21): S / T (đã qua cổng /api ở trên) — server/online.js
   if (p === '/api/settings' && m === 'PUT') {
     const b = await body(req);
     const s = settings();
@@ -651,10 +654,25 @@ async function route(req, res) {
   return fail(res, 404, 'không có API này');
 }
 
-const server = http.createServer((req, res) => {
+/* ---------------------------------------------------------------- Go online (v0.21): edge của app + /api/online/* */
+// Lớp edge của request (server/edge.js — chỉ cho trần tần suất + chẩn đoán, không cấp quyền): Caddy = X-GC-Edge đúng bí mật edge/edge-secret
+// (IP khách = mục cuối X-Forwarded-For); cloudflared = request đến trên CỔNG NGHE RIÊNG 127.0.0.1:<GC_PORT+2> (IP khách = Cf-Connecting-Ip chỉ ở đó).
+// Cổng riêng chỉ mở khi tunnel bật (run/edge-intent.json), không giành cổng khi không cần. P1 đọc req.gcEdge / req.gcIp.
+const { createEdge, createTunnelListener } = require('./edge');
+const edge = createEdge({ edgeDir: path.join(HOME, 'edge') });
+const tunnelListener = createTunnelListener({ port: PORT + 2, handler: (req, res) => handle(req, res, 'tunnel'), log });
+// online-config (P1) là nguồn duy nhất của mode / domain / publicUrl + trạng thái luồng (flow) + tài nguyên Cloudflare đã tạo (cfResources).
+// isOwner = bằng chứng dương S / T (auth.ownerOf); legacy.active = đang chạy bằng .env kế thừa (chỉ đọc — di chuyển trước), marked = dấu data/legacy.json
+const goOnline = require('./online').createOnline({ home: HOME, dataDir: DATA, port: PORT, inDocker: process.env.GC_IN_DOCKER === '1', config: online, secrets, log, edge, tunnel: tunnelListener,
+  isOwner: req => !!auth.ownerOf(req), hasPassword: () => auth.hasPassword(),
+  legacy: () => { const c = online.get(); return { active: !!c.readOnly, marked: auth.isLegacy(), publicUrl: c.env.publicUrl, allowedHosts: c.env.allowedHosts.join(','), tunnel: c.env.tunnel }; } });
+
+function handle(req, res, via) {
+  edge.mark(req, via);
   MSG.run(langOf(req), () => route(req, res)).catch(e => {   // ngôn ngữ của yêu cầu cho trang Cấp phép, nhãn khu / nhà cung cấp / giọng, tên phân cảnh mặc định…
     log('[server] error', MSG.en(e.message)); if (!res.headersSent) fail(res, e.code && e.code >= 400 && e.code < 600 ? e.code : 500, e.message); });
-});
+}
+const server = http.createServer((req, res) => handle(req, res, 'main'));
 
 /* ---------------------------------------------------------------- tự kiểm tra phiên bản */
 let timer = null;
@@ -678,5 +696,6 @@ server.listen(PORT, HOST, () => {
   log('[server] gen-chibi v' + VERSION.replace(/^v/, '') + ' running at http://' + HOST + ':' + PORT + ' · home ' + HOME);
   scheduleChecks();
   if (process.env.GC_NO_AUTOCHECK !== '1') setTimeout(autoCheck, 15000);
+  goOnline.init();   // tunnel đang bật → mở cổng nghe riêng cho cloudflared
 });
-process.on('SIGTERM', () => server.close(() => { oauth.flush(); auth.flush(); process.exit(0); }));
+process.on('SIGTERM', () => { tunnelListener.set(false); server.close(() => { oauth.flush(); auth.flush(); process.exit(0); }); });
