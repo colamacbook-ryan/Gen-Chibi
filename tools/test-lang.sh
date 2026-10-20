@@ -7,6 +7,8 @@
 #   3) genchibi lang (CLI + mặc định THẬT của Studio) / lang xx / lang en (ghi .env + đổi mặc định Studio qua API, không khởi động lại)
 #      · Studio đã đổi mà .env vẫn cũ → lang vẫn đồng bộ được (CNS-153, app chạy và app dừng) · trợ giúp en không có chữ có dấu · trợ giúp vi đủ mọi lệnh
 #   4) README.md + tài liệu tiếng Anh không còn chữ tiếng Việt (trừ dòng chuyển ngôn ngữ, tên riêng) · en ↔ vi trỏ nhau · link tương đối không gãy
+#   5) trình cài --domain (A record sai → in bản ghi cần tạo, thoát rõ; dòng cuối = mã setup) · --cloudflare (không terminal + không GC_CF_TOKEN → dừng trước khi cài;
+#      có GC_CF_TOKEN → Cloudflare API giả tới bậc mật khẩu, token không vào argv / env của curl) · Docker vừa cài mà phiên chưa vào nhóm → sg docker / sudo docker (giả lập) + đột biến
 # © 2026 Gen Labs — All rights reserved.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -14,7 +16,8 @@ W="$(mktemp -d)"; FAIL=0; PASS=0
 ok()  { echo "   ✓ $1"; PASS=$((PASS+1)); }
 bad() { echo "   ✗ $1"; FAIL=$((FAIL+1)); }
 check() { if [ "$1" = 0 ]; then ok "$2"; else bad "$2${3:+ — $3}"; fi; }
-stop_all() { for h in "$W"/*-home; do [ -x "$h/.local/bin/genchibi" ] && HOME="$h" "$h/.local/bin/genchibi" stop >/dev/null 2>&1; done; return 0; }
+CFPID=""
+stop_all() { for h in "$W"/*-home; do [ -x "$h/.local/bin/genchibi" ] && HOME="$h" "$h/.local/bin/genchibi" stop >/dev/null 2>&1; done; [ -z "$CFPID" ] || kill "$CFPID" 2>/dev/null; return 0; }
 trap 'stop_all; [ -n "${KEEP:-}" ] || rm -rf "$W"' EXIT
 TO=""; command -v timeout >/dev/null && TO="timeout 120"
 SID=""; command -v setsid >/dev/null && SID="setsid"
@@ -157,6 +160,124 @@ own_vi | curl -fsS -K - -X PUT -H 'X-GC-Request: 1' -H 'Content-Type: applicatio
 inst vi --lang vi
 [ $IRC = 0 ] && [ "$(envlang vi)" = vi ] && [ "$(health_lang)" = vi ]; check $? "cài lại --lang vi khi Studio đang en (.env đã vi) → mặc định Studio về vi (lựa chọn rõ thắng)" "mã $IRC · uiLang $(health_lang)"
 cli "$G" stop >/dev/null 2>&1
+
+echo "   5) trình cài: --domain / --cloudflare (Go online một bước) · Docker vừa cài, phiên chưa vào nhóm docker (sg / sudo)"
+lastline() { printf '%s\n' "$1" | sed '/^[[:space:]]*$/d' | tail -n 1; }
+codeof() { sed -n '1p' "$W/$1/data/setup-code.txt" 2>/dev/null | tr -d ' \r'; }
+inst bogus --domain 'bad_domain!'
+[ $IRC = 2 ] && echo "$INST_OUT" | grep -q 'Invalid domain: bad_domain!' && [ ! -e "$W/bogus" ]; check $? "--domain sai dạng → thoát 2, chưa đụng tới đĩa" "$IRC $INST_OUT"
+inst bogus --cloudflare
+[ $IRC = 2 ] && echo "$INST_OUT" | grep -q -- '--cloudflare goes with --domain' && [ ! -e "$W/bogus" ]; check $? "--cloudflare thiếu --domain → thoát 2, chưa đụng tới đĩa" "$IRC $INST_OUT"
+inst bogus --domain chibi.example.com --cloudflare
+[ $IRC = 2 ] && echo "$INST_OUT" | grep -q 'GC_CF_TOKEN' && echo "$INST_OUT" | grep -q 'never as an argument' && [ ! -e "$W/bogus" ]; check $? "--cloudflare, không terminal, không GC_CF_TOKEN → dừng NGAY (thoát 2, chưa cài gì), chỉ cách đặt GC_CF_TOKEN" "$IRC $INST_OUT"
+# đường A, A record sai (DNS / IP giả bằng biến kiểm thử, chỉ khi GC_TEST=1) → in IP cần trỏ, thoát rõ ràng; app vẫn cài + chạy; dòng cuối = mã setup
+INST_ENV="GC_TEST=1 GC_TEST_PUBLIC_IP=198.51.100.7 GC_TEST_DNS_A=203.0.113.9 GC_DNS_WAIT=0" inst doma --domain chibi.example.com
+c="$(codeof doma)"
+[ $IRC = 1 ] && echo "$INST_OUT" | grep -q 'now: 203.0.113.9' && echo "$INST_OUT" | grep -q 'A  chibi.example.com  →  198.51.100.7' && echo "$INST_OUT" | grep -q 'genchibi online caddy chibi.example.com' && echo "$INST_OUT" | grep -q 'is running'
+check $? "--domain, bản ghi A sai → in đúng bản ghi cần tạo (A chibi.example.com → 198.51.100.7), thoát 1 rõ ràng kèm lệnh làm tiếp; app đã cài + chạy" "$IRC $(echo "$INST_OUT" | tail -6)"
+[ -n "$c" ] && lastline "$INST_OUT" | grep -q "^Setup code: .*$c.*http://localhost:[0-9]*/setup.*genchibi open"; check $? "dòng cuối = mã setup ($c) + http://localhost:<cổng>/setup + genchibi open" "$(lastline "$INST_OUT")"
+HOME="$W/doma-home" "$W/doma-home/.local/bin/genchibi" stop >/dev/null 2>&1
+INST_ENV="GC_TEST=1 GC_TEST_PUBLIC_IP=198.51.100.7 GC_TEST_DNS_A=198.51.100.7 GC_DNS_WAIT=0" inst doma --domain chibi.example.com
+[ $IRC = 1 ] && echo "$INST_OUT" | grep -q 'chibi.example.com → 198.51.100.7 (this machine)' && echo "$INST_OUT" | grep -q 'needs Docker mode' && echo "$INST_OUT" | grep -q 'genchibi online cloudflare chibi.example.com'
+check $? "--domain, bản ghi A đúng nhưng bản native → báo cần Docker (Caddy giữ 80/443), gợi ý --cloudflare / genchibi online cloudflare" "$IRC $(echo "$INST_OUT" | tail -5)"
+HOME="$W/doma-home" "$W/doma-home/.local/bin/genchibi" stop >/dev/null 2>&1
+
+# đường B tới cuối: Cloudflare API giả + lời gọi "từ Internet" về cổng ingress (GC_TEST) · token chỉ qua GC_CF_TOKEN → stdin của CLI, shim ghi argv + env của curl
+CFT="cfinst$(head -c 20 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+CFOUT="$W/cf.base"
+T="$CFT" O="$CFOUT" node --input-type=module -e "import { fakeCloudflare } from '$ROOT/tools/fixtures/fake-cloudflare-api.mjs'; const f = await fakeCloudflare({ token: process.env.T }); (await import('fs')).writeFileSync(process.env.O, f.base);" >/dev/null 2>&1 &
+CFPID=$!
+for i in $(seq 1 40); do [ -s "$CFOUT" ] && break; sleep 0.25; done
+SHIMD="$W/shim"; mkdir -p "$SHIMD"
+printf '#!/bin/bash\n{ printf "%%s\\0" ARGV "$0" "$@"; /usr/bin/env -0; printf "\\n"; } >> "%s/shim.log"\nexec %s "$@"\n' "$W" "$(command -v curl)" > "$SHIMD/curl"; chmod +x "$SHIMD/curl"
+PB="$(freeport)"
+GC_CF_TOKEN="$CFT" INST_PORT="$PB" INST_ENV="PATH=$SHIMD:$PATH GC_TEST=1 GC_TEST_CF_API=$(cat "$CFOUT" 2>/dev/null) GC_TEST_ONLINE_VIA=127.0.0.1:$((PB + 2)) GC_ONLINE_POLL=0.3 GC_ONLINE_RETRY=2.2" inst domb --domain chibi.example.com --cloudflare
+c="$(codeof domb)"
+[ $IRC = 0 ] && echo "$INST_OUT" | grep -q '✓ Tunnel' && echo "$INST_OUT" | grep -q '✓ MCP from the Internet' && echo "$INST_OUT" | grep -q 'Online: .*https://chibi.example.com.*MCP: https://chibi.example.com/mcp'
+check $? "--domain chibi.example.com --cloudflare (GC_CF_TOKEN) → cài + genchibi online cloudflare tới bậc mật khẩu: in tiến độ, Online https://chibi.example.com + /mcp, thoát 0 (VPS mới: chỉ còn đặt mật khẩu)" "$IRC $(echo "$INST_OUT" | tail -14)"
+[ -n "$c" ] && lastline "$INST_OUT" | grep -q "^Setup code: .*$c.*https://chibi.example.com/setup" && ! lastline "$INST_OUT" | grep -q 'genchibi open'; check $? "dòng cuối = mã setup ($c) + https://chibi.example.com/setup" "$(lastline "$INST_OUT")"
+! printf '%s' "$INST_OUT" | grep -q "$CFT" && ! grep -q "$CFT" "$W/shim.log" 2>/dev/null && ! grep -rq "$CFT" "$W/domb" 2>/dev/null && [ -s "$W/shim.log" ]
+check $? "token Cloudflare không có trong đầu ra trình cài, argv / môi trường của mọi lần gọi curl (shim), tệp nào của thư mục cài" "$(grep -c "$CFT" "$W/shim.log" 2>/dev/null) lần trong shim.log"
+HOME="$W/domb-home" "$W/domb-home/.local/bin/genchibi" stop >/dev/null 2>&1
+kill "$CFPID" 2>/dev/null; CFPID=""
+
+# máy Ubuntu sạch, user không root: trình cài tự cài Docker (giả), usermod -aG docker; phiên này chưa nhận nhóm → phần còn lại chạy qua sg docker -c (hoặc sudo docker)
+FK="$W/fakedocker"; FS="$W/fakestate"; mkdir -p "$FK"
+cat > "$FK/id" <<'EOF'
+#!/bin/bash
+case "$*" in
+  -u|-g) echo 1000 ;;
+  -un) echo tester ;;
+  "-nG tester") if [ -f "$FAKE_STATE/usermod" ]; then echo "tester docker"; else echo tester; fi ;;
+  *) exec /usr/bin/id "$@" ;;
+esac
+EOF
+cat > "$FK/sudo" <<'EOF'
+#!/bin/bash
+[ "$1" = -n ] && shift
+echo "sudo $*" >> "$FAKE_STATE/sudo.log"
+FAKE_SUDO=1 exec "$@"
+EOF
+cat > "$FK/usermod" <<'EOF'
+#!/bin/bash
+echo "usermod $*" >> "$FAKE_STATE/usermod.log"; touch "$FAKE_STATE/usermod"
+EOF
+cat > "$FK/sg" <<'EOF'
+#!/bin/bash
+[ -z "${FAKE_NO_SG:-}" ] || exit 1
+[ "$1" = docker ] && [ "$2" = -c ] && [ -f "$FAKE_STATE/usermod" ] || exit 1
+echo "sg -c $3" >> "$FAKE_STATE/sg.log"
+FAKE_DOCKER_GROUP=1 exec sh -c "$3"
+EOF
+cat > "$FK/docker" <<'EOF'
+#!/bin/bash
+echo "${FAKE_DOCKER_GROUP:+[sg]}${FAKE_SUDO:+[sudo]} $*" >> "$FAKE_STATE/docker.log"
+[ -f "$FAKE_STATE/installed" ] || { echo "docker: command not found" >&2; exit 127; }
+[ -n "${FAKE_DOCKER_GROUP:-}${FAKE_SUDO:-}" ] || { echo "permission denied while trying to connect to the Docker daemon socket" >&2; exit 1; }
+if [ "$1" = compose ]; then
+  for a in "$@"; do [ "$a" = up ] || continue
+    nohup node "$FAKE_STATE/../fakeapp.js" "$(sed -n 's/^GC_PORT=//p' .env)" "$PWD" >/dev/null 2>&1 &
+    echo $! >> "$FAKE_STATE/app.pids"
+  done
+fi
+exit 0
+EOF
+chmod +x "$FK"/*
+cat > "$W/fakeapp.js" <<'EOF'
+// app giả của "docker compose up" giả: /api/health + /api/auth/state, ghi mã setup như server thật
+const fs = require('fs'), http = require('http'), [port, dir] = process.argv.slice(2);
+fs.mkdirSync(dir + '/data', { recursive: true });
+fs.writeFileSync(dir + '/data/setup-code.txt', 'FAKE1-CODE2\nexpires=' + (Math.floor(Date.now() / 1000) + 3600) + '\n');
+http.createServer((q, s) => { s.writeHead(q.url === '/api/health' || q.url === '/api/auth/state' ? 200 : 404, { 'Content-Type': 'application/json' });
+  s.end(q.url === '/api/health' ? '{"ok":true,"version":"v0.0.0","uiLang":"en"}' : '{"password":false}'); }).listen(+port, '127.0.0.1');
+setTimeout(() => process.exit(0), 120000);
+EOF
+printf '#!/bin/sh\ntouch "%s/installed"\n' "$FS" > "$W/get-docker.sh"
+dockinst() { # dockinst <tên> [biến…]: cài KHÔNG --native, PATH có docker / sudo / sg / id / usermod giả
+  local name="$1" home="$W/$1-home"; shift; rm -rf "$FS"; mkdir -p "$FS" "$home"
+  INST_OUT="$(env -u GC_LANG HOME="$home" GC_TARBALL="$TAR" GC_NO_AUTOCHECK=1 HTTPS_PROXY= https_proxy= NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost \
+    PATH="$FK:$PATH" FAKE_STATE="$FS" GC_TEST=1 GC_TEST_DOCKER_SH="file://$W/get-docker.sh" ${1+"$@"} $TO $SID bash "$ROOT/install.sh" --dir "$W/$name" --port "$(freeport)" </dev/null 2>&1)"; IRC=$?
+  [ -f "$FS/app.pids" ] && kill $(cat "$FS/app.pids") 2>/dev/null; return 0
+}
+dockinst dsg
+[ $IRC = 0 ] && [ -f "$FS/installed" ] && grep -q 'usermod -aG docker tester' "$FS/usermod.log" && echo "$INST_OUT" | grep -q 'continuing with sg docker' && echo "$INST_OUT" | grep -q 'Log out and back in to use genchibi without sudo' && echo "$INST_OUT" | grep -q 'Run mode: docker'
+check $? "Docker chưa có → cài (giả) + usermod -aG docker tester; phiên chưa vào nhóm → tiếp tục bằng sg docker, in 'Log out and back in…'" "$IRC $(echo "$INST_OUT" | tail -8) · $(cat "$FS/docker.log" 2>/dev/null | tail -3)"
+grep -q '^\[sg\] compose -f docker-compose.yml up -d' "$FS/docker.log" && ! grep -qE '^ compose' "$FS/docker.log" && lastline "$INST_OUT" | grep -q '^Setup code: .*FAKE1-CODE2'
+check $? "genchibi start trong cùng phiên chạy docker compose qua sg (không lệnh compose nào chạy thẳng bị từ chối); dòng cuối = mã setup" "$(cat "$FS/docker.log" 2>/dev/null | tail -4) · $(lastline "$INST_OUT")"
+dockinst dsudo FAKE_NO_SG=1
+[ $IRC = 0 ] && echo "$INST_OUT" | grep -q 'continuing with sudo docker' && grep -q '^\[sudo\] compose -f docker-compose.yml up -d' "$FS/docker.log"
+check $? "không dùng được sg → sudo docker (không hỏi mật khẩu: -n), compose chạy qua sudo" "$IRC $(echo "$INST_OUT" | tail -4) · $(tail -3 "$FS/docker.log" 2>/dev/null)"
+# đột biến: bỏ đường sg / sudo (chỉ docker thẳng) → trình cài phải rơi về native / dừng, kiểm ở trên ĐỎ
+sed 's/^  case "\$g" in \*" docker "\*)$/  case "$g" in *" docker-mutated "*)/; s/command -v sudo >\/dev\/null \&\& sudo -n docker info/false \&\& sudo -n docker info/' "$ROOT/install.sh" > "$W/install-mut.sh"
+if ! cmp -s "$ROOT/install.sh" "$W/install-mut.sh"; then
+  rm -rf "$FS"; mkdir -p "$FS" "$W/dmut-home"
+  out="$(env -u GC_LANG HOME="$W/dmut-home" GC_TARBALL="$TAR" GC_NO_AUTOCHECK=1 HTTPS_PROXY= https_proxy= NO_PROXY=127.0.0.1,localhost PATH="$FK:$PATH" FAKE_STATE="$FS" GC_TEST=1 GC_TEST_DOCKER_SH="file://$W/get-docker.sh" \
+    $TO $SID bash "$W/install-mut.sh" --dir "$W/dmut" --port "$(freeport)" </dev/null 2>&1)"
+  [ -f "$FS/app.pids" ] && kill $(cat "$FS/app.pids") 2>/dev/null
+  HOME="$W/dmut-home" "$W/dmut-home/.local/bin/genchibi" stop >/dev/null 2>&1
+  ! echo "$out" | grep -q 'continuing with sg docker' && ! grep -q '^\[sg\] compose' "$FS/docker.log" 2>/dev/null
+  check $? "đột biến (không đường sg / sudo) → không còn 'continuing with sg docker' / compose qua sg — rào ở trên bắt được" "$(echo "$out" | tail -3)"
+else bad "đột biến trình cài không áp được"; fi
 
 echo "   4) README + tài liệu"
 DOCS_OUT="$(node -e '

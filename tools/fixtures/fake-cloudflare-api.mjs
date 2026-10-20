@@ -1,13 +1,14 @@
-// Cloudflare API v4 GIẢ (Node http, đúng endpoint + thân của nghiên cứu spikes/2026-10-20-online-setup-research.md) — dùng chung cho tools/test-online.mjs
-// (client + wizard) và tools/test-browser.mjs (nhóm online: Studio › Go online qua GC_TEST_CF_API). Không gọi Cloudflare thật.
-// fakeCloudflare({ token, zones?, perms?, dns?, zeroTrustMissing?, healthy? }) → { st, srv, base, writes, close }
+// gen-chibi — Cloudflare API v4 GIẢ (Node http) cho tools/test-online.mjs, tools/test-online-cli.mjs và tools/test-browser.mjs (nhóm online): đúng endpoint + thân của nghiên cứu
+// (zones · cfd_tunnel · configurations · token · dns_records · rulesets WAF), lỗi quyền / Zero Trust / CNAME có sẵn. Không gọi Cloudflare thật.
+//   fakeCloudflare({ token, zones?, perms?, dns?, healthy?, zeroTrustMissing? }) → { st, srv, base, writes, close }
 // © 2026 Gen Labs — All rights reserved.
 import http from 'http';
 import crypto from 'crypto';
 const listen = srv => new Promise(r => srv.listen(0, '127.0.0.1', () => r(srv.address().port)));
+
 export function tunnelTokenOf(t) { return 'eyJ' + Buffer.from(JSON.stringify({ a: 'acc', t: t.id, s: 'c2VjcmV0' })).toString('base64').replace(/=+$/, ''); }
 export async function fakeCloudflare(o = {}) {
-  const API_TOKEN = o.token;
+  if (!o.token) throw new Error('fakeCloudflare: o.token missing');
   const hex = () => crypto.randomBytes(16).toString('hex');
   const st = {
     acc: hex(), zones: o.zones || [{ id: hex(), name: 'example.com', status: 'active', type: 'full' }],
@@ -23,7 +24,7 @@ export async function fakeCloudflare(o = {}) {
       const out = (code, result, errors) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: code < 400, errors: errors || [], messages: [], result: result === undefined ? null : result })); };
       const deny = () => out(403, null, [{ code: 10000, message: 'Authentication error' }]);
       const nf = () => out(404, null, [{ code: 7003, message: 'Could not route to ' + p }]);
-      if (req.headers.authorization !== 'Bearer ' + API_TOKEN) return out(401, null, [{ code: 1000, message: 'Invalid API Token' }]);
+      if (req.headers.authorization !== 'Bearer ' + o.token) return out(401, null, [{ code: 1000, message: 'Invalid API Token' }]);
       let mm;
       if (p === '/zones' && m === 'GET') {
         if (!st.perms.zone) return deny();

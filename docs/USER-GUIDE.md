@@ -176,19 +176,29 @@ A Data Console style table (desktop): one row per sound — **sound ID** (the na
 - **No Google key yet**: you can still view and listen to machine voices; the page reminds you and has a button to *AI settings › AI voice*. The preview edition (no server) only has machine voices.
 
 ## 6. For AI agents (MCP) — agents from any vendor can use it
-- Run **`genchibi agent connect`**: prints ready-made connect configs for Claude Code, the Claude app, Cursor, Gemini CLI, Codex CLI and a `curl` command (it never prints the token).
+- Run **`genchibi agent connect`**: prints ready-made connect configs for Claude Code, the Claude app, Cursor, Gemini CLI, Codex CLI and a `curl` command (it never prints the token). Since v0.21 every install has an owner token, so agents on this machine that use HTTP send it as `Authorization: Bearer` — agents connected before v0.21 without a token must be connected again with these configs; `genchibi mcp` (stdio) reads the token itself.
 - To have the agent "know the ropes" from the start: **`genchibi agent skill claude`** (or `cursor`, `gemini`, `codex`, `generic`) — installs the guide as a skill / `AGENTS.md` / `GEMINI.md` in the folder you are in (or `--dir`). If you already have your own `AGENTS.md` / `GEMINI.md`, the command stops and does not overwrite them (add `--force` to replace).
 - Tell the agent: **"call `start_here` first"**. The agent receives the Library status, 11 golden rules, 10 guide topics (characters, parts, equipment, scenes, motion packs, sound, animation, film, project bundles, system), then follows step-by-step procedures with runnable examples.
 - 53 tools; agents go through **the same gates** as the Studio. Errors come back with a code (`[VALIDATION_FAILED]`, `NOT_FOUND`…) and point at the exact wrong field — agents can fix things themselves.
 - An agent without an MCP client can still use it over plain HTTP (see `agent/GUIDE.md` section 1).
 
+### Go online: domain, HTTPS and MCP in one step (beta, v0.21)
+Put the app on `https://your-domain` (the Studio, behind the owner password) and `https://your-domain/mcp` (for agents) without editing `.env`, a Caddyfile or DNS by hand. Open **Studio › System › Go online**, or use `genchibi online` on the server — both drive the same steps and show each one as ✓ / ✗ with the fix.
+
+1. **Pick a path.** *VPS with a public IP* (path A): create an A record `your-domain → the machine's IP`, open ports 80 and 443, then `genchibi online caddy your-domain` (Docker; the edge Caddy gets the HTTPS certificate). *Home machine, behind a router, or 80/443 busy* (path B): the domain must be on Cloudflare; create an API token with the pre-filled link the app shows (Account › Cloudflare Tunnel › Edit, Zone › DNS › Edit, Zone › Zone › Read, optional Zone › WAF › Edit; short TTL), then `genchibi online cloudflare your-domain` and paste the token when asked (hidden; without a terminal: `GC_CF_TOKEN`, never an argument). *Your own reverse proxy:* `genchibi online proxy your-domain` prints the config to paste. *Just trying:* `genchibi online quick` gives a temporary `*.trycloudflare.com` link.
+2. **Watch the steps.** Domain / DNS, edge, ports, certificate, public address, **MCP from the Internet** (tested with claude.ai's `Claude-User` agent, so Cloudflare bot blocking shows up here), owner password. A ✗ prints its fix; after fixing, run `genchibi online recheck` (or click *Check again*).
+3. **Owner password.** On a fresh VPS the last step waits for it: open `https://your-domain/setup` and enter the setup code (the installer's last line; `genchibi status` prints it again), choose a password, then `genchibi online recheck`.
+4. **Done:** the command prints `https://your-domain` and `https://your-domain/mcp`. Continue below to connect claude.ai.
+
+You can do all of this at install time: `--domain your-domain` (path A) or `--domain your-domain --cloudflare` (path B) — see [README › Go online](../README.md#go-online-domain-https-mcp-in-one-step). Go offline: `genchibi online off` (with `GC_CF_TOKEN` set, the app also removes the tunnel, DNS record and WAF rule it created). Machines set up by hand before v0.21 (`GC_PUBLIC_URL` / `GC_ALLOWED_HOSTS` in `.env`) keep working; `genchibi online migrate` moves them into Go online.
+
 ### Connect claude.ai with one address, `https://your-domain/mcp` (OAuth, since v0.19)
 The agent works out how to sign in and registers itself; all you do is click **Authorize** once on the app's web page. No key to copy, no token to paste into the agent.
 
-1. **Set the public address.** In the install's `.env`, write `GC_PUBLIC_URL=https://your-domain`: exactly the address reachable from the Internet, no trailing `/`, no port. Add `GC_API_TOKEN` (required once exposed) and `GC_ALLOWED_HOSTS=your-domain`, then run `genchibi restart`. If you use `genchibi expose your-domain`, the command sets all three itself and opens exactly the routes needed through Cloudflare Tunnel. Installs that ran `expose` before v0.19: **run `genchibi expose your-domain` once more** so the tunnel also opens the OAuth routes.
+1. **Go online first** (section above): Go online sets the public address and checks the machine routes from outside. Machines still configured by hand in `.env` (`GC_PUBLIC_URL` exactly the Internet address, no trailing `/`, no port; `GC_ALLOWED_HOSTS`) keep working.
 2. **Running your own proxy (Caddy, nginx…)? Open the machine routes** — see *Behind a proxy and your own login page* below.
 3. **Add the connector on claude.ai:** go to *Customize › Connectors › Add custom connector*, paste `https://your-domain/mcp`, click **Add**, then **Connect**. Leave *Advanced settings* empty: no Client ID / Secret, the app registers the client itself.
-4. **Authorize.** The browser opens the app's **Authorize agent connection** page. Check the agent's name and **the address it will return to** (must be `claude.ai` or `claude.com`), pick a permission level, then click **Authorize**. If this browser is already signed in to the Studio, the page uses that token; if not, paste the owner token (`GC_API_TOKEN`) into the field on the page.
+4. **Authorize.** The browser opens the app's **Authorize agent connection** page. Check the agent's name and **the address it will return to** (must be `claude.ai` or `claude.com`), pick a permission level, then click **Authorize**. If this browser is signed in to the Studio (owner password), the page uses that session; if not, it asks you to sign in (the owner token still works on machines that use it).
 5. **Open a new session** on claude.ai or in Claude Code: the gen-chibi tools appear. A session that was already open does not load a new connector.
 
 | Permission level | What the agent can do |
@@ -225,7 +235,7 @@ your-domain {
 ```
 
 - **Network:** use port 443. The domain needs an A record (public IPv4). Do not redirect `your-domain` ↔ `www.your-domain`, because a redirect drops the `Authorization` header.
-- **Cloudflare:** *Bot Fight Mode*, *Block AI bots* and *AI Crawl Control* return 403 to the `Claude-User` agent. Create a WAF **Skip** rule for Anthropic's IP range `160.79.104.0/21`, or turn those features off for the machine routes above.
+- **Cloudflare:** *Bot Fight Mode*, *Block AI bots* and *AI Crawl Control* return 403 to the `Claude-User` agent. Go online's path B creates a WAF **Skip** rule for the machine routes when the token has *Zone › WAF › Edit* (otherwise it shows the rule to add); Bot Fight Mode on the free plan cannot be skipped by a rule — turn it off. With your own setup: create a Skip rule for Anthropic's IP range `160.79.104.0/21`, or turn those features off for the machine routes above.
 - **Cloudflare + rate limiting:** the app rate-limits registrations / failed attempts by client IP. By default it only reads the last entry of `X-Forwarded-For` (and only when the connection to the app comes from loopback or a private network). Behind Cloudflare, add `GC_CLIENT_IP_HEADER=cf-connecting-ip` to `.env` (or `x-real-ip`) so the app sees the client's real IP instead of the proxy's.
 - **Adding your own services to Docker** (Caddy, a login page…): put them in `docker-compose.override.yml` next to `docker-compose.yml`. Docker Compose merges the two files, and `genchibi update` never touches the override file.
 
@@ -237,7 +247,7 @@ your-domain {
 - **Adding the connector on claude.ai fails, or the Authorize page never shows?** Check in this order:
   1. `curl -i -X POST https://your-domain/mcp -H 'Content-Type: application/json' -d '{}'` must return **401** with `WWW-Authenticate: Bearer resource_metadata="…"`. If you get a login page, a 302 or a 403, the proxy or Cloudflare is blocking (see *Behind a proxy*).
   2. `curl https://your-domain/.well-known/oauth-authorization-server` must return JSON whose `issuer` is exactly `https://your-domain`.
-  3. `GC_PUBLIC_URL` must match the address pasted into claude.ai **character for character**.
+  3. The public address (`genchibi online` shows it; `GC_PUBLIC_URL` on machines set up by hand) must match the address pasted into claude.ai **character for character**.
 
   If you change the address, delete the connector and add it again, because claude.ai caches the discovery result for about 5 minutes.
 - **I have my own login page in front of the app (built by another agent) — will an update wipe it?** No, as long as it lives **outside** the install folder: a Caddyfile, a separate service, or `docker-compose.override.yml`. It will be lost if it was written into `docker-compose.yml` or into files under `current/`: on every update or start, genchibi copies the original `docker-compose.yml` back, and new versions are extracted into their own folder.

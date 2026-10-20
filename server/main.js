@@ -702,6 +702,9 @@ const onlineTestNet = !ONLINE_TEST_VIA ? {} : {
   resolve: async () => ({ a: ['192.0.32.10'], aaaa: [], via: 'system', error: '' }), publicIp: async () => ({ v4: '192.0.32.10', v6: '' }),
   probe: (url, o) => { const u = new URL(url); return require('./online').probeUrl('http://' + ONLINE_TEST_VIA + u.pathname + u.search, Object.assign({}, o, { ip: null, headers: Object.assign({}, o && o.headers, { Host: u.host }) })); }
 };
+// CHỈ cho kiểm thử (tools/test-online-cli.mjs): GC_TEST=1 + GC_TEST_CF_API=http://127.0.0.1:<cổng>/client/v4 — Cloudflare API giả (tools/fixtures/fake-cloudflare-api.mjs)
+const CF_TEST_API = process.env.GC_TEST === '1' && /^http:\/\/127\.0\.0\.1:\d{2,5}\/client\/v4$/.test(process.env.GC_TEST_CF_API || '') ? process.env.GC_TEST_CF_API : '';
+if (CF_TEST_API) onlineTestNet.cloudflare = o => require('./cloudflare').createCloudflare(Object.assign({}, o, { base: CF_TEST_API }));
 const goOnline = require('./online').createOnline(Object.assign({ home: HOME, dataDir: DATA, port: PORT, inDocker: process.env.GC_IN_DOCKER === '1', config: online, secrets, log, edge, tunnel: tunnelListener,
   isOwner: req => !!auth.ownerOf(req), hasPassword: () => auth.hasPassword(),
   legacy: () => { const c = online.get(); return { active: !!c.readOnly, marked: auth.isLegacy(), publicUrl: c.env.publicUrl, allowedHosts: c.env.allowedHosts.join(','), tunnel: c.env.tunnel }; } }, onlineTestNet, onlineTestCf));

@@ -31,7 +31,7 @@ Films are a way to *use* and *demo* assets. The product sold is the **themed ass
 Pick the first option your environment supports.
 
 1. **MCP over HTTP** (recommended): `POST <base>/mcp`, JSON-RPC 2.0, MCP protocol `2025-06-18`
-   (also accepts `2025-03-26`, `2024-11-05`). If the owner set a token, send `Authorization: Bearer <token>`.
+   (also accepts `2025-03-26`, `2024-11-05`). Every install has an owner token (since v0.21): send `Authorization: Bearer <token>` — the owner gets a ready config from `genchibi agent connect` — or connect with OAuth at `<base>/mcp` (the owner clicks Authorize).
    Over the Internet the owner gives you a link `<base>/mcp/<key>` (the key is the credential — keep it secret).
 2. **MCP over stdio**: run `genchibi mcp` (same tools).
 3. **No MCP client** (plain HTTP / function calling): the same JSON-RPC works with any HTTP client.
