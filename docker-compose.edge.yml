@@ -1,0 +1,27 @@
+# gen-chibi — edge Caddy for "Go online" path A (your domain's A record → this machine, HTTPS by Caddy). v0.21
+# © 2026 Gen Labs — All rights reserved.
+# Loaded ONLY when `genchibi online --caddy` turned it on (marker edge/caddy.enabled). genchibi composes
+#   docker compose -f docker-compose.yml -f docker-compose.edge.yml [-f docker-compose.override.yml]
+# and never sets COMPOSE_FILE (that would silently drop your override — CNS-169).
+# Own container: if ports 80/443 are taken, only this service fails; the app keeps running.
+# Caddy runs as your user (not root) on 8080/8443 inside the container; Docker publishes 80→8080, 443→8443 (CNS-187).
+# Config comes from files in ./edge (Caddyfile + sites.caddy written by the app) — a restart re-reads them; the app reloads
+# Caddy through the admin unix socket ./edge/run/caddy-admin.sock (no admin port, no docker.sock — spec §3.1).
+# Service name is prefixed so it never merges with a `caddy` service in your override (CNS-194).
+services:
+  gen-chibi-edge:
+    # pinned tag (Docker Hub library/caddy, checked 2026-10-20); Apache-2.0 — see ASSET_MANIFEST.md
+    image: caddy:2.11.7
+    container_name: gen-chibi-edge
+    user: "${GC_UID:-1000}:${GC_GID:-1000}"
+    command: ["caddy", "run", "--config", "/edge/Caddyfile", "--adapter", "caddyfile"]
+    environment:
+      XDG_DATA_HOME: /edge/caddy-data      # certificates + ACME account (kept across restarts)
+      XDG_CONFIG_HOME: /edge/caddy-config  # Caddy's autosave of the last loaded config
+    ports:
+      - "80:8080"
+      - "443:8443"
+    volumes:
+      - ./edge:/edge
+    depends_on: [app]
+    restart: unless-stopped

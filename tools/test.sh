@@ -4,14 +4,14 @@
 #   2) cổng kiểm của mọi nhân vật trong thư viện chính thức (chạy engine trong Node)
 #   2c/2d) item trang bị, cảnh (loại asset thứ hai, thứ ba)
 #   3) MCP: bắt tay, danh sách tool, tạo nhân vật / linh kiện / item / cảnh, chặn dữ liệu xấu
-#   4) tự cập nhật end-to-end (tools/test-update.sh)
+#   4) tự cập nhật end-to-end (tools/test-update.sh) + edge: launcher giám sát cloudflared, compose ghép -f, Caddy (tools/test-edge.sh)
 #   4c) OAuth cho MCP từ xa (tools/test-oauth.mjs)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 echo "1) cú pháp"
 for f in $(git ls-files '*.js' 2>/dev/null || find engine kinds server studio -name '*.js') launcher.js; do node --check "$f"; done
-bash -n install.sh; bash -n cli/genchibi; bash -n tools/package.sh; bash -n tools/test-lang.sh
+bash -n install.sh; bash -n cli/genchibi; bash -n tools/package.sh; bash -n tools/test-lang.sh; bash -n tools/test-update.sh; bash -n tools/test-edge.sh
 echo "   ✓ cú pháp"
 # luật cấu trúc: không đặt animation/transform CSS lên nhóm lớp của khung xương (lỗi mắt đứng yên v0.1.3)
 if grep -nE "\[data-l=[^]]*\][^{]*\{[^}]*(animation|transform)" engine/render.js studio/*.css 2>/dev/null; then echo "   ✗ CSS đặt transform/animation lên nhóm lớp [data-l]"; exit 1; fi
@@ -36,6 +36,9 @@ PKG_TMP="$(mktemp -d)"; PKG="$(bash tools/package.sh "$PKG_TMP" | tail -1)"
 PKG_LIST="$(tar -tzf "$PKG")"; rm -f "$PKG" "$PKG_TMP/SHA256SUMS"; rmdir "$PKG_TMP"   # chỉ xoá đúng hai tệp vừa tạo + thư mục rỗng
 for f in studio server engine player; do grep -q "/locales/en/$f.json$" <<< "$PKG_LIST" || { echo "   ✗ gói phát hành thiếu locales/en/$f.json"; exit 1; }; done
 echo "   ✓ gói phát hành có locales/en/{studio,server,engine,player}.json"
+# edge v0.21: genchibi chép compose edge + Caddyfile gốc từ bản đang chạy (sync_compose) — thiếu thì `genchibi online --caddy` không bật được
+for f in docker-compose.edge.yml edge/Caddyfile.base; do grep -q "^gen-chibi-v[^/]*/$f$" <<< "$PKG_LIST" || { echo "   ✗ gói phát hành thiếu $f"; exit 1; }; done
+echo "   ✓ gói phát hành có docker-compose.edge.yml + edge/Caddyfile.base"
 # ghi chú Release lấy từ CHANGELOG (tiêu đề có mô tả "## vX.Y.Z — …" — trước v0.20 awk so cả dòng nên Release chỉ có "Phát hành vX")
 RN="$(bash tools/release-notes.sh "v$(tr -d ' \n' < VERSION)")"
 [ -n "$RN" ] || { echo "   ✗ CHANGELOG.md không có mục cho v$(tr -d ' \n' < VERSION) — Release sẽ trống ghi chú"; exit 1; }
@@ -752,5 +755,7 @@ node tools/test-oauth.mjs || exit 1
 
 echo "5) tự cập nhật"
 bash tools/test-update.sh
+echo "5b) edge (v0.21): compose ghép -f (không COMPOSE_FILE), sync_compose, online --caddy / --caddy-off, Caddy thật nạp lại qua unix socket"
+bash tools/test-edge.sh || exit 1
 echo "4b) token GitHub (repo private)"
 node tools/test-token.js

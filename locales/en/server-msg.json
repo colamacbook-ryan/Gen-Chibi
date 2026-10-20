@@ -209,6 +209,7 @@
  "Đã tải {tag}. Đang khởi động lại…": "Downloaded {tag}. Restarting…",
  "không có bản cũ để chạy lại": "no previous version to run again",
  "Đang chạy lại {tag}…": "Running {tag} again…",
+ "Đang chạy lại {tag}… Cảnh báo: {tag} không có edge — máy sẽ offline (mất tên miền / tunnel) cho tới khi cập nhật lại.": "Running {tag} again… Warning: {tag} has no edge support — this machine goes offline (domain / tunnel lost) until you update again.",
  "//oauth": "server/oauth.js + server/oauth-page.js — the Authorize page is for the owner (people); error_description for machines is English in code",
  "Chỉ xem": "Read only",
  "Đọc thư viện, tác phẩm, kiểm công thức, dựng ảnh xem thử. Không lưu gì.": "Read the library and works, check recipes, render preview images. Saves nothing.",
