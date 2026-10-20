@@ -58,6 +58,16 @@
     if (s === null) { s = id; note(L, id); }
     return fmt(s, vars);
   }
+  // NGỮ CẢNH (kiểu pgettext): cùng một chữ tiếng Việt mà tiếng Anh khác nghĩa ("Cập nhật" = menu Updates / cột Updated, "Đạt" = duyệt Approved /
+  // cổng kiểm Passed) → khoá "[ngữ cảnh] msgid". Tiếng Việt vẫn hiện msgid; thiếu khoá có ngữ cảnh thì ghi thiếu rồi rơi về bản dịch của msgid trần
+  function ctxKey(ctx, msgid) { return '[' + String(ctx) + '] ' + String(msgid == null ? '' : msgid); }
+  function ptranslate(l, ctx, msgid, vars) {
+    var id = String(msgid == null ? '' : msgid), L = norm(l) || cur;
+    if (!id || L === SOURCE) return fmt(id, vars);
+    var k = ctxKey(ctx, id), s = lookup(L, k, vars);
+    if (s === null) { note(L, k); s = lookup(L, id, vars); if (s === null) s = id; }
+    return fmt(s, vars);
+  }
   function label(l, s, vars) {
     var id = String(s == null ? '' : s), L = norm(l) || cur;
     var r = id ? lookup(L, id, vars) : id;
@@ -68,6 +78,8 @@
     SOURCE: SOURCE, LANGS: LANGS.slice(), DEFAULT: DEFAULT,
     norm: norm, fmt: fmt,
     t: function (msgid, vars) { return translate(cur, msgid, vars); },
+    pt: function (ctx, msgid, vars) { return ptranslate(cur, ctx, msgid, vars); },
+    ptr: ptranslate, ctxKey: ctxKey,
     tr: translate,
     label: function (s, vars) { return label(cur, s, vars); },
     labelIn: label,

@@ -387,7 +387,6 @@
  "nữ": "female",
  "nam": "male",
  "Ngôn ngữ nghe thử": "Preview language",
- "Ngôn ngữ để nghe thử (phim chọn ngôn ngữ riêng ở Sân khấu final)": "Language for the preview (each film sets its own language in the Voice & sound tab)",
  "Giọng vùng": "Accent",
  "Giọng vùng của riêng nhân vật. \"Theo phim\" = theo giọng vùng của tác phẩm": "This character's own accent. \"Follow film\" = use the work's accent",
  "Theo phim": "Follow film",
@@ -1657,5 +1656,21 @@
  "Xoá luồng hội thoại này?\n\nChỉ xoá tin nhắn với trợ lý ({ctxPath}); tác phẩm / asset giữ nguyên.": "Clear this thread?\n\nOnly the messages with the assistant are deleted ({ctxPath}); works / assets are not touched.",
  "Đã xoá luồng.": "Thread cleared.",
  "Giọng máy (trình duyệt, miễn phí)": "Machine voice (browser, free)",
- "Nghe {name}": "Play {name}"
+ "Nghe {name}": "Play {name}",
+ "Ngôn ngữ để nghe thử (phim chọn ngôn ngữ riêng ở tab Giọng & âm thanh)": "Language for the preview (each film sets its own language in the Voice & sound tab)",
+ "[cổng kiểm] Đạt": "Passed",
+ "[cột] Cập nhật": "Updated",
+ "[lịch sử] Cập nhật": "Update",
+ "[số ít] Phân cảnh": "Shot",
+ "[số ít] Nhân vật": "Character",
+ "[số ít] Vật phẩm": "Item",
+ "[số ít] Bối cảnh": "Scene",
+ "[số ít] Tác phẩm": "Work",
+ "[cột] Nhân vật": "Character",
+ "[hộp] Âm thanh": "Sound",
+ "[xoá] Bỏ": "Remove",
+ "~{n} token": [
+  "~{n} token",
+  "~{n} tokens"
+ ]
 }

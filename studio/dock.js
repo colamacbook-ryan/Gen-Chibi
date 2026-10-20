@@ -8,7 +8,7 @@
 (function () {
   'use strict';
   var GC = window.GenChibi, B = null;
-  var _t = GC.i18n.t, _l = GC.i18n.label, N_ = GC.i18n.N;   // ngôn ngữ (ADR 0007): _t câu giao diện · _l nhãn dữ liệu (nhãn khu do server gửi, tên phần tử)
+  var _t = GC.i18n.t, _pt = GC.i18n.pt, _l = GC.i18n.label, N_ = GC.i18n.N;   // ngôn ngữ (ADR 0007): _t câu giao diện · _l nhãn dữ liệu (nhãn khu do server gửi, tên phần tử)
   // nhãn / vai / lời giới thiệu của từng khu do SERVER giữ (mcp.js ZONES, qua GET /api/ai › zones) — dock không chép lại; chưa có (bản xem thử không server) thì hiện id khu
   var KIND_LABEL = { asset: N_('Nhân vật'), item: N_('Vật phẩm'), scene: N_('Bối cảnh'), action: N_('Hành động'), work: N_('Tác phẩm'), shot: N_('Phân cảnh'), step: N_('Bước'), project: N_('Dự án'), panel: N_('Khu vực'), zone: N_('Khu') };
   var ANCHOR_RE = /^(asset|item|scene|action|work|shot|step|project|panel|zone):[A-Za-z0-9][A-Za-z0-9._~\/-]{0,160}$/;
@@ -27,7 +27,17 @@
   function cut(t, n) { var a = Array.from(String(t == null ? '' : t)); return a.length > n ? a.slice(0, n - 1).join('') + '…' : a.join(''); }
   function norm(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase(); }
   function zoneOf(id) { return (S.zones && S.zones[id]) || null; }
-  function kindLabel(k) { return KIND_LABEL[k] ? _t(KIND_LABEL[k]) : k; }
+  // nhãn LOẠI một phần tử (số ít: "Character", không phải tên mục menu "Characters") — ngữ cảnh 'số ít' (engine/i18n.js pt)
+  function kindLabel(k) {
+    switch (k) {
+      case 'asset': return _pt('số ít', 'Nhân vật');
+      case 'item': return _pt('số ít', 'Vật phẩm');
+      case 'scene': return _pt('số ít', 'Bối cảnh');
+      case 'work': return _pt('số ít', 'Tác phẩm');
+      case 'shot': return _pt('số ít', 'Phân cảnh');
+      default: return KIND_LABEL[k] ? _t(KIND_LABEL[k]) : k;
+    }
+  }
   function zoneLabel(id) { var z = zoneOf(id); return z ? _l(z.label) : id; }   // nhãn khu do server gửi (đã theo X-GC-Lang); _l phòng server cũ
   function esc(s) { return window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/["\\]/g, '\\$&'); }
 
@@ -332,7 +342,7 @@
   function tokens() {
     var n = S.pins.length, per = n ? Math.max(300, Math.min(1200, Math.floor(BUDGET / n))) : 0, typed = E.ta.value.length + 80, pins = 0, b = baseChars();
     S.pins.forEach(function (p) { pins += Math.min(p.snap.length, per) + p.label.length + p.anchor.length; });
-    E.tok.textContent = '~' + Math.ceil((typed + pins + b.sys + b.ctx + b.hist) / 3) + ' token';
+    E.tok.textContent = _t('~{n} token', { n: Math.ceil((typed + pins + b.sys + b.ctx + b.hist) / 3) });
     E.tok.title = _t('Ước tính token vòng đầu của tin này: chữ bạn gõ ~{ceil} + {n} phần tử ghim ~{ceil2} + chỉ dẫn của khu ~{ceil3} + dữ liệu giao diện ~{ceil4} + lịch sử ~{ceil5}. Mỗi lần AI gọi tool là một vòng nữa; số thật hiện dưới câu trả lời.', { ceil: Math.ceil(typed / 3), n: n, ceil2: Math.ceil(pins / 3), ceil3: Math.ceil(b.sys / 3), ceil4: Math.ceil(b.ctx / 3), ceil5: Math.ceil(b.hist / 3) });
   }
 
@@ -553,7 +563,7 @@
         if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); send(); }
       },
       onclick: mentionUpdate, onblur: function () { setTimeout(mentionClose, 120); } });
-    E.tok = h('span', { class: 'tok mono', text: '~0 token' });
+    E.tok = h('span', { class: 'tok mono', text: _t('~{n} token', { n: 0 }) });
     E.pickB = h('button', { type: 'button', class: 'btn sm', 'aria-pressed': 'false', onclick: function () { setPick(!S.pick); } });
     E.atB = h('button', { type: 'button', class: 'btn sm', onclick: function () { var p = E.ta.selectionStart, v = E.ta.value; E.ta.value = v.slice(0, p) + (p && !/\s$/.test(v.slice(0, p)) ? ' @' : '@') + v.slice(p); E.ta.focus(); E.ta.setSelectionRange(E.ta.value.length, E.ta.value.length); mentionUpdate(); } }, '@');
     E.sendL = h('span'); E.send = h('button', { type: 'button', class: 'btn primary sm send', onclick: function () { send(); } }, E.sendL, ' ', h('span', { class: 'kb', text: '⌘↵' }));

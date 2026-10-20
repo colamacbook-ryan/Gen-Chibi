@@ -7,7 +7,7 @@
   var GC = window.GenChibi, LIB = GC.LIB, R = GC.render;
   // NGÔN NGỮ (ADR 0007, engine/i18n.js): msgid = chuỗi tiếng Việt hiện có. _t = câu giao diện · _l = nhãn DỮ LIỆU (engine / người dùng:
   // có bản dịch thì dịch, không thì giữ nguyên, không ghi "thiếu") · N_ = đánh dấu chuỗi ở bảng hằng cấp module — dịch lúc HIỂN THỊ bằng _t().
-  var I18N = GC.i18n, _t = I18N.t, _l = I18N.label, N_ = I18N.N;
+  var I18N = GC.i18n, _t = I18N.t, _pt = I18N.pt, _l = I18N.label, N_ = I18N.N;   // _pt(ngữ cảnh, msgid): một chữ Việt, hai nghĩa tiếng Anh
   // 8 hướng (2.5D): tên góc → nhãn. Thứ tự = GC.VIEW_ORDER. Sprite 8 hướng đi vòng theo chiều kim đồng hồ từ chính diện.
   var VIEW_LABEL = { front: N_('Chính diện'), left: N_('3/4 trái'), right: N_('3/4 phải'), left45: N_('45° trái'), right45: N_('45° phải'), left90: N_('90° trái'), right90: N_('90° phải'),
     left135: N_('135° trái'), right135: N_('135° phải'), back: N_('Sau lưng') };
@@ -567,7 +567,7 @@
       clear(gateBox);
       var t = h('table', { class: 'grid' });
       GC.gate(w, { poses: true }).forEach(function (g) {
-        t.appendChild(h('tr', null, h('td', { text: _l(g.label) }), h('td', { class: g.ok ? 'ok' : 'bad', style: 'font-weight:600', text: g.ok ? _t('Đạt') : _t('Không đạt') })));
+        t.appendChild(h('tr', null, h('td', { text: _l(g.label) }), h('td', { class: g.ok ? 'ok' : 'bad', style: 'font-weight:600', text: g.ok ? _pt('cổng kiểm', 'Đạt') : _t('Không đạt') })));
         if (!g.ok) t.appendChild(h('tr', null, h('td', { colspan: '2', class: 'note', text: _l(g.detail) })));
       });
       gateBox.appendChild(t);
@@ -1072,7 +1072,7 @@
     var all = GC.assets();
     var cur = GC.ASSETS[r.key] || all[0];
     var sel = { activity: r.activity || 'walk', state: null, posture: '', move: '', motion: '', facing: 'right', view: '' };
-    var selA = h('select', { 'aria-label': _t('Nhân vật'), onchange: function () { cur = GC.ASSETS[selA.value]; paintGrid(); play(); } });
+    var selA = h('select', { 'aria-label': _pt('số ít', 'Nhân vật'), onchange: function () { cur = GC.ASSETS[selA.value]; paintGrid(); play(); } });
     all.forEach(function (a) { selA.appendChild(h('option', { value: a.key, text: _l(a.name) + ' · ' + a.pack, selected: a === cur })); });
     var grid = h('div', { class: 'stack' });
     var stg = h('div', { class: 'stage preview', style: 'height:340px' });
@@ -1569,7 +1569,7 @@
       roleSel.appendChild(g);
     });
     roleSel.value = saved.role && V.ROLES[saved.role] ? saved.role : '';
-    var langSel = h('select', { 'aria-label': _t('Ngôn ngữ nghe thử'), title: _t('Ngôn ngữ để nghe thử (phim chọn ngôn ngữ riêng ở Sân khấu final)'), onchange: function () { VoicePref.set(langSel.value, V.accent(langSel.value, '')); fillAccent(); fillAi(); } });
+    var langSel = h('select', { 'aria-label': _t('Ngôn ngữ nghe thử'), title: _t('Ngôn ngữ để nghe thử (phim chọn ngôn ngữ riêng ở tab Giọng & âm thanh)'), onchange: function () { VoicePref.set(langSel.value, V.accent(langSel.value, '')); fillAccent(); fillAi(); } });
     V.langList().forEach(function (l) { langSel.appendChild(h('option', { value: l.id, text: _l(l.label) })); });
     langSel.value = lang0;
     var accSel = h('select', { 'aria-label': _t('Giọng vùng'), title: _t('Giọng vùng của riêng nhân vật. "Theo phim" = theo giọng vùng của tác phẩm'), onchange: function () { touched.accent = true; } });
@@ -1812,7 +1812,7 @@
     var C = GC.choreo, base = cfg.base, cast = base.cast.slice(), dirty = false, alive = true, warnTimer = 0, serverErrs = [];
     // rev tăng mỗi lần sửa: lưu xong chỉ xoá "chưa lưu" khi trong lúc chờ không sửa thêm; saving khoá nút Lưu suốt lúc chờ (không gửi đôi)
     var rev = 0, saving = false, downOnBack = false, warnSig = null, warnPend = null;
-    var evTitle = (cfg.event && cfg.event.title) || base.title || _t('Phân cảnh');
+    var evTitle = (cfg.event && cfg.event.title) || base.title || _pt('số ít', 'Phân cảnh');
     var rows = cfg.event && Array.isArray(cfg.event.steps) ? clone(cfg.event.steps) : [];
     var scene = base.scene ? GC.getScene(base.scene, MY_PACK) : null;
     var MAX = 12, MORE = ['camera', 'bubble', 'activity', 'view', 'facing', 'posture', 'move', 'motion'], MORE_ARR = ['fx', 'sfx'];
@@ -2184,7 +2184,7 @@
     }
     function paint() {
       clear(table); clear(foot);
-      var cols = ['ID', _t('Tên tác phẩm'), _t('Dự án'), _t('Cảnh'), _t('Đạt'), _t('Giọng AI'), _t('Cập nhật'), _t('Trạng thái')];
+      var cols = ['ID', _t('Tên tác phẩm'), _t('Dự án'), _t('Cảnh'), _t('Đạt'), _t('Giọng AI'), _pt('cột', 'Cập nhật'), _t('Trạng thái')];
       var lt = h('tr', { class: 'letters' }); cols.forEach(function (c, i) { lt.appendChild(h('td', { text: String.fromCharCode(65 + i) })); });
       table.appendChild(lt);
       var hd = h('tr'); cols.forEach(function (c) { hd.appendChild(h('th', { text: c })); }); table.appendChild(hd);
@@ -2575,7 +2575,7 @@
       var acts = AiVoice.actorsOf(W), chosen = (W.voices || {})[workLang(W).lang + '|' + workLang(W).accent] || {};
       if (!acts.length) { castBox.appendChild(h('div', { class: 'pad note', text: _t('Chưa có diễn viên — chọn diễn viên trong từng phân cảnh (tab Phân cảnh) hoặc nhờ AI đạo diễn.') })); return; }
       var t = h('table', { class: 'grid' }), hd = h('tr');
-      [_t('Nhân vật'), _t('Vai giọng'), _t('Cảnh'), _t('Câu thoại'), _t('Giọng AI đã chốt')].forEach(function (c) { hd.appendChild(h('th', { text: c })); });
+      [_pt('cột', 'Nhân vật'), _t('Vai giọng'), _t('Cảnh'), _t('Câu thoại'), _t('Giọng AI đã chốt')].forEach(function (c) { hd.appendChild(h('th', { text: c })); });
       t.appendChild(hd);
       acts.forEach(function (a) {
         var nShot = W.shots.filter(function (s) { return (s.cast || []).some(function (k) { return GC.canon(k) === a.key; }); }).length;
@@ -2620,7 +2620,7 @@
     function shotCard(s, i, chars, scenes) {
       var dr = drafts[s.id] || (drafts[s.id] = null), keep = function () { drafts[s.id] = { title: t.value, description: d.value, scene: sc.value, cast: cast.slice() }; };
       var t = h('input', { type: 'text', 'aria-label': _t('Tên phân cảnh {n}', { n: i + 1 }), value: dr ? dr.title : s.title, maxlength: 80, oninput: function () { keep(); } }), d = h('textarea', { rows: 2, maxlength: 1000, 'aria-label': _t('Mô tả phân cảnh {n}', { n: i + 1 }), placeholder: _t('Mô tả phân cảnh'), oninput: function () { keep(); } }); d.value = dr ? dr.description : s.description || '';
-      var sc = h('select', { 'aria-label': _t('Bối cảnh') }); sc.appendChild(h('option', { value: '', text: _t('— bối cảnh —') }));
+      var sc = h('select', { 'aria-label': _pt('số ít', 'Bối cảnh') }); sc.appendChild(h('option', { value: '', text: _t('— bối cảnh —') }));
       scenes.forEach(function (x) { sc.appendChild(h('option', { value: x.key, text: _l(x.name) + (x.project ? ' · ' + Projects.name(x.project) : '') })); });
       sc.value = GC.canon(dr ? dr.scene : s.scene || ''); sc.onchange = keep;   // phân cảnh cũ trỏ afi.* vẫn chọn đúng (không âm thầm thành "không bối cảnh")
       var cast = (dr ? dr.cast : s.cast || []).map(GC.canon), cb = h('div', { class: 'fxchips', role: 'group', 'aria-label': _t('Dàn diễn viên') });
@@ -2787,7 +2787,7 @@
           return h('span', { class: 'lv-pair' }, m, vcCtl(x).el);
         } },
         { t: _t('ID nhân vật'), w: 136, frozen: true, cls: 'id', v: function (x) { return x.id; }, cell: function (x) { return x.id; }, tip: function (x) { return x.id; } },
-        { t: _t('Nhân vật'), w: 112, v: function (x) { return x.a.name; }, cell: function (x) { return h('span', { class: 'lv-who', style: '--own:' + ownOf(x.a) }, h('span', { class: 'dot' }), x.a.name); } },
+        { t: _pt('cột', 'Nhân vật'), w: 112, v: function (x) { return x.a.name; }, cell: function (x) { return h('span', { class: 'lv-who', style: '--own:' + ownOf(x.a) }, h('span', { class: 'dot' }), x.a.name); } },
         { t: _t('Vai giọng'), w: 150, v: function (x) { return _l(GC.voices.ROLES[x.role].label); }, cell: function (x) { return [_l(GC.voices.ROLES[x.role].label), x.explicit ? null : h('span', { class: 'chip', style: 'margin-left:6px', title: _t('Chưa chọn vai trong hồ sơ nhân vật — Studio đoán từ vai trò / tính cách / tên'), text: _t('đoán') })]; } },
         { t: _t('Giọng chốt'), w: 108, cls: 'mono', v: function (x) { return x.voice; }, cell: function (x) { return x.voice || '—'; } },
         { t: _t('Nguồn'), w: 108, v: function (x) { return x.src; }, cell: function (x) { return h('span', { class: CHOT_SRC[x.src][1], title: _t(CHOT_SRC[x.src][2]), text: _t(CHOT_SRC[x.src][0]) }); } },
@@ -2870,7 +2870,7 @@
         h('div', { class: 'pad revtop' }, stageBox,
           h('div', { class: 'revside stack' },
             h('div', { class: 'row' }, h('button', { class: 'btn primary', 'data-playall': '1', onclick: function () { if (W) player.play(W.shots, W.title); } }, _t('▶ Cả phim')), h('button', { class: 'btn', onclick: function () { player.stop(); } }, _t('Dừng')), sumBadge),
-            h('div', { class: 'usebar' }, h('b', { text: _t('Âm thanh') }), audioControls(), dialogControl(player)),
+            h('div', { class: 'usebar' }, h('b', { text: _pt('hộp', 'Âm thanh') }), audioControls(), dialogControl(player)),
             h('div', { class: 'note', text: _t('Bấm "▶ Cảnh" ở từng hàng để xem lại một cảnh; đặt trạng thái Nháp / Cần sửa / Đạt và ghi chú (gắn cảnh hoặc một bước). "Gửi AI sửa theo ghi chú" ghim cảnh vào Trợ lý AI ở cột phải.')})))),
       h('div', { class: 'panel' }, h('h3', null, _t('Duyệt từng cảnh'), h('span', { class: 'r note', text: _t('ghi chú lưu trong tác phẩm — AI đọc được qua get_work › review') })), h('div', { class: 'pad stack' }, allNote, reviewList)));
     panels.voice = h('div', { class: 'stack' },
@@ -2880,7 +2880,7 @@
         h('div', { class: 'usebar' }, h('b', { text: _t('Lồng tiếng') }), dubB, dubNote), dubBox, castNote)),
       h('div', { class: 'panel' }, h('h3', null, _t('Giọng chốt theo nhân vật'), h('span', { class: 'r row' }, vcCastB, h('button', { class: 'btn sm', type: 'button', id: 'wvToLib', title: _t('Xem, nghe và thiết kế giọng cho 22 vai ở Thư viện › Giọng'), onclick: function () { go({ page: 'lib-voices', project: (W && W.project) || undefined }); } }, _t('Bộ giọng vai ›')))),
         h('div', { class: 'pad stack' }, h('div', { class: 'row' }, vcLangNote, h('span', { class: 'note', style: 'margin-left:12px', text: _t('Mỗi nhân vật một giọng, chốt theo tác phẩm — Studio, MCP và phim xuất cùng một giọng.') })), voiceBox)),
-      h('div', { class: 'panel' }, h('h3', null, _t('Âm thanh'), h('span', { class: 'r note', text: _t('luật ghép S1–S7 của cả tác phẩm') })), h('div', { class: 'pad stack' }, soundBox)));
+      h('div', { class: 'panel' }, h('h3', null, _pt('hộp', 'Âm thanh'), h('span', { class: 'r note', text: _t('luật ghép S1–S7 của cả tác phẩm') })), h('div', { class: 'pad stack' }, soundBox)));
     panels.publish = h('div', { class: 'stack' },
       h('div', { class: 'panel' }, h('h3', null, _t('Xuất bản'), h('span', { class: 'r note', text: _t('phim · storyboard · dữ liệu · gói dự án') })), h('div', { class: 'pad stack' },
         h('div', { class: 'usebar' }, h('b', { text: _t('Phim') }),
@@ -3427,7 +3427,7 @@
       clock = h('span', { class: 'note mono' });
       playB = h('button', { class: 'btn sm', 'aria-label': _t('Phát / dừng'), onclick: function () { playing = !playing; playB.textContent = playing ? _t('❚❚ Dừng') : _t('▶ Phát'); play(); } }, playing ? _t('❚❚ Dừng') : _t('▶ Phát'));
       var ctl = h('div', { class: 'row' },
-        h('label', { class: 'fld' }, h('span', { class: 'note', text: A.attack ? _t('Người ra đòn') : _t('Nhân vật') }), charSelect(u.who, _t('Nhân vật'), function (v) { u.who = v; route.who = v; remember(); paintInsp(); }, A.needs ? A : null)),
+        h('label', { class: 'fld' }, h('span', { class: 'note', text: A.attack ? _t('Người ra đòn') : _pt('số ít', 'Nhân vật') }), charSelect(u.who, _pt('số ít', 'Nhân vật'), function (v) { u.who = v; route.who = v; remember(); paintInsp(); }, A.needs ? A : null)),
         A.attack ? h('label', { class: 'fld' }, h('span', { class: 'note', text: _t('Đối thủ') }), charSelect(u.partner, _t('Đối thủ'), function (v) { u.partner = v; paintInsp(); })) : null,
         A.attack ? h('label', { class: 'fld' }, h('span', { class: 'note', text: _t('Phản ứng của đối thủ') }), (function () {
           var s = h('select', { 'aria-label': _t('Phản ứng'), onchange: function () { u.react = s.value; paintInsp(); } });
@@ -4690,7 +4690,7 @@
       paintSteps(); clear(left); clear(right);
       // ① chọn khung
       var kseg = h('div', { class: 'seg' });
-      [['character', _t('Nhân vật')], ['item', _t('Vật phẩm')], ['scene', _t('Bối cảnh')]].forEach(function (k) {
+      [['character', _pt('số ít', 'Nhân vật')], ['item', _pt('số ít', 'Vật phẩm')], ['scene', _pt('số ít', 'Bối cảnh')]].forEach(function (k) {
         kseg.appendChild(h('button', { 'aria-pressed': String(u.kind === k[0]), onclick: function () { u.kind = k[0]; u.d = null; u.frame = null; paint(); } }, k[1]));
       });
       var fgrid = h('div', { class: 'libgrid sm' });
@@ -5017,7 +5017,7 @@
         var flip = h('input', { type: 'checkbox', checked: !!x.flip, onchange: function () { x.flip = flip.checked; preview(); } });
         dt.appendChild(h('tr', null, h('td', null, sel), h('td', null, num('x', x.x, 0, 640, 10, function (v) { x.x = v; })), h('td', null, num('y', x.y || 300, 150, 360, 5, function (v) { x.y = v; })),
           h('td', null, num(_t('cỡ'), x.scale || 1, 0.3, 2.5, 0.1, function (v) { x.scale = v; })), h('td', null, flip), h('td', null, z),
-          h('td', null, h('button', { class: 'btn sm', onclick: function () { w.deco.splice(i, 1); paintAll(); } }, _t('Bỏ')))));
+          h('td', null, h('button', { class: 'btn sm', onclick: function () { w.deco.splice(i, 1); paintAll(); } }, _pt('xoá', 'Bỏ')))));
       });
       var addDeco = h('button', { class: 'btn sm', disabled: (w.deco || []).length >= S.budget.deco, onclick: function () { w.deco = w.deco || []; w.deco.push({ part: 'gen.khung/khoi-da', x: 320, y: 300, scale: 1, flip: false, z: 'back' }); paintAll(); } }, _t('+ Đạo cụ'));
       // --- màu, giờ, thời tiết, chỗ đứng
@@ -5311,11 +5311,11 @@
     var t = h('table', { class: 'grid' });
     var all = GC.assets();
     var head = GC.gate(all[0], { poses: true }).map(function (g) { return _l(g.label); });
-    t.appendChild(h('tr', null, h('th', { text: _t('Nhân vật') }), head.map(function (x) { return h('th', { text: x }); }), h('th', { text: _t('Xuất') })));
+    t.appendChild(h('tr', null, h('th', { text: _pt('cột', 'Nhân vật') }), head.map(function (x) { return h('th', { text: x }); }), h('th', { text: _t('Xuất') })));
     all.forEach(function (a) {
       var gs = GC.gate(a, { poses: true }), ok = gs.every(function (g) { return g.ok; });
       t.appendChild(h('tr', null, h('td', null, h('span', { class: 'mono note', text: (a.code || '') + ' ' }), _l(a.name)),
-        gs.map(function (g) { return h('td', { class: g.ok ? 'ok' : 'bad', title: _l(g.detail || ''), style: 'font-weight:600', text: g.ok ? _t('Đạt') : _t('Không đạt') }); }),
+        gs.map(function (g) { return h('td', { class: g.ok ? 'ok' : 'bad', title: _l(g.detail || ''), style: 'font-weight:600', text: g.ok ? _pt('cổng kiểm', 'Đạt') : _t('Không đạt') }); }),
         h('td', { class: ok ? 'ok' : 'bad', style: 'font-weight:600', text: ok ? _t('Được xuất') : _t('Chặn') })));
     });
     var res = h('div', { class: 'note' });
@@ -5493,7 +5493,7 @@
       var hist = h('table', { class: 'grid' });
       hist.appendChild(h('tr', null, [_t('Lúc'), _t('Loại'), _t('Từ'), _t('Sang'), _t('Kết quả'), 'Backup'].map(function (c) { return h('th', { text: c }); })));
       (s.history || []).forEach(function (e) {
-        hist.appendChild(h('tr', null, h('td', { class: 'nw note', text: fmtTime(e.at) }), h('td', { text: e.kind === 'rollback' ? _t('Chạy lại bản cũ') : _t('Cập nhật') }),
+        hist.appendChild(h('tr', null, h('td', { class: 'nw note', text: fmtTime(e.at) }), h('td', { text: e.kind === 'rollback' ? _t('Chạy lại bản cũ') : _pt('lịch sử', 'Cập nhật') }),
           h('td', { class: 'v', text: e.from || '—' }), h('td', { class: 'v', text: e.to || '—' }),
           h('td', null, h('span', { class: 'chip ' + (e.ok ? 'ok' : 'bad'), text: e.ok ? _t('Thành công') : (e.rolledBack ? _t('Lỗi · đã tự chạy lại bản cũ') : _t('Lỗi')) }), e.error ? h('div', { class: 'note', text: e.error }) : null),
           h('td', { class: 'note mono', text: e.backup || '—' })));

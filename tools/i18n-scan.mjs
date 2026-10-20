@@ -86,7 +86,8 @@ export function analyze(src) {
 }
 
 /* ---------------------------------------------------------------- quy tắc */
-const T_FUNCS = new Set(['_t', 'N_', '_l', 'I18N.t', 'I18N.N', 'I18N.label', 'GC.i18n.t', 'GC.i18n.label', 'i18n.t', 'i18n.label', 'GenChibi.i18n.t']);
+const PT_FUNCS = new Set(['_pt', 'I18N.pt', 'GC.i18n.pt', 'i18n.pt']);   // _pt(ngữ cảnh, msgid) → khoá "[ngữ cảnh] msgid"
+const T_FUNCS = new Set(['_pt', 'I18N.pt', 'GC.i18n.pt', 'i18n.pt', '_t', 'N_', '_l', 'I18N.t', 'I18N.N', 'I18N.label', 'GC.i18n.t', 'GC.i18n.label', 'i18n.t', 'i18n.label', 'GenChibi.i18n.t']);
 const DATA_CALLS = /(^|\.)(indexOf|lastIndexOf|includes|startsWith|endsWith|split|test|match|matchAll|search|replace|replaceAll|getItem|setItem|removeItem|querySelector|querySelectorAll|closest|getElementById|hasOwnProperty|has|RegExp|norm|normalize)$/;
 const CMP = new Set(['===', '!==', '==', '!=']);
 function ignoreZones(src) {   // dòng / khối được miễn có lý do
@@ -164,7 +165,13 @@ export function scan(root = ROOT) {
       const calls = t.calls || [], callee = calls[calls.length - 1] || '';
       const direct = toks[k - 1] && toks[k - 1].value === '(' && toks[k - 2] && toks[k - 2].type === 'ident';
       // msgid = đối số chuỗi ĐẦU TIÊN của _t / N_ (server: thứ hai của tr(lang, …))
-      if ((T_FUNCS.has(callee) && direct && !/label$|^_l$/.test(callee)) || (isServer && /(^|\.)tr$/.test(callee) && toks[k - 1].value === ',' && toks[k - 3] && toks[k - 3].value === '(')) {
+      if (PT_FUNCS.has(callee) && direct) {   // đối số 1 = ngữ cảnh, 2 = msgid
+        const m = toks[k + 1] && toks[k + 1].value === ',' && toks[k + 2] && (toks[k + 2].type === 'str' || toks[k + 2].type === 'tpl') ? toks[k + 2] : null;
+        let id = null; try { id = m ? strValue(m.value) : null; } catch (e) { id = null; }
+        if (id) { const key = '[' + v + '] ' + id; (used.get(key) || used.set(key, []).get(key)).push(rel + ':' + t.line); literals.add(key); }
+        return;
+      }
+      if ((T_FUNCS.has(callee) && direct && !PT_FUNCS.has(callee) && !/label$|^_l$/.test(callee)) || (isServer && /(^|\.)tr$/.test(callee) && toks[k - 1].value === ',' && toks[k - 3] && toks[k - 3].value === '(')) {
         (used.get(v) || used.set(v, []).get(v)).push(rel + ':' + t.line);
       }
       if (!isUI || !VI_RE.test(v)) return;

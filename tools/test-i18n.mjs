@@ -22,6 +22,15 @@ eq(I.t('{n} phân cảnh', { n: 3 }), '3 shots', 'số nhiều: n = 3');
 eq(I.t('Chưa dịch {x}', { x: 5 }), 'Chưa dịch 5', 'thiếu bản dịch → msgid + placeholder');
 ok(I.missing('en').includes('Chưa dịch {x}'), 'thiếu bản dịch được ghi vào missing()');
 ok(!I.missing('en').includes('Lưu'), 'có bản dịch thì không nằm trong missing()');
+// NGỮ CẢNH (pt, kiểu pgettext): cùng chữ Việt, hai nghĩa tiếng Anh — khoá "[ngữ cảnh] msgid"; vi giữ msgid; thiếu ngữ cảnh → rơi về bản dịch msgid trần + ghi thiếu
+I.add('en', { 'Cập nhật': 'Updates', '[cột] Cập nhật': 'Updated', '{n} lần': ['{n} time', '{n} times'], '[đếm] {n} lần': ['{n} go', '{n} goes'] });
+eq(I.pt('cột', 'Cập nhật'), 'Updated', 'pt: khoá có ngữ cảnh thắng');
+eq(I.t('Cập nhật'), 'Updates', 'pt: không ảnh hưởng t() của msgid trần');
+eq(I.pt('lạ', 'Cập nhật'), 'Updates', 'pt: thiếu ngữ cảnh → bản dịch msgid trần');
+ok(I.missing('en').includes('[lạ] Cập nhật'), 'pt: thiếu ngữ cảnh được ghi vào missing() (khoá có ngữ cảnh)');
+eq(I.pt('đếm', '{n} lần', { n: 2 }), '2 goes', 'pt: số nhiều + placeholder theo ngữ cảnh');
+eq(I.ptr('vi', 'cột', 'Cập nhật'), 'Cập nhật', 'pt: tiếng Việt luôn là msgid (không lộ ngữ cảnh)');
+eq(I.ctxKey('cột', 'Cập nhật'), '[cột] Cập nhật', 'ctxKey: dạng khoá trong locales');
 eq(I.t('Rỗng'), 'Rỗng', 'bản dịch rỗng = coi như thiếu (không hiện chuỗi trống)');
 ok(!I.has('en', '//'), 'khoá "//" (ghi chú) không nạp');
 eq(I.t('Giữ {lạ} và {y}', { y: undefined }), 'Giữ {lạ} và undefined', 'placeholder: không có khoá thì giữ nguyên, có khoá thì String() như phép cộng chuỗi cũ');

@@ -7,12 +7,12 @@
 
 ## Fastest: see the whole flow in 10 seconds
 1. Open gen-chibi (default `http://localhost:7480`).
-2. On the **Choose a workspace** screen, click **✨ open the sample project "Văn phòng vui"** (Fun Office).
+2. On the **Choose a workspace** screen, click **✨ Open the sample project "Fun Office"**.
 3. You land in the **Library**: 3 characters, 1 item and 2 scenes from the sample project.
 4. Open **Create** → the works table → click the row *Ngày đầu đi làm* (First day at work, 4 shots) to enter its **film room** → **Review** tab → **▶ Whole film**.
 5. Go to the **Publish** tab → **Film (HTML)** to download the film — open the file in any browser to watch it, and send it to your viewers.
 
-To see a **complete theme set** (what gen-chibi is built to sell): click **🏯 open the sample theme set "Tam Quốc"** (Three Kingdoms) — 7 generals (Peking-opera masks, weapons, 8 directions, their own voices), 13 pieces of equipment, 8 scenes and the film *Từ vườn đào tới Xích Bích* (From the Peach Garden to Red Cliffs: 6 shots with staging, voices, sound and a fight scene). This is a **Gen Labs sample set**: view it, try edits, make films freely, but it **cannot be exported as a sale bundle** — to sell, build your own set in a separate project.
+To see a **complete theme set** (what gen-chibi is built to sell): click **🏯 Open the sample theme set "Three Kingdoms"** — 7 generals (Peking-opera masks, weapons, 8 directions, their own voices), 13 pieces of equipment, 8 scenes and the film *Từ vườn đào tới Xích Bích* (From the Peach Garden to Red Cliffs: 6 shots with staging, voices, sound and a fight scene). This is a **Gen Labs sample set**: view it, try edits, make films freely, but it **cannot be exported as a sale bundle** — to sell, build your own set in a separate project.
 
 The interface is in English by default; to switch to Vietnamese see [README › Language](../README.md#language) (`--lang vi` at install time, `genchibi lang vi`, or the language switch in the Studio).
 
@@ -66,7 +66,7 @@ Details of each part:
 - **It works without AI too**: add shots yourself, pick a scene, click to choose actors (≤ 8), then use *AI writes dialogue* per shot or edit the JSON over MCP.
 - **Step table** (no AI needed): on each shot click **Step table** → a spreadsheet-style table, one row per step (`B01`…, up to 12): actor, expression, line, speaking to, spot, **action**, opponent, reaction, hold time.
   - Every dropdown comes from the director schema — you cannot type a wrong name. The **Action** cell only lists the moves that row's actor can perform (an unarmed actor does not see "Straight thrust"), labelled *attack* / *throw* / *needs weapon*.
-  - The **Opponent** cell only opens once you pick an attack (it suggests someone); **Reaction** only once there is an opponent. The **more…** cell opens extra fields: camera, bubble, activity, view angle, facing, posture, movement, arm motion, effects (≤ 3), sounds (≤ 3).
+  - The **Opponent** cell only opens once you pick an attack (it suggests someone); **Reaction** only once there is an opponent. The **more…** cell opens extra fields: camera, bubble, activity, view angle, facing, pose, movement, arm motion, effects (≤ 3), sounds (≤ 3).
   - Errors show right next to the row; **Save steps** is locked while errors remain and goes through the same gate as the AI / MCP. Closing the table without saving discards your changes (it asks first; closing the browser tab / reloading the page also asks). Edits made while a save is running still show *Unsaved*. Clicking outside the table closes it, but selecting text and releasing the mouse outside does not; **Esc** closes the table, **Tab** cycles within it.
 - **Status**: the "Ready x/y shots" bar + a list of what each shot still lacks — click to go to that shot.
 - **Review**: ▶ Whole film — the film has **automatic staging**:
@@ -85,7 +85,7 @@ Details of each part:
     - A character **has a weapon** when the right hand holds equipment of type *Weapon* (or a part that declares `grip: weapon`). Without one, weapon moves are blocked, with a suggestion of moves that work; fans, books… are props.
     - The attacker closes in / backs off automatically so the move lands; two heads never overlap; nobody flips or flies onto bystanders; the opponent reacts on the exact impact frame. Set `say` to `""` for a move without a line.
     - Write them with the **AI director**, over MCP, or right in the Studio with the **Step table** (above). The **Ready** bar warns when a move does not exist (missing motion pack) or the actor cannot perform it.
-    - Machine still has the old Tam Quốc set? In **Library › Theme projects**, click **⟳ Update Tam Quốc** to import the new version (with its motion pack).
+    - Machine still has the old Tam Quốc set? In **Library › Theme projects**, click **⟳ Update Three Kingdoms sample** to import the new version (with its motion pack).
 
 ### AI voices by role
 Voices follow the **role** (age · gender · scholar / warrior · noble · comic · villain · narrator — 22 roles, including old man, old woman, little boy, little girl, warrior general, strategist…) for **Vietnamese** (Northern / Southern / Central), **English** (US / UK), **Chinese** (Mandarin / Taiwan) and **Cantonese** (Hong Kong). Note: genuine regional accents (Northern / Central / Southern Vietnamese, Taiwan) **only come from Voice design** — see the *Real accents* bullet below.
