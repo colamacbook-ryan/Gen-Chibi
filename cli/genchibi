@@ -2,14 +2,188 @@
 # gen-chibi — lệnh quản lý trên máy chủ. install.sh thay __GC_HOME__ bằng thư mục cài.
 # © 2026 Gen Labs — All rights reserved.
 set -euo pipefail
+
+# ---------------------------------------------------------------- ngôn ngữ (ADR 0007): GC_LANG = en (mặc định) | vi
+# Câu chữ nằm ở hai bảng _en / _vi, mỗi khoá một dòng `khoá) F="chuỗi printf" ;;` (%s = đối số, %% = dấu phần trăm).
+# m KHOÁ [đối số…] in một dòng · mn KHOÁ [đối số…] in không xuống dòng (lời hỏi). Khoá thiếu ở _vi → dùng _en.
+# Viết cho bash 3.2 (macOS): không mảng kết hợp, không ${x,,}. tools/test-lang.sh kiểm mọi khoá dùng tới có đủ hai bảng.
+_en() {
+  case "$1" in
+    no_home) F="Install folder not found: %s" ;;
+    refuse_bind) F="Refusing to start: GC_BIND=%s opens the app to the network but GC_API_TOKEN is not set in .env." ;;
+    already_running) F="Already running (pid %s)" ;;
+    started) F="Started (pid %s)" ;;
+    stopped) F="Stopped" ;;
+    not_running) F="Not running" ;;
+    st_up) F="● running · v%s · %s · mode %s" ;;
+    st_down) F="○ not running · mode %s" ;;
+    st_releases) F="  installed: %s· in use %s" ;;
+    st_mcp_named) F="  MCP to the Internet: %s (genchibi link shows the connect link)" ;;
+    st_mcp_quick) F="  MCP to the Internet: temporary tunnel %s (genchibi link)" ;;
+    st_mcp_off) F="  MCP to the Internet: off (genchibi expose <domain> to open)" ;;
+    upd_checking) F="Checking for a new version…" ;;
+    upd_nocheck) F="Could not check (is the app running?)" ;;
+    upd_failed) F="Update failed; still running the current version." ;;
+    backed_up) F="Backed up: %s" ;;
+    restore_usage) F="Usage: genchibi restore <.tar.gz file in backups/>" ;;
+    restore_ask) F="Replace the current data with %s? (type 'yes') " ;;
+    cancelled) F="Cancelled." ;;
+    restored) F="Restored." ;;
+    un_ask) F="Uninstall gen-chibi. Keep your data (characters, scripts, backups)? [Y/n] " ;;
+    un_wiped) F="Uninstalled and all data deleted." ;;
+    un_kept) F="Uninstalled. Data kept in %s/data and %s/backups." ;;
+    open_token) F="This install is locked: sign in to the Studio with GC_API_TOKEN from %s/.env" ;;
+    tok_ask) F="Paste GitHub token (Contents: Read-only, hidden while typing): " ;;
+    tok_none) F="No token — nothing changed." ;;
+    tok_bad) F="The token has invalid characters — copy it again (letters, digits, _ . - only)." ;;
+    tok_set) F="GC_GITHUB_TOKEN written to .env; restarting to apply…" ;;
+    tok_cleared) F="GC_GITHUB_TOKEN removed; restarting…" ;;
+    keys_set) F="• GC_API_TOKEN set: the Studio now requires sign-in (show the token: grep GC_API_TOKEN %s/.env)" ;;
+    cf_pull_fail) F="Could not download %s" ;;
+    cf_need) F="cloudflared is required. Install it, then run again:\n  Fedora/RHEL:  sudo dnf config-manager addrepo --from-repofile=https://pkg.cloudflare.com/cloudflared.repo && sudo dnf install cloudflared\n  Ubuntu/Debian: see https://pkg.cloudflare.com/   ·   macOS: brew install cloudflared" ;;
+    tun_no_cf) F="! cloudflared is missing: MCP is not reachable from the Internet yet" ;;
+    wait_link) F="Waiting for the link to work over the Internet" ;;
+    wait_fail) F=" — not reachable after 2 minutes (new DNS can take a few more minutes). Check again: genchibi link --check" ;;
+    link_none) F="MCP is not exposed yet. Run: genchibi expose <domain>   (or genchibi expose --quick for a quick test)" ;;
+    cf_reuse) F="• Using the Cloudflare login already on this machine" ;;
+    cf_pick) F="  The browser just downloaded %s — use it as the Cloudflare certificate? [y/N] " ;;
+    cf_picked) F="• Used %s (delete that file when you are done: it grants access to the whole account)" ;;
+    cf_login) F="• Cloudflare login (attempt %s/3): open the link below within 1 minute, pick %s, click Authorize" ;;
+    cf_logged) F="• Logged in to Cloudflare" ;;
+    cf_retry) F="  No certificate received (the 1-minute wait ran out) — retrying with a new link." ;;
+    cf_fail) F="Could not log in to Cloudflare. If the browser downloaded a cert.pem file, copy it to %s and run this command again." ;;
+    bad_domain) F="Invalid domain: %s" ;;
+    tun_reuse) F="• Reusing the existing tunnel and DNS for %s" ;;
+    tun_create_fail) F="Could not create tunnel %s" ;;
+    tun_ready) F="• Tunnel %s ready" ;;
+    tun_creds_bad) F="Broken tunnel key file: %s" ;;
+    dns_taken) F="! %s already has a different DNS record on Cloudflare. Check it, then overwrite with: genchibi expose %s --overwrite-dns" ;;
+    dns_done) F="• DNS: %s → tunnel (account certificate removed from the app server)" ;;
+    tun_cfg_bad) F="Invalid tunnel configuration" ;;
+    quick_fail) F="The temporary tunnel did not come up — see: genchibi logs" ;;
+    quick_note) F="(A temporary tunnel gets a new link on every restart. For long-term use: genchibi expose <domain>)" ;;
+    off_1) F="MCP to the Internet is off. Keys and tunnel config are kept in %s (reopen quickly with genchibi expose <domain>)." ;;
+    off_2) F="The DNS record on Cloudflare remains, pointing at the stopped tunnel." ;;
+    not_exposed) F="MCP is not exposed to the Internet." ;;
+    rotated) F="Key changed — the old link no longer works." ;;
+    bad_opt_expose) F="Unknown option %s (genchibi expose --help)" ;;
+    bad_opt) F="Unknown option %s" ;;
+    link_ok) F="✓ MCP answers over the Internet" ;;
+    link_fail) F="✗ Could not reach %s — see genchibi status, genchibi logs" ;;
+    hdr_token) F="Authorization: Bearer <token — see GC_API_TOKEN in %s/.env>" ;;
+    skill_usage) F="skill: claude | cursor | gemini | codex | generic" ;;
+    skill_dl_fail) F="Could not download the guide (is the app running?)" ;;
+    skill_clash) F="Your own files are already there, not overwriting:%s" ;;
+    skill_clash2) F="→ pick another folder (--dir), merge by hand, or add --force to overwrite." ;;
+    skill_done) F="Installed the gen-chibi guide for %s into %s (generated from agent/ of the running version — run this again after updating the app)" ;;
+    agent_usage) F="genchibi agent connect | guide [topic] | topics | tools [--format openai|gemini|mcp] | skill <vendor> [--dir folder] [--force]" ;;
+    lang_now) F="Language: %s (%s)" ;;
+    lang_hint) F="Change: genchibi lang en | vi  (CLI + Studio default for this install)" ;;
+    lang_bad) F="Unsupported language: %s — use en (English) or vi (Vietnamese)." ;;
+    lang_same) F="Language is already %s (%s) — nothing changed." ;;
+    lang_set) F="Language set to %s: GC_LANG=%s written to .env." ;;
+    lang_restart) F="Restarting the app so the Studio default follows…" ;;
+    lang_norun) F="The app is not running — the new default applies at the next start (genchibi start)." ;;
+    lang_note) F="This is the default for the CLI and for everyone who opens the Studio. Each user can still switch language in the Studio (language switch); that choice is remembered in their browser." ;;
+  esac
+}
+_vi() {
+  case "$1" in
+    no_home) F="Không thấy thư mục cài %s" ;;
+    refuse_bind) F="Từ chối chạy: GC_BIND=%s mở ra mạng nhưng chưa có GC_API_TOKEN trong .env." ;;
+    already_running) F="Đang chạy (pid %s)" ;;
+    started) F="Đã chạy (pid %s)" ;;
+    stopped) F="Đã dừng" ;;
+    not_running) F="Không chạy" ;;
+    st_up) F="● đang chạy · v%s · %s · chế độ %s" ;;
+    st_down) F="○ không chạy · chế độ %s" ;;
+    st_releases) F="  bản cài: %s· đang dùng %s" ;;
+    st_mcp_named) F="  MCP ra ngoài: %s (genchibi link để xem link nối)" ;;
+    st_mcp_quick) F="  MCP ra ngoài: tunnel tạm %s (genchibi link)" ;;
+    st_mcp_off) F="  MCP ra ngoài: tắt (genchibi expose <tên-miền> để mở)" ;;
+    upd_checking) F="Kiểm tra phiên bản…" ;;
+    upd_nocheck) F="Không kiểm tra được (app có đang chạy?)" ;;
+    upd_failed) F="Cập nhật thất bại; vẫn chạy bản hiện tại." ;;
+    backed_up) F="Đã sao lưu: %s" ;;
+    restore_usage) F="Dùng: genchibi restore <tệp .tar.gz trong backups/>" ;;
+    restore_ask) F="Thay dữ liệu hiện tại bằng %s? (gõ 'dong y') " ;;
+    cancelled) F="Huỷ." ;;
+    restored) F="Đã khôi phục." ;;
+    un_ask) F="Gỡ gen-chibi. Giữ lại dữ liệu (nhân vật, kịch bản, backup)? [C/k] " ;;
+    un_wiped) F="Đã gỡ và xoá toàn bộ dữ liệu." ;;
+    un_kept) F="Đã gỡ. Dữ liệu giữ ở %s/data và %s/backups." ;;
+    open_token) F="Bản cài có khoá: đăng nhập Studio bằng GC_API_TOKEN trong %s/.env" ;;
+    tok_ask) F="Dán GitHub token (Contents: Read-only, ẩn khi gõ): " ;;
+    tok_none) F="Không có token — không đổi gì." ;;
+    tok_bad) F="Token có ký tự lạ — chép lại (chỉ gồm chữ, số, _ . -)." ;;
+    tok_set) F="Đã ghi GC_GITHUB_TOKEN vào .env; khởi động lại để áp dụng…" ;;
+    tok_cleared) F="Đã xoá GC_GITHUB_TOKEN; khởi động lại…" ;;
+    keys_set) F="• Đã đặt GC_API_TOKEN: Studio giờ cần đăng nhập (xem token: grep GC_API_TOKEN %s/.env)" ;;
+    cf_pull_fail) F="Không tải được %s" ;;
+    cf_need) F="Cần cloudflared. Cài rồi chạy lại:\n  Fedora/RHEL:  sudo dnf config-manager addrepo --from-repofile=https://pkg.cloudflare.com/cloudflared.repo && sudo dnf install cloudflared\n  Ubuntu/Debian: xem https://pkg.cloudflare.com/   ·   macOS: brew install cloudflared" ;;
+    tun_no_cf) F="! Thiếu cloudflared: MCP chưa ra ngoài được" ;;
+    wait_link) F="Chờ link thông qua Internet" ;;
+    wait_fail) F=" — chưa thông sau 2 phút (DNS mới có thể cần thêm vài phút). Kiểm lại: genchibi link --check" ;;
+    link_none) F="MCP chưa mở ra ngoài. Chạy: genchibi expose <tên-miền>   (hoặc genchibi expose --quick để thử nhanh)" ;;
+    cf_reuse) F="• Dùng đăng nhập Cloudflare có sẵn trên máy" ;;
+    cf_pick) F="  Trình duyệt vừa tải %s — dùng làm chứng chỉ Cloudflare? [c/K] " ;;
+    cf_picked) F="• Đã dùng %s (xong việc nên xoá tệp đó: nó cấp quyền cả tài khoản)" ;;
+    cf_login) F="• Đăng nhập Cloudflare (lần %s/3): mở link dưới đây trong vòng 1 phút, chọn %s, bấm Authorize" ;;
+    cf_logged) F="• Đã đăng nhập Cloudflare" ;;
+    cf_retry) F="  Chưa nhận được chứng chỉ (hết 1 phút chờ) — thử lại với link mới." ;;
+    cf_fail) F="Chưa đăng nhập được Cloudflare. Nếu trình duyệt đã tải tệp cert.pem, chép nó vào %s rồi chạy lại lệnh này." ;;
+    bad_domain) F="Tên miền không hợp lệ: %s" ;;
+    tun_reuse) F="• Dùng lại tunnel và DNS đã có cho %s" ;;
+    tun_create_fail) F="Không tạo được tunnel %s" ;;
+    tun_ready) F="• Tunnel %s sẵn sàng" ;;
+    tun_creds_bad) F="Tệp khoá tunnel hỏng: %s" ;;
+    dns_taken) F="! %s đã có bản ghi DNS khác trên Cloudflare. Kiểm tra rồi ghi đè bằng: genchibi expose %s --overwrite-dns" ;;
+    dns_done) F="• DNS: %s → tunnel (đã xoá chứng chỉ tài khoản khỏi máy chủ app)" ;;
+    tun_cfg_bad) F="Cấu hình tunnel không hợp lệ" ;;
+    quick_fail) F="Tunnel tạm không lên — xem: genchibi logs" ;;
+    quick_note) F="(Tunnel tạm đổi link mỗi lần khởi động lại. Dùng lâu dài: genchibi expose <tên-miền>)" ;;
+    off_1) F="Đã tắt MCP ra ngoài. Giữ khoá và cấu hình tunnel trong %s (mở lại nhanh bằng genchibi expose <tên-miền>)." ;;
+    off_2) F="Bản ghi DNS trên Cloudflare vẫn còn, trỏ vào tunnel đã tắt." ;;
+    not_exposed) F="MCP chưa mở ra ngoài." ;;
+    rotated) F="Đã đổi khoá — link cũ không dùng được nữa." ;;
+    bad_opt_expose) F="Không hiểu tuỳ chọn %s (genchibi expose --help)" ;;
+    bad_opt) F="Không hiểu tuỳ chọn %s" ;;
+    link_ok) F="✓ MCP trả lời qua Internet" ;;
+    link_fail) F="✗ Chưa gọi được %s — xem genchibi status, genchibi logs" ;;
+    hdr_token) F="Authorization: Bearer <token — xem GC_API_TOKEN trong %s/.env>" ;;
+    skill_usage) F="skill: claude | cursor | gemini | codex | generic" ;;
+    skill_dl_fail) F="Không tải được hướng dẫn (app có đang chạy?)" ;;
+    skill_clash) F="Đã có tệp của bạn, không ghi đè:%s" ;;
+    skill_clash2) F="→ chọn thư mục khác (--dir), hoặc gộp tay, hoặc thêm --force để ghi đè." ;;
+    skill_done) F="Đã cài hướng dẫn gen-chibi cho %s vào %s (sinh từ agent/ của bản đang chạy — cập nhật app thì chạy lại lệnh này)" ;;
+    agent_usage) F="genchibi agent connect | guide [chủ đề] | topics | tools [--format openai|gemini|mcp] | skill <hãng> [--dir thư-mục] [--force]" ;;
+    lang_now) F="Ngôn ngữ: %s (%s)" ;;
+    lang_hint) F="Đổi: genchibi lang en | vi  (CLI + giao diện mặc định của bản cài)" ;;
+    lang_bad) F="Không hỗ trợ ngôn ngữ: %s — dùng en (English) hoặc vi (Tiếng Việt)." ;;
+    lang_same) F="Ngôn ngữ đã là %s (%s) — không đổi gì." ;;
+    lang_set) F="Đã đặt ngôn ngữ %s: ghi GC_LANG=%s vào .env." ;;
+    lang_restart) F="Khởi động lại app để giao diện mặc định đổi theo…" ;;
+    lang_norun) F="App đang không chạy — mặc định mới có hiệu lực ở lần chạy tới (genchibi start)." ;;
+    lang_note) F="Đây là mặc định cho CLI và cho mọi người mở Studio. Mỗi người vẫn đổi ngôn ngữ riêng trong Studio được (nút chuyển ngôn ngữ); lựa chọn đó được nhớ trong trình duyệt của họ." ;;
+  esac
+}
+_t() { F=""; if [ "$UI" = vi ]; then _vi "$1"; fi; if [ -z "$F" ]; then _en "$1"; fi; if [ -z "$F" ]; then F="$1"; fi; }
+m()  { _t "$1"; shift; printf "%s$F\n" "" "$@"; }   # "%s" + "" đứng đầu: câu bắt đầu bằng "-" không bị printf hiểu là tuỳ chọn
+mn() { _t "$1"; shift; printf "%s$F" "" "$@"; }
+pick_ui() { case "${1:-}" in vi|vi[_.-]*|VI|VI[_.-]*|Vi) UI=vi ;; *) UI=en ;; esac; }
+lang_name() { case "$1" in vi) echo "Tiếng Việt" ;; *) echo "English" ;; esac; }
+ENV_LANG="${GC_LANG:-}"   # GC_LANG=vi genchibi … (biến môi trường) thắng giá trị trong .env
+pick_ui "$ENV_LANG"
+
 HOME_DIR="${GC_HOME:-__GC_HOME__}"
-[ -d "$HOME_DIR" ] || { echo "Không thấy thư mục cài $HOME_DIR" >&2; exit 1; }
+[ -d "$HOME_DIR" ] || { m no_home "$HOME_DIR" >&2; exit 1; }
 # Lệnh đi theo bản cài: chuyển cho cli/genchibi của bản đang chạy, để bản cập nhật mang theo lệnh mới.
 INNER="$HOME_DIR/current/cli/genchibi"
 if [ -z "${GC_CLI_INNER:-}" ] && [ -f "$INNER" ]; then GC_CLI_INNER=1 GC_HOME="$HOME_DIR" exec bash "$INNER" "$@"; fi
 ORIG_PWD="$PWD"   # thư mục người gọi lệnh (agent skill cài vào dự án của họ, không phải thư mục cài)
 cd "$HOME_DIR"
 set -a; [ -f .env ] && . ./.env; set +a
+pick_ui "${ENV_LANG:-${GC_LANG:-}}"
 MODE="${GC_MODE:-docker}"; PORT="${GC_PORT:-7480}"
 URL="http://127.0.0.1:$PORT"
 PIDF="$HOME_DIR/logs/launcher.pid"; LOG="$HOME_DIR/logs/gen-chibi.log"
@@ -25,18 +199,18 @@ json() { node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const 
 guard_exposure() {
   # đóng khi nghi ngờ: mở ra ngoài máy này mà không có token thì không chạy
   case "${GC_BIND:-127.0.0.1}" in 127.0.0.1|localhost|::1) ;; *)
-    [ -n "${GC_API_TOKEN:-}" ] || { echo "Từ chối chạy: GC_BIND=$GC_BIND mở ra mạng nhưng chưa có GC_API_TOKEN trong .env." >&2; exit 1; } ;;
+    [ -n "${GC_API_TOKEN:-}" ] || { m refuse_bind "$GC_BIND" >&2; exit 1; } ;;
   esac
 }
 start() {
   guard_exposure
   if [ "$MODE" = docker ]; then sync_compose; docker compose up -d --quiet-pull 2>&1 | grep -vE "Creating|Created|Starting|Network|Container .* (Running|Waiting)" || true
   else
-    running_native && { echo "Đang chạy (pid $(cat "$PIDF"))"; return; }
+    running_native && { m already_running "$(cat "$PIDF")"; return; }
     mkdir -p logs
     [ -n "${GC_EXTRA_CA:-}" ] && export NODE_EXTRA_CA_CERTS="$GC_EXTRA_CA"
     GC_HOME="$HOME_DIR" GC_PORT="$PORT" nohup node "$HOME_DIR/launcher.js" >> "$LOG" 2>&1 &
-    echo $! > "$PIDF"; echo "Đã chạy (pid $!)"
+    echo $! > "$PIDF"; m started "$!"
     tunnel_start
   fi
 }
@@ -44,23 +218,23 @@ stop() {
   if [ "$MODE" = docker ]; then docker compose stop
   else
     tunnel_stop
-    if running_native; then kill "$(cat "$PIDF")"; rm -f "$PIDF"; echo "Đã dừng"; else echo "Không chạy"; fi
+    if running_native; then kill "$(cat "$PIDF")"; rm -f "$PIDF"; m stopped; else m not_running; fi
   fi
 }
 status() {
   local h; h="$(curl -fsS "$URL/api/health" 2>/dev/null || true)"
-  if [ -n "$h" ]; then echo "● đang chạy · v$(echo "$h" | json version | sed 's/^v//') · $URL · chế độ $MODE"; else echo "○ không chạy · chế độ $MODE"; fi
-  echo "  bản cài: $(cd releases 2>/dev/null && ls | tr '\n' ' ')· đang dùng $(basename "$(readlink current)")"
+  if [ -n "$h" ]; then m st_up "$(echo "$h" | json version | sed 's/^v//')" "$URL" "$MODE"; else m st_down "$MODE"; fi
+  m st_releases "$(cd releases 2>/dev/null && ls | tr '\n' ' ')" "$(basename "$(readlink current)")"
   case "${GC_TUNNEL:-}" in
-    named) echo "  MCP ra ngoài: ${GC_PUBLIC_URL:-?} (genchibi link để xem link nối)" ;;
-    quick) echo "  MCP ra ngoài: tunnel tạm $(quick_url) (genchibi link)" ;;
-    *) echo "  MCP ra ngoài: tắt (genchibi expose <tên-miền> để mở)" ;;
+    named) m st_mcp_named "${GC_PUBLIC_URL:-?}" ;;
+    quick) m st_mcp_quick "$(quick_url)" ;;
+    *) m st_mcp_off ;;
   esac
 }
 update() {
-  echo "Kiểm tra phiên bản…"
-  api POST /api/update/check >/dev/null || { echo "Không kiểm tra được (app có đang chạy?)"; exit 1; }
-  local r; r="$(api POST /api/update/apply '{}')" || { echo "Cập nhật thất bại; vẫn chạy bản hiện tại."; exit 1; }
+  m upd_checking
+  api POST /api/update/check >/dev/null || { m upd_nocheck; exit 1; }
+  local r; r="$(api POST /api/update/apply '{}')" || { m upd_failed; exit 1; }
   echo "$r" | json message
   if echo "$r" | grep -q '"restart":true'; then
     for i in $(seq 1 60); do sleep 1; curl -fsS "$URL/api/health" >/dev/null 2>&1 && break; done
@@ -69,21 +243,25 @@ update() {
 }
 backup() {
   mkdir -p backups; local f="backups/thu-cong-$(date +%Y%m%d-%H%M%S).tar.gz"
-  tar -czf "$f" data && echo "Đã sao lưu: $HOME_DIR/$f"
+  tar -czf "$f" data && m backed_up "$HOME_DIR/$f"
 }
 restore() {
-  local f="${1:-}"; [ -f "$f" ] || { echo "Dùng: genchibi restore <tệp .tar.gz trong backups/>"; exit 1; }
-  read -r -p "Thay dữ liệu hiện tại bằng $f? (gõ 'dong y') " a; [ "$a" = "dong y" ] || { echo "Huỷ."; exit 1; }
+  local f="${1:-}"; [ -f "$f" ] || { m restore_usage; exit 1; }
+  read -r -p "$(mn restore_ask "$f")" a
+  case "$a" in "dong y"|yes) ;; *) m cancelled; exit 1 ;; esac
   backup; stop; rm -rf data.restore && mkdir data.restore && tar -xzf "$f" -C data.restore
-  rm -rf data && mv data.restore/data data && rm -rf data.restore; start; echo "Đã khôi phục."
+  rm -rf data && mv data.restore/data data && rm -rf data.restore; start; m restored
 }
 uninstall() {
-  read -r -p "Gỡ gen-chibi. Giữ lại dữ liệu (nhân vật, kịch bản, backup)? [C/k] " a
+  read -r -p "$(mn un_ask)" a
+  local wipe=""
+  # câu trả lời xoá dữ liệu: k/K (tiếng Việt, "không") · n/N (tiếng Anh, "no"); mọi câu khác giữ dữ liệu
+  if [ "$UI" = vi ]; then case "$a" in k|K) wipe=1 ;; esac; else case "$a" in n|N) wipe=1 ;; esac; fi
   stop || true
   [ "$MODE" = docker ] && docker compose down || true
   rm -f "$HOME/.local/bin/genchibi"
-  if [ "$a" = "k" ] || [ "$a" = "K" ]; then cd / && rm -rf "$HOME_DIR"; echo "Đã gỡ và xoá toàn bộ dữ liệu."
-  else rm -rf "$HOME_DIR/releases" "$HOME_DIR/current" "$HOME_DIR/previous" "$HOME_DIR/launcher.js" "$HOME_DIR/docker-compose.yml"; echo "Đã gỡ. Dữ liệu giữ ở $HOME_DIR/data và $HOME_DIR/backups."; fi
+  if [ -n "$wipe" ]; then cd / && rm -rf "$HOME_DIR"; m un_wiped
+  else rm -rf "$HOME_DIR/releases" "$HOME_DIR/current" "$HOME_DIR/previous" "$HOME_DIR/launcher.js" "$HOME_DIR/docker-compose.yml"; m un_kept "$HOME_DIR" "$HOME_DIR"; fi
 }
 mcp() {
   # cầu stdio cho agent (Claude Code, Claude Desktop…)
@@ -91,7 +269,7 @@ mcp() {
   else GC_PORT="$PORT" exec node "$HOME_DIR/current/server/mcp-stdio.js"; fi
 }
 logs() { if [ "$MODE" = docker ]; then docker compose logs -f --tail 200; else tail -n 200 -f "$LOG"; fi; }
-open_ui() { local u="http://localhost:$PORT"; [ -n "${GC_API_TOKEN:-}" ] && echo "Bản cài có khoá: đăng nhập Studio bằng GC_API_TOKEN trong $HOME_DIR/.env"; (command -v open >/dev/null && open "$u") || (command -v xdg-open >/dev/null && xdg-open "$u") || echo "$u"; }
+open_ui() { local u="http://localhost:$PORT"; [ -n "${GC_API_TOKEN:-}" ] && m open_token "$HOME_DIR"; (command -v open >/dev/null && open "$u") || (command -v xdg-open >/dev/null && xdg-open "$u") || echo "$u"; }
 
 # ---------------------------------------------------------------- MCP ra ngoài (Cloudflare Tunnel)
 # genchibi expose <tên-miền>: tạo tunnel có tên, trỏ DNS, chỉ cho đường /mcp + OAuth (xem config.yml bên dưới) đi qua, sinh khoá, in link nối.
@@ -113,23 +291,40 @@ token_cmd() {
   local t="${1:-}" tmp
   if [ "$t" = "--clear" ]; then t=""
   elif [ -z "$t" ]; then
-    if [ -t 0 ]; then read -r -s -p "Dán GitHub token (Contents: Read-only, ẩn khi gõ): " t; echo; else read -r t || true; fi
-    [ -n "$t" ] || { echo "Không có token — không đổi gì." >&2; exit 1; }
+    if [ -t 0 ]; then read -r -s -p "$(mn tok_ask)" t; echo; else read -r t || true; fi
+    [ -n "$t" ] || { m tok_none >&2; exit 1; }
   fi
-  case "$t" in *[!A-Za-z0-9_.-]*) echo "Token có ký tự lạ — chép lại (chỉ gồm chữ, số, _ . -)." >&2; exit 1 ;; esac
+  case "$t" in *[!A-Za-z0-9_.-]*) m tok_bad >&2; exit 1 ;; esac
   touch .env; chmod 600 .env; tmp="$(mktemp)"
   K=GC_GITHUB_TOKEN V="$t" awk 'BEGIN { k = ENVIRON["K"]; v = ENVIRON["V"]; d = 0 }
     index($0, k "=") == 1 { print k "=" v; d = 1; next } { print } END { if (!d) print k "=" v }' .env > "$tmp" && cat "$tmp" > .env; rm -f "$tmp"
   export GC_GITHUB_TOKEN="$t"
-  if [ -n "$t" ]; then echo "Đã ghi GC_GITHUB_TOKEN vào .env; khởi động lại để áp dụng…"; else echo "Đã xoá GC_GITHUB_TOKEN; khởi động lại…"; fi
+  if [ -n "$t" ]; then m tok_set; else m tok_cleared; fi
   if [ "$MODE" = docker ]; then start; else stop; start; fi
+}
+lang_cmd() {
+  # genchibi lang [en|vi]: không đối số → in ngôn ngữ của bản cài (GC_LANG trong .env, thiếu = en);
+  # có đối số → ghi GC_LANG vào .env, app đang chạy thì khởi động lại để giao diện mặc định của Studio đổi theo.
+  local want="${1:-}" cur
+  cur="$(sed -n 's/^GC_LANG=//p' .env 2>/dev/null | tail -1)"
+  if [ -z "$want" ]; then
+    case "$cur" in vi) ;; *) cur=en ;; esac
+    m lang_now "$(lang_name "$cur")" "$cur"; m lang_hint; return 0
+  fi
+  case "$want" in en|EN|En) want=en ;; vi|VI|Vi) want=vi ;; *) m lang_bad "$want" >&2; exit 1 ;; esac
+  UI="$want"   # từ đây nói bằng ngôn ngữ vừa chọn
+  if [ "$cur" = "$want" ]; then m lang_same "$(lang_name "$want")" "$want"; m lang_note; return 0; fi
+  set_env GC_LANG "$want"
+  m lang_set "$(lang_name "$want")" "$want"
+  if curl -fsS -m 5 "$URL/api/health" >/dev/null 2>&1; then m lang_restart; apply_env; else m lang_norun; fi
+  m lang_note
 }
 allow_host() { case ",${GC_ALLOWED_HOSTS:-}," in *",$1,"*) ;; *) set_env GC_ALLOWED_HOSTS "${GC_ALLOWED_HOSTS:+$GC_ALLOWED_HOSTS,}$1" ;; esac; }
 ensure_keys() {
   local fresh=""
   [ -n "${GC_API_TOKEN:-}" ] || { set_env GC_API_TOKEN "$(rand_hex 32)"; fresh=1; }
   [ -n "${GC_MCP_KEY:-}" ] || set_env GC_MCP_KEY "$(rand_hex 24)"
-  [ -z "$fresh" ] || echo "• Đã đặt GC_API_TOKEN: Studio giờ cần đăng nhập (xem token: grep GC_API_TOKEN $HOME_DIR/.env)"
+  [ -z "$fresh" ] || m keys_set "$HOME_DIR"
 }
 CFH() { if [ "$MODE" = docker ]; then echo /work; else echo "$TDIR"; fi; }   # thư mục nhà của cloudflared
 cf() { # chạy cloudflared cho các bước thiết lập
@@ -138,11 +333,9 @@ cf() { # chạy cloudflared cho các bước thiết lập
   else HOME="$TDIR" cloudflared --no-autoupdate "$@"; fi
 }
 need_cf() {
-  if [ "$MODE" = docker ]; then docker image inspect "$CF_IMAGE" >/dev/null 2>&1 || docker pull -q "$CF_IMAGE" >/dev/null || { echo "Không tải được $CF_IMAGE" >&2; exit 1; }
+  if [ "$MODE" = docker ]; then docker image inspect "$CF_IMAGE" >/dev/null 2>&1 || docker pull -q "$CF_IMAGE" >/dev/null || { m cf_pull_fail "$CF_IMAGE" >&2; exit 1; }
   elif ! command -v cloudflared >/dev/null; then
-    echo "Cần cloudflared. Cài rồi chạy lại:" >&2
-    echo "  Fedora/RHEL:  sudo dnf config-manager addrepo --from-repofile=https://pkg.cloudflare.com/cloudflared.repo && sudo dnf install cloudflared" >&2
-    echo "  Ubuntu/Debian: xem https://pkg.cloudflare.com/   ·   macOS: brew install cloudflared" >&2
+    m cf_need >&2
     exit 1
   fi
 }
@@ -155,14 +348,14 @@ tunnel_start() { # chế độ Node: chạy cloudflared nền (Docker do compose
   [ "$MODE" = docker ] && return 0
   [ -n "${GC_TUNNEL:-}" ] || return 0
   [ -f "$TPID" ] && kill -0 "$(cat "$TPID")" 2>/dev/null && return 0
-  command -v cloudflared >/dev/null || { echo "! Thiếu cloudflared: MCP chưa ra ngoài được"; return 0; }
+  command -v cloudflared >/dev/null || { m tun_no_cf; return 0; }
   : > "$TLOG"
   if [ "$GC_TUNNEL" = named ]; then HOME="$TDIR" nohup cloudflared --no-autoupdate tunnel --config "$TDIR/config.yml" run >> "$TLOG" 2>&1 &
   else HOME="$TDIR" nohup cloudflared --no-autoupdate tunnel --url "$(origin_url)" >> "$TLOG" 2>&1 & fi
   echo $! > "$TPID"
 }
 tunnel_stop() { [ -f "$TPID" ] && { kill "$(cat "$TPID")" 2>/dev/null || true; rm -f "$TPID"; }; return 0; }
-apply_env() { # khởi động lại để app nhận khoá/tên miền mới
+apply_env() { # khởi động lại để app nhận khoá/tên miền/ngôn ngữ mới
   if [ "$MODE" = docker ]; then sync_compose; docker compose up -d --quiet-pull 2>&1 | grep -vE "Creating|Created|Starting|Started|Stopping|Stopped|Removing|Removed|Recreate|Network|Container .* (Running|Waiting)" || true
   else tunnel_stop; stop >/dev/null; start >/dev/null; fi
 }
@@ -178,14 +371,14 @@ probe() { # probe <link> → 0 khi MCP trả lời qua Internet. Link đưa qua 
 }
 wait_link() {
   local u="$1" i
-  printf "Chờ link thông qua Internet"
+  mn wait_link
   for i in $(seq 1 "${GC_LINK_WAIT:-40}"); do probe "$u" && { echo " ✓"; return 0; }; printf "."; sleep 3; done
-  echo " — chưa thông sau 2 phút (DNS mới có thể cần thêm vài phút). Kiểm lại: genchibi link --check"; return 1
+  m wait_fail; return 1
 }
 print_link() {
   local u; u="$(link_url)"
-  [ -n "$u" ] || { echo "MCP chưa mở ra ngoài. Chạy: genchibi expose <tên-miền>   (hoặc genchibi expose --quick để thử nhanh)"; return 1; }
-  cat <<EOF
+  [ -n "$u" ] || { m link_none; return 1; }
+  if [ "$UI" = vi ]; then cat <<EOF
 
 Link MCP — giữ kín, ai có link là dùng được MCP của bạn (không mở được Studio hay cài đặt):
   $u
@@ -196,48 +389,71 @@ Nối agent:
   Cursor/khác      {"mcpServers":{"gen-chibi":{"url":"$u"}}}
 Lộ link: genchibi expose --rotate (link cũ chết ngay).
 EOF
+  else cat <<EOF
+
+MCP link — keep it secret: anyone with the link can use your MCP (it cannot open the Studio or settings):
+  $u
+
+Connect an agent:
+  Claude Code      claude mcp add -s user --transport http gen-chibi $u
+  Claude web/app   Customize › Connectors › Add custom connector › paste the link
+  Cursor/others    {"mcpServers":{"gen-chibi":{"url":"$u"}}}
+Link leaked: genchibi expose --rotate (the old link stops working immediately).
+EOF
+  fi
   # OAuth (v0.19): không cần chép khoá — dán địa chỉ gốc vào Claude, bấm Cấp phép trên web. Cần GC_PUBLIC_URL (named tunnel); tunnel cũ phải chạy lại expose để mở thêm đường OAuth.
-  if [ "${GC_TUNNEL:-}" = named ] && [ -n "${GC_PUBLIC_URL:-}" ]; then cat <<EOF
+  if [ "${GC_TUNNEL:-}" = named ] && [ -n "${GC_PUBLIC_URL:-}" ]; then
+    if [ "$UI" = vi ]; then cat <<EOF
 
 Kết nối OAuth (khuyên dùng — không phải chép khoá):
   Claude web/app   Customize › Connectors › Add custom connector › dán ${GC_PUBLIC_URL}/mcp › Connect › "Cấp phép" (nhập GC_API_TOKEN, chọn mức quyền)
   Claude Code      claude mcp add --transport http gen-chibi ${GC_PUBLIC_URL}/mcp
   Quản lý / thu hồi: Studio › Hệ thống › Kết nối agent.  (Cập nhật từ bản trước v0.19: chạy lại genchibi expose ${GC_PUBLIC_URL#https://} để mở thêm đường OAuth)
 EOF
+    else cat <<EOF
+
+OAuth connection (recommended — no key to copy):
+  Claude web/app   Customize › Connectors › Add custom connector › paste ${GC_PUBLIC_URL}/mcp › Connect › "Authorize" (enter GC_API_TOKEN, pick a permission level)
+  Claude Code      claude mcp add --transport http gen-chibi ${GC_PUBLIC_URL}/mcp
+  Manage / revoke: Studio › System › Agent connections.  (Updated from a version before v0.19: run genchibi expose ${GC_PUBLIC_URL#https://} again to open the OAuth routes)
+EOF
+    fi
   fi
 }
 cf_login() { # lấy cert.pem (chứng chỉ tài khoản Cloudflare) vào $TDIR/.cloudflared — chỉ dùng lúc thiết lập
   local host="$1" dest="$TDIR/.cloudflared/cert.pem" dl f i
   [ -f "$dest" ] && return 0
-  if [ -f "$HOME/.cloudflared/cert.pem" ]; then cp "$HOME/.cloudflared/cert.pem" "$dest"; echo "• Dùng đăng nhập Cloudflare có sẵn trên máy"; return 0; fi
+  if [ -f "$HOME/.cloudflared/cert.pem" ]; then cp "$HOME/.cloudflared/cert.pem" "$dest"; m cf_reuse; return 0; fi
   dl="$(xdg-user-dir DOWNLOAD 2>/dev/null || true)"; [ -d "$dl" ] || dl="$HOME/Downloads"
   local mark="$TDIR/.login-start"; touch "$mark"
   pick_download() { # chỉ nhận cert.pem trình duyệt tải về SAU khi lần đăng nhập này bắt đầu, và hỏi trước khi dùng
     f="$(find "$dl" -maxdepth 1 -type f -name 'cert.pem' -newer "$mark" 2>/dev/null | head -1)"
     [ -n "$f" ] || return 1
-    local a=""; [ -r /dev/tty ] && read -r -p "  Trình duyệt vừa tải $f — dùng làm chứng chỉ Cloudflare? [c/K] " a < /dev/tty
-    case "$a" in c|C) cp "$f" "$dest" && echo "• Đã dùng $f (xong việc nên xoá tệp đó: nó cấp quyền cả tài khoản)" ;; *) return 1 ;; esac
+    local a="" yes=""; [ -r /dev/tty ] && read -r -p "$(mn cf_pick "$f")" a < /dev/tty
+    if [ "$UI" = vi ]; then case "$a" in c|C) yes=1 ;; esac; else case "$a" in y|Y) yes=1 ;; esac; fi
+    [ -n "$yes" ] || return 1
+    cp "$f" "$dest" && m cf_picked "$f"
   }
   for i in 1 2 3; do
-    echo "• Đăng nhập Cloudflare (lần $i/3): mở link dưới đây trong vòng 1 phút, chọn ${host#*.}, bấm Authorize"
+    m cf_login "$i" "${host#*.}"
     cf tunnel login 2>&1 | grep --line-buffered -oE 'https://dash\.cloudflare\.com/argotunnel[^ ]*|successfully logged in' | sed 's/^/    /' || true
-    [ -f "$dest" ] && { rm -f "$mark"; echo "• Đã đăng nhập Cloudflare"; return 0; }
+    [ -f "$dest" ] && { rm -f "$mark"; m cf_logged; return 0; }
     pick_download && { rm -f "$mark"; return 0; }
-    [ $i -lt 3 ] && echo "  Chưa nhận được chứng chỉ (hết 1 phút chờ) — thử lại với link mới."
+    [ $i -lt 3 ] && m cf_retry
   done
   rm -f "$mark"
-  echo "Chưa đăng nhập được Cloudflare. Nếu trình duyệt đã tải tệp cert.pem, chép nó vào $dest rồi chạy lại lệnh này." >&2
+  m cf_fail "$dest" >&2
   exit 1
 }
 expose_named() { # expose_named <tên-miền> [--overwrite-dns]
   local host="$1" over="${2:-}" name id
-  [[ "$host" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,}$ ]] || { echo "Tên miền không hợp lệ: $host" >&2; exit 1; }
+  [[ "$host" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,}$ ]] || { m bad_domain "$host" >&2; exit 1; }
   need_cf
   ensure_keys
   # cert.pem là chứng chỉ cấp tài khoản (tạo/xoá tunnel, sửa DNS cả tên miền): chỉ dùng lúc thiết lập rồi xoá.
   # Lúc chạy, tunnel chỉ cần creds.json của chính nó. Lần sau cùng tên miền thì không cần đăng nhập lại.
   if [ -f "$TDIR/.cloudflared/creds.json" ] && grep -qxF "  - hostname: $host" "$TDIR/config.yml" 2>/dev/null; then
-    echo "• Dùng lại tunnel và DNS đã có cho $host"
+    m tun_reuse "$host"
   else
     mkdir -p "$TDIR/.cloudflared"; chmod 700 "$TDIR"
     cf_login "$host"
@@ -246,28 +462,28 @@ expose_named() { # expose_named <tên-miền> [--overwrite-dns]
     if [ ! -f "$TDIR/.cloudflared/creds.json" ]; then
       cf tunnel create --credentials-file "$(CFH)/.cloudflared/creds.json" "$name" >/dev/null 2>&1 \
         || cf tunnel token --cred-file "$(CFH)/.cloudflared/creds.json" "$name" >/dev/null \
-        || { echo "Không tạo được tunnel $name" >&2; exit 1; }
-      echo "• Tunnel $name sẵn sàng"
+        || { m tun_create_fail "$name" >&2; exit 1; }
+      m tun_ready "$name"
     fi
     id="$(json TunnelID < "$TDIR/.cloudflared/creds.json")"
-    [ -n "$id" ] || { echo "Tệp khoá tunnel hỏng: $TDIR/.cloudflared/creds.json" >&2; exit 1; }
+    [ -n "$id" ] || { m tun_creds_bad "$TDIR/.cloudflared/creds.json" >&2; exit 1; }
     if ! cf tunnel route dns ${over:+--overwrite-dns} "$id" "$host" >/dev/null 2>"$TDIR/route.err"; then
       if grep -qi "already" "$TDIR/route.err"; then
-        echo "! $host đã có bản ghi DNS khác trên Cloudflare. Kiểm tra rồi ghi đè bằng: genchibi expose $host --overwrite-dns" >&2
+        m dns_taken "$host" "$host" >&2
       else cat "$TDIR/route.err" >&2; fi
       exit 1
     fi
     rm -f "$TDIR/.cloudflared/cert.pem" "$TDIR/route.err"
-    echo "• DNS: $host → tunnel (đã xoá chứng chỉ tài khoản khỏi máy chủ app)"
+    m dns_done "$host"
   fi
   id="$(json TunnelID < "$TDIR/.cloudflared/creds.json")"
   allow_host "$host"
   cat > "$TDIR/config.yml" <<EOF
-# sinh bởi genchibi expose — chỉ cho các đường của MCP + OAuth ra Internet (Studio và /api khác ở lại máy này):
-#   /mcp*                                    MCP (link có khoá + Bearer)
-#   /.well-known/oauth-*                     agent tự khám phá (RFC 9728 / 8414)
-#   /oauth/register|token|revoke|authorize   đăng ký, đổi token, thu hồi; authorize = trang Cấp phép tự chứa (chủ nhập GC_API_TOKEN)
-#   /api/oauth/approve                       nút Cấp phép của trang đó (đòi token chủ máy)
+# generated by genchibi expose — only the MCP + OAuth routes go out to the Internet (the Studio and the rest of /api stay on this machine):
+#   /mcp*                                    MCP (link with key + Bearer)
+#   /.well-known/oauth-*                     agent self-discovery (RFC 9728 / 8414)
+#   /oauth/register|token|revoke|authorize   registration, token exchange, revocation; authorize = the self-contained Authorize page (the owner enters GC_API_TOKEN)
+#   /api/oauth/approve                       the Authorize button on that page (requires the owner token)
 tunnel: $id
 credentials-file: $(CFH)/.cloudflared/creds.json
 ingress:
@@ -285,7 +501,7 @@ ingress:
     service: $(origin_url)
   - service: http_status:404
 EOF
-  cf tunnel --config "$(CFH)/config.yml" ingress validate >/dev/null || { echo "Cấu hình tunnel không hợp lệ" >&2; exit 1; }
+  cf tunnel --config "$(CFH)/config.yml" ingress validate >/dev/null || { m tun_cfg_bad >&2; exit 1; }
   set_env GC_TUNNEL named; set_env GC_PUBLIC_URL "https://$host"
   [ "$MODE" = docker ] && set_env COMPOSE_PROFILES tunnel
   apply_env
@@ -301,10 +517,10 @@ expose_quick() {
   apply_env
   local i u=""
   for i in $(seq 1 30); do u="$(quick_url)"; [ -n "$u" ] && break; sleep 1; done
-  [ -n "$u" ] || { echo "Tunnel tạm không lên — xem: genchibi logs" >&2; exit 1; }
+  [ -n "$u" ] || { m quick_fail >&2; exit 1; }
   wait_link "$(link_url)" || true
   print_link
-  echo "(Tunnel tạm đổi link mỗi lần khởi động lại. Dùng lâu dài: genchibi expose <tên-miền>)"
+  m quick_note
 }
 expose_off() {
   set_env GC_TUNNEL ""; set_env GC_PUBLIC_URL ""
@@ -313,32 +529,42 @@ expose_off() {
     docker compose --profile tunnel --profile quick rm -sf tunnel tunnel-quick >/dev/null 2>&1 || true
   fi
   apply_env
-  echo "Đã tắt MCP ra ngoài. Giữ khoá và cấu hình tunnel trong $TDIR (mở lại nhanh bằng genchibi expose <tên-miền>)."
-  echo "Bản ghi DNS trên Cloudflare vẫn còn, trỏ vào tunnel đã tắt."
+  m off_1 "$TDIR"
+  m off_2
 }
-expose() {
-  case "${1:-}" in
-    --quick) expose_quick ;;
-    --off) expose_off ;;
-    --rotate)
-      [ -n "${GC_TUNNEL:-}" ] || { echo "MCP chưa mở ra ngoài."; exit 1; }
-      set_env GC_MCP_KEY "$(rand_hex 24)"; apply_env; echo "Đã đổi khoá — link cũ không dùng được nữa."
-      wait_link "$(link_url)" || true; print_link ;;
-    ""|-h|--help) cat <<EOF
+expose_help() {
+  if [ "$UI" = vi ]; then cat <<EOF
 genchibi expose <tên-miền>      mở MCP qua tên miền của bạn (Cloudflare quản lý DNS), vd. genchibi expose chibi.example.com
 genchibi expose --quick         link tạm *.trycloudflare.com, không cần tài khoản (đổi link mỗi lần khởi động lại)
 genchibi expose --rotate        đổi khoá trong link
 genchibi expose --off           tắt
 genchibi link [--check]         in link + lệnh nối agent (--check: thử gọi qua Internet)
 EOF
-      ;;
-    -*) echo "Không hiểu tuỳ chọn $1 (genchibi expose --help)" >&2; exit 1 ;;
-    *) [ -z "${2:-}" ] || [ "$2" = --overwrite-dns ] || { echo "Không hiểu tuỳ chọn $2" >&2; exit 1; }; expose_named "$1" "${2:-}" ;;
+  else cat <<EOF
+genchibi expose <domain>        open MCP through your own domain (DNS managed by Cloudflare), e.g. genchibi expose chibi.example.com
+genchibi expose --quick         temporary *.trycloudflare.com link, no account needed (the link changes on every restart)
+genchibi expose --rotate        change the key in the link
+genchibi expose --off           turn it off
+genchibi link [--check]         print the link + agent connect commands (--check: test a call over the Internet)
+EOF
+  fi
+}
+expose() {
+  case "${1:-}" in
+    --quick) expose_quick ;;
+    --off) expose_off ;;
+    --rotate)
+      [ -n "${GC_TUNNEL:-}" ] || { m not_exposed; exit 1; }
+      set_env GC_MCP_KEY "$(rand_hex 24)"; apply_env; m rotated
+      wait_link "$(link_url)" || true; print_link ;;
+    ""|-h|--help) expose_help ;;
+    -*) m bad_opt_expose "$1" >&2; exit 1 ;;
+    *) [ -z "${2:-}" ] || [ "$2" = --overwrite-dns ] || { m bad_opt "$2" >&2; exit 1; }; expose_named "$1" "${2:-}" ;;
   esac
 }
 link_cmd() {
   if [ "${1:-}" = --check ]; then local u; u="$(link_url)"; [ -n "$u" ] || { print_link; exit 1; }
-    if probe "$u"; then echo "✓ MCP trả lời qua Internet"; else echo "✗ Chưa gọi được $u — xem genchibi status, genchibi logs"; exit 1; fi
+    if probe "$u"; then m link_ok; else m link_fail "$u"; exit 1; fi
   else print_link; fi
 }
 
@@ -349,11 +575,11 @@ agent_connect() {
   local u link hdr=""
   u="$URL/mcp"; link="$(link_url)"
   # link Internet tự mang khoá (không cần token — đừng dán token toàn quyền vào client bên thứ ba); địa chỉ máy này mới cần token nếu chủ đặt
-  [ -n "${GC_API_TOKEN:-}" ] && [ -z "$link" ] && hdr="Authorization: Bearer <token — xem GC_API_TOKEN trong $HOME_DIR/.env>"
+  [ -n "${GC_API_TOKEN:-}" ] && [ -z "$link" ] && hdr="$(m hdr_token "$HOME_DIR")"
   local jh="" target="${link:-$u}" ch=""; [ -n "$hdr" ] && jh=',"headers":{"Authorization":"Bearer <token>"}' && ch=" -H 'Authorization: Bearer <token>'"
   local cur_json='{"mcpServers":{"gen-chibi":{"url":"'"$target"'"'"$jh"'}}}' gem_json='{"mcpServers":{"gen-chibi":{"httpUrl":"'"$target"'"'"$jh"'}}}'
   local cc_hdr=""; [ -n "$hdr" ] && cc_hdr=' --header "Authorization: Bearer <token>"'
-  cat <<EOF
+  if [ "$UI" = vi ]; then cat <<EOF
 Nối agent vào gen-chibi (MCP, giao thức 2025-06-18). Sau khi nối, dặn agent: "gọi start_here trước".
 
 Địa chỉ
@@ -376,6 +602,30 @@ Không có MCP     curl -s $target$ch -H 'content-type: application/json' -d '{"
 
 Hướng dẫn cho agent: genchibi agent guide [chủ đề]   ·   cài skill: genchibi agent skill claude | cursor | gemini | codex | generic [--dir thư-mục]
 EOF
+  else cat <<EOF
+Connect an agent to gen-chibi (MCP, protocol 2025-06-18). After connecting, tell the agent: "call start_here first".
+
+Address
+  This machine   $u${hdr:+   (header: $hdr)}
+  Internet       ${link:-not open — genchibi expose <domain> | --quick}
+  stdio          genchibi mcp
+
+Claude Code      claude mcp add -s user --transport http gen-chibi $target$cc_hdr
+                 (or stdio)  claude mcp add -s user gen-chibi -- genchibi mcp
+Claude app/web   Customize › Connectors › Add custom connector › paste the Internet link
+Cursor           ~/.cursor/mcp.json   $cur_json
+Gemini CLI       ~/.gemini/settings.json   $gem_json
+Codex CLI        ~/.codex/config.toml (one key per line):
+                   [mcp_servers.gen-chibi]
+                   command = "genchibi"
+                   args = ["mcp"]
+No MCP client    curl -s $target$ch -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"start_here","arguments":{}}}'
+                 function-calling schema: genchibi agent tools --format openai | gemini
+(Each client's config file format may change between client versions — check the client's docs if it is not picked up.)
+
+Guide for agents: genchibi agent guide [topic]   ·   install as a skill: genchibi agent skill claude | cursor | gemini | codex | generic [--dir folder]
+EOF
+  fi
 }
 agent_cmd() {
   local sub="${1:-connect}"; shift || true
@@ -387,28 +637,21 @@ agent_cmd() {
     skill)
       local v="${1:-claude}" dir="" force=""; shift || true
       while [ $# -gt 0 ]; do case "$1" in --dir) dir="${2:-}"; shift 2 || shift ;; --force) force=1; shift ;; *) shift ;; esac; done
-      case "$v" in claude) dir="${dir:-$HOME/.claude/skills}" ;; cursor|gemini|codex|generic) dir="${dir:-$ORIG_PWD}" ;; *) echo "skill: claude | cursor | gemini | codex | generic" >&2; return 1 ;; esac
+      case "$v" in claude) dir="${dir:-$HOME/.claude/skills}" ;; cursor|gemini|codex|generic) dir="${dir:-$ORIG_PWD}" ;; *) m skill_usage >&2; return 1 ;; esac
       # giải nén vào thư mục tạm, rồi chỉ ghi đè tệp DO CHÍNH LỆNH NÀY SINH (có dấu "generated by `genchibi agent skill`");
       # AGENTS.md / GEMINI.md / rule có sẵn của người dùng thì dừng lại (trừ khi --force)
       local tmp; tmp="$(mktemp -d)"
-      agent_curl "$URL/api/agent/skill?vendor=$v" | tar -x -C "$tmp" || { rm -rf "$tmp"; echo "Không tải được hướng dẫn (app có đang chạy?)" >&2; return 1; }
+      agent_curl "$URL/api/agent/skill?vendor=$v" | tar -x -C "$tmp" || { rm -rf "$tmp"; m skill_dl_fail >&2; return 1; }
       local f clash=""
       while IFS= read -r f; do f="${f#./}"; if [ -e "$dir/$f" ] && ! head -c 2000 "$dir/$f" | grep -q 'generated by `genchibi agent skill`'; then clash="$clash $dir/$f"; fi; done < <(cd "$tmp" && find . -type f)
-      if [ -n "$clash" ] && [ -z "$force" ]; then rm -rf "$tmp"; echo "Đã có tệp của bạn, không ghi đè:$clash" >&2; echo "→ chọn thư mục khác (--dir), hoặc gộp tay, hoặc thêm --force để ghi đè." >&2; return 1; fi
+      if [ -n "$clash" ] && [ -z "$force" ]; then rm -rf "$tmp"; m skill_clash "$clash" >&2; m skill_clash2 >&2; return 1; fi
       mkdir -p "$dir" && cp -R "$tmp"/. "$dir"/ && rm -rf "$tmp"
-      echo "Đã cài hướng dẫn gen-chibi cho $v vào $dir (sinh từ agent/ của bản đang chạy — cập nhật app thì chạy lại lệnh này)" ;;
-    *) echo "genchibi agent connect | guide [chủ đề] | topics | tools [--format openai|gemini|mcp] | skill <hãng> [--dir thư-mục] [--force]" >&2; return 1 ;;
+      m skill_done "$v" "$dir" ;;
+    *) m agent_usage >&2; return 1 ;;
   esac
 }
-
-case "${1:-help}" in
-  start) start ;; stop) stop ;; restart) stop; start ;; status) status ;; update) update ;;
-  logs) logs ;; backup) backup ;; restore) shift; restore "${1:-}" ;; uninstall) uninstall ;;
-  mcp) mcp ;; open) open_ui ;; version) status ;;
-  expose) shift; expose "$@" ;; link) shift; link_cmd "$@" ;;
-  token|github-token) shift; token_cmd "${1:-}" ;;
-  agent) shift; agent_cmd "$@" ;;
-  *) cat <<EOF
+usage() {
+  if [ "$UI" = vi ]; then cat <<EOF
 genchibi — quản lý gen-chibi ($HOME_DIR, chế độ $MODE)
   start | stop | restart | status   chạy, dừng, xem trạng thái
   update                            kiểm tra và cập nhật ngay (tự rollback nếu bản mới lỗi)
@@ -419,8 +662,35 @@ genchibi — quản lý gen-chibi ($HOME_DIR, chế độ $MODE)
   link [--check]                    in link MCP + lệnh nối agent
   agent connect|guide|tools|skill   bootstrap cho agent mọi hãng: cấu hình nối, hướng dẫn, schema tool, cài skill
   token [giá-trị|--clear]           đặt token GitHub (repo private) cho tự cập nhật; bỏ trống = nhập ẩn
+  lang [en|vi]                      xem / đặt ngôn ngữ (CLI + giao diện mặc định của Studio)
   open                              mở Studio trong trình duyệt
   uninstall                         gỡ (hỏi giữ hay xoá dữ liệu)
 EOF
-  ;;
+  else cat <<EOF
+genchibi — manage gen-chibi ($HOME_DIR, mode $MODE)
+  start | stop | restart | status   run, stop, show status
+  update                            check and update now (automatic rollback if the new version fails)
+  logs                              show logs
+  backup | restore <file>           back up / restore data
+  mcp                               MCP bridge (stdio) for agents: claude mcp add gen-chibi -- genchibi mcp
+  expose <domain> | --quick         open MCP to the Internet via Cloudflare Tunnel, print the agent link (--off, --rotate)
+  link [--check]                    print the MCP link + agent connect commands
+  agent connect|guide|tools|skill   bootstrap for agents of any vendor: connect config, guide, tool schema, skill install
+  token [value|--clear]             set the GitHub token (private repo) for auto-update; empty = hidden prompt
+  lang [en|vi]                      show / set the language (CLI + Studio default)
+  open                              open the Studio in the browser
+  uninstall                         uninstall (asks whether to keep or delete your data)
+EOF
+  fi
+}
+
+case "${1:-help}" in
+  start) start ;; stop) stop ;; restart) stop; start ;; status) status ;; update) update ;;
+  logs) logs ;; backup) backup ;; restore) shift; restore "${1:-}" ;; uninstall) uninstall ;;
+  mcp) mcp ;; open) open_ui ;; version) status ;;
+  expose) shift; expose "$@" ;; link) shift; link_cmd "$@" ;;
+  token|github-token) shift; token_cmd "${1:-}" ;;
+  lang|language) shift; lang_cmd "${1:-}" ;;
+  agent) shift; agent_cmd "$@" ;;
+  *) usage ;;
 esac

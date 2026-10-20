@@ -26,6 +26,8 @@ services:
       GC_CLIENT_IP_HEADER: ${GC_CLIENT_IP_HEADER:-}
       GC_REPO: ${GC_REPO:-colamacbook-ryan/Gen-Chibi}
       GC_GITHUB_TOKEN: ${GC_GITHUB_TOKEN:-}
+      # ngôn ngữ giao diện mặc định: en | vi (install.sh --lang, genchibi lang)
+      GC_LANG: ${GC_LANG:-}
       # mạng công ty có proxy: đặt trong .env
       HTTPS_PROXY: ${HTTPS_PROXY:-}
       NO_PROXY: ${NO_PROXY:-}
