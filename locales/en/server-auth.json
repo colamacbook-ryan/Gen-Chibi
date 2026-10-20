@@ -28,5 +28,6 @@
  "không có địa chỉ công khai tạm nào để chính thức hoá": "there is no temporary public address to commit",
  "mode phải là off | caddy | tunnel | proxy | quick": "mode must be off | caddy | tunnel | proxy | quick",
  "clientIpHeader phải là x-forwarded-for | cf-connecting-ip | x-real-ip": "clientIpHeader must be x-forwarded-for | cf-connecting-ip | x-real-ip",
- "không có cấu hình .env kế thừa để di chuyển": "there is no legacy .env online configuration to move"
+ "không có cấu hình .env kế thừa để di chuyển": "there is no legacy .env online configuration to move",
+ "đăng nhập đang bị chặn tạm vì nhiều lần sai — dùng token của bản cài hoặc chờ {n} phút": "sign-in is temporarily blocked after many failed attempts — use the install token or wait {n} minutes"
 }

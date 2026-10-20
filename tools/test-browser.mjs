@@ -123,7 +123,7 @@ try {
 // có phiên cookie thì xoá gc-token khỏi localStorage. GC_ONLY=auth chỉ chạy nhóm này (cổng 7497 + 7669).
 if (!ONLY || ONLY === 'auth') {
   const home2 = mkdtempSync(path.join(tmpdir(), 'gc-'));
-  const srv2 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home2, GC_PORT: '7497', GC_NO_AUTOCHECK: '1', GC_API_TOKEN: 'tok-test-123' }, stdio: 'ignore' }));
+  const srv2 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home2, GC_PORT: '7497', GC_NO_AUTOCHECK: '1', GC_API_TOKEN: 'tok-test-123', GC_CLIENT_IP_HEADER: 'x-forwarded-for' }, stdio: 'ignore' }));
   const home2l = mkdtempSync(path.join(tmpdir(), 'gc-'));
   const srv2l = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home2l, GC_PORT: '7669', GC_NO_AUTOCHECK: '1', GC_API_TOKEN: 'tok-legacy-456', GC_PUBLIC_URL: 'https://chibi.example.test', GC_ALLOWED_HOSTS: 'chibi.example.test' }, stdio: 'ignore' }));
   await new Promise(r => setTimeout(r, 1500));
@@ -173,6 +173,19 @@ if (!ONLY || ONLY === 'auth') {
     await q2.fill('#gcTok', 'tok-test-123'); await q2.click(SUB); await studioUp(q2);
     if (await q2.evaluate(() => localStorage.getItem('gc-token')) !== 'tok-test-123') throw new Error('đăng nhập bằng token phải nhớ token trong trình duyệt (như v0.20)');
     await ctx2.close();
+    // 5b) trần theo tài khoản: 100 lần sai từ 100 "IP" (proxy khai tường minh) → màn đăng nhập báo chặn tạm + lối token; chủ vào bằng token thấy dải cảnh báo, "Đã xem" tắt
+    for (let i = 0; i < 100; i++) await _fetch('http://localhost:7497/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1', 'X-Forwarded-For': '198.51.100.' + (i + 1) }, body: JSON.stringify({ password: 'doan sai lan ' + i }) });
+    const ctx4 = await b2.newContext(); const q4 = await ctx4.newPage(); q4.on('pageerror', e => errs2.push(e.message));
+    await q4.goto('http://localhost:7497/login'); await q4.waitForSelector('#gcLocked', { timeout: 8000 });
+    if (!/chặn tạm/.test(await q4.textContent('#gcLocked'))) throw new Error('đang bị chặn theo tài khoản: màn đăng nhập phải báo "chặn tạm — dùng token hoặc chờ N phút"');
+    await q4.fill('#gcPw', PWB); await q4.click(SUB);
+    if (!/chặn tạm/.test(await alertText(q4))) throw new Error('đang bị chặn: đúng mật khẩu (chưa có cookie thiết bị) vẫn bị từ chối, kèm câu chặn tạm');
+    await q4.click('#gcLogin a:has-text("Dùng token")'); await q4.fill('#gcTok', 'tok-test-123'); await q4.click(SUB); await studioUp(q4);
+    await q4.waitForSelector('#authAlert', { timeout: 5000 });
+    if (!/100 lần sai từ 100 địa chỉ/.test(await q4.textContent('#authAlert'))) throw new Error('dải cảnh báo phải nêu số lần sai / số địa chỉ: ' + await q4.textContent('#authAlert'));
+    await q4.click('#authAlert a'); await q4.waitForSelector('#authAlert', { state: 'detached', timeout: 5000 });
+    await ctx4.close();
+    console.log('  ✓ Chặn theo tài khoản: màn đăng nhập báo "chặn tạm — dùng token hoặc chờ N phút", mật khẩu đúng vẫn bị từ chối · token vẫn vào · Studio hiện dải cảnh báo (100 lần sai / 100 địa chỉ), "Đã xem" tắt dải');
     console.log('  ✓ /setup sau khi có mật khẩu → /login · đã đăng nhập mở /login → về trang chính · "Dùng token": sai → báo, đúng → vào (nhớ như v0.20)');
     // 6) máy kế thừa: token trước (như v0.20) + dải "Chưa có mật khẩu chủ" → Đặt mật khẩu bằng token → có phiên thì xoá gc-token
     const ctx3 = await b2.newContext(); const q3 = await ctx3.newPage(); q3.on('pageerror', e => errs2.push(e.message));

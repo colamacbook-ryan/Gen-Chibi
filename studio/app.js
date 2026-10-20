@@ -188,6 +188,8 @@
         var pw = input({ id: 'gcPw', type: 'password', autocomplete: 'current-password' });
         title = _t('Đăng nhập gen-chibi');
         body.push(h('div', { class: 'note', text: _t('Nhập mật khẩu chủ. Trình duyệt này nhớ đăng nhập 30 ngày.') }), field(_t('Mật khẩu'), pw));
+        // trần theo tài khoản đang chặn người lạ (trình duyệt chưa từng đăng nhập): nói thẳng + lối token (token chủ không bị trần)
+        if (st.locked > 0) body.push(h('div', { class: 'banner warn', id: 'gcLocked', role: 'status' }, h('span', { text: _t('Đăng nhập đang bị chặn tạm vì nhiều lần sai — dùng token hoặc chờ {n} phút.', { n: Math.ceil(st.locked / 60) }) })));
         btn.textContent = _t('Đăng nhập');
         submit = function () {
           Auth.post('api/auth/login', { password: pw.value }).then(function (x) {
@@ -231,6 +233,11 @@
       var seen = false; try { seen = localStorage.getItem('gc-agents-ok') === '1'; } catch (e) { /* bỏ qua */ }
       if (a.agentsReconnect && !seen) box.appendChild(h('div', { id: 'authAgents' }, _t('Agent cũ nối không token cần nối lại — chạy genchibi agent connect trên máy chủ.') + ' ',
         h('a', { href: '#', onclick: function (ev) { ev.preventDefault(); try { localStorage.setItem('gc-agents-ok', '1'); } catch (e) { /* bỏ qua */ } Auth.paint(); } }, _t('Đã hiểu'))));
+      // báo chủ: đăng nhập từng bị chặn tạm (nhiều lần sai từ nhiều nơi) — hiện tới khi chủ bấm "Đã xem"
+      var al = (a.alerts || [])[(a.alerts || []).length - 1];
+      if (al) box.appendChild(h('div', { id: 'authAlert', class: 'chip warn', style: 'white-space:normal;display:block;border-radius:6px;padding:4px 8px' },
+        _t('Cảnh báo: đăng nhập bị chặn tạm lúc {at} — {n} lần sai từ {k} địa chỉ.', { at: fmtTime(al.at), n: al.failures, k: al.ips }) + ' ',
+        h('a', { href: '#', onclick: function (ev) { ev.preventDefault(); Store.api('POST', 'api/auth/alerts/ack', {}).then(function () { a.alerts = []; Auth.paint(); }).catch(function (e) { toast(e.message); }); } }, _t('Đã xem'))));
       if (a.session) box.appendChild(h('div', null, h('a', { href: '#', id: 'authLogout', onclick: function (ev) {
         ev.preventDefault(); Auth.post('api/auth/logout', {}).then(function () { location.href = '/login'; }).catch(function (e) { toast(e.message); });
       } }, _t('Đăng xuất'))));

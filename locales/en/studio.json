@@ -1698,5 +1698,8 @@
  "Chưa có mật khẩu chủ": "No owner password yet",
  "Agent cũ nối không token cần nối lại — chạy genchibi agent connect trên máy chủ.": "Agents that connected without a token must reconnect — run genchibi agent connect on the server.",
  "Đã hiểu": "Got it",
- "Đăng xuất": "Sign out"
+ "Đăng xuất": "Sign out",
+ "Đăng nhập đang bị chặn tạm vì nhiều lần sai — dùng token hoặc chờ {n} phút.": "Sign-in is temporarily blocked after many failed attempts — use a token or wait {n} minutes.",
+ "Cảnh báo: đăng nhập bị chặn tạm lúc {at} — {n} lần sai từ {k} địa chỉ.": "Warning: sign-in was temporarily blocked at {at} — {n} failed attempts from {k} addresses.",
+ "Đã xem": "Dismiss"
 }

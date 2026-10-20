@@ -101,7 +101,9 @@ class Auth {
     this.buckets = new Map();   // trần theo khoá (ip / thiết bị / phiên): { n, reset }
     this.pend = new Map();      // số lần thử ĐANG kiểm theo khoá — tính như lần sai cho tới khi có kết quả (gửi song song không vượt được trần)
     this.soft = new Map();      // đếm lần sai toàn cục của kẻ lạ theo loại (login / setup): { n, reset }
-    this.acct = new Map();      // trần theo tài khoản (một chủ): lần sai của kẻ lạ theo loại — không bị đẩy ra khỏi bộ nhớ
+    this.acct = new Map();      // trần theo tài khoản (một chủ): lần sai của kẻ lạ theo loại — không bị đẩy ra khỏi bộ nhớ. Cửa sổ CỐ ĐỊNH tính từ lần sai đầu
+                                // (≤ 15 phút, lần sai trong lúc chặn không kéo dài cửa sổ — không tích luỹ vô hạn)
+    this.acctIps = new Map();   // loại → Set IP đã sai trong cửa sổ (≤ 1000) — cho sự kiện báo chủ
     this.inflight = { login: 0, setup: 0 };
     this.dirty = false;
     this.tokenInfo = this.loadToken(String(opts.envToken || ''));
@@ -119,7 +121,7 @@ class Auth {
         catch (e2) { this.log('[auth] auth.json is corrupt and could not be renamed: ' + e2.message); }
       }
     }
-    return { v: 1, users: nul(d.users), sessions: nul(d.sessions), devices: nul(d.devices) };
+    return { v: 1, users: nul(d.users), sessions: nul(d.sessions), devices: nul(d.devices), events: Array.isArray(d.events) ? d.events.slice(-20) : [] };
   }
   save() { writeSecret(this.f.auth, JSON.stringify(this.s, null, 1)); this.dirty = false; }
   flush() { if (this.dirty) this.save(); }   // seenAt ghi trễ (không ghi đĩa mỗi request)
@@ -316,22 +318,33 @@ class Auth {
       const s = this.sessionOf(req); if (s) { const key = 'sess:' + s.hash; return { who: 'S', key, lim: L.sess, wait: this.wait(key, L.sess) }; }
       const d = this.deviceOf(req); if (d) { const key = 'dev:' + d.id; return { who: 'D', key, lim: L.dev, wait: this.wait(key, L.dev) }; }
     }
-    const key = kind + ':ip:' + this.ipOf(req);
-    return { who: 'X', kind, key, lim: L.ip, wait: this.wait(key, L.ip) || this.acctWait(kind), slow: this.slowMs(kind) };
+    const ip = this.ipOf(req), key = kind + ':ip:' + ip, w = this.wait(key, L.ip), a = w ? 0 : this.acctWait(kind);
+    return { who: 'X', kind, key, ip, lim: L.ip, wait: w || a, locked: !!a, slow: this.slowMs(kind) };
   }
   fail(kind, g) {
     if (g.who === 'T') return;
     this.bump(this.buckets, g.key, g.lim[1]);
-    if (g.who === 'X') { this.bump(this.soft, kind, LIMIT[kind].soft[1]); this.bump(this.acct, kind, LIMIT[kind].acct[1]); }
+    if (g.who !== 'X') return;
+    this.bump(this.soft, kind, LIMIT[kind].soft[1]);
+    const b0 = this.acct.get(kind); if (!b0 || b0.reset <= this.now()) this.acctIps.set(kind, new Set());
+    this.bump(this.acct, kind, LIMIT[kind].acct[1]);
+    const ips = this.acctIps.get(kind); if (ips && ips.size < 1000 && g.ip) ips.add(g.ip);
+    const b = this.acct.get(kind);
+    if (b.n === LIMIT[kind].acct[0]) {   // vừa chạm trần tài khoản → ghi sự kiện cho chủ (Studio hiện dải ở lần đăng nhập kế tiếp) + log (không bí mật)
+      const ev = { id: rnd(6), kind, at: iso(this.now()), until: iso(b.reset), failures: b.n, ips: ips ? ips.size : 0, sample: ips ? [...ips].slice(-3) : [], seen: false };
+      this.s.events = (this.s.events || []).concat(ev).slice(-20); this.save();
+      this.log('[auth] ' + kind + ' temporarily blocked for clients without a device cookie / token: ' + ev.failures + ' failed attempts from ' + ev.ips + ' address(es) until ' + ev.until);
+    }
   }
+  lockedFor(kind) { return this.acctWait(kind); }   // giây còn bị chặn theo tài khoản (0 = không chặn)
 
   /* ------------------------------------------------------------ trạng thái cho Studio / CLI */
   state(req) {
     const s = this.sessionOf(req);
-    return { password: this.hasPassword(), legacy: this.isLegacy(), setup: !this.hasPassword() && !!this.codeMeta(), session: !!s, owner: this.ownerOf(req), minLength: PW.min, login: '/login', setupUrl: '/setup' };
+    return { password: this.hasPassword(), legacy: this.isLegacy(), setup: !this.hasPassword() && !!this.codeMeta(), session: !!s, owner: this.ownerOf(req), minLength: PW.min, login: '/login', setupUrl: '/setup', locked: this.lockedFor('login') };
   }
   view(req) {   // /api/info.auth (đã là chủ): thêm nguồn token + dải "agent cũ cần nối lại"
-    return Object.assign(this.state(req), { tokenSource: this.tokenInfo.source, agentsReconnect: !!(this.legacyRec && this.legacyRec.tokenless) });
+    return Object.assign(this.state(req), { tokenSource: this.tokenInfo.source, agentsReconnect: !!(this.legacyRec && this.legacyRec.tokenless), alerts: (this.s.events || []).filter(e => !e.seen) });
   }
   sessions(req) {
     this.sweep();
@@ -347,6 +360,7 @@ class Auth {
   async handle(req, res, p, m, io) {
     const json = (code, b, extra) => io.send(res, code, b, null, extra);
     const busy = sec => json(429, { error: tr(VI, 'quá nhiều lần thử sai — thử lại sau {n} giây', { n: sec }), retryAfter: sec }, { 'Retry-After': String(sec) });
+    const blocked = (g) => g.locked ? json(429, { error: tr(VI, 'đăng nhập đang bị chặn tạm vì nhiều lần sai — dùng token của bản cài hoặc chờ {n} phút', { n: Math.ceil(g.wait / 60) }), retryAfter: g.wait, locked: true }, { 'Retry-After': String(g.wait) }) : busy(g.wait);
     if (p === '/api/auth/state' && m === 'GET') return json(200, this.state(req));
 
     // ---- đặt mật khẩu đầu: C (mã setup) hoặc T. Có mật khẩu rồi → 404 (trang /setup chuyển sang /login)
@@ -356,7 +370,7 @@ class Auth {
       const bad = pwProblem(b.password); if (bad) return json(400, { error: bad });
       if (g.who !== 'T') {
         if (!normCode(b.code)) return json(400, { error: 'mã setup sai định dạng (10 ký tự, dạng XXXXX-XXXXX)' });   // sai định dạng không thử mã nào → không đếm
-        if (g.wait) return busy(g.wait);                                                     // xét trần TRƯỚC khi kiểm (CNS-166)
+        if (g.wait) return blocked(g);                                                       // xét trần TRƯỚC khi kiểm (CNS-166)
         if (this.inflight.setup >= SLOW.inflight * this.rate) return busy(2);
         this.inflight.setup++; const release = this.hold(g);
         let r; try { if (g.slow) await sleep(g.slow); r = this.checkCode(b.code); } finally { this.inflight.setup--; release(); }
@@ -372,7 +386,7 @@ class Auth {
       if (!this.hasPassword()) return json(409, { error: 'máy chưa có mật khẩu chủ — chạy genchibi open trên máy chủ để lấy mã setup', setup: '/setup' });
       const b = await io.body(req, 8 * 1024), g = this.guard('login', req);
       if (typeof b.password !== 'string' || !b.password) return json(400, { error: 'cần mật khẩu' });
-      if (g.wait) return busy(g.wait);                                  // chạm trần → từ chối, KHÔNG chạy scrypt
+      if (g.wait) return blocked(g);                                    // chạm trần → từ chối, KHÔNG chạy scrypt
       let okPw = false;
       const release = this.hold(g);
       if (g.who === 'X') {
@@ -411,6 +425,8 @@ class Auth {
       return json(200, { ok: true, expiresAt: iso(r.exp) });
     }
     if (p === '/api/auth/sessions' && m === 'GET') return json(200, this.sessions(req));
+    // chủ đã xem cảnh báo "đăng nhập bị chặn tạm" → không hiện lại
+    if (p === '/api/auth/alerts/ack' && m === 'POST') { let n = 0; (this.s.events || []).forEach(e => { if (!e.seen) { e.seen = true; n++; } }); if (n) this.save(); return json(200, { ok: true, acked: n }); }
     const rv = /^\/api\/auth\/(sessions|devices)\/([A-Za-z0-9_-]{1,32})\/revoke$/.exec(p);
     if (rv && m === 'POST') {
       let done = false;

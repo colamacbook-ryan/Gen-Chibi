@@ -144,6 +144,16 @@ console.log('0) đơn vị (đồng hồ giả): mã setup · mật khẩu · ph
   ok(a.ownerOf(R(cookie(cj4))) === null && !a.deviceOf(R(cookie(cj4))) && Object.keys(a.s.sessions).length === 0, 'đổi mật khẩu: thu hồi MỌI phiên + thiết bị');
   ok(cookieName('gc_session', { headers: { host: 'chibi.example.com' } }) === 'gc_session' && isHttps({ headers: {}, gcEdge: 'caddy' }) && isHttps({ headers: { 'x-forwarded-proto': 'http, https' } }) && !isHttps({ headers: {} }) && / Secure$/.test(a.issue({ headers: { host: 'chibi.example.com' }, gcEdge: 'tunnel', socket: {} })[0]), 'Host không cổng → tên gốc gc_session · Secure khi qua edge của app / X-Forwarded-Proto https');
   ok(logs.every(l => !l.includes(tok) && !l.includes(PW) && !l.includes(PW2)), 'log của Auth không có token / mật khẩu');
+  // trần theo tài khoản (giảm thiểu DoS — Gen 2026-10-20): cửa sổ CỐ ĐỊNH ≤ 15 phút từ lần sai đầu, không tích luỹ; T luôn qua; ghi sự kiện báo chủ
+  const X = ip => ({ headers: { host: 'localhost:7480' }, socket: { remoteAddress: ip } });
+  const t0 = t; for (let i = 0; i < 100; i++) { const g = a.guard('login', X('203.0.113.' + (i % 250))); if (!g.wait) a.fail('login', g); t += 1000; }
+  const gl = a.guard('login', X('198.51.100.1'));
+  ok(gl.wait > 0 && gl.wait <= 900 && gl.locked && a.state(R()).locked > 0, '100 lần sai từ 100 IP → người lạ (IP mới) bị chặn theo tài khoản, còn ≤ 15 phút (' + gl.wait + ' s); /api/auth/state báo locked');
+  ok(a.guard('login', Object.assign(X('198.51.100.1'), { headers: { host: 'localhost:7480', authorization: 'Bearer ' + a.token } })).who === 'T', 'token chủ (T) luôn qua trần tài khoản');
+  const ev = a.s.events[a.s.events.length - 1];
+  ok(ev && ev.failures === 100 && ev.ips === 100 && !ev.seen && logs.some(l => /temporarily blocked .* 100 failed attempts from 100 address/.test(l)) && a.view(R()).alerts.length === 1, 'chạm trần tài khoản → ghi sự kiện cho chủ (100 lần sai, 100 địa chỉ, lúc chặn, tới khi) + log; /api/info.auth.alerts có cảnh báo');
+  t = t0 + 900e3 - 1000; ok(a.guard('login', X('198.51.100.1')).wait > 0, 'vẫn chặn sát cuối cửa sổ 15 phút (lần sai đầu + 15 phút)');
+  t = t0 + 900e3 + 1000; ok(a.guard('login', X('198.51.100.1')).wait === 0, 'hết cửa sổ cố định 15 phút → hết chặn (không tích luỹ, không kéo dài)');
 
   // online-config + OAuth đọc publicUrl lúc chạy
   const od = tmp('on'), oa = { v: null };
@@ -294,7 +304,14 @@ console.log('3) trần kiểu L-66: 10.000 lần đoán từ 500 IP (proxy riên
   ok(codes2.every(c => c === 429), 'đợt thứ hai 1.000 lần → toàn 429, không chạy scrypt (' + (Date.now() - t1) + ' ms)');
   const withD = await login({ ...P('198.51.100.7'), ...cookie(D) }, PW);
   ok(withD.status === 200 && jar(withD.set).gc_session_7744, 'chủ có cookie thiết bị (có TRƯỚC đợt đoán), cùng IP đã bị khoá, tài khoản đang bị chặn → 200 (kẻ lạ không khoá được chủ — L-66)');
-  ok((await login({ ...P('198.51.100.8'), ...bearer(fs.readFileSync(path.join(hB, 'data/owner-token'), 'utf8').trim()) }, PW)).status === 200, 'token chủ (T) cũng không bị trần');
+  const TB = fs.readFileSync(path.join(hB, 'data/owner-token'), 'utf8').trim();
+  ok((await login({ ...P('198.51.100.8'), ...bearer(TB) }, PW)).status === 200, 'token chủ (T) cũng không bị trần');
+  const stB = (await req(7744, 'GET', '/api/auth/state')).json;
+  ok(stB.locked > 0 && stB.locked <= 900 && fresh.json.locked === true && /token/.test(fresh.json.error) && /phút|minutes/.test(fresh.json.error), 'đang chặn: /api/auth/state.locked (≤ 15 phút) + câu lỗi "đang bị chặn tạm — dùng token hoặc chờ N phút" (Studio hiện kèm lối "Dùng token")');
+  const alerts = (await req(7744, 'GET', '/api/info', { headers: bearer(TB) })).json.auth.alerts;
+  ok(alerts.length === 1 && alerts[0].failures === 100 && alerts[0].ips >= 90 && alerts[0].at && alerts[0].until && /temporarily blocked/.test(B.out), 'báo chủ: sự kiện chặn (số lần sai, số địa chỉ, lúc chặn / tới khi) trong /api/info.auth.alerts + log server');
+  const ack = await req(7744, 'POST', '/api/auth/alerts/ack', { headers: { ...W, ...bearer(TB) } });
+  ok(ack.status === 200 && (await req(7744, 'GET', '/api/info', { headers: bearer(TB) })).json.auth.alerts.length === 0 && (await req(7744, 'POST', '/api/auth/alerts/ack', { headers: W })).status === 401, 'chủ bấm "Đã xem" (S / T) → cảnh báo không hiện lại; không bằng chứng → 401');
   const dc = []; for (let i = 0; i < 11; i++) dc.push((await login({ ...P('203.0.113.252'), ...cookie(D) }, 'chu go sai ' + i + ' lan')).status);
   const dHit = await login({ ...P('203.0.113.252'), ...cookie(D) }, PW);
   ok(dc.slice(0, 10).every(c => c === 401) && dc[10] === 429 && dHit.status === 429, 'cookie thiết bị có trần sai RIÊNG: 10 lần sai → lần 11 và cả lần đúng → 429 cho thiết bị đó [' + dc + ']');
