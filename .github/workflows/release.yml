@@ -41,8 +41,8 @@ jobs:
         env:
           TAG: ${{ steps.ver.outputs.tag }}
         run: |
-          awk -v t="## $TAG" '$0==t{f=1;next} /^## /{if(f)exit} f' CHANGELOG.md > notes.md
-          test -s notes.md || echo "Phát hành $TAG" > notes.md
+          bash tools/release-notes.sh "$TAG" > notes.md
+          test -s notes.md || echo "Release $TAG" > notes.md
       - name: Tạo Release (kèm tag)
         if: steps.ver.outputs.skip != '1'
         env:

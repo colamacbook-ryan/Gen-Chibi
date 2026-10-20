@@ -36,6 +36,13 @@ PKG_TMP="$(mktemp -d)"; PKG="$(bash tools/package.sh "$PKG_TMP" | tail -1)"
 PKG_LIST="$(tar -tzf "$PKG")"; rm -f "$PKG" "$PKG_TMP/SHA256SUMS"; rmdir "$PKG_TMP"   # chỉ xoá đúng hai tệp vừa tạo + thư mục rỗng
 for f in studio server engine player; do grep -q "/locales/en/$f.json$" <<< "$PKG_LIST" || { echo "   ✗ gói phát hành thiếu locales/en/$f.json"; exit 1; }; done
 echo "   ✓ gói phát hành có locales/en/{studio,server,engine,player}.json"
+# ghi chú Release lấy từ CHANGELOG (tiêu đề có mô tả "## vX.Y.Z — …" — trước v0.20 awk so cả dòng nên Release chỉ có "Phát hành vX")
+RN="$(bash tools/release-notes.sh "v$(tr -d ' \n' < VERSION)")"
+[ -n "$RN" ] || { echo "   ✗ CHANGELOG.md không có mục cho v$(tr -d ' \n' < VERSION) — Release sẽ trống ghi chú"; exit 1; }
+grep -q '^## ' <<< "$RN" && { echo "   ✗ ghi chú Release tràn sang mục phiên bản khác"; exit 1; }
+N191="$(bash tools/release-notes.sh v0.19.1)"; [[ "${N191%%$'\n'*}" == 'Ryan: "làm tiếp đi, sửa luôn CNS-146'* ]] || { echo "   ✗ release-notes.sh lấy sai mục v0.19.1"; exit 1; }
+[ -z "$(bash tools/release-notes.sh v0.1)" ] || { echo "   ✗ release-notes.sh khớp nhầm tiền tố (v0.1 ≠ v0.1x)"; exit 1; }
+echo "   ✓ ghi chú Release = mục CHANGELOG của VERSION (tiêu đề có mô tả, không tràn mục, không khớp nhầm tiền tố)"
 
 echo "2) cổng kiểm thư viện"
 node -e '
