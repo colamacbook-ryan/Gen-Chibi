@@ -5,7 +5,8 @@
 // C = mã setup (chỉ để đặt mật khẩu đầu). Không có lớp request nào được quyền vì THIẾU một header. Lớp E / P / N chỉ dùng để lấy IP cho trần.
 // Trần đăng nhập (CNS-166, L-66): client chưa có bằng chứng → xét trần TRƯỚC khi chạy scrypt (chạm trần = từ chối, không kiểm);
 // miễn trừ chỉ bằng bằng chứng: S / T (không trần) · D = cookie thiết bị ký HMAC (trần sai RIÊNG cho từng thiết bị, không chung với kẻ lạ).
-// Trần toàn cục chỉ làm CHẬM (trễ tăng dần + trần số lần kiểm cùng lúc), không khoá ai.
+// Trần toàn cục: từ ngưỡng mềm thì làm CHẬM (trễ tăng dần + trần số lần kiểm cùng lúc); vượt trần THEO TÀI KHOẢN thì chặn mọi client không có S / T / D
+// tới hết cửa sổ (đổi IP không lách được — chủ có cookie thiết bị / token vẫn vào; quên cả hai: `genchibi password`).
 // Tệp trong data/ (đều 0600): auth.json (người dùng + phiên + thiết bị; phiên chỉ lưu băm) · owner-token (khi env trống) ·
 // setup-code (HMAC + hạn của mã) · setup-code.txt (bản rõ cho CLI in: dòng 1 "XXXXX-XXXXX", dòng 2 "expires=<epoch giây>") · legacy.json (dấu máy kế thừa).
 // Thuần Node (không DOM, không HTTP server): main.js định tuyến; handle() nhận io = { send, body } của main.js. Có `now` để test chạy đồng hồ giả.
@@ -22,8 +23,10 @@ const SCRYPT = { N: 16384, r: 8, p: 5, keylen: 32, maxmem: 64 * 1024 * 1024 };
 const PW = { min: 12, maxBytes: 1024 };
 const TTL = { session: 30 * 86400e3, device: 400 * 86400e3, setup: 3600e3 };   // ms — cookie thiết bị 400 ngày (trần của trình duyệt)
 const CROCK = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';   // Crockford base32: 10 ký tự = 50 bit
-// trần (số lần SAI, cửa sổ giây). ip/dev/sess = khoá; soft = ngưỡng toàn cục bắt đầu làm chậm (nhân GC_AUTH_RATE — chỉ để chạy test số lượng lớn)
-const LIMIT = { login: { ip: [10, 900], dev: [10, 900], sess: [10, 900], soft: [50, 900] }, setup: { ip: [10, 900], soft: [50, 900] } };
+// trần (số lần SAI, cửa sổ giây). ip/dev/sess = khoá; soft = ngưỡng toàn cục bắt đầu làm chậm (nhân GC_AUTH_RATE — chỉ để chạy test số lượng lớn);
+// acct = trần THEO TÀI KHOẢN (mọi IP cộng lại, KHÔNG nhân GC_AUTH_RATE): vượt → client không có S / T / D bị CHẶN tới hết cửa sổ — đổi IP không reset được
+// (review bảo mật P1: IP do kẻ tấn công kiểm soát được ở lớp P / N thì trần theo IP vô dụng; chủ có cookie thiết bị / token vẫn vào)
+const LIMIT = { login: { ip: [10, 900], dev: [10, 900], sess: [10, 900], soft: [50, 900], acct: [100, 900] }, setup: { ip: [10, 900], soft: [50, 900], acct: [100, 900] } };
 const SLOW = { step: 250, max: 10000, inflight: 8 };   // trễ = step × (số lần sai toàn cục vượt ngưỡng), tối đa max ms; kiểm cùng lúc của kẻ lạ tối đa inflight
 const MAX = { sessions: 100, devices: 50, buckets: 5000, ua: 80 };
 const COOKIE = { session: 'gc_session', device: 'gc_device' };
@@ -98,6 +101,7 @@ class Auth {
     this.buckets = new Map();   // trần theo khoá (ip / thiết bị / phiên): { n, reset }
     this.pend = new Map();      // số lần thử ĐANG kiểm theo khoá — tính như lần sai cho tới khi có kết quả (gửi song song không vượt được trần)
     this.soft = new Map();      // đếm lần sai toàn cục của kẻ lạ theo loại (login / setup): { n, reset }
+    this.acct = new Map();      // trần theo tài khoản (một chủ): lần sai của kẻ lạ theo loại — không bị đẩy ra khỏi bộ nhớ
     this.inflight = { login: 0, setup: 0 };
     this.dirty = false;
     this.tokenInfo = this.loadToken(String(opts.envToken || ''));
@@ -264,26 +268,38 @@ class Auth {
     for (const id of Object.keys(this.s.devices)) if (Date.parse(this.s.devices[id].seenAt || 0) + TTL.device <= t) { this.dropDevice(id); ch = true; }
     for (const [k, b] of this.buckets) if (b.reset <= t) this.buckets.delete(k);
     for (const [k, b] of this.soft) if (b.reset <= t) this.soft.delete(k);
+    for (const [k, b] of this.acct) if (b.reset <= t) this.acct.delete(k);
     if (ch) this.save();
   }
   // việc định kỳ (main.js gọi mỗi phút): dọn phiên hết hạn, ghi seenAt, mã setup hết hạn thì sinh mã mới (genchibi status luôn có mã dùng được)
   tick() { this.sweep(); this.flush(); if (!this.hasPassword()) this.ensureSetupCode(false); }
 
   /* ------------------------------------------------------------ trần (chỉ đếm lần SAI) */
-  // IP của khách theo lớp (chỉ dùng cho trần, không cấp quyền): E-caddy = mục cuối X-Forwarded-For (Caddy ghi, X-GC-Edge đã được kiểm trước khi gắn cờ);
-  // E-tunnel = Cf-Connecting-Ip (chỉ trên cổng nghe riêng của cloudflared); P / N = clientIp của OAuth (peer công cộng → peer; peer riêng → header proxy)
+  // IP của khách (chỉ dùng cho trần, không cấp quyền). Header chuyển tiếp CHỈ tin khi có cơ sở: E-caddy (cờ do app gắn sau khi X-GC-Edge đúng) → mục cuối
+  // X-Forwarded-For; E-tunnel (socket cổng nghe riêng GC_PORT+2) → Cf-Connecting-Ip; proxy riêng mà CHỦ cấu hình tường minh (GC_CLIENT_IP_HEADER kế thừa /
+  // online.json clientIpHeader) → header đó khi peer là mạng riêng. Còn lại: địa chỉ socket — XFF / Cf-Connecting-Ip do client tự gửi bị bỏ qua (đổi header không ra "IP mới")
   ipOf(req) {
-    const h = req.headers || {}, peer = String((req.socket && req.socket.remoteAddress) || '').replace(/^::ffff:/i, '');
-    if (req.gcEdge === 'tunnel') return (String(h['cf-connecting-ip'] || '').trim() || peer || '?').slice(0, 64);
-    if (req.gcEdge === 'caddy') return (String(h['x-forwarded-for'] || '').split(',').pop().trim() || peer || '?').slice(0, 64);
-    return clientIp(h, req.socket && req.socket.remoteAddress, this.ipHeader());
+    const h = req.headers || {}, peer = String((req.socket && req.socket.remoteAddress) || '').replace(/^::ffff:/i, '').slice(0, 64) || '?';
+    if (req.gcEdge === 'tunnel') return (String(h['cf-connecting-ip'] || '').trim() || peer).slice(0, 64);
+    if (req.gcEdge === 'caddy') return (String(h['x-forwarded-for'] || '').split(',').pop().trim() || peer).slice(0, 64);
+    const hdr = this.ipHeader();
+    return hdr ? clientIp(h, req.socket && req.socket.remoteAddress, hdr) : peer;
   }
   wait(key, lim) {
     const b = this.buckets.get(key), t = this.now(), live = b && b.reset > t ? b.n : 0;
     return live + (this.pend.get(key) || 0) >= lim[0] ? Math.max(1, Math.ceil(((b && b.reset > t ? b.reset : t + lim[1] * 1000) - t) / 1000)) : 0;
   }
   // giữ chỗ một lần thử trong trần của khoá (gọi ngay sau guard() cho qua, trước khi kiểm); trả hàm nhả chỗ
-  hold(g) { if (!g.key) return () => {}; this.pend.set(g.key, (this.pend.get(g.key) || 0) + 1); let done = false; return () => { if (done) return; done = true; const n = (this.pend.get(g.key) || 1) - 1; if (n > 0) this.pend.set(g.key, n); else this.pend.delete(g.key); }; }
+  hold(g) {
+    const keys = [g.key, g.who === 'X' ? 'acct:' + g.kind : null].filter(Boolean); if (!keys.length) return () => {};
+    keys.forEach(k => this.pend.set(k, (this.pend.get(k) || 0) + 1));
+    let done = false;
+    return () => { if (done) return; done = true; keys.forEach(k => { const n = (this.pend.get(k) || 1) - 1; if (n > 0) this.pend.set(k, n); else this.pend.delete(k); }); };
+  }
+  acctWait(kind) {   // trần theo tài khoản: lần sai + lần đang kiểm của MỌI kẻ lạ (mọi IP)
+    const lim = LIMIT[kind].acct, b = this.acct.get(kind), t = this.now(), live = b && b.reset > t ? b.n : 0;
+    return live + (this.pend.get('acct:' + kind) || 0) >= lim[0] ? Math.max(1, Math.ceil(((b && b.reset > t ? b.reset : t + lim[1] * 1000) - t) / 1000)) : 0;
+  }
   bump(map, key, sec) {
     const t = this.now(), b = map.get(key);
     if (!b || b.reset <= t) { if (map === this.buckets && map.size >= MAX.buckets) map.delete(map.keys().next().value); map.set(key, { n: 1, reset: t + sec * 1000 }); } else b.n++;
@@ -301,12 +317,12 @@ class Auth {
       const d = this.deviceOf(req); if (d) { const key = 'dev:' + d.id; return { who: 'D', key, lim: L.dev, wait: this.wait(key, L.dev) }; }
     }
     const key = kind + ':ip:' + this.ipOf(req);
-    return { who: 'X', key, lim: L.ip, wait: this.wait(key, L.ip), slow: this.slowMs(kind) };
+    return { who: 'X', kind, key, lim: L.ip, wait: this.wait(key, L.ip) || this.acctWait(kind), slow: this.slowMs(kind) };
   }
   fail(kind, g) {
     if (g.who === 'T') return;
     this.bump(this.buckets, g.key, g.lim[1]);
-    if (g.who === 'X') this.bump(this.soft, kind, LIMIT[kind].soft[1]);
+    if (g.who === 'X') { this.bump(this.soft, kind, LIMIT[kind].soft[1]); this.bump(this.acct, kind, LIMIT[kind].acct[1]); }
   }
 
   /* ------------------------------------------------------------ trạng thái cho Studio / CLI */

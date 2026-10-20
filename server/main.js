@@ -368,7 +368,9 @@ async function route(req, res) {
     if (!who) {
       // approve là đường /api mà tunnel / cổng ngoài thường mở ra Internet → chỗ thử token chủ máy. Token ĐÚNG không bao giờ bị trần; chỉ đếm (theo IP) và chặn các lần SAI
       if (p === '/api/oauth/approve' && oauth.enabled && !isDirectLocal(req.headers, req.socket.remoteAddress)) {
-        const ip = auth.ipOf(req), w = oauth.gate('approve', ip);
+        // token chủ 256 bit (không đoán được): giữ cách lấy IP của OAuth v0.19 (XFF mục cuối khi peer riêng) — kẻ lạ đổi header chỉ rải được lần sai, không đoán được;
+        // lớp E (cờ edge) dùng IP edge. Trần MẬT KHẨU dùng auth.ipOf (không tin header tự khai) + trần theo tài khoản — xem auth.js
+        const ip = req.gcEdge ? auth.ipOf(req) : clientIp(req.headers, req.socket.remoteAddress, ipHeader()), w = oauth.gate('approve', ip);
         if (w) return send(res, 429, { error: VI('quá nhiều lần sai token — thử lại sau {n} giây', { n: w }) }, null, { 'Retry-After': String(w) });
         oauth.tick('approve', ip);
       }

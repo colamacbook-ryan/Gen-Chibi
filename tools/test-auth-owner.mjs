@@ -255,7 +255,7 @@ const TA = fs.readFileSync(path.join(homeA, 'data/owner-token'), 'utf8').trim();
 /* ================================================================== 2) mã setup qua HTTP */
 console.log('2) mã setup qua HTTP: trần riêng xét trước khi kiểm · sai định dạng không đếm · T đặt không cần mã');
 {
-  const S2 = await ready(boot(7742, {})), code = codeOf(S2.home), T2 = fs.readFileSync(path.join(S2.home, 'data/owner-token'), 'utf8').trim(); SECRETS.push(code, T2);
+  const S2 = await ready(boot(7742, { GC_CLIENT_IP_HEADER: 'x-forwarded-for' })), code = codeOf(S2.home), T2 = fs.readFileSync(path.join(S2.home, 'data/owner-token'), 'utf8').trim(); SECRETS.push(code, T2);
   const try1 = (ip, c, pw) => req(7742, 'POST', '/api/auth/setup', { headers: { ...P(ip), ...W }, body: { code: c, password: pw || PW } });
   const fmt = []; for (let i = 0; i < 15; i++) fmt.push((await try1('198.51.100.20', 'sai-dinh-dang')).status);
   const bad = []; for (let i = 0; i < 12; i++) bad.push((await try1('198.51.100.21', 'ZZZZZ-ZZZZ' + (i % 10))).status);
@@ -274,41 +274,52 @@ console.log('2) mã setup qua HTTP: trần riêng xét trước khi kiểm · sa
 }
 
 /* ================================================================== 3) L-66: 10.000 lần đoán */
-console.log('3) trần kiểu L-66: 10.000 lần đoán từ 500 IP (lớp P, XFF) — trần xét TRƯỚC khi chạy scrypt');
+console.log('3) trần kiểu L-66: 10.000 lần đoán từ 500 IP (proxy riêng KHAI TƯỜNG MINH GC_CLIENT_IP_HEADER=x-forwarded-for) — trần xét TRƯỚC khi chạy scrypt; trần theo tài khoản');
 {
   const hB = tmp('B'); seedPassword(hB, PW);
-  const B = await ready(boot(7744, { GC_AUTH_RATE: '1000' }, hB));   // GC_AUTH_RATE: chỉ nâng ngưỡng LÀM CHẬM toàn cục để 10.000 lần đoán chạy nhanh (trần theo IP giữ nguyên) — làm chậm kiểm riêng ở mục 4
+  const B = await ready(boot(7744, { GC_AUTH_RATE: '1000', GC_CLIENT_IP_HEADER: 'x-forwarded-for' }, hB));   // GC_AUTH_RATE: chỉ nâng ngưỡng LÀM CHẬM (không đổi trần IP / tài khoản) để đợt đoán chạy nhanh
   const login = (h, pw) => req(7744, 'POST', '/api/auth/login', { headers: { ...W, ...h }, body: { password: pw } });
-  // đợt đoán chạy TRƯỚC lần đăng nhập đầu của chủ: băm fixture N=1024 cho 5.000 lần kiểm chạy nhanh (đăng nhập đúng sẽ băm lại theo tham số mạnh — mục 0)
+  const own = await login(P('203.0.113.250'), PW), D = { gc_device_7744: jar(own.set).gc_device_7744 };   // chủ đăng nhập trước đợt đoán → giữ cookie thiết bị (bỏ phiên)
+  ok(own.status === 200 && D.gc_device_7744, 'chủ đăng nhập một lần trước đợt đoán, giữ cookie thiết bị (D)');
+  const par = await Promise.all(Array.from({ length: 30 }, (x, i) => login(P('198.51.102.1'), 'song song ' + i + ' sai'))).then(rs => rs.map(r => r.status));
+  ok(par.filter(c => c === 401).length === 10 && par.filter(c => c === 429).length === 20, '30 lần đoán GỬI SONG SONG từ một IP → đúng 10 lần được kiểm, 20 lần 429 (lần đang kiểm cũng chiếm chỗ trong trần)');
   const guesses = []; for (let i = 0; i < 10000; i++) guesses.push(i);
   const t0 = Date.now();
   const codes = await pool(64, guesses, i => login(P('198.51.' + (100 + (i % 500 >> 8)) + '.' + (i % 500 & 255)), 'doan-' + i + '-sai-roi').then(r => r.status));
   const n401 = codes.filter(c => c === 401).length, n429 = codes.filter(c => c === 429).length;
-  ok(n401 === 5000 && n429 === 5000, '10.000 lần đoán / 500 IP: mỗi IP chỉ 10 lần được kiểm (5.000 × 401), còn lại bị chặn trước khi kiểm (5.000 × 429) — ' + Math.round((Date.now() - t0) / 1000) + ' s');
-  const par = await Promise.all(Array.from({ length: 30 }, (x, i) => login(P('198.51.102.1'), 'song song ' + i + ' sai'))).then(rs => rs.map(r => r.status));
-  ok(par.filter(c => c === 401).length === 10 && par.filter(c => c === 429).length === 20, '30 lần đoán GỬI SONG SONG từ một IP → đúng 10 lần được kiểm, 20 lần 429 (lần đang kiểm cũng chiếm chỗ trong trần — không lách được bằng gửi đồng loạt)');
-  const capped = P('198.51.100.7');
-  const hit = await login(capped, PW);
-  ok(hit.status === 429 && !hit.set.length, 'lần TRÚNG mật khẩu từ IP đã chạm trần → vẫn 429, không cấp phiên (CNS-166 — bỏ "xét trần trước" là đỏ ở đây)');
-  const own = await login(P('203.0.113.250'), PW), D = { gc_device_7744: jar(own.set).gc_device_7744 };   // chủ đăng nhập từ IP của mình → giữ cookie thiết bị (bỏ phiên)
-  ok(own.status === 200 && D.gc_device_7744, 'chủ (IP khác, chưa có cookie thiết bị) → 200 giữa đợt đoán: kẻ lạ chỉ khoá được IP của chính chúng; nhận cookie thiết bị (D)');
-  // đợt đoán thứ hai SAU khi chủ đã có D (băm giờ là tham số mạnh): 1.000 lần từ chính các IP đã bị khoá → bị chặn trước khi kiểm nên vẫn nhanh
+  ok(n401 === 90 && n429 === 9910, '10.000 lần đoán / 500 IP: trần THEO TÀI KHOẢN (100 lần sai mọi IP) → chỉ 90 lần nữa được kiểm, 9.910 lần 429 trước khi kiểm — đổi IP không lách được (' + n401 + ' × 401, ' + Math.round((Date.now() - t0) / 1000) + ' s)');
+  const hit = await login(P('198.51.100.7'), PW), fresh = await login(P('203.0.113.99'), PW);
+  ok(hit.status === 429 && !hit.set.length && fresh.status === 429 && Number(fresh.headers['retry-after']) > 0, 'lần TRÚNG mật khẩu khi đã chặn — từ IP đã chạm trần lẫn từ IP MỚI → vẫn 429 + Retry-After, không cấp phiên (CNS-166)');
   const t1 = Date.now(), codes2 = await pool(64, guesses.slice(0, 1000), i => login(P('198.51.' + (100 + (i % 500 >> 8)) + '.' + (i % 500 & 255)), 'lan-hai-' + i).then(r => r.status));
-  ok(codes2.every(c => c === 429), 'đợt thứ hai 1.000 lần từ các IP đã chạm trần → toàn 429, không chạy scrypt (' + (Date.now() - t1) + ' ms)');
-  const withD = await login({ ...capped, ...cookie(D) }, PW);
-  ok(withD.status === 200 && jar(withD.set).gc_session_7744, 'chủ có cookie thiết bị (có TRƯỚC đợt thứ hai), đứng sau CÙNG IP đã bị khoá → 200 (kẻ lạ không khoá được chủ — L-66)');
+  ok(codes2.every(c => c === 429), 'đợt thứ hai 1.000 lần → toàn 429, không chạy scrypt (' + (Date.now() - t1) + ' ms)');
+  const withD = await login({ ...P('198.51.100.7'), ...cookie(D) }, PW);
+  ok(withD.status === 200 && jar(withD.set).gc_session_7744, 'chủ có cookie thiết bị (có TRƯỚC đợt đoán), cùng IP đã bị khoá, tài khoản đang bị chặn → 200 (kẻ lạ không khoá được chủ — L-66)');
+  ok((await login({ ...P('198.51.100.8'), ...bearer(fs.readFileSync(path.join(hB, 'data/owner-token'), 'utf8').trim()) }, PW)).status === 200, 'token chủ (T) cũng không bị trần');
   const dc = []; for (let i = 0; i < 11; i++) dc.push((await login({ ...P('203.0.113.252'), ...cookie(D) }, 'chu go sai ' + i + ' lan')).status);
-  const dHit = await login({ ...P('203.0.113.252'), ...cookie(D) }, PW), other = await login(P('203.0.113.252'), PW);
-  ok(dc.slice(0, 10).every(c => c === 401) && dc[10] === 429 && dHit.status === 429 && other.status === 200, 'cookie thiết bị có trần sai RIÊNG: 10 lần sai → lần 11 và cả lần đúng → 429 cho thiết bị đó; trình duyệt khác cùng IP vẫn 200 [' + dc + ']');
-  ok(B.c.exitCode === null && (await req(7744, 'GET', '/api/health')).status === 200, 'server vẫn sống, /api/health trả lời sau 10.000 lần đoán');
+  const dHit = await login({ ...P('203.0.113.252'), ...cookie(D) }, PW);
+  ok(dc.slice(0, 10).every(c => c === 401) && dc[10] === 429 && dHit.status === 429, 'cookie thiết bị có trần sai RIÊNG: 10 lần sai → lần 11 và cả lần đúng → 429 cho thiết bị đó [' + dc + ']');
+  ok(B.c.exitCode === null && (await req(7744, 'GET', '/api/health')).status === 200, 'server vẫn sống, /api/health trả lời sau 11.000 lần đoán');
   await stop(B);
+}
+console.log('3b) cấu hình mặc định (không khai header IP): XFF / Cf-Connecting-Ip do client gửi KHÔNG được tin — đổi mỗi lần không né được trần');
+{
+  const hS = tmp('Sp'); seedPassword(hS, PW);
+  const Sp = await ready(boot(7744, {}, hS));
+  const login = (h, pw) => req(7744, 'POST', '/api/auth/login', { headers: { ...W, ...h }, body: { password: pw } });
+  const D = { gc_device_7744: jar((await login({}, PW)).set).gc_device_7744 };
+  const codes = await pool(16, Array.from({ length: 1000 }, (x, i) => i), i => login({ 'x-forwarded-for': '10.' + (i >> 8) + '.' + (i & 255) + '.9', 'cf-connecting-ip': '172.16.' + (i >> 8) + '.' + (i & 255), 'x-real-ip': '192.168.0.' + (i & 255) }, 'gia-ip-' + i).then(r => r.status));
+  ok(codes.filter(c => c === 401).length === 10 && codes.filter(c => c === 429).length === 990, '1.000 lần đoán, mỗi lần một X-Forwarded-For / Cf-Connecting-Ip / X-Real-IP khác qua cổng chính → chỉ 10 lần được kiểm (cùng peer), 990 × 429');
+  const hit = await login({ 'x-forwarded-for': '203.0.113.1' }, PW);
+  ok(hit.status === 429 && !hit.set.length, 'lần TRÚNG mật khẩu (kèm XFF "mới") khi đã chặn → vẫn 429');
+  ok((await login({ 'x-forwarded-for': '203.0.113.2', ...cookie(D) }, PW)).status === 200, 'chủ có cookie thiết bị → 200');
+  await stop(Sp);
 }
 
 /* ================================================================== 4) trần toàn cục chỉ làm chậm */
 console.log('4) trần toàn cục chỉ LÀM CHẬM kẻ lạ, không khoá; chủ có cookie thiết bị không bị chậm');
 {
   const hC = tmp('C'); seedPassword(hC, PW);
-  const C = await ready(boot(7745, {}, hC));
+  const C = await ready(boot(7745, { GC_CLIENT_IP_HEADER: 'x-forwarded-for' }, hC));
   const login = (h, pw) => req(7745, 'POST', '/api/auth/login', { headers: { ...W, ...h }, body: { password: pw } });
   const D = { gc_device_7745: jar((await login(P('203.0.113.200'), PW)).set).gc_device_7745 };
   const st = []; for (let i = 0; i < 55; i++) st.push((await login(P('192.0.2.' + (i + 1)), 'sai ' + i + ' rồi nhé bạn')).status);
