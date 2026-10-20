@@ -40,40 +40,40 @@ input:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline
 `;
 
 function shell(L, title, bodyHtml, nonce, script) {
-  const T = s => MSG._t(s, null, L);
+  const _t = s => MSG._t(s, null, L);
   return '<!doctype html><html lang="' + L + '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer">' +
     '<title>' + esc(title) + ' · gen-chibi</title><style nonce="' + nonce + '">' + CSS + '</style></head><body><main class="panel"><h1>' + esc(title) + '</h1>' + bodyHtml +
-    '<div class="foot">gen-chibi · © 2026 Gen Labs — ' + esc(T('Chỉ chủ máy cấp phép được. Bạn có thể đóng trang này để từ chối.')) + '</div></main>' + (script || '') + '</body></html>';
+    '<div class="foot">gen-chibi · © 2026 Gen Labs — ' + esc(_t('Chỉ chủ máy cấp phép được. Bạn có thể đóng trang này để từ chối.')) + '</div></main>' + (script || '') + '</body></html>';
 }
 const nonce = () => crypto.randomBytes(16).toString('base64');
 const csp = n => "default-src 'none'; script-src 'nonce-" + n + "'; style-src 'nonce-" + n + "'; connect-src 'self'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
 // lỗi trước khi tin được redirect_uri: hiện trang, KHÔNG chuyển hướng. message = msgid tiếng Việt từ OAuth.authorize() → dịch theo người xem
 function errorPage(message, lang) {
-  const n = nonce(), L = MSG.reqLang(lang), T = s => MSG._t(s, null, L);
-  return { html: shell(L, T('Không cấp phép được'), '<div class="pad"><div class="alert bad" id="m"></div><div class="note">' + esc(T('Không có gì được cấp. Quay lại agent và thử kết nối lại.')) + '</div></div>', n,
+  const n = nonce(), L = MSG.reqLang(lang), _t = s => MSG._t(s, null, L);
+  return { html: shell(L, _t('Không cấp phép được'), '<div class="pad"><div class="alert bad" id="m"></div><div class="note">' + esc(_t('Không có gì được cấp. Quay lại agent và thử kết nối lại.')) + '</div></div>', n,
     '<script nonce="' + n + '">document.getElementById("m").textContent=' + safeJSON(MSG.label(L, String(message)).slice(0, 400)) + ';</script>'), csp: csp(n) };
 }
 
 // view: kết quả OAuth.authorize().view; opts: { needToken, publicHost, lang? }
 function consentPage(view, opts) {
-  const n = nonce(), L = MSG.reqLang(opts.lang), T = s => MSG._t(s, null, L);
+  const n = nonce(), L = MSG.reqLang(opts.lang), _t = s => MSG._t(s, null, L);
   // chữ JS trong trang (dịch sẵn) — đi cùng dữ liệu, không ghép vào mã
-  const tx = { loopback: T('máy của bạn (CLI)'), known: T('tên miền quen'), added: T('bạn đã thêm (GC_OAUTH_REDIRECTS)'), unknown: T('tên miền lạ'), unasked: T('(không nói rõ — bạn chọn bên dưới)'),
-    foreign: T('Tên miền {host} không phải của claude.ai. Chỉ cấp nếu bạn tự thêm agent này.'), needToken: T('Cần token chủ máy (GC_API_TOKEN) đúng để cấp phép.'), err: T('Lỗi {code}'),
-    badRedirect: T('Địa chỉ quay về không hợp lệ.'), going: T('Đang quay về agent…'), noServer: T('Không gọi được máy chủ: {error}') };
+  const tx = { loopback: _t('máy của bạn (CLI)'), known: _t('tên miền quen'), added: _t('bạn đã thêm (GC_OAUTH_REDIRECTS)'), unknown: _t('tên miền lạ'), unasked: _t('(không nói rõ — bạn chọn bên dưới)'),
+    foreign: _t('Tên miền {host} không phải của claude.ai. Chỉ cấp nếu bạn tự thêm agent này.'), needToken: _t('Cần token chủ máy (GC_API_TOKEN) đúng để cấp phép.'), err: _t('Lỗi {code}'),
+    badRedirect: _t('Địa chỉ quay về không hợp lệ.'), going: _t('Đang quay về agent…'), noServer: _t('Không gọi được máy chủ: {error}') };
   const v = Object.assign({}, view, { client: MSG.label(L, view.client), scopes: (view.scopes || []).map(s => Object.assign({}, s, scopeInfo(s.id, L) || {})) });
   const data = Object.assign({ needToken: !!opts.needToken, publicHost: opts.publicHost || '', tx }, v);
   const body = '<div class="pad">' +
-    '<div>' + T('Một agent muốn kết nối vào <b>gen-chibi</b> của bạn ({host}) để đọc / tạo asset qua MCP. Chỉ bấm <b>Cấp phép</b> nếu chính bạn vừa thêm kết nối này.').replace('{host}', '<span class="mono" id="ph"></span>') + '</div>' +
-    '<div class="kv"><label>' + esc(T('Tên agent')) + '</label><div><b id="cn"></b> <span class="note">' + esc(T('(agent tự khai — không phải bằng chứng danh tính)')) + '</span></div>' +
-    '<label>' + esc(T('Quay về')) + '</label><div><span class="mono" id="cb"></span><span class="chip" id="cc"></span></div>' +
-    '<label>' + esc(T('Agent xin')) + '</label><div class="mono" id="rq"></div></div>' +
+    '<div>' + _t('Một agent muốn kết nối vào <b>gen-chibi</b> của bạn ({host}) để đọc / tạo asset qua MCP. Chỉ bấm <b>Cấp phép</b> nếu chính bạn vừa thêm kết nối này.').replace('{host}', '<span class="mono" id="ph"></span>') + '</div>' +
+    '<div class="kv"><label>' + esc(_t('Tên agent')) + '</label><div><b id="cn"></b> <span class="note">' + esc(_t('(agent tự khai — không phải bằng chứng danh tính)')) + '</span></div>' +
+    '<label>' + esc(_t('Quay về')) + '</label><div><span class="mono" id="cb"></span><span class="chip" id="cc"></span></div>' +
+    '<label>' + esc(_t('Agent xin')) + '</label><div class="mono" id="rq"></div></div>' +
     '<div class="alert" id="warn" hidden></div>' +
-    '<div><div class="lbl">' + esc(T('Phạm vi cấp (đổi lại được ở Studio › Hệ thống › Kết nối agent)')) + '</div><div class="scopes" id="sc" role="radiogroup" aria-label="' + esc(T('Phạm vi cấp')) + '"></div></div>' +
-    '<div id="tk" hidden><label for="tki" class="note">' + esc(T('Token chủ máy (GC_API_TOKEN) — để chứng minh bạn là chủ máy')) + '</label><input id="tki" type="password" autocomplete="current-password" placeholder="GC_API_TOKEN"></div>' +
+    '<div><div class="lbl">' + esc(_t('Phạm vi cấp (đổi lại được ở Studio › Hệ thống › Kết nối agent)')) + '</div><div class="scopes" id="sc" role="radiogroup" aria-label="' + esc(_t('Phạm vi cấp')) + '"></div></div>' +
+    '<div id="tk" hidden><label for="tki" class="note">' + esc(_t('Token chủ máy (GC_API_TOKEN) — để chứng minh bạn là chủ máy')) + '</label><input id="tki" type="password" autocomplete="current-password" placeholder="GC_API_TOKEN"></div>' +
     '<div class="alert bad" id="er" hidden></div>' +
-    '<div class="row"><button class="btn" id="no" type="button">' + esc(T('Từ chối')) + '</button><button class="btn primary" id="ok" type="button">' + esc(T('Cấp phép')) + '</button></div></div>';
+    '<div class="row"><button class="btn" id="no" type="button">' + esc(_t('Từ chối')) + '</button><button class="btn primary" id="ok" type="button">' + esc(_t('Cấp phép')) + '</button></div></div>';
   const js = `(function(){
 var D=JSON.parse(document.getElementById('gc-data').textContent),X=D.tx,$=function(i){return document.getElementById(i)};
 $('ph').textContent=D.publicHost;$('cn').textContent=D.client;$('cb').textContent=D.callback.host;
@@ -103,7 +103,7 @@ function go(decision){
 }
 $('ok').addEventListener('click',function(){if(!$('ok').disabled)go('approve')});$('no').addEventListener('click',function(){go('deny')});
 })();`;
-  return { html: shell(L, T('Cấp phép kết nối agent'), body, n, '<script type="application/json" id="gc-data">' + safeJSON(data) + '</script><script nonce="' + n + '">' + js + '</script>'), csp: csp(n) };
+  return { html: shell(L, _t('Cấp phép kết nối agent'), body, n, '<script type="application/json" id="gc-data">' + safeJSON(data) + '</script><script nonce="' + n + '">' + js + '</script>'), csp: csp(n) };
 }
 
 module.exports = { consentPage, errorPage };

@@ -25,7 +25,7 @@ const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const MSG = require(ROOT + '/server/i18n-msg.js'), L10N = require(ROOT + '/server/i18n.js');
 const { MCP, TOOLS, INSTRUCTIONS, ZONES, cleanContext, workInstructions } = require(ROOT + '/server/mcp.js');
-const { SCOPES, SCOPE_INFO } = require(ROOT + '/server/oauth.js'), { Store } = require(ROOT + '/server/store.js'), { loadEngine } = require(ROOT + '/server/engine-node.js'), Agent = require(ROOT + '/server/agent.js');
+const { SCOPES, SCOPE_INFO } = require(ROOT + '/server/oauth.js'), { PROVIDERS } = require(ROOT + '/server/ai.js'), { Store } = require(ROOT + '/server/store.js'), { loadEngine } = require(ROOT + '/server/engine-node.js'), Agent = require(ROOT + '/server/agent.js');
 const VI_RE = MSG.M.VI_RE;
 const MAIN = readFileSync(ROOT + '/server/main.js', 'utf8');
 const HOOKED = /MSG\.run\(/.test(MAIN) && /MSG\.localizeBody\(/.test(MAIN);
@@ -141,6 +141,12 @@ console.log('(e) nhãn engine Studio hiện đều có bản en (liệt kê từ
 {
   const labels = engineLabels(GC), miss = untranslated(labels);
   ok(labels.size > 400 && !miss.length, labels.size + ' nhãn có chữ Việt (âm / nhóm / luật / công thức · vai / tuổi / kiểu / ngôn ngữ / giọng vùng · biểu cảm / hoạt động / tư thế / di chuyển / bộ phận / linh kiện khung · item / cảnh · cổng kiểm) đều có bản en' + (miss.length ? ' — thiếu ' + miss.length + ': ' + miss.slice(0, 6).map(([s, w]) => w + ' ' + cut(s, 50)).join(' · ') : ''));
+  // nhãn phía server Studio hiện (dock lấy khu từ GET /api/ai, Kết nối agent lấy phạm vi từ GET /api/oauth): khai báo là dữ liệu, không qua _t → kiểm ở đây
+  const srv = [];
+  Object.entries(M0.zoneInfo('en')).forEach(([k, z]) => ['label', 'short', 'intro', 'ask'].forEach(f => { if (VI_RE.test(z[f])) srv.push('khu ' + k + '.' + f); }));
+  Object.entries(PROVIDERS).forEach(([k, p]) => { if (VI_RE.test(MSG._t(p.label, null, 'en'))) srv.push('nhà cung cấp ' + k); });
+  SCOPES.forEach(id => ['label', 'desc'].forEach(f => { if (VI_RE.test(MSG._t(SCOPE_INFO[id][f], null, 'en'))) srv.push('phạm vi ' + id + '.' + f); }));
+  ok(!srv.length, 'nhãn server Studio hiện (' + Object.keys(ZONES).length + ' khu dock × nhãn / vai / lời giới thiệu / gợi ý, ' + Object.keys(PROVIDERS).length + ' nhà cung cấp AI, ' + SCOPES.length + ' phạm vi OAuth) có bản en' + (srv.length ? ' — thiếu: ' + srv.join(', ') : ''));
   const ed = tables['engine-data.json'] || {};
   ok(Object.keys(ed).filter(k => k.slice(0, 2) !== '//').length > 900, 'bảng locales/en/engine-data.json có mặt (' + Object.keys(ed).length + ' khoá) — Studio nạp shard "engine-data"');
   // Studio (lsGuideSteps) tìm mục theo tiêu đề "## Quy trình ghép" rồi bóc "n. " — phần chữ còn lại phải dịch được (khớp nguyên văn / khớp ngược mẫu)
