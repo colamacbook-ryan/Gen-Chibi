@@ -20,6 +20,9 @@
  *                                   opts.needGood = true | (line) → boolean: câu không có clip chỉ được đọc bằng giọng trình duyệt hạng GOOD (thần kinh / Google / Apple có tên), không thì blip —
  *                                     hỏi lúc nói. Người gọi bật khi chế độ giọng "tự động" và tác phẩm có clip AI (đừng để robot lẫn giọng AI); chọn hẳn "máy đọc" thì không bật.
  *   GC.film.clipKey(line)        → khoá một câu thoại (diễn viên | cảm xúc | kiểu bong bóng | chữ) — bộ phát và Studio / phim xuất ra cùng dùng
+ *   GC.film.lines(work)          → [{ key, line, actor, shot }] mọi câu thoại cần giọng của tác phẩm, ĐÚNG như bộ phát sẽ đọc (beat của direct() theo
+ *                                   dự án tác phẩm, bỏ phân cảnh chưa diễn được, mỗi clipKey một lần) — Studio lồng tiếng / xuất phim và server đếm
+ *                                   "Giọng AI x/y" cùng dùng (CNS-146: trước đây server đếm theo bước thô → lệch khi đạo diễn đổi cảm xúc / bong bóng)
  *   GC.film.solveLayout(ctx)     → BỐ CỤC LỜI THOẠI (thuần số, chạy cả trong Node): chọn chỗ cho bong bóng / phụ đề sao cho không che đầu ai
  *
  * Ngân sách (L-42): diễn viên sống ≤ GC.render.budget mỗi phân cảnh, hết cảnh là huỷ; máy quay = một transform CSS;
@@ -328,6 +331,21 @@
 
   // khoá một câu thoại: cùng diễn viên + cảm xúc + kiểu bong bóng + chữ → cùng một giọng thu sẵn (Studio nhúng clip vào phim xuất ra theo khoá này)
   function clipKey(line) { return [line.actor, line.state || 'normal', line.bubble || 'say', String(line.say || '').trim()].join('|'); }
+  function lines(work) {
+    var out = [], seen = {}, o = { project: (work && work.project) || '' };
+    ((work && work.shots) || []).forEach(function (s) {
+      if (issues(s).length) return;
+      var by = {}, plan = direct(s, o);
+      actors(s).forEach(function (a) { by[a.id] = a; });
+      ((plan && plan.beats) || []).forEach(function (b) {
+        if (b.type !== 'line' || !String(b.say || '').trim() || !by[b.actor]) return;
+        var k = clipKey(b);
+        if (seen[k]) return;
+        seen[k] = 1; out.push({ key: k, line: b, actor: by[b.actor], shot: s.id });
+      });
+    });
+    return out;
+  }
 
   /* ============================================================ DOM */
   var INK = '#1f1a17';
@@ -980,5 +998,5 @@
     };
   }
 
-  GC.film = { moodOf: moodOf, clipKey: clipKey, readiness: readiness, issues: issues, still: still, spots: spots, actors: actors, scene: scene, direct: direct, player: player, injectCSS: injectCSS, solveLayout: solveLayout, chipColor: chipColor, contrast: contrast, dialogModes: DIALOGS.slice() };
+  GC.film = { moodOf: moodOf, clipKey: clipKey, lines: lines, readiness: readiness, issues: issues, still: still, spots: spots, actors: actors, scene: scene, direct: direct, player: player, injectCSS: injectCSS, solveLayout: solveLayout, chipColor: chipColor, contrast: contrast, dialogModes: DIALOGS.slice() };
 })(window.GenChibi);

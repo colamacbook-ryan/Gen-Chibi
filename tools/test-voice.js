@@ -281,6 +281,32 @@ const rejectAll = (fn, msg) => fn().then(() => no(true, msg + ': phải lỗi'),
     no(!/NGÔN NGỮ LỜI THOẠI của phim: Tiếng Quảng Đông \(yue \/ hk\)/.test(wi) || !/phồn thể/.test(wi), 'AI đạo diễn phải biết ngôn ngữ phim');
     no(!/NGÔN NGỮ LỜI THOẠI của phim: Tiếng Việt/.test(workInstructions({ id: 'x', shots: [] })), 'tác phẩm chưa chọn ngôn ngữ → tiếng Việt');
     no(m.prepare({ id: 'ci-v', name: 'V', look: {}, voice: { pitch: 9, rate: 0.1 } }).voice.pitch !== V.GV.CLAMP.pitch[1], 'kẹp cao độ một nguồn (voices.js CLAMP)'); }
+  // ---- CNS-146: "Giọng AI x/y" của server đếm ĐÚNG các câu Studio lồng / phim xuất đọc (beat của đạo diễn, GC.film.lines), không theo bước thô ----
+  { const { MCP } = require(ROOT + '/server/mcp.js'), { Store } = require(ROOT + '/server/store.js'), { loadEngine } = require(ROOT + '/server/engine-node.js'), GV = V.GV;
+    const st = new Store(fs.mkdtempSync(path.join(os.tmpdir(), 'gc-v146-'))), m = new MCP({ engine: loadEngine(ROOT), store: st, version: 't', system: {}, voice: x });
+    x.setConfig({ dailyCap: 0 }); { const cc = x.config(); cc.blocked = {}; x.write(cc); }
+    const ri = await m.callTool('install_sample', { id: 'mau-tam-quoc' }, {}); no(ri.isError, 'CNS-146: cài bộ mẫu');
+    const W = 'tq-vuon-dao-xich-bich'; await m.castWork(W, {}); m.sync();
+    const w = st.getWork(W), Lg = GV.lang(w.lang), pin = w.voices[Lg + '|' + GV.accent(Lg, w.accent)], L = m.GC.film.lines(w);
+    // bộ mẫu phải có câu mà đạo diễn đổi cảm xúc / bong bóng so với bước thô — đúng chỗ server cũ đếm hụt (phim Tam Quốc: 24 clip mà chip báo 12)
+    const raw = new Set(); w.shots.forEach(sh => ((sh.event && sh.event.steps) || []).forEach(t => { if (String(t.say || '').trim()) raw.add([t.actor, t.state || 'normal', t.bubble || 'say', String(t.say).trim()].join('|')); }));
+    const changed = L.filter(l => !raw.has(l.key)).length;
+    no(L.length < 10 || !changed, 'CNS-146: bộ mẫu phải có câu đạo diễn đổi state / bubble (test mới có nghĩa): ' + changed + '/' + L.length);
+    // lồng tiếng ĐÚNG tham số Studio dùng (AiVoice.paramsOf: chữ của beat, giọng chốt, GC.voices.roleOf, state / bubble của beat)
+    const say = l => x.line({ text: l.line.say, voice: pin[l.line.actor], role: GV.roleOf(l.actor), state: l.line.state || 'normal', bubble: l.line.bubble || 'say' });
+    let s0 = m.workStats(st.getWork(W));
+    no(s0.voiceTotal !== L.length || s0.voiceDone !== 0, 'CNS-146: chưa lồng → 0/' + L.length + ': ' + JSON.stringify(s0));
+    const half = L.slice(0, Math.ceil(L.length / 2)); for (const l of half) await say(l);
+    s0 = m.workStats(st.getWork(W)); no(s0.voiceDone !== half.length, 'CNS-146: lồng nửa → chip ' + half.length + '/' + L.length + ': ' + JSON.stringify(s0));
+    for (const l of L.slice(half.length)) await say(l);
+    s0 = m.workStats(st.getWork(W)); no(s0.voiceDone !== L.length || s0.voiceTotal !== L.length, 'CNS-146: lồng đủ → chip đủ ' + L.length + '/' + L.length + ': ' + JSON.stringify(s0));
+    const lw = m.listWorks().find(r => r.id === W); no(!lw || lw.voiceDone !== L.length || lw.voiceTotal !== L.length, 'CNS-146: bảng tác phẩm cùng số với phòng làm phim: ' + JSON.stringify(lw && [lw.voiceDone, lw.voiceTotal]));
+    // cache theo chữ ký nội dung: sửa lời một câu → không đọc số cũ (câu đó thành "chưa lồng")
+    const sh = JSON.parse(JSON.stringify(st.getWork(W).shots.find(z => ((z.event && z.event.steps) || []).some(t => t.say)))), t0 = sh.event.steps.find(t => t.say);
+    t0.say = String(t0.say).trim() + ' (sửa lời)';
+    m.saveShotChecked({ work: W, shot: sh });
+    s0 = m.workStats(st.getWork(W)); no(s0.voiceDone >= s0.voiceTotal || s0.voiceDone < L.length - 1, 'CNS-146: sửa lời một câu → chip không còn đủ (cache không giữ số cũ): ' + JSON.stringify(s0));
+    console.log('   ✓ CNS-146: chip "Giọng AI x/y" của server = số câu Studio lồng / phim xuất đọc (' + L.length + ' câu, ' + changed + ' câu đạo diễn đổi cảm xúc / bong bóng) · nửa → ' + half.length + ' · đủ → đủ · bảng tác phẩm cùng số · sửa lời → tính lại'); }
   // ---- giọng trình duyệt dự phòng (CNS-091): đúng ngôn ngữ + giọng vùng + giới, không đọc chéo Quảng Đông / phổ thông ----
   { const vm = require('vm'), spoken = [];
     const voices = [['Microsoft Xiaoxiao Online (Natural)', 'zh-CN'], ['Microsoft Yunxi Online (Natural)', 'zh-CN'], ['Microsoft HsiaoChen Online (Natural)', 'zh-TW'], ['Microsoft YunJhe Online (Natural)', 'zh-TW'],

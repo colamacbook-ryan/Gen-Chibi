@@ -1455,17 +1455,29 @@ class MCP {
     const rv = (w.review && w.review.shots) || {}, ids = new Set((w.shots || []).map(s => s.id));
     Object.keys(rv).forEach(k => { if (!ids.has(k)) return; if (rv[k].status === 'ok') out.reviewOk++; else if (rv[k].status === 'fix') out.reviewFix++; });
     out.proposals = (w.proposals || []).length;
-    const L = GV.lang(w.lang), key = L + '|' + GV.accent(L, w.accent), chosen = (w.voices || {})[key] || {}, seen = new Set();
-    (w.shots || []).forEach(s => ((s.event && s.event.steps) || []).forEach(st => {
-      const say = String(st.say || '').trim();
-      if (!say) return;
-      const k = [st.actor, st.state || 'normal', st.bubble || 'say', say].join('|');
-      if (seen.has(k)) return;
-      seen.add(k); out.voiceTotal++;
-      const A = chosen[st.actor] && this.findAsset(String(st.actor));
-      if (A && this.voice && this.voice.has({ text: say, voice: chosen[st.actor], role: (A.voice && A.voice.role) || GV.guessRole(A), state: st.state || 'normal', bubble: st.bubble || 'say' })) out.voiceDone++;
-    }));
+    // câu cần giọng = ĐÚNG các câu bộ phát sẽ đọc (GC.film.lines: beat của đạo diễn, bỏ phân cảnh chưa diễn được) — cùng nguồn với Studio lồng tiếng / xuất phim (CNS-146)
+    const L = GV.lang(w.lang), key = L + '|' + GV.accent(L, w.accent), chosen = (w.voices || {})[key] || {};
+    const list = this.linesOf(w);
+    list.forEach(({ line, actor }) => {
+      out.voiceTotal++;
+      const v = chosen[line.actor];
+      if (v && this.voice && this.voice.has({ text: line.say, voice: v, role: GV.roleOf(actor), state: line.state || 'normal', bubble: line.bubble || 'say' })) out.voiceDone++;
+    });
     return out;
+  }
+  // GC.film.lines(w) có cache theo CHỮ KÝ NỘI DUNG: direct() chỉ phụ thuộc phân cảnh + bối cảnh + diễn viên + dự án → băm đúng những thứ đó
+  // (đổi gì là tính lại, không đổi thì dùng lại). Dựng kế hoạch đạo diễn ~30 ms / cảnh — không cache thì danh sách tác phẩm chậm theo số cảnh (L-42)
+  linesOf(w) {
+    const F = this.GC.film;
+    let sig;
+    try { sig = crypto.createHash('sha1').update(JSON.stringify([w.project || '', w.shots || [], (w.shots || []).map(s => [F.scene(s), F.actors(s)])])).digest('hex'); }
+    catch (e) { sig = null; }
+    const c = this._lines || (this._lines = new Map()), hit = sig && c.get(w.id);
+    if (hit && hit.sig === sig) return hit.list;
+    let list;
+    try { list = F.lines(w); } catch (e) { list = []; }   // phân cảnh hỏng không được làm hỏng cả trang tác phẩm: đếm 0 (Studio vẫn báo lỗi cảnh ở chỗ khác)
+    if (sig) { c.delete(w.id); c.set(w.id, { sig, list }); while (c.size > 200) c.delete(c.keys().next().value); }
+    return list;
   }
   // ĐỀ XUẤT SỬA chờ chủ duyệt (STD-08 propose_edit): AI không ghi thẳng mô tả cảnh / danh sách bước — ghi vào work.proposals, Studio hiện diff + Áp dụng / Bỏ.
   // Kiểm ngay lúc đề xuất (lỗi → AI sửa lại) VÀ kiểm lại lúc áp dụng (saveShotChecked) — hai cổng

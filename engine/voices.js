@@ -113,6 +113,8 @@
     [kw('sếp|giám đốc|trưởng phòng|bố|cha|mẹ|chú|bác|thầy|cô giáo|boss|manager|father|mother|teacher|老板|经理'), 'nam-trung-nien', 'nu-trung-nien']
   ];
   function textOf(a) { return a ? [a.role, a.persona, a.desc].filter(Boolean).join(' · ').toLowerCase() : ''; }
+  // vai giọng của một nhân vật: vai đã chọn (asset.voice.role) nếu hợp lệ, không thì đoán từ vai trò / tính cách / tên — MỘT nguồn cho Studio, server, phim xuất
+  function roleOf(a) { var r = a && a.voice && a.voice.role; return typeof r === 'string' && hasOwn(ROLES, r) ? r : guessRole(a); }
   function guessRole(a) {
     var meta = textOf(a), name = String((a && a.name) || '').toLowerCase(), fem = FEMALE.test(meta) || FEMALE.test(name), i;
     for (i = 0; i < RULES.length; i++) if (RULES[i][0].test(meta)) return RULES[i][fem ? 2 : 1];
@@ -164,7 +166,7 @@
   }
 
   var V = { AI_VOICES: AI_VOICES, canDesign: canDesign, CLAMP: CLAMP, isAiVoice: function (n) { return hasOwn(AI_SET, n); }, ROLES: ROLES, LANGS: LANGS, AGES: AGES, KINDS: KINDS, STATE_TAGS: STATE_TAGS, BUBBLE_TAGS: BUBBLE_TAGS,
-    cast: cast, guessRole: guessRole, mood: mood, lang: lang, accent: function (l, a) { return accent(l, a)[0]; }, roleList: roleList, langList: langList };
+    cast: cast, guessRole: guessRole, roleOf: roleOf, mood: mood, lang: lang, accent: function (l, a) { return accent(l, a)[0]; }, roleList: roleList, langList: langList };
   if (GC) GC.voices = V;
   if (typeof module === 'object' && module && module.exports) module.exports = V;
 })(typeof window !== 'undefined' ? window.GenChibi : (typeof globalThis !== 'undefined' ? globalThis.GenChibi : undefined));

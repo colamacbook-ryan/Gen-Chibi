@@ -1300,7 +1300,7 @@
     markHas: function (W, L) { if (W && L) this.has[this.workKey(W, L)] = true; },
     hasClips: function (W, L) { return !!(W && L && this.has[this.workKey(W, L)]); },
     // vai giọng của nhân vật (đã chọn, hoặc đoán từ vai trò / tính cách / tên) · giọng vùng riêng nếu hợp ngôn ngữ phim
-    roleOf: function (a) { var r = a && a.voice && a.voice.role; return r && GC.voices.ROLES[r] ? r : GC.voices.guessRole(a); },
+    roleOf: function (a) { return GC.voices.roleOf(a); },   // một nguồn với server + phim xuất (engine/voices.js)
     accentOf: function (a, lang, dflt) { var x = a && a.voice && a.voice.accent; return x && GC.voices.accent(lang, x) === x ? x : dflt; },
     actorsOf: function (W) {
       var seen = {}, out = [];
@@ -1432,15 +1432,10 @@
       var self = this;
       return this.castOf(W, L.lang, L.accent).then(function (cast) {
         var jobs = [], seen = {};
-        W.shots.filter(function (s) { return !GC.film.issues(s).length; }).forEach(function (s) {
-          var by = {}, plan = GC.film.direct(s);
-          GC.film.actors(s).forEach(function (a) { by[a.id] = a; });
-          ((plan && plan.beats) || []).forEach(function (b) {
-            if (b.type !== 'line' || !String(b.say || '').trim() || !by[b.actor]) return;
-            var p = self.paramsOf(L, by[b.actor], b, cast), k = p && self.keyOf(p);
-            if (!p || seen[k]) return;
-            seen[k] = 1; jobs.push(p);
-          });
+        GC.film.lines(W).forEach(function (x) {   // đúng các câu bộ phát sẽ đọc — cùng nguồn với xuất phim + server đếm "Giọng AI x/y" (CNS-146)
+          var p = self.paramsOf(L, x.actor, x.line, cast), k = p && self.keyOf(p);
+          if (!p || seen[k]) return;
+          seen[k] = 1; jobs.push(p);
         });
         var st = { total: jobs.length, done: 0, fresh: 0, cached: 0, failed: 0, stop: null, retryAt: null, error: '', minute: false, waits: 0, waitAt: 0 }, i = 0;
         ui.progress(st);
@@ -1470,18 +1465,11 @@
     return AiVoice.load().then(function (cfg) {
       if (!cfg || !(cfg.hasKey || cfg.cached)) return out;   // chưa từng có giọng AI: khỏi hỏi từng câu
       return AiVoice.castOf(W, L.lang, L.accent).then(function (cast) {
-        var jobs = [], seen = {};
-        W.shots.filter(function (s) { return !GC.film.issues(s).length; }).forEach(function (s) {
-          var by = {}, plan = GC.film.direct(s);
-          GC.film.actors(s).forEach(function (a) { by[a.id] = a; });
-          ((plan && plan.beats) || []).forEach(function (b) {
-            if (b.type !== 'line' || !String(b.say || '').trim() || !by[b.actor]) return;
-            var k = GC.film.clipKey(b);
-            if (seen[k]) return;
-            seen[k] = 1; out.total++;
-            var p = AiVoice.paramsOf(L, by[b.actor], b, cast);
-            if (p) jobs.push({ k: k, p: p });
-          });
+        var jobs = [];
+        GC.film.lines(W).forEach(function (x) {
+          out.total++;
+          var p = AiVoice.paramsOf(L, x.actor, x.line, cast);
+          if (p) jobs.push({ k: x.key, p: p });
         });
         var i = 0;
         function worker() {   // 3 luồng song song
@@ -2444,7 +2432,12 @@
           return st;
         })
         .catch(function (e) { dubSt = { total: 0, done: 0, fresh: 0, cached: 0, failed: 0, end: 'err', error: e.message }; if (alive) toast(e.message); return dubSt; })
-        .then(function (st) { dubbing = false; if (alive) paintDub(); return st; });
+        .then(function (st) {
+          dubbing = false;
+          if (alive) paintDub();
+          if (alive && st && st.done) Store.api('GET', 'api/works/' + w0.id).then(function (w) { if (alive && W && W.id === w.id) { W.stats = w.stats; paintHead(); paintVoice(); } }, function () { /* giữ số cũ */ });
+          return st;
+        });
     }
     // ---- xuất phim: còn câu chưa có giọng AI (mà Giọng AI đã sẵn sàng) thì hỏi trước — lồng tiếng rồi xuất · xuất luôn · huỷ. Chưa sẵn sàng thì xuất như cũ ----
     function closeExport() { clear(exportBox); exportBox.hidden = true; }

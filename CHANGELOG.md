@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.19.1 — Chip "Giọng AI x/y" đếm đúng số câu đã lồng
+Ryan: "làm tiếp đi, sửa luôn CNS-146 rồi phát hành".
+- **Sửa CNS-146**: chip "Giọng AI x/y" ở đầu phòng làm phim và trong bảng Tạo tác báo thiếu. Phim mẫu Tam Quốc có 24/31 câu giọng AI mà chip báo 12/31, còn hộp xuất phim báo đúng "còn 7/31". Gốc: server đếm theo **bước thô** của kịch bản, trong khi Studio lồng tiếng và phim xuất đọc theo **beat của đạo diễn** (đạo diễn tự đổi cảm xúc / kiểu bong bóng của câu nên khoá clip khác; 13/31 câu của bộ mẫu Tam Quốc thuộc loại này).
+- **Một nguồn câu thoại** `GC.film.lines(work)` (engine): mọi câu cần giọng của tác phẩm, đúng như bộ phát sẽ đọc (beat của đạo diễn theo dự án tác phẩm, bỏ phân cảnh chưa diễn được, mỗi câu một lần). Studio lồng tiếng, Studio xuất phim và server đếm chip cùng dùng. Vai giọng cũng một nguồn: `GC.voices.roleOf`. Khoá câu không đổi so với v0.19.0 (đã đối chiếu cả hai bộ mẫu), nên clip đã lồng vẫn được nhận.
+- Server nhớ danh sách câu theo **chữ ký nội dung** (phân cảnh, bối cảnh, diễn viên, dự án): đổi gì thì tính lại, không đổi thì dùng lại. Mở tác phẩm lần đầu tốn thêm khoảng 150 ms để dựng kế hoạch đạo diễn, các lần sau như cũ (khoảng 30 ms).
+- Lồng tiếng xong, chip đầu phòng và dòng "Giọng AI đã lồng x/y" tự đọc lại số mới (trước đây giữ số lúc mở phòng tới khi tải lại trang).
+- Kiểm thử: `tools/test-voice.js` thêm ca CNS-146 trên bộ mẫu Tam Quốc qua đúng đường lồng tiếng thật (Google giả lập): chưa lồng → 0/31 · lồng nửa → 16/31 · lồng đủ → 31/31 · bảng tác phẩm cùng số · sửa lời một câu → tính lại. Server v0.19.0 chạy ca này ra 10/16, tức là test đỏ đúng chỗ.
+
 ## v0.19.0 — MCP từ xa có cấp phép OAuth: dán `https://tên-miền/mcp` vào Claude, bấm "Cấp phép" trên web
 Ryan: "cập nhật được rồi nhưng có cách nào để hệ thống tự sinh mcp theo dạng https://tên-miền/mcp để bạn chủ động kết nối vào được rồi tôi chỉ cần vào cài đặt của web để chọn xác thực cấp phép không ?" · "và trang đăng nhập hiện tại là tôi kêu agent local làm thêm , nên hình như bản trên github chưa có".
 - **Điều kiện** (một lần): `GC_PUBLIC_URL=https://tên-miền` + `GC_API_TOKEN` trong `.env`; proxy / tunnel cho các đường máy (`/mcp`, `/.well-known/oauth-*`, `/oauth/register|token|revoke`) đi thẳng tới app; cổng 443. Sau đó mỗi agent mới chỉ cần dán địa chỉ và bấm Cấp phép.
