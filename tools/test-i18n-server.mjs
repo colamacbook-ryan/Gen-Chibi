@@ -11,6 +11,7 @@
 //  (f) context.lang của dock: cleanContext giữ 'en' | 'vi' (bỏ giá trị lạ) → chỉ dẫn dặn AI trả lời đúng ngôn ngữ giao diện
 //  (g) rào ngược: chính các phép kiểm ở trên ĐỎ khi bỏ một bản dịch / chèn chữ Việt vào mô tả tool / đổi mặc định máy sang vi
 //  (h) review bảo mật v0.20: dịch câu không chặn event loop (payload ReDoS < 50 ms, MCP id 5 KB) · id giữ nguyên chữ · đường của máy luôn en · error_description ASCII
+//  (i) CNS-151: tác phẩm MỚI không truyền lang → Studio / dock theo ngôn ngữ giao diện, agent qua MCP theo mặc định của máy; tác phẩm cũ / gói nhập không lang vẫn tiếng Việt
 // Hook main.js (H0 MSG.run quanh route + H1 MSG.localizeBody trong localize): khi main.js CHƯA có hook, các kiểm phụ thuộc hook in "… chờ hook main.js" thay vì đỏ;
 // main.js có hook thì mọi kiểm đều nghiêm (Gen bỏ nhánh chờ này khi gộp xong).
 // Dùng: node tools/test-i18n-server.mjs   (cổng 7631 + 7632)
@@ -316,6 +317,58 @@ console.log('(h) dịch câu không bao giờ chặn event loop · id giữ nguy
   ok(tCall < 2000 && tHealth < 2000, 'MCP get_work với id 5 KB: trả lời sau ' + tCall + ' ms, /api/health song song ' + tHealth + ' ms (trước khi sửa: 15 s)');
 }
 
-console.log('   (' + pass + ' kiểm tra đạt' + (pend ? ' · ' + pend + ' chờ hook main.js — Gen gộp hook rồi chạy lại để kiểm nghiêm' : '') + ')');
+/* ---------------------------------------------------------------- (i) CNS-151: lời thoại của tác phẩm MỚI */
+console.log('(i) tác phẩm mới: lang = ngôn ngữ giao diện (Studio / dock) · mặc định của máy (agent qua MCP) · tác phẩm cũ / gói nhập không lang vẫn tiếng Việt');
+{
+  const GV = require(ROOT + '/engine/voices.js');
+  const machine = L => { const store = new Store(mkdtempSync(path.join(tmpdir(), 'gc-i18nsrv-'))); return { store, m: new MCP({ engine: loadEngine(ROOT), store, version: 't', system: {}, uiLang: () => L }) }; };
+  const En = machine('en'), Vi = machine('vi');
+  const langOfRec = (S, id) => (S.getWork(id) || {}).lang;
+  // agent qua MCP: tầng HTTP của /mcp luôn 'en' (MSG.run('en') như main.js) — lời thoại theo mặc định của MÁY
+  const agent = async (M, title) => { const r = await MSG.run('en', () => M.m.callTool('save_work', { title })); return r.isError ? 'LỖI ' + r.content[0].text : langOfRec(M.store, r.structuredContent.id); };
+  const aEn = await agent(En, 'Agent film'), aVi = await agent(Vi, 'Phim của agent');
+  ok(aEn === 'en' && aVi === 'vi', 'MCP save_work tạo mới không lang: máy en → ' + aEn + ' · máy vi → ' + aVi + ' (không bị tầng /mcp ép en)');
+  // chủ trong Studio (POST /api/works, không qua callTool): Studio gửi lang tường minh; không gửi → ngôn ngữ của yêu cầu (X-GC-Lang)
+  const own = (M, lang, args) => MSG.run(lang, () => M.m.saveWorkChecked(args)).lang;
+  const sEnEn = own(En, 'en', { title: 'My first film', lang: 'en' }), sViEn = own(Vi, 'vi', { title: 'Studio en trên máy vi', lang: 'en' }), sViHdr = own(Vi, 'en', { title: 'Chỉ có header en' }), sEnVi = own(En, 'vi', { title: 'Phim của tôi' });
+  ok(sEnEn === 'en' && sViEn === 'en' && sViHdr === 'en' && sEnVi === 'vi', 'Studio tạo: máy en + Studio en → ' + sEnEn + ' · máy vi + Studio gửi lang en → ' + sViEn + ' · máy vi + chỉ X-GC-Lang en → ' + sViHdr + ' · máy en + Studio vi → ' + sEnVi);
+  // AI trong dock (channel ui) = ngôn ngữ giao diện của yêu cầu, không phải mặc định của máy
+  const rDock = await MSG.run('vi', () => En.m.callTool('save_work', { title: 'Phim dock' }, { channel: 'ui', zone: 'tao-tac' }));
+  const dLang = rDock.isError ? 'LỖI' : langOfRec(En.store, rDock.structuredContent.id);
+  ok(dLang === 'vi', 'AI trong dock tạo tác phẩm: theo ngôn ngữ giao diện của yêu cầu (máy en, giao diện vi → ' + dLang + ')');
+  // lang tường minh của agent luôn thắng mặc định của máy
+  const rx = await MSG.run('en', () => Vi.m.callTool('save_work', { title: 'Cantonese', lang: 'yue' }));
+  ok(!rx.isError && langOfRec(Vi.store, rx.structuredContent.id) === 'yue', 'agent truyền lang (yue) → giữ đúng lang đó trên máy vi');
+  // tác phẩm cũ (trước v0.20, không có lang): sửa qua Studio / agent / dock KHÔNG gán lang mới — vẫn tiếng Việt
+  En.store.saveWork({ id: 'phim-cu', title: 'Phim cũ', project: '', logline: '', script: '', shots: [], chat: [], kind: 'work', createdAt: '2026-01-01T00:00:00.000Z' });
+  MSG.run('en', () => En.m.saveWorkChecked({ id: 'phim-cu', logline: 'sửa logline' }));
+  await MSG.run('en', () => En.m.callTool('save_work', { id: 'phim-cu', script: 'sửa kịch bản' }));
+  await MSG.run('en', () => En.m.callTool('save_work', { id: 'phim-cu', title: 'Phim cũ (đổi tên)' }, { channel: 'ui', zone: 'tao-tac' }));
+  const old = En.store.getWork('phim-cu');
+  ok(old.lang === undefined && old.logline === 'sửa logline' && old.script === 'sửa kịch bản' && GV.lang(old.lang) === 'vi' && En.m.workStats(old).lang === 'vi' && /DIALOGUE LANGUAGE of the film: Vietnamese/.test(workInstructions(old)),
+    'tác phẩm cũ không lang: sửa ở Studio / MCP / dock (máy en, yêu cầu en) không gán lang → GV.lang = vi, stats.lang = vi, AI đạo diễn vẫn viết tiếng Việt');
+  // gói nhập giữ lang của gói: bộ mẫu Tam Quốc (tác phẩm không lang) nhập vào máy en → vẫn không lang (= tiếng Việt)
+  const tq = JSON.parse(readFileSync(ROOT + '/studio/mau/tam-quoc.json', 'utf8')), tw = (tq.works || [])[0] || {};
+  MSG.run('en', () => En.m.importProject(tq));
+  const imp = En.store.getWork(tw.id) || {};
+  ok(tw.id && tw.lang === undefined && imp.title === tw.title && imp.lang === undefined && En.m.workStats(imp).lang === 'vi', 'nhập gói (bộ mẫu Tam Quốc, tác phẩm không lang) trên máy en → không gán lang mới, vẫn tiếng Việt (' + tw.id + ')');
+  // AI đạo diễn của tác phẩm en: lời thoại tiếng Anh
+  const wiEn = workInstructions(En.store.getWork(En.store.listWorks().find(w => w.title === 'My first film').id));
+  ok(/DIALOGUE LANGUAGE of the film: English \(en \/ us\)/.test(wiEn) && !/Vietnamese/.test(wiEn), 'workInstructions của tác phẩm en: "DIALOGUE LANGUAGE of the film: English (en / us)" — không còn dặn viết tiếng Việt');
+  // qua HTTP thật: base = máy en (cài mới), viBase = máy vi (GC_LANG=vi)
+  const H = hd => ({ Authorization: 'Bearer ' + OWNER, 'X-GC-Request': '1', 'Content-Type': 'application/json', ...hd });
+  const post = async (b, body, hd) => { const r = await fetch(b + '/api/works', { method: 'POST', headers: H(hd), body: JSON.stringify(body) }); const j = await r.json(); return r.ok ? j : { error: j.error }; };
+  const mcpNew = async (b, title) => {
+    const r = await fetch(b + '/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: 'Bearer ' + OWNER }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'save_work', arguments: { title } } }) }).then(x => x.json());
+    const id = r.result && r.result.structuredContent && r.result.structuredContent.id;
+    return id ? (await fetch(b + '/api/works/' + id, { headers: H({}) }).then(x => x.json())).lang : 'LỖI ' + JSON.stringify(r).slice(0, 120);
+  };
+  const h1 = await post(base, { title: 'HTTP en', lang: 'en' }, { 'X-GC-Lang': 'en' }), h2 = await post(viBase, { title: 'HTTP Studio en on vi', lang: 'en' }, { 'X-GC-Lang': 'en' }), h3 = await post(viBase, { title: 'HTTP không header' }, {});
+  ok(h1.lang === 'en' && h1.stats.lang === 'en' && h2.lang === 'en' && h3.lang === 'vi', 'HTTP POST /api/works: máy en + Studio en → ' + h1.lang + ' · máy vi + Studio gửi lang en → ' + h2.lang + ' · máy vi, không header / không lang → ' + h3.lang);
+  const m1 = await mcpNew(base, 'MCP on en machine'), m2 = await mcpNew(viBase, 'MCP trên máy vi');
+  ok(m1 === 'en' && m2 === 'vi', 'HTTP /mcp save_work tạo mới không lang: máy en → ' + m1 + ' · máy vi → ' + m2 + ' (tầng /mcp tiếng Anh, lời thoại theo máy)');
+}
+
+console.log('   (' + pass + ' kiểm tra đạt' + (pend ?' · ' + pend + ' chờ hook main.js — Gen gộp hook rồi chạy lại để kiểm nghiêm' : '') + ')');
 if (fail) { console.log('   ✗ có kiểm tra đỏ'); process.exit(1); }
 process.exit(0);

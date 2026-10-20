@@ -2824,6 +2824,8 @@ if (!ONLY || ONLY === 'i18n') {
     for (const w of ['>▶ Play<', '>■ Stop<', 'aria-label="Character voices"', '>Voice: auto<', 'Made with gen-chibi', 'I.setLang("en")']) if (!fh.includes(w)) throw new Error('phim xuất ra (en) thiếu ' + JSON.stringify(w));
     if (!/I\.add\("en", \{[^]*"Đã dừng":"Stopped"/.test(fh)) throw new Error('phim xuất ra (en) không mang bảng player');
     if (/>▶ Xem<|>■ Dừng</.test(fh)) throw new Error('phim xuất ra (en) còn nút tiếng Việt');
+    // <html lang> theo ngôn ngữ PHIM (work.lang), không theo giao diện: tác phẩm Tam Quốc không có lang (trước v0.20) = tiếng Việt dù xuất ở giao diện en (CNS-151)
+    if (!/<html lang="vi">/.test(fh)) throw new Error('phim xuất ra: <html lang> phải theo ngôn ngữ phim (vi), có ' + (/<html lang="[^"]*">/.exec(fh) || ['?'])[0]);
     const pf = await ctxE.newPage(); await pf.goto('file://' + fp16); await pf.waitForFunction(() => window.GenChibi && window.GenChibi.film);
     const fl = await pf.evaluate(() => [document.getElementById('play').textContent, window.GenChibi.i18n.lang(), window.GenChibi.i18n.t('Đã dừng')]);
     if (fl.join('|') !== '▶ Play|en|Stopped') throw new Error('phim mở bằng file:// ở chế độ en: ' + fl.join('|'));
@@ -2832,6 +2834,54 @@ if (!ONLY || ONLY === 'i18n') {
     if (uniq.length) throw new Error('chế độ en còn ' + uniq.length + ' lỗi (chữ tiếng Việt chưa dịch / bố cục chồng lấn) trên giao diện:\n      ' + uniq.slice(0, 60).join('\n      '));
     if (pendingSeen.size) console.log('  ! ' + pendingSeen.size + ' câu động của engine (core.js, cổng kiểm) còn tiếng Việt — chờ builder engine: ' + [...pendingSeen].slice(0, 4).map(x => JSON.stringify(x.slice(0, 40))).join(', ') + (pendingSeen.size > 4 ? '…' : ''));
     console.log('  ✓ Chế độ en: không còn chữ tiếng Việt trên ' + (nPages + 6) + ' trang / tab (Xưởng, Thư viện mọi mục, Tạo tác + 5 tab phòng làm phim, Hệ thống, dock Trợ lý AI) + phim HTML xuất ra (nút, bảng player, mở file://) — trừ nội dung người dùng (' + USER.length + ' chuỗi của bộ mẫu)');
+    // 6) CNS-155: chữ HỆ THỐNG điền sẵn vào ô nhập của "Tạo asset mới" (tên, mã, mô tả chép từ khung). Bước quét trên bỏ input / textarea vì coi là nội dung
+    //    người dùng — nhưng chữ điền sẵn mà người dùng giữ nguyên sẽ THÀNH nội dung người dùng (không dịch được nữa). Mở form từ MỌI khung nhân vật / vật phẩm /
+    //    bối cảnh ở chế độ en, quét ngay sau khi mở: không còn chữ Việt; tên = "New character | New item | New scene", mã sinh từ tên tiếng Anh
+    await qe.evaluate(() => localStorage.setItem('gc-route-xuong', JSON.stringify({ page: 'create' })));
+    await qe.goto(U + 'xuong?lang=en'); await ready(qe); await qe.waitForSelector('.split.create .libcard');
+    const L6 = '.split.create > .stack:first-child', pre = [];
+    let nForms = 0;
+    for (const [kind, name, idRe] of [['Character', 'New character', /^new-character(-\d+)?$/], ['Item', 'New item', /^new-item(-\d+)?$/], ['Scene', 'New scene', /^new-scene(-\d+)?$/]]) {
+      await qe.click(L6 + ' .seg button:text-is("' + kind + '")'); await qe.waitForTimeout(250);
+      const nf = await qe.$$eval(L6 + ' .libgrid .libcard', els => els.length);
+      if (!nf) throw new Error('Tạo asset mới (en): không có khung ' + kind);
+      for (let i = 0; i < nf; i++) {
+        const card = (await qe.$$(L6 + ' .libgrid .libcard'))[i], key = await card.getAttribute('title');
+        await card.click(); await qe.waitForSelector(L6 + ' input.mono'); nForms++;
+        const v = await qe.$$eval(L6 + ' input, ' + L6 + ' textarea', els => els.filter(e => e.value && !/^(color|range|number|checkbox|radio|hidden)$/.test(e.type))
+          .map(e => [(e.closest('label') ? e.closest('label').textContent.trim() : e.getAttribute('aria-label') || e.tagName.toLowerCase()).slice(0, 24), e.value, e.classList.contains('mono')]));
+        v.filter(([, val]) => VI.test(val)).forEach(([f, val]) => pre.push(kind + ' ' + key + ' · ô "' + f + '" = ' + JSON.stringify(val.slice(0, 80))));
+        const nm = (v.find(x => x[0] === 'Name') || [])[1], id = (v.find(x => x[2]) || [])[1];
+        if (nm !== name) pre.push(kind + ' ' + key + ' · tên điền sẵn = ' + JSON.stringify(nm) + ' (cần "' + name + '")');
+        if (!idRe.test(id || '')) pre.push(kind + ' ' + key + ' · mã điền sẵn = ' + JSON.stringify(id) + ' (cần ' + idRe + ')');
+      }
+    }
+    if (pre.length) throw new Error('chế độ en: form "Tạo asset mới" điền sẵn chữ chưa dịch (' + pre.length + '):\n      ' + pre.slice(0, 30).join('\n      '));
+    // chế độ vi giữ nguyên từng chữ như trước v0.20 (tên + mã + mô tả chép từ khung)
+    await qe.goto(U + 'xuong?lang=vi'); await ready(qe); await qe.waitForSelector('.split.create .libcard');
+    for (const [kind, key, name, id, desc] of [['Nhân vật', 'gen.khung/ma-no-canh', 'Nhân vật mới', 'nhan-vat-moi', null], ['Vật phẩm', 'gen.khung/khung-vu-khi-dai', 'vũ khí dài mới', 'vu-khi-dai-moi', 'Khối đại diện — gốc để tạo vật phẩm cùng dáng.'], ['Bối cảnh', 'gen.khung/san-khau-chuan', 'Cảnh mới', 'canh-moi', null]]) {
+      await qe.click(L6 + ' .seg button:text-is("' + kind + '")'); await qe.waitForTimeout(250);
+      await qe.click(L6 + ' .libgrid .libcard[title="' + key + '"]'); await qe.waitForSelector(L6 + ' input.mono');
+      const got = await qe.evaluate(L => { const f = [...document.querySelectorAll(L + ' label.fld')], val = t => { const l = f.find(x => x.firstChild && x.firstChild.textContent === t); return l && l.querySelector('input') ? l.querySelector('input').value : null; }; return [val('Tên'), val('Mã (id)'), val('Mô tả')]; }, L6);
+      if (got[0] !== name || got[1] !== id || (desc && got[2] !== desc)) throw new Error('chế độ vi: form "Tạo asset mới" (' + key + ') đổi chữ điền sẵn: ' + JSON.stringify(got) + ' (cần ' + JSON.stringify([name, id, desc]) + ')');
+    }
+    console.log('  ✓ Chế độ en: form "Tạo asset mới" mở từ ' + nForms + ' khung (nhân vật / vật phẩm / bối cảnh) — ô nhập điền sẵn không còn chữ Việt; tên "New …", mã new-character / new-item / new-scene; chế độ vi giữ nguyên "Nhân vật mới" / "vũ khí dài mới" / "Cảnh mới" + mã cũ');
+    // 7) CNS-151: ô nghe thử giọng (Thư viện › Giọng) khi trình duyệt chưa chọn ngôn ngữ nghe thử → theo ngôn ngữ giao diện, không mặc định tiếng Việt
+    await qe.evaluate(() => { localStorage.removeItem('gc-voice'); localStorage.setItem('gc-route-thu-vien', JSON.stringify({ page: 'lib-voices' })); });
+    await qe.goto(U + 'thu-vien?lang=en'); await ready(qe); await qe.waitForSelector('#lvLang');
+    const lv7 = await qe.evaluate(() => document.querySelector('#lvLang').value + '/' + document.querySelector('#lvAccent').value);
+    if (lv7 !== 'en/us') throw new Error('Thư viện › Giọng (en, chưa chọn): ngôn ngữ nghe thử = ' + lv7 + ' (cần en/us)');
+    console.log('  ✓ Chế độ en: ô nghe thử giọng chưa chọn → ' + lv7 + ' (theo ngôn ngữ giao diện)');
+    // 8) CNS-151: Studio tạo tác phẩm gửi lang = ngôn ngữ giao diện — máy đặt mặc định vi, người dùng ở giao diện en → tác phẩm en (lời thoại, giọng, AI đạo diễn)
+    await put('vi');
+    await qe.evaluate(() => localStorage.setItem('gc-route-tao-tac', JSON.stringify({ page: 'works' })));   // danh sách tác phẩm (bước 5 để lại tuyến phòng làm phim)
+    await qe.goto('about:blank'); await qe.goto(U + 'tao-tac?lang=en'); await ready(qe); await qe.waitForSelector('.newwork input[type=text]');
+    await qe.fill('.newwork input[type=text]', 'My first film');
+    const [rq8] = await Promise.all([qe.waitForRequest(r => r.method() === 'POST' && /\/api\/works$/.test(r.url())), qe.click('.newwork button:text-is("Create work")')]);
+    const sent8 = JSON.parse(rq8.postData() || '{}'), w8 = await (await rq8.response()).json();
+    await put('en');
+    if (sent8.lang !== 'en' || w8.lang !== 'en' || (w8.stats || {}).lang !== 'en') throw new Error('Studio en tạo tác phẩm trên máy vi: gửi lang=' + sent8.lang + ', lưu lang=' + w8.lang + ' (cần en)');
+    console.log('  ✓ Studio (giao diện en, máy mặc định vi) tạo "My first film": gửi lang en → tác phẩm lang en');
     await ctxE.close();
     if (errs16.length) throw new Error('lỗi trang: ' + errs16.slice(0, 3).join(' | '));
   } catch (e) { fail = 1; console.log('  ✗ i18n (ngôn ngữ giao diện):', e.message); }

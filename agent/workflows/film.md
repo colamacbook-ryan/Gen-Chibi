@@ -10,7 +10,7 @@
    (every allowed `state`, `activity`, `spot`, `camera`, `bubble`, `sfx`, `action`, `react`) and
    **`actorsCan`**: the actions each actor can perform (weapon actions only for actors holding a weapon).
 4. Write the event: `{ "title", "scene": "<scene key>", "steps": [ … ≤ 12 ] }`. Each step:
-   - required: `actor` (id), `state` (enum), `say` (in the work's language — `get_work` › `lang`, default Vietnamese; ≤ 120 chars; `""` allowed when the step is an action);
+   - required: `actor` (id), `state` (enum), `say` (in the work's language — `get_work` › `lang`; default: the machine's interface language when the work is created; works without `lang` (made before v0.20) are Vietnamese; ≤ 120 chars; `""` allowed when the step is an action);
    - staging (optional — the player directs automatically if omitted): `spot`, `to`, `camera`, `bubble`, `sfx`, `activity`, `hold`;
      leave `sfx` out on most steps — sounds are auto-assigned; hand-placed ones follow the mixing rules (topic `sound`: `list_sounds`, `lint_sound_track`);
    - action (optional): `action` from `actorsCan`; an **attack** needs `target` (another actor) and may set `react`
