@@ -380,12 +380,14 @@ const sect = async f => { try { await f(); } catch (e) { if (!process.env.GC_KEE
   await sect(async () => {
     const PORT = +(process.env.GC_SOUNDS_PORT || 7812), H = tmpDir(), BASE = 'http://127.0.0.1:' + PORT, S = loadEngine(ROOT).sounds;
     no(await fetch(BASE + '/api/health').then(() => true, () => false), 'cổng ' + PORT + ' đang bị chiếm (đặt GC_SOUNDS_PORT khác)');
-    const srv = spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: Object.assign({}, process.env, { GC_HOME: H, GC_PORT: String(PORT), GC_NO_AUTOCHECK: '1' }), stdio: 'ignore' });
+    // v0.21: bản cài nào cũng có token chủ — harness gắn T (Authorization: Bearer) cho /api và /mcp (không nới luật truy cập)
+    const TOKEN = 'test-owner-' + Math.random().toString(36).slice(2) + Date.now().toString(36), OWN = { authorization: 'Bearer ' + TOKEN };
+    const srv = spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: Object.assign({}, process.env, { GC_HOME: H, GC_PORT: String(PORT), GC_NO_AUTOCHECK: '1', GC_API_TOKEN: TOKEN }), stdio: 'ignore' });
     process.on('exit', () => { try { srv.kill(); } catch (e) { /* đã tắt */ } });   // no() thoát thẳng — không để server mồ côi giữ cổng
     try {
       for (let i = 0; i < 60; i++) { try { if ((await fetch(BASE + '/api/health')).ok) break; } catch (e) { /* chưa lên */ } await new Promise(r => setTimeout(r, 250)); }
       // x-gc-lang: vi — các kiểm HTTP dưới so câu tiếng Việt (msgid) như Studio ở chế độ vi; bản tiếng Anh mặc định: tools/test-i18n-server.mjs (ADR 0007)
-      const api = async (p, o) => { const r = await fetch(BASE + p, o && o.body ? { method: o.method || 'POST', headers: { 'content-type': 'application/json', 'x-gc-request': '1', 'x-gc-lang': 'vi' }, body: JSON.stringify(o.body) } : { headers: { 'x-gc-lang': 'vi' } }); const t = await r.text(); let j = null; try { j = JSON.parse(t); } catch (e) { /* văn bản */ } return { status: r.status, j, t }; };
+      const api = async (p, o) => { const r = await fetch(BASE + p, o && o.body ? { method: o.method || 'POST', headers: { 'content-type': 'application/json', 'x-gc-request': '1', 'x-gc-lang': 'vi', ...OWN }, body: JSON.stringify(o.body) } : { headers: { 'x-gc-lang': 'vi', ...OWN } }); const t = await r.text(); let j = null; try { j = JSON.parse(t); } catch (e) { /* văn bản */ } return { status: r.status, j, t }; };
       no((await fetch(BASE + '/engine/sounds.js')).status !== 200, 'Studio tải được engine/sounds.js từ server');
       let r = await api('/api/sound-packs');
       no(r.status !== 200 || !Array.isArray(r.j) || r.j.length, 'GET /api/sound-packs: danh sách rỗng lúc đầu');
@@ -417,7 +419,7 @@ const sect = async f => { try { await f(); } catch (e) { if (!process.env.GC_KEE
       r = await api('/api/sound-packs/ci-hp?force=1', { method: 'DELETE', body: {} });
       no(r.status !== 200 || !r.j.deleted || fs.existsSync(path.join(H, 'data', 'soundpacks', 'ci-hp.json')) || !fs.readdirSync(path.join(H, 'data', 'trash')).some(f => /^soundpack-ci-hp-/.test(f)), 'DELETE ?force=1 → gỡ, tệp vào thùng rác: ' + r.t.slice(0, 200));
       no((await api('/api/sound-packs/ci-hp', { method: 'DELETE', body: {} })).status !== 404 || (await api('/api/sound-packs/gen.am', { method: 'DELETE', body: {} })).status !== 404 || (await api('/api/sound-packs/constructor', { method: 'DELETE', body: {} })).status !== 404, 'DELETE gói không có / id lạ → 404');
-      no((await fetch(BASE + '/api/sound-packs/ci-http', { method: 'DELETE' })).status !== 403, 'DELETE thiếu header X-GC-Request → 403 (chống CSRF như mọi lệnh ghi)');
+      no((await fetch(BASE + '/api/sound-packs/ci-http', { method: 'DELETE', headers: OWN })).status !== 403, 'DELETE thiếu header X-GC-Request → 403 (chống CSRF như mọi lệnh ghi — kể cả khi đã là chủ)');
       // nhập bộ mẫu Tam Quốc qua HTTP: gói âm đi theo gói dự án
       r = await api('/api/projects/import', { body: { bundle: TQB } });
       no(r.status !== 200 || r.j.errors.length || r.j.counts.soundPacks !== 1, 'nhập Tam Quốc qua HTTP: có 1 gói âm: ' + r.t.slice(0, 200));
@@ -432,9 +434,9 @@ const sect = async f => { try { await f(); } catch (e) { if (!process.env.GC_KEE
       r = await api('/api/works/phim-http/shots', { body: hs(['trong-tran'], 'canh-2') });
       no(r.status !== 422 || !r.j.errors.some(e => /^event\.steps\[0\]\.sfx\[0\]: S6.*gói "tq-am" của dự án khác/.test(e)), 'POST shot với âm của dự án khác → 422 + errors[] có path (S6): ' + r.t.slice(0, 200));
       // MCP qua HTTP: hướng dẫn agent
-      const rpc = await (await fetch(BASE + '/mcp', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_sounds', arguments: { project: 'mau-tam-quoc', cat: 'nhac-cu' } } }) })).json();
+      const rpc = await (await fetch(BASE + '/mcp', { method: 'POST', headers: { 'content-type': 'application/json', ...OWN }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_sounds', arguments: { project: 'mau-tam-quoc', cat: 'nhac-cu' } } }) })).json();
       no(!JSON.parse(rpc.result.content[0].text).sounds.some(x => x.name === 'trong-tran'), 'MCP qua HTTP: list_sounds thấy gói Tam Quốc vừa nhập');
-      const gd = await fetch(BASE + '/api/agent/guide?topic=sound');
+      const gd = await fetch(BASE + '/api/agent/guide?topic=sound', { headers: OWN });
       no(gd.status !== 200 || !/\*\*S1\*\*/.test(await gd.text()), '/api/agent/guide?topic=sound');
     } finally { srv.kill(); }
     console.log('   ✓ HTTP /api/sound-packs (cổng ' + PORT + '): GET / POST qua cổng, 422 có path, trùng tên báo gói giữ tên, lưu bền, Studio tải được engine/sounds.js, nhập Tam Quốc mang gói âm, MCP + hướng dẫn agent qua HTTP');

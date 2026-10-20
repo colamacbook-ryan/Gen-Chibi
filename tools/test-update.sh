@@ -37,7 +37,9 @@ feed() { # feed <ver> [badsum]
 JSON
 }
 # X-GC-Lang: vi — các kiểm dưới so câu tiếng Việt (msgid) như Studio ở chế độ vi; bản tiếng Anh mặc định kiểm ở tools/test-i18n-server.mjs (ADR 0007)
-api() { curl -s -X "$1" -H 'X-GC-Request: 1' -H 'X-GC-Lang: vi' -H 'Content-Type: application/json' ${3:+-d "$3"} "http://127.0.0.1:$PORT$2"; }
+# v0.21: server tự sinh data/owner-token (không đặt GC_API_TOKEN) — harness gắn token chủ qua stdin của curl (-K -), như CLI; không nới luật truy cập
+own() { printf 'header = "Authorization: Bearer %s"\n' "$(tr -d ' \n' < "$HOME_DIR/data/owner-token" 2>/dev/null)"; }
+api() { own | curl -s -K - -X "$1" -H 'X-GC-Request: 1' -H 'X-GC-Lang: vi' -H 'Content-Type: application/json' ${3:+-d "$3"} "http://127.0.0.1:$PORT$2"; }
 ver() { curl -s "http://127.0.0.1:$PORT/api/health" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).version)}catch{console.log("down")}})'; }
 waitver() { for i in $(seq 1 40); do [ "$(ver)" = "$1" ] && return 0; sleep 0.5; done; return 1; }
 
@@ -64,7 +66,7 @@ sleep 1; api GET /api/update | grep -q '"to": *"v0.1.1"' && ok "lịch sử ghi 
 ls "$HOME_DIR/backups" | grep -q before-v0.1.1 && ok "đã backup dữ liệu trước khi cập nhật" || bad "không có backup"
 
 echo "1b) chống CSRF: Origin hợp lệ qua, nguồn lạ bị chặn kèm lời giải thích (Ryan 2026-10-19: nút cập nhật báo chặn nguồn lạ)"
-orig() { curl -s -o "$W/orig.out" -w '%{http_code}' -X POST -H 'X-GC-Request: 1' -H 'X-GC-Lang: vi' -H "Origin: $1" ${2:+-H "$2"} "http://127.0.0.1:$PORT/api/update/check"; }
+orig() { own | curl -s -K - -o "$W/orig.out" -w '%{http_code}' -X POST -H 'X-GC-Request: 1' -H 'X-GC-Lang: vi' -H "Origin: $1" ${2:+-H "$2"} "http://127.0.0.1:$PORT/api/update/check"; }
 [ "$(orig "http://127.0.0.1:$PORT")" = 200 ] && ok "Origin trùng Host → qua" || bad "Origin trùng Host bị chặn"
 [ "$(orig "http://localhost:$PORT")" = 200 ] && ok "localhost ↔ 127.0.0.1 cùng cổng → qua" || bad "localhost bị coi là nguồn lạ"
 [ "$(orig "http://[::1]:$PORT")" = 200 ] && ok "[::1] cùng cổng → qua" || bad "[::1] bị coi là nguồn lạ"
@@ -92,7 +94,7 @@ api POST /api/update/rollback '{"confirm":"ROLLBACK"}' >/dev/null
 waitver 0.1.0 && ok "chạy lại v0.1.0 theo yêu cầu" || bad "rollback thủ công hỏng"
 
 echo "5) agent cập nhật qua MCP"
-mcpcall() { curl -s -X POST -H 'Content-Type: application/json' -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"$1\",\"arguments\":${2:-{\}}}}" "http://127.0.0.1:$PORT/mcp"; }
+mcpcall() { own | curl -s -K - -X POST -H 'Content-Type: application/json' -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"$1\",\"arguments\":${2:-{\}}}}" "http://127.0.0.1:$PORT/mcp"; }
 build 0.1.3; feed 0.1.3
 mcpcall get_app_version | grep -q 'available\\": true' && ok "get_app_version thấy v0.1.3" || bad "get_app_version không thấy bản mới"
 mcpcall update_app | grep -q 'restart\\": true' && ok "update_app nhận lệnh" || bad "update_app không chạy"

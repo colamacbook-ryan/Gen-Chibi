@@ -33,7 +33,16 @@ _en() {
     un_ask) F="Uninstall gen-chibi. Keep your data (characters, scripts, backups)? [Y/n] " ;;
     un_wiped) F="Uninstalled and all data deleted." ;;
     un_kept) F="Uninstalled. Data kept in %s/data and %s/backups." ;;
-    open_token) F="This install is locked: sign in to the Studio with GC_API_TOKEN from %s/.env" ;;
+    open_setup) F="No owner password yet: opening the setup page with a one-time code. Choose a password of at least 12 characters (a memorable phrase works well)." ;;
+    st_setup) F="  Setup code: %s (set the owner password — genchibi open; valid until %s)" ;;
+    pw_ask) F="New owner password (at least 12 characters, hidden while typing): " ;;
+    pw_again) F="Repeat the password: " ;;
+    pw_mismatch) F="The two passwords differ — nothing changed." ;;
+    pw_short) F="The password needs at least 12 characters (tip: a memorable phrase) — nothing changed." ;;
+    pw_ctrl) F="The password must not contain control characters (tab, newline…) — nothing changed." ;;
+    pw_done) F="Owner password set. Studio sessions were signed out (%s); sign in again with the new password." ;;
+    pw_done_off) F="Owner password set while the app is stopped — it applies at the next start (genchibi start). All Studio sessions were signed out." ;;
+    pw_fail) F="Could not set the password: %s" ;;
     tok_ask) F="Paste GitHub token (Contents: Read-only, hidden while typing): " ;;
     tok_none) F="No token — nothing changed." ;;
     tok_bad) F="The token has invalid characters — copy it again (letters, digits, _ . - only)." ;;
@@ -72,6 +81,7 @@ _en() {
     link_ok) F="✓ MCP answers over the Internet" ;;
     link_fail) F="✗ Could not reach %s — see genchibi status, genchibi logs" ;;
     hdr_token) F="Authorization: Bearer <token — see GC_API_TOKEN in %s/.env>" ;;
+    hdr_token_file) F="Authorization: Bearer <token — see %s/data/owner-token>" ;;
     skill_usage) F="skill: claude | cursor | gemini | codex | generic" ;;
     skill_dl_fail) F="Could not download the guide (is the app running?)" ;;
     skill_clash) F="Your own files are already there, not overwriting:%s" ;;
@@ -114,7 +124,16 @@ _vi() {
     un_ask) F="Gỡ gen-chibi. Giữ lại dữ liệu (nhân vật, kịch bản, backup)? [C/k] " ;;
     un_wiped) F="Đã gỡ và xoá toàn bộ dữ liệu." ;;
     un_kept) F="Đã gỡ. Dữ liệu giữ ở %s/data và %s/backups." ;;
-    open_token) F="Bản cài có khoá: đăng nhập Studio bằng GC_API_TOKEN trong %s/.env" ;;
+    open_setup) F="Chưa có mật khẩu chủ: mở trang đặt mật khẩu kèm mã dùng một lần. Chọn mật khẩu ít nhất 12 ký tự (một cụm từ dễ nhớ là tốt)." ;;
+    st_setup) F="  Mã setup: %s (đặt mật khẩu chủ — genchibi open; hạn tới %s)" ;;
+    pw_ask) F="Mật khẩu chủ mới (ít nhất 12 ký tự, ẩn khi gõ): " ;;
+    pw_again) F="Nhập lại mật khẩu: " ;;
+    pw_mismatch) F="Hai lần nhập không khớp — không đổi gì." ;;
+    pw_short) F="Mật khẩu cần ít nhất 12 ký tự (gợi ý: một cụm từ dễ nhớ) — không đổi gì." ;;
+    pw_ctrl) F="Mật khẩu không được chứa ký tự điều khiển (tab, xuống dòng…) — không đổi gì." ;;
+    pw_done) F="Đã đặt mật khẩu chủ. Các phiên Studio đã bị đăng xuất (%s); đăng nhập lại bằng mật khẩu mới." ;;
+    pw_done_off) F="Đã đặt mật khẩu chủ khi app đang dừng — có hiệu lực ở lần chạy tới (genchibi start). Mọi phiên Studio đã bị đăng xuất." ;;
+    pw_fail) F="Không đặt được mật khẩu: %s" ;;
     tok_ask) F="Dán GitHub token (Contents: Read-only, ẩn khi gõ): " ;;
     tok_none) F="Không có token — không đổi gì." ;;
     tok_bad) F="Token có ký tự lạ — chép lại (chỉ gồm chữ, số, _ . -)." ;;
@@ -153,6 +172,7 @@ _vi() {
     link_ok) F="✓ MCP trả lời qua Internet" ;;
     link_fail) F="✗ Chưa gọi được %s — xem genchibi status, genchibi logs" ;;
     hdr_token) F="Authorization: Bearer <token — xem GC_API_TOKEN trong %s/.env>" ;;
+    hdr_token_file) F="Authorization: Bearer <token — xem %s/data/owner-token>" ;;
     skill_usage) F="skill: claude | cursor | gemini | codex | generic" ;;
     skill_dl_fail) F="Không tải được hướng dẫn (app có đang chạy?)" ;;
     skill_clash) F="Đã có tệp của bạn, không ghi đè:%s" ;;
@@ -197,8 +217,13 @@ PIDF="$HOME_DIR/logs/launcher.pid"; LOG="$HOME_DIR/logs/gen-chibi.log"
 TDIR="$HOME_DIR/tunnel"; TPID="$HOME_DIR/logs/tunnel.pid"; TLOG="$HOME_DIR/logs/tunnel.log"
 CF_IMAGE="${GC_CF_IMAGE:-cloudflare/cloudflared:2026.9.3}"
 
-# token đi qua stdin (curl -K -), không nằm trong argv → không lộ trong `ps`
-auth_cfg() { if [ -n "${GC_API_TOKEN:-}" ]; then printf 'header = "Authorization: Bearer %s"\n' "$GC_API_TOKEN"; fi; }
+# token chủ (v0.21, CNS-195): GC_API_TOKEN trong .env → data/owner-token (server tự sinh khi .env trống). Đọc lúc gọi (server có thể vừa sinh tệp).
+# Không export, không in ra màn hình; đi qua stdin (curl -K -), không nằm trong argv → không lộ trong `ps`
+owner_token() {
+  if [ -n "${GC_API_TOKEN:-}" ]; then printf '%s' "$GC_API_TOKEN"
+  elif [ -r data/owner-token ]; then tr -d ' \r\n' < data/owner-token; fi
+}
+auth_cfg() { local t; t="$(owner_token)"; if [ -n "$t" ]; then printf 'header = "Authorization: Bearer %s"\n' "$t"; fi; }
 api() { auth_cfg | curl -fsS -K - -X "$1" -H 'X-GC-Request: 1' -H "X-GC-Lang: $UI" -H 'Content-Type: application/json' ${3:+-d "$3"} "$URL$2"; }   # X-GC-Lang: câu server trả về theo ngôn ngữ CLI
 running_native() { [ -f "$PIDF" ] && kill -0 "$(cat "$PIDF")" 2>/dev/null; }
 json() { node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const o=JSON.parse(s);const k=process.argv[1].split(".");let v=o;for(const x of k)v=v==null?v:v[x];console.log(v===undefined?"":typeof v==="object"?JSON.stringify(v):v)})' "$1" 2>/dev/null || sed -n "s/.*\"$1\": *\"\{0,1\}\([^\",}]*\).*/\1/p"; }
@@ -206,7 +231,7 @@ json() { node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const 
 guard_exposure() {
   # đóng khi nghi ngờ: mở ra ngoài máy này mà không có token thì không chạy
   case "${GC_BIND:-127.0.0.1}" in 127.0.0.1|localhost|::1) ;; *)
-    [ -n "${GC_API_TOKEN:-}" ] || { m refuse_bind "$GC_BIND" >&2; exit 1; } ;;
+    [ -n "$(owner_token)" ] || { m refuse_bind "$GC_BIND" >&2; exit 1; } ;;
   esac
 }
 start() {
@@ -231,6 +256,7 @@ stop() {
 status() {
   local h; h="$(curl -fsS "$URL/api/health" 2>/dev/null || true)"
   if [ -n "$h" ]; then m st_up "$(echo "$h" | json version | sed 's/^v//')" "$URL" "$MODE"; else m st_down "$MODE"; fi
+  local sc; sc="$(setup_code)"; [ -z "$sc" ] || m st_setup "$sc" "$(setup_until)"
   m st_releases "$(cd releases 2>/dev/null && ls | tr '\n' ' ')" "$(basename "$(readlink current)")"
   case "${GC_TUNNEL:-}" in
     named) m st_mcp_named "${GC_PUBLIC_URL:-?}" ;;
@@ -273,10 +299,55 @@ uninstall() {
 mcp() {
   # cầu stdio cho agent (Claude Code, Claude Desktop…)
   if [ "$MODE" = docker ]; then exec docker compose exec -T app node /install/current/server/mcp-stdio.js
-  else GC_PORT="$PORT" exec node "$HOME_DIR/current/server/mcp-stdio.js"; fi
+  else GC_HOME="$HOME_DIR" GC_PORT="$PORT" exec node "$HOME_DIR/current/server/mcp-stdio.js"; fi   # GC_HOME: cầu đọc data/owner-token khi .env trống (CNS-197)
 }
 logs() { if [ "$MODE" = docker ]; then docker compose logs -f --tail 200; else tail -n 200 -f "$LOG"; fi; }
-open_ui() { local u="http://localhost:$PORT"; [ -n "${GC_API_TOKEN:-}" ] && m open_token "$HOME_DIR"; (command -v open >/dev/null && open "$u") || (command -v xdg-open >/dev/null && xdg-open "$u") || echo "$u"; }
+# mã setup (v0.21 §3.4): server ghi data/setup-code.txt (0600) — dòng 1 "XXXXX-XXXXX", dòng 2 "expires=<epoch giây>"; có tệp = chưa có mật khẩu chủ.
+# setup_code [phút]: in mã nếu còn hạn ít nhất <phút> (mặc định 0); không thì in rỗng
+setup_code() {
+  local f=data/setup-code.txt c e now
+  [ -r "$f" ] || return 0
+  c="$(sed -n '1p' "$f" | tr -d ' \r')"; e="$(sed -n 's/^expires=\([0-9]*\).*/\1/p' "$f")"; now="$(date +%s)"
+  case "$c" in [0-9A-Z][0-9A-Z][0-9A-Z][0-9A-Z][0-9A-Z]-[0-9A-Z][0-9A-Z][0-9A-Z][0-9A-Z][0-9A-Z]) ;; *) return 0 ;; esac
+  [ -n "$e" ] && [ "$e" -gt $((now + ${1:-0} * 60)) ] && printf '%s' "$c"
+  return 0
+}
+setup_until() { local e; e="$(sed -n 's/^expires=\([0-9]*\).*/\1/p' data/setup-code.txt 2>/dev/null)"; [ -n "$e" ] && { date -d "@$e" '+%H:%M' 2>/dev/null || date -r "$e" '+%H:%M' 2>/dev/null; }; return 0; }
+# genchibi open: chưa có mật khẩu chủ → mở http://localhost:<cổng>/setup#code=<mã> (mã ở fragment: trình duyệt không gửi lên server, không vào log);
+# mã sắp hết hạn → xin mã mới qua API (token chủ) rồi đọc lại tệp. Có mật khẩu rồi → mở trang chính (đăng nhập một lần, máy nhớ 30 ngày)
+open_ui() {
+  local u="http://localhost:$PORT" st c
+  st="$(curl -fsS -m 5 "$URL/api/auth/state" 2>/dev/null || true)"
+  if echo "$st" | grep -q '"password":false'; then
+    c="$(setup_code 5)"
+    if [ -z "$c" ]; then api POST /api/auth/setup-code >/dev/null 2>&1 || true; c="$(setup_code 5)"; fi
+    if [ -n "$c" ]; then u="$u/setup#code=$c"; m open_setup; fi
+  fi
+  (command -v open >/dev/null && open "$u") || (command -v xdg-open >/dev/null && xdg-open "$u") || echo "$u"
+}
+# genchibi password: đặt / đặt lại mật khẩu chủ (quên mật khẩu: ai vào được máy chủ là chủ — §3.3). Hỏi ẩn hai lần (không có terminal: đọc một dòng stdin).
+# App đang chạy → POST /api/auth/password bằng token chủ (server thu hồi phiên trong bộ nhớ, nhất quán; mật khẩu + token đi qua stdin của curl, không vào argv).
+# App dừng → ghi thẳng data/auth.json bằng server/auth-cli.js (cùng mã băm của server; Docker chạy trong container một lần). Không ghi tệp khi app chạy: server đang giữ
+# auth.json trong bộ nhớ sẽ ghi đè lên.
+cfg_esc() { local s="$1"; s="${s//\\/\\\\}"; s="${s//\"/\\\"}"; printf '%s' "$s"; }   # \ và " → thoát (dùng cho chuỗi JSON rồi chuỗi cấu hình curl)
+password_cmd() {
+  local p1="" p2="" r code
+  if [ -t 0 ]; then
+    read -r -s -p "$(mn pw_ask)" p1; echo; read -r -s -p "$(mn pw_again)" p2; echo
+    [ "$p1" = "$p2" ] || { m pw_mismatch >&2; exit 1; }
+  else IFS= read -r p1 || true; fi
+  case "$p1" in *[[:cntrl:]]*) m pw_ctrl >&2; exit 1 ;; esac
+  [ "${#p1}" -ge 12 ] || { m pw_short >&2; exit 1; }
+  if curl -fsS -m 5 "$URL/api/health" >/dev/null 2>&1; then
+    r="$( { auth_cfg; printf 'data = "%s"\n' "$(cfg_esc "{\"password\":\"$(cfg_esc "$p1")\"}")"; } | curl -sS -K - -X POST -H 'X-GC-Request: 1' -H "X-GC-Lang: $UI" -H 'Content-Type: application/json' -w '\n%{http_code}' "$URL/api/auth/password" 2>&1)" || true
+    code="$(printf '%s' "$r" | tail -1)"
+    if [ "$code" = 200 ]; then m pw_done "$(printf '%s' "$r" | sed -n '1p' | json revoked)"; else m pw_fail "$(printf '%s' "$r" | sed -n '1p' | json error)" >&2; exit 1; fi
+  else
+    if [ "$MODE" = docker ]; then r="$(printf '%s\n' "$p1" | docker compose run --rm -T --no-deps app node /install/current/server/auth-cli.js password "$UI" 2>&1)" || { m pw_fail "$r" >&2; exit 1; }
+    else r="$(printf '%s\n' "$p1" | GC_HOME="$HOME_DIR" node "$HOME_DIR/current/server/auth-cli.js" password "$UI" 2>&1)" || { m pw_fail "$r" >&2; exit 1; }; fi
+    m pw_done_off
+  fi
+}
 
 # ---------------------------------------------------------------- MCP ra ngoài (Cloudflare Tunnel)
 # genchibi expose <tên-miền>: tạo tunnel có tên, trỏ DNS, chỉ cho đường /mcp + OAuth (xem config.yml bên dưới) đi qua, sinh khoá, in link nối.
@@ -598,7 +669,8 @@ agent_connect() {
   local u link hdr=""
   u="$URL/mcp"; link="$(link_url)"
   # link Internet tự mang khoá (không cần token — đừng dán token toàn quyền vào client bên thứ ba); địa chỉ máy này mới cần token nếu chủ đặt
-  [ -n "${GC_API_TOKEN:-}" ] && [ -z "$link" ] && hdr="$(m hdr_token "$HOME_DIR")"
+  # v0.21: bản cài nào cũng có token chủ (.env hoặc data/owner-token) → địa chỉ máy này luôn cần header; KHÔNG in token, chỉ chỉ chỗ đọc
+  if [ -z "$link" ]; then if [ -n "${GC_API_TOKEN:-}" ]; then hdr="$(m hdr_token "$HOME_DIR")"; else hdr="$(m hdr_token_file "$HOME_DIR")"; fi; fi
   local jh="" target="${link:-$u}" ch=""; [ -n "$hdr" ] && jh=',"headers":{"Authorization":"Bearer <token>"}' && ch=" -H 'Authorization: Bearer <token>'"
   local cur_json='{"mcpServers":{"gen-chibi":{"url":"'"$target"'"'"$jh"'}}}' gem_json='{"mcpServers":{"gen-chibi":{"httpUrl":"'"$target"'"'"$jh"'}}}'
   local cc_hdr=""; [ -n "$hdr" ] && cc_hdr=' --header "Authorization: Bearer <token>"'
@@ -686,7 +758,8 @@ genchibi — quản lý gen-chibi ($HOME_DIR, chế độ $MODE)
   agent connect|guide|tools|skill   bootstrap cho agent mọi hãng: cấu hình nối, hướng dẫn, schema tool, cài skill
   token [giá-trị|--clear]           đặt token GitHub (repo private) cho tự cập nhật; bỏ trống = nhập ẩn
   lang [en|vi]                      xem / đặt ngôn ngữ (CLI + giao diện mặc định của Studio)
-  open                              mở Studio trong trình duyệt
+  open                              mở Studio trong trình duyệt (lần đầu: trang đặt mật khẩu chủ, kèm mã setup)
+  password                          đặt / đặt lại mật khẩu chủ để đăng nhập Studio (quên mật khẩu: chạy lệnh này trên máy chủ)
   uninstall                         gỡ (hỏi giữ hay xoá dữ liệu)
 EOF
   else cat <<EOF
@@ -701,7 +774,8 @@ genchibi — manage gen-chibi ($HOME_DIR, mode $MODE)
   agent connect|guide|tools|skill   bootstrap for agents of any vendor: connect config, guide, tool schema, skill install
   token [value|--clear]             set the GitHub token (private repo) for auto-update; empty = hidden prompt
   lang [en|vi]                      show / set the language (CLI + Studio default)
-  open                              open the Studio in the browser
+  open                              open the Studio in the browser (first time: the owner password setup page, with the setup code)
+  password                          set / reset the owner password for Studio sign-in (forgot it: run this on the server)
   uninstall                         uninstall (asks whether to keep or delete your data)
 EOF
   fi
@@ -710,7 +784,7 @@ EOF
 case "${1:-help}" in
   start) start ;; stop) stop ;; restart) stop; start ;; status) status ;; update) update ;;
   logs) logs ;; backup) backup ;; restore) shift; restore "${1:-}" ;; uninstall) uninstall ;;
-  mcp) mcp ;; open) open_ui ;; version) status ;;
+  mcp) mcp ;; open) open_ui ;; version) status ;; password) password_cmd ;;
   expose) shift; expose ${1+"$@"} ;; link) shift; link_cmd ${1+"$@"} ;;
   token|github-token) shift; token_cmd "${1:-}" ;;
   lang|language) shift; lang_cmd "${1:-}" ;;
