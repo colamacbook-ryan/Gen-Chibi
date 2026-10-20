@@ -2786,11 +2786,20 @@ if (!ONLY || ONLY === 'i18n') {
       }
       return [...bad];
     }, [USER, where, PENDING])).filter(x => { if (x[0] === '~') { pendingSeen.add(x.slice(x.lastIndexOf(' · ') + 3)); return false; } return true; });
-    const ctxE = await b16.newContext({ viewport: { width: 1500, height: 950 } }), qe = await ctxE.newPage();
+    // BỐ CỤC (v0.20): chữ tiếng Anh dài hơn → nút thanh đầu trang không được chồng lên nhau / lên nút Trợ lý AI; chữ trong banner không bị ép thành cột hẹp
+    const layoutBad = async (q, where) => q.evaluate(where => {
+      const out = [], vis = el => el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
+      const R = el => el.getBoundingClientRect(), hit = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 2 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 2;
+      const items = [...document.querySelectorAll('.pagehead .actions > *, #dockToggle, #crumbs')].filter(vis), nm = el => (el.id ? '#' + el.id : '') + ' "' + el.textContent.trim().slice(0, 30) + '"';
+      for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) if (!items[i].contains(items[j]) && !items[j].contains(items[i]) && hit(R(items[i]), R(items[j]))) out.push('BỐ CỤC ' + where + ' · thanh đầu trang chồng: ' + nm(items[i]) + ' ↔ ' + nm(items[j]));
+      for (const sp of document.querySelectorAll('.banner > span:first-child')) { if (!vis(sp)) continue; const w = R(sp).width, bw = R(sp.parentElement).width; if (bw > 320 && w < 180) out.push('BỐ CỤC ' + where + ' · chữ banner bị ép ' + Math.round(w) + 'px: "' + sp.textContent.trim().slice(0, 40) + '"'); }
+      return out;
+    }, where);
+    const ctxE = await b16.newContext({ viewport: { width: 1366, height: 900 } }), qe = await ctxE.newPage();
     qe.on('pageerror', e => errs16.push(e.message)); qe.on('dialog', d => d.dismiss().catch(() => {}));
     const found = [];
     await qe.goto(U + '?lang=en'); await ready(qe); await qe.waitForSelector('.appcard');
-    found.push(...await scanEn(qe, 'Chọn khu'));
+    found.push(...await scanEn(qe, 'Chọn khu'), ...await layoutBad(qe, 'Chọn khu'));
     let nPages = 0;
     for (const app of ['xuong', 'thu-vien', 'tao-tac']) {
       await qe.goto(U + app + '?lang=en'); await ready(qe); await qe.waitForSelector('.nav-item');
@@ -2798,14 +2807,14 @@ if (!ONLY || ONLY === 'i18n') {
       for (let i = 0; i < n; i++) {
         const btn = (await qe.$$('.nav-item'))[i], label = (await btn.textContent()).trim();
         await btn.click(); await qe.waitForTimeout(700); nPages++;
-        found.push(...await scanEn(qe, app + ' › ' + label));
-        if (/^Theme projects/.test(label) && await qe.$('.libcard.proj[title="mau-tam-quoc"]')) { await qe.click('.libcard.proj[title="mau-tam-quoc"]'); await qe.waitForTimeout(600); found.push(...await scanEn(qe, app + ' › ' + label + ' › Tam Quốc')); }
-        if (/^(Characters|Items|Scenes|Motions)/.test(label) && await qe.$('.libcard')) { await qe.click('.libcard'); await qe.waitForTimeout(600); found.push(...await scanEn(qe, app + ' › ' + label + ' › thẻ đầu')); }
+        found.push(...await scanEn(qe, app + ' › ' + label), ...await layoutBad(qe, app + ' › ' + label));
+        if (/^Theme projects/.test(label) && await qe.$('.libcard.proj[title="mau-tam-quoc"]')) { await qe.click('.libcard.proj[title="mau-tam-quoc"]'); await qe.waitForTimeout(600); found.push(...await scanEn(qe, app + ' › ' + label + ' › Tam Quốc'), ...await layoutBad(qe, app + ' › ' + label + ' › Tam Quốc')); }
+        if (/^(Characters|Items|Scenes|Motions)/.test(label) && await qe.$('.libcard')) { await qe.click('.libcard'); await qe.waitForTimeout(600); found.push(...await scanEn(qe, app + ' › ' + label + ' › thẻ đầu'), ...await layoutBad(qe, app + ' › ' + label + ' › thẻ đầu')); }
       }
     }
     // Tạo tác: phòng làm phim của tác phẩm Tam Quốc, đủ 5 tab
     await qe.goto(U + 'tao-tac?lang=en#/tac-pham/tq-vuon-dao-xich-bich/script'); await ready(qe); await qe.waitForSelector('#wtab-script');
-    for (const t of ['script', 'shots', 'review', 'voice', 'publish']) { await qe.click('#wtab-' + t); await qe.waitForTimeout(700); found.push(...await scanEn(qe, 'Tạo tác › phòng làm phim › ' + t)); }
+    for (const t of ['script', 'shots', 'review', 'voice', 'publish']) { await qe.click('#wtab-' + t); await qe.waitForTimeout(700); found.push(...await scanEn(qe, 'Tạo tác › phòng làm phim › ' + t), ...await layoutBad(qe, 'Tạo tác › phòng làm phim › ' + t)); }
     // phim HTML xuất ở chế độ en: chữ trình phát tiếng Anh + mang bảng player/engine để engine/player.js dịch lúc chạy; lời thoại giữ nguyên
     await qe.click('#wtab-publish');
     const [fdl16] = await Promise.all([qe.waitForEvent('download'), qe.click('button:text-is("Film (HTML)")')]);
@@ -2819,7 +2828,7 @@ if (!ONLY || ONLY === 'i18n') {
     if (fl.join('|') !== '▶ Play|en|Stopped') throw new Error('phim mở bằng file:// ở chế độ en: ' + fl.join('|'));
     const uniq = [...new Set(found)];
     if (process.env.GC_I18N_DUMP) fs.writeFileSync(process.env.GC_I18N_DUMP, uniq.join('\n') + '\n');   // GC_I18N_DUMP=<tệp>: ghi đủ danh sách để sửa
-    if (uniq.length) throw new Error('chế độ en còn ' + uniq.length + ' chữ tiếng Việt trên giao diện:\n      ' + uniq.slice(0, 60).join('\n      '));
+    if (uniq.length) throw new Error('chế độ en còn ' + uniq.length + ' lỗi (chữ tiếng Việt chưa dịch / bố cục chồng lấn) trên giao diện:\n      ' + uniq.slice(0, 60).join('\n      '));
     if (pendingSeen.size) console.log('  ! ' + pendingSeen.size + ' câu động của engine (core.js, cổng kiểm) còn tiếng Việt — chờ builder engine: ' + [...pendingSeen].slice(0, 4).map(x => JSON.stringify(x.slice(0, 40))).join(', ') + (pendingSeen.size > 4 ? '…' : ''));
     console.log('  ✓ Chế độ en: không còn chữ tiếng Việt trên ' + (nPages + 6) + ' trang / tab (Xưởng, Thư viện mọi mục, Tạo tác + 5 tab phòng làm phim, Hệ thống, dock Trợ lý AI) + phim HTML xuất ra (nút, bảng player, mở file://) — trừ nội dung người dùng (' + USER.length + ' chuỗi của bộ mẫu)');
     await ctxE.close();

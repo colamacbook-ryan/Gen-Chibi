@@ -565,3 +565,12 @@ body.dock-open:not(.dock-narrow) .toast { right: calc(var(--dock-w, 0px) + 20px)
 @container pane (max-width: 1000px) { .detail .panel, .split.create .panel { overflow-x: auto; } }
 /* chuyển ngôn ngữ (ADR 0007): EN | VI ở chân thanh bên — nhỏ, luôn thấy */
 .langsw .seg button { padding: 2px 9px; font-size: 11px; letter-spacing: .04em; }
+
+/* v0.20: chữ dài (tiếng Anh dài hơn tiếng Việt ~20–40 %) không được tràn đè nút "Trợ lý AI" khi dock mở — nút của trang tự xuống dòng
+   bên trong vùng nút thay vì chồng lên nhau; banner (giấy phép bộ mẫu, cảnh báo…) cho chữ một độ rộng tối thiểu, nút xuống dòng dưới chữ */
+.pagehead { height: auto; min-height: 52px; padding-block: 6px; }
+.pagehead .actions { flex: 1 1 auto; flex-wrap: wrap; justify-content: flex-end; row-gap: 6px; }
+.pagehead .actions > button, .pagehead .actions > .btn, .pagehead .actions > a { flex: none; white-space: nowrap; }
+.pagehead .dock-toggle { flex: none; }
+.banner { flex-wrap: wrap; }
+.banner > span:first-child { flex: 1 1 260px; min-width: 0; }
