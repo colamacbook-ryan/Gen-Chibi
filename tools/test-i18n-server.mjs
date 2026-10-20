@@ -276,13 +276,15 @@ console.log('(h) dịch câu không bao giờ chặn event loop · id giữ nguy
   const P = { 'mẫu rỗng đầu 2,2 KB': ' hạt · diễn viên ≤ ' + '/ đạo cụ · '.repeat(200), 'mẫu rỗng đầu 4,4 KB': ' hạt · diễn viên ≤ ' + '/ đạo cụ · '.repeat(400),
     'mẫu sát trần 1,9 KB': ' hạt · diễn viên ≤ ' + '/ đạo cụ · '.repeat(170), '"nhãn (chi tiết)" 1,9 KB': 'ạ (x, y; z) '.repeat(160),
     '"nhãn (chi tiết)" 200 KB': 'ạ (x, y; z) '.repeat(16000), 'danh sách "; " 1,9 KB': 'Không có tác phẩm a; '.repeat(90) };
-  const slow = Object.entries(P).map(([k, v]) => [k, Math.max(ms(v), ms(v))]).filter(([, t]) => t > 50);
+  // nhỏ nhất của 3 lần đo: máy CI bận / GC chỉ làm CHẬM một lần đo, còn regex cũ chậm MỌI lần (2,2 KB = 269 ms) — không đỏ giả, vẫn bắt tái phạm
+  const best = v => Math.min(ms(v), ms(v), ms(v));
+  const slow = Object.entries(P).map(([k, v]) => [k, best(v)]).filter(([, t]) => t > 50);
   ok(!slow.length, 'payload ReDoS của review đều < 50 ms mỗi câu' + (slow.length ? ': ' + JSON.stringify(slow) : ''));
   // mọi mẫu, giá trị dựng từ chính chữ cố định của mẫu lặp lại (kiểu đầu vào khiến khớp phải lùi nhiều nhất), sát trần độ dài
   let worst = 0, wk = '';
   MSG.M.templates('en').forEach(k => {
     const lits = k.split(/\{[A-Za-z0-9_]+\}/), f = lits.filter(Boolean).join('ạ ').repeat(1 + Math.floor(1900 / Math.max(1, lits.join('').length))).slice(0, 1990);
-    [f, lits[0] + f, f + lits[lits.length - 1], lits[0] + f + 'x'].forEach(v => { const t = ms(v); if (t > worst) { worst = t; wk = k; } });
+    [f, lits[0] + f, f + lits[lits.length - 1], lits[0] + f + 'x'].forEach(v => { let t = ms(v); if (t > 50) t = Math.min(t, best(v)); if (t > worst) { worst = t; wk = k; } });
   });
   ok(worst < 50, 'mọi mẫu × 4 đầu vào bất lợi sát trần: chậm nhất ' + worst.toFixed(1) + ' ms (< 50) — ' + cut(wk, 60));
   // 2) giá trị id giữ nguyên chữ (trước: "007" → 7, id 23 chữ số → 1.23e+22, "-0" → 0)
