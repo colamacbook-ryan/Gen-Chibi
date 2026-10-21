@@ -598,3 +598,16 @@ table.grid.olsteps td { vertical-align: top; }
 .olfoot > :last-child { margin-left: auto; }
 .accpw { max-width: 760px; }
 pre.code.olexpr { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 96px; padding: 6px; margin-top: 6px; font-size: 11px; }
+/* v0.22 — bảng Xuất video (phòng tác phẩm › Xuất bản) */
+.vidpanel { max-width: 980px; }
+.vidkv { grid-template-columns: 120px minmax(0, 1fr); font-size: 13px; }
+.vidkv .warn, .vidkv span.warn { color: var(--warn); }
+.banner.ok { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); background: color-mix(in srgb, var(--ok) 7%, var(--surface)); }
+.readybar.vidbar .meter { flex: 1 1 240px; height: 8px; }
+.readybar.vidbar b { min-width: 42px; font-variant-numeric: tabular-nums; }
+table.grid.vidshots .meter, table.grid.vidshots .meter i { display: block; height: 6px; border-radius: 3px; }
+table.grid.vidshots .meter { background: var(--sunken); overflow: hidden; }
+table.grid.vidshots .meter i { background: var(--ok); }
+.vidrow { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+.vidprev { width: 100%; max-height: 420px; background: #121214; border-radius: 6px; }
+.vidcover { width: 100%; max-height: 240px; object-fit: contain; background: #121214; border-radius: 6px; border: 1px solid var(--line); }

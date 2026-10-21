@@ -52,49 +52,85 @@
       });
     }, Promise.resolve());
   }
-  function boot(P) {
-    var GC = window.GenChibi, D = P.data, I = GC.i18n;
+  // đăng ký asset như FILM_BOOT, CÙNG thứ tự — nhưng cắt thành nhiều tác vụ (~20 ms mỗi tác vụ): Tam Quốc ~60–100 ms một mạch (sanitizeSvg từng nhân vật)
+  async function boot(P) {
+    var GC = window.GenChibi, D = P.data, I = GC.i18n, jobs = [];
     // chữ trên khung hình: CÙNG luật với exportFilm — ngôn ngữ giao diện lúc xuất + bảng player / engine nhúng kèm (CNS-224)
     if (I && P.ui) { if (P.dict) I.add(P.ui, P.dict); I.setLang(P.ui); }
     GC.pack({ id: 'local.my', name: 'local', owner: 'local', group: 'mine', license: 'local' }, function () {});
-    (D.parts || []).forEach(function (p) { GC.registerDataPart('local.my', p); });
-    (D.items || []).forEach(function (x) { GC.registerItem('local.my', x); });
-    (D.scenes || []).forEach(function (x) { GC.registerScene('local.my', x); });
-    (D.characters || []).forEach(function (a) { GC.registerAsset(a.pack, a); });
-    (D.soundPacks || []).forEach(function (p) { if (GC.sounds) GC.sounds.registerPack(p); });   // gói âm TRƯỚC gói động tác (như FILM_BOOT)
-    (D.motionPacks || []).forEach(function (m) { if (GC.choreo) GC.choreo.registerPack('local.my', m); });
+    (D.parts || []).forEach(function (p) { jobs.push(function () { GC.registerDataPart('local.my', p); }); });
+    (D.items || []).forEach(function (x) { jobs.push(function () { GC.registerItem('local.my', x); }); });
+    (D.scenes || []).forEach(function (x) { jobs.push(function () { GC.registerScene('local.my', x); }); });
+    (D.characters || []).forEach(function (a) { jobs.push(function () { GC.registerAsset(a.pack, a); }); });
+    (D.soundPacks || []).forEach(function (p) { jobs.push(function () { if (GC.sounds) GC.sounds.registerPack(p); }); });   // gói âm TRƯỚC gói động tác (như FILM_BOOT)
+    (D.motionPacks || []).forEach(function (m) { jobs.push(function () { if (GC.choreo) GC.choreo.registerPack('local.my', m); }); });
+    var t0 = R.now();
+    for (var i = 0; i < jobs.length; i++) { jobs[i](); if (R.now() - t0 > 20) { await VC.yieldReal(); t0 = R.now(); } }
     return GC;
   }
   function mulberry(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
-  /* ---------------------------------------------------------------- chụp sân khấu: DOM → SVG foreignObject đứng yên */
-  var CSS = null;
+  /* ---------------------------------------------------------------- chụp sân khấu: DOM → SVG foreignObject đứng yên
+   * Ngân sách luồng chính (spec §3: long task ≤ 100 ms — CNS-221): CSS của trang (gồm phông Be Vietnam Pro nhúng, ~67 KB) chỉ thoát XML + mã hoá URL
+   * MỘT lần cho cả lượt (đầu / đuôi data: URL đóng sẵn); mỗi khung chỉ mã hoá phần DOM. Không cloneNode cả sân khấu mỗi khung (hàng nghìn nút DOM rác
+   * mỗi khung → GC lớn của Oilpan dừng luồng ~80 ms): giá trị đang chuyển động chép TẠM vào style của chính phần tử sống, tuần tự hoá, rồi trả style cũ. */
+  var CSS = null, PRE = null;
   function allCSS() {
     if (CSS === null) CSS = Array.prototype.map.call(document.querySelectorAll('style'), function (s) { return s.textContent; }).join('\n') + '\n*{animation:none!important;transition:none!important}';
     return CSS;
   }
   function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function escAttr(s) { return esc(s).replace(/"/g, '&quot;'); }
+  // đầu + đuôi của data: URL cho khung W×H — mã hoá sẵn một lần (urlText theo từng ký tự: nối phần đã mã hoá với nhau vẫn đúng)
+  function frameShell(W, H) {
+    if (!PRE || PRE.w !== W || PRE.h !== H) {
+      var head = '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '"><foreignObject x="0" y="0" width="' + W + '" height="' + H + '">' +
+        '<div xmlns="http://www.w3.org/1999/xhtml"><style>' + esc(allCSS()) + '</style>';
+      PRE = { w: W, h: H, head: 'data:image/svg+xml;charset=utf-8,' + urlText(head), tail: urlText('</div></div></foreignObject></svg>'), bytes: head.length + 40 };
+    }
+    return PRE;
+  }
+  // mã hoá TỐI THIỂU cho data: URL (thay encodeURIComponent cả chuỗi), MỘT lượt: % # \t \n \r (bộ phân tích URL bỏ ký tự trắng điều khiển, # mở fragment) và
+  // ký tự ngoài ASCII → %XX UTF-8 (như encodeURIComponent). Chuỗi mỗi khung luôn là chuỗi 1 byte/ký tự (chữ Việt trong bong bóng không biến cả chuỗi
+  // ~180 nghìn ký tự thành 2 byte/ký tự) và ngắn hơn → ít rác ở vùng đối tượng lớn của heap → ít lần GC toàn phần dừng luồng (~25–45 ms mỗi lần, spec §3)
+  var URL_RE = /[%#\t\n\r]|[^\x00-\x7F]+/g;
+  function urlChar(c) { return c === '%' ? '%25' : c === '#' ? '%23' : c === '\t' ? '%09' : c === '\n' ? '%0A' : c === '\r' ? '%0D' : encOK(c); }
+  function encOK(c) { try { return encodeURIComponent(c); } catch (e) { return encodeURIComponent(c.replace(/[\uD800-\uDFFF]/g, '\uFFFD')); } }   // nửa cặp surrogate lạc
+  function urlText(s) { return s.replace(URL_RE, urlChar); }
+  var XS = null;
+  // → phần DOM của khung (chuỗi XHTML): sân khấu sống + giá trị đang chuyển động (transition / animation) chép thành style tĩnh
   function snapshot(box, W, H) {
-    var live = [box].concat(Array.prototype.slice.call(box.querySelectorAll('*'))), props = new Map();
-    document.getAnimations().forEach(function (a) {   // giá trị đang chuyển động (transition / animation) chép thành style tĩnh của bản sao
-      var e = a.effect, t = e && e.target; if (!t || e.pseudoElement) return;
+    var props = new Map();
+    document.getAnimations().forEach(function (a) {
+      var e = a.effect, t = e && e.target; if (!t || e.pseudoElement || !box.contains(t)) return;
       var ks = props.get(t) || new Set();
       e.getKeyframes().forEach(function (k) { Object.keys(k).forEach(function (p) { if (['offset', 'easing', 'composite', 'computedOffset'].indexOf(p) < 0) ks.add(p); }); });
       props.set(t, ks);
     });
-    var clone = box.cloneNode(true), cl = [clone].concat(Array.prototype.slice.call(clone.querySelectorAll('*')));
-    live.forEach(function (e, i) {
-      var ks = props.get(e); if (!ks) return;
-      var cs = getComputedStyle(e);
-      ks.forEach(function (p) { var css = p.replace(/[A-Z]/g, function (c) { return '-' + c.toLowerCase(); }); cl[i].style.setProperty(css, cs.getPropertyValue(css)); });
+    // đọc HẾT giá trị trước (một lần tính style), rồi mới ghi — xen kẽ đọc / ghi bắt trình duyệt tính lại style nhiều lần
+    var saved = [], vals = [];
+    props.forEach(function (ks, el) {
+      var cs = getComputedStyle(el), v = [];
+      ks.forEach(function (p) { var css = p.replace(/[A-Z]/g, function (c) { return '-' + c.toLowerCase(); }); v.push([css, cs.getPropertyValue(css)]); });
+      vals.push([el, v]);
     });
-    clone.removeAttribute('id'); clone.style.cssText += ';position:relative;left:0;top:0;width:' + W + 'px;height:' + H + 'px;overflow:hidden;border-radius:0';
-    return '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '"><foreignObject x="0" y="0" width="' + W + '" height="' + H + '">' +
-      '<div xmlns="http://www.w3.org/1999/xhtml"><style>' + esc(allCSS()) + '</style>' + new XMLSerializer().serializeToString(clone) + '</div></foreignObject></svg>';
+    vals.forEach(function (x) { var el = x[0]; saved.push([el, el.getAttribute('style')]); x[1].forEach(function (pv) { el.style.setProperty(pv[0], pv[1]); }); });
+    var body;
+    try {
+      XS = XS || new XMLSerializer();
+      var inner = '', kids = box.childNodes;
+      for (var i = 0; i < kids.length; i++) inner += XS.serializeToString(kids[i]);
+      // gốc sân khấu: như bản sao cũ — bỏ id, giữ class + style, đặt cỡ khung
+      var cls = box.getAttribute('class'), sty = (box.getAttribute('style') || '') + ';position:relative;left:0;top:0;width:' + W + 'px;height:' + H + 'px;overflow:hidden;border-radius:0';
+      body = '<div' + (cls ? ' class="' + escAttr(cls) + '"' : '') + ' style="' + escAttr(sty) + '">' + inner;
+    } finally {
+      for (var j = saved.length - 1; j >= 0; j--) { if (saved[j][1] == null) saved[j][0].removeAttribute('style'); else saved[j][0].setAttribute('style', saved[j][1]); }
+    }
+    return body;
   }
-  function svgImage(svg) {
-    var img = new Image();   // data: URL + HTMLImageElement: canvas vẫn sạch (spike taint.mjs)
-    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  function svgImage(body, W, H) {
+    var sh = frameShell(W, H), img = new Image();   // data: URL + HTMLImageElement: canvas vẫn sạch (spike taint.mjs)
+    img.src = sh.head + urlText(body) + sh.tail;
     return img.decode().then(function () { return img; });
   }
 
@@ -209,18 +245,24 @@
    *       shots [chỉ số trong danh sách phân cảnh sẵn sàng] · fps 30 · sec (độ dài từ lượt dry — cỡ OfflineAudioContext) · maxSec (trần) · missingVoice 'silent'|'blip'
    *       handle (FileSystemFileHandle, tuỳ chọn) · seed · tailMs · probe [số khung] · debug (thu chữ trên khung + nhật ký say) */
   async function run(P, o) {
-    var t00 = R.now();
+    var t00 = R.now(), marks = [], mark = function (n) { if (o.debug) marks.push([n, performance.timeOrigin + R.now()]); };
+    mark('start');
     var fps = o.fps || 30, dry = o.pass === 'dry', vertical = o.aspect === '9:16', hd = o.quality !== '720p';
     var OW = vertical ? (hd ? 1080 : 720) : (hd ? 1920 : 1280), OH = vertical ? (hd ? 1920 : 1280) : (hd ? 1080 : 720);
     var SW = OW, SH = Math.round(SW * 9 / 16), SY = vertical ? Math.round((OH - SH) / 2) : 0;   // sân khấu 16:9 theo chiều ngang; 9:16 = đặt giữa khung dọc (Q37 a)
+    // raster SVG theo dải ngang, mỗi dải một tác vụ (TQ 1080p một lần vẽ cả khung: tới ~110 ms luồng chính; 4 dải: ~20–35 ms mỗi dải — spec §3)
+    var BANDS = SW * SH > 1280 * 720 ? 4 : SW * SH > 1080 * 608 ? 3 : 2;
     var srcs = P.srcs || [];
     if (!srcs.length || !srcs.every(function (s) { return SRC_RE.test(s) && s.indexOf('..') < 0; }) || srcs.indexOf('engine/player.js') < 0) throw fail('payload', 'payload.srcs không hợp lệ');
     if (!P.data || !P.film || !Array.isArray(P.film.shots)) throw fail('payload', 'payload thiếu data / film');
-    await loadScripts(srcs);
-    var GC = boot(P), A = GC.audio, D = P.data, FILM = P.film;
+    await loadScripts(srcs); mark('scripts');
+    await VC.yieldReal();
+    var GC = await boot(P), A = GC.audio, D = P.data, FILM = P.film; mark('boot');
+    await VC.yieldReal();   // nạp mã · đăng ký asset · dựng tiếng · dựng sân khấu: mỗi việc một tác vụ (long task ≤ 100 ms — CNS-221)
     var box = document.getElementById('stage');
     box.style.width = SW + 'px'; box.style.height = SH + 'px';
     if (document.fonts && document.fonts.load) await Promise.all(['500', '700', '800'].map(function (w) { return document.fonts.load(w + ' 16px "Be Vietnam Pro"', 'Aăâđêôơư'); })).catch(function () {});
+    mark('fonts');
     Math.random = mulberry(o.seed || 7);
     // tiếng
     // CẢ HAI lượt 48 kHz (mono ở đích): engine/audio.js dùng Math.random (đã gieo hạt) để lấp bộ đệm nhiễu / vang THEO ctx.sampleRate và lập lịch nhạc theo
@@ -228,6 +270,7 @@
     var sr = 48000, maxSec = o.maxSec || 600;
     var lenSec = dry ? Math.min(o.sec || maxSec, maxSec) + 5 : Math.max(5, (o.sec || maxSec) * 1.05 + 3);
     var au = await lockstep({ sr: sr, length: Math.ceil(lenSec * sr), tap: !dry });
+    mark('lockstep');
     window.AudioContext = window.webkitAudioContext = function () { return au.ctx; };
     VC.beforeFire = function (at) { return au.to(at / 1000); };
     if (A) A.setVoiceMode(o.missingVoice === 'blip' ? 'auto' : 'clip');   // Q39: câu chưa có giọng AI im lặng, bong bóng / phụ đề vẫn hiện
@@ -241,9 +284,15 @@
     var ready = GC.film.readiness(FILM).filter(function (x) { return x.ok; }).map(function (x) { return x.shot; });
     if (Array.isArray(o.shots) && o.shots.length) ready = o.shots.map(function (i) { return ready[i]; }).filter(Boolean);
     if (!ready.length) throw fail('empty', 'không có phân cảnh nào sẵn sàng');
-    player.play(ready, FILM.title);
+    // play() = A.unlock() (dựng chuỗi trộn + vang ~50 ms) rồi dựng sân khấu phân cảnh đầu (~70 ms) trong CÙNG tác vụ → tách: dựng tiếng trước, nhả luồng, rồi play
+    // (play gọi lại unlock: không làm gì nữa). Thứ tự dùng Math.random giữ nguyên như cũ — unlock vốn là việc đầu tiên của play.
+    if (A && A.unlock) { A.unlock(); mark('audio'); await VC.yieldReal(); }
+    player.play(ready, FILM.title); mark('play');
+    await VC.yieldReal();
+    box.getBoundingClientRect(); mark('layout');   // bố cục lần đầu của sân khấu vừa dựng: một tác vụ riêng, không dồn vào lần bắn hẹn giờ đầu
+    await VC.yieldReal();
     // bộ mã hoá
-    var F = o.format || {}, canvas = null, g = null, venc = null, aenc = null, errBox = { e: null }, vchunks = [], achunks = [], vdesc = null, adesc = null, writer = null, sink = null;
+    var F = o.format || {}, canvas = null, g = null, tiny = null, seenImg = new WeakSet(), warm = 0, venc = null, aenc = null, errBox = { e: null }, vchunks = [], achunks = [], vdesc = null, adesc = null, writer = null, sink = null;
     var vcfg = null, S = GenMux.sync, calib = null, plan = { shift: 0, source: 'none' }, aFacts = { n: 0, outFrames: 0, negative: 0, first: [] };
     if (!dry) {
       if (typeof VideoEncoder !== 'function' || typeof AudioEncoder !== 'function') throw fail('no-webcodecs', 'trình duyệt không có WebCodecs');
@@ -277,6 +326,7 @@
       calib = await calibrate(acfg);
       if (mp4) plan = S.pick(calib, calib.hints);
     }
+    mark('encoders');
     // PCM từ vòi → AudioEncoder, chỉ tới mẫu PHIM `limit` (đúng thời điểm khung hình — tiếng không dài hơn hình); bỏ `shift` mẫu đầu (bù mồi)
     // mẫu dấu (chỉ test — o.debug.marks [{ sec (< 0: tính từ cuối), seed, len }]): đo lệch tiếng / hình trên tệp thật (tools/video-ci.mjs)
     var marks = (o.debug && o.debug.marks || []).map(function (m) { return { at: Math.round((m.sec < 0 ? (o.sec || 0) + m.sec : m.sec) * 48000), tpl: S.noise(m.len || 2048, m.seed) }; });
@@ -290,7 +340,7 @@
       });
     }
     // vòng khung hình
-    var st = { frames: 0, advance: 0, snap: 0, raster: 0, encode: 0, svgBytes: 0, maxFrameMs: 0, heapPeak: 0 };
+    var st = { frames: 0, warmFrames: 0, advance: 0, snap: 0, decode: 0, maxDraw: 0, maxSnap: 0, maxTiny: 0, tiny: 0, raster: 0, encode: 0, svgBytes: 0, maxFrameMs: 0, heapPeak: 0 };
     var cues = [], open = new Map(), firstDialogFrame = -1, dialogRun = 0, cover = null, coverAt = -1, texts = new Set(), shotMarks = [], lastPlan = null;
     var frames = o.frames || 0, mem = performance.memory;
     for (var i = 0; ; i++) {
@@ -315,14 +365,33 @@
       dialogRun = vis.length ? dialogRun + 1 : 0;
       if (o.debug) texts.add(box.textContent.replace(/\s+/g, ' ').trim());
       if (!dry) {
-        var svg = snapshot(box, SW, SH); st.svgBytes += svg.length;
-        var f2 = R.now(); st.snap += f2 - f1;
-        var img = await svgImage(svg);
+        await VC.yieldReal();   // bộ phát (advance) và chụp ở hai tác vụ khác nhau
+        var f1b = R.now();
+        var body = snapshot(box, SW, SH); st.svgBytes += body.length + frameShell(SW, SH).bytes;
+        var f2 = R.now(); st.snap += f2 - f1b;
+        await VC.yieldReal();
+        var img = await svgImage(body, SW, SH); body = null;
+        // vẽ thử 1 px: trình duyệt tính style + bố cục của tài liệu SVG ở lần vẽ ĐẦU — tách khỏi dải raster đầu (ngân sách long task)
+        if (!tiny) tiny = new OffscreenCanvas(1, 1).getContext('2d');
+        await VC.yieldReal(); var ty = R.now(); tiny.drawImage(img, 0, 0, 1, 1, 0, 0, 1, 1); tiny.getImageData(0, 0, 1, 1); st.maxTiny = Math.max(st.maxTiny, R.now() - ty); st.tiny += R.now() - ty;
+        await VC.yieldReal();
+        var f2b = R.now(); st.decode += f2b - f2;
         g.fillStyle = '#121214'; g.fillRect(0, 0, OW, OH);
         if (vertical) { g.fillStyle = '#ece9e2'; g.font = '800 ' + Math.round(OW / 17) + 'px "Be Vietnam Pro", system-ui, sans-serif'; g.textAlign = 'center'; g.fillText(String(FILM.title || ''), OW / 2, SY - Math.round(OW / 9), OW * 0.9); }
-        g.drawImage(img, 0, SY, SW, SH); g.getImageData(0, 0, 1, 1);   // ép raster SVG ngay ở tác vụ này (không dồn sang new VideoFrame ở tác vụ sau)
-        var f3 = R.now(); st.raster += f3 - f2;
-        await VC.yieldReal();   // raster SVG (~20–35 ms, luồng chính) và mã hoá ở hai tác vụ khác nhau → long task ≤ 100 ms (CNS-221)
+        // ảnh mới trong sân khấu (phông / tiền cảnh của bối cảnh vừa vào): lần raster ĐẦU phải giải mã + vẽ ảnh SVG lồng bên trong (đo: Tam Quốc ~150–190 ms
+        // một dải) → 3 khung kế tiếp raster bằng dải mịn gấp 4; sau đó trình duyệt đã nhớ ảnh, về số dải thường
+        var imgs = box.getElementsByTagName('img');
+        for (var ii = 0; ii < imgs.length; ii++) if (!seenImg.has(imgs[ii])) { seenImg.add(imgs[ii]); warm = 3; }
+        var nb = warm > 0 ? BANDS * 4 : BANDS; if (warm > 0) { warm--; st.warmFrames++; }
+        var md = 0, bt = [];
+        for (var bi = 0, bh = Math.ceil(SH / nb); bi < nb; bi++) {
+          var y0 = bi * bh, hh = Math.min(bh, SH - y0), d0 = R.now();
+          g.drawImage(img, 0, y0, SW, hh, 0, SY + y0, SW, hh); g.getImageData(0, SY + y0, 1, 1);   // ép raster dải này ngay ở tác vụ này
+          md = Math.max(md, R.now() - d0); bt.push(R.now());
+          if (bi < nb - 1) await VC.yieldReal();
+        }
+        var f3 = R.now(); st.raster += f3 - f2; st.maxDraw = Math.max(st.maxDraw, md); st.maxSnap = Math.max(st.maxSnap, f2 - f1b);
+        await VC.yieldReal();   // raster SVG (mỗi dải ≤ ~50 ms, luồng chính) và mã hoá ở các tác vụ khác nhau → long task ≤ 100 ms (CNS-221)
         // ảnh bìa (Q43): khung có thoại đầu tiên, khi bong bóng đã hiện rõ (~0,4 s)
         if (!cover && dialogRun >= Math.round(fps * 0.4)) { cover = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.9 }); coverAt = i; }
         if (o.probe && o.probe.indexOf(i) >= 0) {
@@ -338,7 +407,8 @@
       }
       st.frames++;
       st.maxFrameMs = Math.max(st.maxFrameMs, R.now() - f0);
-      if (o.debug && R.now() - f0 > 40) (st.slow = st.slow || []).push([i, Math.round(performance.timeOrigin + f0), Math.round(f1 - f0), Math.round(R.now() - f0)]);
+      if (i < 3) mark('frame' + i);
+      if (o.debug && R.now() - f0 > 40) (st.slow = st.slow || []).push([i, Math.round(performance.timeOrigin + f0), Math.round(f1 - f0), Math.round(R.now() - f0), dry ? null : [f1, f1b, f2, f2b].concat(bt, [f3, R.now()]).map(function (x) { return Math.round(x - f0); })]);
       if (mem && i % 15 === 0) st.heapPeak = Math.max(st.heapPeak, mem.usedJSHeapSize);
       if (i % 10 === 0) post({ type: 'gc-video-progress', phase: o.pass, frame: i, frames: frames, shot: shotMarks.length, shots: ready.length });
       await VC.yieldReal();   // nhả luồng chính mỗi khung (MessageChannel — CNS-221)
@@ -349,7 +419,7 @@
     VC.beforeFire = null;
     var base = { type: 'gc-video-done', pass: o.pass, frames: nFrames, durationMs: durMs, endAt: endAt, shots: shotMarks, firstDialogFrame: firstDialogFrame,
       cues: cues.map(function (c) { return { from: c.from, to: c.to, text: c.text }; }) };
-    if (o.debug) { base.texts = Array.from(texts); base.says = says; base.slow = st.slow || []; base.t0 = performance.timeOrigin + t00; }
+    if (o.debug) { base.texts = Array.from(texts); base.says = says; base.slow = st.slow || []; base.t0 = performance.timeOrigin + t00; base.marks = marks; }
     if (dry) { base.stats = { wallMs: R.now() - t00, perFrameMs: (R.now() - t00) / Math.max(1, nFrames) }; return base; }
     // kết: tiếng tới hết độ dài hình, đóng bộ mã hoá, ghép
     var endSamples = Math.round(durMs / 1000 * 48000);
@@ -383,7 +453,7 @@
     base.coverFrame = coverAt;
     var wall = R.now() - t00;
     base.stats = { wallMs: wall, xRealtime: wall / durMs, perFrameMs: { advance: st.advance / nFrames, snap: st.snap / nFrames, raster: st.raster / nFrames, encode: st.encode / nFrames, total: wall / nFrames },
-      maxFrameMs: st.maxFrameMs, svgKB: st.svgBytes / nFrames / 1024, heapPeak: st.heapPeak, mux: mux, audioFed: feeder.pos, audioEnd: endSamples, audio: aStats };
+      maxFrameMs: st.maxFrameMs, warmFrames: st.warmFrames, maxDrawMs: st.maxDraw, maxSnapMs: st.maxSnap, maxTinyMs: st.maxTiny, tinyMs: st.tiny / nFrames, decodeMs: st.decode / nFrames, cssKB: allCSS().length / 1024, svgKB: st.svgBytes / nFrames / 1024, heapPeak: st.heapPeak, mux: mux, audioFed: feeder.pos, audioEnd: endSamples, audio: aStats };
     return base;
   }
 })();

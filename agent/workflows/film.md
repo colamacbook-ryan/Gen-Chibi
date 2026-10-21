@@ -52,6 +52,8 @@
 - Fighters stand in the front row (`left`, `midLeft`, `center`, `midRight`, `right`), at least one spot apart.
 - Change `spot` between steps so people move; mix dialogue with short actions (≤ 3 attacks per shot).
 - The owner plays and exports the film (HTML) in Studio › Create (Tạo tác).
+- Video files (MP4 / WebM for YouTube / TikTok) are exported **only by the owner, in their own browser** (Studio › Create › a work › Publish › Export video).
+  There is no MCP tool for video in this version — do not promise a video file; tell the owner to press *Export video* (Chrome / Edge on a computer).
 
 ## Example (shot.json — event.json is the same event alone)
 <!-- example: work.json -->

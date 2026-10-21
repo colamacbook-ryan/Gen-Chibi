@@ -57,7 +57,7 @@ Phòng có 5 tab:
 2. **Phân cảnh** — mỗi cảnh một thẻ: **ảnh khung đầu**, tên, mô tả, bối cảnh, dàn diễn viên, số bước, **thời lượng ước tính**, *Xem bước* (mở danh sách bước), **Bảng bước**, *AI viết lời thoại*, *Diễn thử*, *Hỏi AI* (ghim cảnh vào dock). Mọi thứ AI đạo diễn viết ra hiện ở đây; đề xuất sửa chưa áp thì hiện **diff** với Áp dụng / Bỏ.
 3. **Xem & duyệt** — sân khấu: **▶ Cả phim** và **▶ Cảnh** ở từng hàng; mỗi cảnh có trạng thái **Nháp / Cần sửa / Đạt** + **ghi chú duyệt** (gắn cả cảnh hoặc một bước), lưu vào tác phẩm (`work.review`) qua cổng kiểm của máy chủ; **Gửi AI sửa theo ghi chú** ghim cảnh + bước vào dock và soạn sẵn câu nhờ sửa. Số **Đạt x/y** hiện ở đầu phòng và ở bảng tác phẩm. Cảnh sửa sau khi "Đạt" tự về "Nháp". **Chỉ bạn đặt "Đạt"** (trong Studio): AI ở cột phải và agent qua MCP / link chỉ đặt Nháp / Cần sửa và **thêm** ghi chú (mang nhãn AI / agent) — máy chủ chặn, không chỉ là lời dặn; AI cũng không xoá hay sửa ghi chú của bạn. Agent đọc ghi chú duyệt qua MCP `get_work › review`.
 4. **Giọng & âm thanh** — ngôn ngữ + giọng vùng, **Lồng tiếng AI**, **MỘT bảng "Giọng chốt theo nhân vật"** và ô **Âm thanh**: kết quả chấm luật ghép S1–S7 của cả tác phẩm (lỗi / cảnh báo, bấm để tới cảnh). Bảng giọng chốt là **nơi duy nhất chốt giọng cho một tác phẩm**: mỗi hàng một nhân vật → **vai giọng** → **giọng chốt** (`work.voices`) · **nguồn** (*Đã chốt* / *Chọn tay* / *Chưa chốt*) · giọng vùng · số câu thoại · câu mẫu, **▶ giọng máy** (miễn phí) và **▶ AI** dùng đúng giọng đã chốt (clip có sẵn nghe miễn phí; chưa có thì bấm 2 lần, tốn 1 lượt); chưa chốt thì nút AI mờ. Nút **Chốt giọng cả dàn (miễn phí)** nhờ máy chủ chọn giọng cho cả dàn và chốt vào tác phẩm (không đọc câu nào). Bảng theo **ngôn ngữ phim** ở ô trên; bấm một hàng để xem chi tiết ở khung bên phải. Muốn nghe / thiết kế bộ 22 vai: nút **Bộ giọng vai ›** → *Thư viện › Giọng*.
-5. **Xuất bản** — **Phim (HTML)**, Storyboard SVG / PNG, JSON, gói dự án.
+5. **Xuất bản** — **Phim (HTML)**, **Xuất video** (MP4 / WebM + phụ đề + ảnh bìa), Storyboard SVG / PNG, JSON, gói dự án.
 
 Chi tiết từng phần:
 - **Tác phẩm mới**: đặt tên, chọn dự án.
@@ -106,9 +106,24 @@ Giọng theo **vai** (tuổi · giới · văn / võ · quyền quý · hài · 
 | Nút | Ra gì |
 |---|---|
 | **Phim (HTML)** | Một tệp .html tự chứa (bộ phát + nhân vật + bối cảnh + lời thoại + **giọng AI đã lồng tiếng**). Mở bằng trình duyệt, không cần cài, không cần mạng. Có danh sách phân cảnh, toàn màn hình, phím cách để xem / dừng. Bộ phát bên trong thuộc Gen Labs — giấy phép **chỉ để xem phim đó** (ghi trong tệp) |
+| **Xuất video** | Tệp video đăng YouTube / TikTok (**MP4** hoặc **WebM**) + phụ đề `.srt` + ảnh bìa `.jpg` + tệp `.txt` gồm tiêu đề, mô tả và dòng ghi công — xem mục [Xuất video](#xuất-video) bên dưới |
 | **Storyboard SVG / PNG** | Bảng phân cảnh: ảnh từng cảnh + mô tả + lời thoại — để duyệt, in, gửi khách |
 | **JSON** | Kịch bản + phân cảnh + ghi chú duyệt dạng dữ liệu |
 | **Gói dự án (.json)** | Gói sao lưu cả dự án của tác phẩm (asset + tác phẩm kèm ghi chú duyệt + gói động tác + gói âm) — nhập lại ở máy khác |
+
+### Xuất video
+**Xuất bản › Xuất video** biến tác phẩm thành một tệp video đăng thẳng lên YouTube hay TikTok, không phải đổi định dạng. Việc này chạy **ngay trong trình duyệt của bạn** — không tải gì lên đâu cả.
+
+- **Trình duyệt**: Chrome hoặc Edge trên máy tính. Studio phải mở qua **https** hoặc **localhost** (`http://127.0.0.1:7480` được; `http://<IP-LAN>:7480` thì không — trình duyệt chỉ cho mã hoá video ở trang an toàn). Firefox và Safari chưa hỗ trợ. App dò thật xem trình duyệt *này* làm được gì; thiếu thứ gì thì nút bị khoá và lý do ghi ngay cạnh (ví dụ "Mở Studio qua https hoặc localhost để xuất video.").
+- **Cùng câu hỏi với phim HTML**: còn câu chưa có giọng AI thì hỏi trước — **Lồng tiếng rồi xuất** · **Xuất luôn** · **Huỷ**. Trong video, câu chưa có giọng AI **im lặng**; bong bóng / phụ đề của câu đó vẫn hiện (giọng máy đọc của trình duyệt không ghi được vào tệp). Giọng AI đang tắt thì mọi câu đều im lặng.
+- **Tuỳ chọn**: khung **Ngang 16:9** hoặc **Dọc 9:16** (cho TikTok / Shorts — phim 16:9 đặt giữa khung dọc, tên phim ở trên, nên nhân vật nhỏ hơn); chất lượng **1080p** (mặc định) hoặc **720p**. Bảng báo trước định dạng trình duyệt này sẽ ra, độ dài, thời gian và dung lượng ước tính, cùng trần độ dài.
+- **Định dạng**: **MP4** (H.264 + AAC) nếu trình duyệt mã hoá được (Chrome / Edge trên Windows, macOS); không thì **WebM** (VP9 + Opus) — ví dụ Chrome / Chromium trên Linux. YouTube và TikTok nhận cả hai. Có cả hai thì bạn chọn được.
+- **Thời gian**: khoảng **2–3 lần độ dài phim** (phim 1 phút mất 2–3 phút). **Giữ tab ở phía trước** trong lúc xuất — trình duyệt làm chậm tab bị ẩn; tab từng bị ẩn thì bảng báo.
+- **Trần độ dài**: MP4 giữ cả tệp trong bộ nhớ tới khi xong nên trần **5 phút ở 1080p**, **10 phút ở 720p**; WebM ghi dần ra tệp, trần **30 phút**. Phim vượt trần bị chặn ngay từ đầu, kèm gợi ý (720p hoặc WebM).
+- **Bắt đầu**: trình duyệt hỏi **thư mục lưu** ngay lúc bấm Bắt đầu, 4 tệp vào đó (`<tên>.mp4|webm`, `.srt`, `.jpg`, `.txt`; trùng tên thì thêm `-2`, `-3`…). Trình duyệt không cho chọn thư mục thì tải về từng tệp khi xong. **Huỷ** dừng ngay, không để lại tệp dở.
+- **Xong**: có trình **Xem thử**, danh sách tệp và ảnh bìa. Ảnh bìa là khung có thoại đầu tiên; **Chọn khung khác** cho chọn bất kỳ khung nào của bản xem thử và thay tệp bìa.
+- **Video làm từ bộ mẫu**: video làm từ bộ mẫu Gen Labs (Văn phòng vui, Tam Quốc) đăng công khai được — giữ dòng ghi công **"Làm bằng gen-chibi · Gen Labs"** có sẵn trong tệp mô tả `.txt`.
+- **Agent AI (MCP)** chưa xuất được video ở bản này — chỉ chủ, từ Studio.
 
 ## 4. Nháp, Phát hành và gói dự án — sao lưu, chuyển máy, bán bộ asset theo chủ đề
 Mỗi asset có một trong hai trạng thái:
@@ -242,7 +257,7 @@ tên-miền {
 
 ## Câu hỏi thường gặp
 - **AI tự tạo asset có cần duyệt không?** Không — lưu dạng **nháp** trong dự án của tác phẩm và dùng ngay. Chỉ khi muốn đưa vào gói bán bạn mới bấm **Phát hành**.
-- **Phim HTML gửi đi có lộ engine không?** Bộ phát nằm trong tệp phim với giấy phép **chỉ để xem phim đó**. Bản SaaS sau này sẽ chuyển sang trình phát do Gen Labs lưu trữ hoặc xuất video.
+- **Phim HTML gửi đi có lộ engine không?** Bộ phát nằm trong tệp phim với giấy phép **chỉ để xem phim đó**. Muốn chia sẻ mà không kèm bộ phát thì dùng **Xuất video** (v0.22); bản SaaS sau này còn có trình phát do Gen Labs lưu trữ.
 - **Lỡ sửa hỏng?** Mọi asset và tác phẩm có phiên bản; bản cũ nằm trong thư mục dữ liệu (`versions/`).
 - **Bấm Cập nhật báo "yêu cầu từ nguồn lạ bị chặn"?** Máy chủ chỉ nhận lệnh thay đổi từ chính trang Studio của nó. Câu báo (từ v0.18.1) ghi rõ *trang đang mở ở đâu* và *máy chủ nhận địa chỉ nào*: mở lại Studio bằng đúng địa chỉ máy chủ (thường là `http://127.0.0.1:7480`), hoặc cập nhật ngay trong terminal bằng `genchibi update` (không đi qua trình duyệt). `localhost` / `127.0.0.1` / `[::1]` cùng cổng được coi là một; proxy đứng trước thì cho proxy gửi `X-Forwarded-Host` hoặc đặt `GC_PUBLIC_URL`.
 - **Thêm connector trên claude.ai báo lỗi, hoặc không thấy trang Cấp phép?** Kiểm theo thứ tự:

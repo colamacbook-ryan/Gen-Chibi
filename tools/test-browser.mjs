@@ -1,5 +1,5 @@
 // Kiểm thử trong trình duyệt (chạy cục bộ, cần Playwright): mọi lớp gắn vào đầu phải đi cùng đầu.
-// Dùng: node tools/test-browser.mjs   (tự dựng server tạm ở cổng 7496) · GC_ONLY=voice node tools/test-browser.mjs → chỉ nhóm giọng AI (cổng 7660) · GC_ONLY=lib → chỉ Thư viện Âm thanh / Giọng (cổng 7662) · GC_ONLY=oauth → chỉ nhóm OAuth (cổng 7664–7666) · GC_ONLY=online → chỉ Hệ thống › Lên mạng + Tài khoản chủ (cổng 7672–7680; GC_SHOTS=<thư mục> chụp màn en + vi) · GC_ONLY=bubble → chỉ "lời thoại chuyên nghiệp" (cổng 7495; GC_THROTTLE=4 → CPU trang chậm 4× như máy yếu) · GC_ONLY=video → chỉ xuất video v0.22 (cổng 7690; cần ffmpeg để so khung giải mã lại)
+// Dùng: node tools/test-browser.mjs   (tự dựng server tạm ở cổng 7496) · GC_ONLY=voice node tools/test-browser.mjs → chỉ nhóm giọng AI (cổng 7660) · GC_ONLY=lib → chỉ Thư viện Âm thanh / Giọng (cổng 7662) · GC_ONLY=oauth → chỉ nhóm OAuth (cổng 7664–7666) · GC_ONLY=online → chỉ Hệ thống › Lên mạng + Tài khoản chủ (cổng 7672–7680; GC_SHOTS=<thư mục> chụp màn en + vi) · GC_ONLY=bubble → chỉ "lời thoại chuyên nghiệp" (cổng 7495; GC_THROTTLE=4 → CPU trang chậm 4× như máy yếu) · GC_ONLY=video → chỉ xuất video v0.22 (cổng 7690; cần ffmpeg để so khung giải mã lại; GC_SHOTS=<thư mục> chụp bảng Xuất video en + vi)
 import { createRequire } from 'module';
 import { spawn, spawnSync, execFileSync } from 'child_process';
 import { mkdtempSync, readFileSync } from 'fs';
@@ -3211,6 +3211,11 @@ if (!ONLY || ONLY === 'i18n') {
     // Tạo tác: phòng làm phim của tác phẩm Tam Quốc, đủ 5 tab
     await qe.goto(U + 'tao-tac?lang=en#/tac-pham/tq-vuon-dao-xich-bich/script'); await ready(qe); await qe.waitForSelector('#wtab-script');
     for (const t of ['script', 'shots', 'review', 'voice', 'publish']) { await qe.click('#wtab-' + t); await qe.waitForTimeout(700); found.push(...await scanEn(qe, 'Tạo tác › phòng làm phim › ' + t), ...await layoutBad(qe, 'Tạo tác › phòng làm phim › ' + t)); }
+    // v0.22 P3: bảng Xuất video (mở bằng nút thật — Chromium qua localhost nên nút mở) cũng không được còn chữ Việt ở chế độ en
+    await qe.waitForFunction(() => { const b = document.getElementById('videoExportB'); return b && !b.disabled; }, null, { timeout: 15000 });
+    await qe.click('#videoExportB'); await qe.waitForSelector('.vidpanel [data-v="est"]', { timeout: 15000 }); await qe.waitForTimeout(800);
+    found.push(...await scanEn(qe, 'Tạo tác › phòng làm phim › publish › Export video'), ...await layoutBad(qe, 'Tạo tác › phòng làm phim › publish › Export video'));
+    if (!/Export video/.test(await qe.textContent('.vidpanel h3'))) throw new Error('bảng Xuất video (en): ' + await qe.textContent('.vidpanel h3'));
     // phim HTML xuất ở chế độ en: chữ trình phát tiếng Anh + mang bảng player/engine để engine/player.js dịch lúc chạy; lời thoại giữ nguyên
     await qe.click('#wtab-publish');
     const [fdl16] = await Promise.all([qe.waitForEvent('download'), qe.click('button:text-is("Film (HTML)")')]);
@@ -3228,7 +3233,7 @@ if (!ONLY || ONLY === 'i18n') {
     if (process.env.GC_I18N_DUMP) fs.writeFileSync(process.env.GC_I18N_DUMP, uniq.join('\n') + '\n');   // GC_I18N_DUMP=<tệp>: ghi đủ danh sách để sửa
     if (uniq.length) throw new Error('chế độ en còn ' + uniq.length + ' lỗi (chữ tiếng Việt chưa dịch / bố cục chồng lấn) trên giao diện:\n      ' + uniq.slice(0, 60).join('\n      '));
     if (pendingSeen.size) console.log('  ! ' + pendingSeen.size + ' câu động của engine (core.js, cổng kiểm) còn tiếng Việt — chờ builder engine: ' + [...pendingSeen].slice(0, 4).map(x => JSON.stringify(x.slice(0, 40))).join(', ') + (pendingSeen.size > 4 ? '…' : ''));
-    console.log('  ✓ Chế độ en: không còn chữ tiếng Việt trên ' + (nPages + 6) + ' trang / tab (Xưởng, Thư viện mọi mục, Tạo tác + 5 tab phòng làm phim, Hệ thống, dock Trợ lý AI) + phim HTML xuất ra (nút, bảng player, mở file://) — trừ nội dung người dùng (' + USER.length + ' chuỗi của bộ mẫu)');
+    console.log('  ✓ Chế độ en: không còn chữ tiếng Việt trên ' + (nPages + 6) + ' trang / tab (Xưởng, Thư viện mọi mục, Tạo tác + 5 tab phòng làm phim + bảng Xuất video, Hệ thống, dock Trợ lý AI) + phim HTML xuất ra (nút, bảng player, mở file://) — trừ nội dung người dùng (' + USER.length + ' chuỗi của bộ mẫu)');
     // 6) CNS-155: chữ HỆ THỐNG điền sẵn vào ô nhập của "Tạo asset mới" (tên, mã, mô tả chép từ khung). Bước quét trên bỏ input / textarea vì coi là nội dung
     //    người dùng — nhưng chữ điền sẵn mà người dùng giữ nguyên sẽ THÀNH nội dung người dùng (không dịch được nữa). Mở form từ MỌI khung nhân vật / vật phẩm /
     //    bối cảnh ở chế độ en, quét ngay sau khi mở: không còn chữ Việt; tên = "New character | New item | New scene", mã sinh từ tên tiếng Anh
@@ -3354,8 +3359,12 @@ if (!ONLY || ONLY === 'i18n') {
 //  Fun Office phân cảnh 1 (720p, giọng AI giả = clip WAV 2 kHz, MỘT câu cố ý thiếu clip — Q39): payload = phim HTML (CNS-219) · giống bộ phát sống ở 4 khung
 //  (≤ 2/255) · tiếng ≈ hình ±1 khung · câu thoại đầu đúng giờ ±1 khung · câu thiếu clip im lặng, không blip, bong bóng + phụ đề vẫn có · long task ≤ 100 ms ·
 //  phim tiếng Anh không chữ Việt (khung / .srt / .txt) · không rò bản vá sang Studio, Studio vẫn phát thời gian thực · Huỷ giải phóng, không để tệp ·
-//  tab nền THẬT SỰ bị ẩn (CDP thuần — Playwright luôn giữ trang "visible") vẫn xong · Tam Quốc 1 phân cảnh 1080p ghi luồng ra tệp (OPFS): đo heap.
-if (!ONLY || ONLY === 'video') {
+//  tab nền THẬT SỰ bị ẩn (CDP thuần — Playwright luôn giữ trang "visible") vẫn xong · Tam Quốc 1 phân cảnh 1080p ghi luồng ra tệp (OPFS): đo heap + nhịp tim (chỉ báo so với 100 ms).
+//  P3 (bảng Xuất video trong Studio, đi bằng nút thật): nút khoá đúng lý do theo phép dò (không an toàn / thiếu VideoEncoder / không phải Chromium) · dùng lại
+//  askExport · bảng chọn (định dạng dò thật, trần độ dài, ước tính, vượt trần → chặn) · Bắt đầu → chọn thư mục trong cú bấm → tiến độ theo phân cảnh → 4 tệp
+//  (OPFS) · Xem thử phát · Chọn khung khác thay bìa · 9:16 ra 1080×1920 · Huỷ không để tệp · Fun Office 1080p nhịp tim (chỉ báo) · en / vi. GC_SHOTS=<thư mục> chụp màn.
+if (!ONLY || ONLY === 'video' || ONLY === 'video-ui') {
+  const P3_ONLY = ONLY === 'video-ui';   // GC_ONLY=video-ui: chỉ phần P3 (bảng Xuất video) — lặp nhanh khi sửa giao diện / chạy đột biến
   const { inspectMp4, inspectWebm } = require('./media-inspect.js');
   const { launch: cdpLaunch } = await import('./cdp.mjs');
   const VI = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ]/;
@@ -3366,6 +3375,19 @@ if (!ONLY || ONLY === 'video') {
   const ctx20 = await b20.newContext({ viewport: { width: 1400, height: 900 } });
   const T0 = Date.now(), FPS = 30, FR = 1000 / FPS, HAS_FF = spawnSync('ffmpeg', ['-version'], { stdio: 'ignore' }).status === 0;
   const errs20 = [];
+  // NHỊP TIM ĐỐI CHỨNG (ngân sách long task 100 ms, spec §3): một trang rỗng ở browser context KHÁC (tiến trình renderer khác, luồng chính khác) chạy cùng
+  // nhịp 10 ms. Máy ảo của bộ test có lúc khựng CẢ MÁY (đo: trang rỗng này hở tới ~100 ms, tiến trình Node rảnh hở ~60 ms) — phần đó không phải việc của
+  // Studio. Mỗi khoảng hở của Studio trừ đi khoảng hở lớn nhất của trang đối chứng trùng thời điểm; ngưỡng 100 ms áp lên phần còn lại, và báo cả số thô.
+  const ctlCtx20 = await b20.newContext(), ctl20 = await ctlCtx20.newPage();
+  await ctl20.goto('data:text/html,<title>ctl</title>');
+  await ctl20.evaluate(() => { window.G = []; let last = performance.now(); setInterval(() => { const n = performance.now(); window.G.push([n - last, performance.timeOrigin + n]); last = n; }, 10); });
+  // gaps: [[ms, mốc cuối tuyệt đối (timeOrigin + now)]] của trang Studio → { raw, mine, top } (top: "thô−đối chứng" của 5 khoảng hở lớn nhất)
+  const hbJudge = async gaps => {
+    const G = await ctl20.evaluate(() => window.G.slice()), ov = (d, t) => Math.max(0, ...G.filter(x => x[1] >= t - d && x[1] - x[0] <= t).map(x => x[0]));
+    const rows = gaps.map(([d, t]) => { const c = d > 50 ? ov(d, t) : 0; return { d, c, m: d - c }; });
+    return { raw: Math.max(0, ...rows.map(r => r.d)), mine: Math.max(0, ...rows.map(r => r.m)), n: rows.length,
+      top: rows.slice().sort((a, b) => b.d - a.d).slice(0, 5).map(r => Math.round(r.d) + (r.c > 20 ? '−' + Math.round(r.c) : '')).join(' / ') };
+  };
   try {
     const HDR = { 'Content-Type': 'application/json', 'X-GC-Request': '1' };
     for (const f of ['fun-office', 'tam-quoc']) {
@@ -3398,7 +3420,13 @@ if (!ONLY || ONLY === 'video') {
     await q.waitForTimeout(800);
     const natives = () => q.evaluate(() => ({ st: String(window.setTimeout), pn: String(performance.now), raf: String(window.requestAnimationFrame), dn: String(Date.now), ac: String(window.AudioContext), ss: typeof window.speechSynthesis, vc: typeof window.GCVClock, mux: typeof window.GenMux, frames: document.querySelectorAll('iframe').length }));
     const nat0 = await natives();
+    // tự kiểm nhịp tim đối chứng: Studio bận 250 ms một mạch → đối chứng (tiến trình khác) KHÔNG được khựng theo, phép trừ giữ nguyên ~250 ms
+    { const g = await q.evaluate(async () => { const G = []; let last = performance.now(); const t = setInterval(() => { const n = performance.now(); G.push([n - last, performance.timeOrigin + n]); last = n; }, 10);
+        await new Promise(r => setTimeout(r, 60)); const b = performance.now(); while (performance.now() - b < 250) { /* bận */ } await new Promise(r => setTimeout(r, 60)); clearInterval(t); return G; });
+      const j = await hbJudge(g);
+      if (!(j.raw >= 240) || !(j.mine >= 200)) throw new Error('nhịp tim đối chứng không độc lập với Studio: ' + JSON.stringify(j)); }
 
+    if (!P3_ONLY) {
     // ---- 1) MỘT payload cho phim HTML và video (CNS-219): xuất phim HTML qua nút thật, so DATA / FILM / ngôn ngữ / bảng chữ với GCVideo.studio.payload(W)
     const dl0 = q.waitForEvent('download', { timeout: 30000 }); dl0.catch(() => null);
     await q.click('button:text-is("Film (HTML)")');
@@ -3452,7 +3480,8 @@ if (!ONLY || ONLY === 'video') {
     }, { PROBES });
     const r = R1.r, ltAll = await q.evaluate(() => window.__lt.slice()), blips = await q.evaluate(() => window.__gcBlip), hb = await q.evaluate(() => { clearInterval(window.__hbT); return window.__hbGaps.slice(); });
     const inProbe = e => probeWin.some(w => e[1] + e[0] >= w[0] && e[1] <= w[1]), lt = ltAll.filter(e => !inProbe(e)).map(e => e[0]), ltProbe = ltAll.filter(inProbe).map(e => e[0]);
-    const hbIn = g => probeWin.some(w => g[1] >= w[0] && g[1] - g[0] <= w[1]), hbMax = Math.max(...hb.filter(g => !hbIn(g)).map(g => g[0])), hbProbe = hb.filter(hbIn).map(g => g[0]);
+    const hbIn = g => probeWin.some(w => g[1] >= w[0] && g[1] - g[0] <= w[1]), hbProbe = hb.filter(hbIn).map(g => g[0]), qTO = await q.evaluate(() => performance.timeOrigin);
+    const hbJ = await hbJudge(hb.filter(g => !hbIn(g)).map(g => [g[0], qTO + g[1]])), hbMax = hbJ.mine;
     const vbytes = Buffer.from(await q.evaluate(async () => { const u = new Uint8Array(await window.__vblob.arrayBuffer()); let s = ''; for (let i = 0; i < u.length; i += 32768) s += String.fromCharCode.apply(null, u.subarray(i, i + 32768)); return btoa(s); }), 'base64');
     const vfile = path.join(home20, R1.files.video.name); fs.writeFileSync(vfile, vbytes);
     // cấu trúc tệp + A/V
@@ -3498,14 +3527,14 @@ if (!ONLY || ONLY === 'video') {
     const vi = r.texts.concat([srt, txt]).filter(t => VI.test(t));
     if (vi.length) throw new Error('phim tiếng Anh lộ chữ Việt: ' + vi.slice(0, 3).join(' | '));
     // mượt (L-42, CNS-221): long task của trang Studio (gồm iframe cùng nguồn) trong suốt lượt xuất
-    if (!(hb.length > 100) || hbMax > 110) throw new Error('luồng chính của Studio bị chặn ' + hbMax.toFixed(0) + ' ms (nhịp tim 10 ms → ngân sách 100 ms + 10) — top: ' + hb.filter(g => !hbIn(g)).map(g => Math.round(g[0])).sort((a, b) => b - a).slice(0, 6));
-    if (R1.phases.join() !== 'prepare,render' || R1.lastProg.shots !== 1) throw new Error('tiến độ: ' + JSON.stringify([R1.phases, R1.lastProg]));
+    if (!(hb.length > 100) || hbMax > 100) throw new Error('luồng chính của Studio bị chặn ' + hbMax.toFixed(0) + ' ms sau khi trừ khựng cả máy (nhịp tim 10 ms → ngân sách 100 ms, spec §3) — top thô−đối chứng: ' + hbJ.top);
+    if (R1.phases.join() !== 'prepare,measured,render' || R1.lastProg.shots !== 1) throw new Error('tiến độ: ' + JSON.stringify([R1.phases, R1.lastProg]));
     const pf = r.stats.perFrameMs;
     console.log('  ✓ xuất video qua iframe ẩn (Studio thật, server thật): ' + r.format.container + ' ' + r.format.video + ' + ' + r.format.audio + ' ' + r.format.width + '×' + r.format.height + ' · ' + r.frames + ' khung = lượt dò · '
       + (r.durationMs / 1000).toFixed(2) + ' s phim / ' + (r.wallMs / 1000).toFixed(1) + ' s xuất (' + (r.wallMs / r.durationMs).toFixed(2) + '×, lượt dò ' + (r.dry.stats.perFrameMs).toFixed(1) + ' ms/khung) · mỗi khung ' + pf.total.toFixed(1) + ' ms (advance ' + pf.advance.toFixed(1) + ' · chụp ' + pf.snap.toFixed(1) + ' · raster ' + pf.raster.toFixed(1) + ' · mã hoá ' + pf.encode.toFixed(1) + ')');
     console.log('  ✓ giống bộ phát sống ở 4 khung: ' + R1.diffs.map(d => d[1].toFixed(2)).join(' / ') + ' /255 (≤ 2)' + (HAS_FF ? ' · sau codec (giải mã lại bằng ffmpeg): ' + codecDiff.join(' / ') + ' /255 (≤ 4)' : ' · (không có ffmpeg: bỏ qua so khung giải mã lại)') + (HAS_FF ? ' · ffmpeg giải mã sạch' : ''));
     console.log('  ✓ A/V: tiếng ' + aEnd.toFixed(0) + ' ms ≈ hình ' + r.durationMs.toFixed(0) + ' ms (±1 khung) · câu đầu: bong bóng ' + (bub0 - says[0].t).toFixed(1) + ' ms, giọng AI ' + (a0 - says[0].t).toFixed(0) + ' ms sau lúc say (engine lập lịch +40 ms; ±1 khung) · clip AI thật trong tệp 3/4 câu');
-    console.log('  ✓ Q39: câu chưa có giọng AI im lặng (2 kHz ≤ 5% đỉnh, 0 blip) nhưng bong bóng + phụ đề vẫn có · .srt 4 câu theo khung thật (câu 1 = khung bong bóng hiện) · bìa .jpg ở khung ' + r.coverFrame + ' (thoại đầu: ' + r.firstDialogFrame + ') · .txt có ghi công · không chữ Việt (khung / .srt / .txt) · luồng chính bị chặn tối đa ' + hbMax.toFixed(0) + ' ms (nhịp tim 10 ms, gồm lượt dò + 2 lần nạp iframe; ≤ 110' + (hbProbe.length ? '; không tính lúc test chụp màn: ' + Math.round(Math.max(...hbProbe)) + ' ms' : '') + ') · Long Tasks API: tối đa ' + (lt.length ? Math.max(...lt) : 0) + ' ms');
+    console.log('  ✓ Q39: câu chưa có giọng AI im lặng (2 kHz ≤ 5% đỉnh, 0 blip) nhưng bong bóng + phụ đề vẫn có · .srt 4 câu theo khung thật (câu 1 = khung bong bóng hiện) · bìa .jpg ở khung ' + r.coverFrame + ' (thoại đầu: ' + r.firstDialogFrame + ') · .txt có ghi công · không chữ Việt (khung / .srt / .txt) · luồng chính bị chặn tối đa ' + hbMax.toFixed(0) + ' ms (thô ' + Math.round(hbJ.raw) + ' · top ' + hbJ.top + '; nhịp tim 10 ms, gồm lượt dò + 2 lần nạp iframe; ≤ 100' + (hbProbe.length ? '; không tính lúc test chụp màn: ' + Math.round(Math.max(...hbProbe)) + ' ms' : '') + ') · Long Tasks API: tối đa ' + (lt.length ? Math.max(...lt) : 0) + ' ms');
 
     // ---- 3) không rò bản vá sang Studio; Studio vẫn phát phim thời gian thực đúng
     const nat1 = await natives();
@@ -3534,20 +3563,28 @@ if (!ONLY || ONLY === 'video') {
     // ---- 5) Tam Quốc 1 phân cảnh 1080p ghi LUỒNG ra tệp (FileSystemFileHandle, như khi owner chọn thư mục lúc bấm — CNS-226): heap ≤ 1,5 × tệp + 200 MB
     const TQ = await q.evaluate(async () => {
       const W = await (await fetch('api/works/tq-vuon-dao-xich-bich')).json(), dir = await navigator.storage.getDirectory(), fh = await dir.getFileHandle('tq.webm', { create: true });
-      const gaps = []; let last = performance.now(); const hbT = setInterval(() => { const n = performance.now(); gaps.push(n - last); last = n; }, 10);
-      const h0 = performance.memory.usedJSHeapSize, r = await GCVideo.exportWork(W, { quality: '1080p', shots: [0], handle: fh, missingVoice: 'blip' });
-      clearInterval(hbT); gaps.sort((a, b) => b - a);
+      // giọng AI đã hỏi TRƯỚC (như Studio: lúc bấm Xuất video — hộp askExport), rồi mới đo trong lúc xuất
+      const vo = await GCVideo.studio.voices(W);
+      const gaps = []; let last = performance.now(); const hbT = setInterval(() => { const n = performance.now(); gaps.push([n - last, performance.timeOrigin + n]); last = n; }, 10);
+      const h0 = performance.memory.usedJSHeapSize, r = await GCVideo.exportWork(W, { quality: '1080p', shots: [0], handle: fh, missingVoice: 'blip', voices: vo });
+      clearInterval(hbT);
       const f = await fh.getFile(), head = new Uint8Array(await f.slice(0, 4).arrayBuffer());
-      return { h0, heapPeak: r.stats.heapPeak, frames: r.frames, dryFrames: r.dry.frames, durationMs: r.durationMs, wallMs: r.wallMs, size: f.size, bytes: r.files.find(x => x.kind === 'video').bytes, blob: !!r.files.find(x => x.kind === 'video').blob, head: Array.from(head), pf: r.stats.perFrameMs, maxFrameMs: r.stats.maxFrameMs, gaps: gaps.slice(0, 5).map(Math.round), over: gaps.filter(g => g > 110).length };
+      return { h0, heapPeak: r.stats.heapPeak, frames: r.frames, dryFrames: r.dry.frames, durationMs: r.durationMs, wallMs: r.wallMs, size: f.size, bytes: r.files.find(x => x.kind === 'video').bytes, blob: !!r.files.find(x => x.kind === 'video').blob, head: Array.from(head), pf: r.stats.perFrameMs, maxFrameMs: r.stats.maxFrameMs, gaps };
     });
     const tqBuf = Buffer.from(await q.evaluate(async () => { const f = await (await (await navigator.storage.getDirectory()).getFileHandle('tq.webm')).getFile(), u = new Uint8Array(await f.arrayBuffer()); let s = ''; for (let i = 0; i < u.length; i += 32768) s += String.fromCharCode.apply(null, u.subarray(i, i + 32768)); return btoa(s); }), 'base64');
     const tqw = inspectWebm(tqBuf);
     // giọng clip AI + MỘT câu blip (missingVoice: 'blip'): lượt dò và lượt dựng phải ra CÙNG số khung — dãy Math.random (đã gieo) không được lệch vì tần số mẫu
     if (TQ.frames !== TQ.dryFrames) throw new Error('Tam Quốc: lượt dựng ' + TQ.frames + ' khung ≠ lượt dò ' + TQ.dryFrames + ' (timeline không tất định)');
     if (TQ.size !== TQ.bytes || TQ.blob || tqw.blocks.filter(b => b.track === 1).length !== TQ.frames || tqw.segmentEnd !== tqBuf.length || Math.abs(tqw.durationMs - TQ.durationMs) > FR) throw new Error('Tam Quốc ghi ra tệp: ' + JSON.stringify([TQ.size, TQ.bytes, TQ.blob, tqw.durationMs, TQ.durationMs]));
+    // mượt (spec §3, CNS-221): Tam Quốc 1080p — phim nặng nhất của bộ mẫu — nhịp tim 10 ms của Studio hở ≤ 100 ms suốt lượt xuất
+    // Tam Quốc 1080p (phim nặng nhất): spec §3 muốn ≤ 100 ms — P3 CHƯA đạt ổn định: đa số lượt 67–90 ms, nhưng có lượt lẻ 104–205 ms sau khi trừ khựng cả máy
+    // (một tác vụ dựng tài liệu SVG ~640 phần tử của khung hình, có lúc trùng GC toàn phần). Như P2: CHỈ BÁO (dòng báo ghi rõ ĐẠT / CHƯA ĐẠT) — chờ Gen quyết
+    // ngưỡng / hướng làm tiếp. Rào thụt lùi tất định cho các bước giảm tải nằm ở tools/test-video.mjs (không cloneNode, đầu data: URL đóng sẵn, dải raster, nhả 2 bước)
+    const tqJ = await hbJudge(TQ.gaps);
+    if (!(tqJ.n > 100)) throw new Error('Tam Quốc 1080p: nhịp tim không chạy (' + tqJ.n + ' mẫu)');
     const budget = 1.5 * TQ.size + 200 * 1048576;
     if (!(TQ.heapPeak > 0) || TQ.heapPeak > budget) throw new Error('heap ' + (TQ.heapPeak / 1048576).toFixed(1) + ' MB > ngân sách ' + (budget / 1048576).toFixed(1) + ' MB');
-    console.log('  ✓ Tam Quốc phân cảnh 1, 1080p, clip AI + 1 câu blip, ghi luồng ra tệp (OPFS, phần đầu viết lại khi xong): ' + TQ.frames + ' khung = lượt dò · ' + (TQ.durationMs / 1000).toFixed(1) + ' s phim / ' + (TQ.wallMs / 1000).toFixed(1) + ' s xuất (' + (TQ.wallMs / TQ.durationMs).toFixed(2) + '×) · ' + (TQ.size / 1048576).toFixed(1) + ' MB · heap đỉnh ' + (TQ.heapPeak / 1048576).toFixed(1) + ' MB (Studio trước khi xuất ' + (TQ.h0 / 1048576).toFixed(1) + ' MB; ngân sách ' + (budget / 1048576).toFixed(0) + ' MB) · mỗi khung ' + TQ.pf.total.toFixed(1) + ' ms (raster ' + TQ.pf.raster.toFixed(1) + ') · CHỈ BÁO (không chặn — spec đo ≤ 100 ms ở đây chưa đạt): luồng chính bị chặn tối đa ' + TQ.gaps.join(' / ') + ' ms, ' + TQ.over + ' lần > 110 ms');
+    console.log('  ✓ Tam Quốc phân cảnh 1, 1080p, clip AI + 1 câu blip, ghi luồng ra tệp (OPFS, phần đầu viết lại khi xong): ' + TQ.frames + ' khung = lượt dò · ' + (TQ.durationMs / 1000).toFixed(1) + ' s phim / ' + (TQ.wallMs / 1000).toFixed(1) + ' s xuất (' + (TQ.wallMs / TQ.durationMs).toFixed(2) + '×) · ' + (TQ.size / 1048576).toFixed(1) + ' MB · heap đỉnh ' + (TQ.heapPeak / 1048576).toFixed(1) + ' MB (Studio trước khi xuất ' + (TQ.h0 / 1048576).toFixed(1) + ' MB; ngân sách ' + (budget / 1048576).toFixed(0) + ' MB) · mỗi khung ' + TQ.pf.total.toFixed(1) + ' ms (raster ' + TQ.pf.raster.toFixed(1) + ') · luồng chính bị chặn tối đa ' + Math.round(tqJ.mine) + ' ms (' + (tqJ.mine <= 100 ? 'ĐẠT ≤ 100' : 'CHỈ BÁO: CHƯA ĐẠT spec ≤ 100') + '; thô ' + Math.round(tqJ.raw) + ' · top thô−đối chứng ' + tqJ.top + ')');
 
     // ---- 6) tab NỀN thật sự bị ẩn (CDP thuần, --headless=new): xuất vẫn xong, không chậm vì timer bị bóp (CNS-221)
     await ensureSession(ctx20, O20);
@@ -3568,6 +3605,182 @@ if (!ONLY || ONLY === 'video') {
       if (!hid.done || !hid.vis.includes('hidden') || hid.done.frames !== hid.done.dry || hid.done.wallMs > 3 * r.wallMs + 20000) throw new Error('tab nền: ' + JSON.stringify(hid).slice(0, 400));
       console.log('  ✓ tab nền THẬT SỰ bị ẩn (CDP, visibilityState hidden; setTimeout ở tab đó bị bóp: 5 lần 1 ms = ' + throttled.toFixed(0) + ' ms): xuất vẫn xong ' + hid.done.frames + ' khung = lượt dò (giọng blip — dãy ngẫu nhiên hai lượt phải y hệt; ước 5 s quá ngắn → dò lại theo trần) trong ' + (hid.done.wallMs / 1000).toFixed(1) + ' s (tab hiện: ' + (r.wallMs / 1000).toFixed(1) + ' s)');
     } finally { await cd.close(); }
+    }   // !P3_ONLY
+    // ---- 7) P3: bảng Xuất video trong Studio (phòng tác phẩm › Xuất bản) — đi bằng nút thật, như owner
+    const SHOTS20 = process.env.GC_SHOTS || '';
+    const shot20 = async (pg, name) => { if (SHOTS20) { fs.mkdirSync(SHOTS20, { recursive: true }); await pg.screenshot({ path: path.join(SHOTS20, name + '.png') }); } };
+    // tác phẩm 1 phân cảnh (Fun Office phân cảnh 1) cho các lượt xuất bằng nút — phim ~19 s
+    const foW = await (await fetch(U20 + 'api/works/fo-first-day')).json();
+    let rq = await fetch(U20 + 'api/works', { method: 'POST', headers: HDR, body: JSON.stringify({ id: 'fo-one', title: foW.title, logline: foW.logline, lang: foW.lang, accent: foW.accent, project: foW.project }) });
+    if (rq.status !== 200) throw new Error('tạo tác phẩm fo-one: HTTP ' + rq.status);
+    rq = await fetch(U20 + 'api/works/fo-one/shots', { method: 'POST', headers: HDR, body: JSON.stringify({ shot: foW.shots[0] }) });
+    if (rq.status !== 200) throw new Error('thêm phân cảnh fo-one: HTTP ' + rq.status);
+    // mở phòng tác phẩm ở tab Xuất bản và CHỜ đúng tác phẩm đã vẽ (đổi hash không tải lại trang: nút của phòng cũ còn trên màn tới khi phòng mới dựng xong)
+    const openWork = async (pg, id, lang) => {
+      await pg.goto(U20 + 'tao-tac?lang=' + lang + '#/tac-pham/' + id + '/publish');
+      await pg.waitForFunction(id => { const h = document.querySelector('.roomhead .mono.note'), b = document.getElementById('videoExportB'); return h && h.textContent === id && b && !b.disabled && b.isConnected; }, id, { timeout: 20000 });
+    };
+    // bấm Xuất video → (fo-one còn 1 câu chưa có giọng AI: hộp askExport → Export now / Xuất luôn) → bảng chọn, chờ Bắt đầu mở
+    const openPanel = async pg => {
+      await pg.click('#videoExportB');
+      const w = await Promise.race([pg.waitForSelector('[data-kind="video"][role="group"]', { timeout: 20000 }).then(() => 'ask'), pg.waitForSelector('.vidpanel', { timeout: 20000 }).then(() => 'panel')]);
+      if (w === 'ask') await pg.click('[data-kind="video"][role="group"] button:nth-of-type(2)');
+      await pg.waitForSelector('.vidpanel [data-v="start"]:not([disabled])', { timeout: 20000 });
+    };
+    const VWHY = { insecure: 'Open the Studio over https or localhost to export video.', 'no-webcodecs': 'This browser can\'t encode video yet — use Chrome or Edge on a computer.',
+      browser: 'This version exports video only in Chrome or Edge on a computer — Firefox, Safari and phone browsers aren\'t supported yet.' };
+    // a) dò năng lực THẬT → nút khoá + đúng lý do (CNS-223, Q44): giả trang không an toàn (http qua IP LAN), thiếu VideoEncoder, trình duyệt không phải Chromium
+    const btnState = async (init, lang) => {
+      const pg = await ctx20.newPage(); pg.on('pageerror', e => errs20.push(e.message));
+      if (init) await pg.addInitScript(init);
+      await pg.goto(U20 + 'tao-tac?lang=' + (lang || 'en') + '#/tac-pham/fo-one/publish');
+      await pg.waitForSelector('#videoExportB', { timeout: 15000 });
+      await pg.waitForFunction(() => { const w = document.getElementById('videoWhy'); return w && w.textContent && !/Checking this browser|Đang kiểm tra/.test(w.textContent); }, null, { timeout: 15000 });
+      const st = await pg.evaluate(() => ({ disabled: document.getElementById('videoExportB').disabled, why: document.getElementById('videoWhy').textContent, label: document.getElementById('videoExportB').textContent }));
+      return { pg, st };
+    };
+    const capCases = [['insecure', () => Object.defineProperty(window, 'isSecureContext', { value: false, configurable: true })],
+      ['no-webcodecs', () => { delete window.VideoEncoder; }],
+      ['browser', () => Object.defineProperty(Navigator.prototype, 'userAgentData', { get: () => undefined, configurable: true })]];
+    for (const [code, init] of capCases) {
+      const { pg, st } = await btnState(init);
+      if (!st.disabled || st.why !== VWHY[code] || st.label !== 'Export video') throw new Error('nút Xuất video khi ' + code + ': ' + JSON.stringify(st));
+      if (code === 'insecure') { await shot20(pg, 'video-en-disabled'); }
+      await pg.close();
+    }
+    { const { pg, st } = await btnState(() => Object.defineProperty(window, 'isSecureContext', { value: false, configurable: true }), 'vi');
+      if (!st.disabled || st.why !== 'Mở Studio qua https hoặc localhost để xuất video.' || st.label !== 'Xuất video') throw new Error('nút Xuất video (vi) khi insecure: ' + JSON.stringify(st));
+      await shot20(pg, 'video-vi-disabled'); await pg.close(); }
+    const { pg: qv, st: st0 } = await btnState(() => { window.__pick = []; window.showDirectoryPicker = async o => { window.__pick.push({ active: navigator.userActivation.isActive, o }); const r = await navigator.storage.getDirectory(); return r.getDirectoryHandle(window.__pickDir || 'ui-out', { create: true }); }; });
+    const FMT0 = st0.why.startsWith('MP4') ? 'MP4 (H.264 + AAC)' : 'WebM (VP9 + Opus)';
+    if (st0.disabled || !/^(MP4 \(H\.264 \+ AAC\)|WebM \(VP9 \+ Opus\)) · detected in this browser$/.test(st0.why)) throw new Error('nút Xuất video trên Chromium: ' + JSON.stringify(st0));
+    console.log('  ✓ P3 nút Xuất video theo phép dò thật (CNS-223, Q44): trang không an toàn / thiếu VideoEncoder / không phải Chromium → khoá kèm đúng lý do (en + vi); Chromium → mở, báo "' + st0.why + '"');
+
+    // b) dùng lại hộp askExport (CNS-218): Fun Office còn 1 câu chưa có giọng AI → hỏi trước; "Export now" mở BẢNG (không tải tệp ngay); câu thiếu im lặng (Q39)
+    await openWork(qv, 'fo-first-day', 'en');
+    let dlAny = 0; qv.on('download', () => dlAny++);
+    await qv.click('#videoExportB');
+    await qv.waitForSelector('[aria-label="Export without all AI voices?"][data-kind="video"]', { timeout: 20000 });
+    const ask = await qv.textContent('[aria-label="Export without all AI voices?"]');
+    if (!/1\/15 lines have no AI voice yet — in the video those lines are silent \(bubbles \/ captions still show\)\./.test(ask) || !/Dub, then export/.test(ask) || !/Export now/.test(ask)) throw new Error('hộp hỏi khi xuất video: ' + ask);
+    await qv.click('[aria-label="Export without all AI voices?"] button:text-is("Export now")');
+    await qv.waitForSelector('.vidpanel [data-v="voice"]', { timeout: 15000 });
+    await qv.waitForFunction(() => /14\/15 lines have AI voices — the rest are silent/.test(document.querySelector('.vidpanel [data-v="voice"]').textContent), null, { timeout: 20000 });
+    if (dlAny) throw new Error('Export now (video) không được tải tệp ngay — phải mở bảng chọn');
+    console.log('  ✓ P3 dùng lại hộp askExport của phim HTML (CNS-218): "1/15 lines have no AI voice yet — in the video those lines are silent" · Export now → bảng chọn (14/15 câu có giọng AI, câu còn lại im lặng — Q39)');
+
+    // c) bảng chọn: định dạng dò thật, trần độ dài (GCVideo.limits — WebM 30 phút do P2 đặt, MP4 5 / 10 phút), ước tính; vượt trần → chặn + gợi ý
+    await openWork(qv, 'fo-one', 'en');
+    await openPanel(qv);
+    const opt0 = await qv.evaluate(() => { const t = s => (document.querySelector('.vidpanel ' + s) || {}).textContent || ''; return { fmt: t('.chip[data-fmt]') || t('.seg[aria-label="Format"] [aria-pressed="true"]'), len: t('[data-v="len"]'), limit: t('[data-v="limit"]'), est: t('[data-v="est"]'), save: t('[data-v="save"]'), dims: t('.seg[aria-label="Quality"] + .note'), q: t('.seg[aria-label="Quality"] [aria-pressed="true"]'), a: t('.seg[aria-label="Frame"] [aria-pressed="true"]'), all: document.querySelector('.vidpanel').innerText }; });
+    const limTxt = FMT0.startsWith('MP4') ? '5 minutes for MP4 1080p (MP4 keeps the whole file in memory until it\'s done)' : '30 minutes for WebM (written to the file as it goes)';
+    if (opt0.fmt !== FMT0 || opt0.limit !== limTxt || !/^~\d+ seconds \(estimated from the script; measured exactly when exporting\)$/.test(opt0.len) || !/^takes ~\d+ seconds · file up to ~[\d.]+ MB$/.test(opt0.est)
+      || opt0.dims !== '1920×1080 · 30 fps' || opt0.q !== '1080p' || opt0.a !== 'Landscape 16:9' || !/^pick a folder when you press Start/.test(opt0.save) || !/Keep this tab in front while exporting/.test(opt0.all) || !/Made with gen-chibi · Gen Labs/.test(opt0.all))
+      throw new Error('bảng chọn video: ' + JSON.stringify(opt0));
+    if (VI.test(opt0.all)) throw new Error('bảng chọn video (en) lộ chữ Việt: ' + opt0.all.split('\n').filter(l => VI.test(l)).slice(0, 3).join(' | '));
+    await shot20(qv, 'video-en-idle');
+    // 9:16 + 720p đổi nhãn kích thước; vượt trần (giả trần 10 s) → banner chặn + gợi ý, Bắt đầu khoá
+    await qv.click('.vidpanel .seg[aria-label="Frame"] button[data-v="9:16"]'); await qv.click('.vidpanel .seg[aria-label="Quality"] button[data-v="720p"]');
+    await qv.waitForFunction(() => /^720×1280 · 30 fps$/.test(document.querySelector('.vidpanel .seg[aria-label="Quality"] + .note').textContent), null, { timeout: 10000 });
+    await qv.evaluate(() => { window.__lim0 = GCVideo.limits; GCVideo.limits = () => 10; });
+    await qv.click('.vidpanel .seg[aria-label="Quality"] button[data-v="1080p"]');
+    await qv.waitForSelector('.vidpanel [data-v="over"]', { timeout: 10000 });
+    const over = await qv.evaluate(() => ({ t: document.querySelector('.vidpanel [data-v="over"]').textContent, start: document.querySelector('.vidpanel [data-v="start"]').disabled }));
+    await qv.evaluate(() => { GCVideo.limits = window.__lim0; });
+    if (!over.start || !/^The film runs ~\d+ seconds, over the 10 seconds limit for (WebM \(VP9 \+ Opus\)|MP4 \(H\.264 \+ AAC\)) 1080p — choose 720p( or WebM)?\.$/.test(over.t)) throw new Error('vượt trần độ dài: ' + JSON.stringify(over));
+    console.log('  ✓ P3 bảng chọn: ' + opt0.fmt + ' (dò thật) · ' + opt0.len.replace(/ \(.*/, '') + ' · trần "' + opt0.limit + '" · ' + opt0.est + ' · 16:9 1920×1080 / 9:16 720×1280 · vượt trần → chặn, Bắt đầu khoá: "' + over.t + '"');
+
+    // d) Bắt đầu → hỏi thư mục NGAY trong cú bấm (CNS-226) → tiến độ theo phân cảnh + Huỷ + "giữ tab ở phía trước" (tab bị ẩn → cảnh báo) → 4 tệp trong thư mục,
+    //    Xem thử phát được, Chọn khung khác thay ảnh bìa. 16:9 1080p — đo nhịp tim 10 ms của Studio suốt lượt xuất (≤ 100 ms, spec §3)
+    await qv.click('.vidpanel .seg[aria-label="Frame"] button[data-v="16:9"]');
+    await qv.waitForSelector('.vidpanel [data-v="start"]:not([disabled])', { timeout: 10000 });
+    await qv.evaluate(() => { window.__hbG = []; let last = performance.now(); window.__hbI = setInterval(() => { const n = performance.now(); window.__hbG.push([n - last, performance.timeOrigin + n]); last = n; }, 10); });
+    await qv.click('.vidpanel [data-v="start"]');
+    await qv.waitForSelector('.vidpanel table.vidshots tr[data-shot="0"]', { timeout: 60000 });
+    await qv.waitForFunction(() => +(document.querySelector('.vidpanel [data-v="pct"]') || { textContent: '0' }).textContent.replace('%', '') >= 25, null, { timeout: 120000 });
+    const run0 = await qv.evaluate(() => ({ pick: window.__pick.slice(), pct: document.querySelector('.vidpanel [data-v="pct"]').textContent, row: document.querySelector('.vidshots tr[data-shot="0"]').innerText, front: document.querySelector('.vidpanel [data-v="front"]').textContent, cancel: !!document.querySelector('.vidpanel [data-v="cancel"]'), all: document.querySelector('.vidpanel').innerText }));
+    await shot20(qv, 'video-en-progress');
+    // tab bị ẩn giữa chừng (giả visibilitychange — Playwright luôn giữ trang "visible") → cảnh báo đổi chữ. Giả CẢ hidden + visibilityState (engine/render.js đọc
+    // document.hidden: chỉ giả một nửa thì nó tưởng tab vừa hiện lại và vẽ bù mọi nhân vật sống — việc của bài test, không phải của lượt xuất); trả lại "hiện" sau khi đo
+    await qv.evaluate(() => { Object.defineProperty(document, 'visibilityState', { get: () => 'hidden', configurable: true }); Object.defineProperty(document, 'hidden', { get: () => true, configurable: true }); document.dispatchEvent(new Event('visibilitychange')); });
+    const hid = await qv.textContent('.vidpanel [data-v="front"]');
+    if (run0.pick.length !== 1 || !run0.pick[0].active || run0.pick[0].o.mode !== 'readwrite' || !/^\d+%$/.test(run0.pct) || !/^1\s+The first morning\s+\d+%$/.test(run0.row.trim()) || !run0.cancel
+      || run0.front !== 'Keep this tab in front until it\'s done — the browser slows down hidden tabs.' || hid !== 'This tab was hidden — the browser slowed the export down. Keep this tab in front until it\'s done.' || VI.test(run0.all))
+      throw new Error('đang xuất: ' + JSON.stringify([run0, hid]));
+    await qv.waitForSelector('.vidpanel [data-v="done"]', { timeout: 240000 });
+    const hbUI = await hbJudge(await qv.evaluate(() => { clearInterval(window.__hbI); return window.__hbG.slice(); }));
+    await qv.evaluate(() => { delete document.visibilityState; delete document.hidden; document.dispatchEvent(new Event('visibilitychange')); });
+    const dirList = async name => qv.evaluate(async name => { const d = await (await navigator.storage.getDirectory()).getDirectoryHandle(name); const o = {}; for await (const [n, h] of d.entries()) o[n] = (await h.getFile()).size; return o; }, name);
+    const out1 = await dirList('ui-out'), ext1 = FMT0.startsWith('MP4') ? 'mp4' : 'webm';
+    const done1 = await qv.evaluate(() => ({ banner: document.querySelector('.vidpanel [data-v="done"]').textContent, rows: [...document.querySelectorAll('.vidfiles tr[data-file]')].map(r => r.innerText.replace(/\s+/g, ' ').trim()), all: document.querySelector('.vidpanel').innerText }));
+    if (Object.keys(out1).sort().join() !== ['first-day-at-work.' + ext1, 'first-day-at-work.jpg', 'first-day-at-work.srt', 'first-day-at-work.txt'].sort().join() || Object.values(out1).some(v => !(v > 0))
+      || !/^Done — 4 files saved to the folder "ui-out" · (WEBM|MP4) 1920×1080 · \d+ seconds$/.test(done1.banner) || done1.rows.length !== 4 || VI.test(done1.all)) throw new Error('xong: ' + JSON.stringify([out1, done1]));
+    // Fun Office 1080p qua nút (spec §3 muốn ≤ 100 ms): thường 50–90 ms, nhưng có lượt lẻ ~120 ms (một tác vụ dựng ảnh SVG của khung trùng GC toàn phần) —
+    // CHƯA đạt ổn định → CHỈ BÁO như Tam Quốc (dòng báo ghi rõ ĐẠT / CHƯA ĐẠT); Fun Office 720p ở mục 2 vẫn CHẶN ở 100 ms
+    if (!(hbUI.n > 100)) throw new Error('Fun Office 1080p qua nút Xuất video: nhịp tim không chạy (' + hbUI.n + ' mẫu)');
+    // Xem thử phát được (tệp vừa ghi); độ dài ≈ phim
+    const pv = await qv.evaluate(async () => { const v = document.querySelector('.vidpanel video.vidprev'); if (!v) return { none: true }; v.muted = true;
+      if (v.readyState < 2) await Promise.race([new Promise(r => v.addEventListener('loadeddata', r, { once: true })), new Promise(r => setTimeout(r, 10000))]);
+      if (v.readyState < 2) return { ready: v.readyState, src: v.currentSrc }; const t0 = v.currentTime; await Promise.race([v.play(), new Promise(r => setTimeout(r, 5000))]); await new Promise(r => setTimeout(r, 1500)); v.pause(); return { dur: v.duration, adv: v.currentTime - t0, w: v.videoWidth, h: v.videoHeight }; });
+    if (!(pv.adv > 0.5) || pv.w !== 1920 || pv.h !== 1080 || !(pv.dur > 10)) throw new Error('Xem thử: ' + JSON.stringify(pv));
+    await shot20(qv, 'video-en-done');
+    // Chọn khung khác (Q43): kéo tới 12 s → Dùng khung này làm bìa → tệp .jpg trong thư mục đổi
+    const cov0 = await qv.evaluate(async () => { const f = await (await (await (await navigator.storage.getDirectory()).getDirectoryHandle('ui-out')).getFileHandle('first-day-at-work.jpg')).getFile(); return Array.from(new Uint8Array(await f.arrayBuffer())).slice(-64).join(); });
+    await qv.click('.vidpanel [data-v="repick"]');
+    await qv.evaluate(async () => { const v = document.querySelector('.vidpanel video.vidprev'), s = document.querySelector('.vidpanel input[type="range"]'); s.value = '12'; s.dispatchEvent(new Event('input')); await new Promise(r => v.addEventListener('seeked', r, { once: true })); });
+    await qv.click('.vidpanel [data-v="use-frame"]');
+    await qv.waitForFunction(() => /Cover replaced with the frame at 12\.0 s\./.test(document.getElementById('toast').textContent), null, { timeout: 10000 });
+    const cov1 = await qv.evaluate(async () => { const f = await (await (await (await navigator.storage.getDirectory()).getDirectoryHandle('ui-out')).getFileHandle('first-day-at-work.jpg')).getFile(); const b = new Uint8Array(await f.arrayBuffer()); const bm = await createImageBitmap(f); return { tail: Array.from(b).slice(-64).join(), head: [b[0], b[1]], w: bm.width, h: bm.height }; });
+    if (cov1.tail === cov0 || cov1.head.join() !== '255,216' || cov1.w !== 1920 || cov1.h !== 1080) throw new Error('Chọn khung khác: ảnh bìa không đổi / sai: ' + JSON.stringify(cov1));
+    console.log('  ✓ P3 Bắt đầu: hộp chọn thư mục gọi NGAY trong cú bấm (userActivation còn hiệu lực — CNS-226) · tiến độ theo phân cảnh "' + run0.row.replace(/\s+/g, ' ').trim() + '" + Huỷ + "giữ tab ở phía trước" (tab bị ẩn → cảnh báo) · xong: 4 tệp trong thư mục ('
+      + Object.entries(out1).map(([n, b]) => n.replace('first-day-at-work', '') + ' ' + Math.round(b / 1024) + ' KB').join(', ') + ') · Xem thử phát được ' + pv.w + '×' + pv.h + ' ' + pv.dur.toFixed(1) + ' s · Chọn khung khác → .jpg mới ở 12 s · Fun Office 1080p: luồng chính bị chặn tối đa ' + Math.round(hbUI.mine) + ' ms (' + (hbUI.mine <= 100 ? 'ĐẠT ≤ 100' : 'CHỈ BÁO: CHƯA ĐẠT spec ≤ 100') + '; thô ' + Math.round(hbUI.raw) + ' · top thô−đối chứng ' + hbUI.top + ')');
+
+    // e) 9:16 1080p qua nút → tệp ra đúng 1080×1920 (Q37 a); tên trùng → -2 (không ghi đè lượt trước)
+    await qv.click('.vidpanel button:text-is("Export again")');
+    await qv.waitForSelector('.vidpanel [data-v="start"]:not([disabled])', { timeout: 20000 });
+    await qv.click('.vidpanel .seg[aria-label="Frame"] button[data-v="9:16"]');
+    await qv.waitForSelector('.vidpanel [data-v="start"]:not([disabled])', { timeout: 10000 });
+    await qv.click('.vidpanel [data-v="start"]');
+    await qv.waitForSelector('.vidpanel [data-v="done"]', { timeout: 240000 });
+    const out2 = await dirList('ui-out'), vb2 = Buffer.from(await qv.evaluate(async ext => { const f = await (await (await (await navigator.storage.getDirectory()).getDirectoryHandle('ui-out')).getFileHandle('first-day-at-work-2.' + ext)).getFile(), u = new Uint8Array(await f.arrayBuffer()); let s = ''; for (let i = 0; i < u.length; i += 32768) s += String.fromCharCode.apply(null, u.subarray(i, i + 32768)); return btoa(s); }, ext1), 'base64');
+    let dim2;
+    if (ext1 === 'webm') { const w = inspectWebm(vb2); dim2 = [w.tracks[0].width, w.tracks[0].height]; } else { const m = inspectMp4(vb2), V = m.tracks.find(t => t.handler === 'vide'); dim2 = [V.width, V.height]; }
+    const ban2 = await qv.textContent('.vidpanel [data-v="done"]');
+    if (Object.keys(out2).length !== 8 || dim2.join('×') !== '1080×1920' || !/ 1080×1920 · /.test(ban2)) throw new Error('9:16 1080p: ' + JSON.stringify([Object.keys(out2), dim2, ban2]));
+    console.log('  ✓ P3 9:16 1080p qua nút: tệp ' + dim2.join('×') + ' (phim ngang đặt giữa khung dọc — Q37 a) · tên trùng → first-day-at-work-2.* (lượt trước còn nguyên, 8 tệp)');
+
+    // f) Huỷ giữa chừng qua nút → không để lại tệp nào trong thư mục đã chọn, bảng đóng, toast báo
+    await qv.click('.vidpanel button:text-is("Export again")');
+    await qv.waitForSelector('.vidpanel [data-v="start"]:not([disabled])', { timeout: 20000 });
+    await qv.click('.vidpanel .seg[aria-label="Quality"] button[data-v="720p"]');
+    await qv.waitForSelector('.vidpanel [data-v="start"]:not([disabled])', { timeout: 10000 });
+    await qv.evaluate(() => { window.__pickDir = 'ui-cancel'; });
+    await qv.click('.vidpanel [data-v="start"]');
+    await qv.waitForFunction(() => +(document.querySelector('.vidpanel [data-v="pct"]') || { textContent: '0' }).textContent.replace('%', '') >= 10, null, { timeout: 120000 });
+    await qv.click('.vidpanel [data-v="cancel"]');
+    await qv.waitForFunction(() => /Video export cancelled — no files left behind\./.test(document.getElementById('toast').textContent), null, { timeout: 15000 });
+    const out3 = await dirList('ui-cancel'), fr3 = await qv.evaluate(() => ({ iframes: document.querySelectorAll('iframe[data-gc-video]').length, panel: !!document.querySelector('.vidpanel') }));
+    if (Object.keys(out3).length || fr3.iframes || fr3.panel) throw new Error('Huỷ qua nút: ' + JSON.stringify([out3, fr3]));
+    console.log('  ✓ P3 Huỷ qua nút giữa chừng: thư mục đã chọn trống (tệp video tạo lúc bấm đã gỡ), iframe gỡ, bảng đóng, toast "Video export cancelled — no files left behind."');
+
+    // g) giao diện tiếng Việt: cùng bảng, chữ Việt (msgid) — chụp màn idle / đang xuất / xong
+    await openWork(qv, 'fo-one', 'vi');
+    await openPanel(qv);
+    const vi0 = await qv.evaluate(() => document.querySelector('.vidpanel').innerText);
+    for (const w of ['Khung hình', 'Ngang 16:9', 'Chất lượng', 'Định dạng', 'Trần độ dài', 'Ước tính', 'Lưu vào', 'Bắt đầu', 'Giữ tab này ở phía trước']) if (!vi0.includes(w)) throw new Error('bảng Xuất video (vi) thiếu "' + w + '": ' + vi0);
+    await shot20(qv, 'video-vi-idle');
+    if (SHOTS20) {
+      await qv.evaluate(() => { window.__pickDir = 'ui-vi'; });
+      await qv.click('.vidpanel .seg[aria-label="Chất lượng"] button[data-v="720p"]');
+      await qv.waitForSelector('.vidpanel [data-v="start"]:not([disabled])', { timeout: 10000 });
+      await qv.click('.vidpanel [data-v="start"]');
+      await qv.waitForFunction(() => +(document.querySelector('.vidpanel [data-v="pct"]') || { textContent: '0' }).textContent.replace('%', '') >= 30, null, { timeout: 120000 });
+      await shot20(qv, 'video-vi-progress');
+      await qv.waitForSelector('.vidpanel [data-v="done"]', { timeout: 240000 });
+      await shot20(qv, 'video-vi-done');
+    }
+    console.log('  ✓ P3 giao diện tiếng Việt: bảng Xuất video đủ chữ (Khung hình · Chất lượng · Định dạng · Trần độ dài · Ước tính · Lưu vào · Bắt đầu · giữ tab ở phía trước)' + (SHOTS20 ? ' · ảnh chụp en + vi ở ' + SHOTS20 : ''));
+    await qv.close();
     if (errs20.length) throw new Error('lỗi trang: ' + errs20.slice(0, 3).join(' | '));
     console.log('  ✓ nhóm xuất video xong trong ' + ((Date.now() - T0) / 1000).toFixed(0) + ' s');
   } catch (e) { fail = 1; console.log('  ✗ xuất video:', e && e.stack || e); }

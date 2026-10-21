@@ -59,7 +59,7 @@ The room has 5 tabs:
 2. **Shots** — one card per shot: **first-frame image**, name, description, scene, cast, number of steps, **estimated duration**, *View steps* (opens the step list), **Step table**, *AI writes dialogue*, *Rehearse*, *Ask AI* (pins the shot into the dock). Everything the AI director writes shows up here; proposed edits not yet applied show a **diff** with Apply / Discard.
 3. **Review** — the stage: **▶ Whole film** and **▶ Shot** on each row; each shot has a status **Draft / Needs changes / Approved** + **review notes** (on the whole shot or on one step), saved in the work (`work.review`) through the server's gate; **Send to AI to fix per notes** pins the shot + step into the dock and pre-writes the request. The **Approved x/y** count shows at the top of the room and in the works table. A shot edited after "Approved" goes back to "Draft". **Only you set "Approved"** (in the Studio): the AI in the right-hand column and agents over MCP / link can only set Draft / Needs changes and **add** notes (labelled AI / agent) — the server enforces this, it is not just an instruction; the AI also cannot delete or edit your notes. Agents read review notes via MCP `get_work › review`.
 4. **Voice & sound** — language + accent, **AI dub**, **ONE "Locked voices by character" table** and the **Sound** box: the S1–S7 mixing-rule results for the whole work (errors / warnings, click to go to the shot). The locked-voice table is **the only place to lock voices for a work**: one row per character → **voice role** → **locked voice** (`work.voices`) · **source** (*Locked* / *Picked by hand* / *Not locked*) · accent · number of lines · sample line, **▶ machine voice** (free) and **▶ AI** using exactly the locked voice (an existing clip plays for free; otherwise click twice, it uses 1 request); without a locked voice the AI button is greyed out. The **Lock voices for the whole cast (free)** button asks the server to choose voices for the whole cast and lock them into the work (no line is read). The table follows the **film language** in the box above; click a row to see its details in the panel on the right. To listen to / design the set of 22 roles: the **Role voice set ›** button → *Library › Voices*.
-5. **Publish** — **Film (HTML)**, Storyboard SVG / PNG, JSON, project bundle.
+5. **Publish** — **Film (HTML)**, **Export video** (MP4 / WebM + subtitles + cover), Storyboard SVG / PNG, JSON, project bundle.
 
 Details of each part:
 - **New work**: give it a name, pick a project.
@@ -108,9 +108,24 @@ Voices follow the **role** (age · gender · scholar / warrior · noble · comic
 | Button | What you get |
 |---|---|
 | **Film (HTML)** | A single self-contained .html file (player + characters + scenes + dialogue + **dubbed AI voices**). Opens in a browser, nothing to install, no network needed. Has a shot list, full screen, space bar to play / pause. The player inside belongs to Gen Labs — licensed **only for viewing that film** (stated in the file) |
+| **Export video** | A video file for YouTube / TikTok (**MP4** or **WebM**) + `.srt` subtitles + a `.jpg` cover + a `.txt` with title, description and credit line — see [Export video](#export-video) below |
 | **Storyboard SVG / PNG** | A storyboard: each shot's image + description + dialogue — to review, print, send to a client |
 | **JSON** | Script + shots + review notes as data |
 | **Project bundle (.json)** | A backup bundle of the work's whole project (assets + works with review notes + motion packs + sound packs) — import it on another machine |
+
+### Export video
+**Publish › Export video** turns the work into a video file you can upload to YouTube or TikTok without converting it. It runs **in your own browser** — nothing is uploaded anywhere.
+
+- **Browsers**: Chrome or Edge on a computer. The Studio must be opened over **https** or **localhost** (`http://127.0.0.1:7480` works; `http://<LAN-IP>:7480` does not — browsers only allow video encoding on secure pages). Firefox and Safari are not supported yet. The app checks what *this* browser can actually do; if something is missing the button is disabled and the reason is written next to it (e.g. "Open the Studio over https or localhost to export video.").
+- **Same question as the HTML film**: if some lines have no AI voice yet, it asks first — **Dub, then export** · **Export now** · **Cancel**. In a video, lines without an AI voice are **silent**; their speech bubbles / subtitles still show (the browser's machine voice cannot be recorded into a file). With AI voices turned off, every line is silent.
+- **Options**: frame **Landscape 16:9** or **Vertical 9:16** (for TikTok / Shorts — the 16:9 film is centred in a vertical frame with the title above, so characters are smaller); quality **1080p** (default) or **720p**. The panel shows the format this browser will produce, the estimated length, time and size, and the length limit.
+- **Formats**: **MP4** (H.264 + AAC) where the browser can encode it (Chrome / Edge on Windows and macOS); otherwise **WebM** (VP9 + Opus) — for example Chrome / Chromium on Linux. YouTube and TikTok accept both. When both are available you can pick.
+- **Time**: about **2–3× the film's length** (a 1-minute film takes 2–3 minutes). **Keep the tab in front** while it runs — browsers slow down hidden tabs; the panel warns you if the tab was hidden.
+- **Length limits**: MP4 keeps the whole file in memory until it is finished, so it is limited to **5 minutes at 1080p** and **10 minutes at 720p**; WebM is written to the file as it goes and is limited to **30 minutes**. A film over the limit is blocked up front with a suggestion (720p or WebM).
+- **Start**: the browser asks for a **folder** right when you press Start, and the 4 files go there (`<title>.mp4|webm`, `.srt`, `.jpg`, `.txt`; an existing name gets `-2`, `-3`…). Where the browser can't pick a folder, the files are downloaded at the end. **Cancel** stops right away and leaves no partial file.
+- **When it's done**: a **Preview** player, the file list, and the cover. The cover is the first frame with dialogue; **Choose another frame** lets you pick any frame of the preview and replaces the cover file.
+- **Sample-based videos**: videos made from the Gen Labs samples (Fun Office, Three Kingdoms) may be posted publicly — keep the credit line **"Made with gen-chibi · Gen Labs"** that the `.txt` description already contains.
+- **AI agents (MCP)** cannot export video in this version — only the owner, from the Studio.
 
 ## 4. Draft, Published and project bundles — back up, move machines, sell themed asset sets
 Each asset has one of two statuses:
@@ -245,7 +260,7 @@ your-domain {
 
 ## Frequently asked questions
 - **Do assets the AI creates need approval?** No — they are saved as **drafts** in the work's project and usable right away. Only when you want them in a sale bundle do you click **Publish**.
-- **Does a shared HTML film expose the engine?** The player sits in the film file under a licence **for viewing that film only**. A future SaaS edition will move to a player hosted by Gen Labs, or to video export.
+- **Does a shared HTML film expose the engine?** The player sits in the film file under a licence **for viewing that film only**. To share without the player, use **Export video** (v0.22); a future SaaS edition will also offer a player hosted by Gen Labs.
 - **Broke something?** Every asset and work has versions; old versions live in the data folder (`versions/`).
 - **Clicking Update says the request from an unknown origin was blocked?** The server only accepts change commands from its own Studio page. The message (since v0.18.1) states *where the page is open* and *which address the server sees*: reopen the Studio at the server's exact address (usually `http://127.0.0.1:7480`), or update right away in a terminal with `genchibi update` (no browser involved). `localhost` / `127.0.0.1` / `[::1]` on the same port count as one; with a proxy in front, have the proxy send `X-Forwarded-Host` or set `GC_PUBLIC_URL`.
 - **Adding the connector on claude.ai fails, or the Authorize page never shows?** Check in this order:

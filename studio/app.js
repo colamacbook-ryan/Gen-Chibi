@@ -1453,6 +1453,15 @@
     for (i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
     return 'data:audio/wav;base64,' + btoa(s);
   }
+  // như bufDataURI nhưng mã hoá base64 ngoài luồng chính (FileReader) — gom hàng chục clip cho phim / video không thành một long task (spec v0.22 §3)
+  function bufDataURIAsync(buf) {
+    return new Promise(function (ok, no) {
+      var r = new FileReader();
+      r.onload = function () { ok(String(r.result).replace(/^data:[^,]*;base64,/, 'data:audio/wav;base64,')); };
+      r.onerror = function () { no(r.error); };
+      r.readAsDataURL(new Blob([buf], { type: 'audio/wav' }));
+    });
+  }
   var SRC_CHIP = { design: [N_('thiết kế'), 'chip ok'], library: [N_('thư viện Google'), 'chip info'], prebuilt: [N_('có sẵn'), 'chip'], chosen: [N_('đã chọn'), 'chip warn'] };
   // nguồn của giọng một nhân vật trong tác phẩm: đã chốt vào work.voices · chọn tay ở hồ sơ nhân vật · chưa có (phòng tác phẩm › Giọng & âm thanh)
   var CHOT_SRC = { chot: [N_('Đã chốt'), 'chip ok', N_('Giọng đã CHỐT trong tác phẩm (work.voices) — Studio, MCP và phim xuất cùng một giọng')], tay: [N_('Chọn tay'), 'chip warn', N_('Giọng chọn tay trên hồ sơ nhân vật (chưa chốt vào tác phẩm)')], chua: [N_('Chưa chốt'), 'chip', N_('Chưa có giọng AI — Lồng tiếng AI hoặc “Chốt giọng cả dàn” sẽ chọn và chốt')] };
@@ -1665,14 +1674,28 @@
     return new Promise(function (ok) { (function tick() { var d = at - Date.now(); if (d <= 0 || ui.cancelled()) ok(); else setTimeout(tick, Math.min(250, d)); })(); });
   }
   // Phim xuất ra mang các clip AI ĐÃ có (không đọc mới, không tốn lượt): { khoá câu (GC.film.clipKey): data: URI } + số đếm
+  // nhả luồng chính (MessageChannel: không bị bóp như setTimeout ở tab nền) — HAI bước: bước đầu rỗng để hẹn giờ / vẽ đã tới hạn trong tác vụ vừa xong được
+  // chạy ngay, không phải chờ thêm tác vụ nặng kế tiếp (như GCVClock.yieldReal của trang xuất video)
+  function hop() { return new Promise(function (ok) { var c = new MessageChannel(); c.port1.onmessage = function () { c.port1.close(); ok(); }; c.port2.postMessage(0); }); }
+  function nextTask() { return hop().then(hop); }
+  // = GC.film.lines(W) nhưng dựng từng phân cảnh ở một tác vụ riêng (đạo diễn tự động của phim 6 phân cảnh ~50–70 ms một mạch → long task, spec v0.22 §3).
+  // Cùng kết quả: lines() bỏ phân cảnh chưa sẵn sàng và gộp câu trùng khoá theo thứ tự phân cảnh — gộp lại đúng như vậy ở đây.
+  function filmLinesAsync(W) {
+    var out = [], seen = {}, shots = (W && W.shots) || [], i = 0;
+    return (function step() {
+      if (i >= shots.length) return Promise.resolve(out);
+      GC.film.lines({ shots: [shots[i++]], project: W.project || '' }).forEach(function (x) { if (!seen[x.key]) { seen[x.key] = 1; out.push(x); } });
+      return nextTask().then(step);
+    })();
+  }
   function filmVoices(W, L) {
     var out = { voices: {}, have: 0, total: 0 };
     if (!AiVoice.on()) return Promise.resolve(out);
     return AiVoice.load().then(function (cfg) {
       if (!cfg || !(cfg.hasKey || cfg.cached)) return out;   // chưa từng có giọng AI: khỏi hỏi từng câu
-      return AiVoice.castOf(W, L.lang, L.accent).then(function (cast) {
-        var jobs = [];
-        GC.film.lines(W).forEach(function (x) {
+      return Promise.all([AiVoice.castOf(W, L.lang, L.accent), filmLinesAsync(W)]).then(function (res) {
+        var cast = res[0], jobs = [];
+        res[1].forEach(function (x) {
           out.total++;
           var p = AiVoice.paramsOf(L, x.actor, x.line, cast);
           if (p) jobs.push({ k: x.key, p: p });
@@ -1681,9 +1704,13 @@
         function worker() {   // 3 luồng song song
           if (i >= jobs.length) return Promise.resolve();
           var j = jobs[i++];
-          return AiVoice.get(j.p, true).then(function (r) { out.voices[j.k] = bufDataURI(r.buf); out.have++; }, function () { /* chưa đọc câu này: bỏ qua */ }).then(worker);
+          return AiVoice.get(j.p, true).then(function (r) { return bufDataURIAsync(r.buf).then(function (u) { j.u = u; }); }).catch(function () { /* chưa đọc câu này: bỏ qua */ }).then(worker);
         }
-        return Promise.all([worker(), worker(), worker()]).then(function () { if (out.have) AiVoice.markHas(W, L); return out; });
+        return Promise.all([worker(), worker(), worker()]).then(function () {
+          jobs.forEach(function (j) { if (j.u) { out.voices[j.k] = j.u; out.have++; } });   // theo thứ tự câu (không theo thứ tự xong) — payload tất định
+          if (out.have) AiVoice.markHas(W, L);
+          return out;
+        });
       });
     }).catch(function () { return out; });
   }
@@ -1874,7 +1901,105 @@
       }).catch(function (e) { toast(e.message); });
   }
   // lối vào xuất video (studio/video/client.js, nạp trước app.js): cùng filmPayload với phim HTML (CNS-219) + cùng cách đặt tên tệp
-  if (window.GCVideo) window.GCVideo.studio = { payload: filmPayload, slug: slugify };
+  if (window.GCVideo) window.GCVideo.studio = { payload: filmPayload, slug: slugify, voices: function (W) { return filmVoices(W, workLang(W)); } };
+
+  /* ---- XUẤT VIDEO (v0.22 P3) — phần cấp module: một lượt xuất một lúc cho cả Studio (iframe ẩn + bộ mã hoá nặng). Trạng thái nằm ở đây, không ở trang
+   * tác phẩm: rời trang rồi quay lại vẫn thấy tiến độ; xong khi đang ở trang khác thì tệp vẫn được lưu + báo toast. Bảng chọn / tiến độ vẽ ở workRoom. */
+  var Vid = {
+    job: null,     // { wid, title, phase 'run'|'done'|'error', prog, marks, frames, files, dir, base, fh, hidden, t0, opts, url, coverUrl, err }
+    paint: null,   // hàm vẽ lại của trang tác phẩm đang mở (null khi không mở)
+    pref: function () {
+      var o = {}; try { o = JSON.parse(localStorage.getItem('gc-video-opts') || '{}') || {}; } catch (e) { /* hỏng: dùng mặc định */ }
+      return { aspect: o.aspect === '9:16' ? '9:16' : '16:9', quality: o.quality === '720p' ? '720p' : '1080p', container: o.container === 'mp4' || o.container === 'webm' ? o.container : '' };
+    },
+    savePref: function (o) { try { localStorage.setItem('gc-video-opts', JSON.stringify({ aspect: o.aspect, quality: o.quality, container: o.container || '' })); } catch (e) { /* bộ nhớ đầy: bỏ qua */ } },
+    redraw: function () { if (Vid.paint) Vid.paint(); }
+  };
+  var VFMT = { mp4: 'MP4 (H.264 + AAC)', webm: 'WebM (VP9 + Opus)' };
+  function vSecs(s) { s = Math.max(1, Math.round(s)); return s < 90 ? _t('{n} giây', { n: s }) : _t('{n} phút', { n: Math.round(s / 6) / 10 }); }
+  function vBytes(b) { return b >= 1048576 ? (b / 1048576).toFixed(b >= 104857600 ? 0 : 1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB'; }
+  // độ dài phim ƯỚC (giây) cho bảng chọn, từ kế hoạch của đạo diễn tự động (mỗi phân cảnh một tác vụ — đạo diễn một màn đấu ~80 ms). Hệ số khớp lượt dò của
+  // hai bộ mẫu ±10 % (Fun Office 4 phân cảnh 70 s, Tam Quốc 6 phân cảnh 159 s). Độ dài THẬT đo ở lượt dò — trần độ dài kiểm lại ở đó (lỗi too-long).
+  function filmSecEstimate(W) {
+    var ok = GC.film.readiness(W).filter(function (x) { return x.ok; }), n = ok.length, sec = 2.4, i = 0;   // 2,4 s: thẻ kết
+    return (function step() {
+      if (i >= ok.length) return Promise.resolve(n ? sec : 0);
+      var plan = GC.film.direct(ok[i++].shot, { project: W.project || '' });
+      sec += 2.6 + (n > 1 ? 2.2 : 0);   // vào sân + thẻ tiêu đề phân cảnh (phim nhiều phân cảnh)
+      ((plan && plan.beats) || []).forEach(function (b) { if (b.type === 'line') sec += (b.estimate || 1.6) + (b.hold || 0) + 0.9; else if (b.type === 'act') sec += 2.1; });
+      return nextTask().then(step);
+    })();
+  }
+  function vEstimate(sec, q, container) {
+    var hd = q !== '720p', mbps = (hd ? 8 : 5) + 0.16;
+    return { wall: sec * (hd ? 2.8 : 1.8) + 10, bytes: sec * mbps * 1e6 / 8, limit: window.GCVideo ? GCVideo.limits({ container: container }, q) : 0 };
+  }
+  // tên tệp chưa có trong thư mục (không ghi đè video cũ): tên, tên-2, tên-3… — xét cả 4 đuôi
+  function vUniqueBase(dir, base, exts) {
+    function taken(b) { return Promise.all(exts.map(function (x) { return dir.getFileHandle(b + '.' + x).then(function () { return true; }, function () { return false; }); })).then(function (r) { return r.some(Boolean); }); }
+    var k = 1;
+    return (function next() { var b = k === 1 ? base : base + '-' + k; return taken(b).then(function (t) { if (!t || k > 50) return b; k++; return next(); }); })();
+  }
+  function vWrite(dir, name, blob) { return dir.getFileHandle(name, { create: true }).then(function (fh) { return fh.createWritable().then(function (w) { return w.write(blob).then(function () { return w.close(); }); }); }); }
+  function vVis() { var j = Vid.job; if (j && j.phase === 'run' && document.visibilityState === 'hidden') { j.hidden = true; Vid.redraw(); } }
+  document.addEventListener('visibilitychange', vVis);
+  // bắt đầu một lượt: dir = thư mục đã chọn lúc bấm (CNS-226) hoặc null (tải về khi xong). o: { aspect, quality, container, vo, estSec }
+  function vStart(W, o, dir) {
+    var ext = o.container, base = slugify(W.title) || 'video';
+    var job = Vid.job = { wid: W.id, title: W.title, phase: 'run', prog: { phase: 'prepare' }, marks: null, frames: 0, dir: dir, base: base, fh: null, hidden: document.visibilityState === 'hidden', t0: Date.now(), opts: o, files: null };
+    Vid.redraw();
+    (dir ? vUniqueBase(dir, base, [ext, 'srt', 'jpg', 'txt']).then(function (b) { job.base = b; return dir.getFileHandle(b + '.' + ext, { create: true }); }) : Promise.resolve(null)).then(function (fh) {
+      job.fh = fh;
+      if (job.cancelled) throw Object.assign(new Error(_t('Đã huỷ xuất video.')), { code: 'cancelled' });
+      job.p = GCVideo.exportWork(W, { quality: o.quality, aspect: o.aspect, container: o.container, voices: o.vo || undefined, handle: fh || undefined, name: job.base, missingVoice: 'silent' }, function (m) {
+        if (m.phase === 'measured') { job.marks = m.marks; job.frames = m.frames; job.durationMs = m.durationMs; }
+        else job.prog = m;
+        Vid.redraw();
+      });
+      return job.p;
+    }).then(function (r) {
+      job.result = r;
+      var vf = r.files.filter(function (f) { return f.kind === 'video'; })[0], rest = r.files.filter(function (f) { return f !== vf; });
+      job.files = r.files.map(function (f) { return { kind: f.kind, name: f.name, bytes: f.kind === 'video' ? (vf.bytes || (vf.blob && vf.blob.size) || 0) : f.blob.size, blob: f.blob }; });
+      var save = dir ? rest.reduce(function (p, f) { return p.then(function () { return vWrite(dir, f.name, f.blob); }); }, Promise.resolve())
+        : Promise.resolve().then(function () { r.files.forEach(function (f) { downloadBlob(f.name, f.blob); }); });
+      return save.then(function () { return fhBlob(job, vf); });
+    }).then(function (blob) {
+      job.phase = 'done'; job.url = URL.createObjectURL(blob);
+      var cv = job.files.filter(function (f) { return f.kind === 'cover'; })[0]; if (cv) job.coverUrl = URL.createObjectURL(cv.blob);
+      toast(dir ? _t('Đã xuất video "{title}" — {n} tệp trong thư mục "{dir}".', { title: job.title, n: job.files.length, dir: dir.name }) : _t('Đã xuất video "{title}" — {n} tệp đã tải về.', { title: job.title, n: job.files.length }));
+      Vid.redraw();
+    }).catch(function (e) {
+      // huỷ / lỗi: không để lại tệp dở trong thư mục đã chọn (spec §3)
+      var rm = dir && job.fh && !job.result ? dir.removeEntry(job.base + '.' + ext).catch(function () { /* chưa tạo / đã xoá */ }) : Promise.resolve();
+      return rm.then(function () {
+        if (Vid.job !== job) return;
+        if (e && e.code === 'cancelled') { Vid.job = null; toast(_t('Đã huỷ xuất video — không để lại tệp nào.')); }
+        else { job.phase = 'error'; job.err = (e && e.message) || String(e); }
+        Vid.redraw();
+      });
+    });
+    function fhBlob(j, vf) { return vf.blob ? Promise.resolve(vf.blob) : j.fh.getFile(); }
+  }
+  function vCancel() { var j = Vid.job; if (!j || j.phase !== 'run') return; j.cancelled = true; if (j.p) j.p.cancel(); Vid.redraw(); }
+  function vClose() { var j = Vid.job; if (!j || j.phase === 'run') return; if (j.url) URL.revokeObjectURL(j.url); if (j.coverUrl) URL.revokeObjectURL(j.coverUrl); Vid.job = null; Vid.redraw(); }
+  // ảnh bìa mới từ khung đang dừng của trình xem thử (Q43 "Chọn khung khác") → ghi đè tệp bìa (thư mục) hoặc tải về
+  function vCoverFrom(video) {
+    var j = Vid.job; if (!j || j.phase !== 'done') return Promise.resolve();
+    var c = document.createElement('canvas'); c.width = video.videoWidth; c.height = video.videoHeight;
+    c.getContext('2d').drawImage(video, 0, 0, c.width, c.height);
+    return new Promise(function (ok, no) { c.toBlob(function (b) { if (b) ok(b); else no(new Error(_t('Không dựng được ảnh bìa.'))); }, 'image/jpeg', 0.9); }).then(function (blob) {
+      var name = j.base + '.jpg', f = j.files.filter(function (x) { return x.kind === 'cover'; })[0];
+      if (!f) { f = { kind: 'cover', name: name }; j.files.push(f); }
+      f.blob = blob; f.bytes = blob.size; f.at = video.currentTime;
+      return (j.dir ? vWrite(j.dir, name, blob) : Promise.resolve(downloadBlob(name, blob))).then(function () {
+        if (j.coverUrl) URL.revokeObjectURL(j.coverUrl);
+        j.coverUrl = URL.createObjectURL(blob);
+        toast(_t('Đã thay ảnh bìa bằng khung ở {t} s.', { t: video.currentTime.toFixed(1) }));
+        Vid.redraw();
+      });
+    });
+  }
   var FILM_CSS = [
     '*{box-sizing:border-box}html,body{margin:0;background:#121214;color:#ece9e2;font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}',
     '.film{max-width:min(1200px,96vw);margin:0 auto;padding:24px 0 40px;display:grid;gap:14px}',
@@ -2671,33 +2796,38 @@
           return st;
         });
     }
-    // ---- xuất phim: còn câu chưa có giọng AI (mà Giọng AI đã sẵn sàng) thì hỏi trước — lồng tiếng rồi xuất · xuất luôn · huỷ. Chưa sẵn sàng thì xuất như cũ ----
+    // ---- xuất phim / video: còn câu chưa có giọng AI (mà Giọng AI đã sẵn sàng) thì hỏi trước — lồng tiếng rồi xuất · xuất luôn · huỷ. Chưa sẵn sàng thì xuất như cũ.
+    //      kind 'html' = phim HTML (tải về ngay) · 'video' = mở bảng Xuất video (CÙNG hộp hỏi — CNS-218; câu thiếu giọng trong video im lặng — Q39)
     function closeExport() { clear(exportBox); exportBox.hidden = true; }
-    function exportClick() {
+    function exportGo(kind, w0, vo) { if (kind === 'video') openVideo(w0, vo); else exportFilm(w0, vo); }
+    function exportClick(kind) {
       if (!W || exportBusy) return;
       var w0 = W, L = workLang(W);
       closeExport();
+      if (kind === 'video' && Vid.job && Vid.job.phase === 'run') { toast(_t('Đang xuất video "{title}" — chờ xong hoặc bấm Huỷ trước.', { title: Vid.job.title })); return; }
       if (dubbing) { toast(_t('Đang lồng tiếng AI — chờ xong (hoặc bấm Dừng lồng tiếng) rồi xuất phim.')); return; }
-      if (!AiVoice.on() || !AiVoice.ready()) { exportFilm(w0); return; }
+      if (!AiVoice.on() || !AiVoice.ready()) { exportGo(kind, w0); return; }
       exportBusy = true;
       filmVoices(w0, L).then(function (vo) {   // hỏi "dry" các clip đã có (không tốn lượt) — chính kết quả này được dùng để xuất, khỏi hỏi lại
         exportBusy = false;
         if (!alive || !W || W.id !== w0.id) return;   // đã đổi tác phẩm trong lúc hỏi: bỏ, không hiện hộp của tác phẩm cũ
-        if (!vo.total || vo.have >= vo.total) exportFilm(w0, vo); else askExport(w0, vo);
+        if (!vo.total || vo.have >= vo.total) exportGo(kind, w0, vo); else askExport(w0, vo, kind);
       });
     }
-    function askExport(w0, vo) {
+    function askExport(w0, vo, kind) {
       exportBox.hidden = false;
-      var go1 = h('button', { class: 'btn sm primary', title: _t('Đọc các câu còn thiếu bằng giọng AI (tốn lượt Google; hết lượt thì dừng) rồi tự xuất phim'), onclick: function () { dubThenExport(w0); } }, _t('Lồng tiếng rồi xuất'));
-      exportBox.appendChild(h('div', { class: 'banner warn', role: 'group', 'aria-label': _t('Xác nhận xuất phim thiếu giọng AI'), style: 'flex-wrap:wrap' },
-        h('span', { style: 'flex:1 1 320px', text: _t('Còn {n}/{total} câu chưa có giọng AI — câu thiếu sẽ đọc bằng giọng máy / blip.', { n: vo.total - vo.have, total: vo.total }) }),
+      var video = kind === 'video';
+      var go1 = h('button', { class: 'btn sm primary', title: video ? _t('Đọc các câu còn thiếu bằng giọng AI (tốn lượt Google; hết lượt thì dừng) rồi mở bảng xuất video') : _t('Đọc các câu còn thiếu bằng giọng AI (tốn lượt Google; hết lượt thì dừng) rồi tự xuất phim'), onclick: function () { dubThenExport(w0, kind); } }, _t('Lồng tiếng rồi xuất'));
+      exportBox.appendChild(h('div', { class: 'banner warn', role: 'group', 'aria-label': _t('Xác nhận xuất phim thiếu giọng AI'), 'data-kind': kind || 'html', style: 'flex-wrap:wrap' },
+        h('span', { style: 'flex:1 1 320px', text: video ? _t('Còn {n}/{total} câu chưa có giọng AI — trong video, câu thiếu sẽ im lặng (bong bóng / phụ đề vẫn hiện).', { n: vo.total - vo.have, total: vo.total })
+          : _t('Còn {n}/{total} câu chưa có giọng AI — câu thiếu sẽ đọc bằng giọng máy / blip.', { n: vo.total - vo.have, total: vo.total }) }),
         go1,
-        h('button', { class: 'btn sm', onclick: function () { closeExport(); if (W && W.id === w0.id) exportFilm(W); } }, _t('Xuất luôn')),   // tính lại lúc bấm (dry, không tốn lượt): hộp có thể đã mở lâu — vừa lồng thêm, đổi ngôn ngữ, sửa kịch bản
+        h('button', { class: 'btn sm', onclick: function () { closeExport(); if (W && W.id === w0.id) exportGo(kind, W); } }, _t('Xuất luôn')),   // tính lại lúc bấm (dry, không tốn lượt): hộp có thể đã mở lâu — vừa lồng thêm, đổi ngôn ngữ, sửa kịch bản
         h('button', { class: 'btn sm', onclick: function () { closeExport(); } }, _t('Huỷ'))));
       go1.focus();
     }
     // lồng tiếng như nút Lồng tiếng AI, xong (hoặc dừng vì hết lượt) thì tự xuất; bấm Dừng lồng tiếng = không xuất (người dùng đổi ý); thiếu key / lỗi thì không xuất
-    function dubThenExport(w0) {
+    function dubThenExport(w0, kind) {
       closeExport();
       if (!W || W.id !== w0.id) return;
       if (dubbing || designing) { toast(dubbing ? _t('Đang lồng tiếng AI — chờ xong rồi xuất phim.') : _t('Đang thiết kế giọng vùng — chờ xong rồi xuất phim.')); return; }
@@ -2705,9 +2835,167 @@
         if (!st || !alive || !W || W.id !== w0.id) return;
         if (st.end === 'cancel') { toast(_t('Đã dừng lồng tiếng — chưa xuất phim.')); return; }
         if (st.end === 'nokey' || st.end === 'err') return;   // startDub đã báo lỗi / mở Cài đặt AI
-        exportFilm(W);
+        exportGo(kind, W);
       });
     }
+
+    // ---- XUẤT VIDEO (v0.22): nút khoá theo phép dò năng lực THẬT, kèm đúng lý do (CNS-223) · bảng chọn khung hình / chất lượng / định dạng (dò thật),
+    //      ước thời gian + dung lượng + trần độ dài · Bắt đầu: chọn thư mục NGAY lúc bấm (CNS-226) · tiến độ theo phân cảnh + Huỷ + "giữ tab ở phía trước"
+    //      (CNS-221) · xong: tệp đã lưu, Xem thử, chọn khung khác làm bìa (Q43). Trạng thái lượt xuất ở Vid (cấp module).
+    var videoB = h('button', { class: 'btn sm', id: 'videoExportB', disabled: true, title: _t('Tệp video (MP4 hoặc WebM) + phụ đề .srt + ảnh bìa .jpg + mô tả .txt — đăng lên YouTube / TikTok. Chạy ngay trong trình duyệt này; giữ tab ở phía trước trong lúc xuất.'), onclick: function () { exportClick('video'); } }, _t('Xuất video'));
+    var videoWhy = h('span', { class: 'note', id: 'videoWhy', role: 'status' });
+    var videoBox = h('div', { class: 'stack vidbox', hidden: true }), vcap = null, vs = null;
+    function probeVideo() {
+      if (!window.GCVideo || !GCVideo.probe) { vcap = { ok: false, reason: _t('Không mở được trang xuất video — cập nhật gen-chibi hoặc mở Studio đúng địa chỉ máy chủ.') }; paintVideoBtn(); return; }
+      videoWhy.textContent = _t('Đang kiểm tra trình duyệt…');
+      GCVideo.probe(Vid.pref()).then(function (r) { vcap = r; if (alive) paintVideoBtn(); }, function (e) { vcap = { ok: false, reason: e.message }; if (alive) paintVideoBtn(); });
+    }
+    function paintVideoBtn() {
+      var ok = !!(vcap && vcap.ok);
+      videoB.disabled = !ok || !W;
+      videoB.setAttribute('aria-describedby', 'videoWhy');
+      videoWhy.textContent = !vcap ? _t('Đang kiểm tra trình duyệt…') : ok ? _t('{fmt} · dò trên trình duyệt này', { fmt: VFMT[vcap.format.container] }) : vcap.reason;
+      videoWhy.className = 'note' + (vcap && !ok ? ' warn' : '');
+    }
+    function openVideo(w0, vo) {
+      var p = Vid.pref();
+      vs = { wid: w0.id, vo: vo || null, aspect: p.aspect, quality: p.quality, container: p.container, probe: null, estSec: null, voReady: !!vo };
+      if (!vo) filmVoices(w0, workLang(w0)).then(function (v) { if (vs && vs.wid === w0.id) { vs.vo = v; vs.voReady = true; paintVideo(); } });
+      filmSecEstimate(w0).then(function (sec) { if (vs && vs.wid === w0.id) { vs.estSec = sec; paintVideo(); } });
+      reprobe();
+    }
+    function reprobe() {
+      var my = vs; if (!my) return;
+      my.probe = null; paintVideo();
+      GCVideo.probe({ quality: my.quality, aspect: my.aspect, container: my.container }).then(function (r) { if (vs === my) { my.probe = r; if (r.ok) my.container = r.format.container; paintVideo(); } });
+    }
+    function segOf(label, cur, opts, set) {
+      var seg = h('div', { class: 'seg', role: 'group', 'aria-label': label });
+      opts.forEach(function (o) { seg.appendChild(h('button', { type: 'button', 'aria-pressed': String(cur === o[0]), 'data-v': o[0], disabled: o[2] || null, onclick: function () { if (cur !== o[0]) set(o[0]); } }, o[1])); });
+      return seg;
+    }
+    function paintVideo() {
+      if (!alive) return;
+      clear(videoBox);
+      var j = Vid.job && W && Vid.job.wid === W.id ? Vid.job : null;
+      videoBox.hidden = !j && !(vs && W && vs.wid === W.id);
+      if (videoBox.hidden) return;
+      var panel = h('div', { class: 'panel vidpanel', role: 'region', 'aria-label': _t('Xuất video') }), body = h('div', { class: 'pad stack' });
+      panel.appendChild(h('h3', null, _t('Xuất video'), h('span', { class: 'r note', text: _t('video · phụ đề .srt · ảnh bìa .jpg · mô tả .txt') })));
+      panel.appendChild(body);
+      if (j && j.phase === 'run') paintVideoRun(body, j);
+      else if (j && j.phase === 'done') paintVideoDone(body, j);
+      else if (j && j.phase === 'error') {
+        body.appendChild(h('div', { class: 'banner bad', role: 'alert' }, h('span', { text: _t('Xuất video không xong: {error}', { error: j.err }) })));
+        body.appendChild(h('div', { class: 'row' }, h('button', { class: 'btn sm', onclick: function () { vClose(); } }, _t('Đóng'))));
+      } else paintVideoOpts(body);
+      videoBox.appendChild(panel);
+    }
+    function paintVideoOpts(body) {
+      var o = vs, pr = o.probe, kv = h('div', { class: 'kv vidkv' });
+      kv.appendChild(h('label', { text: _t('Khung hình') }));
+      kv.appendChild(h('div', { class: 'row' }, segOf(_t('Khung hình'), o.aspect, [['16:9', _t('Ngang 16:9')], ['9:16', _t('Dọc 9:16 — phim ngang đặt giữa')]], function (v) { o.aspect = v; Vid.savePref(o); reprobe(); }),
+        h('span', { class: 'note', text: o.aspect === '9:16' ? _t('cho TikTok / Shorts: phim 16:9 đặt giữa khung dọc, tên phim ở trên — nhân vật nhỏ hơn bản ngang') : _t('YouTube, máy tính, TV') })));
+      kv.appendChild(h('label', { text: _t('Chất lượng') }));
+      kv.appendChild(h('div', { class: 'row' }, segOf(_t('Chất lượng'), o.quality, [['1080p', '1080p'], ['720p', '720p']], function (v) { o.quality = v; Vid.savePref(o); reprobe(); }),
+        h('span', { class: 'mono note', text: (o.aspect === '9:16' ? (o.quality === '720p' ? '720×1280' : '1080×1920') : (o.quality === '720p' ? '1280×720' : '1920×1080')) + ' · 30 fps' })));
+      kv.appendChild(h('label', { text: _t('Định dạng') }));
+      if (!pr) kv.appendChild(h('span', { class: 'note', text: _t('Đang dò trình duyệt…') }));
+      else if (!pr.ok) kv.appendChild(h('span', { class: 'note warn', text: pr.reason }));
+      else {
+        var fr = h('div', { class: 'row' });
+        if (pr.formats.length > 1) fr.appendChild(segOf(_t('Định dạng'), pr.format.container, pr.formats.map(function (k) { return [k, VFMT[k]]; }), function (v) { o.container = v; Vid.savePref(o); reprobe(); }));
+        else fr.appendChild(h('span', { class: 'chip info', 'data-fmt': pr.format.container, text: VFMT[pr.format.container] }));
+        fr.appendChild(h('span', { class: 'note', text: pr.formats.length > 1 ? _t('dò thật trên trình duyệt này') : pr.format.container === 'webm' ? _t('trình duyệt này không mã hoá được MP4 — YouTube và TikTok vẫn nhận WebM') : _t('dò thật trên trình duyệt này') }));
+        kv.appendChild(fr);
+      }
+      var est = o.estSec != null && pr && pr.ok ? vEstimate(o.estSec, o.quality, pr.format.container) : null, over = !!(est && o.estSec > est.limit);
+      kv.appendChild(h('label', { text: _t('Độ dài') }));
+      kv.appendChild(h('span', { 'data-v': 'len', text: o.estSec == null ? _t('đang ước…') : !o.estSec ? _t('chưa có phân cảnh nào sẵn sàng') : _t('~{len} (ước theo kịch bản; đo đúng lúc xuất)', { len: vSecs(o.estSec) }) }));
+      kv.appendChild(h('label', { text: _t('Trần độ dài') }));
+      kv.appendChild(h('span', { 'data-v': 'limit', text: !pr || !pr.ok ? '—' : pr.format.container === 'mp4' ? _t('{lim} cho MP4 {q} (MP4 giữ cả tệp trong bộ nhớ tới khi xong)', { lim: vSecs(est ? est.limit : GCVideo.limits(pr.format, o.quality)), q: o.quality })
+        : _t('{lim} cho WebM (ghi dần ra tệp)', { lim: vSecs(GCVideo.limits(pr.format, o.quality)) }) }));
+      kv.appendChild(h('label', { text: _t('Ước tính') }));
+      kv.appendChild(h('span', { 'data-v': 'est', text: est && o.estSec ? _t('xuất mất ~{t} · tệp tối đa ~{size}', { t: vSecs(est.wall), size: vBytes(est.bytes) }) : '—' }));
+      kv.appendChild(h('label', { text: _t('Lời thoại') }));
+      var vo = o.vo, voTxt = !o.voReady ? _t('đang đếm câu có giọng AI…') : !AiVoice.on() || !AiVoice.ready() ? _t('Giọng AI chưa bật — mọi câu thoại im lặng trong video (bong bóng / phụ đề vẫn hiện; giọng máy đọc không ghi được vào video).')
+        : !vo.total ? _t('phim chưa có câu thoại') : vo.have >= vo.total ? _t('{have}/{total} câu có giọng AI', { have: vo.have, total: vo.total }) : _t('{have}/{total} câu có giọng AI — câu còn lại im lặng, bong bóng / phụ đề vẫn hiện', { have: vo.have, total: vo.total });
+      kv.appendChild(h('span', { 'data-v': 'voice', class: o.voReady && vo && vo.have < vo.total ? 'warn' : '', text: voTxt }));
+      kv.appendChild(h('label', { text: _t('Lưu vào') }));
+      kv.appendChild(h('span', { 'data-v': 'save', text: window.showDirectoryPicker ? _t('chọn thư mục khi bấm Bắt đầu — 4 tệp: video, .srt, .jpg, .txt') : _t('tải về từng tệp khi xong — 4 tệp: video, .srt, .jpg, .txt') }));
+      body.appendChild(kv);
+      if (over) {
+        var alt = pr.format.container === 'mp4' && pr.formats.indexOf('webm') >= 0;
+        body.appendChild(h('div', { class: 'banner bad', role: 'alert', 'data-v': 'over' }, h('span', { text: _t('Phim dài ~{len}, quá trần {lim} của {fmt} {q} — {hint}', { len: vSecs(o.estSec), lim: vSecs(est.limit), fmt: VFMT[pr.format.container], q: o.quality,
+          hint: o.quality === '1080p' ? (alt ? _t('chọn 720p hoặc WebM.') : _t('chọn 720p.')) : alt ? _t('chọn WebM.') : _t('rút bớt phân cảnh rồi xuất lại.') }) })));
+      }
+      if (W && /^mau-/.test(W.project || '')) body.appendChild(h('div', { class: 'note', text: _t('Video làm từ bộ mẫu Gen Labs đăng công khai được — giữ dòng ghi công "Làm bằng gen-chibi · Gen Labs" trong mô tả (.txt).') }));
+      body.appendChild(h('div', { class: 'note', text: _t('Giữ tab này ở phía trước trong lúc xuất — tab bị ẩn sẽ bị trình duyệt làm chậm. Xuất mất khoảng 2–3 lần độ dài phim.') }));
+      var can = !!(pr && pr.ok && o.estSec && o.voReady && !over);
+      var go = h('button', { class: 'btn sm primary', 'data-v': 'start', disabled: !can, onclick: function () { startClick(); } }, _t('Bắt đầu'));
+      body.appendChild(h('div', { class: 'row' }, go, h('button', { class: 'btn sm', onclick: function () { vs = null; paintVideo(); } }, _t('Đóng'))));
+    }
+    // Bắt đầu: hộp chọn thư mục gọi NGAY trong cú bấm (cần thao tác người dùng — CNS-226); trình duyệt không có thì tải về khi xong
+    function startClick() {
+      var o = vs, w0 = W; if (!o || !w0 || !o.probe || !o.probe.ok) return;
+      if (Vid.job && Vid.job.phase === 'run') { toast(_t('Đang xuất video "{title}" — chờ xong hoặc bấm Huỷ trước.', { title: Vid.job.title })); return; }
+      var opt = { aspect: o.aspect, quality: o.quality, container: o.probe.format.container, vo: o.vo, estSec: o.estSec };
+      var pick = window.showDirectoryPicker ? window.showDirectoryPicker({ id: 'gc-video', mode: 'readwrite', startIn: 'videos' }) : Promise.resolve(null);
+      pick.then(function (dir) { vs = null; vStart(w0, opt, dir); }, function (e) {
+        if (e && e.name === 'AbortError') { toast(_t('Chưa chọn thư mục — chưa xuất video.')); return; }
+        toast(_t('Không mở được thư mục ({error}) — tệp sẽ tải về khi xong.', { error: e && e.message || e })); vs = null; vStart(w0, opt, null);
+      });
+    }
+    function paintVideoRun(body, j) {
+      var p = j.prog || {}, total = j.frames || p.frames || 0, cur = p.phase === 'render' ? p.frame || 0 : 0, pct = total ? Math.min(99, Math.floor(cur / total * 100)) : 0;
+      var head = p.phase === 'render' ? _t('Đang dựng và mã hoá — khung {i}/{n}', { i: cur, n: total }) : _t('Đang chuẩn bị — đo độ dài phim (lượt chạy thử, chưa ghi)…');
+      body.appendChild(h('div', { class: 'readybar vidbar' },
+        h('span', { class: 'meter', role: 'progressbar', 'aria-label': _t('Tiến độ xuất video'), 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(pct) }, h('i', { style: 'width:' + pct + '%' })),
+        h('b', { 'data-v': 'pct', text: pct + '%' }), h('span', { class: 'note', 'aria-live': 'polite', text: head })));
+      if (j.marks && j.marks.length) {
+        var t = h('table', { class: 'grid vidshots' });
+        t.appendChild(h('tr', null, h('th', { text: '#' }), h('th', { text: _t('Phân cảnh') }), h('th', { text: _t('Tiến độ') }), h('th', { text: '%' })));
+        j.marks.forEach(function (m, k) {
+          var a = m.frame, b = k + 1 < j.marks.length ? j.marks[k + 1].frame : total, sp = b > a ? Math.max(0, Math.min(100, Math.floor((cur - a) / (b - a) * 100))) : 0;
+          if (p.phase !== 'render') sp = 0;
+          t.appendChild(h('tr', { 'data-shot': String(k) }, h('td', { class: 'id', text: String(k + 1) }), h('td', { text: m.title || '—' }),
+            h('td', { style: 'width:40%' }, h('span', { class: 'meter' }, h('i', { style: 'width:' + sp + '%' }))), h('td', { class: 'nw mono', text: sp + '%' })));
+        });
+        body.appendChild(t);
+      }
+      body.appendChild(h('div', { class: 'banner warn', role: 'note', 'data-v': 'front' }, h('span', { text: j.hidden ? _t('Tab này vừa bị ẩn — trình duyệt làm chậm việc xuất. Giữ tab này ở phía trước tới khi xong.') : _t('Giữ tab này ở phía trước tới khi xong — tab bị ẩn sẽ bị trình duyệt làm chậm.') })));
+      body.appendChild(h('div', { class: 'row' }, h('button', { class: 'btn sm', 'data-v': 'cancel', disabled: j.cancelled || null, onclick: function () { vCancel(); } }, j.cancelled ? _t('Đang huỷ…') : _t('Huỷ')),
+        h('span', { class: 'note', text: j.dir ? _t('lưu vào thư mục "{dir}"', { dir: j.dir.name }) : _t('tải về khi xong') })));
+    }
+    function paintVideoDone(body, j) {
+      var r = j.result || {}, f = r.format || {};
+      body.appendChild(h('div', { class: 'banner ok', role: 'status', 'data-v': 'done' }, h('span', { text: j.dir ? _t('Xong — {n} tệp đã lưu vào thư mục "{dir}" · {fmt} {w}×{h} · {len}', { n: j.files.length, dir: j.dir.name, fmt: (f.container || '').toUpperCase(), w: f.width, h: f.height, len: vSecs((r.durationMs || 0) / 1000) })
+        : _t('Xong — {n} tệp đã tải về · {fmt} {w}×{h} · {len}', { n: j.files.length, fmt: (f.container || '').toUpperCase(), w: f.width, h: f.height, len: vSecs((r.durationMs || 0) / 1000) }) })));
+      var KIND = { video: _t('video'), srt: _t('phụ đề'), cover: _t('ảnh bìa'), txt: _t('tiêu đề + mô tả') };
+      var t = h('table', { class: 'grid vidfiles' });
+      t.appendChild(h('tr', null, h('th', { text: _t('Tệp') }), h('th', { text: _t('Loại') }), h('th', { text: _t('Cỡ') }), h('th', { text: '' })));
+      j.files.forEach(function (x) {
+        t.appendChild(h('tr', { 'data-file': x.kind }, h('td', { class: 'mono', text: x.name }), h('td', { text: KIND[x.kind] || x.kind }), h('td', { class: 'nw mono', text: vBytes(x.bytes || 0) }),
+          h('td', { class: 'nw' }, j.dir ? null : h('button', { class: 'btn sm', onclick: function () { if (x.blob) downloadBlob(x.name, x.blob); else if (j.url) fetch(j.url).then(function (q) { return q.blob(); }).then(function (b) { downloadBlob(x.name, b); }); } }, _t('Tải lại')))));
+      });
+      var vid = h('video', { class: 'vidprev', controls: true, preload: 'auto', src: j.url, 'aria-label': _t('Xem thử video vừa xuất') });
+      var cover = j.coverUrl ? h('img', { class: 'vidcover', src: j.coverUrl, alt: _t('Ảnh bìa') }) : h('span', { class: 'note', text: _t('chưa có ảnh bìa') });
+      var pickRow = h('div', { class: 'stack', hidden: true, style: 'gap:6px' });
+      var slider = h('input', { type: 'range', min: '0', max: String(Math.max(0.1, (r.durationMs || 0) / 1000 - 0.05)), step: String(1 / 30), value: '0', 'aria-label': _t('Chọn khung làm ảnh bìa'), oninput: function () { vid.pause(); vid.currentTime = +slider.value; } });
+      pickRow.appendChild(h('div', { class: 'note', text: _t('Kéo thanh (hoặc dừng trình xem thử) ở khung muốn làm bìa, rồi bấm "Dùng khung này làm bìa".') }));
+      pickRow.appendChild(slider);
+      pickRow.appendChild(h('div', { class: 'row' }, h('button', { class: 'btn sm primary', 'data-v': 'use-frame', onclick: function () { vCoverFrom(vid).catch(function (e) { toast(e.message); }); } }, _t('Dùng khung này làm bìa')),
+        h('button', { class: 'btn sm', onclick: function () { pickRow.hidden = true; } }, _t('Thôi'))));
+      body.appendChild(h('div', { class: 'vidrow' },
+        h('div', { class: 'stack', style: 'gap:6px;min-width:0' }, h('b', { class: 'note', text: _t('Xem thử') }), vid),
+        h('div', { class: 'stack', style: 'gap:6px;min-width:0' }, h('b', { class: 'note', text: _t('Ảnh bìa') }), cover,
+          h('button', { class: 'btn sm', 'data-v': 'repick', onclick: function () { pickRow.hidden = false; slider.value = String(vid.currentTime || 0); } }, _t('Chọn khung khác')), pickRow)));
+      body.appendChild(t);
+      body.appendChild(h('div', { class: 'row' }, h('button', { class: 'btn sm', onclick: function () { var w0 = W; vClose(); if (w0) openVideo(w0); } }, _t('Xuất lại')), h('button', { class: 'btn sm', onclick: function () { vClose(); } }, _t('Đóng'))));
+    }
+    Vid.paint = paintVideo;
+    probeVideo();
+    onLeave(function () { if (Vid.paint === paintVideo) Vid.paint = null; });
 
     /* ---- dữ liệu dựng giao diện ---- */
     function paintHead() {
@@ -3039,8 +3327,9 @@
     panels.publish = h('div', { class: 'stack' },
       h('div', { class: 'panel' }, h('h3', null, _t('Xuất bản'), h('span', { class: 'r note', text: _t('phim · storyboard · dữ liệu · gói dự án') })), h('div', { class: 'pad stack' },
         h('div', { class: 'usebar' }, h('b', { text: _t('Phim') }),
-          h('button', { class: 'btn sm primary', title: _t('Một tệp .html chạy được ở mọi trình duyệt, không cần cài gì — gửi cho người xem. Còn câu chưa có giọng AI thì hỏi trước: lồng tiếng rồi xuất / xuất luôn'), onclick: function () { exportClick(); } }, _t('Phim (HTML)'))),
-        exportBox,
+          h('button', { class: 'btn sm primary', title: _t('Một tệp .html chạy được ở mọi trình duyệt, không cần cài gì — gửi cho người xem. Còn câu chưa có giọng AI thì hỏi trước: lồng tiếng rồi xuất / xuất luôn'), onclick: function () { exportClick('html'); } }, _t('Phim (HTML)')),
+          videoB, videoWhy),
+        exportBox, videoBox,
         h('div', { class: 'usebar' }, h('b', { text: 'Storyboard' }),
           h('button', { class: 'btn sm', title: _t('Bảng phân cảnh: ảnh từng cảnh + mô tả + lời thoại'), onclick: function () { if (W) download(W.id + '-storyboard.svg', storyboard(W), 'image/svg+xml'); } }, 'Storyboard SVG'),
           h('button', { class: 'btn sm', onclick: function () {
@@ -3056,7 +3345,7 @@
     $('view').appendChild(h('div', anc({ class: 'works room-wrap' }, 'work:' + r.work, r.work), body));
     function paint() {
       stillCache = {};
-      syncLang(); paintDub(); paintHead(); paintTabs();
+      syncLang(); paintDub(); paintHead(); paintTabs(); paintVideoBtn(); paintVideo();
       logline.value = draftScript ? draftScript.logline : W.logline || ''; script.value = draftScript ? draftScript.script : W.script || '';
       langSel2.value = langSel.value; langNote2.textContent = langNote.textContent; langNote2.className = langNote.className;
       paintCast(); paintShots(); paintReview(); paintVoice();

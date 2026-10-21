@@ -280,7 +280,7 @@ else {
     const W = { setTimeout: (f, ms) => { realT.push(f); setImmediate(f); return 1; },   // timer THẬT: đếm (đồng hồ ảo không được dùng) nhưng vẫn chạy
       clearTimeout() {}, setInterval() { return 1; }, clearInterval() {}, requestAnimationFrame: () => 1, cancelAnimationFrame() {},
       performance: { now: () => 1000 + performance.now() }, speechSynthesis: { speak() {} }, SpeechSynthesisUtterance: function () {}, IntersectionObserver: function () {}, ResizeObserver: function () {},
-      MessageChannel: class { constructor() { const self = this; this.port1 = { onmessage: null }; this.port2 = { postMessage: () => setImmediate(() => self.port1.onmessage && self.port1.onmessage({})) }; } },   // như MessageChannel thật: một tác vụ vĩ mô
+      MessageChannel: class { constructor() { const self = this; this.port1 = { onmessage: null }; this.port2 = { postMessage: () => { log.push('mc'); setImmediate(() => self.port1.onmessage && self.port1.onmessage({})); } }; } },   // như MessageChannel thật: một tác vụ vĩ mô
       document: { querySelector: s => withMeta && s === 'meta[name="gc-video-export"]' ? {} : null, getAnimations: () => [] } };
     W.window = W; W.Date = { now: () => 5000 }; W.Promise = Promise; W.console = console; W.Object = Object; W.Array = Array; W.Math = Math; W.WeakMap = WeakMap;
     return { W, realT, log };
@@ -310,9 +310,12 @@ else {
     let done = false; VC.track(new Promise(r => setTimeout(r, 60)).then(() => { done = true; }));   // việc async thật 60 ms (vd. decodeAudioData)
     await VC.advance(41);
     no(!done, 'advance phải chờ việc async thật đã track');
+    // nhả HAI bước vĩ mô mỗi lần (bước đầu rỗng: hẹn giờ của Studio tới hạn trong tác vụ nặng được chạy ngay sau nó — ngân sách long task, spec §3)
+    const m0 = on.log.length; await VC.yieldReal(); await VC.yieldReal();
+    no(on.log.length - m0 !== 4 || on.realT.length, 'yieldReal = 2 bước MessageChannel, không setTimeout thật; có ' + (on.log.length - m0) + ' bước / ' + on.realT.length + ' setTimeout');
   };
   await run();
-  if (bad === b0) ok('đồng hồ ảo: chỉ vá ở trang xuất (có meta), thứ tự hẹn giờ (thời điểm → thứ tự đặt, 0 ms lồng nhau, interval, huỷ), rAF một lượt / khung, beforeFire trước mỗi lần bắn, chờ việc async đã track, không dùng setTimeout thật');
+  if (bad === b0) ok('đồng hồ ảo: chỉ vá ở trang xuất (có meta), thứ tự hẹn giờ (thời điểm → thứ tự đặt, 0 ms lồng nhau, interval, huỷ), rAF một lượt / khung, beforeFire trước mỗi lần bắn, chờ việc async đã track, nhả luồng 2 bước MessageChannel, không dùng setTimeout thật');
 }
 
 /* ---------------------------------------------------------------- tệp chữ */
@@ -338,6 +341,8 @@ else {
   const cap = fs.readFileSync(path.join(ROOT, 'studio/video/capture.js'), 'utf8').replace(/\/\/[^\n']*$|\/\*[\s\S]*?\*\//gm, '');   // bỏ chú thích
   no(/createObjectURL|createImageBitmap/.test(cap) || !/'data:image\/svg\+xml;charset=utf-8,'/.test(cap), 'chụp khung qua data: URL + HTMLImageElement (blob: / createImageBitmap làm bẩn canvas)');
   no(/[^.]\bsetTimeout\(/.test(cap), 'capture.js không dùng setTimeout (đồng hồ ảo / tab ẩn bị bóp) — nhả luồng bằng MessageChannel');
+  // ngân sách luồng chính (spec §3): không nhân bản cả sân khấu mỗi khung (rác DOM → GC dừng luồng ~80 ms); CSS + phông chỉ thoát / mã hoá MỘT lần; raster theo dải
+  no(/cloneNode\(/.test(cap) || !/function frameShell\(W, H\) \{\s*if \(!PRE \|\| PRE\.w !== W/.test(cap) || !/var BANDS = /.test(cap), 'chụp khung: không cloneNode, đầu data: URL (CSS + phông) đóng sẵn một lần, raster theo dải');
   const vc = fs.readFileSync(path.join(ROOT, 'studio/video/vclock.js'), 'utf8');
   no(/(^|\/)engine\//.test(path.relative(ROOT, path.join(ROOT, 'studio/video/vclock.js'))), 'vclock không nằm trong engine/');
   no(!/window\.parent/.test(cap) || !/e\.origin !== ORIGIN \|\| e\.source !== PARENT/.test(cap), 'trang xuất kiểm origin + source của tin nhắn');

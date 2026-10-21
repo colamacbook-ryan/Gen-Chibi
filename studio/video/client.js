@@ -1,18 +1,22 @@
 /* gen-chibi — lối vào xuất video cho Studio (v0.22). © 2026 Gen Labs — All rights reserved.
  *
  * Studio nạp tệp này (nhỏ, không vá gì của trang). Nó tạo iframe ẨN studio/video-export.html — nơi duy nhất có đồng hồ ảo + bộ ghép (CNS-228) —
- * gửi payload qua postMessage (kiểm origin + source hai chiều, CNS-214) và nhận lại tệp. Không có nút / giao diện ở đây (P3).
+ * gửi payload qua postMessage (kiểm origin + source hai chiều, CNS-214) và nhận lại tệp. Không có nút / giao diện ở đây — bảng Xuất video nằm ở studio/app.js (P3).
  *
- *   GCVideo.probe({ quality, aspect }) → Promise<{ ok, code?, reason?, format? }>   dò năng lực THẬT theo thứ tự (CNS-223):
- *       secureContext → WebCodecs → codec (MP4 avc1 + mp4a trước, rồi WebM vp09 + opus) → vẽ foreignObject không làm bẩn canvas
+ *   GCVideo.probe({ quality, aspect, container }) → Promise<{ ok, code?, reason?, format?, formats? }>   dò năng lực THẬT theo thứ tự (CNS-223):
+ *       secureContext → Chromium máy tính (Q44) → WebCodecs → codec (MP4 avc1 + mp4a trước, rồi WebM vp09 + opus; dò trong Worker probe-worker.js, nhớ theo cỡ khung) →
+ *       vẽ foreignObject không làm bẩn canvas. container: chọn định dạng khi cả hai cùng có; formats = các định dạng dùng được
  *   GCVideo.exportWork(W, opts, onProgress) → Promise<{ files: [{ kind, name, type, blob, bytes }], format, durationMs, stats }>  (+ .cancel())
  *       W = tác phẩm của Studio; payload lấy từ filmPayload(W) (app.js đăng ký GCVideo.studio — CÙNG nguồn với phim HTML, CNS-219)
  *       opts: { quality '1080p'|'720p', aspect '16:9'|'9:16', shots [chỉ số], voices (kết quả filmVoices đã hỏi), missingVoice 'silent'|'blip',
- *               handle (FileSystemFileHandle — chọn lúc bấm, CNS-226), format (bỏ qua dò), maxSec, debug, probe, seed, dryEstimate (giây — test lối dò lại) }
- *       onProgress({ phase: 'prepare'|'render', frame, frames, shot, shots })
+ *               handle (FileSystemFileHandle — chọn lúc bấm, CNS-226), container, format (bỏ qua dò), maxSec, debug, probe, seed, dryEstimate (giây — test lối dò lại),
+ *               dryOnly (chỉ lượt dò → { dry, format } — test / hiệu chỉnh ước lượng) }
+ *       onProgress({ phase: 'prepare'|'render', frame, frames, shot, shots }) · sau lượt dò: onProgress({ phase: 'measured', frames, durationMs, marks: [{ frame, title }] })
+ *       opts.name: tên tệp (không đuôi) — Studio chọn tên chưa có trong thư mục lưu; mặc định slug(tiêu đề)
  *   GCVideo.exportPayload(payload, opts, onProgress) → như trên, nhận payload sẵn (job CI, test)
- *   GCVideo.limits(format, quality) → giây tối đa (MP4 giữ cả tệp trong bộ nhớ: 5 phút @1080p, 10 phút @720p; WebM ghi luồng: 30 phút)
- *   Lỗi: Error có .code: insecure · no-webcodecs · no-codec · tainted · too-long · cancelled · load · encode · payload · empty · internal
+ *   GCVideo.limits(format, quality) → giây tối đa (MP4 giữ cả tệp trong bộ nhớ: 5 phút @1080p, 10 phút @720p; WebM ghi luồng: 30 phút — trần do
+ *       builder P2 tự đặt, Studio + tài liệu báo rõ)
+ *   Lỗi: Error có .code: insecure · browser · no-webcodecs · no-codec · tainted · too-long · cancelled · load · encode · payload · empty · internal
  */
 (function () {
   'use strict';
@@ -28,36 +32,65 @@
     insecure: function () { return _t('Mở Studio qua https hoặc localhost để xuất video.'); },
     'no-webcodecs': function () { return _t('Trình duyệt này chưa mã hoá được video — dùng Chrome hoặc Edge trên máy tính.'); },
     'no-codec': function () { return _t('Trình duyệt này không có bộ mã hoá MP4 (H.264 + AAC) hay WebM (VP9 + Opus) — dùng Chrome hoặc Edge trên máy tính.'); },
+    browser: function () { return _t('Bản này chỉ xuất video trên Chrome hoặc Edge ở máy tính — Firefox, Safari và trình duyệt điện thoại chưa được hỗ trợ.'); },
     tainted: function () { return _t('Trình duyệt này không cho chụp khung hình phim — dùng Chrome hoặc Edge trên máy tính.'); },
     'too-long': function (x) { return _t('Phim dài quá {n} giây cho định dạng này — chọn 720p hoặc xuất ít phân cảnh hơn.', { n: x }); },
     cancelled: function () { return _t('Đã huỷ xuất video.'); },
-    load: function () { return _t('Không mở được trang xuất video — cập nhật gen-chibi hoặc mở Studio đúng địa chỉ máy chủ.'); }
+    load: function () { return _t('Không mở được trang xuất video — cập nhật gen-chibi hoặc mở Studio đúng địa chỉ máy chủ.'); },
+    empty: function () { return _t('Tác phẩm chưa có phân cảnh nào sẵn sàng.'); }
   };
-  function err(code, extra) { var e = new Error((REASON[code] ? REASON[code](extra) : _t('Xuất video lỗi: {x}', { x: extra || code }))); e.code = code; return e; }
+  // lỗi kỹ thuật (encode · internal · payload…): câu hiện cho người dùng chỉ mang MÃ lỗi (theo ngôn ngữ giao diện); chi tiết của trang xuất ở e.detail + console
+  function err(code, extra) {
+    var e = new Error(REASON[code] ? REASON[code](extra) : _t('Xuất video lỗi: {x}', { x: code })); e.code = code;
+    if (!REASON[code] && extra) { e.detail = String(extra); if (window.console) console.warn('[GCVideo] ' + code + ': ' + e.detail); }
+    return e;
+  }
 
   function dims(o) { var v = o && o.aspect === '9:16', hd = !o || o.quality !== '720p'; return { w: v ? (hd ? 1080 : 720) : (hd ? 1920 : 1280), h: v ? (hd ? 1920 : 1280) : (hd ? 1080 : 720) }; }
   GCV.limits = function (format, quality) { return format && format.container === 'mp4' ? (quality === '720p' ? 600 : 300) : 1800; };
 
+  // phần dò codec chạy trong Worker (isConfigSupported VP9 chặn luồng gọi ~100 ms — ngân sách long task, spec §3); nhớ kết quả theo cỡ khung cho cả phiên
+  var WORKER = me ? new URL('probe-worker.js', me).href : new URL('studio/video/probe-worker.js', location.href).href, codecCache = {};
+  function codecs(d) {
+    var k = d.w + 'x' + d.h;
+    if (!codecCache[k]) codecCache[k] = new Promise(function (ok, no) {
+      var w; try { w = new Worker(WORKER); } catch (e) { no(e); return; }
+      var t = setTimeout(function () { w.terminate(); no(new Error('probe-worker timeout')); }, 15000);
+      w.onmessage = function (e) { clearTimeout(t); w.terminate(); ok(e.data || {}); };
+      w.onerror = function (e) { clearTimeout(t); w.terminate(); no(e); };
+      w.postMessage({ w: d.w, h: d.h });
+    }).catch(function (e) { delete codecCache[k]; throw e; });
+    return codecCache[k];
+  }
+  var taintOK = null;
+  // o: { quality, aspect, container ('mp4'|'webm' — chọn định dạng khi cả hai cùng có; mặc định MP4 trước) }
+  // → { ok, format, formats: ['mp4', 'webm'] (định dạng dùng được ở cỡ này) } | { ok: false, code, reason }
   GCV.probe = async function (o) {
     o = o || {};
     if (!window.isSecureContext) return { ok: false, code: 'insecure', reason: REASON.insecure() };
-    if (typeof VideoEncoder !== 'function' || typeof AudioEncoder !== 'function' || typeof VideoFrame !== 'function' || typeof OfflineAudioContext !== 'function' || typeof AudioWorkletNode !== 'function' || typeof OffscreenCanvas !== 'function')
+    // Q44: v0.22 chỉ kiểm trên Chromium máy tính (Chrome / Edge). Firefox ≥ 130 có WebCodecs, Safari có VideoEncoder nhưng chưa ai chạy hết đường xuất ở đó
+    // (Safari: foreignObject làm bẩn canvas — CNS-223) → khoá kèm lý do. navigator.userAgentData chỉ Chromium có (Firefox / Safari không).
+    var uad = navigator.userAgentData;
+    if (!uad || !(uad.brands || []).some(function (b) { return /Chromium/.test(b.brand); }) || uad.mobile) return { ok: false, code: 'browser', reason: REASON.browser() };
+    if (typeof VideoEncoder !== 'function' || typeof AudioEncoder !== 'function' || typeof VideoFrame !== 'function' || typeof OfflineAudioContext !== 'function' || typeof AudioWorkletNode !== 'function' || typeof OffscreenCanvas !== 'function' || typeof Worker !== 'function')
       return { ok: false, code: 'no-webcodecs', reason: REASON['no-webcodecs']() };
-    var d = dims(o), hd = d.w * d.h > 1280 * 720;
-    async function vOK(codec, avc) { try { var c = { codec: codec, width: d.w, height: d.h, bitrate: hd ? 8e6 : 5e6, framerate: 30 }; if (avc) c.avc = { format: 'avc' }; return (await VideoEncoder.isConfigSupported(c)).supported === true; } catch (e) { return false; } }
-    async function aOK(codec) { try { return (await AudioEncoder.isConfigSupported({ codec: codec, sampleRate: 48000, numberOfChannels: 2, bitrate: 160000 })).supported === true; } catch (e) { return false; } }
-    var format = null, avcs = hd ? ['avc1.640028', 'avc1.4d0028', 'avc1.42e028'] : ['avc1.64001f', 'avc1.4d001f', 'avc1.42e01f'];
-    if (await aOK('mp4a.40.2')) for (var i = 0; i < avcs.length && !format; i++) if (await vOK(avcs[i], true)) format = { container: 'mp4', video: { codec: avcs[i], bitrate: hd ? 8e6 : 5e6 }, audio: { codec: 'mp4a.40.2', bitrate: 160000 } };
-    if (!format) { var vp9 = hd ? 'vp09.00.40.08' : 'vp09.00.31.08'; if (await vOK(vp9) && await aOK('opus')) format = { container: 'webm', video: { codec: vp9, bitrate: hd ? 8e6 : 5e6 }, audio: { codec: 'opus', bitrate: 160000 } }; }
-    if (!format) return { ok: false, code: 'no-codec', reason: REASON['no-codec']() };
-    // foreignObject (data: URL) → canvas → VideoFrame: Safari / trình duyệt khác có thể coi là "bẩn" → lỗi giữa chừng; dò trước bằng một khung 8×8
-    try {
-      var img = new Image(); img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><foreignObject width="8" height="8"><div xmlns="http://www.w3.org/1999/xhtml" style="width:8px;height:8px;background:red"></div></foreignObject></svg>');
-      await img.decode();
-      var cv = new OffscreenCanvas(8, 8); cv.getContext('2d').drawImage(img, 0, 0); new VideoFrame(cv, { timestamp: 0 }).close();
-    } catch (e) { return { ok: false, code: 'tainted', reason: REASON.tainted() }; }
+    var c;
+    try { c = await codecs(dims(o)); } catch (e) { return { ok: false, code: 'no-codec', reason: REASON['no-codec']() }; }
+    var formats = ['mp4', 'webm'].filter(function (k) { return c[k]; });
+    if (!formats.length) return { ok: false, code: 'no-codec', reason: REASON['no-codec']() };
+    // foreignObject (data: URL) → canvas → VideoFrame: Safari / trình duyệt khác có thể coi là "bẩn" → lỗi giữa chừng; dò trước bằng một khung 8×8 (một lần)
+    if (taintOK === null) {
+      try {
+        var img = new Image(); img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><foreignObject width="8" height="8"><div xmlns="http://www.w3.org/1999/xhtml" style="width:8px;height:8px;background:red"></div></foreignObject></svg>');
+        await img.decode();
+        var cv = new OffscreenCanvas(8, 8); cv.getContext('2d').drawImage(img, 0, 0); new VideoFrame(cv, { timestamp: 0 }).close();
+        taintOK = true;
+      } catch (e) { taintOK = false; }
+    }
+    if (!taintOK) return { ok: false, code: 'tainted', reason: REASON.tainted() };
+    var format = Object.assign({}, c[o.container && c[o.container] ? o.container : formats[0]]);
     format.limitSec = GCV.limits(format, o.quality);
-    return { ok: true, format: format };
+    return { ok: true, format: format, formats: formats };
   };
 
   // một lượt trong một iframe mới (engine giữ AudioContext suốt đời trang → mỗi lượt một trang sạch)
@@ -106,13 +139,16 @@
       try { dry = await pass(payload, Object.assign({ pass: 'dry', sec: est }, common), prog, ctl); }
       catch (e) { if (e.code !== 'dry-short' || est >= maxSec) throw e; dry = await pass(payload, Object.assign({ pass: 'dry', sec: maxSec }, common), prog, ctl); }
       if (ctl.cancelled) throw err('cancelled');
+      // độ dài thật + mốc khung đầu của từng phân cảnh (bảng tiến độ theo phân cảnh của Studio)
+      if (onProgress) { try { onProgress({ phase: 'measured', frames: dry.frames, durationMs: dry.durationMs, marks: (dry.shots || []).map(function (m) { return { frame: m.frame, title: m.title }; }) }); } catch (e) { /* lỗi của người gọi */ } }
+      if (opts.dryOnly) return { dry: dry, format: format };   // chỉ đo độ dài (test, hiệu chỉnh ước lượng)
       var r = await pass(payload, Object.assign({ pass: 'render', sec: dry.durationMs / 1000, frames: dry.frames, handle: opts.handle, probe: opts.probe }, common), prog, ctl);
-      var title = (payload.film && payload.film.title) || 'video', slug = (GCV.studio && GCV.studio.slug ? GCV.studio.slug(title) : GCVTextSlug(title)) || 'video';
+      var title = (payload.film && payload.film.title) || 'video', slug = opts.name || (GCV.studio && GCV.studio.slug ? GCV.studio.slug(title) : GCVTextSlug(title)) || 'video';
       // mô tả .txt: tiêu đề + mô tả phim + dòng ghi công (Q47) — chữ hệ thống theo ngôn ngữ giao diện lúc xuất, như chữ trên khung hình (CNS-224)
       var txt = [String(title).trim(), String((payload.film && payload.film.logline) || '').trim(), _t('Làm bằng gen-chibi · Gen Labs')].filter(Boolean).join('\n\n') + '\n';
       r.files.push({ kind: 'txt', type: 'text/plain', ext: 'txt', blob: new Blob([txt], { type: 'text/plain;charset=utf-8' }) });
       r.files.forEach(function (x) { x.name = slug + '.' + x.ext; });
-      r.dry = { frames: dry.frames, durationMs: dry.durationMs, stats: dry.stats };
+      r.dry = { frames: dry.frames, durationMs: dry.durationMs, stats: dry.stats, marks: dry.marks };
       r.wallMs = performance.now() - t0;
       return r;
     })();
@@ -124,7 +160,7 @@
 
   GCV.exportWork = function (W, opts, onProgress) {
     opts = opts || {};
-    if (!GCV.studio || typeof GCV.studio.payload !== 'function') return Promise.reject(err('payload', 'Studio chưa đăng ký filmPayload'));
+    if (!GCV.studio || typeof GCV.studio.payload !== 'function') return Promise.reject(err('payload', 'GCVideo.studio.payload'));
     var inner = null, cancelled = false;
     var p = GCV.studio.payload(W, opts.voices).then(function (payload) {
       if (cancelled) throw err('cancelled');

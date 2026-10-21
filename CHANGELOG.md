@@ -1,5 +1,66 @@
 # Changelog
 
+## v0.22.0 — Export video: one button in the Studio makes a video file you can upload to YouTube or TikTok
+Owner decision: Ryan approved the v0.22 spec on 2026-10-21 ("duyệt, làm tiếp đi" — *"approved, keep going"*) with all proposed defaults.
+
+### New
+- **Work › Export video** (next to *Film (HTML)*): pick **16:9** or **9:16** and **1080p** (default) or **720p**. The app checks your browser first and shows:
+  - which format you will get;
+  - how long the export should take;
+  - roughly how big the file will be;
+  - the length limit.
+
+  After you press **Start**:
+  - it asks where to save (where the browser allows);
+  - you see progress per shot, with **Cancel**;
+  - at the end you get **Preview** and **Choose another cover frame**.
+- **You get four files**:
+  - the video;
+  - subtitles (`.srt`);
+  - a cover image (`.jpg`, the first frame with dialogue);
+  - a `.txt` file with title, description and the line "Made with gen-chibi · Gen Labs".
+- **Formats**:
+  - Chrome / Edge on Windows and macOS → **MP4** (H.264 + AAC). Checked on real Chrome in CI on Windows and macOS.
+  - Linux and Chromium → **WebM** (VP9 + Opus). YouTube and TikTok accept both.
+  - Picture and sound are the same as the film in the Studio, frame by frame. On a decoded file, the sound lands within 0 ms of the picture at the start and at the end (measured with ffmpeg).
+- **9:16** is the landscape film centred in a vertical frame for now. A camera that crops to the speaker is planned next.
+- **Lines without an AI voice are silent** in the video; their bubbles still show. Before you export, the usual dialog offers to dub them first. The browser's own read-aloud voice cannot be recorded.
+- **Limits**:
+  - MP4: 5 minutes at 1080p, 10 minutes at 720p.
+  - WebM: 30 minutes.
+  - Keep the tab in front while exporting. A hidden tab still finishes, but more slowly.
+- **Works in**: Chrome / Edge on a computer, with the Studio opened over `https` or `localhost`. In other cases the button is disabled and says why. Firefox, Safari and phones are not supported yet.
+- **Videos made from the Gen Labs samples** (*Fun Office*, *Three Kingdoms*) may be posted publicly, with the attribution line.
+
+### How it works
+- Everything happens in your browser, and nothing is uploaded.
+- The film is rendered frame by frame on a virtual clock in an isolated page.
+- It is encoded with the browser's built-in WebCodecs and packed by our own MP4 / WebM writer. There is no new dependency and nothing changed in the Docker image.
+- AAC encoder delay is measured on your machine (2112 samples on macOS, for example) and compensated without an edit list.
+
+### Security
+- Only the export page may be framed, and only by the Studio itself (`X-Frame-Options: SAMEORIGIN`, CSP `frame-ancestors 'self'`). Every other page and response still refuses framing.
+- The export page has no inline script. Messages between the Studio and the page check their origin.
+- The HTML film and the video use one shared film payload.
+
+### Known issues
+- On heavy scenes at 1080p (e.g. *Three Kingdoms*), the Studio can freeze for up to ~0.2 s now and then during an export. 720p stays under 0.1 s. The video itself is not affected.
+- MCP agents cannot export video yet: this needs a browser.
+
+### Tests
+- `tools/test.sh` — new section 2o, covering:
+  - MP4 / WebM structure;
+  - AAC delay compensation on simulated Windows / macOS encoders;
+  - real ffmpeg decode;
+  - header isolation.
+- `tools/test-browser.mjs` — groups `video` and `video-ui`, covering:
+  - pixel match with the live player;
+  - A/V sync;
+  - isolation, cancel and hidden tab;
+  - language;
+  - the export panel, the button reasons and the files written.
+- CI job `video-mp4`: real Chrome on Windows and macOS exports MP4 H.264 + AAC, checked with ffprobe and marker sync.
+
 ## v0.21.3 — Safer root installs, Cloudflare clean-up only for what this machine created, temporary link can be turned on again
 Ryan: "làm tiếp đi" *(In English: "keep going")* — closing the findings left open by v0.21.0 (CNS-204, CNS-210, CNS-212, CNS-213) and one bug found while testing them.
 - **Fixed — temporary link turned on a second time**: *Go online › Temporary link*, then *Go offline*, then *Temporary link* again picked up the previous, dead `trycloudflare.com` address from the tunnel log, and the "Public address" step failed. The app now trusts only the launcher's live status for the address.

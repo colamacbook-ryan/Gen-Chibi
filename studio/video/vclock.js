@@ -51,7 +51,11 @@
   // một bước vĩ mô của event loop THẬT (MessageChannel: không bị kẹp 4 ms, không bị bóp ở tab ẩn như setTimeout — CNS-221)
   var mc = new MessageChannel(), q = [];
   mc.port1.onmessage = function () { var f = q.shift(); if (f) f(); };
-  VC.yieldReal = function () { return new Promise(function (ok) { q.push(ok); mc.port2.postMessage(0); }); };
+  // Nhả HAI bước: hẹn giờ của Studio (cùng luồng) tới hạn TRONG lúc một tác vụ nặng đang chạy chỉ vào hàng sẵn sàng khi bộ lập lịch chọn tác vụ kế — lúc đó
+  // tin MessageChannel đã đặt trong tác vụ nặng đứng trước nó. Một bước thì hẹn giờ phải chờ thêm cả tác vụ nặng kế tiếp (đo: nhịp tim 10 ms hở ≈ 2 × tác vụ);
+  // bước đầu rỗng → hẹn giờ chạy ngay sau tác vụ nặng (hở ≈ 1 × tác vụ). Không dùng setTimeout (tab ẩn bị bóp ≥ 1 s — CNS-221).
+  function hop() { return new Promise(function (ok) { q.push(ok); mc.port2.postMessage(0); }); }
+  VC.yieldReal = function () { return hop().then(hop); };
   VC.track = function (p) { VC.pending++; var done = function () { VC.pending--; }; Promise.resolve(p).then(done, done); return p; };
   var OAC = W.OfflineAudioContext;
   if (OAC && OAC.prototype.decodeAudioData) {
