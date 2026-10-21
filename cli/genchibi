@@ -83,7 +83,7 @@ _en() {
     lang_restart) F="Restarting the app so the Studio default follows…" ;;
     lang_norun) F="The app is not running — the new default applies at the next start (genchibi start)." ;;
     lang_note) F="This is the default for the CLI and for everyone who opens the Studio. Each user can still switch language in the Studio (language switch); that choice is remembered in their browser." ;;
-    deprecated) F="Deprecated: genchibi %s is an alias of genchibi %s and will be removed in v0.22 — running that now." ;;
+    deprecated) F="Deprecated: genchibi %s is an alias of genchibi %s and will be removed in v0.23 — running that now." ;;
     caddy_native) F="genchibi online --caddy needs Docker mode: Caddy publishes ports 80/443 (below 1024). Native mode: use the Cloudflare path instead (Studio › System › Go online › Cloudflare)." ;;
     caddy_busy) F="Port(s) %s already in use on this machine — Caddy was NOT turned on (the app keeps running). Stop the service holding them, or use the Cloudflare path (Studio › System › Go online › Cloudflare, no open ports needed)." ;;
     caddy_old) F="The running version has no edge Caddy yet (needs v0.21 or newer) — run genchibi update first." ;;
@@ -239,7 +239,7 @@ _vi() {
     lang_restart) F="Khởi động lại app để giao diện mặc định đổi theo…" ;;
     lang_norun) F="App đang không chạy — mặc định mới có hiệu lực ở lần chạy tới (genchibi start)." ;;
     lang_note) F="Đây là mặc định cho CLI và cho mọi người mở Studio. Mỗi người vẫn đổi ngôn ngữ riêng trong Studio được (nút chuyển ngôn ngữ); lựa chọn đó được nhớ trong trình duyệt của họ." ;;
-    deprecated) F="Sắp bỏ: genchibi %s là bí danh của genchibi %s, sẽ bỏ ở v0.22 — đang chạy lệnh đó." ;;
+    deprecated) F="Sắp bỏ: genchibi %s là bí danh của genchibi %s, sẽ bỏ ở v0.23 — đang chạy lệnh đó." ;;
     caddy_native) F="genchibi online --caddy cần chế độ Docker: Caddy mở cổng 80/443 (dưới 1024). Chế độ native: dùng đường Cloudflare (Studio › Hệ thống › Lên mạng › Cloudflare)." ;;
     caddy_busy) F="Cổng %s trên máy này đang bị chiếm — CHƯA bật Caddy (app vẫn chạy). Dừng dịch vụ đang giữ cổng, hoặc dùng đường Cloudflare (Studio › Hệ thống › Lên mạng › Cloudflare, không cần mở cổng)." ;;
     caddy_old) F="Bản đang chạy chưa có edge Caddy (cần v0.21 trở lên) — chạy genchibi update trước." ;;
@@ -439,7 +439,7 @@ status() {
   local sc; sc="$(setup_code)"; [ -z "$sc" ] || m st_setup "$sc" "$(setup_until)"
   m st_releases "$(cd releases 2>/dev/null && ls | tr '\n' ' ')" "$(basename "$(readlink current)")"
   case "${GC_TUNNEL:-}" in
-    named) m st_mcp_named "${GC_PUBLIC_URL:-?}" ;;   # máy còn dùng genchibi expose cũ (bỏ ở v0.22)
+    named) m st_mcp_named "${GC_PUBLIC_URL:-?}" ;;   # máy còn dùng genchibi expose cũ (bỏ ở v0.23)
     quick) m st_mcp_quick "$(quick_url)" ;;
     *) if [ -n "$h" ]; then oapi GET /api/online; fi
        if [ "$OCODE" = 200 ] && [ "$(jv flow.waitingPassword)" = true ] && [ -n "$(jv publicUrlPending)" ]; then m st_online_wait "$(jv publicUrlPending)" "$(jv flow.mode)" "$(jv publicUrlPending)"   # CNS-209: trạng thái TẠM, không phải "off"
@@ -1136,13 +1136,13 @@ expose_off() {
   m off_1 "$TDIR"
   m off_2
 }
-# ---------------------------------------------------------------- expose / link: bí danh mỏng của genchibi online (CNS-204, spec §3.5; bỏ ở v0.22)
+# ---------------------------------------------------------------- expose / link: bí danh mỏng của genchibi online (CNS-204, spec §3.5; bỏ ở v0.23)
 # Một dòng nhắc (stderr) rồi chạy đúng lệnh online — cùng API /api/online/*, không còn đường cloudflared login riêng.
 #   expose <tên-miền> [--overwrite-dns] → online cloudflare <tên-miền> [--overwrite-dns]   (Cloudflare Tunnel; API token thay cho cloudflared login)
 #   expose --quick → online quick · expose --off → online off · expose (không đối số) / --help → online --help
 #   link → online (trạng thái: địa chỉ Studio + MCP) · link --check → online recheck (kiểm lại từ Internet)
 # Máy còn chạy tunnel do expose CŨ tạo (.env có GC_TUNNEL — profile tunnel / quick giữ thêm một bản, §3.5): expose --off dọn cấu hình .env đó
-# (expose_off), link in thêm link có khoá, expose --rotate đổi khoá của link đó. Các nhánh này mất cùng profile ở v0.22.
+# (expose_off), link in thêm link có khoá, expose --rotate đổi khoá của link đó. Các nhánh này mất cùng profile ở v0.23.
 legacy_note() { m deprecated "$1" "$2" >&2; }
 expose() {
   local a="${1:-}"
@@ -1264,7 +1264,7 @@ genchibi — quản lý gen-chibi ($HOME_DIR, chế độ $MODE)
   backup | restore <tệp>            sao lưu / khôi phục dữ liệu
   mcp                               cầu MCP (stdio) cho agent: claude mcp add gen-chibi -- genchibi mcp
   online [caddy|cloudflare|proxy|quick|recheck|off]   ra Internet một bước: tên miền + HTTPS + MCP (genchibi online --help)
-  expose | link                     (cũ, bí danh của online, bỏ ở v0.22) expose <tên-miền> = online cloudflare · --quick = online quick · --off = online off · link = online
+  expose | link                     (cũ, bí danh của online, bỏ ở v0.23) expose <tên-miền> = online cloudflare · --quick = online quick · --off = online off · link = online
   agent connect|guide|tools|skill   bootstrap cho agent mọi hãng: cấu hình nối, hướng dẫn, schema tool, cài skill
   token [giá-trị|--clear]           đặt token GitHub (repo private) cho tự cập nhật; bỏ trống = nhập ẩn
                                     (KHÔNG phải token chủ: token chủ là GC_API_TOKEN trong .env, hoặc data/owner-token — CLI tự đọc)
@@ -1281,7 +1281,7 @@ genchibi — manage gen-chibi ($HOME_DIR, mode $MODE)
   backup | restore <file>           back up / restore data
   mcp                               MCP bridge (stdio) for agents: claude mcp add gen-chibi -- genchibi mcp
   online [caddy|cloudflare|proxy|quick|recheck|off]   go online in one step: domain + HTTPS + MCP (genchibi online --help)
-  expose | link                     (deprecated aliases of online, removed in v0.22) expose <domain> = online cloudflare · --quick = online quick · --off = online off · link = online
+  expose | link                     (deprecated aliases of online, removed in v0.23) expose <domain> = online cloudflare · --quick = online quick · --off = online off · link = online
   agent connect|guide|tools|skill   bootstrap for agents of any vendor: connect config, guide, tool schema, skill install
   token [value|--clear]             set the GitHub token (private repo) for auto-update; empty = hidden prompt
                                     (NOT the owner token: that is GC_API_TOKEN in .env, or data/owner-token — the CLI reads it itself)

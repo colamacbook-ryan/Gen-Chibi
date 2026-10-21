@@ -194,6 +194,9 @@ const { STUDIO_HEADERS, VIDEO_EXPORT_PAGE, VIDEO_EXPORT_HEADERS } = require('./h
 const STATIC_ROOTS = ['engine', 'kinds', 'studio', 'locales'];   // locales/<lang>/*.json: bảng dịch Studio nạp trước lần vẽ đầu
 function serveStatic(req, res, urlPath) {
   let rel = decodeURIComponent(urlPath).replace(/^\/+/, '');
+  // đường dẫn KHÔNG chuẩn (// · /./ · /../ · \) → 404, TRƯỚC mọi so khớp trang có header riêng: /studio//index.html từng được phục vụ như tệp tĩnh thường
+  // (path.join tự gộp //) nên mất CSP của Studio (review bảo mật v0.22). Chỉ đúng một cách viết của mỗi tệp được phục vụ.
+  if (rel && (rel.indexOf('\\') >= 0 || rel.indexOf('\0') >= 0 || path.posix.normalize(rel) !== rel || rel.split('/').some(seg => seg === '..' || seg === '.'))) return fail(res, 404, 'không tìm thấy');
   const slash = rel.match(/^(xuong|thu-vien|tao-tac)\/$/);   // /xuong/ → /xuong (đường dẫn tương đối của trang chỉ đúng khi không có / cuối)
   if (slash) { res.writeHead(301, { Location: '/' + slash[1] }); return res.end(); }
   // /setup (đặt mật khẩu đầu) chỉ có khi CHƯA có mật khẩu — sau đó chuyển sang /login (bảng §3.4)
@@ -206,7 +209,8 @@ function serveStatic(req, res, urlPath) {
   if (!STATIC_ROOTS.includes(top) || rel.split('/').includes('..')) return fail(res, 404, 'không tìm thấy');
   const file = path.join(APP, rel);
   if (!file.startsWith(APP + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return fail(res, 404, 'không tìm thấy');
-  send(res, 200, fs.readFileSync(file), MIME[path.extname(file)] || 'application/octet-stream');
+  // mọi trang .html khác (nếu có) cũng mang CSP của Studio — không trang HTML nào của máy chủ đi ra mà thiếu CSP
+  send(res, 200, fs.readFileSync(file), MIME[path.extname(file)] || 'application/octet-stream', /\.html$/i.test(file) ? STUDIO_HEADERS : undefined);
 }
 
 /* ---------------------------------------------------------------- định tuyến */

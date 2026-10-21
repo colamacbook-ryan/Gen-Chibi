@@ -4,62 +4,72 @@
 Owner decision: Ryan approved the v0.22 spec on 2026-10-21 ("duyệt, làm tiếp đi" — *"approved, keep going"*) with all proposed defaults.
 
 ### New
-- **Work › Export video** (next to *Film (HTML)*): pick **16:9** or **9:16** and **1080p** (default) or **720p**. The app checks your browser first and shows:
-  - which format you will get;
-  - how long the export should take;
+- **Work › Export video** (next to *Film (HTML)*): choose **16:9** or **9:16**, and **1080p** (default) or **720p**. The app first checks what your browser can do, then shows:
+  - the format you will get;
+  - roughly how long the export takes (about 2–3.5× the film's length);
   - roughly how big the file will be;
   - the length limit.
 
-  After you press **Start**:
-  - it asks where to save (where the browser allows);
-  - you see progress per shot, with **Cancel**;
-  - at the end you get **Preview** and **Choose another cover frame**.
-- **You get four files**:
+  **Start** asks where to save (if the browser allows it), shows progress per shot with **Cancel**, and ends with **Preview** and **Choose another cover frame**.
+- **Four files**:
   - the video;
   - subtitles (`.srt`);
   - a cover image (`.jpg`, the first frame with dialogue);
-  - a `.txt` file with title, description and the line "Made with gen-chibi · Gen Labs".
+  - a `.txt` with the title, the description and the credit line "Made with gen-chibi · Gen Labs".
+
+  Existing files are never overwritten: a new name gets `-2`, `-3`… Cancel removes only the files this export created.
 - **Formats**:
-  - Chrome / Edge on Windows and macOS → **MP4** (H.264 + AAC). Checked on real Chrome in CI on Windows and macOS.
-  - Linux and Chromium → **WebM** (VP9 + Opus). YouTube and TikTok accept both.
-  - Picture and sound are the same as the film in the Studio, frame by frame. On a decoded file, the sound lands within 0 ms of the picture at the start and at the end (measured with ffmpeg).
-- **9:16** is the landscape film centred in a vertical frame for now. A camera that crops to the speaker is planned next.
-- **Lines without an AI voice are silent** in the video; their bubbles still show. Before you export, the usual dialog offers to dub them first. The browser's own read-aloud voice cannot be recorded.
+  - **MP4** (H.264 + AAC) from Chrome / Edge on Windows and macOS. Real Chrome exports it in CI on Windows and macOS at 720p, 1080p and 9:16, including from a hidden tab.
+  - **WebM** (VP9 + Opus) on Linux and Chromium.
+  - YouTube and TikTok accept both.
+- **Sound in sync**:
+  - AAC encoder delay is measured on your machine (2112 samples on macOS in CI) and compensated without an edit list.
+  - On the decoded file, test clicks land within 3 ms of where they belong (measured with ffmpeg).
+- **Picture**: matches the film in the Studio (mean pixel difference under 2/255 in tests).
+- **9:16**: the landscape film centred in a vertical frame for now; a camera that crops to the speaker is planned next.
+- **Lines without an AI voice are silent** in the video, but their bubbles still show. Before exporting, the usual dialog offers to dub them first. The browser's read-aloud voice cannot be recorded.
 - **Limits**:
-  - MP4: 5 minutes at 1080p, 10 minutes at 720p.
-  - WebM: 30 minutes.
-  - Keep the tab in front while exporting. A hidden tab still finishes, but more slowly.
-- **Works in**: Chrome / Edge on a computer, with the Studio opened over `https` or `localhost`. In other cases the button is disabled and says why. Firefox, Safari and phones are not supported yet.
-- **Videos made from the Gen Labs samples** (*Fun Office*, *Three Kingdoms*) may be posted publicly, with the attribution line.
+  - MP4: 5 min at 1080p, 10 min at 720p.
+  - WebM: 15 min.
+  - Keep the tab in front; a hidden tab still finishes, but more slowly.
+- **Works in**: Chrome / Edge on a computer, with the Studio opened over `https` or `localhost`. Otherwise the button is disabled and says why. Firefox, Safari and phones are not supported yet.
+- **Sample terms updated** (*Fun Office*, *Văn phòng vui*, *Three Kingdoms*): films / videos made from a Gen Labs sample may be posted with the credit line "Made with gen-chibi · Gen Labs"; no resale and no redistribution of the sample's files or assets. The repository licence is unchanged.
 
 ### How it works
-- Everything happens in your browser, and nothing is uploaded.
+- Everything runs in your browser and nothing is uploaded.
 - The film is rendered frame by frame on a virtual clock in an isolated page.
-- It is encoded with the browser's built-in WebCodecs and packed by our own MP4 / WebM writer. There is no new dependency and nothing changed in the Docker image.
-- AAC encoder delay is measured on your machine (2112 samples on macOS, for example) and compensated without an edit list.
+- It is encoded with the browser's WebCodecs and packed by our own MP4 / WebM writer.
+- No new dependency, no change to the Docker image.
 
 ### Security
-- Only the export page may be framed, and only by the Studio itself (`X-Frame-Options: SAMEORIGIN`, CSP `frame-ancestors 'self'`). Every other page and response still refuses framing.
-- The export page has no inline script. Messages between the Studio and the page check their origin.
-- The HTML film and the video use one shared film payload.
+- Only the export page may be framed, and only by the Studio itself (`X-Frame-Options: SAMEORIGIN`, CSP `frame-ancestors 'self'`). Every other response still refuses framing.
+- Odd paths (`//`, `/./`, `..`) are refused before any header decision, and every HTML page carries the Studio CSP.
+- The export page has no inline script, and messages between it and the Studio check their origin.
+- File names avoid Windows reserved names.
+- Releases now wait for the Windows / macOS real-Chrome MP4 check.
+
+### Changed
+- `genchibi expose` / `genchibi link` (aliases since v0.21.3) are now removed in **v0.23**, not v0.22.
 
 ### Known issues
-- On heavy scenes at 1080p (e.g. *Three Kingdoms*), the Studio can freeze for up to ~0.2 s now and then during an export. 720p stays under 0.1 s. The video itself is not affected.
-- MCP agents cannot export video yet: this needs a browser.
+- During an export the Studio can pause briefly now and then. Measured worst case on our test machine: about 0.1 s, with a hard limit of 0.25 s at 1080p in tests. The video itself is not affected.
+- MCP agents cannot export video yet (it needs a browser).
+- The MP4 path is verified in CI with real Chrome; not yet by hand on an owner's computer.
 
 ### Tests
-- `tools/test.sh` — new section 2o, covering:
+- `tools/test.sh` section 2o:
   - MP4 / WebM structure;
-  - AAC delay compensation on simulated Windows / macOS encoders;
+  - encoder-delay compensation for simulated Windows / macOS encoders;
   - real ffmpeg decode;
-  - header isolation.
-- `tools/test-browser.mjs` — groups `video` and `video-ui`, covering:
-  - pixel match with the live player;
-  - A/V sync;
-  - isolation, cancel and hidden tab;
-  - language;
-  - the export panel, the button reasons and the files written.
-- CI job `video-mp4`: real Chrome on Windows and macOS exports MP4 H.264 + AAC, checked with ffprobe and marker sync.
+  - header and path isolation;
+  - sample terms the same everywhere;
+  - workflow structure.
+- `tools/test-browser.mjs` groups `video` and `video-ui`:
+  - pixel match at 720p and 1080p;
+  - A/V sync, isolation, cancel, hidden tab, language;
+  - the export panel, the reasons a button is disabled, the files written;
+  - 51 name collisions on Cancel.
+- `.github/workflows/video-mp4.yml` (used by CI and release): real Chrome on Windows and macOS exports MP4 at 720p, 1080p and 9:16, plus from a hidden tab, checked with ffprobe and marker sync.
 
 ## v0.21.3 — Safer root installs, Cloudflare clean-up only for what this machine created, temporary link can be turned on again
 Ryan: "làm tiếp đi" *(In English: "keep going")* — closing the findings left open by v0.21.0 (CNS-204, CNS-210, CNS-212, CNS-213) and one bug found while testing them.

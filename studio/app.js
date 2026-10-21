@@ -1916,6 +1916,8 @@
     redraw: function () { if (Vid.paint) Vid.paint(); }
   };
   var VFMT = { mp4: 'MP4 (H.264 + AAC)', webm: 'WebM (VP9 + Opus)' };
+  // bộ mẫu Gen Labs: dự án mang dấu `sample` (cổng nhập gói mẫu đặt) hoặc là một bộ mẫu đi kèm (SAMPLES) — không đoán theo tiền tố id
+  function isSampleProject(id) { var p = id && Projects.all().filter(function (x) { return x.id === id; })[0]; return !!(p && (p.sample || SAMPLES.some(function (S) { return S.id === p.id; }))); }
   function vSecs(s) { s = Math.max(1, Math.round(s)); return s < 90 ? _t('{n} giây', { n: s }) : _t('{n} phút', { n: Math.round(s / 6) / 10 }); }
   function vBytes(b) { return b >= 1048576 ? (b / 1048576).toFixed(b >= 104857600 ? 0 : 1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB'; }
   // độ dài phim ƯỚC (giây) cho bảng chọn, từ kế hoạch của đạo diễn tự động (mỗi phân cảnh một tác vụ — đạo diễn một màn đấu ~80 ms). Hệ số khớp lượt dò của
@@ -1930,15 +1932,21 @@
       return nextTask().then(step);
     })();
   }
+  // hệ số thời gian xuất / độ dài phim, đo trên máy test (CNS-238): 1080p Fun Office 2,0–2,3× (4 phân cảnh 2,3×) · Tam Quốc 3,2–3,4× → 2,8;
+  // 720p Fun Office 1,8–1,9× · Tam Quốc 2,6–2,7× → 2,2. Cộng ~10 s nạp trang xuất + lượt dò.
   function vEstimate(sec, q, container) {
     var hd = q !== '720p', mbps = (hd ? 8 : 5) + 0.16;
-    return { wall: sec * (hd ? 2.8 : 1.8) + 10, bytes: sec * mbps * 1e6 / 8, limit: window.GCVideo ? GCVideo.limits({ container: container }, q) : 0 };
+    return { wall: sec * (hd ? 2.8 : 2.2) + 10, bytes: sec * mbps * 1e6 / 8, limit: window.GCVideo ? GCVideo.limits({ container: container }, q) : 0 };
   }
   // tên tệp chưa có trong thư mục (không ghi đè video cũ): tên, tên-2, tên-3… — xét cả 4 đuôi
+  // KHÔNG BAO GIỜ trả tên đã có: hết 50 số thì thử tên có dấu thời gian; vẫn trùng → lỗi (không ghi đè, và Huỷ không thể xoá nhầm video cũ của người dùng)
   function vUniqueBase(dir, base, exts) {
-    function taken(b) { return Promise.all(exts.map(function (x) { return dir.getFileHandle(b + '.' + x).then(function () { return true; }, function () { return false; }); })).then(function (r) { return r.some(Boolean); }); }
+    function taken(b) { return Promise.all(exts.map(function (x) { return dir.getFileHandle(b + '.' + x).then(function () { return true; }, function (e) { return !(e && e.name === 'NotFoundError'); }); })).then(function (r) { return r.some(Boolean); }); }
     var k = 1;
-    return (function next() { var b = k === 1 ? base : base + '-' + k; return taken(b).then(function (t) { if (!t || k > 50) return b; k++; return next(); }); })();
+    return (function next() {
+      var b = k === 1 ? base : k <= 50 ? base + '-' + k : base + '-' + Date.now().toString(36) + (k > 51 ? '-' + k : '');
+      return taken(b).then(function (t) { if (!t) return b; if (k > 53) throw new Error(_t('Thư mục đã có quá nhiều tệp tên "{base}" — chọn thư mục khác.', { base: base })); k++; return next(); });
+    })();
   }
   function vWrite(dir, name, blob) { return dir.getFileHandle(name, { create: true }).then(function (fh) { return fh.createWritable().then(function (w) { return w.write(blob).then(function () { return w.close(); }); }); }); }
   function vVis() { var j = Vid.job; if (j && j.phase === 'run' && document.visibilityState === 'hidden') { j.hidden = true; Vid.redraw(); } }
@@ -1949,7 +1957,7 @@
     var job = Vid.job = { wid: W.id, title: W.title, phase: 'run', prog: { phase: 'prepare' }, marks: null, frames: 0, dir: dir, base: base, fh: null, hidden: document.visibilityState === 'hidden', t0: Date.now(), opts: o, files: null };
     Vid.redraw();
     (dir ? vUniqueBase(dir, base, [ext, 'srt', 'jpg', 'txt']).then(function (b) { job.base = b; return dir.getFileHandle(b + '.' + ext, { create: true }); }) : Promise.resolve(null)).then(function (fh) {
-      job.fh = fh;
+      job.fh = fh; job.created = !!fh;   // tệp video DO LƯỢT NÀY tạo (tên đã kiểm là chưa có) — chỉ tệp này được gỡ khi Huỷ / lỗi
       if (job.cancelled) throw Object.assign(new Error(_t('Đã huỷ xuất video.')), { code: 'cancelled' });
       job.p = GCVideo.exportWork(W, { quality: o.quality, aspect: o.aspect, container: o.container, voices: o.vo || undefined, handle: fh || undefined, name: job.base, missingVoice: 'silent' }, function (m) {
         if (m.phase === 'measured') { job.marks = m.marks; job.frames = m.frames; job.durationMs = m.durationMs; }
@@ -1970,11 +1978,14 @@
       toast(dir ? _t('Đã xuất video "{title}" — {n} tệp trong thư mục "{dir}".', { title: job.title, n: job.files.length, dir: dir.name }) : _t('Đã xuất video "{title}" — {n} tệp đã tải về.', { title: job.title, n: job.files.length }));
       Vid.redraw();
     }).catch(function (e) {
-      // huỷ / lỗi: không để lại tệp dở trong thư mục đã chọn (spec §3)
-      var rm = dir && job.fh && !job.result ? dir.removeEntry(job.base + '.' + ext).catch(function () { /* chưa tạo / đã xoá */ }) : Promise.resolve();
-      return rm.then(function () {
+      // huỷ / lỗi: không để lại tệp dở trong thư mục đã chọn (spec §3) — CHỈ tệp lượt này tạo; trình duyệt có thể chưa nhả tệp ngay (luồng ghi vừa huỷ)
+      // → thử lại một lần sau ~200 ms; vẫn không gỡ được thì nói thật tên tệp còn lại
+      var name = job.base + '.' + ext;
+      var rmOnce = function () { return dir.removeEntry(name).then(function () { return true; }, function (x) { return x && x.name === 'NotFoundError'; }); };
+      var rm = dir && job.created && !job.result ? rmOnce().then(function (ok) { return ok || new Promise(function (r) { setTimeout(r, 200); }).then(rmOnce); }) : Promise.resolve(true);
+      return rm.then(function (gone) {
         if (Vid.job !== job) return;
-        if (e && e.code === 'cancelled') { Vid.job = null; toast(_t('Đã huỷ xuất video — không để lại tệp nào.')); }
+        if (e && e.code === 'cancelled') { Vid.job = null; toast(gone ? _t('Đã huỷ xuất video — không để lại tệp nào.') : _t('Đã huỷ xuất video — không xoá được tệp dở "{name}" trong thư mục "{dir}", hãy xoá tay.', { name: name, dir: dir.name })); }
         else { job.phase = 'error'; job.err = (e && e.message) || String(e); }
         Vid.redraw();
       });
@@ -2929,8 +2940,8 @@
         body.appendChild(h('div', { class: 'banner bad', role: 'alert', 'data-v': 'over' }, h('span', { text: _t('Phim dài ~{len}, quá trần {lim} của {fmt} {q} — {hint}', { len: vSecs(o.estSec), lim: vSecs(est.limit), fmt: VFMT[pr.format.container], q: o.quality,
           hint: o.quality === '1080p' ? (alt ? _t('chọn 720p hoặc WebM.') : _t('chọn 720p.')) : alt ? _t('chọn WebM.') : _t('rút bớt phân cảnh rồi xuất lại.') }) })));
       }
-      if (W && /^mau-/.test(W.project || '')) body.appendChild(h('div', { class: 'note', text: _t('Video làm từ bộ mẫu Gen Labs đăng công khai được — giữ dòng ghi công "Làm bằng gen-chibi · Gen Labs" trong mô tả (.txt).') }));
-      body.appendChild(h('div', { class: 'note', text: _t('Giữ tab này ở phía trước trong lúc xuất — tab bị ẩn sẽ bị trình duyệt làm chậm. Xuất mất khoảng 2–3 lần độ dài phim.') }));
+      if (W && isSampleProject(W.project)) body.appendChild(h('div', { class: 'note', 'data-v': 'credit', text: _t('Tác phẩm dùng bộ mẫu Gen Labs: {SAMPLE_TERMS}. Dòng ghi công có sẵn trong mô tả (.txt).', { SAMPLE_TERMS: _t(SAMPLE_TERMS) }) }));
+      body.appendChild(h('div', { class: 'note', text: _t('Giữ tab này ở phía trước trong lúc xuất — tab bị ẩn sẽ bị trình duyệt làm chậm. Xuất mất khoảng 2–3,5 lần độ dài phim.') }));
       var can = !!(pr && pr.ok && o.estSec && o.voReady && !over);
       var go = h('button', { class: 'btn sm primary', 'data-v': 'start', disabled: !can, onclick: function () { startClick(); } }, _t('Bắt đầu'));
       body.appendChild(h('div', { class: 'row' }, go, h('button', { class: 'btn sm', onclick: function () { vs = null; paintVideo(); } }, _t('Đóng'))));
@@ -3694,7 +3705,8 @@
   // dừng khi rời trang / tab ẩn.
   var MANNEQUIN = 'gen.khung/ma-no-canh';
   // điều khoản của bộ mẫu Gen Labs (gói / hoạt ảnh xuất ra từ bộ mẫu mang dấu này — nhập lại vẫn bị chặn bán theo dấu nội dung)
-  var SAMPLE_TERMS = N_('chỉ để xem, thử, quay phim; không bán lại, không phân phối');
+  // MỘT câu điều khoản bộ mẫu Gen Labs (Q47, CNS-240) — cùng câu ở studio/mau/*.json, ASSET_MANIFEST.md, server/mcp.js, tài liệu
+  var SAMPLE_TERMS = N_('xem, thử, làm phim; được đăng phim / video làm từ bộ mẫu kèm dòng ghi công "Made with gen-chibi · Gen Labs"; không bán lại, không phân phối lại tệp hay asset của bộ mẫu');
   // smp (tuỳ chọn): dấu bộ mẫu của dự án chứa gói → bản tải về ghi rõ sample { owner, license }
   function motionPackOut(P, smp) {
     var o = clone(P); ['pack', 'key', 'version', 'savedAt', 'note'].forEach(function (k) { delete o[k]; });
@@ -3753,7 +3765,7 @@
           h('span', { class: 'tag', text: g.key }),
           P ? (smp ? h('span', { class: 'chip', title: smp.license || '', text: _t('Bộ mẫu {x}', { x: smp.owner || 'Gen Labs' }) }) : h('span', { class: pub ? 'chip ok' : 'chip', text: pub ? _t('Phát hành') : _t('Nháp') })) : null,
           P && P.description ? h('span', { class: 'note', style: 'flex-basis:100%', text: _lo(P, P.description) }) : null,
-          P ? h('button', { class: 'btn sm', style: 'margin-left:auto', title: smp ? _t('Bản sao lưu của gói bộ mẫu — xem, sửa thử, làm phim; không bán lại') : _t('Tải gói động tác (.json) — nhập lại được ở bản cài khác'), onclick: function () { download(P.id + '.json', JSON.stringify(motionPackOut(P, smp), null, 2), 'application/json'); } }, _t('Tải gói (.json)')) : null);
+          P ? h('button', { class: 'btn sm', style: 'margin-left:auto', title: smp ? _t('Bản sao lưu của gói bộ mẫu — {SAMPLE_TERMS}', { SAMPLE_TERMS: _t(SAMPLE_TERMS) }) : _t('Tải gói động tác (.json) — nhập lại được ở bản cài khác'), onclick: function () { download(P.id + '.json', JSON.stringify(motionPackOut(P, smp), null, 2), 'application/json'); } }, _t('Tải gói (.json)')) : null);
         body.appendChild(h('div', { class: 'panel', 'data-pack': g.key }, head, meta, h('div', { class: 'pad' }, shown.length ? grid : h('div', { class: 'note', text: _t('Gói chưa có đòn nào (chỉ có tư thế / màn diễn).') }))));
       });
       if (!body.children.length) body.appendChild(h('div', { class: 'panel pad note lib-empty', text: _t('Không có đòn nào khớp "{q}".', { q: q }) }));
@@ -3844,7 +3856,7 @@
       }));
     }
     function saveSheetSVG() { if (!anim) return; var L = layout(); download(baseName() + '.svg', C.sheetSVG(anim, { cols: L.cols, cell: L.cw }).svg, 'image/svg+xml'); }
-    // giấy phép ghi trong JSON: nhân vật / gói thuộc bộ mẫu Gen Labs thì không "thuộc người tạo" — chỉ để xem, thử, quay phim
+    // giấy phép ghi trong JSON: nhân vật / gói thuộc bộ mẫu Gen Labs thì không "thuộc người tạo" — điều khoản bộ mẫu (SAMPLE_TERMS)
     function sampleNow() {
       var A = C.ACTIONS[u.action], who = GC.ASSETS[u.who], pa = A && A.attack ? GC.ASSETS[u.partner] : null;
       return sampleOf(A ? C.PACKS[A.pack] : null) || sampleOfProject(who && who.pack === MY_PACK ? who.project : '') || sampleOfProject(pa && pa.pack === MY_PACK ? pa.project : '');
@@ -4907,8 +4919,10 @@
   };
   function mineAll() { return [].concat(GC.assets(), GC.items(), GC.scenes()).filter(function (x) { return x.pack === MY_PACK; }); }
   function inProject(arr, pid) { return arr.filter(function (x) { return x.pack === MY_PACK && (x.project || '') === pid; }); }
+  // tên tệp an toàn: bỏ dấu, a-z0-9-, ≤ 40 ký tự; tên thiết bị dành riêng của Windows (con, prn, aux, nul, com1–9, lpt1–9) thêm hậu tố — Windows không tạo được tệp "con.webm"
   function slugify(s) {
-    return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+    var x = String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+    return /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/.test(x) ? x + '-gc' : x;
   }
   function thumbOf(x) {
     if (x.kind === 'item') return svgURL(GC.itemSvg(x, { size: 160 }));
@@ -4986,7 +5000,7 @@
       dockObj('project', sel || null, P.name);
       var parts = [[_t('Nhân vật'), inProject(GC.assets(), sel), 'lib-characters'], [_t('Vật phẩm'), inProject(GC.items(), sel), 'lib-items'], [_t('Bối cảnh'), inProject(GC.scenes(), sel), 'lib-scenes']];
       var body = h('div', { class: 'pad stack' }, P.description ? h('div', { class: 'note', text: _lo(P, P.description) }) : null,
-        P.sample ? h('div', { class: 'banner' }, h('span', { text: _t('Bộ mẫu của {x} — {x2}. Muốn bán: dựng bộ của bạn trong một dự án riêng rồi phát hành.', { x: P.sample.owner || 'Gen Labs', x2: P.sample.license || _t('chỉ để xem và làm phim thử') }) }),
+        P.sample ? h('div', { class: 'banner' }, h('span', { text: _t('Bộ mẫu của {x} — {x2}. Muốn bán: dựng bộ của bạn trong một dự án riêng rồi phát hành.', { x: P.sample.owner || 'Gen Labs', x2: _t(SAMPLE_TERMS) }) }),   // câu điều khoản HIỆN HÀNH (không lấy chữ đã lưu lúc cài — bản cài cũ mang câu cũ; đổi câu không bắt cập nhật bộ mẫu)
           Store.mode === 'server' ? samplesStale().filter(function (S) { return S.id === P.id; }).map(function (S) { return h('button', { class: 'btn sm primary', onclick: function () { updateDemo(S); } }, _t('⟳ Có bản mới của bộ mẫu — cập nhật')); }) : null) : null);
       parts.forEach(function (g) {
         if (!g[1].length) return;

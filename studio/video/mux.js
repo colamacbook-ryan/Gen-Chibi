@@ -241,6 +241,7 @@
    *   sync.calibSignal(sr)               → { pcm, at, tpl }   im lặng · nhiễu tpl tại mẫu `at` · im lặng
    *   sync.findLag(tpl, sig, lo, hi)     → { lag, score }      vị trí k ∈ [lo, hi] mà sig[k…] giống tpl nhất (tương quan chuẩn hoá, score ∈ [−1, 1])
    *   sync.delayOf(cal, decoded)         → { delay, score }    độ trễ đo được (mẫu) từ PCM giải mã của calibSignal
+   *   sync.lagRanges(cal, step)          → [[lo, hi]…]          dải của delayOf cắt từng đoạn (findLag từng đoạn rồi gộp = delayOf)
    *   sync.hints(chunks, inFrames, sr)   → gợi ý bộ mã hoá TỰ BÁO: ts gói đầu (âm?), tổng mẫu ra so với mẫu vào
    *   sync.pick(measured, hints, sr)     → { shift, source }   chọn độ bù: đo giải mã (tin cậy) > ts âm của gói đầu > 0
    *   new sync.Feeder({ shift, marks, gap }) .push(l, r) · .take(limit, emit(l, r, n, outPos))   PCM phim → bộ mã hoá, bỏ / chèn đầu, dập mẫu dấu (test)
@@ -262,6 +263,8 @@
     return best;
   }
   function delayOf(cal, decoded) { var r = findLag(cal.tpl, decoded, cal.at - 4096, cal.at + 8192); return { delay: r.lag < 0 ? null : r.lag - cal.at, score: r.score }; }
+  // dải độ trễ của delayOf cắt thành đoạn `step` vị trí (trang xuất chạy mỗi đoạn một tác vụ — ngân sách long task); gộp: điểm cao nhất, hoà thì sớm hơn
+  function lagRanges(cal, step) { var out = [], lo = Math.max(0, cal.at - 4096), hi = cal.at + 8192; step = Math.max(1, step | 0); for (var a = lo; a <= hi; a += step) out.push([a, Math.min(hi, a + step - 1)]); return out; }
   function hints(chunks, inFrames, sr) {
     var out = 0; chunks.forEach(function (c) { out += Math.round(c.dur * sr / 1e6); });
     var t0 = chunks.length ? chunks[0].ts : 0;
@@ -307,7 +310,7 @@
     for (var i = 0; i < chunks.length && pos < endFrames; i++) { keep.push(chunks[i]); pos += Math.round(chunks[i].dur * sr / 1e6); }
     return { chunks: keep, dropped: chunks.length - keep.length, frames: pos };
   }
-  var sync = { noise: noise, calibSignal: calibSignal, findLag: findLag, delayOf: delayOf, hints: hints, pick: pick, Feeder: Feeder, trim: trim };
+  var sync = { noise: noise, calibSignal: calibSignal, findLag: findLag, delayOf: delayOf, lagRanges: lagRanges, hints: hints, pick: pick, Feeder: Feeder, trim: trim };
 
   var API = { mp4: mp4, mp4Parts: mp4Parts, webm: webm, WebmWriter: WebmWriter, concat: concat, ascOf: ascOf, sync: sync };
   if (typeof module === 'object' && module.exports) module.exports = API; else root.GenMux = API;

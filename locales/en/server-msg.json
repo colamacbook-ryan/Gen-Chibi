@@ -71,13 +71,11 @@
  "Cần một trong: work (id tác phẩm), shot, event, steps": "Needs one of: work (work id), shot, event, steps",
  "Chọn một dự án để xuất (asset \"chưa xếp dự án\" thì xếp vào một dự án trước)": "Choose a project to export (put assets \"without a project\" into a project first)",
  "Không có dự án {id} (list_projects)": "No project {id} (list_projects)",
- "Bộ mẫu của {owner} — chỉ để xem, sửa thử, làm phim; không xuất gói bán. Dựng bộ của bạn trong một dự án riêng rồi phát hành.": "A sample by {owner} — for viewing, trying edits and making films only; no sale bundle. Build your own set in a separate project, then publish it.",
  "vật phẩm {id} còn nháp nhưng asset phát hành cần nó — phát hành nó trước khi bán": "item {id} is still a draft but a published asset needs it — publish it before selling",
  "bối cảnh {id} còn nháp nhưng asset phát hành cần nó — phát hành nó trước khi bán": "scene {id} is still a draft but a published asset needs it — publish it before selling",
  "gói âm {id} còn nháp nhưng asset phát hành cần nó — phát hành nó trước khi bán": "sound pack {id} is still a draft but a published asset needs it — publish it before selling",
  "Gói dự án có {n} gói âm ({ids}) > {max} — trần khi nhập lại; gộp bớt gói âm (kể cả gói âm kéo từ dự án khác / dùng chung) rồi xuất lại": "The project bundle has {n} sound packs ({ids}) > {max} — the cap when importing again; merge sound packs (including ones pulled from other projects / shared) and export again",
  "Gói dự án có {n} gói động tác ({ids}) > {max} — trần khi nhập lại; gộp bớt gói động tác (kể cả gói động tác kéo từ dự án khác / dùng chung) rồi xuất lại": "The project bundle has {n} motion packs ({ids}) > {max} — the cap when importing again; merge motion packs (including ones pulled from other projects / shared) and export again",
- "Gói bán đang dùng {n} mục của bộ mẫu {owner} ({names}) — bộ mẫu chỉ để xem, sửa thử, làm phim. Thay bằng linh kiện / trang bị / cảnh của riêng bạn rồi xuất lại.": "The sale bundle uses {n} items of the {owner} sample ({names}) — samples are for viewing, trying edits and making films only. Replace them with your own parts / items / scenes and export again.",
  "Không phải gói gen-chibi.project/1": "Not a gen-chibi.project/1 bundle",
  "project.id: slug dự án (chữ thường, số, gạch nối)": "project.id: a project slug (lowercase letters, digits, hyphens)",
  "cần mảng": "needs an array",
@@ -298,5 +296,7 @@
  "đường dẫn không an toàn trong gói: {name}": "unsafe path in the package: {name}",
  "đường dẫn thoát khỏi thư mục đích: {name}": "path escapes the target folder: {name}",
  "loại mục không hỗ trợ ({type}): {name}": "unsupported entry type ({type}): {name}",
- "tên tệp không hợp lệ {name}": "invalid file name {name}"
+ "tên tệp không hợp lệ {name}": "invalid file name {name}",
+ "Bộ mẫu của {owner} — xem, thử, làm phim; được đăng phim / video làm từ bộ mẫu kèm dòng ghi công \"Made with gen-chibi · Gen Labs\"; không bán lại, không phân phối lại tệp hay asset của bộ mẫu; bộ mẫu không được xuất gói bán. Dựng bộ của bạn trong một dự án riêng rồi phát hành.": "A sample by {owner} — view, try and make films; films / videos made from the sample may be posted with the credit line \"Made with gen-chibi · Gen Labs\"; no resale, no redistribution of the sample's files or assets; samples cannot be exported as a sale bundle. Build your own set in a separate project, then publish it.",
+ "Gói bán đang dùng {n} mục của bộ mẫu {owner} ({names}) — bộ mẫu: xem, thử, làm phim; được đăng phim / video làm từ bộ mẫu kèm dòng ghi công \"Made with gen-chibi · Gen Labs\"; không bán lại, không phân phối lại tệp hay asset của bộ mẫu; không được đưa vào gói bán. Thay bằng linh kiện / trang bị / cảnh của riêng bạn rồi xuất lại.": "The sale bundle uses {n} items of the {owner} sample ({names}) — sample: view, try and make films; films / videos made from the sample may be posted with the credit line \"Made with gen-chibi · Gen Labs\"; no resale, no redistribution of the sample's files or assets; it cannot go into a sale bundle. Replace them with your own parts / equipment / scenes and export again."
 }

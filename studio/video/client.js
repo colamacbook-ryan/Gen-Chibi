@@ -14,8 +14,8 @@
  *       onProgress({ phase: 'prepare'|'render', frame, frames, shot, shots }) · sau lượt dò: onProgress({ phase: 'measured', frames, durationMs, marks: [{ frame, title }] })
  *       opts.name: tên tệp (không đuôi) — Studio chọn tên chưa có trong thư mục lưu; mặc định slug(tiêu đề)
  *   GCVideo.exportPayload(payload, opts, onProgress) → như trên, nhận payload sẵn (job CI, test)
- *   GCVideo.limits(format, quality) → giây tối đa (MP4 giữ cả tệp trong bộ nhớ: 5 phút @1080p, 10 phút @720p; WebM ghi luồng: 30 phút — trần do
- *       builder P2 tự đặt, Studio + tài liệu báo rõ)
+ *   GCVideo.limits(format, quality) → giây tối đa (MP4 giữ cả tệp trong bộ nhớ: 5 phút @1080p, 10 phút @720p; WebM: 15 phút — hình ghi luồng nhưng bộ đệm
+ *       tiếng OfflineAudioContext tăng theo độ dài; Studio + tài liệu báo rõ)
  *   Lỗi: Error có .code: insecure · browser · no-webcodecs · no-codec · tainted · too-long · cancelled · load · encode · payload · empty · internal
  */
 (function () {
@@ -47,7 +47,10 @@
   }
 
   function dims(o) { var v = o && o.aspect === '9:16', hd = !o || o.quality !== '720p'; return { w: v ? (hd ? 1080 : 720) : (hd ? 1920 : 1280), h: v ? (hd ? 1920 : 1280) : (hd ? 1080 : 720) }; }
-  GCV.limits = function (format, quality) { return format && format.container === 'mp4' ? (quality === '720p' ? 600 : 300) : 1800; };
+  // dòng ghi công (Q47, CNS-240): CÙNG một chuỗi ở mọi ngôn ngữ — điều khoản bộ mẫu dẫn đúng chữ này
+  GCV.CREDIT = 'Made with gen-chibi · Gen Labs';
+  // WebM 15 phút: hình ghi luồng, nhưng OfflineAudioContext của lượt dựng giữ (sec·1,05 + 3)·48000 mẫu float32 (~180 MB ở 15 phút, ~364 MB ở 30 phút)
+  GCV.limits = function (format, quality) { return format && format.container === 'mp4' ? (quality === '720p' ? 600 : 300) : 900; };
 
   // phần dò codec chạy trong Worker (isConfigSupported VP9 chặn luồng gọi ~100 ms — ngân sách long task, spec §3); nhớ kết quả theo cỡ khung cho cả phiên
   var WORKER = me ? new URL('probe-worker.js', me).href : new URL('studio/video/probe-worker.js', location.href).href, codecCache = {};
@@ -145,10 +148,10 @@
       var r = await pass(payload, Object.assign({ pass: 'render', sec: dry.durationMs / 1000, frames: dry.frames, handle: opts.handle, probe: opts.probe }, common), prog, ctl);
       var title = (payload.film && payload.film.title) || 'video', slug = opts.name || (GCV.studio && GCV.studio.slug ? GCV.studio.slug(title) : GCVTextSlug(title)) || 'video';
       // mô tả .txt: tiêu đề + mô tả phim + dòng ghi công (Q47) — chữ hệ thống theo ngôn ngữ giao diện lúc xuất, như chữ trên khung hình (CNS-224)
-      var txt = [String(title).trim(), String((payload.film && payload.film.logline) || '').trim(), _t('Làm bằng gen-chibi · Gen Labs')].filter(Boolean).join('\n\n') + '\n';
+      var txt = [String(title).trim(), String((payload.film && payload.film.logline) || '').trim(), GCV.CREDIT].filter(Boolean).join('\n\n') + '\n';
       r.files.push({ kind: 'txt', type: 'text/plain', ext: 'txt', blob: new Blob([txt], { type: 'text/plain;charset=utf-8' }) });
       r.files.forEach(function (x) { x.name = slug + '.' + x.ext; });
-      r.dry = { frames: dry.frames, durationMs: dry.durationMs, stats: dry.stats, marks: dry.marks };
+      r.dry = { frames: dry.frames, durationMs: dry.durationMs, stats: dry.stats, tmarks: dry.tmarks };
       r.wallMs = performance.now() - t0;
       return r;
     })();
@@ -156,7 +159,7 @@
     GCV.current = p;
     return p;
   };
-  function GCVTextSlug(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40); }
+  function GCVTextSlug(s) { var x = String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40); return /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/.test(x) ? x + '-gc' : x; }   // như slugify của Studio
 
   GCV.exportWork = function (W, opts, onProgress) {
     opts = opts || {};

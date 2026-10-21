@@ -1,6 +1,7 @@
 // Job CI xuất video (CNS-215 / CNS-216): Chrome CÓ SẴN của runner (windows-latest / macos-latest) xuất 1 phân cảnh Fun Office bằng WebCodecs THẬT,
 // lưu tệp, kiểm cấu trúc bằng tools/media-inspect.js (+ ffprobe nếu có). Không npm, không Playwright: CDP qua WebSocket có sẵn của Node 22 (tools/cdp.mjs).
-//   node tools/video-ci.mjs [--require-mp4] [--hidden] [--quality 720p|1080p] [--out <thư mục>]
+//   node tools/video-ci.mjs [--require-mp4] [--hidden] [--quality 720p|1080p] [--frame 16x9|9x16] [--out <thư mục>]
+//     --quality / --frame  chất lượng + khung hình (9x16 = phim ngang đặt giữa khung dọc, Q37 a) — kiểm cỡ khung của TỆP ra (CNS-239)
 //     --require-mp4  TRƯỢT nếu trình duyệt không ra được MP4 avc1 + mp4a (job Windows / macOS — nhánh ưu tiên 1 phải chạy thật)
 //     --require-ffmpeg  TRƯỢT nếu máy không có ffmpeg / ffprobe (job CI cài sẵn) — phép đo lệch tiếng / hình THẬT cần giải mã
 //     --hidden       trong lúc xuất mở một tab khác lên trước → trang xuất ở tab NỀN (bị bóp timer) vẫn phải xong (CNS-221)
@@ -21,7 +22,9 @@ const { inspectMp4, inspectWebm, decodeAudio, measureMarks } = require(path.join
 const { sync } = require(path.join(ROOT, 'studio/video/mux.js'));
 const HDR = require(path.join(ROOT, 'server/headers.js'));
 const argv = process.argv.slice(2), flag = f => argv.includes(f), val = (f, d) => { const i = argv.indexOf(f); return i >= 0 ? argv[i + 1] : d; };
-const REQUIRE_MP4 = flag('--require-mp4'), REQUIRE_FF = flag('--require-ffmpeg'), HIDDEN = flag('--hidden'), QUALITY = val('--quality', '720p');
+const REQUIRE_MP4 = flag('--require-mp4'), REQUIRE_FF = flag('--require-ffmpeg'), HIDDEN = flag('--hidden'), QUALITY = val('--quality', '720p'), FRAME = val('--frame', '16x9');
+if (!['720p', '1080p'].includes(QUALITY) || !['16x9', '9x16'].includes(FRAME)) { console.log('   ✗ --quality 720p|1080p · --frame 16x9|9x16'); process.exit(2); }
+const ASPECT = FRAME === '9x16' ? '9:16' : '16:9', HD = QUALITY === '1080p', WANT = ASPECT === '9:16' ? (HD ? [1080, 1920] : [720, 1280]) : (HD ? [1920, 1080] : [1280, 720]);
 const OUT = path.resolve(val('--out', '') || fs.mkdtempSync(path.join(os.tmpdir(), 'gc-video-ci-')));
 fs.mkdirSync(OUT, { recursive: true });
 const fails = [];
@@ -71,7 +74,7 @@ const chrome = await launch();
 console.log('   Chrome: ' + chrome.version.product + ' · ' + chrome.chrome + ' · ' + process.platform + '/' + process.arch);
 let code = 1;
 try {
-  const page = await chrome.open('http://127.0.0.1:' + PORT + '/tools/fixtures/video-ci/host.html?opts=' + encodeURIComponent(JSON.stringify({ quality: QUALITY, shots: [0], debug: { marks: MARKS } })));
+  const page = await chrome.open('http://127.0.0.1:' + PORT + '/tools/fixtures/video-ci/host.html?opts=' + encodeURIComponent(JSON.stringify({ quality: QUALITY, aspect: ASPECT, shots: [0], debug: { marks: MARKS } })));
   for (let i = 0; i < 100 && (await page.eval('window.__ci && window.__ci.state')) !== 'ready'; i++) await new Promise(r => setTimeout(r, 100));
   await page.eval('window.ciRun(), true', { awaitPromise: false });
   let other = null;
@@ -85,7 +88,7 @@ try {
   }
   const pr = st.probe || {};
   console.log('   dò năng lực: ' + (pr.ok ? pr.format.container + ' · ' + pr.format.video.codec + ' + ' + pr.format.audio.codec : 'KHÔNG xuất được: ' + pr.code + ' — ' + pr.reason));
-  if (check(st.state === 'done', 'xuất không xong: ' + st.state + ' ' + (st.code || '') + ' ' + (st.error || ''))) {
+  if (check(st.state === 'done', 'xuất không xong: ' + st.state + ' ' + (st.code || '') + ' ' + (st.error || '') + (st.detail ? ' — chi tiết: ' + st.detail : ''))) {
     const v = st.files.find(f => f.kind === 'video');
     const parts = [];
     for (let i = 0; i < v.size; i += 4 << 20) parts.push(Buffer.from(await page.eval('window.ciChunk(' + i + ', ' + (4 << 20) + ')'), 'base64'));
@@ -100,6 +103,8 @@ try {
     console.log('   bù mồi: ' + A0.shift + ' mẫu (nguồn ' + A0.shiftSource + ') · lượt dựng: ' + A0.chunks + ' gói, ' + A0.negative + ' gói ts âm, gói đầu ' + JSON.stringify(A0.first) +
       ' · mẫu phim ' + A0.filmFrames + ' · vào bộ mã hoá ' + A0.inFrames + ' · ra ' + A0.outFrames + ' (dư ' + (A0.outFrames - A0.inFrames) + ')' + (A0.trimmed != null ? ' · cắt đuôi ' + A0.trimmed + ' gói → ' + A0.muxFrames + ' mẫu trong MP4' : ''));
     check(buf.length === v.size, 'tải về thiếu byte ' + buf.length + ' / ' + v.size);
+    console.log('   khung: ' + QUALITY + ' ' + ASPECT + ' → ' + st.format.width + '×' + st.format.height);
+    check(st.format.width === WANT[0] && st.format.height === WANT[1], 'cỡ khung ' + st.format.width + '×' + st.format.height + ', cần ' + WANT.join('×') + ' (' + QUALITY + ' ' + ASPECT + ')');
     check(st.frames === st.dry.frames, 'lượt dựng ' + st.frames + ' khung ≠ lượt dò ' + st.dry.frames + ' (timeline không tất định)');
     if (st.format.container === 'mp4') {
       const r = inspectMp4(buf), V = r.tracks.find(t => t.handler === 'vide'), A = r.tracks.find(t => t.handler === 'soun');
@@ -109,6 +114,7 @@ try {
       check(A && A.codec === 'mp4a' && A.asc, 'track tiếng mp4a + AudioSpecificConfig');
       if (V && A) {
         const vd = V.duration / V.timescale * 1000, ad = A.duration / A.timescale * 1000;
+        check(V.width === WANT[0] && V.height === WANT[1], 'tkhd của tệp MP4 ' + V.width + '×' + V.height + ', cần ' + WANT.join('×'));
         check(V.samples.length === st.frames && V.samples[0].key, 'số khung ' + V.samples.length + ' = ' + st.frames + ', khung đầu là khung khoá');
         check(ad - vd >= -frameMs - 1e-6 && ad - vd <= aacMs + 1e-6, 'tiếng ' + ad.toFixed(1) + ' ms ≈ hình ' + vd.toFixed(1) + ' ms (−1 khung hình … +1 khung AAC ' + aacMs.toFixed(1) + ' ms)');
         console.log('   MP4: avc1 profile ' + V.avcC.profile + ' level ' + V.avcC.level + ' · ' + V.samples.length + ' khung (' + V.keyCount + ' khoá) · mp4a ' + A.sampleRate + ' Hz × ' + A.channels + ' · ASC ' + Buffer.from(A.asc).toString('hex') + ' · tiếng ' + ad.toFixed(1) + ' / hình ' + vd.toFixed(1) + ' ms');
@@ -117,6 +123,7 @@ try {
       check(!REQUIRE_MP4, 'Chrome này KHÔNG ra được MP4 H.264 + AAC (ra ' + st.format.container + ' ' + st.format.video + ' + ' + st.format.audio + ') — nhánh ưu tiên 1 hỏng trên ' + process.platform);
       const r = inspectWebm(buf), vb = r.blocks.filter(b => b.track === 1), ab = r.blocks.filter(b => b.track === 2);
       check(r.tracks[0] && r.tracks[0].codec === 'V_VP9' && r.tracks[1] && r.tracks[1].codec === 'A_OPUS', 'WebM V_VP9 + A_OPUS');
+      check(r.tracks[0] && r.tracks[0].width === WANT[0] && r.tracks[0].height === WANT[1], 'track hình WebM ' + (r.tracks[0] && r.tracks[0].width) + '×' + (r.tracks[0] && r.tracks[0].height) + ', cần ' + WANT.join('×'));
       check(vb.length === st.frames && vb[0].key, 'số khung ' + vb.length + ' = ' + st.frames + ', khung đầu là khung khoá');
       const aEnd = ab.length ? ab[ab.length - 1].ms + 20 : 0;
       check(Math.abs(aEnd - st.durationMs) <= frameMs, 'tiếng kết thúc ' + aEnd + ' ms ≈ hình ' + st.durationMs.toFixed(1) + ' ms (±1 khung)');
@@ -156,5 +163,5 @@ try {
   code = fails.length ? 1 : 0;
 } catch (e) { console.log('   ✗ ' + (e && e.stack || e)); code = 1; }
 finally { await chrome.close(); srv.close(); }
-console.log(code ? '   ✗ video-ci: ' + fails.length + ' lỗi' : '   ✓ video-ci: xuất 1 phân cảnh bằng WebCodecs thật + tệp đúng cấu trúc' + (HIDDEN ? ' (ở tab nền bị ẩn)' : ''));
+console.log(code ? '   ✗ video-ci: ' + fails.length + ' lỗi' : '   ✓ video-ci: xuất 1 phân cảnh bằng WebCodecs thật (' + QUALITY + ' ' + ASPECT + ') + tệp đúng cấu trúc' + (HIDDEN ? ' (ở tab nền bị ẩn)' : ''));
 process.exit(code);

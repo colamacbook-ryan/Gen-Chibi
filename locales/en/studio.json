@@ -901,7 +901,6 @@
  "kịch bản đặt vào cảnh này:": "script set in this scene:",
  "JSON cảnh": "Scene JSON",
  "Nền trống 1920": "Blank background 1920",
- "chỉ để xem, thử, quay phim; không bán lại, không phân phối": "view, try and film only; no resale, no redistribution",
  "Bộ mẫu — {SAMPLE_TERMS}": "Sample — {SAMPLE_TERMS}",
  "Bản này chưa nạp bộ biên đạo (engine/choreo.js).": "This build hasn't loaded the choreography kit (engine/choreo.js).",
  "Đòn của bộ khung + gói động tác theo chủ đề — xem trước, tải hoạt ảnh.": "Core frame moves + theme motion packs — preview them and download animations.",
@@ -914,7 +913,6 @@
  "diễn": "solo",
  "{n} / {n2} đòn": "{n} / {n2} moves",
  "Đòn trung lập của bộ khung — có sẵn trong mọi bản cài và mọi phim xuất ra.": "Neutral core frame moves — included in every install and every exported film.",
- "Bản sao lưu của gói bộ mẫu — xem, sửa thử, làm phim; không bán lại": "Backup of a sample pack — view, try edits, make films; no resale",
  "Tải gói động tác (.json) — nhập lại được ở bản cài khác": "Download the motion pack (.json) — import it on another install",
  "Tải gói (.json)": "Download pack (.json)",
  "Gói chưa có đòn nào (chỉ có tư thế / màn diễn).": "This pack has no moves yet (only poses / performances).",
@@ -1258,7 +1256,6 @@
  "trống": "empty",
  "{x} nhân vật · {x2} vật phẩm · {x3} bối cảnh": "{x} characters · {x2} items · {x3} scenes",
  "Bộ mẫu của {x} — {x2}. Muốn bán: dựng bộ của bạn trong một dự án riêng rồi phát hành.": "Sample by {x} — {x2}. Want to sell? Build your own set in a separate project and publish it.",
- "chỉ để xem và làm phim thử": "for viewing and trial films only",
  "⟳ Có bản mới của bộ mẫu — cập nhật": "⟳ Update sample",
  "Dự án chưa có asset. Bấm \"Tạo asset mới\" để dựng từ bộ khung chuẩn.": "This project has no assets yet. Click \"New asset\" to build one from the core frame.",
  "Dùng": "Use",
@@ -1920,7 +1917,6 @@
  "Phim dài quá {n} giây cho định dạng này — chọn 720p hoặc xuất ít phân cảnh hơn.": "The film is longer than {n} seconds for this format — choose 720p or export fewer scenes.",
  "Đã huỷ xuất video.": "Video export cancelled.",
  "Xuất video lỗi: {x}": "Video export failed: {x}",
- "Làm bằng gen-chibi · Gen Labs": "Made with gen-chibi · Gen Labs",
  "Không mở được trang xuất video — cập nhật gen-chibi hoặc mở Studio đúng địa chỉ máy chủ.": "Couldn't open the video export page — update gen-chibi or open the Studio at the server's exact address.",
  "{n} giây": [
   "{n} second",
@@ -1975,8 +1971,6 @@
  "chọn 720p.": "choose 720p.",
  "chọn WebM.": "choose WebM.",
  "rút bớt phân cảnh rồi xuất lại.": "remove some shots and export again.",
- "Video làm từ bộ mẫu Gen Labs đăng công khai được — giữ dòng ghi công \"Làm bằng gen-chibi · Gen Labs\" trong mô tả (.txt).": "Videos made from Gen Labs sample packs may be posted publicly — keep the credit line \"Made with gen-chibi · Gen Labs\" in the description (.txt).",
- "Giữ tab này ở phía trước trong lúc xuất — tab bị ẩn sẽ bị trình duyệt làm chậm. Xuất mất khoảng 2–3 lần độ dài phim.": "Keep this tab in front while exporting — the browser slows down hidden tabs. Exporting takes about 2–3× the film's length.",
  "Bắt đầu": "Start",
  "Chưa chọn thư mục — chưa xuất video.": "No folder chosen — the video wasn't exported.",
  "Không mở được thư mục ({error}) — tệp sẽ tải về khi xong.": "Couldn't open the folder ({error}) — the files will download when it's done.",
@@ -2006,5 +2000,11 @@
  "Thôi": "Never mind",
  "Chọn khung khác": "Choose another frame",
  "Xuất lại": "Export again",
- "Bản này chỉ xuất video trên Chrome hoặc Edge ở máy tính — Firefox, Safari và trình duyệt điện thoại chưa được hỗ trợ.": "This version exports video only in Chrome or Edge on a computer — Firefox, Safari and phone browsers aren't supported yet."
+ "Bản này chỉ xuất video trên Chrome hoặc Edge ở máy tính — Firefox, Safari và trình duyệt điện thoại chưa được hỗ trợ.": "This version exports video only in Chrome or Edge on a computer — Firefox, Safari and phone browsers aren't supported yet.",
+ "xem, thử, làm phim; được đăng phim / video làm từ bộ mẫu kèm dòng ghi công \"Made with gen-chibi · Gen Labs\"; không bán lại, không phân phối lại tệp hay asset của bộ mẫu": "view, try and make films; films / videos made from the sample may be posted with the credit line \"Made with gen-chibi · Gen Labs\"; no resale, no redistribution of the sample's files or assets",
+ "Bản sao lưu của gói bộ mẫu — {SAMPLE_TERMS}": "Backup of a sample pack — {SAMPLE_TERMS}",
+ "Tác phẩm dùng bộ mẫu Gen Labs: {SAMPLE_TERMS}. Dòng ghi công có sẵn trong mô tả (.txt).": "This work uses a Gen Labs sample: {SAMPLE_TERMS}. The credit line is already in the description (.txt).",
+ "Đã huỷ xuất video — không xoá được tệp dở \"{name}\" trong thư mục \"{dir}\", hãy xoá tay.": "Video export cancelled — couldn't delete the partial file \"{name}\" in the folder \"{dir}\"; please delete it by hand.",
+ "Thư mục đã có quá nhiều tệp tên \"{base}\" — chọn thư mục khác.": "The folder already has too many files named \"{base}\" — pick another folder.",
+ "Giữ tab này ở phía trước trong lúc xuất — tab bị ẩn sẽ bị trình duyệt làm chậm. Xuất mất khoảng 2–3,5 lần độ dài phim.": "Keep this tab in front while exporting — the browser slows down hidden tabs. Exporting takes about 2–3.5× the film's length."
 }

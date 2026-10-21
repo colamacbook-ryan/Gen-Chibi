@@ -29,12 +29,12 @@
     var m = e.data || {};
     if (m.type === 'gc-video-start' && !job) {
       job = run(m.payload || {}, m.opts || {}).then(function (res) { post(res); }, function (err) {
-        if (cancelled) post({ type: 'gc-video-cancelled', encoders: closeAll() });
-        else { closeAll(); post({ type: 'gc-video-error', code: err && err.code || 'internal', message: String(err && err.message || err) }); }
+        if (cancelled) closeAll().then(function (enc) { post({ type: 'gc-video-cancelled', encoders: enc }); });
+        else closeAll().then(function () { post({ type: 'gc-video-error', code: err && err.code || 'internal', message: String(err && err.message || err) }); });
       });
     } else if (m.type === 'gc-video-cancel') {
       cancelled = true;
-      if (!job) post({ type: 'gc-video-cancelled', encoders: closeAll() });
+      if (!job) closeAll().then(function (enc) { post({ type: 'gc-video-cancelled', encoders: enc }); });
     } else if (m.type === 'gc-video-probe-ack' && ackWait) { var f = ackWait; ackWait = null; f(); }
   });
   function ready() { post({ type: 'gc-video-ready' }); }
@@ -185,18 +185,31 @@
   }
 
   var live = { venc: null, aenc: null, sink: null, player: null };
+  // → Promise<{ venc, aenc }>: CHỜ nơi ghi huỷ xong (FileSystemWritableFileStream.abort nhả tệp) rồi mới báo cha — cha gỡ tệp dở ngay sau tin này
   function closeAll() {
-    var st = {};
+    var st = {}, ab = Promise.resolve();
     ['venc', 'aenc'].forEach(function (k) { var e = live[k]; if (e) { try { if (e.state !== 'closed') e.close(); } catch (x) { /* đã đóng */ } st[k] = e.state; } else st[k] = 'none'; });
-    if (live.sink) { live.sink.abort(); live.sink = null; }
+    if (live.sink) { ab = Promise.resolve(live.sink.abort()).catch(function () { /* đã đóng */ }); live.sink = null; }
     if (live.player) { try { live.player.destroy(); } catch (x) { /* đã huỷ */ } live.player = null; }
-    return st;
+    return ab.then(function () { return st; });
   }
   // description của decoderConfig: ArrayBuffer hoặc ArrayBufferView (kể cả DataView) → bản sao Uint8Array
   function bytesOf(d) { return d instanceof ArrayBuffer ? new Uint8Array(d.slice(0)) : new Uint8Array(d.buffer.slice(d.byteOffset, d.byteOffset + d.byteLength)); }
   function hex(b) { return Array.prototype.map.call(b, function (x) { return (x < 16 ? '0' : '') + x.toString(16); }).join(''); }
   // độ trễ mồi THẬT của bộ mã hoá tiếng trên máy này (GenMux.sync): MỘT AudioEncoder riêng cùng cấu hình mã hoá tín hiệu hiệu chuẩn → AudioDecoder giải mã
   // → tương quan chéo với tín hiệu gốc. Kèm các gợi ý bộ mã hoá tự báo (description, ts / thời lượng gói đầu, mẫu ra so với mẫu vào) để CI in ra.
+  // = GenMux.sync.delayOf nhưng cắt dải độ trễ thành từng đoạn 1024 vị trí, mỗi đoạn một tác vụ: tương quan chéo cả dải (12 288 × 4096 phép nhân)
+  // một mạch chặn luồng chính ~130 ms ngay trước khung đầu (đo: TQ 720p, nhịp tim hở 135–163 ms mọi lượt — spec §3). Cùng kết quả: điểm của từng vị trí
+  // độc lập, lấy điểm cao nhất, hoà thì vị trí sớm hơn (như findLag).
+  async function delayOfSliced(cal, sig) {
+    var best = { lag: -1, score: -2 }, rr = GenMux.sync.lagRanges(cal, 1024);
+    for (var i = 0; i < rr.length; i++) {
+      var r = GenMux.sync.findLag(cal.tpl, sig, rr[i][0], rr[i][1]);
+      if (r.lag >= 0 && r.score > best.score) best = r;
+      await VC.yieldReal();
+    }
+    return { delay: best.lag < 0 ? null : best.lag - cal.at, score: best.score };
+  }
   async function calibrate(acfg) {
     var S = GenMux.sync, cal = S.calibSignal(48000), n = cal.pcm.length, chunks = [], cfg = null, info = { inFrames: n }, enc = null, dec = null;
     try {
@@ -225,7 +238,7 @@
       await dec.flush(); dec.close(); dec = null;
       var pcm = new Float32Array(total), p = 0; outs.forEach(function (x) { pcm.set(x, p); p += x.length; });
       info.decFrames = total;
-      var m = S.delayOf(cal, pcm); info.delay = m.delay; info.score = Math.round(m.score * 1000) / 1000;
+      var m = await delayOfSliced(cal, pcm); info.delay = m.delay; info.score = Math.round(m.score * 1000) / 1000;
     } catch (e) {
       info.error = info.error || String(e && e.message || e);
       [enc, dec].forEach(function (x) { try { if (x && x.state !== 'closed') x.close(); } catch (y) { /* đã đóng */ } });
@@ -245,7 +258,7 @@
    *       shots [chỉ số trong danh sách phân cảnh sẵn sàng] · fps 30 · sec (độ dài từ lượt dry — cỡ OfflineAudioContext) · maxSec (trần) · missingVoice 'silent'|'blip'
    *       handle (FileSystemFileHandle, tuỳ chọn) · seed · tailMs · probe [số khung] · debug (thu chữ trên khung + nhật ký say) */
   async function run(P, o) {
-    var t00 = R.now(), marks = [], mark = function (n) { if (o.debug) marks.push([n, performance.timeOrigin + R.now()]); };
+    var t00 = R.now(), tmarks = [], mark = function (n) { if (o.debug) tmarks.push([n, performance.timeOrigin + R.now()]); };   // mốc thời gian (gỡ lỗi ngân sách) — KHÁC `marks` (mẫu dấu tiếng)
     mark('start');
     var fps = o.fps || 30, dry = o.pass === 'dry', vertical = o.aspect === '9:16', hd = o.quality !== '720p';
     var OW = vertical ? (hd ? 1080 : 720) : (hd ? 1920 : 1280), OH = vertical ? (hd ? 1920 : 1280) : (hd ? 1080 : 720);
@@ -419,7 +432,7 @@
     VC.beforeFire = null;
     var base = { type: 'gc-video-done', pass: o.pass, frames: nFrames, durationMs: durMs, endAt: endAt, shots: shotMarks, firstDialogFrame: firstDialogFrame,
       cues: cues.map(function (c) { return { from: c.from, to: c.to, text: c.text }; }) };
-    if (o.debug) { base.texts = Array.from(texts); base.says = says; base.slow = st.slow || []; base.t0 = performance.timeOrigin + t00; base.marks = marks; }
+    if (o.debug) { base.texts = Array.from(texts); base.says = says; base.slow = st.slow || []; base.t0 = performance.timeOrigin + t00; base.tmarks = tmarks; }
     if (dry) { base.stats = { wallMs: R.now() - t00, perFrameMs: (R.now() - t00) / Math.max(1, nFrames) }; return base; }
     // kết: tiếng tới hết độ dài hình, đóng bộ mã hoá, ghép
     var endSamples = Math.round(durMs / 1000 * 48000);

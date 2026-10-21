@@ -131,14 +131,14 @@ console.log('   — cách dùng, app dừng');
   ok(r.code === 1 && /needs Docker mode/.test(r.out), 'native: online caddy <tên-miền> → cần Docker, gợi ý Cloudflare (không gọi API)', r.out);
   r = await cli(home, ['online', 'bogus']);
   ok(r.code === 2 && /Unknown option bogus/.test(r.out), 'lệnh con lạ → thoát 2 + trợ giúp', r.out);
-  // CNS-204 (spec §3.5): expose / link = bí danh mỏng của online — một dòng "Deprecated … removed in v0.22", rồi ĐÚNG đầu ra + mã thoát của lệnh online tương ứng
-  const DEP = /^Deprecated: genchibi (.+) is an alias of genchibi (.+) and will be removed in v0\.22 — running that now\.$/m;
+  // CNS-204 (spec §3.5): expose / link = bí danh mỏng của online — một dòng "Deprecated … removed in v0.23", rồi ĐÚNG đầu ra + mã thoát của lệnh online tương ứng
+  const DEP = /^Deprecated: genchibi (.+) is an alias of genchibi (.+) and will be removed in v0\.23 — running that now\.$/m;
   const strip = o => o.split('\n').filter(l => !DEP.test(l)).join('\n');
   const pairs = [[['expose', 'chibi.example.com', '--overwrite-dns'], ['online', 'cloudflare', 'chibi.example.com', '--overwrite-dns']], [['expose', '--quick'], ['online', 'quick']],
     [['expose', '--off'], ['online', 'off']], [['expose', '--help'], ['online', '--help']], [['link'], ['online']], [['link', '--check'], ['online', 'recheck']]];
   for (const [old, neu] of pairs) {
     const a = await cli(home, old), b = await cli(home, neu), dl = a.out.split('\n').filter(l => DEP.test(l)), mm = DEP.exec(a.out) || [];
-    ok(dl.length === 1 && mm[1] === old.join(' ') && mm[2] === neu.join(' '), 'genchibi ' + old.join(' ') + ': đúng một dòng "Deprecated … alias of genchibi ' + neu.join(' ') + ' … removed in v0.22"', a.out);
+    ok(dl.length === 1 && mm[1] === old.join(' ') && mm[2] === neu.join(' '), 'genchibi ' + old.join(' ') + ': đúng một dòng "Deprecated … alias of genchibi ' + neu.join(' ') + ' … removed in v0.23"', a.out);
     ok(a.code === b.code && strip(a.out) === b.out && cf.st.log.length === 0, 'genchibi ' + old.join(' ') + ' ≡ genchibi ' + neu.join(' ') + ' (cùng đầu ra, cùng mã thoát ' + b.code + ')', 'expose: ' + a.code + ' ' + a.out + '\nonline: ' + b.code + ' ' + b.out);
   }
   r = await cli(home, ['expose', '--bogus']);

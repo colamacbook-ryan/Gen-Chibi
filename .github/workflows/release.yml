@@ -13,7 +13,11 @@ concurrency:
   group: release
   cancel-in-progress: false
 jobs:
+  # CNS-236: bản phát hành không bao giờ ra nếu xuất video MP4 (Chrome thật, Windows / macOS) hỏng — cùng workflow với ci.yml
+  video-mp4:
+    uses: ./.github/workflows/video-mp4.yml
   release:
+    needs: video-mp4
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

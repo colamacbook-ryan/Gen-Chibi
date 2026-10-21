@@ -18,7 +18,8 @@
     return [clean(o.title), clean(o.description), clean(o.credit)].filter(Boolean).join('\n\n') + '\n';
   }
   function slug(s) {
-    return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'video';
+    var x = String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'video';
+    return /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/.test(x) ? x + '-gc' : x;   // tên thiết bị dành riêng của Windows
   }
   var API = { srt: srt, txt: txt, slug: slug, tc: tc };
   if (typeof module === 'object' && module.exports) module.exports = API; else root.GCVText = API;

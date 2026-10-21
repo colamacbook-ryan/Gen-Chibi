@@ -18,7 +18,7 @@
       window.__ciVideo = v.blob;
       window.__ci = Object.assign(window.__ci, { state: 'done', format: r.format, frames: r.frames, durationMs: r.durationMs, dry: r.dry, stats: r.stats, wallMs: r.wallMs,
         files: r.files.map(function (f) { return { kind: f.kind, name: f.name, type: f.type, size: f.blob.size }; }) });
-    }, function (e) { window.__ci.state = 'error'; window.__ci.error = String(e && e.message || e); window.__ci.code = e && e.code; });
+    }, function (e) { window.__ci.state = 'error'; window.__ci.error = String(e && e.message || e); window.__ci.code = e && e.code; window.__ci.detail = e && e.detail; });
   };
   // tệp video → base64 từng đoạn (CDP trả chuỗi)
   window.ciChunk = function (i, n) {

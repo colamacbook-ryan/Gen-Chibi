@@ -325,6 +325,12 @@ else {
   no(s !== '1\r\n00:00:03,067 --> 00:00:05,467\r\nGood morning, boss!\r\n\r\n2\r\n01:02:03,004 --> 01:02:05,000\r\nMột giờ sau\r\n', '.srt: đánh số lại, mốc hh:mm:ss,mmm, bỏ câu rỗng / 0 s, bỏ ký tự điều khiển: ' + JSON.stringify(s));
   no(T.txt({ title: 'First Day', description: '', credit: 'Made with gen-chibi · Gen Labs' }) !== 'First Day\n\nMade with gen-chibi · Gen Labs\n', '.txt: tiêu đề + mô tả + ghi công');
   no(T.slug('Ngày đầu đi làm!') !== 'ngay-dau-di-lam' || T.slug('') !== 'video', 'slug tên tệp');
+  // tên thiết bị dành riêng của Windows: CÙNG luật ở 3 bản slug (text.js, slugify của Studio, dự phòng trong client.js)
+  { const appS = fs.readFileSync(path.join(ROOT, 'studio/app.js'), 'utf8'), cliS = fs.readFileSync(path.join(ROOT, 'studio/video/client.js'), 'utf8');
+    const grab = (src, name) => { const i = src.indexOf('function ' + name + '('), j = src.indexOf('\n  }', i); const body = src.slice(i, src.indexOf('\n', i) > j ? j + 4 : Math.max(j + 4, src.indexOf('\n', i))); return vm.runInNewContext('(' + (name === 'GCVTextSlug' ? src.slice(i, src.indexOf('\n', i)).replace(/\s*\/\/.*$/, '') : body) + ')'); };
+    const fns = [['text.js', T.slug], ['app.js slugify', grab(appS, 'slugify')], ['client.js', grab(cliS, 'GCVTextSlug')]];
+    for (const [n, f] of fns) for (const [inp, out] of [['CON', 'con-gc'], ['Nul', 'nul-gc'], ['com1', 'com1-gc'], ['LPT9', 'lpt9-gc'], ['aux', 'aux-gc'], ['prn', 'prn-gc'], ['con tam quoc', 'con-tam-quoc'], ['com10', 'com10'], ['Ngày đầu', 'ngay-dau']])
+      no(f(inp) !== out, 'slug (' + n + ') "' + inp + '" → "' + f(inp) + '", cần "' + out + '" (tên dành riêng của Windows)'); }
   if (bad === b0) ok('.srt (SubRip, CRLF) · .txt (tiêu đề / mô tả / ghi công Q47) · tên tệp');
 }
 
@@ -342,12 +348,69 @@ else {
   no(/createObjectURL|createImageBitmap/.test(cap) || !/'data:image\/svg\+xml;charset=utf-8,'/.test(cap), 'chụp khung qua data: URL + HTMLImageElement (blob: / createImageBitmap làm bẩn canvas)');
   no(/[^.]\bsetTimeout\(/.test(cap), 'capture.js không dùng setTimeout (đồng hồ ảo / tab ẩn bị bóp) — nhả luồng bằng MessageChannel');
   // ngân sách luồng chính (spec §3): không nhân bản cả sân khấu mỗi khung (rác DOM → GC dừng luồng ~80 ms); CSS + phông chỉ thoát / mã hoá MỘT lần; raster theo dải
+  // gộp P3 × bù AAC (v0.22.0): hai biến cùng tên `marks` trong run() (mốc gỡ lỗi + mẫu dấu tiếng) → var dồn một → Feeder nhận mốc gỡ lỗi → "internal"
+  const runSrc = cap.slice(cap.indexOf('async function run(')), decl = n => (runSrc.match(new RegExp('(?:var|let|const|,)\\s*' + n + '\\s*=', 'g')) || []).length;
+  no(decl('marks') !== 1 || decl('tmarks') !== 1, 'capture.js run(): `marks` (mẫu dấu tiếng) và `tmarks` (mốc gỡ lỗi) mỗi tên khai báo đúng một lần — có ' + decl('marks') + ' / ' + decl('tmarks'));
+  // lỗi kỹ thuật tới tay người gọi: client.js giữ chi tiết ở e.detail (Studio chỉ hiện MÃ), host của CI ghi detail, video-ci in ra
+  { const cli = fs.readFileSync(path.join(ROOT, 'studio/video/client.js'), 'utf8'), host = fs.readFileSync(path.join(ROOT, 'tools/fixtures/video-ci/host.js'), 'utf8'), vci = fs.readFileSync(path.join(ROOT, 'tools/video-ci.mjs'), 'utf8');
+    no(!/_t\('Xuất video lỗi: \{x\}', \{ x: code \}\)/.test(cli) || !/e\.detail = String\(extra\)/.test(cli) || !/window\.__ci\.detail = e && e\.detail/.test(host) || !/st\.detail \? ' — chi tiết: ' \+ st\.detail/.test(vci),
+      'lỗi kỹ thuật: Studio hiện mã, e.detail giữ chi tiết, video-ci in chi tiết'); }
   no(/cloneNode\(/.test(cap) || !/function frameShell\(W, H\) \{\s*if \(!PRE \|\| PRE\.w !== W/.test(cap) || !/var BANDS = /.test(cap), 'chụp khung: không cloneNode, đầu data: URL (CSS + phông) đóng sẵn một lần, raster theo dải');
   const vc = fs.readFileSync(path.join(ROOT, 'studio/video/vclock.js'), 'utf8');
   no(/(^|\/)engine\//.test(path.relative(ROOT, path.join(ROOT, 'studio/video/vclock.js'))), 'vclock không nằm trong engine/');
   no(!/window\.parent/.test(cap) || !/e\.origin !== ORIGIN \|\| e\.source !== PARENT/.test(cap), 'trang xuất kiểm origin + source của tin nhắn');
   if (bad === b0) ok('cách ly: Studio chỉ nạp client.js (không vclock / mux / capture), trang xuất không script inline, phim HTML chỉ nhúng engine/ + kinds/, một filmPayload cho hai đường, data: URL, không setTimeout, kiểm origin');
   void vc;
+}
+
+/* ---------------------------------------------------------------- hiệu chuẩn mồi AAC cắt từng đoạn (ngân sách long task — tương quan cả dải ~130 ms) */
+{
+  const b0 = bad, S = M.sync, cal = S.calibSignal(48000);
+  for (const D of [0, 1024, 2112, -300, 5000, 8000]) {
+    const sig = new Float32Array(cal.pcm.length + 9000); for (let i = 0; i < cal.pcm.length; i++) if (i + D >= 0 && i + D < sig.length) sig[i + D] = cal.pcm[i] * 0.8 + (((i * 7919) % 97) / 97 - 0.5) * 0.01;
+    const whole = S.delayOf(cal, sig); let best = { lag: -1, score: -2 };
+    const rr = S.lagRanges(cal, 1024);
+    for (const [a, b] of rr) { const r = S.findLag(cal.tpl, sig, a, b); if (r.lag >= 0 && r.score > best.score) best = r; }
+    const sliced = { delay: best.lag < 0 ? null : best.lag - cal.at, score: best.score };
+    no(rr.length < 10 || rr[0][0] !== Math.max(0, cal.at - 4096) || rr[rr.length - 1][1] !== cal.at + 8192 || rr.some((x, i) => i && x[0] !== rr[i - 1][1] + 1), 'lagRanges phủ kín, không chồng dải của delayOf');
+    no(sliced.delay !== whole.delay || Math.abs(sliced.score - whole.score) > 1e-4 || whole.delay !== D, 'cắt đoạn = cả dải: trễ ' + D + ' → cả dải ' + whole.delay + ' / cắt ' + sliced.delay);
+  }
+  const cap2 = fs.readFileSync(path.join(ROOT, 'studio/video/capture.js'), 'utf8');
+  no(/S\.delayOf\(/.test(cap2) || !/await delayOfSliced\(/.test(cap2), 'trang xuất dùng delayOfSliced (từng đoạn, nhả luồng), không gọi delayOf một mạch');
+  if (bad === b0) ok('hiệu chuẩn mồi AAC: tương quan chéo cắt 13 đoạn × 1024 vị trí = cả dải (trễ 0 / 1024 / 2112 / −300 / 5000 / 8000 mẫu); trang xuất nhả luồng giữa các đoạn');
+}
+
+/* ---------------------------------------------------------------- điều khoản bộ mẫu: MỘT câu ở mọi nơi (Q47 — chủ duyệt; CNS-240, review bảo mật 🟠) */
+{
+  const b0 = bad, rd = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
+  const VI = "xem, thử, làm phim; được đăng phim / video làm từ bộ mẫu kèm dòng ghi công \"Made with gen-chibi · Gen Labs\"; không bán lại, không phân phối lại tệp hay asset của bộ mẫu", EN = "view, try and make films; films / videos made from the sample may be posted with the credit line \"Made with gen-chibi · Gen Labs\"; no resale, no redistribution of the sample's files or assets";
+  const app = rd('studio/app.js'), tq = JSON.parse(rd('studio/mau/tam-quoc.json')), vpv = JSON.parse(rd('studio/mau/van-phong-vui.json')), fo = JSON.parse(rd('studio/mau/fun-office.json'));
+  const en = JSON.parse(rd('locales/en/studio.json')), enS = JSON.parse(rd('locales/en/server-msg.json')), mcp = rd('server/mcp.js'), man = rd('ASSET_MANIFEST.md');
+  no(app.indexOf("var SAMPLE_TERMS = N_('" + VI + "')") < 0 || en[VI] !== EN, 'SAMPLE_TERMS (app.js) = câu điều khoản chung + bản tiếng Anh');
+  no(tq.sample.license !== '© 2026 Gen Labs — bộ mẫu: ' + VI || vpv.license.indexOf(VI) < 0 || fo.license.indexOf(EN) < 0, 'giấy phép trong studio/mau/*.json dùng câu chung: ' + tq.sample.license);
+  no(man.indexOf(VI) < 0, 'ASSET_MANIFEST.md (tq-am) dùng câu chung');
+  const mm = [...mcp.matchAll(/tr\(VI, '([^']*bộ mẫu[^']*)'/g)].map(m => m[1]).filter(m => /gói bán/.test(m));
+  no(mm.length !== 2 || mm.some(m => m.indexOf(VI) < 0 || !enS[m] || enS[m].indexOf(EN) < 0 || !/không được/.test(m)), 'thông báo bộ mẫu của server/mcp.js dùng câu chung (vẫn mã FORBIDDEN qua "không được"): ' + mm.length);
+  const OLD = /chỉ để xem, thử, quay phim|chỉ để xem, sửa thử, làm phim|chỉ để xem và làm phim thử|xem, sửa thử, làm phim; không bán lại|view, try and film only|trial films only|for viewing, trying edits|viewing, trying and filming only/;
+  const hit = ['studio/app.js', 'server/mcp.js', 'ASSET_MANIFEST.md', 'agent/GUIDE.md', 'agent/workflows/project-bundle.md', 'locales/en/studio.json', 'locales/en/server-msg.json', 'studio/mau/tam-quoc.json', 'docs/USER-GUIDE.md', 'docs/HUONG-DAN.md'].filter(f => OLD.test(rd(f)));
+  no(hit.length, 'còn câu điều khoản bộ mẫu CŨ ("chỉ để xem…") ở: ' + hit.join(', '));
+  no(/Made with gen-chibi · Gen Labs/.test(rd('studio/video/client.js')) === false || /_t\('Làm bằng gen-chibi · Gen Labs'\)/.test(rd('studio/video/client.js')), 'dòng ghi công trong .txt là đúng chữ "Made with gen-chibi · Gen Labs" ở mọi ngôn ngữ');
+  if (bad === b0) ok('điều khoản bộ mẫu: một câu (vi + en) ở SAMPLE_TERMS, studio/mau/*.json, ASSET_MANIFEST, server/mcp.js, agent guide, tài liệu; không còn câu "chỉ để xem…"; dòng ghi công cố định');
+}
+
+/* ---------------------------------------------------------------- CI: nhánh MP4 Chrome thật (CNS-236 / CNS-239) */
+{
+  const b0 = bad, rd = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
+  const vm4 = rd('.github/workflows/video-mp4.yml'), ci = rd('.github/workflows/ci.yml'), rel = rd('.github/workflows/release.yml');
+  const runs = [...vm4.matchAll(/run: node tools\/video-ci\.mjs ([^\n]*)/g)].map(m => m[1]);
+  no(!/workflow_call/.test(vm4) || !/windows-latest/.test(vm4) || !/macos-latest/.test(vm4), 'video-mp4.yml: workflow dùng chung (workflow_call), Windows + macOS');
+  no(!runs.every(r => /--require-mp4/.test(r) && /--require-ffmpeg/.test(r)) || !runs.some(r => !/--quality|--frame|--hidden/.test(r)) || !runs.some(r => /--hidden/.test(r)) || !runs.some(r => /--quality 1080p/.test(r) && !/--frame/.test(r)) || !runs.some(r => /--quality 1080p/.test(r) && /--frame 9x16/.test(r)),
+    'video-mp4.yml chạy video-ci: mặc định + --hidden + --quality 1080p + --quality 1080p --frame 9x16 (đều --require-mp4 --require-ffmpeg): ' + JSON.stringify(runs));
+  no(!/video-mp4:\n\s+uses: \.\/\.github\/workflows\/video-mp4\.yml/.test(ci), 'ci.yml gọi video-mp4.yml');
+  no(!/video-mp4:\n\s+uses: \.\/\.github\/workflows\/video-mp4\.yml/.test(rel) || !/\n  release:\n    needs: video-mp4\n/.test(rel), 'release.yml: job release CẦN video-mp4 (không phát hành khi nhánh MP4 hỏng)');
+  const vci = rd('tools/video-ci.mjs');
+  no(!/--frame/.test(vci) || !/WANT\[0\] && st\.format\.height === WANT\[1\]/.test(vci), 'video-ci.mjs có --frame và kiểm cỡ khung của tệp ra');
+  if (bad === b0) ok('CI: video-mp4.yml (Windows + macOS, Chrome thật) chạy mặc định / tab nền / 1080p / 9:16 1080p, dùng chung cho ci.yml và release.yml — release cần nó trước khi phát hành');
 }
 
 /* ---------------------------------------------------------------- header của server theo loại tệp (CNS-214) */
@@ -365,18 +428,24 @@ else {
       ['/studio/video-export.html', 'SAMEORIGIN', "frame-ancestors 'self'"],
       ['/studio/video/capture.js', 'DENY', null], ['/studio/video/vclock.js', 'DENY', null], ['/studio/app.js', 'DENY', null], ['/studio/studio.css', 'DENY', null],
       ['/engine/core.js', 'DENY', null], ['/locales/en/player.json', 'DENY', null], ['/studio/mau/fun-office.json', 'DENY', null], ['/api/health', 'DENY', null], ['/khong-co', 'DENY', null],
-      ['/studio/video-export.html?x=1', 'SAMEORIGIN', "frame-ancestors 'self'"], ['/studio/video-export.html/', 'DENY', null], ['/studio//video-export.html', 'DENY', null]];
+      ['/studio/video-export.html?x=1', 'SAMEORIGIN', "frame-ancestors 'self'"], ['/studio/video-export.html/', 'DENY', null], ['/studio//video-export.html', 'DENY', null],
+      ['/studio//index.html', 'DENY', null], ['/studio/./index.html', 'DENY', null], ['/studio/video/../index.html', 'DENY', null], ['/studio/%2e/video-export.html', 'DENY', null], ['/engine//core.js', 'DENY', null]];
+    // đường dẫn không chuẩn (// · /./ · /../) → 404 TRƯỚC khi so khớp trang có header riêng (review bảo mật: /studio//index.html từng ra HTML không CSP)
+    const ODD = ['/studio//index.html', '/studio/./index.html', '/studio/video/../index.html', '/studio/%2e/video-export.html', '/studio//video-export.html', '/engine//core.js'];
     const seen = [];
     for (const [u, xfo, fa] of cases) {
-      const r = await fetch('http://127.0.0.1:' + PORT + u, { redirect: 'manual' }), csp = r.headers.get('content-security-policy') || '';
+      // HTTP THÔ (fetch / trình duyệt chuẩn hoá ./ ../ %2e trước khi gửi; kẻ tấn công dùng curl / socket thì không)
+      const r = await new Promise((ok, no2) => { const rq = require('http').request({ host: '127.0.0.1', port: PORT, path: u, method: 'GET' }, rs => { rs.resume(); rs.on('end', () => ok({ status: rs.statusCode, headers: { get: k => rs.headers[k] == null ? null : String(rs.headers[k]) } })); }); rq.on('error', no2); rq.end(); }), csp = r.headers.get('content-security-policy') || '';
       seen.push(u + ' ' + r.status + ' ' + r.headers.get('x-frame-options'));
+      if (ODD.includes(u)) no(r.status !== 404 && r.status !== 400, u + ': đường dẫn không chuẩn phải 404 / 400, có ' + r.status);
+      if (r.status === 200 && /text\/html/.test(r.headers.get('content-type') || '')) no(csp.indexOf("script-src 'self'") < 0, u + ': trang HTML nào cũng phải mang CSP, có "' + csp + '"');
       no(r.headers.get('x-frame-options') !== xfo, u + ': X-Frame-Options phải là ' + xfo + ', có ' + r.headers.get('x-frame-options'));
       if (fa) no(csp.indexOf(fa) < 0 || csp.indexOf("script-src 'self'") < 0, u + ': CSP phải có ' + fa + " + script-src 'self', có " + csp);
       else no(/frame-ancestors 'self'/.test(csp), u + ': không được mang frame-ancestors \'self\'');
     }
     const pg = await (await fetch('http://127.0.0.1:' + PORT + '/studio/video-export.html')).text();
     no(pg.indexOf('gc-video-export') < 0, 'server trả đúng trang xuất video');
-    if (bad === b0) ok('server: CHỈ studio/video-export.html nhận X-Frame-Options SAMEORIGIN + CSP frame-ancestors \'self\'; ' + (cases.length - 2) + ' loại phản hồi khác (Studio, đăng nhập, js, css, json, mẫu, API, 404, đường lách) giữ DENY');
+    if (bad === b0) ok('server: CHỈ studio/video-export.html nhận X-Frame-Options SAMEORIGIN + CSP frame-ancestors \'self\'; ' + (cases.length - 2) + ' loại phản hồi khác (Studio, đăng nhập, js, css, json, mẫu, API, 404, đường lách) giữ DENY; đường dẫn không chuẩn (// · /./ · /../) → 404; HTML nào cũng có CSP');
   } finally { srv.kill(); }
 }
 

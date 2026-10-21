@@ -79,8 +79,8 @@ in the language of the user / project (rule 6).
    (script errors point at `steps[i].field`). A passing `validate_*` returns `{ "ok": true, … }`.
    Fix exactly the fields named in `details[].path`, then validate again. Stop after 3 failed
    attempts on the same item and report to the owner what still fails.
-8. **Samples are not yours.** Projects marked as a Gen Labs sample (e.g. Tam Quốc) are for viewing,
-   trying and filming — never copy their parts / motion packs / sound packs into something sold.
+8. **Samples are not yours.** Projects marked as a Gen Labs sample (e.g. Tam Quốc) may be viewed,
+   tried and filmed — films / videos made from the sample may be posted with the credit line "Made with gen-chibi · Gen Labs"; no resale, no redistribution of the sample's files or assets — never copy their parts / motion packs / sound packs into something sold.
 9. **Nothing is deleted by agents.** There is no tool that deletes an asset. Saving over an existing id
    (`overwrite: true`, or `save_*` on the same id) creates a NEW version — the old one stays in history.
    `save_shot` with `remove` takes a shot out of a work — only when the owner asks. `rollback_app` needs the

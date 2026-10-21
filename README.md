@@ -89,7 +89,7 @@ genchibi online off                     # go offline (with GC_CF_TOKEN: also rem
 genchibi online migrate                 # machines set up by hand in .env (GC_PUBLIC_URL / GC_ALLOWED_HOSTS) before v0.21
 ```
 
-Changing the public address signs out agents connected through OAuth (they must connect again); the command asks first (`--yes` without a terminal). Exit code `3` means "online, waiting for the owner password". `genchibi expose` (the v0.20 way, with a browser login to Cloudflare) still works in this version and is removed in v0.22.
+Changing the public address signs out agents connected through OAuth (they must connect again); the command asks first (`--yes` without a terminal). Exit code `3` means "online, waiting for the owner password". `genchibi expose` (the v0.20 way, with a browser login to Cloudflare) still works in this version (as an alias of `genchibi online`) and is removed in v0.23.
 
 **Backups contain your password and sessions; restoring turns Go online off.** `genchibi backup` saves `data/`, which now also holds the owner password (hashed), the Studio sessions / remembered devices and the online settings. `genchibi restore <file>` keeps the password of the backup but signs out every session and device, and turns Go online **off** (no public address, tunnel stopped, a new install id — a backup from another machine never takes over that machine's domain or tunnel). Run Go online again afterwards.
 
@@ -152,7 +152,7 @@ Creating a part: `get_part_spec` → draw (safe SVG, colour tokens) → `preview
 ### Connect claude.ai with `https://your-domain/mcp` — OAuth, just click Authorize (v0.19)
 The app is its own OAuth 2.1 authorization server, with RFC 9728 / 8414 discovery, dynamic client registration (DCR), PKCE S256 and expiring tokens stored as hashes. To connect: go online first ([above](#go-online-domain-https-mcp-in-one-step) — it sets the public address), open claude.ai *Customize › Connectors › Add custom connector*, paste `https://your-domain/mcp` and click **Connect**. The app's **Authorize** page appears so you can pick a permission level (`mcp:read` · `mcp:write` · `mcp:owner`); it uses your Studio sign-in (owner password), or asks you to sign in. Manage and revoke in **Studio › System › Agent connections**. If you use your own proxy or login page, the machine routes (`/mcp`, `/.well-known/oauth-*`, `/oauth/register|token|revoke`) must go straight to the app — `genchibi online proxy <domain>` prints that config. A sample Caddy config is in `docs/Caddyfile.oauth.example`; Cloudflare handling and common errors are in `docs/USER-GUIDE.md` › section 6.
 
-### Legacy: `genchibi expose` / `genchibi link` — aliases of `genchibi online`, removed in v0.22
+### Legacy: `genchibi expose` / `genchibi link` — aliases of `genchibi online`, removed in v0.23
 Both are now thin aliases: they print one "Deprecated" line, then run the matching [Go online](#go-online-domain-https-mcp-in-one-step) command (same steps, same exit code). The old browser login to Cloudflare (`cloudflared login`) is gone — path B uses an API token.
 
 | Old command | Runs |
@@ -162,7 +162,7 @@ Both are now thin aliases: they print one "Deprecated" line, then run the matchi
 | `genchibi expose --off` | `genchibi online off` |
 | `genchibi link` · `genchibi link --check` | `genchibi online` · `genchibi online recheck` |
 
-Machines that still run a tunnel made by the old `expose` (`.env` has `GC_TUNNEL`, Docker profile `tunnel` / `quick`) keep working until v0.22: `genchibi link` also prints their keyed MCP link (`https://<domain>/mcp/<key>` — MCP only, no header needed), `genchibi expose --rotate` changes the key (the old link stops working immediately), and `genchibi expose --off` removes that old setup. Move to Go online with `genchibi online migrate`.
+Machines that still run a tunnel made by the old `expose` (`.env` has `GC_TUNNEL`, Docker profile `tunnel` / `quick`) keep working until v0.23: `genchibi link` also prints their keyed MCP link (`https://<domain>/mcp/<key>` — MCP only, no header needed), `genchibi expose --rotate` changes the key (the old link stops working immediately), and `genchibi expose --off` removes that old setup. Move to Go online with `genchibi online migrate`.
 
 Your own tunnel or proxy, LAN: use `genchibi online proxy <domain>` (or set `GC_BIND` and `GC_ALLOWED_HOSTS` in `.env` for a LAN). Since v0.21 the app never trusts a request because a proxy header is missing: the Studio always needs the owner password (sign-in), and scripts calling `/api` or `/mcp` send `Authorization: Bearer <owner token>`.
 
