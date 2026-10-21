@@ -122,6 +122,7 @@
  "Đã dừng tunnel và bỏ publicUrl; Caddy không nạp được cấu hình trống": "Tunnel stopped and publicUrl removed; Caddy could not load the empty configuration",
  "Đã dừng tunnel, bỏ site Caddy và publicUrl": "Tunnel stopped, Caddy site and publicUrl removed",
  "Không có gì cần dọn ở Cloudflare": "Nothing to clean up on Cloudflare",
+ "Không xoá gì ở Cloudflare: tunnel {name} và CNAME {host} (cùng luật WAF nếu có) do một bản cài khác tạo — máy cũ của bản sao lưu, hoặc máy này trước khi khôi phục. Chúng vẫn ở Cloudflare và thuộc về máy đó: Go offline trên máy đó, hoặc xoá tay ở dash.cloudflare.com (Zero Trust › Networks › Tunnels và DNS)": "Nothing deleted on Cloudflare: tunnel {name} and the CNAME {host} (and the WAF rule, if any) were created by another installation — the machine the backup came from, or this machine before the restore. They stay on Cloudflare and belong to that machine: go offline there, or delete them by hand at dash.cloudflare.com (Zero Trust › Networks › Tunnels, and DNS)",
  "Tunnel {name} và CNAME {host} vẫn còn ở Cloudflare (không có API token để xoá)": "Tunnel {name} and CNAME {host} are still on Cloudflare (no API token to delete them)",
  "Dán API token để app xoá, hoặc xoá tay ở dash.cloudflare.com (Zero Trust › Networks › Tunnels và DNS)": "Paste an API token so the app deletes them, or delete them by hand at dash.cloudflare.com (Zero Trust › Networks › Tunnels and DNS)",
  "Dọn Cloudflare chưa hết: {error}": "Cloudflare cleanup is incomplete: {error}",

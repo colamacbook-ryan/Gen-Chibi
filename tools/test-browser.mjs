@@ -184,10 +184,13 @@ if (!ONLY || ONLY === 'auth') {
     // 5b) trần theo tài khoản: 100 lần sai từ 100 "IP" (proxy khai tường minh) → màn đăng nhập báo chặn tạm + lối token; chủ vào bằng token thấy dải cảnh báo, "Đã xem" tắt
     for (let i = 0; i < 100; i++) await _fetch('http://localhost:7497/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1', 'X-Forwarded-For': '198.51.100.' + (i + 1) }, body: JSON.stringify({ password: 'doan sai lan ' + i }) });
     const ctx4 = await b2.newContext(); const q4 = await ctx4.newPage(); q4.on('pageerror', e => errs2.push(e.message));
-    await q4.goto('http://localhost:7497/login'); await q4.waitForSelector('#gcLocked', { timeout: 8000 });
-    if (!/chặn tạm/.test(await q4.textContent('#gcLocked'))) throw new Error('đang bị chặn theo tài khoản: màn đăng nhập phải báo "chặn tạm — dùng token hoặc chờ N phút"');
+    await q4.goto('http://localhost:7497/login'); await q4.waitForSelector('#gcPw', { timeout: 8000 });
+    // CNS-210: /api/auth/state công khai không báo locked → trước lần thử chưa có dải; lần thử trả 429 locked → dải "chặn tạm" + lối token
+    if (await q4.$('#gcLocked')) throw new Error('CNS-210: trước khi thử, màn đăng nhập của người lạ không được biết tài khoản đang bị chặn');
     await q4.fill('#gcPw', PWB); await q4.click(SUB);
     if (!/chặn tạm/.test(await alertText(q4))) throw new Error('đang bị chặn: đúng mật khẩu (chưa có cookie thiết bị) vẫn bị từ chối, kèm câu chặn tạm');
+    await q4.waitForSelector('#gcLocked', { timeout: 8000 });
+    if (!/chặn tạm/.test(await q4.textContent('#gcLocked'))) throw new Error('đang bị chặn theo tài khoản: sau lần thử, màn đăng nhập phải báo "chặn tạm — dùng token hoặc chờ N phút"');
     await q4.click('#gcLogin a:has-text("Dùng token")'); await q4.fill('#gcTok', 'tok-test-123'); await q4.click(SUB); await studioUp(q4);
     await q4.waitForSelector('#authAlert', { timeout: 5000 });
     if (!/100 lần sai từ 100 địa chỉ/.test(await q4.textContent('#authAlert'))) throw new Error('dải cảnh báo phải nêu số lần sai / số địa chỉ: ' + await q4.textContent('#authAlert'));

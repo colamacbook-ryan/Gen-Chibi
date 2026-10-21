@@ -131,6 +131,18 @@ console.log('   — cách dùng, app dừng');
   ok(r.code === 1 && /needs Docker mode/.test(r.out), 'native: online caddy <tên-miền> → cần Docker, gợi ý Cloudflare (không gọi API)', r.out);
   r = await cli(home, ['online', 'bogus']);
   ok(r.code === 2 && /Unknown option bogus/.test(r.out), 'lệnh con lạ → thoát 2 + trợ giúp', r.out);
+  // CNS-204 (spec §3.5): expose / link = bí danh mỏng của online — một dòng "Deprecated … removed in v0.22", rồi ĐÚNG đầu ra + mã thoát của lệnh online tương ứng
+  const DEP = /^Deprecated: genchibi (.+) is an alias of genchibi (.+) and will be removed in v0\.22 — running that now\.$/m;
+  const strip = o => o.split('\n').filter(l => !DEP.test(l)).join('\n');
+  const pairs = [[['expose', 'chibi.example.com', '--overwrite-dns'], ['online', 'cloudflare', 'chibi.example.com', '--overwrite-dns']], [['expose', '--quick'], ['online', 'quick']],
+    [['expose', '--off'], ['online', 'off']], [['expose', '--help'], ['online', '--help']], [['link'], ['online']], [['link', '--check'], ['online', 'recheck']]];
+  for (const [old, neu] of pairs) {
+    const a = await cli(home, old), b = await cli(home, neu), dl = a.out.split('\n').filter(l => DEP.test(l)), mm = DEP.exec(a.out) || [];
+    ok(dl.length === 1 && mm[1] === old.join(' ') && mm[2] === neu.join(' '), 'genchibi ' + old.join(' ') + ': đúng một dòng "Deprecated … alias of genchibi ' + neu.join(' ') + ' … removed in v0.22"', a.out);
+    ok(a.code === b.code && strip(a.out) === b.out && cf.st.log.length === 0, 'genchibi ' + old.join(' ') + ' ≡ genchibi ' + neu.join(' ') + ' (cùng đầu ra, cùng mã thoát ' + b.code + ')', 'expose: ' + a.code + ' ' + a.out + '\nonline: ' + b.code + ' ' + b.out);
+  }
+  r = await cli(home, ['expose', '--bogus']);
+  ok(r.code === 1 && /--bogus/.test(r.out) && !/cloudflared login/.test(r.out), 'expose với tuỳ chọn lạ → báo lỗi (thoát 1), không còn đường cloudflared login', r.code + ' ' + r.out);
 }
 
 const L = startLauncher(home, P, { GC_TEST_CF_API: cf.base, GC_TEST_ONLINE_VIA: '127.0.0.1:' + (P + 2) });
@@ -283,7 +295,29 @@ console.log('   — link tạm (quick) qua CLI: launcher + cloudflared giả đ�
   ok(r.code === 0 && url && r.out.includes(url + '/mcp') && /✓ Tunnel/.test(r.out) && /✓ MCP from the Internet/.test(r.out), 'genchibi online quick → tunnel · public · mcp · mật khẩu ✓, in link tạm + /mcp', r.code + ' ' + r.out);
   r = await cli(hq, ['online', 'off']);
   ok(r.code === 0 && /Offline/.test(r.out), 'genchibi online off (link tạm) → offline', r.out);
+  // bật lại trên CÙNG launcher: tunnel.log còn link cũ (đã chết) — bậc Tunnel phải đợi link MỚI của cloudflared mới, không lấy link cũ từ log
+  r = await cli(hq, ['online', 'quick']);
+  const urlB = (/✓ Online: (https:\/\/fake-\d+\.trycloudflare\.com)/.exec(r.out) || [])[1];
+  const cfPid = (() => { try { return JSON.parse(fs.readFileSync(path.join(hq, 'fake-cf-run.json'), 'utf8')).pid; } catch (e) { return 0; } })();
+  ok(r.code === 0 && urlB && urlB !== url && urlB === 'https://fake-' + cfPid + '.trycloudflare.com' && /✓ MCP from the Internet/.test(r.out), 'online quick → off → quick (cùng launcher) → link MỚI của cloudflared mới, không lấy link cũ còn trong tunnel.log', r.code + ' ' + r.out);
+  r = await cli(hq, ['online', 'off']);
+  ok(r.code === 0 && /Offline/.test(r.out), 'genchibi online off lần hai → offline', r.out);
   await stopLauncher(LQ);
+  // CNS-204: bí danh cũ chạy đúng luồng mới tới xong (app chạy) — bản cài riêng
+  const PQ2 = 7891, PX2 = 7897, hq2 = mkHome('quick2', PQ2);
+  fs.writeFileSync(path.join(hq2, 'fake-cf-proxy-port'), String(PX2));
+  const LQ2 = startLauncher(hq2, PQ2, { GC_TEST_ONLINE_VIA: '127.0.0.1:' + PX2 });
+  await until(() => health(PQ2), 30000);
+  r = await cli(hq2, ['password'], { input: 'correct horse battery staple\n' });
+  r = await cli(hq2, ['expose', '--quick']);
+  const url2 = (/✓ Online: (https:\/\/fake-\d+\.trycloudflare\.com)/.exec(r.out) || [])[1];
+  ok(r.code === 0 && url2 && /^Deprecated: genchibi expose --quick is an alias of genchibi online quick/m.test(r.out) && /✓ MCP from the Internet/.test(r.out), 'genchibi expose --quick (cũ) → nhắc một dòng rồi chạy online quick tới xong, in link tạm', r.code + ' ' + r.out);
+  r = await cli(hq2, ['link']);
+  ok(r.code === 0 && /^Deprecated: genchibi link is an alias of genchibi online/m.test(r.out) && url2 && r.out.includes(url2), 'genchibi link → trạng thái online: in địa chỉ (Studio + /mcp)', r.code + ' ' + r.out);
+  await sleep(2200);
+  r = await cli(hq2, ['expose', '--off']);
+  ok(r.code === 0 && /^Deprecated: genchibi expose --off is an alias of genchibi online off/m.test(r.out) && /Offline/.test(r.out), 'genchibi expose --off → online off', r.code + ' ' + r.out);
+  await stopLauncher(LQ2);
 }
 
 // ---------------------------------------------------------------- 6) máy kế thừa (.env có GC_PUBLIC_URL) → needs legacy · migrate

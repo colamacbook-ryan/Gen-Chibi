@@ -152,25 +152,17 @@ Tạo linh kiện: `get_part_spec` → vẽ (SVG an toàn, token màu) → `prev
 ### Nối claude.ai bằng `https://tên-miền/mcp` — OAuth, chỉ cần bấm Cấp phép (v0.19)
 App tự làm máy chủ cấp phép OAuth 2.1, gồm khám phá RFC 9728 / 8414, tự đăng ký client (DCR), PKCE S256 và token có hạn, lưu dạng băm. Cách nối: ra Internet trước ([ở trên](#ra-internet-tên-miền-https-mcp-một-bước) — bước này đặt địa chỉ công khai), vào claude.ai *Customize › Connectors › Add custom connector*, dán `https://tên-miền/mcp` rồi bấm **Connect**. Trang **Cấp phép** của app hiện ra để chọn mức quyền (`mcp:read` · `mcp:write` · `mcp:owner`); trang dùng phiên đăng nhập Studio (mật khẩu chủ), chưa đăng nhập thì mời đăng nhập. Quản lý và thu hồi ở **Studio › Hệ thống › Kết nối agent**. Nếu dùng proxy hoặc trang đăng nhập riêng thì các đường máy (`/mcp`, `/.well-known/oauth-*`, `/oauth/register|token|revoke`) phải đi thẳng tới app — `genchibi online proxy <tên-miền>` in sẵn cấu hình đó. Đoạn Caddy mẫu nằm ở `docs/Caddyfile.oauth.example`; cách xử lý Cloudflare và các lỗi thường gặp nằm trong `docs/HUONG-DAN.md` › mục 6.
 
-### Cách cũ: `genchibi expose` — đã thay bằng `genchibi online`, bỏ ở v0.22
-Máy đang dùng vẫn chạy ở bản này. Thiết lập mới: dùng [Ra Internet](#ra-internet-tên-miền-https-mcp-một-bước) (không cần đăng nhập Cloudflare bằng trình duyệt, Studio cũng ra Internet, sau mật khẩu chủ).
+### Cách cũ: `genchibi expose` / `genchibi link` — bí danh của `genchibi online`, bỏ ở v0.22
+Giờ hai lệnh này chỉ là bí danh mỏng: in một dòng "Sắp bỏ" rồi chạy đúng lệnh [Ra Internet](#ra-internet-tên-miền-https-mcp-một-bước) tương ứng (cùng các bước, cùng mã thoát). Không còn đăng nhập Cloudflare bằng trình duyệt (`cloudflared login`) — đường B dùng API token.
 
-```bash
-genchibi expose chibi.example.com   # lần đầu mở trình duyệt đăng nhập Cloudflare một lần
-```
+| Lệnh cũ | Chạy |
+|---|---|
+| `genchibi expose <tên-miền> [--overwrite-dns]` | `genchibi online cloudflare <tên-miền> [--overwrite-dns]` |
+| `genchibi expose --quick` | `genchibi online quick` |
+| `genchibi expose --off` | `genchibi online off` |
+| `genchibi link` · `genchibi link --check` | `genchibi online` · `genchibi online recheck` |
 
-Lệnh tạo Cloudflare Tunnel, trỏ DNS, **chỉ cho đường `/mcp` và các đường OAuth đi qua** (Studio ở lại máy), sinh khoá, khởi động lại, thử gọi qua Internet, rồi in ra **link MCP**:
-
-```
-https://chibi.example.com/mcp/<khoá>
-```
-
-Agent dán link là nối được — không cần header:
-- Claude Code: `claude mcp add -s user --transport http gen-chibi <link>`
-- Claude web/desktop: Customize › Connectors › Add custom connector › dán link (hoặc dán `https://chibi.example.com/mcp` để nối bằng OAuth, xem mục trên)
-- Cursor và client khác: `{"mcpServers":{"gen-chibi":{"url":"<link>"}}}`
-
-Link chỉ cấp quyền MCP (không mở Studio hay cài đặt). Các lệnh khác: `genchibi link` (in lại link) · `genchibi link --check` · `genchibi expose --rotate` (đổi khoá, link cũ chết ngay) · `genchibi expose --off` · `genchibi expose --quick` (link tạm `*.trycloudflare.com`, không cần tài khoản, đổi mỗi lần khởi động lại). Docker: tunnel chạy thành container `gen-chibi-tunnel`, tự bật lại cùng app. Node: cần `cloudflared` trong PATH.
+Máy còn chạy tunnel do `expose` cũ tạo (`.env` có `GC_TUNNEL`, profile Docker `tunnel` / `quick`) vẫn chạy tới v0.22: `genchibi link` in thêm link MCP có khoá của máy đó (`https://<tên-miền>/mcp/<khoá>` — chỉ MCP, không cần header), `genchibi expose --rotate` đổi khoá (link cũ chết ngay), `genchibi expose --off` gỡ cấu hình cũ đó. Chuyển sang Ra Internet: `genchibi online migrate`.
 
 Tunnel hoặc proxy riêng, mạng LAN: dùng `genchibi online proxy <tên-miền>` (hoặc đặt `GC_BIND` và `GC_ALLOWED_HOSTS` trong `.env` cho mạng LAN). Từ v0.21 app không bao giờ tin một request chỉ vì thiếu header proxy: Studio luôn cần mật khẩu chủ (đăng nhập), script gọi `/api` hoặc `/mcp` gửi `Authorization: Bearer <token chủ>`.
 

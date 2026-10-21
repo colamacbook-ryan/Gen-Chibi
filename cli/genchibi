@@ -53,30 +53,11 @@ _en() {
     tok_bad) F="The token has invalid characters — copy it again (letters, digits, _ . - only)." ;;
     tok_set) F="GC_GITHUB_TOKEN written to .env; restarting to apply…" ;;
     tok_cleared) F="GC_GITHUB_TOKEN removed; restarting…" ;;
-    keys_set) F="• GC_API_TOKEN set: the Studio now requires sign-in (show the token: grep GC_API_TOKEN %s/.env)" ;;
-    cf_pull_fail) F="Could not download %s" ;;
-    cf_need) F="cloudflared is required. Install it, then run again:\n  Fedora/RHEL:  sudo dnf config-manager addrepo --from-repofile=https://pkg.cloudflare.com/cloudflared.repo && sudo dnf install cloudflared\n  Ubuntu/Debian: see https://pkg.cloudflare.com/   ·   macOS: brew install cloudflared" ;;
     tun_no_cf) F="! cloudflared is missing: MCP is not reachable from the Internet yet" ;;
     wait_link) F="Waiting for the link to work over the Internet" ;;
     wait_fail) F=" — not reachable after 2 minutes (new DNS can take a few more minutes). Check again: genchibi link --check" ;;
     link_none) F="MCP is not exposed yet. Run: genchibi expose <domain>   (or genchibi expose --quick for a quick test)" ;;
-    cf_reuse) F="• Using the Cloudflare login already on this machine" ;;
-    cf_pick) F="  The browser just downloaded %s — use it as the Cloudflare certificate? [y/N] " ;;
-    cf_picked) F="• Used %s (delete that file when you are done: it grants access to the whole account)" ;;
-    cf_login) F="• Cloudflare login (attempt %s/3): open the link below within 1 minute, pick %s, click Authorize" ;;
-    cf_logged) F="• Logged in to Cloudflare" ;;
-    cf_retry) F="  No certificate received (the 1-minute wait ran out) — retrying with a new link." ;;
-    cf_fail) F="Could not log in to Cloudflare. If the browser downloaded a cert.pem file, copy it to %s and run this command again." ;;
     bad_domain) F="Invalid domain: %s" ;;
-    tun_reuse) F="• Reusing the existing tunnel and DNS for %s" ;;
-    tun_create_fail) F="Could not create tunnel %s" ;;
-    tun_ready) F="• Tunnel %s ready" ;;
-    tun_creds_bad) F="Broken tunnel key file: %s" ;;
-    dns_taken) F="! %s already has a different DNS record on Cloudflare. Check it, then overwrite with: genchibi expose %s --overwrite-dns" ;;
-    dns_done) F="• DNS: %s → tunnel (account certificate removed from the app server)" ;;
-    tun_cfg_bad) F="Invalid tunnel configuration" ;;
-    quick_fail) F="The temporary tunnel did not come up — see: genchibi logs" ;;
-    quick_note) F="(A temporary tunnel gets a new link on every restart. For long-term use: genchibi expose <domain>)" ;;
     off_1) F="MCP to the Internet is off. Keys and tunnel config are kept in %s (reopen quickly with genchibi expose <domain>)." ;;
     off_2) F="The DNS record on Cloudflare remains, pointing at the stopped tunnel." ;;
     not_exposed) F="MCP is not exposed to the Internet." ;;
@@ -102,7 +83,7 @@ _en() {
     lang_restart) F="Restarting the app so the Studio default follows…" ;;
     lang_norun) F="The app is not running — the new default applies at the next start (genchibi start)." ;;
     lang_note) F="This is the default for the CLI and for everyone who opens the Studio. Each user can still switch language in the Studio (language switch); that choice is remembered in their browser." ;;
-    expose_moved) F="Note: genchibi expose is replaced by genchibi online (genchibi online --help, or Studio › System › Go online: Cloudflare with an API token, no browser login). This version still runs the old expose (cloudflared login) for machines that use it; it goes away in v0.22." ;;
+    deprecated) F="Deprecated: genchibi %s is an alias of genchibi %s and will be removed in v0.22 — running that now." ;;
     caddy_native) F="genchibi online --caddy needs Docker mode: Caddy publishes ports 80/443 (below 1024). Native mode: use the Cloudflare path instead (Studio › System › Go online › Cloudflare)." ;;
     caddy_busy) F="Port(s) %s already in use on this machine — Caddy was NOT turned on (the app keeps running). Stop the service holding them, or use the Cloudflare path (Studio › System › Go online › Cloudflare, no open ports needed)." ;;
     caddy_old) F="The running version has no edge Caddy yet (needs v0.21 or newer) — run genchibi update first." ;;
@@ -228,30 +209,11 @@ _vi() {
     tok_bad) F="Token có ký tự lạ — chép lại (chỉ gồm chữ, số, _ . -)." ;;
     tok_set) F="Đã ghi GC_GITHUB_TOKEN vào .env; khởi động lại để áp dụng…" ;;
     tok_cleared) F="Đã xoá GC_GITHUB_TOKEN; khởi động lại…" ;;
-    keys_set) F="• Đã đặt GC_API_TOKEN: Studio giờ cần đăng nhập (xem token: grep GC_API_TOKEN %s/.env)" ;;
-    cf_pull_fail) F="Không tải được %s" ;;
-    cf_need) F="Cần cloudflared. Cài rồi chạy lại:\n  Fedora/RHEL:  sudo dnf config-manager addrepo --from-repofile=https://pkg.cloudflare.com/cloudflared.repo && sudo dnf install cloudflared\n  Ubuntu/Debian: xem https://pkg.cloudflare.com/   ·   macOS: brew install cloudflared" ;;
     tun_no_cf) F="! Thiếu cloudflared: MCP chưa ra ngoài được" ;;
     wait_link) F="Chờ link thông qua Internet" ;;
     wait_fail) F=" — chưa thông sau 2 phút (DNS mới có thể cần thêm vài phút). Kiểm lại: genchibi link --check" ;;
     link_none) F="MCP chưa mở ra ngoài. Chạy: genchibi expose <tên-miền>   (hoặc genchibi expose --quick để thử nhanh)" ;;
-    cf_reuse) F="• Dùng đăng nhập Cloudflare có sẵn trên máy" ;;
-    cf_pick) F="  Trình duyệt vừa tải %s — dùng làm chứng chỉ Cloudflare? [c/K] " ;;
-    cf_picked) F="• Đã dùng %s (xong việc nên xoá tệp đó: nó cấp quyền cả tài khoản)" ;;
-    cf_login) F="• Đăng nhập Cloudflare (lần %s/3): mở link dưới đây trong vòng 1 phút, chọn %s, bấm Authorize" ;;
-    cf_logged) F="• Đã đăng nhập Cloudflare" ;;
-    cf_retry) F="  Chưa nhận được chứng chỉ (hết 1 phút chờ) — thử lại với link mới." ;;
-    cf_fail) F="Chưa đăng nhập được Cloudflare. Nếu trình duyệt đã tải tệp cert.pem, chép nó vào %s rồi chạy lại lệnh này." ;;
     bad_domain) F="Tên miền không hợp lệ: %s" ;;
-    tun_reuse) F="• Dùng lại tunnel và DNS đã có cho %s" ;;
-    tun_create_fail) F="Không tạo được tunnel %s" ;;
-    tun_ready) F="• Tunnel %s sẵn sàng" ;;
-    tun_creds_bad) F="Tệp khoá tunnel hỏng: %s" ;;
-    dns_taken) F="! %s đã có bản ghi DNS khác trên Cloudflare. Kiểm tra rồi ghi đè bằng: genchibi expose %s --overwrite-dns" ;;
-    dns_done) F="• DNS: %s → tunnel (đã xoá chứng chỉ tài khoản khỏi máy chủ app)" ;;
-    tun_cfg_bad) F="Cấu hình tunnel không hợp lệ" ;;
-    quick_fail) F="Tunnel tạm không lên — xem: genchibi logs" ;;
-    quick_note) F="(Tunnel tạm đổi link mỗi lần khởi động lại. Dùng lâu dài: genchibi expose <tên-miền>)" ;;
     off_1) F="Đã tắt MCP ra ngoài. Giữ khoá và cấu hình tunnel trong %s (mở lại nhanh bằng genchibi expose <tên-miền>)." ;;
     off_2) F="Bản ghi DNS trên Cloudflare vẫn còn, trỏ vào tunnel đã tắt." ;;
     not_exposed) F="MCP chưa mở ra ngoài." ;;
@@ -277,7 +239,7 @@ _vi() {
     lang_restart) F="Khởi động lại app để giao diện mặc định đổi theo…" ;;
     lang_norun) F="App đang không chạy — mặc định mới có hiệu lực ở lần chạy tới (genchibi start)." ;;
     lang_note) F="Đây là mặc định cho CLI và cho mọi người mở Studio. Mỗi người vẫn đổi ngôn ngữ riêng trong Studio được (nút chuyển ngôn ngữ); lựa chọn đó được nhớ trong trình duyệt của họ." ;;
-    expose_moved) F="Lưu ý: genchibi expose đã được thay bằng genchibi online (genchibi online --help, hoặc Studio › Hệ thống › Lên mạng: Cloudflare bằng API token, không cần đăng nhập trình duyệt). Bản này vẫn chạy expose cũ (cloudflared login) cho máy đang dùng nó; bỏ ở v0.22." ;;
+    deprecated) F="Sắp bỏ: genchibi %s là bí danh của genchibi %s, sẽ bỏ ở v0.22 — đang chạy lệnh đó." ;;
     caddy_native) F="genchibi online --caddy cần chế độ Docker: Caddy mở cổng 80/443 (dưới 1024). Chế độ native: dùng đường Cloudflare (Studio › Hệ thống › Lên mạng › Cloudflare)." ;;
     caddy_busy) F="Cổng %s trên máy này đang bị chiếm — CHƯA bật Caddy (app vẫn chạy). Dừng dịch vụ đang giữ cổng, hoặc dùng đường Cloudflare (Studio › Hệ thống › Lên mạng › Cloudflare, không cần mở cổng)." ;;
     caddy_old) F="Bản đang chạy chưa có edge Caddy (cần v0.21 trở lên) — chạy genchibi update trước." ;;
@@ -389,7 +351,6 @@ MODE="${GC_MODE:-docker}"; PORT="${GC_PORT:-7480}"
 URL="http://127.0.0.1:$PORT"
 PIDF="$HOME_DIR/logs/launcher.pid"; LOG="$HOME_DIR/logs/gen-chibi.log"
 TDIR="$HOME_DIR/tunnel"; TPID="$HOME_DIR/logs/tunnel.pid"; TLOG="$HOME_DIR/logs/tunnel.log"
-CF_IMAGE="${GC_CF_IMAGE:-cloudflare/cloudflared:2026.9.3}"
 
 # token chủ (v0.21, CNS-195): GC_API_TOKEN trong .env → data/owner-token (server tự sinh khi .env trống). Đọc lúc gọi (server có thể vừa sinh tệp).
 # Không export, không in ra màn hình; đi qua stdin (curl -K -), không nằm trong argv → không lộ trong `ps`
@@ -597,8 +558,6 @@ password_cmd() {
   fi
 }
 
-# ---------------------------------------------------------------- MCP ra ngoài (Cloudflare Tunnel)
-# genchibi expose <tên-miền>: tạo tunnel có tên, trỏ DNS, chỉ cho đường /mcp + OAuth (xem config.yml bên dưới) đi qua, sinh khoá, in link nối.
 sync_compose() {
   # chép tệp compose + Caddyfile gốc của bản đang chạy. KHÔNG đụng docker-compose.override.yml (của chủ),
   # edge/conf/Caddyfile (bản sống) và edge/conf/sites.caddy (app sinh).
@@ -1086,26 +1045,6 @@ lang_cmd() {
   fi
   m lang_note
 }
-allow_host() { case ",${GC_ALLOWED_HOSTS:-}," in *",$1,"*) ;; *) set_env GC_ALLOWED_HOSTS "${GC_ALLOWED_HOSTS:+$GC_ALLOWED_HOSTS,}$1" ;; esac; }
-ensure_keys() {
-  local fresh=""
-  [ -n "${GC_API_TOKEN:-}" ] || { set_env GC_API_TOKEN "$(rand_hex 32)"; fresh=1; }
-  [ -n "${GC_MCP_KEY:-}" ] || set_env GC_MCP_KEY "$(rand_hex 24)"
-  [ -z "$fresh" ] || m keys_set "$HOME_DIR"
-}
-CFH() { if [ "$MODE" = docker ]; then echo /work; else echo "$TDIR"; fi; }   # thư mục nhà của cloudflared
-cf() { # chạy cloudflared cho các bước thiết lập
-  mkdir -p "$TDIR/.cloudflared"; chmod 700 "$TDIR"
-  if [ "$MODE" = docker ]; then dk run --rm -i -u "$(id -u):$(id -g)" -e HOME=/work -v "$TDIR:/work" "$CF_IMAGE" ${1+"$@"}
-  else HOME="$TDIR" cloudflared --no-autoupdate ${1+"$@"}; fi
-}
-need_cf() {
-  if [ "$MODE" = docker ]; then dk image inspect "$CF_IMAGE" >/dev/null 2>&1 || dk pull -q "$CF_IMAGE" >/dev/null || { m cf_pull_fail "$CF_IMAGE" >&2; exit 1; }
-  elif ! command -v cloudflared >/dev/null; then
-    m cf_need >&2
-    exit 1
-  fi
-}
 origin_url() { if [ "$MODE" = docker ]; then echo "http://app:7480"; else echo "http://127.0.0.1:$PORT"; fi; }
 quick_url() {
   if [ "$MODE" = docker ]; then compose logs --no-log-prefix tunnel-quick 2>/dev/null | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1 || true
@@ -1187,108 +1126,6 @@ EOF
     fi
   fi
 }
-cf_login() { # lấy cert.pem (chứng chỉ tài khoản Cloudflare) vào $TDIR/.cloudflared — chỉ dùng lúc thiết lập
-  local host="$1" dest="$TDIR/.cloudflared/cert.pem" dl f i
-  [ -f "$dest" ] && return 0
-  if [ -f "$HOME/.cloudflared/cert.pem" ]; then cp "$HOME/.cloudflared/cert.pem" "$dest"; m cf_reuse; return 0; fi
-  dl="$(xdg-user-dir DOWNLOAD 2>/dev/null || true)"; [ -d "$dl" ] || dl="$HOME/Downloads"
-  local mark="$TDIR/.login-start"; touch "$mark"
-  pick_download() { # chỉ nhận cert.pem trình duyệt tải về SAU khi lần đăng nhập này bắt đầu, và hỏi trước khi dùng
-    f="$(find "$dl" -maxdepth 1 -type f -name 'cert.pem' -newer "$mark" 2>/dev/null | head -1)"
-    [ -n "$f" ] || return 1
-    local a="" yes=""; [ -r /dev/tty ] && read -r -p "$(mn cf_pick "$f")" a < /dev/tty
-    if [ "$UI" = vi ]; then case "$a" in c|C) yes=1 ;; esac; else case "$a" in y|Y) yes=1 ;; esac; fi
-    [ -n "$yes" ] || return 1
-    cp "$f" "$dest" && m cf_picked "$f"
-  }
-  for i in 1 2 3; do
-    m cf_login "$i" "${host#*.}"
-    cf tunnel login 2>&1 | grep --line-buffered -oE 'https://dash\.cloudflare\.com/argotunnel[^ ]*|successfully logged in' | sed 's/^/    /' || true
-    [ -f "$dest" ] && { rm -f "$mark"; m cf_logged; return 0; }
-    pick_download && { rm -f "$mark"; return 0; }
-    [ $i -lt 3 ] && m cf_retry
-  done
-  rm -f "$mark"
-  m cf_fail "$dest" >&2
-  exit 1
-}
-expose_named() { # expose_named <tên-miền> [--overwrite-dns]
-  local host="$1" over="${2:-}" name id
-  [[ "$host" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,}$ ]] || { m bad_domain "$host" >&2; exit 1; }
-  need_cf
-  ensure_keys
-  # cert.pem là chứng chỉ cấp tài khoản (tạo/xoá tunnel, sửa DNS cả tên miền): chỉ dùng lúc thiết lập rồi xoá.
-  # Lúc chạy, tunnel chỉ cần creds.json của chính nó. Lần sau cùng tên miền thì không cần đăng nhập lại.
-  if [ -f "$TDIR/.cloudflared/creds.json" ] && grep -qxF "  - hostname: $host" "$TDIR/config.yml" 2>/dev/null; then
-    m tun_reuse "$host"
-  else
-    mkdir -p "$TDIR/.cloudflared"; chmod 700 "$TDIR"
-    cf_login "$host"
-    trap 'rm -f "$TDIR/.cloudflared/cert.pem"' EXIT
-    name="gen-chibi-$(hostname -s 2>/dev/null | tr -c 'a-zA-Z0-9\n' '-' || echo may)"   # một tunnel cho mỗi máy
-    if [ ! -f "$TDIR/.cloudflared/creds.json" ]; then
-      cf tunnel create --credentials-file "$(CFH)/.cloudflared/creds.json" "$name" >/dev/null 2>&1 \
-        || cf tunnel token --cred-file "$(CFH)/.cloudflared/creds.json" "$name" >/dev/null \
-        || { m tun_create_fail "$name" >&2; exit 1; }
-      m tun_ready "$name"
-    fi
-    id="$(json TunnelID < "$TDIR/.cloudflared/creds.json")"
-    [ -n "$id" ] || { m tun_creds_bad "$TDIR/.cloudflared/creds.json" >&2; exit 1; }
-    if ! cf tunnel route dns ${over:+--overwrite-dns} "$id" "$host" >/dev/null 2>"$TDIR/route.err"; then
-      if grep -qi "already" "$TDIR/route.err"; then
-        m dns_taken "$host" "$host" >&2
-      else cat "$TDIR/route.err" >&2; fi
-      exit 1
-    fi
-    rm -f "$TDIR/.cloudflared/cert.pem" "$TDIR/route.err"
-    m dns_done "$host"
-  fi
-  id="$(json TunnelID < "$TDIR/.cloudflared/creds.json")"
-  allow_host "$host"
-  cat > "$TDIR/config.yml" <<EOF
-# generated by genchibi expose — only the MCP + OAuth routes go out to the Internet (the Studio and the rest of /api stay on this machine):
-#   /mcp*                                    MCP (link with key + Bearer)
-#   /.well-known/oauth-*                     agent self-discovery (RFC 9728 / 8414)
-#   /oauth/register|token|revoke|authorize   registration, token exchange, revocation; authorize = the self-contained Authorize page (the owner enters GC_API_TOKEN)
-#   /api/oauth/approve                       the Authorize button on that page (requires the owner token)
-tunnel: $id
-credentials-file: $(CFH)/.cloudflared/creds.json
-ingress:
-  - hostname: $host
-    path: ^/mcp(/.*)?$
-    service: $(origin_url)
-  - hostname: $host
-    path: ^/\.well-known/oauth-(protected-resource|authorization-server)(/mcp)?$
-    service: $(origin_url)
-  - hostname: $host
-    path: ^/oauth/(register|token|revoke|authorize)$
-    service: $(origin_url)
-  - hostname: $host
-    path: ^/api/oauth/approve$
-    service: $(origin_url)
-  - service: http_status:404
-EOF
-  cf tunnel --config "$(CFH)/config.yml" ingress validate >/dev/null || { m tun_cfg_bad >&2; exit 1; }
-  set_env GC_TUNNEL named; set_env GC_PUBLIC_URL "https://$host"
-  [ "$MODE" = docker ] && set_env COMPOSE_PROFILES tunnel
-  apply_env
-  wait_link "$(link_url)" || true
-  print_link
-}
-expose_quick() {
-  mkdir -p "$TDIR"; chmod 700 "$TDIR"   # tạo trước, không để Docker tạo thư mục mang chủ root
-  need_cf
-  ensure_keys; allow_host "*.trycloudflare.com"
-  set_env GC_TUNNEL quick; set_env GC_PUBLIC_URL ""
-  if [ "$MODE" = docker ]; then set_env COMPOSE_PROFILES quick; compose rm -sf tunnel >/dev/null 2>&1 || true; fi
-  apply_env
-  local i u=""
-  for i in $(seq 1 30); do u="$(quick_url)"; [ -n "$u" ] && break; sleep 1; done
-  [ -n "$u" ] || { m quick_fail >&2; exit 1; }
-  wait_link "$(link_url)" || true
-  print_link
-  m quick_note
-}
 expose_off() {
   set_env GC_TUNNEL ""; set_env GC_PUBLIC_URL ""
   if [ "$MODE" = docker ]; then
@@ -1299,41 +1136,40 @@ expose_off() {
   m off_1 "$TDIR"
   m off_2
 }
-expose_help() {
-  if [ "$UI" = vi ]; then cat <<EOF
-genchibi expose <tên-miền>      mở MCP qua tên miền của bạn (Cloudflare quản lý DNS), vd. genchibi expose chibi.example.com
-genchibi expose --quick         link tạm *.trycloudflare.com, không cần tài khoản (đổi link mỗi lần khởi động lại)
-genchibi expose --rotate        đổi khoá trong link
-genchibi expose --off           tắt
-genchibi link [--check]         in link + lệnh nối agent (--check: thử gọi qua Internet)
-EOF
-  else cat <<EOF
-genchibi expose <domain>        open MCP through your own domain (DNS managed by Cloudflare), e.g. genchibi expose chibi.example.com
-genchibi expose --quick         temporary *.trycloudflare.com link, no account needed (the link changes on every restart)
-genchibi expose --rotate        change the key in the link
-genchibi expose --off           turn it off
-genchibi link [--check]         print the link + agent connect commands (--check: test a call over the Internet)
-EOF
-  fi
-}
+# ---------------------------------------------------------------- expose / link: bí danh mỏng của genchibi online (CNS-204, spec §3.5; bỏ ở v0.22)
+# Một dòng nhắc (stderr) rồi chạy đúng lệnh online — cùng API /api/online/*, không còn đường cloudflared login riêng.
+#   expose <tên-miền> [--overwrite-dns] → online cloudflare <tên-miền> [--overwrite-dns]   (Cloudflare Tunnel; API token thay cho cloudflared login)
+#   expose --quick → online quick · expose --off → online off · expose (không đối số) / --help → online --help
+#   link → online (trạng thái: địa chỉ Studio + MCP) · link --check → online recheck (kiểm lại từ Internet)
+# Máy còn chạy tunnel do expose CŨ tạo (.env có GC_TUNNEL — profile tunnel / quick giữ thêm một bản, §3.5): expose --off dọn cấu hình .env đó
+# (expose_off), link in thêm link có khoá, expose --rotate đổi khoá của link đó. Các nhánh này mất cùng profile ở v0.22.
+legacy_note() { m deprecated "$1" "$2" >&2; }
 expose() {
-  m expose_moved >&2   # P4 (v0.21) nối expose vào online; bản này vẫn chạy như cũ
-  case "${1:-}" in
-    --quick) expose_quick ;;
-    --off) expose_off ;;
+  local a="${1:-}"
+  case "$a" in
+    ""|-h|--help|help) legacy_note "expose${a:+ $a}" "online --help"; online_usage ;;
+    --quick) legacy_note "expose --quick" "online quick"; online_cmd quick ;;
+    --off)
+      if [ -n "${GC_TUNNEL:-}" ]; then legacy_note "expose --off" "online off"; expose_off
+      else legacy_note "expose --off" "online off"; online_cmd off; fi ;;
     --rotate)
       [ -n "${GC_TUNNEL:-}" ] || { m not_exposed; exit 1; }
       set_env GC_MCP_KEY "$(rand_hex 24)"; apply_env; m rotated
       wait_link "$(link_url)" || true; print_link ;;
-    ""|-h|--help) expose_help ;;
-    -*) m bad_opt_expose "$1" >&2; exit 1 ;;
-    *) [ -z "${2:-}" ] || [ "$2" = --overwrite-dns ] || { m bad_opt "$2" >&2; exit 1; }; expose_named "$1" "${2:-}" ;;
+    -*) m bad_opt_expose "$a" >&2; exit 1 ;;
+    *) [ -z "${2:-}" ] || [ "$2" = --overwrite-dns ] || { m bad_opt "$2" >&2; exit 1; }
+       legacy_note "expose $a${2:+ $2}" "online cloudflare $a${2:+ $2}"; online_cmd cloudflare "$a" ${2:+"$2"} ;;
   esac
 }
 link_cmd() {
-  if [ "${1:-}" = --check ]; then local u; u="$(link_url)"; [ -n "$u" ] || { print_link; exit 1; }
-    if probe "$u"; then m link_ok; else m link_fail "$u"; exit 1; fi
-  else print_link; fi
+  case "${1:-}" in
+    --check) legacy_note "link --check" "online recheck"
+      local u; u="$(link_url)"
+      if [ -n "$u" ]; then if probe "$u"; then m link_ok; else m link_fail "$u"; exit 1; fi   # link có khoá của tunnel expose cũ
+      else online_cmd recheck; fi ;;
+    "") legacy_note link online; online_cmd status; [ -z "$(link_url)" ] || print_link ;;
+    *) m bad_opt "$1" >&2; exit 2 ;;
+  esac
 }
 
 # genchibi agent …: bootstrap cho agent BẤT KỲ hãng nào (INT-05) — cấu hình nối từng client, hướng dẫn, schema tool, cài skill.
@@ -1428,8 +1264,7 @@ genchibi — quản lý gen-chibi ($HOME_DIR, chế độ $MODE)
   backup | restore <tệp>            sao lưu / khôi phục dữ liệu
   mcp                               cầu MCP (stdio) cho agent: claude mcp add gen-chibi -- genchibi mcp
   online [caddy|cloudflare|proxy|quick|recheck|off]   ra Internet một bước: tên miền + HTTPS + MCP (genchibi online --help)
-  expose <tên-miền> | --quick       (cũ, thay bằng online, bỏ ở v0.22) MCP qua Cloudflare Tunnel bằng cloudflared login
-  link [--check]                    in link MCP + lệnh nối agent
+  expose | link                     (cũ, bí danh của online, bỏ ở v0.22) expose <tên-miền> = online cloudflare · --quick = online quick · --off = online off · link = online
   agent connect|guide|tools|skill   bootstrap cho agent mọi hãng: cấu hình nối, hướng dẫn, schema tool, cài skill
   token [giá-trị|--clear]           đặt token GitHub (repo private) cho tự cập nhật; bỏ trống = nhập ẩn
                                     (KHÔNG phải token chủ: token chủ là GC_API_TOKEN trong .env, hoặc data/owner-token — CLI tự đọc)
@@ -1446,8 +1281,7 @@ genchibi — manage gen-chibi ($HOME_DIR, mode $MODE)
   backup | restore <file>           back up / restore data
   mcp                               MCP bridge (stdio) for agents: claude mcp add gen-chibi -- genchibi mcp
   online [caddy|cloudflare|proxy|quick|recheck|off]   go online in one step: domain + HTTPS + MCP (genchibi online --help)
-  expose <domain> | --quick         (legacy, replaced by online, removed in v0.22) MCP via Cloudflare Tunnel with cloudflared login
-  link [--check]                    print the MCP link + agent connect commands
+  expose | link                     (deprecated aliases of online, removed in v0.22) expose <domain> = online cloudflare · --quick = online quick · --off = online off · link = online
   agent connect|guide|tools|skill   bootstrap for agents of any vendor: connect config, guide, tool schema, skill install
   token [value|--clear]             set the GitHub token (private repo) for auto-update; empty = hidden prompt
                                     (NOT the owner token: that is GC_API_TOKEN in .env, or data/owner-token — the CLI reads it itself)
@@ -1463,7 +1297,7 @@ case "${1:-help}" in
   start) start ;; stop) stop ;; restart) stop; start ;; status) status ;; update) update ;;
   logs) logs ;; backup) backup ;; restore) shift; restore "${1:-}" ;; uninstall) uninstall ;;
   mcp) mcp ;; open) open_ui ;; version) status ;; password) password_cmd ;;
-  expose) shift; expose ${1+"$@"} ;; link) shift; link_cmd ${1+"$@"} ;;
+  expose) shift; expose ${1+"$@"}; exit $? ;; link) shift; link_cmd ${1+"$@"}; exit $? ;;
   online) shift; online_cmd ${1+"$@"}; exit $? ;;
   token|github-token) shift; token_cmd "${1:-}" ;;
   lang|language) shift; lang_cmd "${1:-}" ;;

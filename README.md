@@ -152,25 +152,17 @@ Creating a part: `get_part_spec` → draw (safe SVG, colour tokens) → `preview
 ### Connect claude.ai with `https://your-domain/mcp` — OAuth, just click Authorize (v0.19)
 The app is its own OAuth 2.1 authorization server, with RFC 9728 / 8414 discovery, dynamic client registration (DCR), PKCE S256 and expiring tokens stored as hashes. To connect: go online first ([above](#go-online-domain-https-mcp-in-one-step) — it sets the public address), open claude.ai *Customize › Connectors › Add custom connector*, paste `https://your-domain/mcp` and click **Connect**. The app's **Authorize** page appears so you can pick a permission level (`mcp:read` · `mcp:write` · `mcp:owner`); it uses your Studio sign-in (owner password), or asks you to sign in. Manage and revoke in **Studio › System › Agent connections**. If you use your own proxy or login page, the machine routes (`/mcp`, `/.well-known/oauth-*`, `/oauth/register|token|revoke`) must go straight to the app — `genchibi online proxy <domain>` prints that config. A sample Caddy config is in `docs/Caddyfile.oauth.example`; Cloudflare handling and common errors are in `docs/USER-GUIDE.md` › section 6.
 
-### Legacy: `genchibi expose` — replaced by `genchibi online`, removed in v0.22
-Machines that already use it keep working in this version. New setups: use [Go online](#go-online-domain-https-mcp-in-one-step) (no browser login to Cloudflare, the Studio goes online too, behind the owner password).
+### Legacy: `genchibi expose` / `genchibi link` — aliases of `genchibi online`, removed in v0.22
+Both are now thin aliases: they print one "Deprecated" line, then run the matching [Go online](#go-online-domain-https-mcp-in-one-step) command (same steps, same exit code). The old browser login to Cloudflare (`cloudflared login`) is gone — path B uses an API token.
 
-```bash
-genchibi expose chibi.example.com   # the first time, opens a browser once to log in to Cloudflare
-```
+| Old command | Runs |
+|---|---|
+| `genchibi expose <domain> [--overwrite-dns]` | `genchibi online cloudflare <domain> [--overwrite-dns]` |
+| `genchibi expose --quick` | `genchibi online quick` |
+| `genchibi expose --off` | `genchibi online off` |
+| `genchibi link` · `genchibi link --check` | `genchibi online` · `genchibi online recheck` |
 
-The command creates a Cloudflare Tunnel, points DNS, **lets only `/mcp` and the OAuth routes through** (the Studio stays on your machine), generates a key, restarts, tests a call over the Internet, then prints the **MCP link**:
-
-```
-https://chibi.example.com/mcp/<key>
-```
-
-An agent pastes the link and is connected — no header needed:
-- Claude Code: `claude mcp add -s user --transport http gen-chibi <link>`
-- Claude web/desktop: Customize › Connectors › Add custom connector › paste the link (or paste `https://chibi.example.com/mcp` to connect with OAuth, see above)
-- Cursor and other clients: `{"mcpServers":{"gen-chibi":{"url":"<link>"}}}`
-
-The link grants MCP access only (it cannot open the Studio or settings). Other commands: `genchibi link` (print the link again) · `genchibi link --check` · `genchibi expose --rotate` (change the key; the old link stops working immediately) · `genchibi expose --off` · `genchibi expose --quick` (temporary `*.trycloudflare.com` link, no account needed, changes on every restart). Docker: the tunnel runs as the `gen-chibi-tunnel` container and comes back up with the app. Node: needs `cloudflared` in PATH.
+Machines that still run a tunnel made by the old `expose` (`.env` has `GC_TUNNEL`, Docker profile `tunnel` / `quick`) keep working until v0.22: `genchibi link` also prints their keyed MCP link (`https://<domain>/mcp/<key>` — MCP only, no header needed), `genchibi expose --rotate` changes the key (the old link stops working immediately), and `genchibi expose --off` removes that old setup. Move to Go online with `genchibi online migrate`.
 
 Your own tunnel or proxy, LAN: use `genchibi online proxy <domain>` (or set `GC_BIND` and `GC_ALLOWED_HOSTS` in `.env` for a LAN). Since v0.21 the app never trusts a request because a proxy header is missing: the Studio always needs the owner password (sign-in), and scripts calling `/api` or `/mcp` send `Authorization: Bearer <owner token>`.
 

@@ -208,6 +208,8 @@ cat > "$FK/id" <<'EOF'
 case "$*" in
   -u|-g) if [ -n "${FAKE_ROOT:-}" ]; then echo 0; else echo 1000; fi ;;
   "-u tester"|"-g tester") echo 1001 ;;
+  "-u genchibi") if [ -f "$FAKE_STATE/genchibi" ] || [ -n "${FAKE_HAS_SYS:-}" ]; then echo 998; else exit 1; fi ;;
+  "-g genchibi") if [ -f "$FAKE_STATE/genchibi" ] || [ -n "${FAKE_HAS_SYS:-}" ]; then echo 997; else exit 1; fi ;;
   -un) if [ -n "${FAKE_ROOT:-}" ]; then echo root; else echo tester; fi ;;
   "-nG tester") if [ -f "$FAKE_STATE/usermod" ]; then echo "tester docker"; else echo tester; fi ;;
   *) exec /usr/bin/id "$@" ;;
@@ -219,6 +221,24 @@ cat > "$FK/chown" <<'EOF'
 echo "chown $*" >> "$FAKE_STATE/chown.log"
 [ "$(/usr/bin/id -u)" = 0 ] && exec /bin/chown "$@"
 exit 0
+EOF
+# useradd / adduser / addgroup giả (CNS-212): ghi lệnh, "tạo" tài khoản genchibi = tệp trạng thái (id giả đọc); FAKE_NO_* = công cụ không có / thất bại
+cat > "$FK/useradd" <<'EOF'
+#!/bin/bash
+echo "useradd $*" >> "$FAKE_STATE/useradd.log"
+[ -z "${FAKE_NO_USERADD:-}" ] || exit 1
+touch "$FAKE_STATE/genchibi"
+EOF
+cat > "$FK/adduser" <<'EOF'
+#!/bin/bash
+echo "adduser $*" >> "$FAKE_STATE/adduser.log"
+[ -z "${FAKE_NO_ADDUSER:-}" ] || exit 1
+touch "$FAKE_STATE/genchibi"
+EOF
+cat > "$FK/addgroup" <<'EOF'
+#!/bin/bash
+echo "addgroup $*" >> "$FAKE_STATE/adduser.log"
+[ -z "${FAKE_NO_ADDUSER:-}" ] || exit 1
 EOF
 cat > "$FK/sudo" <<'EOF'
 #!/bin/bash
@@ -279,9 +299,23 @@ check $? "không dùng được sg → sudo docker (không hỏi mật khẩu: -
 dockinst droot FAKE_ROOT=1 SUDO_USER=tester
 [ $IRC = 0 ] && grep -q '^GC_UID=1001$' "$W/droot/.env" && grep -q '^GC_GID=1001$' "$W/droot/.env" && grep -qx "chown -R 1001:1001 $W/droot" "$FS/chown.log" && echo "$INST_OUT" | grep -q 'Running as root: the containers run as user 1001:1001'
 check $? "trình cài chạy bằng root + SUDO_USER → GC_UID/GC_GID = 1001 (user gọi sudo), thư mục cài chown 1001, báo rõ" "$IRC $(grep '^GC_[UG]ID' "$W/droot/.env" 2>/dev/null | tr '\n' ' ') $(cat "$FS/chown.log" 2>/dev/null | tr '\n' ' ') · $(echo "$INST_OUT" | tail -4)"
+# root thật, không SUDO_USER (CNS-212): KHÔNG đoán uid 1000 (có thể là người khác trên máy dùng chung) → tài khoản hệ thống riêng genchibi (useradd --system, nologin)
 dockinst droot2 FAKE_ROOT=1
-[ $IRC = 0 ] && grep -q '^GC_UID=1000$' "$W/droot2/.env" && grep -qx "chown -R 1000:1000 $W/droot2" "$FS/chown.log" && ! grep -q '^GC_UID=0$' "$W/droot2/.env"
-check $? "trình cài chạy bằng root, không SUDO_USER → GC_UID=1000 (không bao giờ 0), thư mục cài chown 1000" "$IRC $(grep '^GC_[UG]ID' "$W/droot2/.env" 2>/dev/null | tr '\n' ' ') $(cat "$FS/chown.log" 2>/dev/null | tr '\n' ' ')"
+[ $IRC = 0 ] && grep -q '^GC_UID=998$' "$W/droot2/.env" && grep -q '^GC_GID=997$' "$W/droot2/.env" && grep -qx "chown -R 998:997 $W/droot2" "$FS/chown.log" && ! grep -q '1000' "$FS/chown.log" \
+  && grep -q '^useradd --system --no-create-home .*--shell [^ ]*nologin .*genchibi$' "$FS/useradd.log" && echo "$INST_OUT" | grep -q 'the system account genchibi (998:997, no login)'
+check $? "trình cài chạy bằng root, không SUDO_USER → tạo tài khoản hệ thống genchibi (useradd --system, nologin), GC_UID/GC_GID = 998:997, chown 998:997 — không bao giờ 1000 / 0" "$IRC $(grep '^GC_[UG]ID' "$W/droot2/.env" 2>/dev/null | tr '\n' ' ') $(cat "$FS/chown.log" "$FS/useradd.log" 2>/dev/null | tr '\n' ' ') · $(echo "$INST_OUT" | tail -3)"
+dockinst droot3 FAKE_ROOT=1 FAKE_HAS_SYS=1
+[ $IRC = 0 ] && grep -q '^GC_UID=998$' "$W/droot3/.env" && [ ! -e "$FS/useradd.log" ] && [ ! -e "$FS/adduser.log" ] && grep -qx "chown -R 998:997 $W/droot3" "$FS/chown.log"
+check $? "tài khoản genchibi đã có → dùng lại (không gọi useradd / adduser), GC_UID=998" "$IRC $(cat "$FS/useradd.log" "$FS/adduser.log" "$FS/chown.log" 2>/dev/null | tr '\n' ' ')"
+dockinst droot4 FAKE_ROOT=1 FAKE_NO_USERADD=1
+[ $IRC = 0 ] && grep -q '^GC_UID=998$' "$W/droot4/.env" && grep -q '^adduser -S -D -H .*-s [^ ]*nologin .*genchibi$' "$FS/adduser.log" && grep -qx "chown -R 998:997 $W/droot4" "$FS/chown.log"
+check $? "không useradd (BusyBox / Alpine) → adduser -S -D -H nologin genchibi, GC_UID=998" "$IRC $(cat "$FS/adduser.log" 2>/dev/null | tr '\n' ' ')"
+dockinst droot5 FAKE_ROOT=1 FAKE_NO_USERADD=1 FAKE_NO_ADDUSER=1
+[ $IRC = 1 ] && [ ! -e "$W/droot5/.env" ] && [ ! -e "$FS/chown.log" ] && echo "$INST_OUT" | grep -q 'system account genchibi could not be created' && echo "$INST_OUT" | grep -q 'Rerun from your own account: sudo bash install.sh'
+check $? "không tạo được tài khoản hệ thống → dừng (thoát 1) trước khi cài, không chown, bảo chạy lại bằng sudo từ tài khoản của mình — không rơi về 1000" "$IRC $(echo "$INST_OUT" | tail -3) · $(cat "$FS/chown.log" 2>/dev/null)"
+dockinst droot6 FAKE_ROOT=1 FAKE_NO_USERADD=1 FAKE_NO_ADDUSER=1 GC_LANG=vi
+[ $IRC = 1 ] && [ ! -e "$W/droot6/.env" ] && echo "$INST_OUT" | grep -q 'không tạo được tài khoản hệ thống genchibi' && echo "$INST_OUT" | grep -q 'sudo bash install.sh'
+check $? "… cùng lời dừng đó bằng tiếng Việt (GC_LANG=vi)" "$IRC $(echo "$INST_OUT" | tail -2)"
 # đột biến: bỏ đường sg / sudo (chỉ docker thẳng) → trình cài phải rơi về native / dừng, kiểm ở trên ĐỎ
 sed 's/^  case "\$g" in \*" docker "\*)$/  case "$g" in *" docker-mutated "*)/; s/command -v sudo >\/dev\/null \&\& sudo -n docker info/false \&\& sudo -n docker info/' "$ROOT/install.sh" > "$W/install-mut.sh"
 if ! cmp -s "$ROOT/install.sh" "$W/install-mut.sh"; then

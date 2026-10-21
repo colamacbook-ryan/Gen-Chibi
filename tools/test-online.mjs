@@ -414,6 +414,45 @@ console.log('   — đường B: giữ token (mã hoá) · Go offline không tok
   ok(y.step(await y.view(), 'remote').state === 'ok' && !y.cf.st.tunnels.some(z => !z.deleted_at), 'Go offline lần nữa kèm token → dọn được (tài nguyên nhớ ở cfResources)');
   y.close(); y.cf.close();
 }
+console.log('   — đường B: tài nguyên Cloudflare gắn install-id (CNS-213) — khôi phục sang máy khác không xoá tunnel của máy cũ');
+{
+  // installId THẬT (data/install-id), không hàm giả — như server
+  const fileId = { extra: { installId: undefined } };
+  const deletes = cf => cf.st.log.filter(l => l.m === 'DELETE');
+  // cùng máy: Go offline xoá đúng tài nguyên của mình; cfResources mang installId đầy đủ + id luật WAF
+  const x = await flowB({ mk: fileId });
+  await x.post('/api/online/cloudflare', { token: API_TOKEN, zone: 'example.com', sub: 'chibi' }); await x.idle();
+  const iid = fs.readFileSync(path.join(x.dataDir, 'install-id'), 'utf8').trim(), res = x.cfg.get().cfResources;
+  ok(/^[a-f0-9]{32}$/.test(iid) && res && res.installId === iid && res.tunnelName === 'gen-chibi-' + iid.slice(0, 8) && res.wafRuleId && res.wafRuleId === x.cf.st.ruleset.rules[0].id,
+    'cfResources ghi installId đầy đủ của bản cài + tunnel gen-chibi-<8 ký tự> + id luật WAF' + (res ? '' : ' (không có cfResources)'));
+  await x.post('/api/online/off', { token: API_TOKEN }); await x.idle();
+  ok(x.step(await x.view(), 'remote').state === 'ok' && !x.cf.st.tunnels.some(z => !z.deleted_at) && !x.cf.st.dns.some(d => d.name === 'chibi.example.com') && x.cf.st.ruleset.rules.length === 0 && deletes(x.cf).length >= 3,
+    'cùng máy (installId khớp) → Go offline xoá CNAME + tunnel + luật WAF');
+  x.close(); x.cf.close();
+  // bản ghi v0.21 (chưa có installId) trên chính máy đó → nhận ra bằng tên tunnel, vẫn dọn được
+  const w = await flowB({ mk: fileId });
+  await w.post('/api/online/cloudflare', { token: API_TOKEN, zone: 'example.com', sub: 'chibi' }); await w.idle();
+  const r21 = Object.assign({}, w.cfg.get().cfResources); delete r21.installId; delete r21.wafRuleId; delete r21.wafRulesetId; w.cfg.set({ cfResources: r21 });
+  await w.post('/api/online/off', { token: API_TOKEN }); await w.idle();
+  ok(!w.cf.st.tunnels.some(z => !z.deleted_at) && !w.cf.st.dns.some(d => d.name === 'chibi.example.com'), 'cfResources kiểu v0.21 (không installId), cùng máy → khớp theo tên tunnel, vẫn dọn');
+  w.close(); w.cf.close();
+  // khôi phục sang máy khác: data/ (online.json có cfResources) mang theo, install-id mới (resetAfterRestore như server) → Go offline KHÔNG xoá gì ở Cloudflare, báo rõ
+  const y = await flowB({ mk: fileId });
+  await y.post('/api/online/cloudflare', { token: API_TOKEN, zone: 'example.com', sub: 'chibi' }); await y.idle();
+  const old = y.cfg.get().cfResources, nLog = y.cf.st.log.length;
+  y.online.resetAfterRestore();
+  await sleep(5);
+  const off = await y.post('/api/online/off', { token: API_TOKEN }); await y.idle();
+  const v = await y.view(), r = y.step(v, 'remote'), ve = y.step(await y.view('en'), 'remote');
+  const after = y.cf.st.log.slice(nLog);
+  ok(off.status === 202 && v.mode === 'off' && after.length === 0 && deletes(y.cf).length === 0 && y.cf.st.tunnels.some(z => z.id === old.tunnelId && !z.deleted_at)
+    && y.cf.st.dns.some(d => d.name === 'chibi.example.com' && d.content === old.tunnelId + '.cfargotunnel.com') && y.cf.st.ruleset.rules.length === 1,
+    'khôi phục sang máy khác (install-id mới) → Go offline: không một lời gọi Cloudflare nào; tunnel, CNAME, luật WAF của máy cũ còn nguyên' + (after.length ? ' — gọi: ' + after.map(l => l.m + ' ' + l.p).join(', ') : ''));
+  ok(r.state === 'ok' && r.detail.includes(old.tunnelName) && r.detail.includes('chibi.example.com') && /bản cài khác/.test(r.detail) && /thuộc về máy đó/.test(r.detail)
+    && /another installation/.test(ve.detail) && /belong to that machine/.test(ve.detail) && y.cfg.get().cfResources === null,
+    'bậc Cloudflare nói rõ (vi + en): tunnel ' + old.tunnelName + ' + CNAME còn ở Cloudflare, thuộc máy kia; máy này bỏ bản ghi (không bao giờ xoá nhầm)');
+  y.close(); y.cf.close();
+}
 
 // ---------------------------------------------------------------- 6) đường A (Caddy) với DNS / IP / mạng giả + admin giả
 async function flowA(o = {}) {

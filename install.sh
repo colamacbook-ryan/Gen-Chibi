@@ -80,6 +80,8 @@ _en() {
     sum_mcp) F="  MCP:       claude mcp add gen-chibi -- %s mcp" ;;
     sum_mcp_net) F="  Go online (domain + HTTPS + MCP): genchibi online --help, or Studio › System › Go online" ;;
     root_uid) F="Running as root: the containers run as user %s:%s (not root) — %s now belongs to that user" ;;
+    sys_user_ok) F="Running as root without sudo: the containers run as the system account %s (%s:%s, no login) — not root, not a person's account" ;;
+    sys_user_fail) F="Running as root without sudo, and the system account %s could not be created (no useradd / adduser). gen-chibi was not installed. Rerun from your own account: sudo bash install.sh … — the app then runs as your user, never as root." ;;
     sum_update) F="  Auto-update: on (turn off in Studio › System › Updates)" ;;
     sum_lang) F="  Language:  English (Vietnamese: genchibi lang vi, or the language switch in the Studio)" ;;
     no_answer) F="gen-chibi is not answering on port %s yet. See: genchibi logs" ;;
@@ -146,6 +148,8 @@ _vi() {
     sum_mcp) F="  MCP:     claude mcp add gen-chibi -- %s mcp" ;;
     sum_mcp_net) F="  Ra Internet (tên miền + HTTPS + MCP): genchibi online --help, hoặc Studio › Hệ thống › Lên mạng" ;;
     root_uid) F="Đang chạy bằng root: container chạy bằng user %s:%s (không phải root) — %s giờ thuộc user đó" ;;
+    sys_user_ok) F="Đang chạy bằng root không qua sudo: container chạy bằng tài khoản hệ thống %s (%s:%s, không đăng nhập được) — không phải root, không phải tài khoản của ai" ;;
+    sys_user_fail) F="Đang chạy bằng root không qua sudo và không tạo được tài khoản hệ thống %s (không có useradd / adduser). Chưa cài gen-chibi. Chạy lại từ tài khoản của bạn: sudo bash install.sh … — app sẽ chạy bằng user của bạn, không bao giờ bằng root." ;;
     sum_update) F="  Tự cập nhật: bật (tắt trong Studio › Hệ thống › Cập nhật)" ;;
     sum_lang) F="  Ngôn ngữ: Tiếng Việt (English: genchibi lang en, hoặc nút chuyển ngôn ngữ trong Studio)" ;;
     no_answer) F="Chưa thấy gen-chibi trả lời ở cổng %s. Xem: genchibi logs" ;;
@@ -285,6 +289,46 @@ if [ -n "$DOCKER_VIA" ]; then
   export GC_DOCKER_VIA="$DOCKER_VIA"   # genchibi (start, online…) trong phiên này dùng cùng đường
 fi
 
+# ---------- user của container (Docker): trình cài chạy bằng root → KHÔNG cho container chạy root (GC_UID=0 = app + edge Caddy là root trong container).
+# Có SUDO_USER (sudo từ tài khoản của owner) → uid của người đó. Root thật không SUDO_USER (CNS-212) → tài khoản hệ thống riêng `genchibi`
+# (không đăng nhập, không home; có rồi thì dùng lại; không bao giờ uid 0) — KHÔNG đoán 1000: trên máy dùng chung uid 1000 có thể là người khác.
+# Không tạo được (không useradd / adduser) → dừng TRƯỚC khi cài gì, bảo owner chạy lại bằng sudo từ tài khoản của mình.
+# Thư mục cài chown -R cho user này (ở dưới): bind mount ./:/install phải ghi được, và tự cập nhật ghi releases/ + đổi current.
+# CÒN LẠI (chưa đóng, ghi ở CNS-212): root về sau vẫn chạy mã từ thư mục thuộc user này — lệnh ~/.local/bin/genchibi của root là BẢN CHÉP
+# (không phải symlink) nhưng chuyển sang current/cli/genchibi, đọc .env (set -a) và docker-compose*.yml của thư mục cài. Vì vậy ai ghi được thư mục
+# cài (chính app trong container, nếu app bị chiếm) leo được lên root khi root gõ genchibi. Đóng hẳn cần tách releases/ khỏi bind mount ghi được
+# (app chỉ ghi data/ run/ logs/ edge/, launcher bên ngoài đổi phiên bản) — việc của v0.22. Với `genchibi` (nologin) không còn NGƯỜI nào khác ghi được.
+SYS_USER=genchibi
+sys_ids() { # CUID/CGID của tài khoản hệ thống; 1 nếu chưa có hoặc là root
+  local u g; u="$(id -u "$SYS_USER" 2>/dev/null)" || return 1; g="$(id -g "$SYS_USER" 2>/dev/null)" || return 1
+  case "$u$g" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$u" != 0 ] && [ "$g" != 0 ] || return 1
+  CUID="$u"; CGID="$g"
+}
+sys_user() { # dùng lại / tạo tài khoản hệ thống: useradd (glibc) → adduser -S (BusyBox / Alpine)
+  local nl; nl="$(command -v nologin 2>/dev/null || true)"; [ -n "$nl" ] || nl=/usr/sbin/nologin
+  if id -u "$SYS_USER" >/dev/null 2>&1; then sys_ids; return; fi
+  if command -v useradd >/dev/null 2>&1 && useradd --system --no-create-home --home-dir /nonexistent --shell "$nl" --user-group "$SYS_USER" >/dev/null 2>&1 && sys_ids; then return 0; fi
+  if command -v adduser >/dev/null 2>&1; then
+    command -v addgroup >/dev/null 2>&1 && addgroup -S "$SYS_USER" >/dev/null 2>&1 || true
+    adduser -S -D -H -h /nonexistent -s "$nl" -G "$SYS_USER" "$SYS_USER" >/dev/null 2>&1 || adduser -S -D -H -h /nonexistent -s "$nl" "$SYS_USER" >/dev/null 2>&1 || true
+    sys_ids && return 0
+  fi
+  return 1
+}
+CUID="$(id -u)"; CGID="$(id -g)"; AS_ROOT=""
+if [ "$CUID" = 0 ] && [ "$MODE" = docker ]; then
+  AS_ROOT=1
+  if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ] && id -u "$SUDO_USER" >/dev/null 2>&1 && [ "$(id -u "$SUDO_USER")" != 0 ]; then CUID="$(id -u "$SUDO_USER")"; CGID="$(id -g "$SUDO_USER")"
+  elif [ -f "$DIR/.env" ] && grep -q '^GC_UID=[1-9][0-9]*$' "$DIR/.env" && grep -q '^GC_GID=[1-9][0-9]*$' "$DIR/.env"; then
+    # cài lại: .env đã có user (khác 0) → giữ (chown theo nó ở dưới), không tạo tài khoản
+    CUID="$(sed -n 's/^GC_UID=//p' "$DIR/.env" | tail -1)"; CGID="$(sed -n 's/^GC_GID=//p' "$DIR/.env" | tail -1)"
+  else
+    sys_user || die sys_user_fail "$SYS_USER"
+    ok sys_user_ok "$SYS_USER" "$CUID" "$CGID"
+  fi
+fi
+
 # ---------- tải bản phát hành
 mkdir -p "$DIR/releases" "$DIR/data" "$DIR/backups" "$DIR/logs"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
@@ -355,14 +399,6 @@ env_put() { # env_put KHOÁ BIẾN_CHỨA_GIÁ_TRỊ
     index($0, k "=") == 1 { print k "=" v; d = 1; next } { print } END { if (!d) print k "=" v }' "$DIR/.env" > "$tmp" && cat "$tmp" > "$DIR/.env"; rm -f "$tmp"
 }
 
-# ---------- user của container (Docker): trình cài chạy bằng root → KHÔNG cho container chạy root (GC_UID=0 = app + edge Caddy là root trong container).
-# Dùng uid của người gọi sudo (SUDO_USER) nếu có, không thì 1000:1000; thư mục cài chown cho user đó (bind mount data/ edge/ run/ phải ghi được).
-CUID="$(id -u)"; CGID="$(id -g)"; AS_ROOT=""
-if [ "$CUID" = 0 ] && [ "$MODE" = docker ]; then
-  AS_ROOT=1; CUID=1000; CGID=1000
-  if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ] && id -u "$SUDO_USER" >/dev/null 2>&1 && [ "$(id -u "$SUDO_USER")" != 0 ]; then CUID="$(id -u "$SUDO_USER")"; CGID="$(id -g "$SUDO_USER")"; fi
-fi
-
 # ---------- .env (sinh một lần; không có bí mật mặc định)
 if [ ! -f "$DIR/.env" ]; then
   KEY="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
@@ -406,7 +442,8 @@ else
   # ngôn ngữ: CHỈ ghi khi người cài chọn rõ lần này. .env cũ (trước v0.20) chưa có GC_LANG → không ghi gì: server giữ ngôn ngữ đang dùng (CNS-152)
   if [ -n "$LANG_SET" ]; then env_put GC_LANG UI; fi
   # bản cài cũ do root cài (GC_UID=0) → đổi sang user thường (chown ở dưới)
-  if [ -n "$AS_ROOT" ] && grep -q '^GC_UID=0$' "$DIR/.env"; then env_put GC_UID CUID; env_put GC_GID CGID; fi
+  # (thiếu dòng GC_UID cũng vậy: compose sẽ rơi về mặc định 1000 — CNS-212)
+  if [ -n "$AS_ROOT" ] && { grep -q '^GC_UID=0$' "$DIR/.env" || ! grep -q '^GC_UID=[0-9]' "$DIR/.env" || ! grep -q '^GC_GID=[1-9]' "$DIR/.env"; }; then env_put GC_UID CUID; env_put GC_GID CGID; fi
   # móc kiểm thử không bao giờ nằm trong .env (review bảo mật 🟡7): CLI nạp .env bằng set -a → app / launcher sẽ thấy
   if grep -q '^[[:space:]]*\(export[[:space:]]\{1,\}\)\{0,1\}GC_TEST' "$DIR/.env"; then tmp="$(mktemp)"; grep -v '^[[:space:]]*\(export[[:space:]]\{1,\}\)\{0,1\}GC_TEST' "$DIR/.env" > "$tmp"; cat "$tmp" > "$DIR/.env"; rm -f "$tmp"; fi
   ok env_kept
@@ -414,7 +451,8 @@ fi
 if [ -n "$AS_ROOT" ]; then
   # GC_UID trong .env (có thể đã có từ trước, khác 0) là user container dùng — chown theo đúng nó
   CUID="$(sed -n 's/^GC_UID=\([0-9]*\)$/\1/p' "$DIR/.env" | tail -1)"; CGID="$(sed -n 's/^GC_GID=\([0-9]*\)$/\1/p' "$DIR/.env" | tail -1)"
-  chown -R "${CUID:-1000}:${CGID:-1000}" "$DIR"; warn root_uid "${CUID:-1000}" "${CGID:-1000}" "$DIR"
+  [ -n "$CUID" ] && [ -n "$CGID" ] && [ "$CUID" != 0 ] && [ "$CGID" != 0 ] || die sys_user_fail "$SYS_USER"   # không bao giờ chown cho root / đoán uid
+  chown -R "$CUID:$CGID" "$DIR"; warn root_uid "$CUID" "$CGID" "$DIR"
 fi
 
 # ---------- CLI

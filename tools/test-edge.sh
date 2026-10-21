@@ -159,7 +159,7 @@ out="$(gc online --caddy 2>&1)" && rc=0 || rc=$?
 out="$(GC_HOME="$C" GC_CLI_INNER=1 GC_LANG=vi PATH="$W/fakebin:$PATH" bash "$ROOT/cli/genchibi" online --caddy 2>&1)" || true
 grep -q 'cần chế độ Docker' <<< "$out" && ok "câu báo có bản tiếng Việt" || bad "thiếu câu tiếng Việt: $out"
 out="$(gc expose --help 2>&1)" || true
-grep -q 'replaced by genchibi online' <<< "$out" && grep -q 'genchibi expose --quick' <<< "$out" && ok "genchibi expose: báo đã thay bằng online, vẫn chạy như cũ" || bad "expose: $out"
+grep -q 'Deprecated: genchibi expose --help is an alias of genchibi online --help' <<< "$out" && grep -q 'genchibi online quick' <<< "$out" && ok "genchibi expose: bí danh của online (một dòng Deprecated, bỏ ở v0.22 — CNS-204)" || bad "expose: $out"
 
 echo "4) Caddy thật: Caddyfile.base + nạp lại qua unix socket"
 CADDY_VER=2.11.7

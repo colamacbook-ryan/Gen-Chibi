@@ -188,11 +188,16 @@
         var pw = input({ id: 'gcPw', type: 'password', autocomplete: 'current-password' });
         title = _t('Đăng nhập gen-chibi');
         body.push(h('div', { class: 'note', text: _t('Nhập mật khẩu chủ. Trình duyệt này nhớ đăng nhập 30 ngày.') }), field(_t('Mật khẩu'), pw));
-        // trần theo tài khoản đang chặn người lạ (trình duyệt chưa từng đăng nhập): nói thẳng + lối token (token chủ không bị trần)
-        if (st.locked > 0) body.push(h('div', { class: 'banner warn', id: 'gcLocked', role: 'status' }, h('span', { text: _t('Đăng nhập đang bị chặn tạm vì nhiều lần sai — trên máy chủ chạy genchibi password (đặt lại mật khẩu), hoặc dùng token, hoặc chờ {n} phút.', { n: Math.ceil(st.locked / 60) }) })));
+        // trần theo tài khoản đang chặn người lạ (trình duyệt chưa từng đăng nhập): nói thẳng + lối token (token chủ không bị trần).
+        // /api/auth/state công khai không còn báo locked (CNS-210) → dải hiện khi lần thử trả 429 locked (máy chủ xét trần trước khi kiểm mật khẩu)
+        var lockBox = h('div', { id: 'gcLockedBox' });
+        var lockShow = function (sec) { clear(lockBox); if (sec > 0) lockBox.appendChild(h('div', { class: 'banner warn', id: 'gcLocked', role: 'status' }, h('span', { text: _t('Đăng nhập đang bị chặn tạm vì nhiều lần sai — trên máy chủ chạy genchibi password (đặt lại mật khẩu), hoặc dùng token, hoặc chờ {n} phút.', { n: Math.ceil(sec / 60) }) }))); };
+        lockShow(st.locked || 0);
+        body.push(lockBox);
         btn.textContent = _t('Đăng nhập');
         submit = function () {
           Auth.post('api/auth/login', { password: pw.value }).then(function (x) {
+            if (x.s === 429 && x.j && x.j.locked) lockShow(+x.j.retryAfter || 60);
             if (x.s !== 200) { pw.select(); return fail(x.j.error || _t('Lỗi {status}', { status: x.s })); }
             try { localStorage.removeItem('gc-token'); } catch (e) { /* bỏ qua */ }
             Auth.done();

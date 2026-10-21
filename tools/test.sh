@@ -808,6 +808,25 @@ node tools/test-auth-owner.mjs || exit 1
 
 echo "4d) ngôn ngữ (ADR 0007): trình cài --lang / GC_LANG / câu hỏi khi có terminal · genchibi lang · trợ giúp en / vi · README + tài liệu tiếng Anh"
 bash tools/test-lang.sh || exit 1
+# L-77: CI GitHub chạy bằng user thường (runner, uid 1001); test.sh chạy bằng root THẬT ở máy dev thì giả định "chỉ đúng khi là root" (chown, ghi /root…) lọt qua.
+# Root → chạy lại test-lang.sh (trình cài + CLI) bằng nobody (setpriv) từ một bản chép của cây làm việc trong /tmp (không nằm dưới thư mục 0700 nào),
+# HOME / TMPDIR riêng ngoài bản chép. Không phải root (CI) → bỏ qua; thiếu setpriv / nobody → báo rõ rồi bỏ qua.
+if [ "$(id -u)" != 0 ]; then echo "   · L-77: không phải root — bước chạy lại bằng user thường không cần (CI đã chạy không root)"
+elif ! command -v setpriv >/dev/null 2>&1 || ! id -u nobody >/dev/null 2>&1; then echo "   ! L-77: thiếu setpriv hoặc user nobody — KHÔNG chạy lại được test-lang.sh bằng user thường (giả định chỉ-root có thể lọt tới CI)"
+else
+  L77="$(mktemp -d /tmp/gc-l77-XXXXXX)"
+  l77_clean() { case "$L77" in /tmp/gc-l77-??????) rm -rf -- "$L77" ;; esac; }   # chỉ xoá đúng thư mục tạm vừa tạo
+  mkdir -p "$L77/repo" "$L77/home" "$L77/tmp"
+  tar -C "$ROOT" --exclude=./.git --exclude=./dist -cf - . | tar -C "$L77/repo" -xf -
+  chown -R "$(id -u nobody):$(id -g nobody)" "$L77"; chmod 755 "$L77"
+  if setpriv --reuid="$(id -u nobody)" --regid="$(id -g nobody)" --clear-groups --reset-env -- \
+       env HOME="$L77/home" TMPDIR="$L77/tmp" PATH="$PATH" SHELL=/bin/bash LANG=C.UTF-8 bash "$L77/repo/tools/test-lang.sh" > "$L77/out.txt" 2>&1; then
+    echo "   ✓ L-77: test-lang.sh chạy lại bằng nobody (uid $(id -u nobody), như runner CI không root): $(grep -c '^   ✓' "$L77/out.txt") ✓"
+    l77_clean
+  else
+    grep -E '^   ✗|Kết quả' "$L77/out.txt" | sed 's/^/   [nobody] /'; echo "   ✗ L-77: test-lang.sh xanh bằng root nhưng ĐỎ bằng user thường — giả định chỉ-root (xem $L77/out.txt)"; exit 1
+  fi
+fi
 
 echo "4c) OAuth 2.1 cho MCP từ xa (v0.19): 401 khám phá · metadata · DCR (allowlist callback, không secret, trần, tốc độ) · authorize chỉ chủ duyệt · PKCE / resource / iss · code một lần · refresh xoay vòng · hết hạn · thu hồi · phạm vi → kênh sẵn có · oauth.json chỉ băm · đường máy qua cổng đăng nhập ngoài giả"
 node tools/test-oauth.mjs || exit 1

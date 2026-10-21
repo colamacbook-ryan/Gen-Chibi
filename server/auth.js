@@ -358,9 +358,14 @@ class Auth {
   lockedFor(kind) { return this.acctWait(kind); }   // giây còn bị chặn theo tài khoản (0 = không chặn)
 
   /* ------------------------------------------------------------ trạng thái cho Studio / CLI */
+  // GET /api/auth/state là CÔNG KHAI (CNS-210): người chưa chứng minh là chủ chỉ nhận cái màn /login · /setup cần để vẽ — password, minLength, đường dẫn,
+  // và legacy CHỈ khi chưa có mật khẩu (máy kế thừa → màn token thay màn mã setup). Không trả locked (kẻ đoán không biết đợt đoán đã chạm trần —
+  // Studio hiện dải "chặn tạm" từ phản hồi 429 của lần thử), setup (có mã đang chờ), session / owner. Chủ (S / T) nhận đủ.
   state(req) {
-    const s = this.sessionOf(req);
-    return { password: this.hasPassword(), legacy: this.isLegacy(), setup: !this.hasPassword() && !!this.codeMeta(), session: !!s, owner: this.ownerOf(req), minLength: PW.min, login: '/login', setupUrl: '/setup', locked: this.lockedFor('login') };
+    const owner = this.ownerOf(req), pw = this.hasPassword();
+    const pub = { password: pw, minLength: PW.min, login: '/login', setupUrl: '/setup' };
+    if (!owner) return pw ? pub : Object.assign(pub, { legacy: this.isLegacy() });
+    return Object.assign(pub, { legacy: this.isLegacy(), setup: !pw && !!this.codeMeta(), session: !!this.sessionOf(req), owner, locked: this.lockedFor('login') });
   }
   view(req) {   // /api/info.auth (đã là chủ): thêm nguồn token + dải "agent cũ cần nối lại"
     return Object.assign(this.state(req), { tokenSource: this.tokenInfo.source, agentsReconnect: !!(this.legacyRec && this.legacyRec.tokenless), alerts: (this.s.events || []).filter(e => !e.seen) });

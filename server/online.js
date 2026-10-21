@@ -239,6 +239,14 @@ function createOnline(opts) {
     return v;
   }
   const tunnelName = () => 'gen-chibi-' + installId().slice(0, 8);
+  // CNS-213: tài nguyên Cloudflare (tunnel, CNAME, luật WAF) ghi kèm installId của bản cài tạo ra chúng. Khôi phục sao lưu sang máy khác → installId mới
+  // → cfResources trong online.json là của máy cũ: Go offline / chạy lại KHÔNG xoá, chỉ báo. Bản ghi v0.21 (chưa có installId) → so tên tunnel (gen-chibi-<8 ký tự đầu>)
+  function ownsCf(res) {
+    if (!res) return false;
+    if (res.installId) return res.installId === installId();
+    return res.tunnelName === tunnelName();
+  }
+  const cfRes = () => (d.config.get() || {}).cfResources || null;
 
   // ---- token API: chỉ bộ nhớ
   let mem = null;   // { token, at, keep }
@@ -268,9 +276,11 @@ function createOnline(opts) {
     if (!j || typeof j !== 'object') return null;
     return { tunnel: cut(j.tunnel, 10), running: j.running === true, ready: j.ready === true, since: cut(j.since, 40), error: j.error ? cut(j.error, 200) : '', url: QUICK_RE.test(String(j.url || '')) ? j.url : '' };
   }
-  // link tạm: edge-status.url (P2) → không có thì quét đuôi log cloudflared
+  // link tạm: edge-status.url (P2) là nguồn duy nhất khi launcher có ghi status — launcher xoá url khi cloudflared thoát / tắt, còn
+  // logs/tunnel.log (chỉ nối thêm) vẫn giữ link CŨ đã chết của lần chạy trước → không quét log nữa (quick → off → quick lấy nhầm link cũ).
+  // Không có status (launcher không hiểu P2) mới quét đuôi log.
   function quickUrl() {
-    const s = edgeStatus(); if (s && s.url) return s.url;
+    const s = edgeStatus(); if (s) return s.tunnel === 'quick' && s.running ? s.url : '';
     try {
       const st = fs.statSync(files.cfLog), fd = fs.openSync(files.cfLog, 'r'), n = Math.min(st.size, 64 * 1024), buf = Buffer.alloc(n);
       fs.readSync(fd, buf, 0, n, st.size - n); fs.closeSync(fd);
@@ -484,7 +494,7 @@ function createOnline(opts) {
       let t = await cfc.findTunnel(name), made = false;
       if (!t) { t = await cfc.createTunnel(name); made = true; }
       cf.tunnelId = t.id; cf.tunnelName = name;
-      d.config.set({ cfResources: { zone: cf.zone, zoneId: cf.zoneId, accountId: cf.accountId, tunnelId: t.id, tunnelName: name, host: flow.domain } });   // để Go offline dọn được kể cả khi luồng dừng giữa chừng
+      d.config.set({ cfResources: { installId: installId(), zone: cf.zone, zoneId: cf.zoneId, accountId: cf.accountId, tunnelId: t.id, tunnelName: name, host: flow.domain } });   // để Go offline dọn được kể cả khi luồng dừng giữa chừng
       await cfc.putIngress(t.id, flow.domain, service);
       const c = await cfc.ensureCname(flow.domain, t.id, { overwrite: cf.overwrite === true, comment: 'gen-chibi (' + name + ')' });
       if (c.result === 'conflict') {
@@ -506,6 +516,8 @@ function createOnline(opts) {
       const r = await client().wafSkipRule(flow.domain, tunnelName());
       if (r.result === 'needs_manual') return wafManual({ cfStatus: r.status, cfCode: cut(r.cfCode, 40) });
       flow.cf.wafRule = { rulesetId: r.rulesetId || '', ruleId: r.ruleId || '' };
+      const res = cfRes();
+      if (res && ownsCf(res)) d.config.set({ cfResources: Object.assign({}, res, { wafRulesetId: flow.cf.wafRule.rulesetId, wafRuleId: flow.cf.wafRule.ruleId }) });   // id luật WAF cùng installId
       return ok(N_('Luật WAF Skip cho đường máy ({how}). Lưu ý: Bot Fight Mode của gói Free không skip được bằng luật', { how: WAFR[r.result] || WAFR.exists }));
     } catch (e) {
       // Cloudflare từ chối luật (vd gói không cho skip một pha — chưa xác minh, spike P0) → làm tay + "Tôi đã làm", kèm mã gốc; lỗi mạng → thử lại
@@ -614,7 +626,8 @@ function createOnline(opts) {
     return true;
   }
   // khôi phục sao lưu (CNS-202): data/ có thể của máy khác → không mang trạng thái online sang. mode off, publicUrl rỗng, bỏ luồng, intent off (tunnel dừng),
-  // xoá run/tunnel.token + install-id (lần Go online sau dùng tên tunnel mới — không giành tunnel của máy gốc), bỏ site Caddy. Giữ cfResources (Go offline còn dọn được)
+  // xoá run/tunnel.token + install-id (lần Go online sau dùng tên tunnel mới — không giành tunnel của máy gốc), bỏ site Caddy. Giữ cfResources: nó mang installId cũ
+  // nên Go offline ở đây chỉ báo (CNS-213), không xoá tài nguyên của máy gốc
   function resetAfterRestore() {
     flow = null;
     try { writeIntent('off', false); } catch (e) { d.log('[online] restore: ' + cut(e.message)); }
@@ -648,7 +661,12 @@ function createOnline(opts) {
     // tài nguyên ghi ở bậc tunnel (cfResources) — còn cả khi luồng Cloudflare dừng giữa chừng hoặc đã bị luồng khác thay
     const remote = stepOf('remote'), cf = res0 && res0.tunnelId ? res0 : null;
     if (!cf) put(remote, ok(N_('Không có gì cần dọn ở Cloudflare')));
-    else {
+    else if (!ownsCf(cf)) {
+      // CNS-213: của bản cài khác (sao lưu khôi phục từ máy khác) — không đụng tới Cloudflare, nói rõ cái gì còn và ai giữ; bỏ bản ghi để máy này không bao giờ xoá nhầm
+      put(remote, ok(N_('Không xoá gì ở Cloudflare: tunnel {name} và CNAME {host} (cùng luật WAF nếu có) do một bản cài khác tạo — máy cũ của bản sao lưu, hoặc máy này trước khi khôi phục. Chúng vẫn ở Cloudflare và thuộc về máy đó: Go offline trên máy đó, hoặc xoá tay ở dash.cloudflare.com (Zero Trust › Networks › Tunnels và DNS)', { name: cut(cf.tunnelName, 64), host: cut(cf.host, 253) })));
+      d.config.set({ cfResources: null });
+      d.log('[online] offline: Cloudflare resources of another install left untouched (tunnel ' + cut(cf.tunnelName, 64) + ', host ' + cut(cf.host, 253) + ')');
+    } else {
       const tok = token || kept();
       if (!tok) put(remote, fail(N_('Tunnel {name} và CNAME {host} vẫn còn ở Cloudflare (không có API token để xoá)', { name: cf.tunnelName, host: cf.host }), N_('Dán API token để app xoá, hoặc xoá tay ở dash.cloudflare.com (Zero Trust › Networks › Tunnels và DNS)'), { manual: true }));
       else {
