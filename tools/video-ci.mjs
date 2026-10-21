@@ -2,6 +2,7 @@
 // lưu tệp, kiểm cấu trúc bằng tools/media-inspect.js (+ ffprobe nếu có). Không npm, không Playwright: CDP qua WebSocket có sẵn của Node 22 (tools/cdp.mjs).
 //   node tools/video-ci.mjs [--require-mp4] [--hidden] [--quality 720p|1080p] [--out <thư mục>]
 //     --require-mp4  TRƯỢT nếu trình duyệt không ra được MP4 avc1 + mp4a (job Windows / macOS — nhánh ưu tiên 1 phải chạy thật)
+//     --require-ffmpeg  TRƯỢT nếu máy không có ffmpeg / ffprobe (job CI cài sẵn) — phép đo lệch tiếng / hình THẬT cần giải mã
 //     --hidden       trong lúc xuất mở một tab khác lên trước → trang xuất ở tab NỀN (bị bóp timer) vẫn phải xong (CNS-221)
 //   Chạy cục bộ (Linux, Chromium của Playwright): ra WebM VP9 + Opus (Chromium mã nguồn mở không có H.264 / AAC) — vẫn kiểm đủ cấu trúc.
 // Phục vụ repo bằng một server tĩnh nhỏ với ĐÚNG header của server thật (server/headers.js): trang xuất SAMEORIGIN + frame-ancestors 'self', còn lại DENY.
@@ -16,10 +17,11 @@ import { fileURLToPath } from 'url';
 import { launch } from './cdp.mjs';
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const { inspectMp4, inspectWebm } = require(path.join(ROOT, 'tools/media-inspect.js'));
+const { inspectMp4, inspectWebm, decodeAudio, measureMarks } = require(path.join(ROOT, 'tools/media-inspect.js'));
+const { sync } = require(path.join(ROOT, 'studio/video/mux.js'));
 const HDR = require(path.join(ROOT, 'server/headers.js'));
 const argv = process.argv.slice(2), flag = f => argv.includes(f), val = (f, d) => { const i = argv.indexOf(f); return i >= 0 ? argv[i + 1] : d; };
-const REQUIRE_MP4 = flag('--require-mp4'), HIDDEN = flag('--hidden'), QUALITY = val('--quality', '720p');
+const REQUIRE_MP4 = flag('--require-mp4'), REQUIRE_FF = flag('--require-ffmpeg'), HIDDEN = flag('--hidden'), QUALITY = val('--quality', '720p');
 const OUT = path.resolve(val('--out', '') || fs.mkdtempSync(path.join(os.tmpdir(), 'gc-video-ci-')));
 fs.mkdirSync(OUT, { recursive: true });
 const fails = [];
@@ -42,6 +44,9 @@ function payload() {
     film: { title: W.title, logline: W.logline || '', dialog: 'auto', shots: W.shots.map(s => ({ id: s.id, title: s.title, description: s.description || '', scene: s.scene, cast: s.cast, event: s.event })) }
   };
 }
+
+// mẫu dấu tiếng (nhiễu trắng tất định 2048 mẫu, im lặng 0,2 s hai bên) dập vào PCM phim ở trang xuất: đầu phim + gần cuối → đo lệch tiếng / hình trên tệp THẬT
+const MARKS = [{ sec: 0.5, seed: 0x5EED01, len: 2048 }, { sec: -0.6, seed: 0x5EED02, len: 2048 }];
 
 /* ---------------------------------------------------------------- server tĩnh với header của server thật */
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.css': 'text/css; charset=utf-8' };
@@ -66,7 +71,7 @@ const chrome = await launch();
 console.log('   Chrome: ' + chrome.version.product + ' · ' + chrome.chrome + ' · ' + process.platform + '/' + process.arch);
 let code = 1;
 try {
-  const page = await chrome.open('http://127.0.0.1:' + PORT + '/tools/fixtures/video-ci/host.html?opts=' + encodeURIComponent(JSON.stringify({ quality: QUALITY, shots: [0] })));
+  const page = await chrome.open('http://127.0.0.1:' + PORT + '/tools/fixtures/video-ci/host.html?opts=' + encodeURIComponent(JSON.stringify({ quality: QUALITY, shots: [0], debug: { marks: MARKS } })));
   for (let i = 0; i < 100 && (await page.eval('window.__ci && window.__ci.state')) !== 'ready'; i++) await new Promise(r => setTimeout(r, 100));
   await page.eval('window.ciRun(), true', { awaitPromise: false });
   let other = null;
@@ -87,7 +92,13 @@ try {
     const buf = Buffer.concat(parts), file = path.join(OUT, v.name);
     fs.writeFileSync(file, buf);
     console.log('   tệp: ' + file + ' (' + buf.length + ' B) · ' + st.frames + ' khung · ' + (st.durationMs / 1000).toFixed(2) + ' s · ' + (st.wallMs / 1000).toFixed(1) + ' s xuất (' + (st.wallMs / st.durationMs).toFixed(2) + '× thời lượng)');
-    const fps = st.format.fps, frameMs = 1000 / fps;
+    const fps = st.format.fps, frameMs = 1000 / fps, A0 = st.stats.audio || {}, aacMs = 1024 / 48;
+    // sự thật về bộ mã hoá tiếng của NỀN TẢNG này (so Windows / macOS trên log CI)
+    const C = A0.calib || {};
+    console.log('   tiếng ' + A0.codec + ' · description ' + A0.desc + ' · hiệu chuẩn: trễ ' + C.delay + ' mẫu (' + (C.delay / 48).toFixed(2) + ' ms, tương quan ' + C.score + ')' + (C.error ? ' LỖI ' + C.error : '') +
+      ' · gói đầu ' + JSON.stringify(C.first) + ' · gợi ý ' + JSON.stringify(C.hints) + ' · ts khung giải mã đầu ' + C.decFirstTs + ' · giải mã ' + C.decFrames + ' / vào ' + C.inFrames + ' mẫu');
+    console.log('   bù mồi: ' + A0.shift + ' mẫu (nguồn ' + A0.shiftSource + ') · lượt dựng: ' + A0.chunks + ' gói, ' + A0.negative + ' gói ts âm, gói đầu ' + JSON.stringify(A0.first) +
+      ' · mẫu phim ' + A0.filmFrames + ' · vào bộ mã hoá ' + A0.inFrames + ' · ra ' + A0.outFrames + ' (dư ' + (A0.outFrames - A0.inFrames) + ')' + (A0.trimmed != null ? ' · cắt đuôi ' + A0.trimmed + ' gói → ' + A0.muxFrames + ' mẫu trong MP4' : ''));
     check(buf.length === v.size, 'tải về thiếu byte ' + buf.length + ' / ' + v.size);
     check(st.frames === st.dry.frames, 'lượt dựng ' + st.frames + ' khung ≠ lượt dò ' + st.dry.frames + ' (timeline không tất định)');
     if (st.format.container === 'mp4') {
@@ -99,7 +110,7 @@ try {
       if (V && A) {
         const vd = V.duration / V.timescale * 1000, ad = A.duration / A.timescale * 1000;
         check(V.samples.length === st.frames && V.samples[0].key, 'số khung ' + V.samples.length + ' = ' + st.frames + ', khung đầu là khung khoá');
-        check(Math.abs(ad - vd) <= frameMs + 1e-6 + 1024 / 48, 'tiếng ' + ad.toFixed(1) + ' ms ≈ hình ' + vd.toFixed(1) + ' ms (±1 khung + 1 khung AAC)');
+        check(ad - vd >= -frameMs - 1e-6 && ad - vd <= aacMs + 1e-6, 'tiếng ' + ad.toFixed(1) + ' ms ≈ hình ' + vd.toFixed(1) + ' ms (−1 khung hình … +1 khung AAC ' + aacMs.toFixed(1) + ' ms)');
         console.log('   MP4: avc1 profile ' + V.avcC.profile + ' level ' + V.avcC.level + ' · ' + V.samples.length + ' khung (' + V.keyCount + ' khoá) · mp4a ' + A.sampleRate + ' Hz × ' + A.channels + ' · ASC ' + Buffer.from(A.asc).toString('hex') + ' · tiếng ' + ad.toFixed(1) + ' / hình ' + vd.toFixed(1) + ' ms');
       }
     } else {
@@ -114,13 +125,30 @@ try {
     }
     if (REQUIRE_MP4) check(st.format.container === 'mp4' && /^avc1/.test(st.format.video) && /^mp4a/.test(st.format.audio), 'yêu cầu MP4 avc1 + mp4a, có ' + JSON.stringify(st.format));
     if (HIDDEN) check(st.visibility.includes('hidden'), 'tab xuất phải thực sự bị ẩn trong lúc xuất (thấy: ' + [...new Set(st.visibility)].join(',') + ')');
+    // ĐO THẬT: ffmpeg giải mã tệp (không đọc edit list — tệp không có) → PCM → tìm mẫu dấu → lệch so với thời điểm phim đã dập
+    const dec = decodeAudio(file);
+    if (dec.error) { check(!REQUIRE_FF, 'cần ffmpeg + ffprobe để đo lệch tiếng / hình: ' + dec.error); console.log('   – không đo được tiếng thật: ' + dec.error); }
+    else {
+      const codecMs = st.format.container === 'mp4' ? aacMs : 20;
+      const ms = measureMarks(dec, MARKS.map((m, i) => ({ at: A0.marks[i], tpl: sync.noise(m.len, m.seed) })), Math.round(0.3 * dec.sr));
+      ms.forEach((m, i) => {
+        console.log('   mẫu dấu ' + (i ? 'cuối' : 'đầu') + ': phim ' + m.expectMs.toFixed(2) + ' ms → giải mã ' + (m.foundMs == null ? '–' : m.foundMs.toFixed(2)) + ' ms · lệch ' + (m.offsetMs == null ? '–' : m.offsetMs.toFixed(2) + ' ms (' + m.offsetSamples + ' mẫu)') + ' · tương quan ' + m.score.toFixed(3));
+        check(m.score >= 0.5, 'mẫu dấu ' + (i ? 'cuối' : 'đầu') + ' không tìm thấy rõ trong tiếng giải mã (tương quan ' + m.score.toFixed(3) + ')');
+        check(m.offsetMs != null && Math.abs(m.offsetMs) <= frameMs, 'tiếng lệch hình ' + (m.offsetMs == null ? '?' : m.offsetMs.toFixed(2)) + ' ms tại ' + (m.expectMs / 1000).toFixed(2) + ' s — phải ≤ 1 khung (' + frameMs.toFixed(1) + ' ms)');
+        check(m.offsetMs != null && Math.abs(m.offsetMs) <= 3, 'bù mồi chưa chính xác: lệch ' + (m.offsetMs == null ? '?' : m.offsetMs.toFixed(2)) + ' ms tại ' + (m.expectMs / 1000).toFixed(2) + ' s (đòi ≤ 3 ms — bù đúng thì ~0)');
+      });
+      const vEnd = st.durationMs, aEnd = dec.durationMs;
+      console.log('   giải mã ffmpeg: tiếng bắt đầu ' + (dec.firstPts * 1000).toFixed(2) + ' ms, kết thúc ' + aEnd.toFixed(1) + ' ms · hình ' + vEnd.toFixed(1) + ' ms (' + (aEnd - vEnd >= 0 ? '+' : '') + (aEnd - vEnd).toFixed(1) + ')');
+      check(Math.abs(dec.firstPts * 1000) <= 1, 'tiếng giải mã phải bắt đầu ở 0 ms, có ' + (dec.firstPts * 1000).toFixed(2));
+      check(aEnd - vEnd >= -frameMs && aEnd - vEnd <= codecMs + 0.5, 'thời lượng tiếng giải mã ' + aEnd.toFixed(1) + ' ms so với hình ' + vEnd.toFixed(1) + ' ms: phải trong [−1 khung hình, +1 khung tiếng ' + codecMs.toFixed(1) + ' ms]');
+    }
     const ffp = spawnSync('ffprobe', ['-v', 'error', '-count_frames', '-show_entries', 'stream=codec_name,nb_read_frames,duration:format=duration,format_name', '-of', 'json', file], { encoding: 'utf8' });
     if (ffp.status === 0) {
       const j = JSON.parse(ffp.stdout), vs = j.streams.find(s => ['h264', 'vp9'].includes(s.codec_name));
       check(vs && +vs.nb_read_frames === st.frames, 'ffprobe đếm ' + (vs && vs.nb_read_frames) + ' khung, cần ' + st.frames);
-      const dec = spawnSync('ffmpeg', ['-v', 'error', '-i', file, '-f', 'null', '-'], { encoding: 'utf8' });
-      check(dec.status === 0 && !dec.stderr.trim(), 'ffmpeg giải mã không sạch: ' + dec.stderr.slice(0, 300));
-      console.log('   ffprobe: ' + j.streams.map(s => s.codec_name).join(' + ') + ' · ' + j.format.format_name + ' · ' + (+j.format.duration).toFixed(3) + ' s · giải mã ' + (dec.status === 0 && !dec.stderr.trim() ? 'sạch' : 'LỖI'));
+      const dz = spawnSync('ffmpeg', ['-v', 'error', '-i', file, '-f', 'null', '-'], { encoding: 'utf8' });
+      check(dz.status === 0 && !dz.stderr.trim(), 'ffmpeg giải mã không sạch: ' + dz.stderr.slice(0, 300));
+      console.log('   ffprobe: ' + j.streams.map(s => s.codec_name).join(' + ') + ' · ' + j.format.format_name + ' · ' + (+j.format.duration).toFixed(3) + ' s · giải mã ' + (dz.status === 0 && !dz.stderr.trim() ? 'sạch' : 'LỖI'));
     } else console.log('   – không có ffprobe trên máy này: chỉ kiểm cấu trúc bằng tools/media-inspect.js');
     console.log('   mỗi khung: ' + JSON.stringify(st.stats.perFrameMs, (k, x) => typeof x === 'number' ? +x.toFixed(1) : x) + ' · heap đỉnh ' + (st.stats.heapPeak / 1048576).toFixed(1) + ' MB');
   }

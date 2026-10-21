@@ -12,7 +12,7 @@ import vm from 'vm';
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const M = require(path.join(ROOT, 'studio/video/mux.js'));
-const { inspectMp4, inspectWebm } = require(path.join(ROOT, 'tools/media-inspect.js'));
+const { inspectMp4, inspectWebm, decodeAudio, measureMarks } = require(path.join(ROOT, 'tools/media-inspect.js'));
 const T = require(path.join(ROOT, 'studio/video/text.js'));
 let bad = 0;
 const no = (cond, msg) => { if (cond) { bad++; console.log('   ✗ ' + msg); } return !cond; };
@@ -115,6 +115,73 @@ console.log('   — WebM ghi luồng (luồng giả 65 s: qua mốc 30 s của t
   if (bad === b0) ok('WebM ghi luồng: phần đầu viết đè đúng 1 lần (cùng độ dài), Segment / Duration / SeekHead / Cues / Tags đúng, cluster mở bằng khung khoá + nối ở mốc 30 s, xen kẽ theo thời gian, ghi ra dần trong lúc đưa vào (mốc 30 s: ' + Math.round(100 * at30[0] / at30[1]) + '% đã ra nơi ghi), bộ đệm ≤ 1 cluster + hàng chờ (' + fin.maxBuffered + ' B), từ chối ' + threw + ' đầu vào sai');
 }
 
+/* ---------------------------------------------------------------- đồng bộ tiếng: bù độ trễ mồi AAC KHÔNG edit list (GenMux.sync) — luồng giả mô phỏng 2 nền tảng
+ * Bộ mã hoá giả: đầu ra giải mã = D mẫu mồi (im lặng) + đầu vào + đệm cuối tới bội 1024 (+ `flush` gói thừa), gói 1024 mẫu, ts từ 0 (hoặc −D nếu negTs).
+ * Số liệu CI 39586887287: Windows tiếng +18,7 ms (khớp ceil(vào / 1024) gói), macOS +82,6 ms (khớp mồi 2112 + 1 gói thừa) — hai hồ sơ dưới đây. */
+const SY = M.sync, SR = 48000;
+function fakeAac(input, D, flush, negTs) {
+  const total = Math.ceil((input.length + D) / 1024) * 1024 + (flush || 0) * 1024, dec = new Float32Array(total);
+  dec.set(input, D);
+  const chunks = []; for (let k = 0; k * 1024 < total; k++) chunks.push({ ts: Math.round((k * 1024 - (negTs ? D : 0)) * 1e6 / SR), dur: 1024e6 / SR, data: new Uint8Array(1) });
+  return { dec, chunks };
+}
+// một lượt xuất giả: hiệu chuẩn → chọn độ bù → Feeder (từng khối 4096 của vòi, từng khung 1600 mẫu như capture.js) → mã hoá giả → cắt đuôi → đo mẫu dấu
+function syncRun(P, film, marks, mut) {
+  mut = mut || {};
+  const cal = SY.calibSignal(SR), ce = fakeAac(cal.pcm, P.D, P.flush, P.negTs);
+  const measured = mut.noCalib ? null : SY.delayOf(cal, ce.dec);
+  let plan = SY.pick(measured, SY.hints(ce.chunks, cal.pcm.length, SR));
+  if (mut.shift != null) plan = { shift: mut.shift, source: 'mutant' };
+  const fd = new SY.Feeder({ shift: plan.shift, marks }), parts = [];
+  for (let p = 0; p < film.length; p += 4096) fd.push(film.subarray(p, Math.min(film.length, p + 4096)), film.subarray(p, Math.min(film.length, p + 4096)));
+  for (let lim = 0; lim <= film.length; lim += 1600) fd.take(Math.min(lim, fd.got), (l, r, n) => parts.push(l.slice(0, n)));
+  fd.take(film.length, (l, r, n) => parts.push(l.slice(0, n)));
+  const enc = new Float32Array(parts.reduce((a, x) => a + x.length, 0)); let q = 0; parts.forEach(x => { enc.set(x, q); q += x.length; });
+  const out = fakeAac(enc, P.D, P.flush, P.negTs), tr = mut.noTrim ? { chunks: out.chunks, frames: out.dec.length } : SY.trim(out.chunks, film.length, SR);
+  const dec = out.dec.subarray(0, tr.frames);
+  const found = measureMarks({ pcm: dec, sr: SR, firstPts: 0 }, marks, 9000);
+  return { plan, measured, found, frames: tr.frames, inFrames: fd.out };
+}
+// phán quyết như CI: mỗi mẫu dấu lệch ≤ 1 mẫu (luồng giả tất định) · tiếng trong [phim, phim + 1 khung AAC) · không bù theo hằng số hệ điều hành
+function syncVerdict(r, filmLen) {
+  const e = [];
+  r.found.forEach((m, i) => { if (m.offsetSamples == null || Math.abs(m.offsetSamples) > 1 || m.score < 0.99) e.push('mẫu dấu ' + i + ' lệch ' + m.offsetSamples + ' mẫu (tương quan ' + m.score.toFixed(3) + ')'); });
+  if (r.frames < filmLen || r.frames >= filmLen + 1024) e.push('tiếng ' + r.frames + ' mẫu ∉ [' + filmLen + ', ' + (filmLen + 1024) + ')');
+  return e;
+}
+console.log('   — đồng bộ tiếng AAC: bù độ trễ mồi không edit list (luồng giả kiểu Windows mồi 1024 / macOS mồi 2112 + gói thừa)');
+{
+  const b0 = bad, N = 924800;   // = 578 khung @30 fps của fixture CI
+  const film = new Float32Array(N); { const z = SY.noise(N, 77); for (let i = 0; i < N; i++) film[i] = 0.05 * z[i]; }   // nền ồn nhẹ (nhạc / giọng) quanh mẫu dấu
+  const marks = [{ at: Math.round(0.5 * SR), tpl: SY.noise(2048, 0x5EED01) }, { at: N - Math.round(0.6 * SR), tpl: SY.noise(2048, 0x5EED02) }];
+  const plats = [['Windows-kiểu (mồi 1024)', { D: 1024, flush: 0 }], ['macOS-kiểu (mồi 2112 + 1 gói thừa)', { D: 2112, flush: 1 }], ['macOS-kiểu, ts gói đầu âm', { D: 2112, flush: 1, negTs: true }]];
+  const lines = [];
+  for (const [name, P] of plats) {
+    const r = syncRun(P, film, marks), v = syncVerdict(r, N);
+    no(r.measured.delay !== P.D || r.plan.source !== 'decode', name + ': hiệu chuẩn phải đo đúng mồi ' + P.D + ', có ' + JSON.stringify(r.measured) + ' ' + JSON.stringify(r.plan));
+    no(r.inFrames !== N - P.D, name + ': bộ mã hoá nhận phim − mồi = ' + (N - P.D) + ' mẫu, có ' + r.inFrames);
+    no(v.length, name + ': bù + cắt đuôi phải khớp mẫu: ' + v.join('; '));
+    // đột biến → phải ĐỎ
+    const muts = [['không bù', { shift: 0 }], ['bù hằng số của hệ điều hành kia', { shift: P.D === 1024 ? 2112 : 1024 }], ['không cắt đuôi', { noTrim: true, flushOnly: true }]];
+    let red = 0;
+    for (const [mn, mu] of muts) {
+      if (mu.flushOnly && !P.flush) continue;   // không gói thừa thì đuôi tự nhiên đã < 1 khung AAC
+      const mv = syncVerdict(syncRun(P, film, marks, mu), N);
+      if (mv.length) red++; else no(true, name + ': đột biến "' + mn + '" phải làm phép kiểm ĐỎ');
+    }
+    // không giải mã được (hiệu chuẩn hỏng): ts âm thì vẫn bù đúng, không thì nguồn 'none' (CI sẽ đỏ ở phép đo thật)
+    const nc = syncRun(P, film, marks, { noCalib: true });
+    no(P.negTs ? (nc.plan.source !== 'timestamp' || syncVerdict(nc, N).length) : (nc.plan.source !== 'none' || !syncVerdict(nc, N).length), name + ': lùi khi không hiệu chuẩn được: ' + JSON.stringify(nc.plan));
+    lines.push(name + ' → bù ' + r.plan.shift + ', ' + red + ' đột biến đỏ');
+  }
+  // Feeder: shift âm chèn im lặng · mẫu dấu đè đúng chỗ (theo mẫu PHIM) · không đụng PCM gốc
+  { const src = new Float32Array(10000).fill(0.25), fd = new SY.Feeder({ shift: -300, marks: [{ at: 5000, tpl: new Float32Array([1, -1]) }], gap: 10 }), got = [];
+    fd.push(src, src); fd.take(3000, (l, r, n) => got.push(...l.subarray(0, n))); fd.take(10000, (l, r, n) => got.push(...l.subarray(0, n)));
+    no(got.length !== 10300 || got[0] !== 0 || got[299] !== 0 || got[300] !== 0.25 || got[300 + 4990] !== 0 || got[5300] !== 1 || got[5301] !== -1 || got[5311] !== 0 || got[5312] !== 0.25 || src[5000] !== 0.25, 'Feeder: shift −300 chèn 300 mẫu im lặng, mẫu dấu tại mẫu phim 5000 (±gap im lặng), PCM gốc nguyên vẹn'); }
+  no(SY.pick({ delay: 2112, score: 0.3 }, { tsDelay: 0 }).source !== 'none' || SY.pick({ delay: 99999, score: 1 }, { tsDelay: 2112 }).shift !== 2112, 'pick: tương quan yếu / độ trễ vô lý thì không tin số đo');
+  if (bad === b0) ok('bù mồi AAC không edit list: ' + lines.join(' · ') + ' — hiệu chuẩn đo đúng mồi, mẫu dấu đầu + cuối lệch 0 mẫu, tiếng ∈ [hình, hình + 1 khung AAC); Feeder chèn im lặng khi bù âm; pick không tin số đo yếu');
+}
+
 /* ---------------------------------------------------------------- luồng THẬT do ffmpeg mã hoá → ghép → giải mã lại */
 const have = c => spawnSync(c, ['-version'], { stdio: 'ignore' }).status === 0;
 if (!have('ffmpeg') || !have('ffprobe')) console.log('   – BỎ QUA giải mã thật: máy này không có ffmpeg / ffprobe (cấu trúc tệp đã kiểm ở trên; máy Gen + job CI xuất video có ffprobe)');
@@ -164,6 +231,44 @@ else {
   no(!vs2 || !/^00:00:05\.0/.test(vs2.tags && vs2.tags.DURATION || ''), 'WebM: ffprobe đọc được thời lượng stream hình (Tags DURATION), có ' + JSON.stringify(vs2 && vs2.tags));
   no(Math.abs(+pw2.format.duration - 5) > 0.05, 'WebM: thời lượng ≈ 5 s, có ' + pw2.format.duration);
   const d2 = decodeClean(webf); no(d2, 'ffmpeg giải mã WebM không sạch: ' + d2);
+  // ĐỒNG BỘ THẬT: bộ mã hoá AAC của ffmpeg (mồi 1024, như Windows) — hiệu chuẩn → bù bằng Feeder → MP4 không edts → ffmpeg giải mã → mẫu dấu đúng chỗ.
+  // Đột biến "không bù" phải lệch đúng 1024 mẫu (phép đo thấy được). Opus / WebM: CodecDelay = pre-skip → lệch 0; xoá pre-skip → lệch 312.
+  {
+    const f32 = (file, pcm) => { const b = Buffer.alloc(pcm.length * 8); for (let i = 0; i < pcm.length; i++) { b.writeFloatLE(pcm[i], i * 8); b.writeFloatLE(pcm[i], i * 8 + 4); } fs.writeFileSync(file, b); };
+    const adts = file => { const ab = fs.readFileSync(file), ch = []; for (let p = 0; p < ab.length;) { const hl = ab[p + 1] & 1 ? 7 : 9, len = ((ab[p + 3] & 3) << 11) | (ab[p + 4] << 3) | (ab[p + 5] >> 5); ch.push({ ts: Math.round(ch.length * 1024 * 1e6 / SR), dur: 1024e6 / SR, data: ab.subarray(p + hl, p + len) }); p += len; } return ch; };
+    const cal = SY.calibSignal(SR); f32(path.join(TMP, 'cal.f32'), cal.pcm);
+    ff(['-f', 'f32le', '-ar', '48000', '-ac', '2', '-i', path.join(TMP, 'cal.f32'), '-c:a', 'aac', '-b:a', '160k', '-f', 'adts', path.join(TMP, 'cal.aac')]);
+    const cd = decodeAudio(path.join(TMP, 'cal.aac')), meas = SY.delayOf(cal, cd.pcm);
+    no(cd.error || meas.delay !== 1024, 'hiệu chuẩn bộ mã hoá AAC của ffmpeg: mồi 1024, đo được ' + JSON.stringify(meas) + ' ' + (cd.error || ''));
+    const N = vch.length * 1600, film = new Float32Array(N); for (let i = 0; i < N; i++) film[i] = 0.1 * Math.sin(2 * Math.PI * 440 * i / SR);
+    const marks = [{ at: Math.round(0.5 * SR), tpl: SY.noise(2048, 0x5EED01) }, { at: N - Math.round(0.6 * SR), tpl: SY.noise(2048, 0x5EED02) }];
+    const runAac = (shift, tag) => {
+      const fd = new SY.Feeder({ shift, marks }), parts = []; fd.push(film, film); fd.take(N, (l, r, n) => parts.push(l.slice(0, n)));
+      const enc = new Float32Array(parts.reduce((a, x) => a + x.length, 0)); let q = 0; parts.forEach(x => { enc.set(x, q); q += x.length; });
+      f32(path.join(TMP, tag + '.f32'), enc);
+      ff(['-f', 'f32le', '-ar', '48000', '-ac', '2', '-i', path.join(TMP, tag + '.f32'), '-c:a', 'aac', '-b:a', '160k', '-f', 'adts', path.join(TMP, tag + '.aac')]);
+      const tr = SY.trim(adts(path.join(TMP, tag + '.aac')), N, SR), f = path.join(TMP, tag + '.mp4');
+      fs.writeFileSync(f, M.mp4({ video: { codec: 'avc1', width: 640, height: 360, fps: 30, description: avcC, chunks: vch }, audio: { codec: 'mp4a', sampleRate: 48000, channels: 2, description: asc, chunks: tr.chunks } }));
+      const d = decodeAudio(f); return { d, m: d.error ? [] : measureMarks(d, marks, 14400) };
+    };
+    const good = runAac(meas.delay, 'sync'), bad0 = runAac(0, 'nosync'), vMs = N / SR * 1000;
+    no(good.d.error || good.m.some(m => Math.abs(m.offsetSamples) > 2 || m.score < 0.8), 'AAC thật đã bù: mẫu dấu đầu / cuối phải lệch ≤ 2 mẫu, có ' + JSON.stringify(good.m.map(m => [m.offsetSamples, +m.score.toFixed(3)])) + ' ' + (good.d.error || ''));
+    no(good.d.error || good.d.durationMs < vMs || good.d.durationMs >= vMs + 1024 / 48, 'AAC thật đã bù: tiếng giải mã ' + (good.d.durationMs || 0).toFixed(1) + ' ms ∈ [hình ' + vMs.toFixed(1) + ', + 1 khung AAC)');
+    no(bad0.d.error || bad0.m.some(m => Math.abs(m.offsetSamples - 1024) > 2), 'đột biến "không bù": phép đo phải thấy lệch 1024 mẫu, có ' + JSON.stringify(bad0.m.map(m => m.offsetSamples)));
+    // Opus: mẫu dấu dập thẳng (Opus tự bù qua CodecDelay = pre-skip) → ffmpeg libopus → WebmWriter
+    const fo = new SY.Feeder({ shift: 0, marks }), op = []; fo.push(film, film); fo.take(N, (l, r, n) => op.push(l.slice(0, n)));
+    const oe = new Float32Array(N); let q2 = 0; op.forEach(x => { oe.set(x, q2); q2 += x.length; }); f32(path.join(TMP, 'op.f32'), oe);
+    ff(['-f', 'f32le', '-ar', '48000', '-ac', '2', '-i', path.join(TMP, 'op.f32'), '-c:a', 'libopus', '-b:a', '96k', '-f', 'ogg', path.join(TMP, 'op.ogg')]);
+    const og2 = fs.readFileSync(path.join(TMP, 'op.ogg')), pk2 = []; let part2 = [];
+    for (let p = 0; p + 27 <= og2.length;) { const ns = og2[p + 26], segs = og2.subarray(p + 27, p + 27 + ns); let q = p + 27 + ns; for (const L of segs) { part2.push(og2.subarray(q, q + L)); q += L; if (L < 255) { pk2.push(Buffer.concat(part2)); part2 = []; } } p = q; }
+    let at2 = 0; const och2 = pk2.slice(2).map(d => { const dur = frames(d), c = { ts: Math.round(at2 * 1e6 / 48000), dur: dur * 1e6 / 48000, data: d }; at2 += dur; return c; });
+    const webm2 = (head, tag) => { const f = path.join(TMP, tag + '.webm'); fs.writeFileSync(f, M.webm({ video: { codec: 'vp09', width: 640, height: 360, fps: 30, chunks: vp }, audio: { codec: 'opus', sampleRate: 48000, channels: 2, description: head, chunks: och2 } })); const d = decodeAudio(f); return { d, m: d.error ? [] : measureMarks(d, marks, 14400) }; };
+    const pre = pk2[0][10] | (pk2[0][11] << 8), zero = Buffer.from(pk2[0]); zero[10] = zero[11] = 0;
+    const ow = webm2(pk2[0], 'opus-sync'), oz = webm2(zero, 'opus-nopreskip');
+    no(ow.d.error || ow.m.some(m => Math.abs(m.offsetSamples) > 2 || m.score < 0.6), 'Opus / WebM (CodecDelay = pre-skip ' + pre + '): mẫu dấu lệch ≤ 2 mẫu, có ' + JSON.stringify(ow.m.map(m => [m.offsetSamples, +m.score.toFixed(3)])) + ' ' + (ow.d.error || ''));
+    no(oz.d.error || oz.m.some(m => Math.abs(m.offsetSamples - pre) > 2), 'đột biến "pre-skip 0": phép đo phải thấy lệch ' + pre + ' mẫu, có ' + JSON.stringify(oz.m.map(m => m.offsetSamples)));
+    if (bad === b0) ok('đồng bộ THẬT qua ffmpeg: AAC mồi đo được ' + meas.delay + ' → bù → MP4 không edts, mẫu dấu lệch ' + good.m.map(m => m.offsetSamples).join(' / ') + ' mẫu, tiếng ' + good.d.durationMs.toFixed(1) + ' / hình ' + vMs.toFixed(1) + ' ms (đột biến không bù: lệch ' + bad0.m.map(m => m.offsetSamples).join(' / ') + ') · WebM Opus pre-skip ' + pre + ': lệch ' + ow.m.map(m => m.offsetSamples).join(' / ') + ' (đột biến pre-skip 0: ' + oz.m.map(m => m.offsetSamples).join(' / ') + ')');
+  }
   if (bad === b0) ok('luồng thật (ffmpeg): MP4 H.264 + AAC ' + vch.length + ' khung · WebM VP9 + Opus ' + vp.length + ' khung — ffprobe đúng codec / số khung / thời lượng, ffmpeg giải mã lại không một lỗi');
 }
 

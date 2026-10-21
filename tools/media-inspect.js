@@ -1,6 +1,8 @@
 // Đọc cấu trúc tệp MP4 / WebM do studio/video/mux.js ghép (chỉ dùng để KIỂM THỬ — tools/test-video.mjs, tools/video-ci.mjs, test trình duyệt).
 // Không phải bộ tách luồng đầy đủ: đủ để kiểm thứ tự hộp, bảng mẫu, khung khoá, thời lượng, xen kẽ tiếng / hình.
 //   inspectMp4(buf)  → { top: ['ftyp','moov','mdat'], edts, brands, tracks: [{ handler, codec, timescale, duration, samples: [{ dts, dur, size, offset, key }], avcC, esds, asc }], movieDuration, mdat: {start,end} }
+//   decodeAudio(file) → { pcm: Float32Array (mono, 48 kHz), sr, firstPts (giây — mốc của mẫu giải mã đầu tiên trên dòng thời gian tệp) } | { error }   (cần ffmpeg + ffprobe)
+//   measureMarks(dec, marks, win) → [{ at, expectMs, foundMs, offsetMs, score }]   tìm từng mẫu dấu (GenMux.sync.noise) trong PCM giải mã ±win mẫu
 //   inspectWebm(buf) → { docType, segmentSize, segmentEnd, durationMs, seek: {id: pos}, tracks: [{ number, codec, uid, codecPrivate, codecDelay }], clusters: [{ pos, t0, blocks }], blocks: [{ track, ms, key, size, order }], cues: [{ t, pos }], tags: {uid: 'hh:mm:ss…'} }
 // © 2026 Gen Labs — All rights reserved.
 'use strict';
@@ -127,4 +129,26 @@ function inspectWebm(buf) {
   return r;
 }
 
-module.exports = { inspectMp4, inspectWebm };
+/* ---------------------------------------------------------------- giải mã THẬT bằng ffmpeg (như đầu phát không đọc edit list) → đo vị trí tiếng */
+function decodeAudio(file) {
+  const { spawnSync } = require('child_process');
+  const pr = spawnSync('ffprobe', ['-v', 'error', '-select_streams', 'a:0', '-show_frames', '-read_intervals', '%+#1', '-show_entries', 'stream=sample_rate:frame=pts_time', '-of', 'json', file], { encoding: 'utf8' });
+  if (pr.error || pr.status !== 0) return { error: 'ffprobe: ' + (pr.error ? pr.error.message : pr.stderr.slice(0, 300)) };
+  const j = JSON.parse(pr.stdout), sr = +(j.streams && j.streams[0] && j.streams[0].sample_rate), firstPts = +(j.frames && j.frames[0] && j.frames[0].pts_time);
+  if (!sr || !isFinite(firstPts)) return { error: 'ffprobe không đọc được sample_rate / pts khung tiếng đầu: ' + pr.stdout.slice(0, 300) };
+  // -ac 1: trộn mono (hai kênh y hệt nhau ở tệp test); giữ nguyên tần số mẫu; không lọc gì thêm → mẫu thứ i ở thời điểm firstPts + i / sr
+  const r = spawnSync('ffmpeg', ['-v', 'error', '-i', file, '-map', '0:a:0', '-ac', '1', '-c:a', 'pcm_f32le', '-f', 'f32le', '-'], { maxBuffer: 1 << 30 });
+  if (r.error || r.status !== 0) return { error: 'ffmpeg: ' + (r.error ? r.error.message : String(r.stderr).slice(0, 300)) };
+  const b = r.stdout, pcm = new Float32Array(b.length >> 2);
+  for (let i = 0; i < pcm.length; i++) pcm[i] = b.readFloatLE(i * 4);
+  return { pcm, sr, firstPts, durationMs: (firstPts + pcm.length / sr) * 1000 };
+}
+function measureMarks(dec, marks, win) {
+  const { sync } = require('../studio/video/mux.js');
+  return marks.map(m => {
+    const exp = m.at - Math.round(dec.firstPts * dec.sr), r = sync.findLag(m.tpl, dec.pcm, exp - win, exp + win);
+    return { at: m.at, expectMs: m.at / dec.sr * 1000, foundMs: r.lag < 0 ? null : (r.lag / dec.sr + dec.firstPts) * 1000, offsetMs: r.lag < 0 ? null : (r.lag - exp) / dec.sr * 1000, offsetSamples: r.lag < 0 ? null : r.lag - exp, score: r.score };
+  });
+}
+
+module.exports = { inspectMp4, inspectWebm, decodeAudio, measureMarks };

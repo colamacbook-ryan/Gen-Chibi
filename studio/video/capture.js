@@ -158,6 +158,44 @@
   }
   // description của decoderConfig: ArrayBuffer hoặc ArrayBufferView (kể cả DataView) → bản sao Uint8Array
   function bytesOf(d) { return d instanceof ArrayBuffer ? new Uint8Array(d.slice(0)) : new Uint8Array(d.buffer.slice(d.byteOffset, d.byteOffset + d.byteLength)); }
+  function hex(b) { return Array.prototype.map.call(b, function (x) { return (x < 16 ? '0' : '') + x.toString(16); }).join(''); }
+  // độ trễ mồi THẬT của bộ mã hoá tiếng trên máy này (GenMux.sync): MỘT AudioEncoder riêng cùng cấu hình mã hoá tín hiệu hiệu chuẩn → AudioDecoder giải mã
+  // → tương quan chéo với tín hiệu gốc. Kèm các gợi ý bộ mã hoá tự báo (description, ts / thời lượng gói đầu, mẫu ra so với mẫu vào) để CI in ra.
+  async function calibrate(acfg) {
+    var S = GenMux.sync, cal = S.calibSignal(48000), n = cal.pcm.length, chunks = [], cfg = null, info = { inFrames: n }, enc = null, dec = null;
+    try {
+      enc = new AudioEncoder({ output: function (c, m) {
+        if (m && m.decoderConfig && !cfg) cfg = m.decoderConfig;
+        var b = new Uint8Array(c.byteLength); c.copyTo(b); chunks.push({ data: b, ts: c.timestamp, dur: c.duration || 0, type: c.type });
+      }, error: function (e) { info.error = info.error || String(e && e.message || e); } });
+      enc.configure(acfg);
+      var pl = new Float32Array(n * 2); pl.set(cal.pcm, 0); pl.set(cal.pcm, n);
+      var ad = new AudioData({ format: 'f32-planar', sampleRate: 48000, numberOfFrames: n, numberOfChannels: 2, timestamp: 0, data: pl });
+      enc.encode(ad); ad.close(); await enc.flush(); enc.close(); enc = null;
+      info.desc = cfg && cfg.description ? hex(bytesOf(cfg.description)) : null;
+      info.first = chunks.slice(0, 6).map(function (c) { return { ts: c.ts, dur: c.dur, bytes: c.data.length }; });
+      info.hints = S.hints(chunks, n, 48000);
+      if (!cfg) throw new Error('bộ mã hoá không đưa decoderConfig');
+      var outs = [], total = 0;
+      dec = new AudioDecoder({ output: function (a) {
+        var k = a.numberOfFrames, L = new Float32Array(k), Rt = new Float32Array(k);
+        a.copyTo(L, { planeIndex: 0, format: 'f32-planar' }); if (a.numberOfChannels > 1) a.copyTo(Rt, { planeIndex: 1, format: 'f32-planar' }); else Rt = L;
+        if (!outs.length) info.decFirstTs = a.timestamp;
+        for (var i = 0; i < k; i++) L[i] = (L[i] + Rt[i]) / 2;
+        outs.push(L); total += k; a.close();
+      }, error: function (e) { info.error = info.error || String(e && e.message || e); } });
+      dec.configure(cfg);
+      chunks.forEach(function (c) { dec.decode(new EncodedAudioChunk({ type: 'key', timestamp: c.ts, duration: c.dur || undefined, data: c.data })); });
+      await dec.flush(); dec.close(); dec = null;
+      var pcm = new Float32Array(total), p = 0; outs.forEach(function (x) { pcm.set(x, p); p += x.length; });
+      info.decFrames = total;
+      var m = S.delayOf(cal, pcm); info.delay = m.delay; info.score = Math.round(m.score * 1000) / 1000;
+    } catch (e) {
+      info.error = info.error || String(e && e.message || e);
+      [enc, dec].forEach(function (x) { try { if (x && x.state !== 'closed') x.close(); } catch (y) { /* đã đóng */ } });
+    }
+    return info;
+  }
   function untilDequeue(enc, max, errBox) {
     if (enc.encodeQueueSize <= max) return Promise.resolve();
     return new Promise(function (ok) {
@@ -206,7 +244,7 @@
     player.play(ready, FILM.title);
     // bộ mã hoá
     var F = o.format || {}, canvas = null, g = null, venc = null, aenc = null, errBox = { e: null }, vchunks = [], achunks = [], vdesc = null, adesc = null, writer = null, sink = null;
-    var vcfg = null;
+    var vcfg = null, S = GenMux.sync, calib = null, plan = { shift: 0, source: 'none' }, aFacts = { n: 0, outFrames: 0, negative: 0, first: [] };
     if (!dry) {
       if (typeof VideoEncoder !== 'function' || typeof AudioEncoder !== 'function') throw fail('no-webcodecs', 'trình duyệt không có WebCodecs');
       canvas = new OffscreenCanvas(OW, OH); g = canvas.getContext('2d', { alpha: false });
@@ -230,21 +268,26 @@
           if (m && m.decoderConfig && m.decoderConfig.description && !adesc) { adesc = bytesOf(m.decoderConfig.description); AUD.description = adesc; if (!mp4 && adesc.length >= 12) AUD.preSkip = adesc[10] | (adesc[11] << 8); }
           var b = new Uint8Array(c.byteLength); c.copyTo(b);
           var ch = { data: b, ts: c.timestamp, dur: c.duration || (mp4 ? 1024e6 / 48000 : 20000) };   // thiếu duration: một khung AAC (1024 mẫu) / Opus (20 ms)
+          if (aFacts.first.length < 8) aFacts.first.push({ ts: c.timestamp, dur: c.duration, bytes: c.byteLength });
+          aFacts.n++; aFacts.outFrames += Math.round(ch.dur * 48000 / 1e6); if (c.timestamp < 0) aFacts.negative++;
           try { if (writer) writer.audio(ch); else achunks.push(ch); } catch (e) { errBox.e = errBox.e || e; }
         }, error: function (e) { errBox.e = errBox.e || e; } });
       aenc.configure(acfg);
+      // bù độ trễ mồi KHÔNG dùng edit list (chỉ AAC / MP4; WebM Opus đã có CodecDelay = pre-skip của OpusHead): đo trên chính bộ mã hoá này
+      calib = await calibrate(acfg);
+      if (mp4) plan = S.pick(calib, calib.hints);
     }
-    // PCM từ vòi → AudioEncoder, chỉ tới mẫu `limit` (đúng thời điểm khung hình — tiếng không dài hơn hình)
-    var pcm = [], got = 0, fed = 0;
-    if (au.tap) au.tap.port.onmessage = function (e) { pcm.push(e.data); got += e.data.l.length; };
+    // PCM từ vòi → AudioEncoder, chỉ tới mẫu PHIM `limit` (đúng thời điểm khung hình — tiếng không dài hơn hình); bỏ `shift` mẫu đầu (bù mồi)
+    // mẫu dấu (chỉ test — o.debug.marks [{ sec (< 0: tính từ cuối), seed, len }]): đo lệch tiếng / hình trên tệp thật (tools/video-ci.mjs)
+    var marks = (o.debug && o.debug.marks || []).map(function (m) { return { at: Math.round((m.sec < 0 ? (o.sec || 0) + m.sec : m.sec) * 48000), tpl: S.noise(m.len || 2048, m.seed) }; });
+    var feeder = new S.Feeder({ shift: plan.shift, marks: marks });
+    if (au.tap) au.tap.port.onmessage = function (e) { feeder.push(e.data.l, e.data.r); };
     function feed(limit) {
-      while (pcm.length && fed < limit) {
-        var b = pcm[0], n = Math.min(b.l.length, limit - fed);
-        var pl = new Float32Array(n * 2); pl.set(b.l.subarray(0, n), 0); pl.set(b.r.subarray(0, n), n);
-        var ad = new AudioData({ format: 'f32-planar', sampleRate: 48000, numberOfFrames: n, numberOfChannels: 2, timestamp: Math.round(fed * 1e6 / 48000), data: pl });
-        aenc.encode(ad); ad.close(); fed += n;
-        if (n === b.l.length) pcm.shift(); else pcm[0] = { l: b.l.subarray(n), r: b.r.subarray(n) };
-      }
+      feeder.take(limit, function (l, r, n, outPos) {
+        var pl = new Float32Array(n * 2); pl.set(l, 0); pl.set(r, n);
+        var ad = new AudioData({ format: 'f32-planar', sampleRate: 48000, numberOfFrames: n, numberOfChannels: 2, timestamp: Math.round(outPos * 1e6 / 48000), data: pl });
+        aenc.encode(ad); ad.close();
+      });
     }
     // vòng khung hình
     var st = { frames: 0, advance: 0, snap: 0, raster: 0, encode: 0, svgBytes: 0, maxFrameMs: 0, heapPeak: 0 };
@@ -288,7 +331,7 @@
         }
         var vf = new VideoFrame(canvas, { timestamp: Math.round(t * 1000), duration: Math.round(1e6 / fps) });
         venc.encode(vf, { keyFrame: i % fps === 0 }); vf.close();
-        feed(Math.min(got, Math.round(t / 1000 * 48000)));
+        feed(Math.min(feeder.got, Math.round(t / 1000 * 48000)));
         await untilDequeue(venc, 4, errBox); await untilDequeue(aenc, 8, errBox);
         await sink.drain();
         st.encode += R.now() - f3;
@@ -312,13 +355,17 @@
     var endSamples = Math.round(durMs / 1000 * 48000);
     await au.finish();
     var w0 = R.now();
-    while (got < endSamples && R.now() - w0 < 10000) await VC.yieldReal();
-    if (got < endSamples) throw fail('internal', 'thiếu tiếng: ' + got + ' / ' + endSamples + ' mẫu');
+    while (feeder.got < endSamples && R.now() - w0 < 10000) await VC.yieldReal();
+    if (feeder.got < endSamples) throw fail('internal', 'thiếu tiếng: ' + feeder.got + ' / ' + endSamples + ' mẫu');
     feed(endSamples);
     await venc.flush(); await aenc.flush();
     if (errBox.e) throw fail('encode', String(errBox.e.message || errBox.e));
     venc.close(); aenc.close(); live.venc = live.aenc = null;
     var m0 = R.now(), blob, mux = {};
+    // sự thật về tiếng (CI in ra từng nền tảng): hiệu chuẩn, độ bù đã dùng, gói đầu, mẫu vào / ra, cắt đuôi
+    var aStats = { codec: F.audio.codec, desc: adesc ? hex(adesc) : null, calib: calib, shift: plan.shift, shiftSource: plan.source, first: aFacts.first, chunks: aFacts.n,
+      negative: aFacts.negative, inFrames: feeder.out, outFrames: aFacts.outFrames, filmFrames: endSamples, marks: marks.map(function (m) { return m.at; }) };
+    if (!writer) { var tr = S.trim(achunks, endSamples, 48000); achunks = tr.chunks; aStats.trimmed = tr.dropped; aStats.muxFrames = tr.frames; }
     if (writer) { mux = writer.finish(); }
     else {
       var parts = GenMux.mp4Parts({ video: { codec: 'avc1', width: OW, height: OH, fps: fps, description: vdesc, chunks: vchunks },
@@ -336,7 +383,7 @@
     base.coverFrame = coverAt;
     var wall = R.now() - t00;
     base.stats = { wallMs: wall, xRealtime: wall / durMs, perFrameMs: { advance: st.advance / nFrames, snap: st.snap / nFrames, raster: st.raster / nFrames, encode: st.encode / nFrames, total: wall / nFrames },
-      maxFrameMs: st.maxFrameMs, svgKB: st.svgBytes / nFrames / 1024, heapPeak: st.heapPeak, mux: mux, audioFed: fed, audioEnd: endSamples };
+      maxFrameMs: st.maxFrameMs, svgKB: st.svgBytes / nFrames / 1024, heapPeak: st.heapPeak, mux: mux, audioFed: feeder.pos, audioEnd: endSamples, audio: aStats };
     return base;
   }
 })();

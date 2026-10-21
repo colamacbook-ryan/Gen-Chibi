@@ -232,6 +232,83 @@
     return concat(parts);
   }
 
-  var API = { mp4: mp4, mp4Parts: mp4Parts, webm: webm, WebmWriter: WebmWriter, concat: concat, ascOf: ascOf };
+  /* ================================================================== đồng bộ tiếng: bù độ trễ mồi của bộ mã hoá (encoder delay / priming) KHÔNG dùng edit list
+   * AAC: bộ mã hoá luôn nhả trước D mẫu "mồi" (Apple AudioToolbox thường 2112, FFmpeg / Media Foundation thường 1024 — KHÔNG đoán theo hệ điều hành).
+   * MP4 không edit list (YouTube khuyên) → đầu phát giải mã từ mẫu 0 → tiếng trễ D mẫu so với hình + dài thêm D + đệm cuối.
+   * Cách bù: ĐO D trên chính bộ mã hoá của trình duyệt (mã hoá tín hiệu hiệu chuẩn → giải mã → tương quan chéo), rồi BỎ D mẫu PCM đầu phim
+   * trước khi đưa vào bộ mã hoá (D < 0: chèn −D mẫu im lặng) → mẫu giải mã thứ j = mẫu phim thứ j. Đuôi: cắt các gói bắt đầu từ mốc cuối hình trở đi.
+   *   sync.noise(n, seed)                → Float32Array nhiễu trắng tất định (mẫu dấu / tín hiệu hiệu chuẩn)
+   *   sync.calibSignal(sr)               → { pcm, at, tpl }   im lặng · nhiễu tpl tại mẫu `at` · im lặng
+   *   sync.findLag(tpl, sig, lo, hi)     → { lag, score }      vị trí k ∈ [lo, hi] mà sig[k…] giống tpl nhất (tương quan chuẩn hoá, score ∈ [−1, 1])
+   *   sync.delayOf(cal, decoded)         → { delay, score }    độ trễ đo được (mẫu) từ PCM giải mã của calibSignal
+   *   sync.hints(chunks, inFrames, sr)   → gợi ý bộ mã hoá TỰ BÁO: ts gói đầu (âm?), tổng mẫu ra so với mẫu vào
+   *   sync.pick(measured, hints, sr)     → { shift, source }   chọn độ bù: đo giải mã (tin cậy) > ts âm của gói đầu > 0
+   *   new sync.Feeder({ shift, marks, gap }) .push(l, r) · .take(limit, emit(l, r, n, outPos))   PCM phim → bộ mã hoá, bỏ / chèn đầu, dập mẫu dấu (test)
+   *   sync.trim(chunks, endFrames, sr)   → { chunks, dropped, frames }   giữ gói khi điểm bắt đầu (theo mẫu giải mã) < endFrames */
+  function noise(n, seed) { var s = seed >>> 0 || 1, o = new Float32Array(n); for (var i = 0; i < n; i++) { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; o[i] = (s / 4294967296 - 0.5); } return o; }
+  function calibSignal(sr) { var tpl = noise(4096, 0xC0FFEE), at = Math.round(sr * 0.2), pcm = new Float32Array(at + tpl.length + Math.round(sr * 0.3)); pcm.set(tpl, at); return { pcm: pcm, at: at, tpl: tpl }; }
+  function findLag(tpl, sig, lo, hi) {
+    lo = Math.max(0, lo | 0); hi = Math.min(sig.length - tpl.length, hi | 0);
+    var et = 0, i, k, best = { lag: -1, score: -2 }, L = tpl.length;
+    for (i = 0; i < L; i++) et += tpl[i] * tpl[i];
+    if (hi < lo || !et) return best;
+    var es = 0; for (i = 0; i < L; i++) es += sig[lo + i] * sig[lo + i];
+    for (k = lo; k <= hi; k++) {
+      if (k > lo) { es += sig[k + L - 1] * sig[k + L - 1] - sig[k - 1] * sig[k - 1]; if (es < 0) es = 0; }
+      var c = 0; for (i = 0; i < L; i++) c += tpl[i] * sig[k + i];
+      var sc = es > 1e-12 ? c / Math.sqrt(et * es) : 0;
+      if (sc > best.score) best = { lag: k, score: sc };
+    }
+    return best;
+  }
+  function delayOf(cal, decoded) { var r = findLag(cal.tpl, decoded, cal.at - 4096, cal.at + 8192); return { delay: r.lag < 0 ? null : r.lag - cal.at, score: r.score }; }
+  function hints(chunks, inFrames, sr) {
+    var out = 0; chunks.forEach(function (c) { out += Math.round(c.dur * sr / 1e6); });
+    var t0 = chunks.length ? chunks[0].ts : 0;
+    return { chunks: chunks.length, firstTs: t0, negative: chunks.filter(function (c) { return c.ts < 0; }).length, outFrames: out, inFrames: inFrames, extra: out - inFrames,
+      tsDelay: t0 < 0 ? Math.round(-t0 * sr / 1e6) : 0 };
+  }
+  // độ bù hợp lệ: |D| ≤ 3 khung AAC + vài mẫu (8192 rộng rãi) và tương quan rõ (≥ 0,5); không thì lùi về ts âm của gói đầu, rồi 0 (in ra nguồn để CI thấy)
+  function pick(measured, h) {
+    if (measured && measured.delay != null && measured.score >= 0.5 && Math.abs(measured.delay) <= 8192) return { shift: measured.delay, source: 'decode' };
+    if (h && h.tsDelay > 0 && h.tsDelay <= 8192) return { shift: h.tsDelay, source: 'timestamp' };
+    return { shift: 0, source: 'none' };
+  }
+  function Feeder(o) {
+    o = o || {};
+    this.q = []; this.got = 0; this.pos = 0; this.out = 0;
+    this.drop = Math.max(0, o.shift | 0); this.pad = Math.max(0, -(o.shift | 0)); this.shift = o.shift | 0;
+    this.marks = o.marks || []; this.gap = o.gap == null ? 9600 : o.gap;
+  }
+  Feeder.prototype.push = function (l, r) { this.q.push({ l: l, r: r || l }); this.got += l.length; };
+  // dập mẫu dấu (chỉ khi test): vùng [at − gap, at + len + gap) im lặng, tpl tại `at` — vị trí theo MẪU PHIM
+  Feeder.prototype._stamp = function (l, r, p0) {
+    var n = l.length, gap = this.gap;
+    this.marks.forEach(function (m) {
+      var a = m.at - gap, b = m.at + m.tpl.length + gap, s = Math.max(a, p0), e = Math.min(b, p0 + n);
+      for (var p = s; p < e; p++) { var v = p >= m.at && p < m.at + m.tpl.length ? m.tpl[p - m.at] : 0; l[p - p0] = v; r[p - p0] = v; }
+    });
+  };
+  // đưa mẫu phim [pos, limit) ra emit(l, r, n, outPos): bỏ `drop` mẫu đầu / chèn `pad` mẫu im lặng trước tiên
+  Feeder.prototype.take = function (limit, emit) {
+    if (this.pad && limit > this.pos) { var z = new Float32Array(this.pad); emit(z, z, this.pad, this.out); this.out += this.pad; this.pad = 0; }
+    while (this.q.length && this.pos < limit) {
+      var b = this.q[0], n = Math.min(b.l.length, limit - this.pos);
+      var l = b.l.slice(0, n), r = b.r === b.l ? l.slice() : b.r.slice(0, n);
+      if (this.marks.length) this._stamp(l, r, this.pos);
+      var skip = Math.min(this.drop, n);
+      if (n > skip) { emit(skip ? l.subarray(skip) : l, skip ? r.subarray(skip) : r, n - skip, this.out); this.out += n - skip; }
+      this.drop -= skip; this.pos += n;
+      if (n === b.l.length) this.q.shift(); else this.q[0] = { l: b.l.subarray(n), r: b.r.subarray(n) };
+    }
+  };
+  function trim(chunks, endFrames, sr) {
+    var keep = [], pos = 0;
+    for (var i = 0; i < chunks.length && pos < endFrames; i++) { keep.push(chunks[i]); pos += Math.round(chunks[i].dur * sr / 1e6); }
+    return { chunks: keep, dropped: chunks.length - keep.length, frames: pos };
+  }
+  var sync = { noise: noise, calibSignal: calibSignal, findLag: findLag, delayOf: delayOf, hints: hints, pick: pick, Feeder: Feeder, trim: trim };
+
+  var API = { mp4: mp4, mp4Parts: mp4Parts, webm: webm, WebmWriter: WebmWriter, concat: concat, ascOf: ascOf, sync: sync };
   if (typeof module === 'object' && module.exports) module.exports = API; else root.GenMux = API;
 })(typeof self !== 'undefined' ? self : this);
