@@ -14,3 +14,30 @@ jobs:
         with:
           node-version: '22'
       - run: bash tools/test.sh
+  # v0.22 xuất video (CNS-215 / CNS-216): nhánh MP4 H.264 + AAC (ưu tiên 1) chỉ có ở Chrome / Edge trên Windows / macOS — Chromium Linux (máy Gen) chỉ ra
+  # WebM VP9 + Opus. Job này dùng Google Chrome CÓ SẴN của runner (không npm, không Playwright): xuất 1 phân cảnh Fun Office bằng WebCodecs thật, kiểm
+  # cấu trúc MP4 (ftyp → moov → mdat, avc1 + mp4a, không edts, tiếng ≈ hình) và TRƯỢT nếu Chrome không ra được avc1 + mp4a. Lượt 2: xuất ở tab nền bị ẩn.
+  video-mp4:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Xuất 1 phân cảnh MP4 bằng Chrome thật
+        run: node tools/video-ci.mjs --require-mp4 --out video-out
+      - name: Xuất ở tab nền (bị ẩn, timer bị bóp)
+        run: node tools/video-ci.mjs --require-mp4 --hidden --out video-out-hidden
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: video-${{ matrix.os }}
+          path: |
+            video-out
+            video-out-hidden
+          if-no-files-found: ignore

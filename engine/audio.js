@@ -41,7 +41,8 @@
  *       voiceMode 'blip' ép giọng blip (bỏ qua clip). PCM thô không header coi là s16le mono, clipRate Hz (mặc định 24000 — Gemini TTS).
  *   GC.audio.decodeClip(src, {rate}) → Promise<AudioBuffer>   cùng đầu vào như clip; LRU 16 clip / 300 s (cùng nguồn → cùng AudioBuffer);
  *       dùng để nạp sẵn trước khi diễn. Không dùng bộ nhớ của ArrayBuffer đã đưa vào (không "detach" nó).
- *   GC.audio.setVoiceMode('auto'|'tts'|'blip'|'off') / voiceMode   auto = TTS nếu có giọng Việt, không thì blip
+ *   GC.audio.setVoiceMode('auto'|'tts'|'blip'|'off'|'clip') / voiceMode   auto = TTS nếu có giọng Việt, không thì blip ·
+ *                                      clip = CHỈ giọng thu sẵn (clip AI), câu không có / hỏng clip thì im lặng + nhép miệng (xuất video, Q39 — v0.22)
  *   GC.audio.voiceTier(giọng | tên) → 'good' | 'basic'   hạng giọng trình duyệt: basic = máy đọc kiểu cũ nhận ra được (espeak, speech-dispatcher, pico, festival,
  *       mbrola, "+Tên", Microsoft đời cũ không "Online", tên chỉ là tên ngôn ngữ); còn lại good (Natural / Online / Neural / Google, Apple "Linh", Android Google TTS…)
  *   voice.needGood (tuỳ chọn của say): true → chỉ dùng giọng trình duyệt nếu giọng tìm được thuộc hạng good, còn lại blip — phim có giọng AI thì phần thiếu clip
@@ -58,7 +59,7 @@
   var REV_RETURN = 0.5;                  // độ to đường vang trả về master (chỉnh theo đo, xem tools/audio-lab.mjs)
   var TIMES = ['day', 'dawn', 'dusk', 'night'];
   var WEATHERS = ['clear', 'rain', 'snow', 'petals', 'leaves', 'mist', 'fireflies'];
-  var MODES = ['auto', 'tts', 'blip', 'off'];
+  var MODES = ['auto', 'tts', 'blip', 'off', 'clip'];
 
   var ctx = null, master = null, sfxMaster = null, sfxBus = null, voiceBus = null, ambBus = null, musBus = null, duckBus = null, revIn = null;
   var noiseBuf = null, pinkBuf = null, brownBuf = null, voiceWave = null;
@@ -956,7 +957,7 @@
 
   // chọn cách nói: 'tts' | 'blip' | 'silent'. allowTTS=false khi đang chuyển giữa chừng.
   function chooseEngine(allowTTS, j) {
-    if (muted || mode === 'off') return 'silent';
+    if (muted || mode === 'off' || mode === 'clip') return 'silent';   // clip: câu không có clip (hoặc clip hỏng) im lặng, không rơi về blip
     var blipOK = ready();
     if (mode === 'blip') return blipOK ? 'blip' : 'silent';
     if (allowTTS && synth && now() - stuckAt > STUCK_COOL) {

@@ -1912,5 +1912,14 @@
  "Sắp xong: {url} đang bật tạm. Bước cuối — đặt mật khẩu chủ; đặt xong là app tự hoàn tất lên mạng (không cần Kiểm lại).": "Almost done: {url} is on temporarily. Last step — set the owner password; once it is set the app finishes going online by itself (no need to check again).",
  "Token chủ dùng cho CLI / agent nằm trên máy chủ:": "The owner token for the CLI / agents lives on the server:",
  "trong .env của thư mục cài, hoặc": "in the install folder's .env, or",
- "(khi .env không đặt) — CLI tự đọc. Cấu hình nối agent in sẵn:": "(when .env does not set it) — the CLI reads it itself. Ready-made agent connection settings:"
+ "(khi .env không đặt) — CLI tự đọc. Cấu hình nối agent in sẵn:": "(when .env does not set it) — the CLI reads it itself. Ready-made agent connection settings:",
+ "Mở Studio qua https hoặc localhost để xuất video.": "Open the Studio over https or localhost to export video.",
+ "Trình duyệt này chưa mã hoá được video — dùng Chrome hoặc Edge trên máy tính.": "This browser can't encode video yet — use Chrome or Edge on a computer.",
+ "Trình duyệt này không có bộ mã hoá MP4 (H.264 + AAC) hay WebM (VP9 + Opus) — dùng Chrome hoặc Edge trên máy tính.": "This browser has neither an MP4 (H.264 + AAC) nor a WebM (VP9 + Opus) encoder — use Chrome or Edge on a computer.",
+ "Trình duyệt này không cho chụp khung hình phim — dùng Chrome hoặc Edge trên máy tính.": "This browser won't let the film frames be captured — use Chrome or Edge on a computer.",
+ "Phim dài quá {n} giây cho định dạng này — chọn 720p hoặc xuất ít phân cảnh hơn.": "The film is longer than {n} seconds for this format — choose 720p or export fewer scenes.",
+ "Đã huỷ xuất video.": "Video export cancelled.",
+ "Xuất video lỗi: {x}": "Video export failed: {x}",
+ "Làm bằng gen-chibi · Gen Labs": "Made with gen-chibi · Gen Labs",
+ "Không mở được trang xuất video — cập nhật gen-chibi hoặc mở Studio đúng địa chỉ máy chủ.": "Couldn't open the video export page — update gen-chibi or open the Studio at the server's exact address."
 }

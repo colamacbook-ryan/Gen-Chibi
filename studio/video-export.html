@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="gc-video-export" content="1">
+<meta name="robots" content="noindex">
+<title>gen-chibi — video export</title>
+<!-- Trang xuất video (v0.22). Studio nhúng trang này trong iframe ẩn (cùng nguồn, server trả X-Frame-Options: SAMEORIGIN + CSP của Studio với
+     frame-ancestors 'self' — CNS-214). KHÔNG có script inline (script-src 'self'): engine nạp động theo danh sách srcs của payload, như phim HTML.
+     © 2026 Gen Labs — All rights reserved. -->
+<style>html,body{margin:0;padding:0;background:#121214;overflow:hidden}#stage{position:absolute;left:0;top:0;overflow:hidden}#stage.gcp{border-radius:0}</style>
+<script src="video/vclock.js"></script>
+<script src="video/mux.js"></script>
+<script src="video/text.js"></script>
+<script src="video/capture.js"></script>
+</head>
+<body>
+<div id="stage"></div>
+</body>
+</html>

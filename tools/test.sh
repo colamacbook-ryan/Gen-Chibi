@@ -3,6 +3,7 @@
 #   1) cú pháp mọi tệp JS + script bash
 #   2) cổng kiểm của mọi nhân vật trong thư viện chính thức (chạy engine trong Node)
 #   2c/2d) item trang bị, cảnh (loại asset thứ hai, thứ ba)
+#   2o) xuất video v0.22 (tools/test-video.mjs): muxer MP4 / WebM, đồng hồ ảo, header trang xuất — phần trình duyệt: GC_ONLY=video node tools/test-browser.mjs
 #   3) MCP: bắt tay, danh sách tool, tạo nhân vật / linh kiện / item / cảnh, chặn dữ liệu xấu
 #   4) tự cập nhật end-to-end (tools/test-update.sh) + edge: launcher giám sát cloudflared, compose ghép -f, Caddy (tools/test-edge.sh)
 #   4c) OAuth cho MCP từ xa (tools/test-oauth.mjs)
@@ -681,6 +682,9 @@ echo "2n) thư viện âm thanh nối vào app: âm nào dùng được = một 
 node tools/test-sounds-app.js || exit 1
 echo "2l) âm thanh: dựng offline MỌI âm của thư viện (không vỡ / NaN, không câm, không gắt kéo dài, độ to ±7 dB, đúng thời lượng, node ≤ ngân sách) · limiter khi chồng · ghép mẫu · rò node · CPU sfx() · nạp gói / trùng tên trên trang · clip giọng trong say() — cần Playwright, không có thì bỏ qua phần trình duyệt"
 node tools/test-audio.mjs || exit 1
+echo "2o) xuất video (v0.22): bộ ghép MP4 (ftyp → moov → mdat, không edts, bảng mẫu, khung khoá, xen kẽ) + WebM ghi luồng (cluster / Cues / SeekHead / Tags, bộ đệm ≤ 1 cluster) · luồng thật ffmpeg → giải mã lại (bỏ qua có báo khi thiếu ffmpeg) · đồng hồ ảo · .srt / .txt · cách ly (Studio không nạp vclock / mux) · header: chỉ trang xuất SAMEORIGIN + frame-ancestors 'self' (CNS-214)"
+(echo > /dev/tcp/127.0.0.1/7697) 2>/dev/null && { echo "Cổng 7697 đang bị chiếm"; exit 1; }
+node tools/test-video.mjs || exit 1
 echo "3) MCP (server không đặt GC_API_TOKEN = bản cài v0.20 nâng cấp: owner-token tự sinh, cầu stdio tự đọc — CNS-197)"
 H="$(mktemp -d)"; PORT=7495
 (echo > /dev/tcp/127.0.0.1/$PORT) 2>/dev/null && { echo "Cổng $PORT đang bị chiếm"; exit 1; }

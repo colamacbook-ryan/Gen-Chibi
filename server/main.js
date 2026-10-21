@@ -189,13 +189,8 @@ function oauthBody(req) {
 const { bearerOf } = require('./auth');   // Authorization: Bearer … | X-GC-Token
 
 /* ---------------------------------------------------------------- tệp tĩnh */
-// Trang Studio ra Internet (v0.21) → CSP làm lớp phòng thủ cho XSS từ dữ liệu agent ghi qua MCP (review bảo mật 🟡5). Studio không có script inline:
-// script chỉ từ 'self'. style 'unsafe-inline' vì Studio đặt thuộc tính style + thẻ <style> (ẩn tới khi nạp bảng dịch, phông nhúng engine/fonts.js).
-// data: / blob: cho ảnh SVG dựng tại chỗ, âm thanh WAV / clip, phông WOFF2 nhúng, fetch(data:) của engine/audio.js, tải tệp (blob). Không frame (frame-ancestors).
-// Phim HTML xuất ra là tệp tải về riêng — không mang header này. send() đã đặt X-Frame-Options: DENY + Referrer-Policy: no-referrer (chặt hơn same-origin)
-const STUDIO_CSP = ["default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline'", "img-src 'self' data: blob:", "media-src 'self' data: blob:", "font-src 'self' data:",
-  "connect-src 'self' data: blob:", "object-src 'none'", "base-uri 'none'", "form-action 'self'", "frame-ancestors 'none'"].join('; ');
-const STUDIO_HEADERS = { 'Content-Security-Policy': STUDIO_CSP };
+// CSP của Studio + header riêng của trang xuất video (CNS-214): server/headers.js
+const { STUDIO_HEADERS, VIDEO_EXPORT_PAGE, VIDEO_EXPORT_HEADERS } = require('./headers');
 const STATIC_ROOTS = ['engine', 'kinds', 'studio', 'locales'];   // locales/<lang>/*.json: bảng dịch Studio nạp trước lần vẽ đầu
 function serveStatic(req, res, urlPath) {
   let rel = decodeURIComponent(urlPath).replace(/^\/+/, '');
@@ -205,6 +200,7 @@ function serveStatic(req, res, urlPath) {
   if (rel === 'setup' && auth.hasPassword()) { res.writeHead(302, { Location: '/login', 'Cache-Control': 'no-store' }); return res.end(); }
   if (rel === '' || rel === 'index.html' || rel === 'xuong' || rel === 'thu-vien' || rel === 'tao-tac' || rel === 'login' || rel === 'setup') rel = 'studio/index.html';   // 3 ứng dụng độc lập + màn đăng nhập / đặt mật khẩu dùng chung một bộ mã (Studio tĩnh — mọi lớp)
   if (rel === 'studio/index.html') return send(res, 200, fs.readFileSync(path.join(APP, rel)), MIME['.html'], STUDIO_HEADERS);
+  if (rel === VIDEO_EXPORT_PAGE) return send(res, 200, fs.readFileSync(path.join(APP, rel)), MIME['.html'], VIDEO_EXPORT_HEADERS);   // DUY NHẤT trang nhúng được (cùng nguồn)
   if (rel === 'CHANGELOG.md' || rel === 'VERSION') return send(res, 200, fs.readFileSync(path.join(APP, rel)), MIME[path.extname(rel)] || 'text/plain; charset=utf-8');
   const top = rel.split('/')[0];
   if (!STATIC_ROOTS.includes(top) || rel.split('/').includes('..')) return fail(res, 404, 'không tìm thấy');

@@ -1806,8 +1806,13 @@
     var want = {}; S.bundleDeps({ shots: W.shots, motionPacks: motionPacks || [] }).packs.forEach(function (id) { want[id] = 1; });
     return S.packs().filter(function (p) { return !p.frame && (want[p.id] || (W.project && p.project === W.project)); }).map(function (p) { return S.pack(p.id); });
   }
-  // pre (tuỳ chọn) = kết quả filmVoices đã hỏi (hộp "thiếu giọng AI" ở Sân khấu final) — khỏi hỏi lại
-  function exportFilm(W, pre) {
+  // mã engine nhúng / nạp theo phim: mọi <script src="engine|kinds/…"> của trang Studio, đúng thứ tự (studio/* — kể cả studio/video/* — KHÔNG bao giờ vào phim, CNS-228)
+  function filmSrcs() { return Array.prototype.map.call(document.scripts, function (x) { return x.getAttribute('src') || ''; }).filter(function (x) { return /^(engine|kinds)\//.test(x); }); }
+  // MỘT nguồn dữ liệu phim (CNS-219): phim HTML (exportFilm) và video (studio/video/client.js → trang xuất video) cùng lấy ở đây — asset tác phẩm dùng,
+  // gói động tác / gói âm, giọng chốt, clip giọng AI đã có, ngôn ngữ phim, chữ trình phát theo ngôn ngữ giao diện LÚC XUẤT (CNS-224), danh sách mã engine.
+  // pre (tuỳ chọn) = kết quả filmVoices đã hỏi (hộp "thiếu giọng AI" ở Sân khấu final) — khỏi hỏi lại.
+  // → Promise<{ srcs, data, film, ui, dict, have, total }>   (phần gom asset chạy NGAY lúc gọi, như trước; phần giọng AI chờ filmVoices)
+  function filmPayload(W, pre) {
     var L = workLang(W), chars = [], scenes = [];
     W.shots.forEach(function (s) { chars = chars.concat(GC.film.actors(s)); var sc = GC.film.scene(s); if (sc) scenes.push(sc); });
     var data = bundleOf(chars, [], scenes);
@@ -1817,33 +1822,42 @@
       .map(function (p) { var o = clone(p); ['pack', 'key', 'version', 'savedAt', 'note'].forEach(function (k) { delete o[k]; }); return o; }) : [];
     // gói âm phim dùng (v0.18): gói của dự án tác phẩm + gói gọi tên trong step.sfx / sự kiện của gói động tác đi theo — mở file:// vẫn nghe đúng; bộ chuẩn gen.am nằm sẵn trong engine/sounds.js
     data.soundPacks = filmSoundPacks(W, data.motionPacks); data.project = W.project || '';
-    var srcs = Array.prototype.map.call(document.scripts, function (x) { return x.getAttribute('src') || ''; }).filter(function (x) { return /^(engine|kinds)\//.test(x); });
+    var srcs = filmSrcs();
+    if (srcs.indexOf('engine/player.js') < 0) return Promise.reject(new Error(_t('Thiếu engine/player.js')));
+    // kèm các clip giọng AI ĐÃ có của từng câu (hỏi "dry": không đọc mới, không tốn lượt) — phim mở bằng file:// vẫn có giọng AI, không gọi mạng
+    return (pre ? Promise.resolve(pre) : filmVoices(W, L)).then(function (vo) {
+      var pick = function (o, keys) { var r = {}; keys.forEach(function (k) { if (o[k] !== undefined) r[k] = o[k]; }); return r; };
+      // motionPacks phải giữ lại ở đây: dựng lại `data` mà bỏ nó thì bộ phát không nạp gói nào và phim mất các chương dùng đòn của gói
+      var out = { parts: data.parts, motionPacks: data.motionPacks, soundPacks: data.soundPacks, project: data.project, characters: data.characters.map(function (a) {
+          // giọng chốt sẵn lúc xuất (nhân vật chưa lưu giọng thì lấy giọng Studio đang dùng — không xuất persona; vai giọng luôn chốt, vì phim không có persona để đoán lại)
+          var o = pick(a, ['id', 'pack', 'name', 'version', 'look', 'expressions', 'kind', 'voice', 'role']);
+          if (GC.audio) { var vv = GC.audio.voiceOf(a, L); o.voice = Object.assign({}, o.voice || vv); if (!o.voice.role && vv.role) o.voice.role = vv.role; }
+          return o;
+        }),
+        items: data.items.map(function (x) { return pick(x, ['id', 'name', 'type', 'rarity', 'equip']); }),
+        scenes: data.scenes.map(function (x) { return pick(x, ['id', 'name', 'layers', 'deco', 'palette', 'time', 'weather', 'spots']); }),
+        lang: L.lang, accent: L.accent, voices: vo.voices, voiceTotal: vo.total };   // ngôn ngữ phim + clip giọng AI theo khoá GC.film.clipKey + tổng số câu (nhãn "Giọng AI 19/31")
+      var film = { title: W.title, logline: W.logline || '', dialog: StagePref.get().dialog, shots: W.shots.map(function (s) { return { id: s.id, title: s.title, description: s.description || '', scene: s.scene, cast: s.cast, event: s.event }; }) };
+      // NGÔN NGỮ (ADR 0007): chữ của trình phát theo ngôn ngữ giao diện LÚC XUẤT — chữ engine/player.js dịch lúc chạy bằng engine/i18n.js + bảng player / engine
+      // (dict) nhúng kèm. Lời thoại, tên phim = nội dung người dùng: giữ nguyên. Video dùng CÙNG luật (CNS-224).
+      var UI = I18N.lang();
+      return { srcs: srcs, data: out, film: film, ui: UI, dict: Lang.playerDict(UI), have: vo.have, total: vo.total };
+    });
+  }
+  // pre (tuỳ chọn) = kết quả filmVoices đã hỏi (hộp "thiếu giọng AI" ở Sân khấu final) — khỏi hỏi lại
+  function exportFilm(W, pre) {
+    var srcs = filmSrcs();
     if (srcs.indexOf('engine/player.js') < 0) { toast(_t('Thiếu engine/player.js')); return; }
     toast(_t('Đang đóng gói phim…'));
-    // kèm các clip giọng AI ĐÃ có của từng câu (hỏi "dry": không đọc mới, không tốn lượt) — phim mở bằng file:// vẫn có giọng AI, không gọi mạng
-    Promise.all([Promise.all(srcs.map(function (f) { return fetch(f).then(function (r) { if (!r.ok) throw new Error(_t('Không tải được {f}', { f: f })); return r.text(); }); })), pre ? Promise.resolve(pre) : filmVoices(W, L)])
+    Promise.all([Promise.all(srcs.map(function (f) { return fetch(f).then(function (r) { if (!r.ok) throw new Error(_t('Không tải được {f}', { f: f })); return r.text(); }); })), filmPayload(W, pre)])
       .then(function (res) {
-        var texts = res[0], vo = res[1];
-        var pick = function (o, keys) { var r = {}; keys.forEach(function (k) { if (o[k] !== undefined) r[k] = o[k]; }); return r; };
-        // motionPacks phải giữ lại ở đây: dựng lại `data` mà bỏ nó thì bộ phát không nạp gói nào và phim mất các chương dùng đòn của gói
-        data = { parts: data.parts, motionPacks: data.motionPacks, soundPacks: data.soundPacks, project: data.project, characters: data.characters.map(function (a) {
-            // giọng chốt sẵn lúc xuất (nhân vật chưa lưu giọng thì lấy giọng Studio đang dùng — không xuất persona; vai giọng luôn chốt, vì phim không có persona để đoán lại)
-            var o = pick(a, ['id', 'pack', 'name', 'version', 'look', 'expressions', 'kind', 'voice', 'role']);
-            if (GC.audio) { var vv = GC.audio.voiceOf(a, L); o.voice = Object.assign({}, o.voice || vv); if (!o.voice.role && vv.role) o.voice.role = vv.role; }
-            return o;
-          }),
-          items: data.items.map(function (x) { return pick(x, ['id', 'name', 'type', 'rarity', 'equip']); }),
-          scenes: data.scenes.map(function (x) { return pick(x, ['id', 'name', 'layers', 'deco', 'palette', 'time', 'weather', 'spots']); }),
-          lang: L.lang, accent: L.accent, voices: vo.voices, voiceTotal: vo.total };   // ngôn ngữ phim + clip giọng AI theo khoá GC.film.clipKey + tổng số câu (nhãn "Giọng AI 19/31")
-        var film = { title: W.title, logline: W.logline || '', dialog: StagePref.get().dialog, shots: W.shots.map(function (s) { return { id: s.id, title: s.title, description: s.description || '', scene: s.scene, cast: s.cast, event: s.event }; }) };
+        var texts = res[0], P = res[1], data = P.data, film = P.film, UI = P.ui, vo = { have: P.have, total: P.total };
         var safe = function (t) { return t.replace(/<\/script/gi, '<\\/script').replace(/<!--/g, '<\\!--'); };
-        // NGÔN NGỮ (ADR 0007): chữ của trình phát theo ngôn ngữ giao diện LÚC XUẤT — chữ của trang dịch ngay ở đây; chữ engine/player.js
-        // dịch lúc chạy bằng engine/i18n.js (đã nằm trong srcs) + bảng player / engine nhúng kèm. Lời thoại, tên phim = nội dung người dùng: giữ nguyên.
-        var UI = I18N.lang();
+        // chữ của trang phim (nút, nhãn) dịch ngay ở đây theo cùng ngôn ngữ UI của payload
         var vopt = [['auto', _t('Giọng: tự động')], ['tts', _t('Giọng: máy đọc')], ['blip', _t('Giọng: blip')], ['off', _t('Giọng: tắt')]];
         var TXT = { aiAuto: _t('Giọng: tự động (có giọng AI)'), aiNote: _t('Giọng AI {n}/{total}'), aiLack: _t('{n} câu chưa có giọng AI — phần còn lại đọc bằng giọng máy / blip.'),
           lines: _t('{n} lời thoại'), none: _t('Tác phẩm chưa có phân cảnh nào sẵn sàng.') };
-        var html = '<!doctype html>\n<!--\n  ' + _t('Phim "{title}" — làm bằng gen-chibi.', { title: xml(W.title) }) + '\n  ' + _t('Bộ phát (engine/*, kinds/*) © 2026 Gen Labs — All rights reserved. Giấy phép: CHỈ ĐỂ XEM phim này.') + '\n  ' + _t('Không trích xuất, sao chép, sửa đổi hay tái sử dụng mã bộ phát cho mục đích khác.') + '\n  ' + _t('Riêng phông chữ lời thoại Be Vietnam Pro (engine/fonts.js) © 2021 The Be Vietnam Pro Project Authors — SIL Open Font License 1.1 (toàn văn nằm trong chính tệp này).') + '\n-->\n<html lang="' + htmlLang(L) + '">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>' + xml(W.title) + ' — gen-chibi</title>\n' +
+        var html = '<!doctype html>\n<!--\n  ' + _t('Phim "{title}" — làm bằng gen-chibi.', { title: xml(W.title) }) + '\n  ' + _t('Bộ phát (engine/*, kinds/*) © 2026 Gen Labs — All rights reserved. Giấy phép: CHỈ ĐỂ XEM phim này.') + '\n  ' + _t('Không trích xuất, sao chép, sửa đổi hay tái sử dụng mã bộ phát cho mục đích khác.') + '\n  ' + _t('Riêng phông chữ lời thoại Be Vietnam Pro (engine/fonts.js) © 2021 The Be Vietnam Pro Project Authors — SIL Open Font License 1.1 (toàn văn nằm trong chính tệp này).') + '\n-->\n<html lang="' + htmlLang({ lang: data.lang, accent: data.accent }) + '">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>' + xml(W.title) + ' — gen-chibi</title>\n' +
           '<meta name="generator" content="gen-chibi ' + xml(String((Store.info || {}).version || '')) + ' · Gen Labs">\n<style>' + FILM_CSS + '</style>\n</head>\n<body>\n' +
           '<main class="film"><header><div><h1>' + xml(W.title) + '</h1><p>' + xml(W.logline || '') + '</p></div><span class="badge">' + xml(_t('{n} phân cảnh', { n: W.shots.length })) + '</span></header>\n' +
           '<div class="screen"><div id="stage"></div><button id="big" class="big" aria-label="' + xml(_t('Xem phim')) + '">▶</button></div>\n' +
@@ -1852,13 +1866,15 @@
           '<select id="dialog" aria-label="' + xml(_t('Kiểu lời thoại')) + '">' + DIALOG_MODES.map(function (m) { return '<option value="' + m[0] + '">' + xml(_t(m[1])) + '</option>'; }).join('') + '</select><span id="prog"></span></div>\n' +
           '<ol id="chapters"></ol>\n<footer>' + xml(_t('Làm bằng gen-chibi · Bộ phát © 2026 Gen Labs — chỉ để xem phim này')) + '</footer></main>\n' +
           texts.map(function (t, i) { return '<script>/* ' + srcs[i] + ' */\n' + safe(t) + '\n</script>'; }).join('\n') + '\n' +
-          '<script>\n(function (I) { if (!I) return; I.add(' + jsonForScript(UI) + ', ' + jsonForScript(Lang.playerDict(UI)) + '); I.setLang(' + jsonForScript(UI) + '); })(window.GenChibi && window.GenChibi.i18n);\nvar TXT = ' + jsonForScript(TXT) + ';\n</script>\n' +
+          '<script>\n(function (I) { if (!I) return; I.add(' + jsonForScript(UI) + ', ' + jsonForScript(P.dict) + '); I.setLang(' + jsonForScript(UI) + '); })(window.GenChibi && window.GenChibi.i18n);\nvar TXT = ' + jsonForScript(TXT) + ';\n</script>\n' +
           '<script>\nvar DATA = ' + jsonForScript(data) + ';\nvar FILM = ' + jsonForScript(film) + ';\n' + FILM_BOOT + '\n</script>\n</body>\n</html>\n';
         var bytes = new Blob([html]).size, sz = bytes >= 1048576 ? (bytes / 1048576).toFixed(1) + ' MB' : Math.round(bytes / 1024) + ' KB';
         download(slugify(W.title) + '.html', html, 'text/html');
         toast(_t('Đã xuất phim "{title}" ({sz}) · {have}/{total} câu có giọng AI{x} — mở bằng trình duyệt bất kỳ để xem.', { title: W.title, sz: sz, have: vo.have, total: vo.total, x: vo.total && vo.have < vo.total ? _t(' (câu còn lại dùng giọng máy đọc hoặc blip — bấm Lồng tiếng AI trước khi xuất để có đủ)') : '' }));
       }).catch(function (e) { toast(e.message); });
   }
+  // lối vào xuất video (studio/video/client.js, nạp trước app.js): cùng filmPayload với phim HTML (CNS-219) + cùng cách đặt tên tệp
+  if (window.GCVideo) window.GCVideo.studio = { payload: filmPayload, slug: slugify };
   var FILM_CSS = [
     '*{box-sizing:border-box}html,body{margin:0;background:#121214;color:#ece9e2;font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}',
     '.film{max-width:min(1200px,96vw);margin:0 auto;padding:24px 0 40px;display:grid;gap:14px}',
