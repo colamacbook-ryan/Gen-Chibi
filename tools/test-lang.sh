@@ -324,6 +324,12 @@ dockinst() { # dockinst <tên> [biến…]: cài KHÔNG --native, PATH có docke
     PATH="$FK:$PATH" FAKE_STATE="$FS" GC_TEST=1 GC_TEST_DOCKER_SH="file://$W/get-docker.sh" ${1+"$@"} $TO $SID bash "$ROOT/install.sh" --dir "$W/$name" --port "$(freeport)" </dev/null 2>&1)"; IRC=$?
   [ -f "$FS/app.pids" ] && kill $(cat "$FS/app.pids") 2>/dev/null; return 0
 }
+# 🔵 vòng 5: thư mục đã có bản ghi "docker" mà lúc này Docker không dùng được → trình cài KHÔNG tự chuyển sang native (dừng, nói cách làm)
+printf '#!/bin/sh\nexit 0\n' > "$W/no-docker.sh"; mkdir -p "$W/drec" "$W/drec-home/.local/lib/gen-chibi"
+printf 'docker %s\n' "$(cd -P "$W/drec" && pwd)" > "$W/drec-home/.local/lib/gen-chibi/installs"
+dockinst drec GC_TEST_DOCKER_SH="file://$W/no-docker.sh"
+[ $IRC = 1 ] && echo "$INST_OUT" | grep -q 'is a Docker install, but Docker cannot be used right now' && [ ! -e "$W/drec/.env" ] && grep -qx "docker $(cd -P "$W/drec" && pwd)" "$W/drec-home/.local/lib/gen-chibi/installs"
+check $? "Docker không dùng được trên thư mục có bản ghi docker → trình cài dừng (không tự chuyển native, bản ghi giữ nguyên)" "$IRC $(echo "$INST_OUT" | tail -3)"
 dockinst dsg
 [ $IRC = 0 ] && [ -f "$FS/installed" ] && grep -q 'usermod -aG docker tester' "$FS/usermod.log" && echo "$INST_OUT" | grep -q 'continuing with sg docker' && echo "$INST_OUT" | grep -q 'Log out and back in to use genchibi without sudo' && echo "$INST_OUT" | grep -q 'Run mode: docker'
 check $? "Docker chưa có → cài (giả) + usermod -aG docker tester; phiên chưa vào nhóm → tiếp tục bằng sg docker, in 'Log out and back in…'" "$IRC $(echo "$INST_OUT" | tail -8) · $(cat "$FS/docker.log" 2>/dev/null | tail -3)"

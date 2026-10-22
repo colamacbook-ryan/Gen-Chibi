@@ -62,6 +62,7 @@ _en() {
     native_fallback) F="Docker is not running: using Node mode directly." ;;
     need_runtime) F="Needs Docker Desktop (running) or Node ≥ 18. macOS: install Docker Desktop or 'brew install node', then run the install command again." ;;
     native_need_node) F="--native mode needs Node ≥ 18." ;;
+    docker_rec) F="%s is a Docker install, but Docker cannot be used right now — not switching it to Node mode. Fix Docker access (or run with --native on purpose), then run the installer again." ;;
     mode_ok) F="Run mode: %s" ;;
     find_latest) F="Looking for the latest release…" ;;
     find_ver) F="Looking for release %s…" ;;
@@ -143,6 +144,7 @@ _vi() {
     native_fallback) F="Không thấy Docker đang chạy: dùng chế độ Node trực tiếp." ;;
     need_runtime) F="Cần Docker Desktop (đang chạy) hoặc Node ≥ 18. macOS: cài Docker Desktop hoặc 'brew install node', rồi chạy lại lệnh cài." ;;
     native_need_node) F="Chế độ --native cần Node ≥ 18." ;;
+    docker_rec) F="%s là bản cài Docker, nhưng lúc này không dùng được Docker — không tự chuyển sang chế độ Node. Sửa quyền / Docker (hoặc chủ ý chạy với --native) rồi chạy lại trình cài." ;;
     mode_ok) F="Cách chạy: %s" ;;
     find_latest) F="Tìm bản phát hành mới nhất…" ;;
     find_ver) F="Tìm bản phát hành %s…" ;;
@@ -350,6 +352,7 @@ docker_access() {
 }
 DOCKER_SH="https://get.docker.com"
 [ "${GC_TEST:-}" != 1 ] || DOCKER_SH="${GC_TEST_DOCKER_SH:-$DOCKER_SH}"   # CHỈ cho kiểm thử (tools/test-lang.sh): script cài Docker giả
+AUTO_MODE=""; [ -n "$MODE" ] || AUTO_MODE=1
 if [ -z "$MODE" ]; then
   if docker_access; then MODE="docker"
   elif [ "$OS" = "Linux" ] && [ "$(id -u)" = "0" -o -n "$(command -v sudo)" ]; then
@@ -361,6 +364,14 @@ if [ -z "$MODE" ]; then
   else die need_runtime
   fi
 elif [ "$MODE" = docker ]; then docker_access || true
+fi
+# thư mục đã có bản ghi "docker" (genchibi v0.23.1) mà lúc này Docker không dùng được → KHÔNG tự chuyển sang native (bản ghi native = genchibi sẽ chạy
+# mã trong thư mục cài, container ghi được). Chỉ --native tường minh mới đổi
+if [ -n "$AUTO_MODE" ] && [ "$MODE" = native ] && [ -d "$DIR" ]; then
+  DPN="$(cd -P "$DIR" && pwd)"; RH0=""; [ "$(id -u)" != 0 ] || RH0="$(getent passwd 0 2>/dev/null | cut -d: -f6)"
+  for rh in "$HOME" $RH0; do for rt in .local/lib/gen-chibi gen-chibi-trust; do
+    [ -r "$rh/$rt/installs" ] && grep -qxF "docker $DPN" "$rh/$rt/installs" && die docker_rec "$DIR"
+  done; done
 fi
 [ "$MODE" = "native" ] && ! node_ok && die native_need_node
 ok mode_ok "$MODE"

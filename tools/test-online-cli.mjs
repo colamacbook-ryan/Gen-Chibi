@@ -65,6 +65,7 @@ function mkHome(name, port) {
   fs.mkdirSync(path.join(home, 'run'), { recursive: true, mode: 0o700 });
   fs.mkdirSync(path.join(home, 'logs'), { recursive: true });
   fs.mkdirSync(path.join(home, 'h'), { recursive: true });
+  { const t = path.join(home, 'h', '.local/lib/gen-chibi'); fs.mkdirSync(t, { recursive: true, mode: 0o700 }); fs.chmodSync(t, 0o700); fs.writeFileSync(path.join(t, 'installs'), 'native ' + fs.realpathSync(home) + '\n', { mode: 0o600 }); }   // bản ghi native như trình cài ghi (v0.23.1)
   fs.writeFileSync(path.join(home, '.env'), 'GC_MODE=native\nGC_PORT=' + port + '\nGC_LANG=en\nGC_BIND=127.0.0.1\n', { mode: 0o600 });
   return home;
 }

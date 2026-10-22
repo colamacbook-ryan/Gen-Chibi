@@ -22,11 +22,14 @@ cd "$ROOT"
 # (vd test-edge.sh trước đây kill subshell, caddy sống tiếp). Chỉ Linux (/proc). Tiến trình đã có TRƯỚC khi bộ chạy (server dev của bạn) không tính
 gc_orphans() {
   [ -d /proc/self ] || return 0
-  local d p c n
+  local d p c n e
   for d in /proc/[0-9]*; do
     p="${d#/proc/}"; [ "$p" != "$$" ] || continue
     c="$(readlink "$d/cwd" 2>/dev/null)" || continue
-    case "$c/" in "$ROOT"/*) ;; *) continue ;; esac
+    # cả tiến trình của bản chép đột biến / L-77 (/tmp/gc-mut-*, /tmp/gc-l77-*) theo cwd, và mọi app test (GC_HOME dưới /tmp/gc-*) — launcher native sót khi stop đi nhầm đường
+    case "$c/" in "$ROOT"/*|/tmp/gc-mut-*|/tmp/gc-l77-*) ;; *)
+      e="$(tr '\0' '\n' < "$d/environ" 2>/dev/null | sed -n 's/^GC_HOME=//p' | head -n 1)" || e=""
+      case "$e" in /tmp/gc-*) ;; *) continue ;; esac ;; esac
     n="$(tr '\0' ' ' < "$d/cmdline" 2>/dev/null | cut -c1-160)" || continue
     case "$(basename "${n%% *}" 2>/dev/null)" in caddy*|node|nodejs|cloudflared*|chrome|chromium*|headless_shell) printf '%s %s\n' "$p" "$n" ;; esac   # theo TÊN tệp chạy, không theo đường repo
   done
@@ -73,6 +76,10 @@ if (bad) process.exit(1);
 ' || exit 1
 echo "   ✓ không có method trùng tên trong class (server)"
 
+# lint test shell: `check $?` phải đứng ngay sau ĐIỀU KIỆN của nó — dòng trước là check khác / chú thích / } / fi / done nghĩa là $? của thứ khác (lỗi vòng 4)
+LINT="$(for f in tools/test-*.sh; do awk -v F="$f" '/^[[:space:]]*$/ { next } { if ($0 ~ /^[[:space:]]*check \$\?/ && (prev ~ /^[[:space:]]*(check |#)/ || prev ~ /^[[:space:]]*(\}|fi|done)[[:space:]]*$/)) print F ":" NR; prev = $0 }' "$f"; done)"
+[ -z "$LINT" ] || { echo "   ✗ check \$? không đứng ngay sau điều kiện của nó: $LINT"; exit 1; }
+echo "   ✓ mọi check \$? trong tools/test-*.sh đứng ngay sau điều kiện của nó"
 echo "1b) ngôn ngữ (ADR 0007): i18n lõi (t / placeholder / số nhiều / fallback / langOf / tr) · bảng locales/en hợp lệ · độ phủ bản dịch"
 node tools/test-i18n.mjs || exit 1
 home_check tools/test-i18n.mjs

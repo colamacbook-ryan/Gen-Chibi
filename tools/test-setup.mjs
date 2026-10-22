@@ -105,7 +105,10 @@ function shims(dir, extra) {
   return { FB, LOG };
 }
 const cliRunK = (HD, FB, args) => cliRun(HD, FB, args, '', { HOME: path.join(fs.readlinkSync(path.join(HD, '.khome'))), GC_TEST: '1' });   // GC_TEST=1: sàn tin cậy kiểm thử (tệp đã kiểm của test là v0.0.0)   // bản cài Docker giả (HOME riêng — xem HDk)
-const cliRun = (HD, FB, args, input, env) => { const r = spawnSync('bash', [path.join(ROOT, 'cli/genchibi')].concat(args), { env: { ...baseEnv(), GC_HOME: HD, GC_CLI_INNER: '1', PATH: FB + ':' + process.env.PATH, ...(env || {}) }, input: input || '', encoding: 'utf8', timeout: 60000 }); return { code: r.status, out: (r.stdout || '') + (r.stderr || '') }; };
+// v0.23.1 vòng 5: bản cài Node có bản ghi "native <thư mục>" (trình cài ghi) trong HOME riêng — genchibi không đoán chế độ theo .env, và test không chạm HOME thật
+const natHome = (HD, home) => { const h = home || HD + '-home', t = path.join(h, '.local/lib/gen-chibi'); fs.mkdirSync(t, { recursive: true, mode: 0o700 }); fs.chmodSync(t, 0o700);
+  const f = path.join(t, 'installs'), line = 'native ' + fs.realpathSync(HD) + '\n'; if (!fs.existsSync(f) || !fs.readFileSync(f, 'utf8').includes(line)) fs.appendFileSync(f, line, { mode: 0o600 }); return h; };
+const cliRun = (HD, FB, args, input, env) => { const r = spawnSync('bash', [path.join(ROOT, 'cli/genchibi')].concat(args), { env: { ...baseEnv(), GC_HOME: HD, GC_CLI_INNER: '1', PATH: FB + ':' + process.env.PATH, HOME: (env && env.HOME) || natHome(HD), ...(env || {}) }, input: input || '', encoding: 'utf8', timeout: 60000 }); return { code: r.status, out: (r.stdout || '') + (r.stderr || '') }; };
 
 /* ================================================================== 0) đơn vị */
 console.log('0) đơn vị: setup.json (bảng lối vào, chỉ tiến, sàn) · cửa sổ admin · adminReasons · phiên admin · init nguyên tử');

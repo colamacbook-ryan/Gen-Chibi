@@ -266,15 +266,18 @@ _en() {
     edge_copy_fail) F="Could not copy edge/%s of the install folder to %s — nothing started (certificates must not be lost). Check disk space and permissions, then run the command again." ;;
     trust_floor) F="The app runs %s; genchibi keeps the verified compose files of %s (never older than %s, so the edge Caddy's folders stay outside the install folder)." ;;
     td_other) F="This install (%s) is managed by uid %s (its approvals and edge folders are in that account). Run genchibi as that user, not as root." ;;
+    mode_guess) F="! .env says GC_MODE=native, but this install has no mode record and genchibi cannot rule out Docker — treating it as a Docker install. If it really runs with Node, run the install command again with --native (it records the mode)." ;;
     td_root_owned) F="! This install was set up with sudo: root keeps its approvals and edge folders. Use sudo %s so both stay the same." ;;
     ov_bad) F="✗ Cannot approve %s — it would make Docker read files the app can change:" ;;
+    ov_bad_syn) F="  - line %s: %s — only plain block YAML is accepted in an approved override (one key per line; no { } [ ], & * <<, ? ! | >, quoted keys, ---, tabs, or a comment after a quoted value)" ;;
     ov_bad_key) F="  - line %s: \"%s:\" (reads a file — not supported in an approved override; move it to an image or an absolute path outside the install folder)" ;;
-    ov_bad_src) F="  - line %s: %s (a folder of the install folder, a relative path, a link or a variable — use an absolute path outside the install folder)" ;;
+    ov_bad_src) F="  - line %s: %s (a folder of the install folder, a relative path, a link, a variable, quotes or spaces — use a named volume or an absolute path outside the install folder)" ;;
     ov_bad_var) F="  - variable %s (COMPOSE_* / DOCKER_* change how Docker itself runs — not allowed)" ;;
     ov_bad_quote) F="  - variable %s: its value in .env contains ' — not supported (remove it, or put the value in the override itself)" ;;
     ov_vals) F="Values changed in .env since approval: %s" ;;
     dr_edge_owner) F="Edge Caddy folder %s belongs to uid %s, not the install folder's user %s — fix: %s" ;;
     dr_mig_busy) F="uid %s still has running processes (someone may be logged in as that user) — nothing moved. If that is a person, keep the install as it is; otherwise stop those processes and run genchibi doctor --migrate again." ;;
+    skill_in_install) F="Not writing the guide into %s: it is inside the install folder (the app can change it). Run the command from your project folder, or use --dir." ;;
     skill_bad) F="The downloaded guide is not a plain archive (links or special files) — nothing written." ;;
     dr_stub_old) F="%s is an old genchibi command that runs the install folder's copy (the app can write it) — run genchibi once as that file's owner, or reinstall" ;;
     dr_uid_unknown) F="The containers run as uid %s (%s). If that is not the owner's account (old root install without sudo), move it: %s doctor --migrate" ;;
@@ -538,15 +541,18 @@ _vi() {
     edge_copy_fail) F="Không chép được edge/%s của thư mục cài sang %s — chưa bật gì (không để mất chứng chỉ). Kiểm dung lượng đĩa và quyền rồi chạy lại lệnh." ;;
     trust_floor) F="App đang chạy %s; genchibi giữ tệp compose đã kiểm của %s (không bao giờ cũ hơn %s, để thư mục của edge Caddy luôn ở ngoài thư mục cài)." ;;
     td_other) F="Bản cài này (%s) do uid %s quản lý (bản duyệt và thư mục edge nằm ở tài khoản đó). Chạy genchibi bằng user đó, không bằng root." ;;
+    mode_guess) F="! .env ghi GC_MODE=native, nhưng bản cài này chưa có bản ghi chế độ và genchibi không loại trừ được Docker — coi là bản cài Docker. Nếu nó thật sự chạy bằng Node, chạy lại lệnh cài với --native (lệnh cài ghi chế độ)." ;;
     td_root_owned) F="! Bản cài này được cài bằng sudo: root giữ bản duyệt và thư mục edge. Dùng sudo %s để hai bên không lệch nhau." ;;
     ov_bad) F="✗ Không duyệt được %s — nó sẽ khiến Docker đọc tệp mà app đổi được:" ;;
+    ov_bad_syn) F="  - dòng %s: %s — override đã duyệt chỉ nhận YAML khối thường (mỗi dòng một khoá; không { } [ ], & * <<, ? ! | >, khoá có nháy, ---, tab, hay chú thích sau giá trị có nháy)" ;;
     ov_bad_key) F="  - dòng %s: \"%s:\" (đọc một tệp — override đã duyệt không hỗ trợ; chuyển vào image hoặc đường tuyệt đối ngoài thư mục cài)" ;;
-    ov_bad_src) F="  - dòng %s: %s (thư mục trong thư mục cài, đường tương đối, liên kết hoặc biến — dùng đường tuyệt đối ngoài thư mục cài)" ;;
+    ov_bad_src) F="  - dòng %s: %s (thư mục trong thư mục cài, đường tương đối, liên kết, biến, nháy hay khoảng trắng — dùng volume có tên hoặc đường tuyệt đối ngoài thư mục cài)" ;;
     ov_bad_var) F="  - biến %s (COMPOSE_* / DOCKER_* đổi cách chính Docker chạy — không cho phép)" ;;
     ov_bad_quote) F="  - biến %s: giá trị trong .env có dấu ' — không hỗ trợ (bỏ dấu đó, hoặc ghi giá trị thẳng trong override)" ;;
     ov_vals) F="Giá trị đã đổi trong .env từ lúc duyệt: %s" ;;
     dr_edge_owner) F="Thư mục edge Caddy %s thuộc uid %s, không phải user của thư mục cài %s — cách sửa: %s" ;;
     dr_mig_busy) F="uid %s còn tiến trình đang chạy (có thể có người đăng nhập bằng user đó) — chưa chuyển gì. Nếu đó là một người thật thì giữ nguyên bản cài; nếu không, dừng các tiến trình đó rồi chạy lại genchibi doctor --migrate." ;;
+    skill_in_install) F="Không ghi hướng dẫn vào %s: nó nằm trong thư mục cài (app đổi được). Chạy lệnh từ thư mục dự án của bạn, hoặc dùng --dir." ;;
     skill_bad) F="Gói hướng dẫn tải về không phải lưu trữ thường (có liên kết hoặc tệp đặc biệt) — chưa ghi gì." ;;
     dr_stub_old) F="%s là lệnh genchibi cũ, chạy bản trong thư mục cài (app ghi được) — chạy genchibi một lần bằng chủ của tệp đó, hoặc cài lại" ;;
     dr_uid_unknown) F="Container chạy bằng uid %s (%s). Nếu đó không phải tài khoản của chủ (bản cài root cũ không sudo), chuyển: %s doctor --migrate" ;;
@@ -653,7 +659,19 @@ mode_put() { # mode_put CHẾ_ĐỘ — chốt chế độ của thư mục cài
 # bản ghi chế độ có mà không an toàn (người khác ghi / tráo được) → KHÔNG đoán theo .env (fail closed — .env GC_MODE=native sẽ exec mã của container)
 if [ -e "$TD/installs" ] || [ -L "$TD/installs" ]; then file_safe "$TD/installs" || { m td_unsafe "$TD/installs" >&2; exit 1; }; fi
 # dấu Docker: container compose của chính thư mục này (nhãn working_dir do compose gắn) — chỉ hỏi khi phải đoán (chưa có bản ghi nào)
-docker_marked() { command -v docker >/dev/null 2>&1 && [ -n "$(docker ps -aq --filter "label=com.docker.compose.project.working_dir=$HOME_PHYS" 2>/dev/null)" ]; }
+# Đóng khi nghi ngờ: máy có docker mà hỏi không được (quyền, daemon…) → coi như CÓ dấu. Không dùng dk (chưa định nghĩa ở đây, và GC_DOCKER_VIA đến từ .env)
+docker_marked() {
+  command -v docker >/dev/null 2>&1 || return 1   # máy không có Docker → không thể là bản cài Docker
+  local d o
+  for d in "$HOME_PHYS" "$HOME_DIR"; do
+    o="$(docker ps -aq --filter "label=com.docker.compose.project.working_dir=$d" 2>/dev/null)" || return 0
+    [ -z "$o" ] || return 0
+  done
+  return 1
+}
+# chưa có tệp bản ghi nào — và chắc chắn là chưa có: thư mục chứa nó đọc được (không đọc được → coi như CÓ bản ghi, không đoán native)
+rec_absent() { local p="$TD"; while [ ! -e "$p" ] && [ ! -L "$p" ]; do p="$(dirname "$p")"; done; [ -d "$p" ] && [ -r "$p" ] && [ -x "$p" ] && [ ! -e "$TD/installs" ] && [ ! -L "$TD/installs" ]; }
+MODE_GUESS=""   # .env nói native nhưng không chứng minh được → mô hình Docker, KHÔNG ghi bản ghi (chủ cài lại --native là xong), nhắc mỗi lần
 MODE_T="$(mode_get)" || MODE_T=""
 case "$MODE_T" in docker|native) ;; *)
   # chưa có bản ghi cho thư mục này: native CHỈ khi chưa có tệp bản ghi nào (bản cài ≤ v0.23.0), thư mục thuộc chính người gõ, .env nói native và không có
@@ -661,8 +679,8 @@ case "$MODE_T" in docker|native) ;; *)
   MODE_T="$(rd .env | sed -n 's/^\(export \)\{0,1\}GC_MODE=["'"'"']\{0,1\}\([a-z]*\).*/\2/p' | tail -n 1)" || MODE_T=""
   if [ "$MODE_T" = native ]; then
     if [ -n "$DROP" ]; then :
-    elif [ ! -e "$TD/installs" ] && [ "$APP_UID" = "$(id -u)" ] && ! docker_marked; then :
-    else MODE_T=docker; fi
+    elif rec_absent && [ "$APP_UID" = "$(id -u)" ] && ! docker_marked; then :
+    else MODE_T=docker; MODE_GUESS=1; fi
   else MODE_T=docker; fi ;;
 esac
 # root + thư mục của user khác + native → root sẽ phải chạy node launcher.js của user đó → từ chối
@@ -676,7 +694,7 @@ if [ -n "$TRUST" ]; then
   [ -d "$TD" ] && TD="$(cd -P "$TD" && pwd)"
   path_safe "$TD" || { m td_unsafe "$TD" >&2; exit 1; }
   case "$TD/" in "$HOME_PHYS"/*) m td_in_install "$TD" "$HOME_DIR" >&2; exit 1 ;; esac   # container ghi được → không còn là chỗ tin cậy
-  if [ -z "$(mode_get)" ]; then
+  if [ -z "$(mode_get)" ] && [ -z "$MODE_GUESS" ]; then
     # một bản cài — một tài khoản giữ bản duyệt / edge (CNS-293): root trên bản cài mà chủ của nó đã quản lý (bản ghi trong $TD của chủ) → bảo dùng tài khoản đó
     if [ -n "$DROP" ]; then
       UTD="$(td_default "$(home_of "$APP_UID")")"
@@ -690,6 +708,7 @@ if [ -n "$TRUST" ]; then
   fi
   # user thường trên bản cài trình cài dựng bằng sudo (dấu run/trust-owner — chỉ để nhắc, không quyết gì): bản duyệt / edge của root ở tài khoản root
   if [ -z "$IS_ROOT" ] && [ "$(rd run/trust-owner | head -n 1)" = root ]; then m td_root_owned "${CLI_SELF:-genchibi}" >&2; fi
+  [ -z "$MODE_GUESS" ] || m mode_guess >&2
   # chạy từ TRONG thư mục cài (lệnh cũ ≤ v0.23.0 exec sang current/cli/genchibi) → tự lắp lệnh đã kiểm, thay các lệnh cũ, chuyển sang (trust_boot, dưới)
   case "$SELF_FILE" in "$HOME_DIR"/*|"$HOME_PHYS"/*) BOOT=1 ;; esac
   case "$CLI_SELF" in "$HOME_DIR"/*|"$HOME_PHYS"/*) CLI_SELF="" ;; esac   # đường thật owner gõ không biết (lệnh ≤ v0.22 không truyền GC_CLI_SELF) → trust_boot dò
@@ -839,6 +858,7 @@ compose_fallback() {
   local a c cs=()
   for c in gen-chibi gen-chibi-edge; do own_ct "$c" && cs+=("$c"); done   # tên container cố định: chỉ đụng khi nó thuộc CHÍNH thư mục cài này
   case "${1:-}" in stop|logs|exec|down) [ ${#cs[@]} -gt 0 ] || { m root_nofiles "$(cur_tag)" "${TRUST_ERR:-?}" >&2; return 1; } ;; esac
+  case "${1:-}" in logs|exec) case " ${cs[*]-} " in *" gen-chibi "*) ;; *) m root_nofiles "$(cur_tag)" "${TRUST_ERR:-?}" >&2; return 1 ;; esac ;; esac   # logs / cầu MCP: chỉ gen-chibi của CHÍNH bản cài này
   case "${1:-}" in
     stop) m root_fallback "${1:-}" >&2; dk stop "${cs[@]}" ;;
     logs) m root_fallback "${1:-}" >&2; dk logs -f --tail 200 gen-chibi ;;
@@ -1071,12 +1091,13 @@ EOF_ENV
 # (đã lọc) + lý do + lệnh làm tiếp. Quyết định của root ở $TD: override.yml (bản đã duyệt) · override.off (SHA-256 của override mà root chọn chạy KHÔNG có nó).
 # ov_state → 0: không có override / đúng bản đã duyệt / đúng bản đã chọn bỏ · 1: chưa duyệt hoặc đã đổi từ lúc quyết (OV_F = tệp)
 OV_F=""; OV_GONE=""; OV_QK=""
+OV_GEN="GC_UID GC_GID GC_PORT GC_BIND GC_EDGE_DIR"   # khoá compose.env do genchibi tự tính (không từ .env) — không chụp, override dùng được
 # ov_src TỆP: nội dung override — đường tuyệt đối = bản chép của genchibi (đọc thẳng), tương đối = tệp trong thư mục cài (rd, bằng chủ của nó)
 ov_src() { case "$1" in /*) cat -- "$1" ;; *) rd "$1" ;; esac; }
-# ov_keys TỆP → các biến ${VAR} / $VAR override dùng (bỏ $$), trừ khoá genchibi tự đưa vào compose — mỗi dòng một, sắp xếp
+# ov_keys TỆP → các biến ${VAR} / $VAR override dùng (bỏ $$), trừ khoá genchibi tự tính (OV_GEN) — mỗi dòng một, sắp xếp
 ov_keys() {
   ov_src "$1" | sed 's/\$\$//g' | { grep -oE '\$\{?[A-Za-z_][A-Za-z0-9_]*' || true; } | sed 's/^\$[{]\{0,1\}//' | sort -u | while IFS= read -r k; do
-    case "$ENV_KEYS GC_EDGE_DIR " in *" $k "*) continue ;; esac
+    case " $OV_GEN " in *" $k "*) continue ;; esac   # chỉ khoá genchibi tự sinh cho compose; mọi khoá khác (kể cả GC_PUBLIC_URL, HTTPS_PROXY…) được chụp
     printf '%s\n' "$k"
   done
 }
@@ -1090,31 +1111,79 @@ ov_env() {
     printf "%s='%s'\n" "$k" "$v"
   done < <(ov_keys "$1")
 }
-# ov_check TỆP (bản chép của genchibi): override đã duyệt KHÔNG được khiến Docker đọc tệp container đổi được — khoá đọc tệp (build, env_file, extends, include,
-# configs / secrets, file…), nguồn bind tương đối / có biến / trong thư mục cài / là liên kết, biến COMPOSE_* / DOCKER_*. In từng lỗi, trả 1 nếu có
+# ov_check TỆP (bản chép của genchibi): override đã duyệt KHÔNG được khiến Docker đọc tệp container đổi được. Không phân tích YAML đầy đủ (bash thuần) → DANH SÁCH
+# CHO PHÉP cú pháp, đóng khi nghi ngờ: chỉ YAML khối thường (một khoá mỗi dòng). Từ chối, mỗi dòng một lỗi kèm số dòng: {…} [...] (flow), & * << (anchor / alias /
+# merge), ? (khoá phức), ! (tag), | > (khối chữ), khoá có nháy, --- / ..., tab ở thụt đầu dòng, chú thích sau giá trị có nháy. Trên đó: khoá đọc tệp (build,
+# env_file, extends, include, configs, secrets, file, dockerfile, additional_contexts, label_file); mục volumes dạng ngắn chỉ được là volume có tên hoặc
+# /đường/tuyệt-đối:… ngoài thư mục cài (không nháy, không khoảng trắng, không $); source: / device: phải tuyệt đối ngoài thư mục cài (source tên volume chỉ khi
+# type: volume); biến COMPOSE_* / DOCKER_*. In từng lỗi, trả 1 nếu có
+ov_abs_ok() { # đường tuyệt đối ngoài thư mục cài (cả HOME_DIR lẫn HOME_PHYS), không phải liên kết, thư mục cha thật cũng ngoài
+  local v="$1" k
+  case "$v" in /*) ;; *) return 1 ;; esac
+  case "$v" in *'$'*|*' '*|*'"'*|*"'"*) return 1 ;; esac
+  case "$v/" in "$HOME_PHYS"/*|"$HOME_DIR"/*) return 1 ;; esac
+  [ ! -L "$v" ] || return 1
+  k="$(cd -P "$(dirname "$v")" 2>/dev/null && pwd)" || k=""
+  case "$k/" in "$HOME_PHYS"/*|"$HOME_DIR"/*) return 1 ;; esac
+  if [ -d "$v" ]; then k="$(cd -P "$v" 2>/dev/null && pwd)" || k=""; case "$k/" in "$HOME_PHYS"/*|"$HOME_DIR"/*) return 1 ;; esac; fi
+  return 0
+}
 ov_check() {
-  local f="$1" kind ln val bad="" k p
+  local f="$1" kind ln val bad="" k
   while IFS=$'\t' read -r kind ln val; do
     case "$kind" in
+      X) bad=1; m ov_bad_syn "$ln" "$val" ;;
       K) bad=1; m ov_bad_key "$ln" "$val" ;;
-      S) p=""
-         case "$val" in /*) ;; *) p=1 ;; esac
-         case "$val" in *'$'*) p=1 ;; esac
-         if [ -z "$p" ]; then
-           case "$val/" in "$HOME_PHYS"/*|"$HOME_DIR"/*) p=1 ;; esac
-           [ ! -L "$val" ] || p=1
-           k="$(cd -P "$(dirname "$val")" 2>/dev/null && pwd)" || k=""
-           case "$k/" in "$HOME_PHYS"/*) p=1 ;; esac
-         fi
-         [ -z "$p" ] || { bad=1; m ov_bad_src "$ln" "$val"; } ;;
+      S) ov_abs_ok "$val" || { bad=1; m ov_bad_src "$ln" "$val"; } ;;
+      V) bad=1; m ov_bad_src "$ln" "$val" ;;
     esac
-  done < <(sed 's/[[:space:]]#.*$//; s/^[[:space:]]*#.*$//' "$f" | awk '
-    { l = $0 }
-    match(l, /^[ \t-]*(build|env_file|extends|include|configs|secrets|file|dockerfile|additional_contexts|label_file)[ \t]*:/) { k = substr(l, RSTART, RLENGTH); gsub(/[ \t:-]/, "", k); printf "K\t%d\t%s\n", NR, k; next }
-    match(l, /^[ \t-]*(source|device)[ \t]*:[ \t]*/) { v = substr(l, RSTART + RLENGTH); gsub(/["\047]/, "", v); gsub(/[ \t]+$/, "", v); if (v ~ /[\/.~$]/) printf "S\t%d\t%s\n", NR, v; next }
-    /^[ \t]*-[ \t]*["\047]?[^ \t"\047]+["\047]?[ \t]*$/ { v = l; sub(/^[ \t]*-[ \t]*/, "", v); gsub(/["\047]/, "", v); gsub(/[ \t]+$/, "", v)
-      i = index(v, ":"); if (i < 2) next; src = substr(v, 1, i - 1); if (index(src, "=")) next
-      if (src ~ /^[.~$\/]/ || index(src, "/")) printf "S\t%d\t%s\n", NR, src }')
+  done < <(LC_ALL=C awk '
+    function ind(s) { match(s, /^ */); return RLENGTH }
+    function endItem() { if (itemLine && isrc != "" && itype != "volume") { if (isrc ~ /^\//) printf "S\t%d\t%s\n", srcLine, isrc; else printf "V\t%d\t%s\n", srcLine, isrc }
+                         if (itemLine && isrc != "" && itype == "volume" && isrc !~ /^[A-Za-z0-9][A-Za-z0-9_.-]*$/) printf "V\t%d\t%s\n", srcLine, isrc
+                         itemLine = 0; isrc = ""; itype = "" }
+    {
+      raw = $0
+      if (raw ~ /^[ ]*$/ || raw ~ /^[ ]*#/) next
+      if (raw ~ /\t/) { printf "X\t%d\ttab\n", NR; next }
+      if (raw ~ /^%/) { printf "X\t%d\t%%\n", NR; next }
+      l = raw; sub(/[ \t]+$/, "", l)
+      if (l ~ /^(---|\.\.\.)([ \t]|$)/) { printf "X\t%d\t---\n", NR; next }
+      # chú thích cuối dòng: chỉ bỏ khi phần trước không có nháy (nháy + " #" → từ chối: không đoán chuỗi nằm đâu)
+      c = index(l, " #"); if (c) { pre = substr(l, 1, c - 1); if (pre ~ /["\047]/) { printf "X\t%d\t#\n", NR; next } l = pre; sub(/[ \t]+$/, "", l) }
+      t = l; gsub(/\$\{[A-Za-z_][A-Za-z0-9_]*(:?[-?+][^{}]*)?\}/, "", t)   # ${VAR} / ${VAR:-x} (biến, đã chụp giá trị) không phải flow
+      if (t ~ /[{}\[\]]/) { printf "X\t%d\t{ }\n", NR; next }
+      if (l ~ /<</) { printf "X\t%d\t<<\n", NR; next }
+      if (l ~ /(^|[ :-])[&*][^ &*]/ || l ~ /(^|[ :-])[&*]$/) { printf "X\t%d\t& *\n", NR; next }
+      if (l ~ /^[ ]*(-[ ]+)?\?([ ]|$)/) { printf "X\t%d\t?\n", NR; next }
+      if (l ~ /(^|[ :-])!/) { printf "X\t%d\t!\n", NR; next }
+      if (l ~ /:[ ]+[|>][-+0-9]*$/ || l ~ /^[ ]*-[ ]+[|>][-+0-9]*$/) { printf "X\t%d\t| >\n", NR; next }
+      if (l ~ /^[ ]*(-[ ]+)?["\047][^"\047]*["\047][ ]*:/) { printf "X\t%d\t\"key\":\n", NR; next }
+      n = ind(l); body = substr(l, n + 1)
+      # rời khối volumes khi thụt lùi về bằng / ít hơn dòng "volumes:"
+      if (invol && n <= vind) { endItem(); invol = 0 }
+      key = ""; isitem = 0; rest = body
+      if (rest ~ /^-[ ]/ || rest == "-") { isitem = 1; rest = substr(rest, 2); sub(/^[ ]+/, "", rest) }
+      if (match(rest, /^[A-Za-z0-9_.-]+[ ]*:([ ]|$)/)) { key = rest; sub(/[ ]*:.*/, "", key); val = rest; sub(/^[^:]*:[ ]*/, "", val) }
+      if (key ~ /^(build|env_file|extends|include|configs|secrets|file|dockerfile|additional_contexts|label_file)$/) { printf "K\t%d\t%s\n", NR, key; next }
+      if (key == "device") { v = val; if (v != "") printf "S\t%d\t%s\n", NR, v }
+      if (invol) {
+        if (isitem && n + 0 > vind) {
+          endItem()
+          if (key != "") { itemLine = NR; if (key == "type") itype = val; if (key == "source") { isrc = val; srcLine = NR } }
+          else {
+            v = rest
+            if (v ~ /["\047 \t$]/ || v == "") { printf "V\t%d\t%s\n", NR, v; next }
+            if (v ~ /^\//) { s = v; sub(/:.*/, "", s); printf "S\t%d\t%s\n", NR, s }
+            else if (v !~ /^[A-Za-z0-9][A-Za-z0-9_.-]*:[^ ]+$/) printf "V\t%d\t%s\n", NR, v
+          }
+        } else if (itemLine && key == "type") itype = val
+        else if (itemLine && key == "source") { isrc = val; srcLine = NR }
+      }
+      if (key == "volumes" && val == "" && !isitem) { endItem(); invol = 1; vind = n }
+      else if (key == "source" && !invol) printf "V\t%d\t%s\n", NR, val
+    }
+    END { endItem() }' "$f")
   while IFS= read -r k; do case "$k" in COMPOSE_*|DOCKER_*) bad=1; m ov_bad_var "$k" ;; esac; done < <(ov_keys "$f")
   [ -z "$bad" ]
 }
@@ -1531,6 +1600,7 @@ EDGE_MIGRATED=""   # vừa tạo nguồn edge ở $EDGE_DIR trong lệnh này �
 edge_prepare_trust() {
   local d base
   [ "$APP_UID" != 0 ] || { m uid0_refuse "$HOME_DIR" >&2; return 1; }   # không bao giờ tạo / đổi chủ thư mục edge cho uid 0
+  if as_app test -L edge; then m edge_unsafe "$HOME_DIR/edge" "$APP_UID" "$(mn edge_fix_link "$HOME_DIR/edge")" >&2; return 1; fi   # edge/ của thư mục cài là liên kết → từ chối
   ( umask 022; mkdir -p "$EDGE_DIR" ) && chmod 755 "$EDGE_DIR" || return 1
   for d in conf run caddy-data caddy-config; do
     if [ ! -e "$EDGE_DIR/$d" ] && [ ! -L "$EDGE_DIR/$d" ]; then   # symlink có sẵn: không "chữa" lặng lẽ — edge_sources_ok từ chối, chủ xem
@@ -1539,8 +1609,9 @@ edge_prepare_trust() {
       EDGE_MIGRATED=1
       # lần đầu: chép edge/<d> cũ của thư mục cài (chứng chỉ, Caddyfile, sites) — đọc và ghi đều bằng chủ thư mục cài. Lỗi → KHÔNG nuốt: xoá đích (lần sau
       # chép lại), báo, dừng — Caddy chạy thiếu chứng chỉ sẽ xin lại (giới hạn tần suất Let's Encrypt) (CNS-292c)
-      if as_app test -d "edge/$d" && ! as_app test -L "edge/$d"; then
-        if ! { as_app sh -c 'cd "edge/$1" && tar -cf - .' sh "$d" | ( cd "$EDGE_DIR/$d" && as_app tar -xf - ); } 2>/dev/null; then
+      if as_app sh -c '[ ! -L edge ] && [ -d "edge/$1" ] && [ ! -L "edge/$1" ]' sh "$d"; then
+        # kiểm + tar trong CÙNG một tiến trình (container không tráo được giữa lúc kiểm và lúc đọc): cd -P rồi so đường thật với thư mục cài
+        if ! { as_app sh -c '[ ! -L edge ] && [ ! -L "edge/$1" ] && cd -P "edge/$1" && [ "$(pwd -P)" = "$2/edge/$1" ] && tar -cf - .' sh "$d" "$HOME_PHYS" | ( cd "$EDGE_DIR/$d" && as_app tar -xf - ); } 2>/dev/null; then
           case "$EDGE_DIR/$d" in "$TD"/i/*/edge/*) rm -rf -- "${EDGE_DIR:?}/$d" ;; esac
           m edge_copy_fail "$d" "$EDGE_DIR/$d" >&2; return 1
         fi
@@ -2152,6 +2223,9 @@ agent_cmd() {
       local v="${1:-claude}" dir="" force=""; shift || true
       while [ $# -gt 0 ]; do case "$1" in --dir) dir="${2:-}"; shift 2 || shift ;; --force) force=1; shift ;; *) shift ;; esac; done
       case "$v" in claude) dir="${dir:-$HOME/.claude/skills}" ;; cursor|gemini|codex|generic) dir="${dir:-$ORIG_PWD}" ;; *) m skill_usage >&2; return 1 ;; esac
+      # đích trong thư mục cài (container ghi được — gói skill sẽ thành đầu vào của app) → từ chối; dò theo đường thật của thư mục gần nhất đã có
+      local dp="$dir"; case "$dp" in /*) ;; *) dp="$ORIG_PWD/$dp" ;; esac; while [ ! -d "$dp" ]; do dp="$(dirname "$dp")"; done; dp="$(cd -P "$dp" && pwd)"
+      case "$dp/" in "$HOME_PHYS"/*|"$HOME_DIR"/*) m skill_in_install "$dir" >&2; return 1 ;; esac
       # giải nén vào thư mục tạm, rồi chỉ ghi đè tệp DO CHÍNH LỆNH NÀY SINH (có dấu "generated by `genchibi agent skill`");
       # AGENTS.md / GEMINI.md / rule có sẵn của người dùng thì dừng lại (trừ khi --force)
       # gói do app gửi (container) = dữ liệu không tin: chỉ tệp thường + thư mục, không tên tuyệt đối / "..", giải nén không giữ chủ / quyền; đích có liên kết = đụng
@@ -2238,8 +2312,11 @@ doctor_migrate() {
   if ps -eo uid= 2>/dev/null | awk -v u="$old" '$1 == u { f = 1 } END { exit !f }'; then m dr_mig_busy "$old" >&2; ( start ) >/dev/null 2>&1 || true; return 1; fi
   # chỉ tệp đang thuộc uid cũ, không theo symlink, một filesystem, không tệp có nhiều liên kết cứng (liên kết tới tệp của người khác) — cả nguồn edge ở $EDGE_DIR
   # (CNS-291: không thì start ngay sau đây từ chối edge, app nằm dừng)
-  find "$HOME_DIR" -xdev -user "$old" \( -type d -o -type l -o -links 1 \) -exec chown -h "$NU:$NG" {} + || { m dr_mig_chown "$HOME_DIR" >&2; return 1; }
-  if [ -n "$EDGE_DIR" ] && [ -d "$EDGE_DIR" ]; then find "$EDGE_DIR" -xdev -user "$old" \( -type d -o -type l -o -links 1 \) -exec chown -h "$NU:$NG" {} + || { m dr_mig_chown "$EDGE_DIR" >&2; return 1; }; fi
+  # -P + -execdir: chown chạy NGAY trong thư mục chứa tệp với tên ./tệp — không đường chuỗi dài nào để container tráo một thư mục cha thành liên kết giữa chừng.
+  # find từ chối -execdir khi PATH có mục tương đối → PATH chỉ giữ mục tuyệt đối
+  local sp; sp="$(printf '%s' "$PATH" | tr ':' '\n' | grep '^/' | paste -sd: -)" || sp="/usr/sbin:/usr/bin:/sbin:/bin"
+  PATH="$sp" find -P "$HOME_DIR" -xdev -user "$old" \( -type d -o -type l -o -links 1 \) -execdir chown -h "$NU:$NG" {} + || { m dr_mig_chown "$HOME_DIR" >&2; return 1; }
+  if [ -n "$EDGE_DIR" ] && [ -d "$EDGE_DIR" ]; then PATH="$sp" find -P "$EDGE_DIR" -xdev -user "$old" \( -type d -o -type l -o -links 1 \) -execdir chown -h "$NU:$NG" {} + || { m dr_mig_chown "$EDGE_DIR" >&2; return 1; }; fi
   APP_UID="$NU"; APP_GID="$NG"
   set_env GC_UID "$NU"; set_env GC_GID "$NG"; set_env GC_INSTALLED_BY root
   m dr_mig_done "$old" "$SYS_USER" "$NU" "$NG"

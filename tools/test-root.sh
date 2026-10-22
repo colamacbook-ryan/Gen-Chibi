@@ -115,7 +115,9 @@ cat > "$FK/docker" <<'EOF'
 #!/bin/bash
 echo "$*" >> "$FAKE_STATE/docker.log"
 # inspect: nhãn working_dir của container = FAKE_CT_WD (genchibi chỉ đụng container của CHÍNH thư mục cài khi không có tệp compose)
-if [ "$1" = inspect ]; then printf '%s\n' "${FAKE_CT_WD:-}"; exit 0; fi
+if [ "$1" = inspect ]; then eval "n=\${$#}"; if [ "$n" = gen-chibi-edge ] && [ -n "${FAKE_CT_WD_EDGE:-}" ]; then printf '%s\n' "$FAKE_CT_WD_EDGE"; else printf '%s\n' "${FAKE_CT_WD:-}"; fi; exit 0; fi
+# ps (đoán chế độ): FAKE_PS_FAIL → lỗi (không hỏi được daemon); FAKE_PS_IDS → container của thư mục
+if [ "$1" = ps ]; then [ -z "${FAKE_PS_FAIL:-}" ] || exit 1; [ -z "${FAKE_PS_IDS:-}" ] || echo "$FAKE_PS_IDS"; exit 0; fi
 [ "$1" = compose ] || exit 0
 shift
 files=""; pd="$PWD"; ef=""
@@ -383,7 +385,31 @@ rootcli override approve --yes; QO="$OUT"; QR=$RC
 ! grep -v 'rc=1 1 1$' "$W/ov-bad.log" | grep -q . && [ $DR2 = 1 ] && echo "$DO2" | grep -q 'variable DOCKER_HOST (COMPOSE_\* / DOCKER_\*' && [ $QR = 1 ] && echo "$QO" | grep -q "variable QUOTED: its value in .env contains '" \
   && grep -qx "LOGIN_SECRET='s3cr3t-hash'" "$TI/override.env" && grep -q 'HASH' "$TI/override.yml"
 check $? "override approve từ chối (đỏ, từng dòng): bind tương đối / có biến / trong thư mục cài, build, env_file, source tương đối, biến DOCKER_*, giá trị có ' — bản đã duyệt cũ giữ nguyên" "$(cat "$W/ov-bad.log" | tr '\n' ' ') · rc $DR2: $DO2 · rc $QR: $QO"
-( cd "$I" && as_container sh -c 'cat > docker-compose.override.yml; sed -i "/^QUOTED=/d" .env' ) < "$W/ov.keep"
+( cd "$I" && as_container sh -c 'sed -i "/^QUOTED=/d" .env' )
+# vòng 5 (bảo mật 🟠): bộ kiểm override là DANH SÁCH CHO PHÉP cú pháp — mọi đường vòng reviewer chứng minh (tools/fixtures/override/bad-c1…c9) + flow / anchor /
+# tag / khối chữ / --- / tab / chú thích che / device tương đối / biến trong nguồn đều bị từ chối, có số dòng; bản duyệt cũ giữ nguyên
+: > "$W/ov-syn.log"
+for f in "$ROOT"/tools/fixtures/override/bad-*.yml; do
+  ( cd "$I" && as_container sh -c 'cat > docker-compose.override.yml' ) < "$f"; rootcli override approve --yes
+  echo "$(basename "$f") rc=$RC $(echo "$OUT" | grep -c 'Cannot approve') $(echo "$OUT" | grep -cE '^  - line [0-9]+: ')" >> "$W/ov-syn.log"
+done
+printf 'services:\n  login:\n    image: example/login\n    volumes:\n      - %s/data:/x\n' "$(cd -P "$I" && pwd)" > "$W/ov-inst.yml"   # bind tuyệt đối VÀO thư mục cài (đường thật)
+( cd "$I" && as_container sh -c 'cat > docker-compose.override.yml' ) < "$W/ov-inst.yml"; rootcli override approve --yes; echo "inst-abs rc=$RC $(echo "$OUT" | grep -c 'Cannot approve') $(echo "$OUT" | grep -cE '^  - line [0-9]+: ')" >> "$W/ov-syn.log"
+! grep -vE ' rc=1 1 [1-9][0-9]*$' "$W/ov-syn.log" | grep -q . && [ "$(wc -l < "$W/ov-syn.log")" -ge 20 ] && grep -q 'HASH' "$TI/override.yml"
+check $? "override approve (danh sách cho phép cú pháp): mọi đường vòng (flow {…}/[…], khoá có nháy, anchor/merge, extends {file}, bind có khoảng trắng / '=' / tương đối / vào thư mục cài, type: bind + source tên, khối chữ, tag, ?, ---, tab, chú thích che, device tương đối, biến) → từ chối có số dòng; bản duyệt cũ giữ nguyên" "$(tr '\n' ' ' < "$W/ov-syn.log")"
+( cd "$I" && as_container sh -c 'cat > docker-compose.override.yml' ) < "$ROOT/tools/fixtures/override/ok-block.yml"; rootcli override approve --yes; OKO="$OUT"; OKR=$RC
+[ $OKR = 0 ] && cmp -s "$TI/override.yml" "$ROOT/tools/fixtures/override/ok-block.yml"
+check $? "override YAML khối thường (biến \${…}, volume có tên, bind tuyệt đối ngoài thư mục cài, type: volume, nháy ở giá trị, chú thích) → duyệt được" "rc $OKR: $OKO"
+# 🟡 vòng 5: biến override dùng mà nằm trong danh sách khoá của genchibi (GC_PUBLIC_URL…) cũng được chụp; .env đổi → hỏi lại. Chỉ GC_UID/GID/PORT/BIND/EDGE_DIR (genchibi tự tính) không chụp
+printf 'services:\n  login:\n    image: example/login\n    environment:\n      PUB: ${GC_PUBLIC_URL}\n      P: ${GC_PORT}\n' > "$W/ov-pub.yml"
+( cd "$I" && as_container sh -c 'cat > docker-compose.override.yml; printf "GC_PUBLIC_URL=https://a.example.com\n" >> .env' ) < "$W/ov-pub.yml"; rootcli override approve --yes; PA="$OUT"
+grep -qx "GC_PUBLIC_URL='https://a.example.com'" "$TI/override.env" && ! grep -q '^GC_PORT=' "$TI/override.env" && echo "$PA" | grep -q 'values are not shown): GC_PUBLIC_URL$'
+PR1=$?
+( cd "$I" && as_container sh -c 'sed -i "s|^GC_PUBLIC_URL=.*|GC_PUBLIC_URL=https://evil.example.com|" .env' ); NUP="$(grep -c 'sub=up' "$FS/compose.log")"; rootcli start
+[ $PR1 = 0 ] && [ $RC = 1 ] && echo "$OUT" | grep -q 'Values changed in .env since approval: GC_PUBLIC_URL' && [ "$(grep -c 'sub=up' "$FS/compose.log")" = "$NUP" ]
+check $? "override dùng \${GC_PUBLIC_URL} (khoá genchibi cũng đọc): giá trị được chụp; .env đổi → start dừng, hỏi lại. \${GC_PORT} (genchibi tự tính) không chụp" "$PA · rc $RC: $OUT"
+( cd "$I" && as_container sh -c 'sed -i "/^GC_PUBLIC_URL=/d" .env' )
+( cd "$I" && as_container sh -c 'cat > docker-compose.override.yml' ) < "$W/ov.keep"; rootcli override approve --yes
 ( cd "$I" && as_container sh -c 'printf "      MORE: \${OTHER_SECRET}\n" >> docker-compose.override.yml' ); rootcli start
 [ $RC = 1 ] && echo "$OUT" | grep -q 'OTHER_SECRET'
 check $? "override thêm biến mới (\${OTHER_SECRET}) → lại dừng, liệt kê biến, phải duyệt lại" "rc $RC: $OUT"
@@ -413,6 +439,11 @@ check $? "gid của thư mục cài là nhóm docker → từ chối dựng cont
 ( cd "$I" && as_container sh -c 'mkdir -p edge/caddy-data/locked && chmod 000 edge/caddy-data/locked' ); NUP="$(grep -c 'sub=up' "$FS/compose.log")"; rootcli start
 CF="$OUT"; CFR=$RC; ( cd "$I" && as_container sh -c 'chmod 700 edge/caddy-data/locked && rmdir edge/caddy-data/locked' )
 [ $CFR = 1 ] && echo "$CF" | grep -q "Could not copy edge/caddy-data of the install folder to $TI/edge/caddy-data — nothing started" && [ ! -e "$TI/edge/caddy-data" ] && [ "$(grep -c 'sub=up' "$FS/compose.log")" = "$NUP" ]
+CHKCF=$?
+( cd "$I" && as_container sh -c 'mv edge edge.real && ln -s edge.real edge' ); rootcli start; ELO="$OUT"; ELR=$RC; ( cd "$I" && as_container sh -c 'rm -f edge && mv edge.real edge' )
+[ $ELR = 1 ] && echo "$ELO" | grep -q "Refusing to start the edge Caddy: $I/edge must be a real folder"
+check $? "edge/ của thư mục cài là liên kết → từ chối edge (không đọc / chép qua liên kết), nói cách sửa" "rc $ELR: $ELO"
+[ $CHKCF = 0 ]
 check $? "chép edge/ cũ sang nguồn mới lỗi (thư mục không đọc được) → dừng, báo rõ, không compose up, xoá đích để lần sau chép lại (không mất chứng chỉ lặng lẽ — CNS-292c)" "rc $CFR: $CF"
 rootcli start
 grep 'sub=up' "$FS/compose.log" | tail -1 | grep -q "docker-compose.yml $TD/rel/v0.1.0/docker-compose.edge.yml$" && grep -qx "GC_EDGE_DIR='$TI/edge'" "$FS/last-compose-up.env" \
@@ -436,7 +467,7 @@ fi
 # CNS-282: máy cũ, lần đầu, không tới được GitHub, CHƯA có tệp compose đã kiểm nào → stop / mcp vẫn chạy (tên container cố định), một lần thử tải mỗi lệnh
 Ho="$W/offhome"; mkdir -p "$Ho"
 IP="$(cd -P "$I" && pwd)"
-offcli() { OUT="$(env -u GC_LANG PATH="$FK:$PATH" HOME="$Ho" FAKE_CT_WD="${CT_WD-$IP}" FAKE_ROOT=1 FAKE_ROOT_HOME="$Ho" FAKE_STATE="$FS" GC_HOME="$I" GC_TEST=1 GC_TEST_RELEASE_BASE="file://$W/no-such-feed" timeout 120 $SID bash "$ROOT/cli/genchibi" "$@" 2>&1)"; RC=$?; }
+offcli() { OUT="$(env -u GC_LANG PATH="$FK:$PATH" HOME="$Ho" FAKE_CT_WD="${CT_WD-$IP}" ${OFF_ENV:-} FAKE_ROOT=1 FAKE_ROOT_HOME="$Ho" FAKE_STATE="$FS" GC_HOME="$I" GC_TEST=1 GC_TEST_RELEASE_BASE="file://$W/no-such-feed" timeout 120 $SID bash "$ROOT/cli/genchibi" "$@" 2>&1)"; RC=$?; }
 : > "$FS/docker.log"; offcli stop </dev/null; S1="$OUT"; S1R=$RC
 printf '' | offcli mcp; S2="$OUT"
 [ $S1R = 0 ] && grep -q '^stop gen-chibi gen-chibi-edge$' "$FS/docker.log" && [ "$(echo "$S1" | grep -c 'Checking release')" = 1 ] && grep -q '^exec -i gen-chibi node /install/current/server/mcp-stdio.js$' "$FS/docker.log" && ! grep -q '^compose' "$FS/docker.log"
@@ -444,6 +475,9 @@ check $? "không tới được GitHub, chưa có tệp đã kiểm: stop → do
 : > "$FS/docker.log"; CT_WD=/srv/ban-cai-khac offcli stop </dev/null
 [ $RC = 1 ] && ! grep -q '^stop ' "$FS/docker.log"
 check $? "…container gen-chibi thuộc bản cài KHÁC (nhãn working_dir) → stop không đụng nó" "rc $RC: $OUT · $(cat "$FS/docker.log")"
+: > "$FS/docker.log"; printf '' | CT_WD=/srv/ban-cai-khac OFF_ENV="FAKE_CT_WD_EDGE=$IP" offcli mcp; MR=$RC; CT_WD=/srv/ban-cai-khac OFF_ENV="FAKE_CT_WD_EDGE=$IP" offcli logs </dev/null; LR=$RC
+[ $MR != 0 ] && [ $LR != 0 ] && ! grep -qE '^(exec|logs) ' "$FS/docker.log"
+check $? "…mcp / logs lúc đó (chỉ gen-chibi-edge là của bản cài này, gen-chibi của bản cài khác): không exec / logs vào gen-chibi đó (cầu MCP không nối nhầm app)" "mcp $MR · logs $LR · $(cat "$FS/docker.log")"
 offcli start </dev/null
 [ $RC = 1 ] && echo "$OUT" | grep -q 'No verified compose files for release v0.1.0' && echo "$OUT" | grep -q 'github.com'
 check $? "…start lúc đó → báo rõ (cần github.com), thoát 1, không dùng tệp của thư mục cài" "rc $RC: $OUT"
@@ -479,9 +513,16 @@ check $? "bản ghi chế độ không an toàn (ai cũng ghi) + .env GC_MODE=na
 # đã có tệp bản ghi (bản cài khác) mà chưa có dòng cho thư mục này: .env native KHÔNG đủ → mô hình tin cậy (docker)
 Hm2="$W/modehome"; mkdir -p "$Hm2/.local/lib/gen-chibi"; chmod 700 "$Hm2/.local/lib/gen-chibi"; printf 'docker /srv/khac\n' > "$Hm2/.local/lib/gen-chibi/installs"; chmod 600 "$Hm2/.local/lib/gen-chibi/installs"
 OUT="$(env -u GC_LANG PATH="$FK:$PATH" HOME="$Hm2" FAKE_ROOT_HOME="$Hm2" FAKE_UIDV="$AUID" FAKE_STATE="$FS" GC_HOME="$I" GC_TEST=1 GC_TEST_RELEASE_BASE="$REL" NO_PROXY=127.0.0.1,localhost timeout 120 $SID bash "$ROOT/cli/genchibi" status </dev/null 2>&1)"; RC=$?
-grep -qx "docker $(cd -P "$I" && pwd)" "$Hm2/.local/lib/gen-chibi/installs" && [ "$(canaries)" = 0 ] && [ ! -e "$I/logs/launcher.pid" ]
-check $? "chủ thư mục gõ genchibi, .env native, đã có tệp bản ghi mà chưa có dòng cho thư mục này → mô hình Docker (không exec current/), ghi bản ghi docker" "rc $RC: $OUT · $(cat "$Hm2/.local/lib/gen-chibi/installs")"
+[ "$(cat "$Hm2/.local/lib/gen-chibi/installs")" = 'docker /srv/khac' ] && echo "$OUT" | grep -q 'cannot rule out Docker' && [ "$(canaries)" = 0 ] && [ ! -e "$I/logs/launcher.pid" ]
+check $? "chủ thư mục gõ genchibi, .env native, đã có tệp bản ghi mà chưa có dòng cho thư mục này → mô hình Docker (không exec current/), không ghi bản ghi (đoán), nhắc cài lại --native" "rc $RC: $OUT · $(cat "$Hm2/.local/lib/gen-chibi/installs")"
 ( cd "$I" && as_container sh -c 'sed -i "/^GC_MODE=native$/d" .env' )
+# 🟡 vòng 5: đoán native (chưa có tệp bản ghi nào, chủ là mình, .env native) đóng khi nghi ngờ — docker hỏi lỗi / có container của thư mục → Docker, không ghi bản ghi, nhắc cài lại --native
+In2="$W/inst-nat2"; Hn3="$W/nat2home"; mkdir -p "$In2/rel/cli" "$Hn3"; printf '#!/bin/sh\necho NATIVE-RAN\n' > "$In2/rel/cli/genchibi"; ln -s rel "$In2/current"; printf 'GC_MODE=native\nGC_PORT=7995\n' > "$In2/.env"; own_app "$In2"
+natc() { OUT="$(env -u GC_LANG PATH="$FK:$PATH" HOME="$Hn3" FAKE_ROOT_HOME="$Hn3" FAKE_UIDV="$AUID" FAKE_STATE="$FS" GC_HOME="$In2" GC_TEST=1 GC_TEST_RELEASE_BASE="file://$W/no-such-feed" ${NAT_ENV:-} timeout 60 $SID bash "$ROOT/cli/genchibi" status </dev/null 2>&1)"; RC=$?; }
+natc; N1="$OUT"; NAT_ENV="FAKE_PS_FAIL=1" natc; N2="$OUT"; NAT_ENV="FAKE_PS_IDS=abc123" natc; N3="$OUT"
+echo "$N1" | grep -q NATIVE-RAN && ! echo "$N2" | grep -q NATIVE-RAN && echo "$N2" | grep -q 'cannot rule out Docker' && ! echo "$N3" | grep -q NATIVE-RAN && echo "$N3" | grep -q 'cannot rule out Docker' \
+  && [ ! -e "$Hn3/.local/lib/gen-chibi/installs" ]
+check $? "bản cài cũ chưa có bản ghi, .env native: không container nào của thư mục → native; docker hỏi lỗi hoặc có container → Docker (đóng khi nghi ngờ), không ghi bản ghi, nhắc chạy lại lệnh cài với --native" "1: $N1 · 2: $N2 · 3: $N3"
 # CNS-293: một bản cài — một tài khoản. Root chưa có bản ghi, mà chủ thư mục đã quản lý nó (bản ghi trong $TD của chủ) → root được bảo dùng tài khoản đó
 Uo="$W/ownerhome"; mkdir -p "$Uo/.local/lib/gen-chibi"; printf 'docker %s\n' "$(cd -P "$I" && pwd)" > "$Uo/.local/lib/gen-chibi/installs"; Hr2="$W/roothome2"; mkdir -p "$Hr2"
 OUT="$(env -u GC_LANG PATH="$FK:$PATH" HOME="$Hr2" FAKE_ROOT=1 FAKE_ROOT_HOME="$Hr2" FAKE_USER_UID="$AUID" FAKE_USER_HOME="$Uo" FAKE_STATE="$FS" GC_HOME="$I" GC_TEST=1 timeout 60 $SID bash "$ROOT/cli/genchibi" start </dev/null 2>&1)"; RC=$?
@@ -566,10 +607,10 @@ DO_ENV="FAKE_ROOT=1 SUDO_USER= FAKE_COMPOSE_FAIL=stop" docli --yes
 [ $RC = 1 ] && echo "$OUT" | grep -q 'Could not stop the app — nothing moved' && [ ! -e "$FS/chown.log" ] && cmp -s "$D/.env" "$W/denv.before"
 check $? "doctor --yes (root) mà không dừng được app → không chuyển gì (không chown, .env nguyên), thoát 1" "rc $RC: $OUT · $(cat "$FS/chown.log" 2>/dev/null | head -3)"
 DO_ENV="FAKE_ROOT=1 SUDO_USER=" docli --yes
-grep -q '^useradd --system --no-create-home --home-dir /nonexistent --shell [^ ]*nologin --user-group genchibi$' "$FS/useradd.log" && grep -q "^chown -h 998:997 $D" "$FS/chown.log" && grep -q "^chown -h 998:997 .*$D/.env" "$FS/chown.log" \
+grep -q '^useradd --system --no-create-home --home-dir /nonexistent --shell [^ ]*nologin --user-group genchibi$' "$FS/useradd.log" && grep -q "^chown -h 998:997 .*\./$(basename "$D")\( \|$\)" "$FS/chown.log" && grep -q "^chown -h 998:997 .*\./\.env\( \|$\)" "$FS/chown.log" && ! grep -q "^chown -h 998:997 .*$D/" "$FS/chown.log" \
   && grep -qx 'GC_UID=998' "$D/.env" && grep -qx 'GC_GID=997' "$D/.env" && grep -qx 'GC_INSTALLED_BY=root' "$D/.env" && grep -qx 'GC_MASTER_KEY=.*' "$D/.env" && echo "$OUT" | grep -q "Moved: files of uid $AUID now belong to genchibi (998:997)" \
   && grep 'sub=up' "$FS/compose.log" | tail -1 | grep -q "pd=$D " && grep -qx "GC_UID='998'" "$FS/last-compose-up.env"
-check $? "doctor --yes (root): tạo tài khoản genchibi (useradd --system, nologin), đổi chủ CHỈ tệp đang thuộc uid cũ (find -user … chown -h, không theo symlink), .env GC_UID/GC_GID=998/997 + GC_INSTALLED_BY=root, chạy lại (compose user 998)" "rc $RC · useradd: $(cat "$FS/useradd.log" 2>&1) · .env: $(grep -E '^GC_(UID|GID|INSTALLED_BY|MASTER_KEY)=' "$D/.env" | cut -c1-24 | tr '\n' ' ') · up: $(grep 'sub=up' "$FS/compose.log" | tail -1 | cut -c1-200) · env: $(grep GC_UID "$FS/last-compose-up.env") · $(head -c 200 "$FS/chown.log")"
+check $? "doctor --yes (root): tạo tài khoản genchibi (useradd --system, nologin), đổi chủ CHỈ tệp đang thuộc uid cũ (find -P -user … -execdir chown -h ./tệp, không đường chuỗi, không theo symlink), .env GC_UID/GC_GID=998/997 + GC_INSTALLED_BY=root, chạy lại (compose user 998)" "rc $RC · useradd: $(cat "$FS/useradd.log" 2>&1) · .env: $(grep -E '^GC_(UID|GID|INSTALLED_BY|MASTER_KEY)=' "$D/.env" | cut -c1-24 | tr '\n' ' ') · up: $(grep 'sub=up' "$FS/compose.log" | tail -1 | cut -c1-200) · env: $(grep GC_UID "$FS/last-compose-up.env") · $(head -c 200 "$FS/chown.log")"
 if [ -n "$REALROOT" ]; then
   [ "$(ls -ldn "$TID/edge/caddy-data" | awk '{ print $3 }')" = 998 ] && [ "$(ls -ldn "$TID/edge/conf" | awk '{ print $3 }')" = 998 ] && [ "$(cat "$TID/edge/caddy-data/certs/x.crt")" = CERT ] \
     && grep 'sub=up' "$FS/compose.log" | tail -1 | grep -q "pd=$D .*docker-compose.edge.yml$" && ! echo "$OUT" | grep -q 'Refusing to start the edge Caddy'

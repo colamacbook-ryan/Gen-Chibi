@@ -1,0 +1,32 @@
+# override của chủ
+services:
+  login:
+    image: example/login:2   # bản mới
+    restart: unless-stopped
+    environment:
+      HASH: ${LOGIN_SECRET}
+      USER: $LOGIN_USER
+      LIT: $$NOT_A_VAR
+      URL: "https://a.example.com/x?y=1"
+    ports:
+      - "127.0.0.1:8081:80"
+    volumes:
+      - logindata:/data
+      - /srv/login/conf:/conf:ro
+      - /data
+      - type: volume
+        source: cache
+        target: /cache
+      - type: bind
+        source: /var/log/login
+        target: /logs
+    command:
+      - --flag
+      - "value with spaces"
+  app:
+    depends_on:
+      - login
+volumes:
+  logindata:
+  cache:
+    driver: local

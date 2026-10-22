@@ -37,6 +37,10 @@ process.on('uncaughtException', e => { console.log('   ✗ lỗi bất ngờ: ' 
 
 // env sạch: bỏ mọi GC_* của máy chạy test (không để GC_API_TOKEN / GC_PUBLIC_URL lọt vào làm sai ca)
 const baseEnv = () => Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^GC_/.test(k)));
+// v0.23.1 vòng 5: bản cài Node có bản ghi "native <thư mục>" (trình cài ghi) trong HOME riêng — genchibi không đoán chế độ theo .env, và test không chạm HOME thật
+const natHome = (HD, home) => { const h = home || HD + '-home', t = path.join(h, '.local/lib/gen-chibi'); fs.mkdirSync(t, { recursive: true, mode: 0o700 }); fs.chmodSync(t, 0o700);
+  const f = path.join(t, 'installs'), line = 'native ' + fs.realpathSync(HD) + '\n'; if (!fs.existsSync(f) || !fs.readFileSync(f, 'utf8').includes(line)) fs.appendFileSync(f, line, { mode: 0o600 }); return h; };
+
 function boot(port, env, home) {
   home = home || tmp('h' + port);
   const c = spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...baseEnv(), GC_HOME: home, GC_PORT: String(port), GC_NO_AUTOCHECK: '1', ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -420,7 +424,7 @@ console.log('9) CLI: genchibi status / open (cửa sổ admin) · password (app 
   const FB = tmp('bin'), LOG = path.join(FB, 'argv.log'), OPENED = path.join(FB, 'opened.txt'), realCurl = execFileSync('bash', ['-c', 'command -v curl'], { encoding: 'utf8' }).trim();
   fs.writeFileSync(path.join(FB, 'curl'), '#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> ' + JSON.stringify(LOG) + '\nexec ' + JSON.stringify(realCurl) + ' "$@"\n', { mode: 0o755 });
   for (const o of ['open', 'xdg-open']) fs.writeFileSync(path.join(FB, o), '#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> ' + JSON.stringify(OPENED) + '\n', { mode: 0o755 });   // TOÀN BỘ argv
-  const cli = (args, input) => { const r = spawnSync('bash', [path.join(ROOT, 'cli/genchibi')].concat(args), { env: { ...baseEnv(), GC_HOME: HD, GC_CLI_INNER: '1', PATH: FB + ':' + process.env.PATH }, input: input || '', encoding: 'utf8' }); return { code: r.status, out: (r.stdout || '') + (r.stderr || '') }; };
+  const cli = (args, input) => { const r = spawnSync('bash', [path.join(ROOT, 'cli/genchibi')].concat(args), { env: { ...baseEnv(), GC_HOME: HD, GC_CLI_INNER: '1', PATH: FB + ':' + process.env.PATH, HOME: natHome(HD) }, input: input || '', encoding: 'utf8' }); return { code: r.status, out: (r.stdout || '') + (r.stderr || '') }; };
   let S = await ready(boot(7749, {}, HD));
   const TC = fs.readFileSync(path.join(HD, 'data/owner-token'), 'utf8').trim(); SECRETS.push(TC);
   let st = cli(['status']);
@@ -437,7 +441,7 @@ console.log('9) CLI: genchibi status / open (cửa sổ admin) · password (app 
   const op2 = cli(['open']); ok(fs.readFileSync(OPENED, 'utf8').trim().split('\n').pop() === 'http://localhost:7749' && /sign in with your owner account/.test(op2.out) && !fs.existsSync(path.join(HD, 'run/admin-window')), 'có owner: genchibi open mở trang chính, không mở cửa sổ admin');
   const ac = cli(['agent', 'connect']);
   ok(ac.code === 0 && ac.out.includes('<token — see ' + HD + '/data/owner-token>') && !ac.out.includes(TC), 'agent connect: chỉ chỗ đọc token (data/owner-token khi .env trống), KHÔNG in token');
-  const mc = spawnSync('bash', [path.join(ROOT, 'cli/genchibi'), 'mcp'], { env: { ...baseEnv(), GC_HOME: HD, GC_CLI_INNER: '1', PATH: FB + ':' + process.env.PATH }, input: '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}\n', encoding: 'utf8' });
+  const mc = spawnSync('bash', [path.join(ROOT, 'cli/genchibi'), 'mcp'], { env: { ...baseEnv(), GC_HOME: HD, GC_CLI_INNER: '1', PATH: FB + ':' + process.env.PATH, HOME: natHome(HD) }, input: '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}\n', encoding: 'utf8' });
   ok(/"protocolVersion":"2025-06-18"/.test(mc.stdout || ''), 'genchibi mcp (native, .env không token) → cầu stdio đọc data/owner-token, bắt tay được');
   await stop(S);
   const pw2 = cli(['password'], 'mat khau moi khi app dung\n');

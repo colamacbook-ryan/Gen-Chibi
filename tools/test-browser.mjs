@@ -3526,6 +3526,7 @@ if (want('setup')) {
     if (!/genchibi setup check/.test(await q.textContent('#suSelfGrid tr[data-check="host"]'))) throw new Error('MCP-04 chưa chạy: phải nói đúng lệnh cần chạy trên máy chủ');
     // MCP-04 THẬT (CNS-269): CLI thật trên thư mục cài giả (current → cây mã) chạy "<đường tuyệt đối> mcp" rồi báo về app
     fs.symlinkSync(ROOT, path.join(home1, 'current')); fs.writeFileSync(path.join(home1, '.env'), 'GC_MODE=native\nGC_PORT=' + P1 + '\nGC_LANG=en\nGC_API_TOKEN=' + TOKS + '\n', { mode: 0o600 });
+    { const t = path.join(home1, '.local/lib/gen-chibi'); fs.mkdirSync(t, { recursive: true, mode: 0o700 }); fs.writeFileSync(path.join(t, 'installs'), 'native ' + fs.realpathSync(home1) + '\n', { mode: 0o600 }); }   // bản ghi native như trình cài ghi (v0.23.1)
     const hcr = spawnSync('bash', [path.join(ROOT, 'cli/genchibi'), 'setup', 'check'], { env: { PATH: process.env.PATH, HOME: home1, GC_HOME: home1, GC_CLI_INNER: '1' }, encoding: 'utf8', timeout: 60000 });
     if (hcr.status !== 0 || !/MCP-04 ✓/.test(hcr.stdout)) throw new Error('genchibi setup check phải đạt: ' + hcr.stdout + hcr.stderr);
     await q.waitForSelector('#suSelfGrid tr[data-check="host"][data-state="ok"]', { timeout: 15000 });

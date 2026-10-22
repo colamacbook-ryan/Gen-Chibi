@@ -105,7 +105,7 @@ function mkHome(name) { const h = path.join(W, name); fs.mkdirSync(path.join(h, 
     const port = await freePort(), dir = path.join(home, 'gc');
     storageAuth = [];
     const res = await run('bash', [path.join(ROOT, 'install.sh'), '--native', '--dir', dir, '--port', String(port)].concat(args), Object.assign({ HOME: home }, base, extra));
-    try { await run(path.join(home, '.local/bin/genchibi'), ['stop'], {}); } catch { /* chưa cài */ }
+    try { await run(path.join(home, '.local/bin/genchibi'), ['stop'], { HOME: home }); } catch { /* chưa cài */ }   // HOME của lần cài (bản ghi native ở đó) — không bao giờ HOME thật
     return Object.assign(res, { dir, home });
   };
   const a = await inst('inst-good', { GC_GITHUB_TOKEN: GOOD });
@@ -130,7 +130,7 @@ function mkHome(name) { const h = path.join(W, name); fs.mkdirSync(path.join(h, 
   fs.writeFileSync(path.join(e.dir, '.env'), fs.readFileSync(path.join(e.dir, '.env'), 'utf8').replace(/^GC_PORT=.*$/m, 'GC_PORT=' + port2));   // .env cũ giữ cổng cũ
   storageAuth = [];
   const e2 = await run('bash', [path.join(ROOT, 'install.sh'), '--native', '--dir', e.dir, '--port', String(port2)], Object.assign({ HOME: e.home }, base, { GC_GITHUB_TOKEN: GOOD }));
-  try { await run(path.join(e.home, '.local/bin/genchibi'), ['stop'], {}); } catch { /* ok */ }
+  try { await run(path.join(e.home, '.local/bin/genchibi'), ['stop'], { HOME: e.home }); } catch { /* ok */ }
   const env2 = fs.readFileSync(path.join(e.dir, '.env'), 'utf8');
   check(e2.code === 0 && env2.includes('GC_GITHUB_TOKEN=' + GOOD) && env2.includes('GC_FOO=giu-nguyen') && env2.includes('GC_MASTER_KEY='), '.env cũ: thêm dòng token, giữ dòng khác' + (e2.code === 0 ? '' : '\n' + e2.out.slice(-500)));
 
@@ -140,7 +140,7 @@ function mkHome(name) { const h = path.join(W, name); fs.mkdirSync(path.join(h, 
     let out = ''; ch.stdout.on('data', x => out += x); ch.stderr.on('data', x => out += x);
     ch.on('error', er => resolve({ code: -1, out: String(er) })); ch.on('close', code => resolve({ code, out })); ch.stdin.end('github_pat_NEWtoken456\n');
   });
-  try { await run(path.join(a.home, '.local/bin/genchibi'), ['stop'], {}); } catch { /* ok */ }
+  try { await run(path.join(a.home, '.local/bin/genchibi'), ['stop'], { HOME: a.home }); } catch { /* ok */ }
   const env3 = fs.readFileSync(path.join(a.dir, '.env'), 'utf8');
   check(tk.code === 0 && env3.includes('GC_GITHUB_TOKEN=github_pat_NEWtoken456') && !env3.includes(GOOD) && !tk.out.includes('NEWtoken456'), 'genchibi token: đọc stdin, ghi .env, không in token');
   check((env3.match(/^GC_GITHUB_TOKEN=/gm) || []).length === 1, 'không nhân đôi dòng token');

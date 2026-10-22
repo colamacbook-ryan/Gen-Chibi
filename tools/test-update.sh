@@ -129,7 +129,7 @@ CD="$W/compose"; mkdir -p "$CD/current"; echo "# compose bản mới" > "$CD/cur
 cmp -s "$CD/docker-compose.yml" "$CD/current/docker-compose.yml" && ok "sync_compose vẫn chép docker-compose.yml của bản mới (hành vi cũ không đổi)" || bad "sync_compose không chép docker-compose.yml"
 cmp -s "$CD/docker-compose.override.yml" "$W/override.orig" && ok "sync_compose không đụng docker-compose.override.yml" || bad "sync_compose làm đổi docker-compose.override.yml"
 # v0.23.1: bản override ĐÃ DUYỆT của bản cài ($TI/override.yml + giá trị biến $TI/override.env) và quyết định chạy không có nó ($TI/override.off), ngoài thư mục cài, là của root — genchibi override approve / off ghi / xoá nó; tệp của chủ thì không bao giờ
-grep -n 'override' "$ROOT/cli/genchibi" | grep -vE '^[0-9]+:[[:space:]]*#' | grep -v '\$TI/override\.\(yml\|env\|off\)' | grep -q 'rm \|cp \|mv \|>' && bad "cli/genchibi có lệnh ghi / xoá liên quan override" || ok "cli/genchibi không có lệnh nào ghi / xoá docker-compose.override.yml (chỉ bản root đã duyệt ở ~/.local/lib/gen-chibi)"
+grep -n 'override' "$ROOT/cli/genchibi" | grep -vE '^[0-9]+:[[:space:]]*#' | grep -vE '^[0-9]+:    [a-z0-9_]+\) F="' | grep -v '\$TI/override\.\(yml\|env\|off\)' | grep -q 'rm \|cp \|mv \|>' && bad "cli/genchibi có lệnh ghi / xoá liên quan override" || ok "cli/genchibi không có lệnh nào ghi / xoá docker-compose.override.yml (chỉ bản root đã duyệt ở ~/.local/lib/gen-chibi)"
 
 echo "8) edge: launcher giám sát cloudflared (giả) theo run/edge-intent.json (v0.21, spec §3.1, CNS-170)"
 EST="$HOME_DIR/run/edge-status.json"

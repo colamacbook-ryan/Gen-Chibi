@@ -28,7 +28,7 @@ mkinst() {
   local d="$1"; mkdir -p "$d/current/edge"
   cp "$ROOT/docker-compose.yml" "$ROOT/docker-compose.edge.yml" "$d/current/"; cp "$ROOT/edge/Caddyfile.base" "$d/current/edge/"
   cp "$ROOT/docker-compose.yml" "$d/"
-  printf 'services:\n  login:\n    image: example/login\n  caddy:\n    image: caddy:2\n    ports: ["80:80", "443:443"]\n' > "$d/docker-compose.override.yml"
+  printf 'services:\n  login:\n    image: example/login\n  caddy:\n    image: caddy:2\n    ports:\n      - "80:80"\n      - "443:443"\n' > "$d/docker-compose.override.yml"
   printf 'GC_MODE=docker\nGC_MASTER_KEY=test-key\nGC_UID=1000\nGC_GID=1000\n' > "$d/.env"
 }
 

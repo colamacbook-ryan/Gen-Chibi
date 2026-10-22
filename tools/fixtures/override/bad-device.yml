@@ -1,0 +1,5 @@
+volumes:
+  d:
+    driver_opts:
+      o: bind
+      device: ./x

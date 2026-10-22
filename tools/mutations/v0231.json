@@ -183,9 +183,9 @@
   },
   {
    "id": "R16",
-   "guard": "doctor: chỉ đổi chủ tệp của uid cũ (find -user, chown -h)",
+   "guard": "doctor: chỉ đổi chủ tệp của uid cũ (find -P -user, -execdir chown -h ./tệp)",
    "file": "cli/genchibi",
-   "find": "find \"$HOME_DIR\" -xdev -user \"$old\" \\( -type d -o -type l -o -links 1 \\) -exec chown -h \"$NU:$NG\" {} +",
+   "find": "PATH=\"$sp\" find -P \"$HOME_DIR\" -xdev -user \"$old\" \\( -type d -o -type l -o -links 1 \\) -execdir chown -h \"$NU:$NG\" {} +",
    "replace": "chown -R \"$NU:$NG\" \"$HOME_DIR\"",
    "test": [
     "bash",
@@ -689,8 +689,8 @@
    "id": "M02",
    "guard": "native chỉ khi CHƯA có tệp bản ghi nào + chủ là mình",
    "file": "cli/genchibi",
-   "find": "elif [ ! -e \"$TD/installs\" ] && [ \"$APP_UID\" = \"$(id -u)\" ]",
-   "replace": "elif [ \"$APP_UID\" = \"$(id -u)\" ]",
+   "find": "    elif rec_absent && [ \"$APP_UID\" = \"$(id -u)\" ] && ! docker_marked; then :",
+   "replace": "    elif [ \"$APP_UID\" = \"$(id -u)\" ] && ! docker_marked; then :",
    "test": [
     "bash",
     "tools/test-root.sh"
@@ -713,25 +713,25 @@
    "id": "V02",
    "guard": "approve từ chối khoá đọc tệp (build, env_file…)",
    "file": "cli/genchibi",
-   "find": "match(l, /^[ \\t-]*(build|env_file|extends|include|configs|secrets|file|dockerfile|additional_contexts|label_file)[ \\t]*:/)",
-   "replace": "match(l, /^[ \\t-]*(xbuild|xenv_file)[ \\t]*:/)",
+   "find": "if (key ~ /^(build|env_file|extends|include|configs|secrets|file|dockerfile|additional_contexts|label_file)$/)",
+   "replace": "if (key ~ /^(xbuild|xenv_file)$/)",
    "test": [
     "bash",
     "tools/test-root.sh"
    ],
-   "expect": "override approve từ chối"
+   "expect": "mọi đường vòng"
   },
   {
    "id": "V03",
-   "guard": "approve từ chối nguồn bind tương đối / biến / trong thư mục cài / liên kết",
+   "guard": "approve: nguồn bind tuyệt đối phải ngoài thư mục cài, không liên kết, không $ / khoảng trắng",
    "file": "cli/genchibi",
-   "find": "[ -z \"$p\" ] || { bad=1; m ov_bad_src",
-   "replace": "[ -z \"$p\" ] || { m ov_bad_src",
+   "find": "      S) ov_abs_ok \"$val\" || { bad=1; m ov_bad_src \"$ln\" \"$val\"; } ;;",
+   "replace": "      S) : ;;",
    "test": [
     "bash",
     "tools/test-root.sh"
    ],
-   "expect": "override approve từ chối"
+   "expect": "mọi đường vòng"
   },
   {
    "id": "V04",
@@ -833,8 +833,8 @@
    "id": "W02",
    "guard": "CNS-291: doctor chuyển user đổi chủ cả nguồn edge (root thật)",
    "file": "cli/genchibi",
-   "find": "if [ -n \"$EDGE_DIR\" ] && [ -d \"$EDGE_DIR\" ]; then find \"$EDGE_DIR\"",
-   "replace": "if false; then find \"$EDGE_DIR\"",
+   "find": "if [ -n \"$EDGE_DIR\" ] && [ -d \"$EDGE_DIR\" ]; then PATH=\"$sp\" find -P \"$EDGE_DIR\"",
+   "replace": "if false; then PATH=\"$sp\" find -P \"$EDGE_DIR\"",
    "test": [
     "bash",
     "tools/test-root.sh"
@@ -869,8 +869,8 @@
    "id": "E03",
    "guard": "CNS-292c: chép edge lỗi → báo, dừng (không nuốt)",
    "file": "cli/genchibi",
-   "find": "if ! { as_app sh -c 'cd \"edge/$1\" && tar -cf - .' sh \"$d\"",
-   "replace": "if false && ! { as_app sh -c 'cd \"edge/$1\" && tar -cf - .' sh \"$d\"",
+   "find": "        if ! { as_app sh -c '[ ! -L edge ] && [ ! -L \"edge/$1\" ] && cd -P",
+   "replace": "        if false && ! { as_app sh -c '[ ! -L edge ] && [ ! -L \"edge/$1\" ] && cd -P",
    "test": [
     "bash",
     "tools/test-root.sh"
@@ -961,6 +961,246 @@
     "f=\"$(mktemp)\"; sed -n '/^home_sig() {/,/^}/p; /^GC_H0=/,/^\\[ \"$GC_S0\"/p' tools/test.sh > \"$f\"; bash \"$f\"; r=$?; rm -f \"$f\"; exit $r"
    ],
    "expect": "home_check mù"
+  },
+  {
+   "id": "Y01",
+   "guard": "override: từ chối flow { } [ ] (c2, c4, c7)",
+   "file": "cli/genchibi",
+   "find": "      if (t ~ /[{}\\[\\]]/) {",
+   "replace": "      if (0) {",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "mọi đường vòng"
+  },
+  {
+   "id": "Y02",
+   "guard": "override: từ chối khoá có nháy (c3)",
+   "file": "cli/genchibi",
+   "find": "      if (l ~ /^[ ]*(-[ ]+)?[\"\\047][^\"\\047]*[\"\\047][ ]*:/) {",
+   "replace": "      if (0) {",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "mọi đường vòng"
+  },
+  {
+   "id": "Y03",
+   "guard": "override: từ chối anchor / alias & *",
+   "file": "cli/genchibi",
+   "find": "      if (l ~ /(^|[ :-])[&*][^ &*]/ || l ~ /(^|[ :-])[&*]$/) {",
+   "replace": "      if (0) {",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "mọi đường vòng"
+  },
+  {
+   "id": "Y04",
+   "guard": "override: từ chối merge <<",
+   "file": "cli/genchibi",
+   "find": "      if (l ~ /<</) {",
+   "replace": "      if (0) {",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "mọi đường vòng"
+  },
+  {
+   "id": "Y05",
+   "guard": "override: từ chối khoá phức ?",
+   "file": "cli/genchibi",
+   "find": "      if (l ~ /^[ ]*(-[ ]+)?\\?([ ]|$)/) {",
+   "replace": "      if (0) {",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "mọi đường vòng"
+  },
+  {
+   "id": "Y06",
+   "guard": "override: từ chối tag !",
+   "file": "cli/genchibi",
+   "find": "      if (l ~ /(^|[ :-])!/) {",
+   "replace": "      if (0) {",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "mọi đường vòng"
+  },
+  {
+   "id": "Y07",
+   "guard": "override: từ chối khối chữ | >",
+   "file": "cli/genchibi",
+   "find": "      if (l ~ /:[ ]+[|>][-+0-9]*$/ || l ~ /^[ ]*-[ ]+[|>][-+0-9]*$/) {",
+   "replace": "      if (0) {",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "mọi đường vòng"
+  },
+  {
+   "id": "Y08",
+   "guard": "override: từ chối --- / ...",
+   "file": "cli/genchibi",
+   "find": "      if (l ~ /^(---|\\.\\.\\.)([ \\t]|$)/) {",
+   "replace": "      if (0) {",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "mọi đường vòng"
+  },
+  {
+   "id": "Y09",
+   "guard": "override: từ chối tab",
+   "file": "cli/genchibi",
+   "find": "      if (raw ~ /\\t/) {",
+   "replace": "      if (0) {",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "mọi đường vòng"
+  },
+  {
+   "id": "Y10",
+   "guard": "override: chú thích sau giá trị có nháy → từ chối (không để che {…})",
+   "file": "cli/genchibi",
+   "find": "if (pre ~ /[\"\\047]/) { printf \"X\\t%d\\t#\\n\", NR; next }",
+   "replace": "if (0) { next }",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "mọi đường vòng"
+  },
+  {
+   "id": "Y11",
+   "guard": "override: mục volumes ngắn phải là volume có tên hoặc đường tuyệt đối (c8)",
+   "file": "cli/genchibi",
+   "find": "            else if (v !~ /^[A-Za-z0-9][A-Za-z0-9_.-]*:[^ ]+$/) printf \"V\\t%d\\t%s\\n\", NR, v",
+   "replace": "            else if (0) printf \"V\\t%d\\t%s\\n\", NR, v",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "mọi đường vòng"
+  },
+  {
+   "id": "Y12",
+   "guard": "override: type: bind + source tên → từ chối (c6)",
+   "file": "cli/genchibi",
+   "find": "    function endItem() { if (itemLine && isrc != \"\" && itype != \"volume\") {",
+   "replace": "    function endItem() { if (0) {",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "mọi đường vòng"
+  },
+  {
+   "id": "Y13",
+   "guard": "override: device: phải tuyệt đối ngoài thư mục cài",
+   "file": "cli/genchibi",
+   "find": "      if (key == \"device\") { v = val; if (v != \"\") printf \"S\\t%d\\t%s\\n\", NR, v }",
+   "replace": "      if (0) { }",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "mọi đường vòng"
+  },
+  {
+   "id": "Y14",
+   "guard": "🟡 vòng 5: chụp cả biến trong danh sách khoá genchibi (GC_PUBLIC_URL…), chỉ trừ khoá genchibi tự tính",
+   "file": "cli/genchibi",
+   "find": "    case \" $OV_GEN \" in *\" $k \"*) continue ;; esac",
+   "replace": "    case \"$ENV_KEYS $OV_GEN \" in *\" $k \"*) continue ;; esac",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "GC_PUBLIC_URL"
+  },
+  {
+   "id": "Y15",
+   "guard": "🟡 vòng 5: docker hỏi lỗi → coi như có dấu Docker (đóng khi nghi ngờ)",
+   "file": "cli/genchibi",
+   "find": "    o=\"$(docker ps -aq --filter \"label=com.docker.compose.project.working_dir=$d\" 2>/dev/null)\" || return 0",
+   "replace": "    o=\"$(docker ps -aq --filter \"label=com.docker.compose.project.working_dir=$d\" 2>/dev/null)\" || return 1",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "bản cài cũ chưa có bản ghi, .env native"
+  },
+  {
+   "id": "Y16",
+   "guard": "🟡 vòng 5: đoán Docker thì không ghi bản ghi (cài lại --native là xong)",
+   "file": "cli/genchibi",
+   "find": "  if [ -z \"$(mode_get)\" ] && [ -z \"$MODE_GUESS\" ]; then",
+   "replace": "  if [ -z \"$(mode_get)\" ]; then",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "đã có tệp bản ghi mà chưa có dòng"
+  },
+  {
+   "id": "Y17",
+   "guard": "🟡 vòng 5: edge/ của thư mục cài là liên kết → từ chối",
+   "file": "cli/genchibi",
+   "find": "  if as_app test -L edge; then m edge_unsafe",
+   "replace": "  if false; then m edge_unsafe",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "edge/ của thư mục cài là liên kết"
+  },
+  {
+   "id": "Y18",
+   "guard": "🔵 vòng 5: logs / exec (cầu MCP) chỉ vào gen-chibi của chính bản cài",
+   "file": "cli/genchibi",
+   "find": "  case \"${1:-}\" in logs|exec) case \" ${cs[*]-} \" in *\" gen-chibi \"*) ;;",
+   "replace": "  case \"${1:-}\" in logs|exec) case \" gen-chibi \" in *\" gen-chibi \"*) ;;",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "không exec / logs vào gen-chibi đó"
+  },
+  {
+   "id": "Y19",
+   "guard": "🔵 vòng 5: trình cài không tự chuyển native trên thư mục có bản ghi docker",
+   "file": "install.sh",
+   "find": "[ -r \"$rh/$rt/installs\" ] && grep -qxF \"docker $DPN\" \"$rh/$rt/installs\" && die docker_rec \"$DIR\"",
+   "replace": "false && die docker_rec \"$DIR\"",
+   "test": [
+    "bash",
+    "tools/test-lang.sh"
+   ],
+   "expect": "trình cài dừng (không tự chuyển native"
+  },
+  {
+   "id": "Y20",
+   "guard": "🔵 vòng 5: agent skill không ghi vào thư mục cài",
+   "file": "cli/genchibi",
+   "find": "      case \"$dp/\" in \"$HOME_PHYS\"/*|\"$HOME_DIR\"/*) m skill_in_install",
+   "replace": "      case \"$dp/\" in /khong-co/*) m skill_in_install",
+   "test": [
+    "node",
+    "tools/test-agent-zero.mjs"
+   ],
+   "expect": "đích trong thư mục cài"
   }
  ]
 }

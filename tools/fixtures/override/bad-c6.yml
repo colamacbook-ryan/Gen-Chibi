@@ -1,0 +1,6 @@
+services:
+  app:
+    volumes:
+      - type: bind
+        source: data
+        target: /x

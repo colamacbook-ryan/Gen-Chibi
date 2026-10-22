@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.23.1 — Hardening: the app can no longer reach root through its own files; `genchibi doctor`; restore keeps the install id on the same machine
+Before Ryan tests from scratch (INT-20 (e): "hoàn thiện hết các vấn đề kỹ thuật đi rồi tôi mới test" — *"finish all the technical issues first, then I'll test"*). No new features in the Studio.
+
+### Read before updating (Docker installs)
+- **If you have a `docker-compose.override.yml`, `start` / `update` stop until you decide once.** Run the command `genchibi` prints (`… override approve` or `… override off`, an absolute path so it works with `sudo`). Running containers are not touched before you decide. `approve` refuses an override that uses `build:`, `env_file:`, `extends`, `include`, `configs` / `secrets` files, or bind mounts with a relative path, a variable, a link or a path inside the install folder — move those to an image or an absolute path outside the install folder first. Variables like `${LOGIN_SECRET}` are taken once at approval; changing their value in `.env` later asks again.
+- **Overrides must be plain block YAML (one key per line).** Flow style (`[...]`, `{...}`), anchors / `<<`, tags, block text (`|`, `>`), quoted keys, tabs, and bind paths that are relative, use a variable or point inside the install folder are refused, one line per problem. Rewrite e.g. `ports: ["8080:80"]` as a block list. Every variable the override uses is taken once at approval (except `GC_UID` / `GC_GID` / `GC_PORT` / `GC_BIND` / `GC_EDGE_DIR`, which genchibi computes itself).
+- **An old Node (non-Docker) install without a mode record may be treated as Docker** until you run the installer again with `--native`; `genchibi` prints that line.
+- **The first `genchibi` after the app is on v0.23.1 needs github.com once**: it downloads the release package, checks it against `SHA256SUMS`, and replaces itself. Offline, `stop`, `logs` and `mcp` still work.
+- **With the edge Caddy on, the first `update` / `rollback` recreates the app container too** (a short interruption). Certificates are copied once to a folder outside the install folder.
+
+### Security — what changed
+- **`genchibi` (as root or as your own user) never runs or loads anything from the install folder.** It uses its own copy, verified against the release's `SHA256SUMS`, in `~/.local/lib/gen-chibi` (`~/gen-chibi-trust` when Docker comes from snap). `.env` is read as data (known keys only), never sourced.
+- **Compose files come from the verified copy and never from a release older than v0.23.1**, even after a rollback or if the app points `current` back.
+- **The run mode is no longer taken from `.env`.** A Docker install stays Docker; native only when the installer recorded it.
+- **Old `genchibi` commands (v0.23.0 and earlier) replace themselves** the first time you run them; `genchibi doctor` shows ✗ for any old command left on your PATH.
+- **Each install keeps its own approvals and edge Caddy folders** outside the install folder. One account per install: root and your user are told which one to use. `uninstall` removes only that install's state.
+- **Containers never run as root or with a privileged group**, and the installer never changes owners on an existing folder.
+- **`genchibi agent skill`** only unpacks regular files and folders, never as their original owner, and stops if the target contains links.
+
+### New
+- **`genchibi doctor [--yes] [--migrate]`**: one line per check (app, verified commands and compose files, override, container user, ports, set-up stage, edge, tunnel); exit 1 when something is ✗. For root installs made without sudo by v0.21.0–0.21.2 (containers ran as uid 1000), it proposes moving to a `genchibi` system account — only with evidence, never to the folder's own owner, and not while that user still has running processes. It moves the edge folders too.
+- **A backup restored on the same machine keeps its install id**, so *Go offline* can still remove this machine's own Cloudflare tunnel and DNS record. A backup from another machine (or made before v0.23.1) still gets a new id.
+
+### For developers
+- `tools/mutations/v0231.json`: 80 mutations, each must turn a named test red. Old-command fixtures come from real tags (`tools/fixtures/old-cli/`, `old-compose/`) — a hand-written fixture hid a bug in an earlier round (L-83).
+- `tools/test.sh` checks after every group that no test wrote to the real `$HOME`.
+
+### Not in this release (v0.23.2)
+- Real 9:16 video, a smoother 1080p export, more MCP tools (versions / restore, storyboard, HTML film export), video settings stored with the work.
+- Not yet tried on: Docker from snap on a real machine, macOS hosts.
+
 ## v0.23.0 — Owner ready: first login with admin / admin, then a guided set-up (owner account → domain → MCP check)
 Ryan: "tài khoản owner phải được khởi tạo mặc định làm admin pass admin, rồi lần đầu đăng nhập yêu cầu owner bắt buộc phải update khởi tạo lại thông tin owner lần đầu và thực hiện qui trình đăng ký để nối tên miền và chuẩn đoán kết nối mcp" *(In English: "the owner account should start as admin / admin; on first login the owner must re-create the owner details and go through the steps to connect a domain and check the MCP connection")*. Google sign-in and multi-user are left for later (owner-only for now).
 

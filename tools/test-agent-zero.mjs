@@ -152,10 +152,11 @@ ok((await batch(21)).status === 413, 'lô JSON-RPC 21 lời gọi phải 413');
 const b2 = await batch(2); ok(b2.status === 200 && (await b2.json()).length === 2, 'lô 2 lời gọi phải trả 2 kết quả');
 const CH = path.join(H, 'cli-home'), U = path.join(H, 'du-an-cua-ban'), FB = path.join(H, 'bin'), LOG = path.join(H, 'curl-argv.log');
 fs.mkdirSync(CH); fs.mkdirSync(U); fs.mkdirSync(FB);
+const CHH = path.join(H, 'cli-user-home'); { const t = path.join(CHH, '.local/lib/gen-chibi'); fs.mkdirSync(t, { recursive: true, mode: 0o700 }); fs.writeFileSync(path.join(t, 'installs'), 'native ' + fs.realpathSync(CH) + '\n', { mode: 0o600 }); }   // bản ghi native như trình cài ghi; HOME riêng (không chạm HOME thật)
 fs.writeFileSync(path.join(CH, '.env'), 'GC_MODE=native\nGC_PORT=' + PORT + '\nGC_API_TOKEN=' + TOKEN + '\n');
 const realCurl = execFileSync('bash', ['-c', 'command -v curl'], { encoding: 'utf8' }).trim();
 fs.writeFileSync(path.join(FB, 'curl'), '#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> ' + JSON.stringify(LOG) + '\nexec ' + JSON.stringify(realCurl) + ' "$@"\n', { mode: 0o755 });
-const cli = (args, cwd) => { try { return { code: 0, out: execFileSync('bash', [path.join(ROOT, 'cli/genchibi')].concat(args), { cwd: cwd || U, encoding: 'utf8', env: { ...process.env, GC_HOME: CH, GC_CLI_INNER: '1', PATH: FB + ':' + process.env.PATH }, stdio: ['ignore', 'pipe', 'pipe'] }) }; } catch (e) { return { code: e.status, out: String(e.stdout || '') + String(e.stderr || '') }; } };
+const cli = (args, cwd) => { try { return { code: 0, out: execFileSync('bash', [path.join(ROOT, 'cli/genchibi')].concat(args), { cwd: cwd || U, encoding: 'utf8', env: { ...process.env, GC_HOME: CH, GC_CLI_INNER: '1', PATH: FB + ':' + process.env.PATH, HOME: CHH }, stdio: ['ignore', 'pipe', 'pipe'] }) }; } catch (e) { return { code: e.status, out: String(e.stdout || '') + String(e.stderr || '') }; } };
 fs.writeFileSync(path.join(U, 'GEMINI.md'), 'ghi chú riêng của tôi\n');
 const r1 = cli(['agent', 'skill', 'gemini']);
 ok(r1.code !== 0 && fs.readFileSync(path.join(U, 'GEMINI.md'), 'utf8') === 'ghi chú riêng của tôi\n', 'agent skill không được ghi đè GEMINI.md của người dùng: ' + r1.out.slice(0, 200));
@@ -169,6 +170,9 @@ ok(r4.code === 0 && r5.code === 0 && fs.existsSync(path.join(SK, 'gen-chibi/SKIL
 { const SK2 = path.join(H, 'skills-link'), TGT = path.join(H, 'noi-khac'); fs.mkdirSync(SK2); fs.mkdirSync(TGT); fs.symlinkSync(TGT, path.join(SK2, 'gen-chibi'));
   const r6 = cli(['agent', 'skill', 'claude', '--dir', SK2, '--force']);
   ok(r6.code !== 0 && fs.readdirSync(TGT).length === 0 && r6.out.includes(path.join(SK2, 'gen-chibi')), 'agent skill: đích là liên kết cài sẵn → dừng, không ghi xuyên (kể cả --force): ' + r6.out.slice(0, 200)); }
+// vòng 5: đích nằm TRONG thư mục cài (app đổi được) → từ chối, cả khi đứng trong thư mục cài lẫn --dir trỏ vào đó
+{ const r7 = cli(['agent', 'skill', 'codex'], CH), r8 = cli(['agent', 'skill', 'claude', '--dir', path.join(CH, 'x', 'y')]);
+  ok(r7.code !== 0 && r8.code !== 0 && !fs.existsSync(path.join(CH, 'AGENTS.md')) && !fs.existsSync(path.join(CH, 'x')) && /inside the install folder/.test(r7.out + r8.out), 'agent skill: đích trong thư mục cài → từ chối: ' + (r7.out + r8.out).slice(0, 200)); }
 const tp = cli(['agent', 'topics']); ok(tp.code === 0 && /"id":"film"/.test(tp.out), 'agent topics qua token phải chạy: ' + tp.out.slice(0, 120));
 const con = cli(['agent', 'connect']); ok(con.code === 0 && /start_here/.test(con.out) && con.out.indexOf(TOKEN) < 0, 'agent connect không được in token');
 const CLI_ABS = path.join(ROOT, 'cli/genchibi');
