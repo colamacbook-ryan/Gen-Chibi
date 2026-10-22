@@ -563,26 +563,21 @@ fi
 
 # ---------- CLI (từ gói đã kiểm ở $TMP — không từ thư mục cài)
 # Root: home theo passwd (KHÔNG theo $HOME — sudo -E / HOME của user sẽ đặt lệnh root vào chỗ user ghi được, CNS-284)
-home_of() { local h=""; h="$(getent passwd "$1" 2>/dev/null | cut -d: -f6)" || h=""; [ -n "$h" ] || h="$(awk -F: -v u="$1" '$3 == u { print $6; exit }' /etc/passwd 2>/dev/null)" || h=""
-  [ -n "$h" ] || { [ "$1" = 0 ] && h="$(dscl . -read /Users/root NFSHomeDirectory 2>/dev/null | awk '{ print $2 }')"; } || h=""; [ -n "$h" ] || { [ "$1" = 0 ] && h=/root; }; printf '%s' "$h"; }
-path_safe() { # như cli/genchibi: P và mọi thư mục cha thuộc mình hoặc root, không ai khác ghi được (trừ bit t)
-  local p="$1" l
-  while :; do
-    [ -e "$p" ] && [ ! -L "$p" ] || return 1
-    l="$(ls -ldn "$p" 2>/dev/null)" || return 1
-    if [ ! -O "$p" ] && [ "$(printf '%s' "$l" | awk '{ print $3 }')" != 0 ]; then return 1; fi
-    case "$l" in d????????[tT]*) ;; ?????w*|????????w*) return 1 ;; esac
-    [ "$p" = / ] && return 0
-    p="$(dirname "$p")"
-  done
-}
+# path_safe / home_of / snap_docker / td_default: lấy NGUYÊN VĂN từ cli/genchibi của gói đã kiểm (một nguồn — CNS-287): cùng luật an toàn (cả ACL), cùng chỗ $TD
+eval "$(sed -n -e '/^path_safe() {/,/^}/p' -e '/^file_safe() {/p' -e '/^home_of() {/,/^}/p' -e '/^snap_docker() {/,/^}/p' -e '/^td_default() {/p' "$PKG/cli/genchibi")"
+declare -F path_safe >/dev/null && declare -F home_of >/dev/null && declare -F td_default >/dev/null || die td_unsafe "$PKG/cli/genchibi"
 # root: $HOME chỉ khi nó an toàn (thuộc root, không ai khác ghi được, cả các thư mục cha); không thì home của uid 0 theo passwd (sudo -E — CNS-284)
 if [ "$(id -u)" = 0 ]; then if [ -n "${HOME:-}" ] && path_safe "$HOME"; then UHOME="$HOME"; else UHOME="$(home_of 0)"; fi; else UHOME="$HOME"; fi
 BIN="$UHOME/.local/bin"; mkdir -p "$BIN"
+DP="$(cd -P "$DIR" && pwd)"
+put_rec() { # put_rec <thư mục tin cậy> <chế độ>: bản ghi "<chế độ> <đường thật thư mục cài>" (thay dòng cũ của thư mục này — cài lại native xoá bản ghi docker cũ)
+  { [ ! -f "$1/installs" ] || awk -v p="$DP" '{ l = $0; sub(/^[^ ]* /, ""); if ($0 != p) print l }' "$1/installs"; printf '%s %s\n' "$2" "$DP"; } > "$1/installs.tmp"
+  chmod 600 "$1/installs.tmp"; mv -f "$1/installs.tmp" "$1/installs"
+}
 if [ "$MODE" = docker ]; then
   # Docker (mọi uid — CNS-279): tệp đã kiểm của lệnh — ~/.local/lib/gen-chibi (0700, container không thấy): rel/<bản>/ compose + lệnh, genchibi (bản mới nhất),
   # repo, mode, ca.pem (CA của người cài, cho lần tải kiểm SHA sau này)
-  TRUSTD="$UHOME/.local/lib/gen-chibi"
+  TRUSTD="$(td_default "$UHOME")"   # Docker cài bằng snap: đường không ẩn (snap không đọc ~/.local)
   TP="$TRUSTD"; while [ ! -e "$TP" ]; do TP="$(dirname "$TP")"; done; path_safe "$TP" || die td_unsafe "$TRUSTD"
   ( umask 077; mkdir -p "$TRUSTD/rel" "$TRUSTD/run" ); chmod 700 "$TRUSTD"
   TRUSTD="$(cd -P "$TRUSTD" && pwd)"; path_safe "$TRUSTD" || die td_unsafe "$TRUSTD"
@@ -593,7 +588,9 @@ if [ "$MODE" = docker ]; then
   [ ! -f "$PKG/edge/Caddyfile.base" ] || cp "$PKG/edge/Caddyfile.base" "$R.tmp/Caddyfile.base"
   cp "$PKG/cli/genchibi" "$R.tmp/genchibi"; printf '%s\n' "$VER" > "$R.tmp/VERSION"; printf '%s\n' "$WANTSUM" > "$R.tmp/SHA256"
   rm -rf "$R"; mv "$R.tmp" "$R"
-  printf '%s\n' "$REPO" > "$TRUSTD/repo"; DP="$(cd -P "$DIR" && pwd)"; { [ ! -f "$TRUSTD/installs" ] || awk -v p="$DP" '{ l = $0; sub(/^[^ ]* /, ""); if ($0 != p) print l }' "$TRUSTD/installs"; printf 'docker %s\n' "$DP"; } > "$TRUSTD/installs.tmp"; chmod 600 "$TRUSTD/installs.tmp"; mv -f "$TRUSTD/installs.tmp" "$TRUSTD/installs"
+  printf '%s\n' "$REPO" > "$TRUSTD/repo"; put_rec "$TRUSTD" docker
+  # dấu (chỉ để nhắc, không quyết gì): bản cài này do tài khoản nào quản lý bản duyệt / edge — user thường gõ genchibi trên bản cài sudo sẽ được nhắc dùng sudo
+  if [ -n "$AS_ROOT" ]; then printf 'root\n'; else printf 'user\n'; fi | in_dir sh -c 'rm -f run/trust-owner.gc-tmp && cat > run/trust-owner.gc-tmp && mv -f run/trust-owner.gc-tmp run/trust-owner' 
   if [ -n "${NODE_EXTRA_CA_CERTS:-}" ] && [ -f "$NODE_EXTRA_CA_CERTS" ]; then cp "$NODE_EXTRA_CA_CERTS" "$TRUSTD/ca.pem.tmp" && mv -f "$TRUSTD/ca.pem.tmp" "$TRUSTD/ca.pem"; fi
   sed -e "s#__GC_HOME__#$DIR#" -e "s#__GC_TRUST__#$TRUSTD#" "$PKG/cli/genchibi" > "$TRUSTD/genchibi.tmp" && chmod 755 "$TRUSTD/genchibi.tmp" && mv -f "$TRUSTD/genchibi.tmp" "$TRUSTD/genchibi"
   printf '%s\n' "$VER" > "$TRUSTD/genchibi.version"
@@ -601,6 +598,9 @@ if [ "$MODE" = docker ]; then
   ok root_trust "$TRUSTD"
 else
   sed "s#__GC_HOME__#$DIR#" "$PKG/cli/genchibi" > "$BIN/genchibi"; chmod +x "$BIN/genchibi"
+  # native: bản ghi "native" (genchibi không đoán chế độ theo .env nữa); thư mục tin cậy không an toàn → bỏ qua (genchibi sẽ coi là Docker — an toàn)
+  TRUSTD="$(td_default "$UHOME")"; TP="$TRUSTD"; while [ ! -e "$TP" ]; do TP="$(dirname "$TP")"; done
+  if path_safe "$TP"; then ( umask 077; mkdir -p "$TRUSTD" ) && [ ! -L "$TRUSTD/installs" ] && path_safe "$TRUSTD" && put_rec "$TRUSTD" native; fi
 fi
 ok cli_ok "$BIN"
 case ":$PATH:" in *":$BIN:"*) ;; *) warn path_hint "$BIN" "$(basename "${SHELL:-bash}")" ;; esac

@@ -104,7 +104,7 @@ function shims(dir, extra) {
   Object.entries(extra || {}).forEach(([n, body]) => fs.writeFileSync(path.join(FB, n), body, { mode: 0o755 }));
   return { FB, LOG };
 }
-const cliRunK = (HD, FB, args) => cliRun(HD, FB, args, '', { HOME: path.join(fs.readlinkSync(path.join(HD, '.khome'))) });   // bản cài Docker giả (HOME riêng — xem HDk)
+const cliRunK = (HD, FB, args) => cliRun(HD, FB, args, '', { HOME: path.join(fs.readlinkSync(path.join(HD, '.khome'))), GC_TEST: '1' });   // GC_TEST=1: sàn tin cậy kiểm thử (tệp đã kiểm của test là v0.0.0)   // bản cài Docker giả (HOME riêng — xem HDk)
 const cliRun = (HD, FB, args, input, env) => { const r = spawnSync('bash', [path.join(ROOT, 'cli/genchibi')].concat(args), { env: { ...baseEnv(), GC_HOME: HD, GC_CLI_INNER: '1', PATH: FB + ':' + process.env.PATH, ...(env || {}) }, input: input || '', encoding: 'utf8', timeout: 60000 }); return { code: r.status, out: (r.stdout || '') + (r.stderr || '') }; };
 
 /* ================================================================== 0) đơn vị */

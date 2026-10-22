@@ -1,5 +1,5 @@
 {
- "_": "gen-chibi v0.23.1 — đột biến cho mô hình tin cậy (CNS-233 / CNS-257 / CNS-278–288, F1 / F2), doctor (CNS-234), dấu máy khi khôi phục (CNS-235), seenClient (CNS-277). Chạy: node tools/mutate.mjs --data tools/mutations/v0231.json [--jobs N --wrap \"bash netns.sh\"] [ID…]; kiểm nhanh: --check. Bảng: v0231.md. © 2026 Gen Labs — All rights reserved.",
+ "_": "gen-chibi v0.23.1 — đột biến cho mô hình tin cậy (CNS-233 / CNS-257 / CNS-278–296, F1 / F2), doctor (CNS-234), dấu máy khi khôi phục (CNS-235), seenClient (CNS-277). Chạy: node tools/mutate.mjs --data tools/mutations/v0231.json [--jobs N --wrap \"bash netns.sh\"] [ID…]; kiểm nhanh: --check. Bảng: v0231.md. © 2026 Gen Labs — All rights reserved.",
  "mutations": [
   {
    "id": "R01",
@@ -53,7 +53,7 @@
    "id": "R05",
    "guard": "override: root chỉ dùng bản đã duyệt",
    "file": "cli/genchibi",
-   "find": "    if file_safe \"$TD/override.yml\"; then printf '%s\\n' -f \"$TD/override.yml\"; fi\n",
+   "find": "    if file_safe \"$TI/override.yml\"; then printf '%s\\n' -f \"$TI/override.yml\"; fi\n",
    "replace": "    ov=\"$(compose_override)\"; [ -z \"$ov\" ] || printf '%s\\n' -f \"$HOME_DIR/$ov\"\n",
    "test": [
     "bash",
@@ -245,8 +245,8 @@
    "id": "G02",
    "guard": "override đổi sau khi duyệt → lại dừng",
    "file": "cli/genchibi",
-   "find": "if file_safe \"$TD/override.yml\" && [ \"$(sha256_of \"$TD/override.yml\")\" = \"$h\" ] && [ \"$(ov_keys",
-   "replace": "if file_safe \"$TD/override.yml\" && [ \"$(ov_keys",
+   "find": "if file_safe \"$TI/override.yml\" && [ \"$(sha256_of \"$TI/override.yml\")\" = \"$h\" ] && file_safe \"$TI/override.env\"",
+   "replace": "if file_safe \"$TI/override.yml\" && file_safe \"$TI/override.env\"",
    "test": [
     "bash",
     "tools/test-root.sh"
@@ -257,8 +257,8 @@
    "id": "G03",
    "guard": "override off chỉ cho đúng nội dung đã chọn",
    "file": "cli/genchibi",
-   "find": "if file_safe \"$TD/override.off\" && [ \"$(head -n 1 \"$TD/override.off\")\" = \"$h\" ]; then return 0; fi",
-   "replace": "if file_safe \"$TD/override.off\"; then return 0; fi",
+   "find": "if file_safe \"$TI/override.off\" && [ \"$(head -n 1 \"$TI/override.off\")\" = \"$h\" ]; then return 0; fi",
+   "replace": "if file_safe \"$TI/override.off\"; then return 0; fi",
    "test": [
     "bash",
     "tools/test-root.sh"
@@ -471,10 +471,10 @@
   },
   {
    "id": "K01",
-   "guard": "CNS-281: override đã duyệt nhận đúng biến .env nó dùng",
+   "guard": "CNS-281 / CNS-294: override đã duyệt nhận đúng biến .env nó dùng (giá trị chụp lúc duyệt)",
    "file": "cli/genchibi",
-   "find": "  if file_safe \"$TD/override.keys\" && file_safe \"$TD/override.yml\"; then",
-   "replace": "  if false; then",
+   "find": "  if file_safe \"$TI/override.env\" && file_safe \"$TI/override.yml\"; then out=",
+   "replace": "  if false; then out=",
    "test": [
     "bash",
     "tools/test-root.sh"
@@ -485,7 +485,7 @@
    "id": "K02",
    "guard": "CNS-286: override bị xoá sau khi duyệt → hỏi lại (fail closed)",
    "file": "cli/genchibi",
-   "find": "    if file_safe \"$TD/override.yml\"; then OV_GONE=1; return 1; fi\n",
+   "find": "    if file_safe \"$TI/override.yml\"; then OV_GONE=1; return 1; fi\n",
    "replace": "",
    "test": [
     "bash",
@@ -593,13 +593,13 @@
    "id": "F01",
    "guard": "F2: chuỗi từ app / thư mục cài in ra terminal đã bỏ ký tự điều khiển",
    "file": "cli/genchibi",
-   "find": "san() { LC_ALL=C tr -d '\\000-\\010\\013-\\037\\177'; }",
-   "replace": "san() { cat; }",
+   "find": "san() { LC_ALL=C tr -d '\\000-\\010\\013-\\037\\177' | LC_ALL=C awk",
+   "replace": "san() { cat | LC_ALL=C awk",
    "test": [
     "bash",
     "tools/test-root.sh"
    ],
-   "expect": "bỏ ký tự điều khiển (F2)"
+   "expect": "ESC / BEL / C1"
   },
   {
    "id": "N01",
@@ -648,6 +648,319 @@
     "tools/test-root.sh"
    ],
    "expect": "user của container = CHỦ thư mục"
+  },
+  {
+   "id": "L01",
+   "guard": "SÀN 🔴: compose không bao giờ lấy từ bản dưới v0.23.1 (current do container trỏ)",
+   "file": "cli/genchibi",
+   "find": "if [ -n \"$t\" ] && floor_ok \"$t\" && [ -f \"$TD/rel/$t/docker-compose.yml\" ]",
+   "replace": "if [ -n \"$t\" ] && [ -f \"$TD/rel/$t/docker-compose.yml\" ]",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "compose giữ tệp đã kiểm của v0.1.1"
+  },
+  {
+   "id": "L02",
+   "guard": "SÀN lớp 2: từ chối tệp edge không dùng GC_EDGE_DIR (mount ./edge)",
+   "file": "cli/genchibi",
+   "find": "grep -q 'GC_EDGE_DIR' \"$d/docker-compose.edge.yml\" || { m edge_old",
+   "replace": "true || { m edge_old",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "tệp compose edge đã kiểm mà mount ./edge"
+  },
+  {
+   "id": "M01",
+   "guard": "bản ghi chế độ không an toàn → từ chối (không đoán theo .env)",
+   "file": "cli/genchibi",
+   "find": "file_safe \"$TD/installs\" || { m td_unsafe \"$TD/installs\" >&2; exit 1; }",
+   "replace": ":",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "bản ghi chế độ không an toàn"
+  },
+  {
+   "id": "M02",
+   "guard": "native chỉ khi CHƯA có tệp bản ghi nào + chủ là mình",
+   "file": "cli/genchibi",
+   "find": "elif [ ! -e \"$TD/installs\" ] && [ \"$APP_UID\" = \"$(id -u)\" ]",
+   "replace": "elif [ \"$APP_UID\" = \"$(id -u)\" ]",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "đã có tệp bản ghi mà chưa có dòng"
+  },
+  {
+   "id": "V01",
+   "guard": "CNS-294: giá trị biến đổi trong .env → hỏi lại",
+   "file": "cli/genchibi",
+   "find": " \\\n    && [ \"$(ov_env \"$TI/override.yml\" | sha256_of)\" = \"$(sha256_of \"$TI/override.env\")\" ]",
+   "replace": "",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "giá trị biến của override đổi"
+  },
+  {
+   "id": "V02",
+   "guard": "approve từ chối khoá đọc tệp (build, env_file…)",
+   "file": "cli/genchibi",
+   "find": "match(l, /^[ \\t-]*(build|env_file|extends|include|configs|secrets|file|dockerfile|additional_contexts|label_file)[ \\t]*:/)",
+   "replace": "match(l, /^[ \\t-]*(xbuild|xenv_file)[ \\t]*:/)",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "override approve từ chối"
+  },
+  {
+   "id": "V03",
+   "guard": "approve từ chối nguồn bind tương đối / biến / trong thư mục cài / liên kết",
+   "file": "cli/genchibi",
+   "find": "[ -z \"$p\" ] || { bad=1; m ov_bad_src",
+   "replace": "[ -z \"$p\" ] || { m ov_bad_src",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "override approve từ chối"
+  },
+  {
+   "id": "V04",
+   "guard": "approve từ chối biến COMPOSE_* / DOCKER_*",
+   "file": "cli/genchibi",
+   "find": "case \"$k\" in COMPOSE_*|DOCKER_*) bad=1;",
+   "replace": "case \"$k\" in XCOMPOSE_*|XDOCKER_*) bad=1;",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "override approve từ chối"
+  },
+  {
+   "id": "V05",
+   "guard": "approve từ chối giá trị có ' (không lặng lẽ bỏ)",
+   "file": "cli/genchibi",
+   "find": " || [ -n \"$OV_QK\" ]; then\n        { m ov_bad",
+   "replace": "; then\n        { m ov_bad",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "override approve từ chối"
+  },
+  {
+   "id": "F02",
+   "guard": "F2: bỏ cả ký tự điều khiển C1 (U+0080–U+009F)",
+   "file": "cli/genchibi",
+   "find": "r = sprintf(\"%c[%c-%c]\", 194, 128, 159)",
+   "replace": "r = \"KHONG-KHOP\"",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "ESC / BEL / C1"
+  },
+  {
+   "id": "O03",
+   "guard": "không có tệp compose: chỉ đụng container của CHÍNH thư mục cài",
+   "file": "cli/genchibi",
+   "find": "for c in gen-chibi gen-chibi-edge; do own_ct \"$c\" && cs+=(\"$c\"); done",
+   "replace": "cs=(gen-chibi gen-chibi-edge)",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "thuộc bản cài KHÁC"
+  },
+  {
+   "id": "T01",
+   "guard": "CNS-293: root không tách đôi bản cài chủ đã quản lý",
+   "file": "cli/genchibi",
+   "find": "then m td_other \"$HOME_DIR\" \"$APP_UID\" >&2; exit 1; fi",
+   "replace": "then :; fi",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "chủ thư mục đã quản lý"
+  },
+  {
+   "id": "T02",
+   "guard": "CNS-293: user được nhắc dùng sudo trên bản cài dựng bằng sudo",
+   "file": "cli/genchibi",
+   "find": "[ \"$(rd run/trust-owner | head -n 1)\" = root ]",
+   "replace": "false",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "dựng bằng sudo → nhắc"
+  },
+  {
+   "id": "T03",
+   "guard": "Docker snap → thư mục tin cậy không ẩn",
+   "file": "cli/genchibi",
+   "find": "  command -v snap >/dev/null 2>&1 && snap list docker >/dev/null 2>&1\n}",
+   "replace": "  return 1\n}",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "Docker cài bằng snap"
+  },
+  {
+   "id": "W01",
+   "guard": "doctor chuyển user: uid cũ còn tiến trình → không chuyển",
+   "file": "cli/genchibi",
+   "find": "if ps -eo uid= 2>/dev/null | awk",
+   "replace": "if false && ps -eo uid= 2>/dev/null | awk",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "uid cũ còn tiến trình"
+  },
+  {
+   "id": "W02",
+   "guard": "CNS-291: doctor chuyển user đổi chủ cả nguồn edge (root thật)",
+   "file": "cli/genchibi",
+   "find": "if [ -n \"$EDGE_DIR\" ] && [ -d \"$EDGE_DIR\" ]; then find \"$EDGE_DIR\"",
+   "replace": "if false; then find \"$EDGE_DIR\"",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "đổi chủ cả nguồn edge"
+  },
+  {
+   "id": "W03",
+   "guard": "CNS-291: doctor ✗ khi nguồn edge sai chủ (root thật)",
+   "file": "cli/genchibi",
+   "find": "[ \"$o\" = \"$APP_UID\" ] || { dr \"✗\" \"$(mn dr_edge_owner",
+   "replace": "true || { dr \"✗\" \"$(mn dr_edge_owner",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "nguồn edge thuộc uid khác"
+  },
+  {
+   "id": "W04",
+   "guard": "CNS-295: doctor không in thêm ✓ trái ngược sau dòng ·",
+   "file": "cli/genchibi",
+   "find": "    elif [ -z \"$said\" ]; then dr \"✓\" \"$(mn dr_uid_ok",
+   "replace": "    else dr \"✓\" \"$(mn dr_uid_ok",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "KHÔNG chuyển, chỉ một dòng"
+  },
+  {
+   "id": "E03",
+   "guard": "CNS-292c: chép edge lỗi → báo, dừng (không nuốt)",
+   "file": "cli/genchibi",
+   "find": "if ! { as_app sh -c 'cd \"edge/$1\" && tar -cf - .' sh \"$d\"",
+   "replace": "if false && ! { as_app sh -c 'cd \"edge/$1\" && tar -cf - .' sh \"$d\"",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "chép edge/ cũ sang nguồn mới lỗi"
+  },
+  {
+   "id": "E04",
+   "guard": "uid 0: không tạo thư mục edge (root thật)",
+   "file": "cli/genchibi",
+   "find": "  [ \"$APP_UID\" != 0 ] || { m uid0_refuse \"$HOME_DIR\" >&2; return 1; }   # không bao giờ tạo",
+   "replace": "  :   # không bao giờ tạo",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "TRƯỚC khi tạo thư mục edge"
+  },
+  {
+   "id": "N02",
+   "guard": "CNS-293: uninstall chỉ xoá trạng thái của bản cài đó",
+   "file": "cli/genchibi",
+   "find": "  if [ -z \"${TRUST:-}\" ] || [ ! -s \"$TD/installs\" ]; then",
+   "replace": "  if true; then",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "uninstall một bản cài (root)"
+  },
+  {
+   "id": "I06",
+   "guard": "trình cài --native ghi bản ghi native",
+   "file": "install.sh",
+   "find": "path_safe \"$TRUSTD\" && put_rec \"$TRUSTD\" native; fi",
+   "replace": "true; fi",
+   "test": [
+    "bash",
+    "tools/test-lang.sh"
+   ],
+   "expect": "cài --native →"
+  },
+  {
+   "id": "I07",
+   "guard": "cài lại thay bản ghi cũ của thư mục (native thay docker)",
+   "file": "install.sh",
+   "find": "awk -v p=\"$DP\" '{ l = $0; sub(/^[^ ]* /, \"\"); if ($0 != p) print l }' \"$1/installs\"",
+   "replace": "awk '{ print }' \"$1/installs\"",
+   "test": [
+    "bash",
+    "tools/test-lang.sh"
+   ],
+   "expect": "cài lại --native lên thư mục có bản ghi docker cũ"
+  },
+  {
+   "id": "I08",
+   "guard": "trình cài ghi dấu run/trust-owner (sudo → root)",
+   "file": "install.sh",
+   "find": "if [ -n \"$AS_ROOT\" ]; then printf 'root\\n'; else",
+   "replace": "if false; then printf 'root\\n'; else",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "trình cài (root, không sudo) trên thư mục cài có sẵn"
+  },
+  {
+   "id": "S03",
+   "guard": "agent skill: đích có liên kết → dừng, kể cả --force",
+   "file": "cli/genchibi",
+   "find": "if [ -n \"$lclash\" ]; then rm -rf \"$tmp\"; m skill_clash",
+   "replace": "if false; then rm -rf \"$tmp\"; m skill_clash",
+   "test": [
+    "node",
+    "tools/test-agent-zero.mjs"
+   ],
+   "expect": "đích là liên kết cài sẵn"
+  },
+  {
+   "id": "Z01",
+   "guard": "CNS-296: home_check bắt tạo-rồi-xoá + ~/gen-chibi",
+   "file": "tools/test.sh",
+   "find": "for d in \"$HOME/.local\" \"$HOME/.local/bin\" \"$HOME/.local/lib\"; do",
+   "replace": "for d in; do",
+   "test": [
+    "bash",
+    "-c",
+    "f=\"$(mktemp)\"; sed -n '/^home_sig() {/,/^}/p; /^GC_H0=/,/^\\[ \"$GC_S0\"/p' tools/test.sh > \"$f\"; bash \"$f\"; r=$?; rm -f \"$f\"; exit $r"
+   ],
+   "expect": "home_check mù"
   }
  ]
 }

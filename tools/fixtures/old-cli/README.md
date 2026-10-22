@@ -11,3 +11,5 @@ Bài học (cortex CNS-278 / L-80): fixture "bản cũ" viết tay từ trí nh�
 | `genchibi-v0.21.3` | v0.21.3 | bản root sớm nhất còn hỗ trợ (tài khoản `genchibi`), không `GC_CLI_SELF` |
 | `genchibi-v0.22.0` | v0.22.0 | bản liền trước v0.23, không `GC_CLI_SELF` — máy cài trước 2026-10-22 |
 | `genchibi-v0.23.0` | v0.23.0 | có `GC_CLI_SELF` |
+
+Compose edge cũ: `tools/fixtures/old-compose/docker-compose.edge-v0.23.0.yml` = `git show v0.23.0:docker-compose.edge.yml` (mount `./edge/*` của thư mục cài — bảo mật 🔴 vòng 4: genchibi phải từ chối tệp edge không dùng `GC_EDGE_DIR`). `tools/test.sh` so với tag như trên.

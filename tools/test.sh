@@ -35,9 +35,22 @@ gc_orphans() {
 GC_PRE_PIDS=" $(gc_orphans | awk '{ print $1 }' | tr '\n' ' ') "
 # HOME thật của người chạy bộ test: không test nào được cài / ghi lệnh genchibi hay ~/.local/lib/gen-chibi vào đó (v0.23.1: một test cài native với HOME=/root
 # ghi đè /root/.local/bin/genchibi) — chữ ký trước / sau mỗi nhóm test cài đặt / CLI
-home_sig() { ls -ldn --time-style=+%s "$HOME/.local/bin/genchibi" 2>/dev/null; [ ! -d "$HOME/.local/lib/gen-chibi" ] || find "$HOME/.local/lib/gen-chibi" -exec ls -ldn --time-style=+%s {} + 2>/dev/null; return 0; }
+home_sig() {
+  local d
+  # thư mục cha "yên tĩnh": mtime đổi khi có mục con được TẠO hay XOÁ (bắt cả tạo-rồi-xoá trong cùng nhóm test — CNS-296)
+  for d in "$HOME/.local" "$HOME/.local/bin" "$HOME/.local/lib"; do [ ! -d "$d" ] || ls -ldn --time-style=+%s.%N "$d"; done
+  # $HOME (nhiều chương trình khác ghi): chỉ tên gen-chibi* / genchibi* — thư mục cài mặc định ~/gen-chibi, ~/gen-chibi-trust (Docker snap)
+  ls -A "$HOME" 2>/dev/null | grep -iE '^\.?gen-?chibi' || true
+  for d in "$HOME/.local/bin/genchibi" "$HOME/.local/lib/gen-chibi" "$HOME/gen-chibi" "$HOME/gen-chibi-trust"; do [ ! -e "$d" ] || find "$d" -exec ls -ldn --time-style=+%s.%N {} + 2>/dev/null; done
+  return 0
+}
+# rào phải tự bắt được: tạo-rồi-xoá trong ~/.local/lib, và ~/gen-chibi (HOME giả trong /tmp — không đụng HOME thật)
+GC_H0="$(mktemp -d)"; mkdir -p "$GC_H0/.local/bin" "$GC_H0/.local/lib"
+GC_S0="$(HOME="$GC_H0" home_sig)"; mkdir "$GC_H0/.local/lib/gen-chibi"; rmdir "$GC_H0/.local/lib/gen-chibi"; GC_S1="$(HOME="$GC_H0" home_sig)"
+mkdir "$GC_H0/gen-chibi"; GC_S2="$(HOME="$GC_H0" home_sig)"; rmdir "$GC_H0/gen-chibi" "$GC_H0/.local/bin" "$GC_H0/.local/lib" "$GC_H0/.local" "$GC_H0"
+[ "$GC_S0" != "$GC_S1" ] && [ "$GC_S0" != "$GC_S2" ] || { echo "   ✗ home_check mù: không thấy tạo-rồi-xoá ~/.local/lib/gen-chibi hoặc ~/gen-chibi"; exit 1; }
 GC_HOME_SIG="$(home_sig)"
-home_check() { [ "$(home_sig)" = "$GC_HOME_SIG" ] || { echo "   ✗ $1 đã ghi vào HOME thật ($HOME/.local/bin/genchibi hoặc $HOME/.local/lib/gen-chibi) — test phải dùng HOME riêng"; exit 1; }; }
+home_check() { [ "$(home_sig)" = "$GC_HOME_SIG" ] || { echo "   ✗ $1 đã ghi vào HOME thật ($HOME/.local/{bin,lib}, ~/gen-chibi, ~/gen-chibi-trust — kể cả tạo rồi xoá) — test phải dùng HOME riêng"; exit 1; }; }
 echo "1) cú pháp"
 for f in $(git ls-files '*.js' 2>/dev/null || find engine kinds server studio -name '*.js') launcher.js; do node --check "$f"; done
 bash -n install.sh; bash -n cli/genchibi; bash -n tools/package.sh; bash -n tools/test-lang.sh; bash -n tools/test-update.sh; bash -n tools/test-edge.sh; bash -n tools/test-root.sh
@@ -62,7 +75,9 @@ echo "   ✓ không có method trùng tên trong class (server)"
 
 echo "1b) ngôn ngữ (ADR 0007): i18n lõi (t / placeholder / số nhiều / fallback / langOf / tr) · bảng locales/en hợp lệ · độ phủ bản dịch"
 node tools/test-i18n.mjs || exit 1
+home_check tools/test-i18n.mjs
 node tools/i18n-scan.mjs --strict || exit 1
+home_check tools/i18n-scan.mjs
 # gói phát hành phải mang bảng dịch (thiếu locales/ thì bản cài chạy toàn msgid tiếng Việt)
 PKG_TMP="$(mktemp -d)"; PKG="$(bash tools/package.sh "$PKG_TMP" | tail -1)"
 PKG_LIST="$(tar -tzf "$PKG")"; rm -f "$PKG" "$PKG_TMP/SHA256SUMS"; rmdir "$PKG_TMP"   # chỉ xoá đúng hai tệp vừa tạo + thư mục rỗng
@@ -81,8 +96,10 @@ echo "   ✓ ghi chú Release = mục CHANGELOG của VERSION (tiêu đề có m
 
 echo "1c) CI chạy test trình duyệt (v0.23 B6, CNS-032): Playwright ghim bản · ma trận phủ đủ nhóm GC_ONLY · release cần browser + video-mp4"
 node tools/test-ci-config.mjs || exit 1
+home_check tools/test-ci-config.mjs
 echo "1d) danh sách mã engine / Studio một nguồn (v0.23 B10, CNS-054): engine/scripts.json = index.html = trang xuất video = Node; không chép tay nơi khác"
 node tools/test-scripts.mjs || exit 1
+home_check tools/test-scripts.mjs
 grep -q "^gen-chibi-v[^/]*/engine/scripts.json$" <<< "$PKG_LIST" || { echo "   ✗ gói phát hành thiếu engine/scripts.json (server/engine-node.js cần)"; exit 1; }
 echo "   ✓ gói phát hành có engine/scripts.json"
 
@@ -705,19 +722,26 @@ console.log("   ✓ " + M.behaviors + " hành vi không lặp · " + M.real.toFi
 ' || exit 1
 echo "2j) gói động tác: cổng chặn từng kiểu tấn công · hình học đòn tay không (đo độc lập) · bộ mẫu chặn bán theo nội dung · sao lưu tự đủ · dữ liệu cũ · hoạt ảnh trọn đòn · hợp đồng lỗi mọi tool"
 node tools/test-motion.js || exit 1
+home_check tools/test-motion.js
 echo "2j2) luật id của bộ khung (v0.23 B10, CNS-065): đòn khung không trùng activity / state · id cũ là bí danh ẩn (render / validate y hệt) · tác phẩm / kịch bản lưu chuyển sang id mới · gói không lấy được id cũ lẫn id khung"
 node tools/test-frame-ids.mjs || exit 1
+home_check tools/test-frame-ids.mjs
 echo "2k) giọng AI (Google Gemini TTS) với mạng giả: lưu đệm, đổi model khi hết hạn mức, thẻ cảm xúc, không lộ key"
 node tools/test-voice.js || exit 1
+home_check tools/test-voice.js
 echo "2m) thư viện âm thanh: cổng kiểm gói âm (từng luật một ca sai, không mã, ≤ 60 node) · trùng tên chỉ ra gói giữ tên · 17 tên cũ · tự gán = bảng cũ · luật ghép S1–S7 · gói Tam Quốc"
 node tools/test-sounds.js || exit 1
+home_check tools/test-sounds.js
 echo "2n) thư viện âm thanh nối vào app: âm nào dùng được = một hàm (theo dự án của tác phẩm) · bộ phát tự gán theo dự án + không khí · gói động tác gọi tên âm · store + MCP 7 tool + HTTP (409 / force / DELETE) · kênh link / chatroom / import không lách cổng · rào theo phụ thuộc + nạp khoan dung · lint S1–S7 khi lưu (+ trần) · MA TRẬN lưu → xuất → nhập máy sạch (trần lưu = trần nhập, gói động tác, gói bán) · Tam Quốc · hướng dẫn agent + docs khớp RULES từng câu"
 node tools/test-sounds-app.js || exit 1
+home_check tools/test-sounds-app.js
 echo "2l) âm thanh: dựng offline MỌI âm của thư viện (không vỡ / NaN, không câm, không gắt kéo dài, độ to ±7 dB, đúng thời lượng, node ≤ ngân sách) · limiter khi chồng · ghép mẫu · rò node · CPU sfx() · nạp gói / trùng tên trên trang · clip giọng trong say() — cần Playwright, không có thì bỏ qua phần trình duyệt"
 node tools/test-audio.mjs || exit 1
+home_check tools/test-audio.mjs
 echo "2o) xuất video (v0.22): bộ ghép MP4 (ftyp → moov → mdat, không edts, bảng mẫu, khung khoá, xen kẽ) + WebM ghi luồng (cluster / Cues / SeekHead / Tags, bộ đệm ≤ 1 cluster) · luồng thật ffmpeg → giải mã lại (bỏ qua có báo khi thiếu ffmpeg) · đồng hồ ảo · .srt / .txt · cách ly (Studio không nạp vclock / mux) · header: chỉ trang xuất SAMEORIGIN + frame-ancestors 'self' (CNS-214)"
 (echo > /dev/tcp/127.0.0.1/7697) 2>/dev/null && { echo "Cổng 7697 đang bị chiếm"; exit 1; }
 node tools/test-video.mjs || exit 1
+home_check tools/test-video.mjs
 echo "3) MCP (server không đặt GC_API_TOKEN = bản cài v0.20 nâng cấp: owner-token tự sinh, cầu stdio tự đọc — CNS-197)"
 H="$(mktemp -d)"; PORT=7495
 (echo > /dev/tcp/127.0.0.1/$PORT) 2>/dev/null && { echo "Cổng $PORT đang bị chiếm"; exit 1; }
@@ -826,22 +850,29 @@ kill $SP 2>/dev/null || true
 echo "3a) ngôn ngữ phía server (ADR 0007, v0.20): msgid server / engine có bản en · khớp ngược mẫu · HTTP en / vi theo header · MCP cho agent tiếng Anh · trang Cấp phép · nhãn engine · rào ngược"
 for P in 7631 7632; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done
 node tools/test-i18n-server.mjs || exit 1
+home_check tools/test-i18n-server.mjs
 
 echo "3c) agent từ số 0 (mọi hãng): chỉ dùng hướng dẫn agent/ + JSON-RPC thuần — trọn luồng, lỗi có mã, đường không-MCP, lớp bọc từng hãng"
 (echo > /dev/tcp/127.0.0.1/7493) 2>/dev/null && { echo "Cổng 7493 đang bị chiếm"; exit 1; }
 node tools/test-agent-zero.mjs || exit 1
+home_check tools/test-agent-zero.mjs
 echo "3b) AI trong chatroom (LLM API) đi đúng cổng nhà xưởng"
 node tools/test-agent.mjs || exit 1
+home_check tools/test-agent.mjs
 echo "3b2) dock Trợ lý AI: vai + tool theo khu · ghim · luồng theo đối tượng · đề xuất sửa chờ duyệt · duyệt từng cảnh · khoá lượt theo tác phẩm · trần luồng"
 node tools/test-dock.mjs || exit 1
+home_check tools/test-dock.mjs
 echo "3b3) lõi dock + phòng làm phim: quyền duyệt theo tác giả · bản sao khung luôn nháp · chỉ dẫn tĩnh / dữ liệu bọc JSON · trần ngân sách ngữ cảnh · khu Thư viện không tạo mới"
 node tools/test-dock-core.mjs || exit 1
+home_check tools/test-dock-core.mjs
 
 echo "4) khoá truy cập"
 bash tools/test-auth.sh || exit 1
+home_check tools/test-auth.sh
 echo "4e) đăng nhập chủ máy + bảng truy cập v0.21 → v0.23: khởi tạo bằng token (mã setup đã bỏ) · tên đăng nhập + mật khẩu (scrypt) · phiên / cookie thiết bị · trần L-66 (10.000 lần đoán) · máy kế thừa · nâng cấp không token · online.json lúc chạy"
 for P in 7741 7742 7743 7744 7745 7746 7747 7748 7749; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done
 node tools/test-auth-owner.mjs || exit 1
+home_check tools/test-auth-owner.mjs
 
 echo "4d) ngôn ngữ (ADR 0007): trình cài --lang / GC_LANG / câu hỏi khi có terminal · genchibi lang · trợ giúp en / vi · README + tài liệu tiếng Anh"
 bash tools/test-lang.sh || exit 1
@@ -869,13 +900,16 @@ l77_rerun tools/test-lang.sh
 
 echo "4c) OAuth 2.1 cho MCP từ xa (v0.19): 401 khám phá · metadata · DCR (allowlist callback, không secret, trần, tốc độ) · authorize chỉ chủ duyệt · PKCE / resource / iss · code một lần · refresh xoay vòng · hết hạn · thu hồi · phạm vi → kênh sẵn có · oauth.json chỉ băm · đường máy qua cổng đăng nhập ngoài giả"
 node tools/test-oauth.mjs || exit 1
+home_check tools/test-oauth.mjs
 
 echo "4f) Go online (v0.21): cổng nghe riêng cho cloudflared + X-GC-Edge của Caddy · sites.caddy (regex hostname) + nạp lại kèm admin qua unix socket · Cloudflare API giả (luồng đủ, idempotent, zone pending / partial, thiếu quyền, CNAME có sẵn không đè, WAF, Go offline) · đường A / proxy / link tạm với DNS / IP giả · publicUrl tạm trả về khi lỗi · không gọi IP nội bộ · token API không lọt · rào ngược"
 node tools/test-online.mjs || exit 1
+home_check tools/test-online.mjs
 
 echo "4g) cổng ingress của cloudflared (v0.21, sửa bảo mật B) + Go online link tạm từ đầu tới cuối: kẻ lạ chiếm cổng trước app → không spawn · kiểm định kỳ · /ready đúng tiến trình · đột biến · launcher + app + online-config + cloudflared giả"
 for P in 7811 7813 7815 7821 7823 7825 7831 7833; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done
 node tools/test-ingress.mjs || exit 1
+home_check tools/test-ingress.mjs
 
 echo "4h) genchibi online (v0.21 P4): server + launcher thật, Cloudflare API giả, cloudflared giả — token trên dòng lệnh bị từ chối · không terminal + CNAME có sẵn → dừng, không đè · chưa có tài khoản chủ → 409 needs owner (v0.23: không còn bậc mật khẩu / mã thoát 3) → genchibi password → --token-stdin → xong · đổi địa chỉ cần --yes · proxy · WAF làm tay · nhiều tên miền · off dọn Cloudflare · có terminal hỏi ẩn · token không trong argv / env / log (shim + /proc) · đột biến curl -d · link tạm · máy kế thừa"
 for P in 7841 7843 7851 7853 7855 7861 7863 7891 7895; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done
@@ -897,7 +931,14 @@ for f in tools/fixtures/old-cli/genchibi-v*; do t="${f##*genchibi-}"
   if git rev-parse -q --verify "refs/tags/$t" >/dev/null 2>&1; then cmp -s "$f" <(git show "$t:cli/genchibi") || { echo "   ✗ $f khác git show $t:cli/genchibi — fixture lệnh cũ phải lấy nguyên văn từ tag"; exit 1; }
   else echo "   · không có tag $t (git fetch --tags) — chưa so được $f"; fi
 done
-echo "   ✓ fixture lệnh cũ (tools/fixtures/old-cli) = git show <tag>:cli/genchibi"
+for f in tools/fixtures/old-compose/docker-compose.edge-v*.yml; do t="${f##*edge-}"; t="${t%.yml}"
+  if git rev-parse -q --verify "refs/tags/$t" >/dev/null 2>&1; then cmp -s "$f" <(git show "$t:docker-compose.edge.yml") || { echo "   ✗ $f khác git show $t:docker-compose.edge.yml"; exit 1; }
+  else echo "   · không có tag $t — chưa so được $f"; fi
+done
+echo "   ✓ fixture lệnh cũ (tools/fixtures/old-cli) + compose edge cũ (tools/fixtures/old-compose) = git show <tag>:…"
+# một nguồn cho luật an toàn (CNS-287): trình cài lấy path_safe / home_of / snap_docker / td_default từ cli/genchibi của gói — không có bản chép riêng
+if grep -nE '^(path_safe|home_of|snap_docker|td_default)\(\) \{' install.sh; then echo "   ✗ install.sh định nghĩa lại hàm an toàn — phải lấy từ cli/genchibi"; exit 1; fi
+echo "   ✓ install.sh dùng path_safe / home_of / td_default của cli/genchibi (một nguồn)"
 bash tools/test-root.sh || exit 1
 home_check tools/test-root.sh
 l77_rerun tools/test-root.sh
@@ -910,8 +951,11 @@ bash tools/test-edge.sh || exit 1
 home_check tools/test-edge.sh
 echo "4b) token GitHub (repo private)"
 node tools/test-token.js
+home_check tools/test-token.js
 
 echo "9) không còn tiến trình con mồ côi (caddy / node / cloudflared / chromium có thư mục làm việc trong repo)"
 GC_LEFT="$(gc_orphans | while read -r p rest; do case "$GC_PRE_PIDS" in *" $p "*) ;; *) printf '%s %s\n' "$p" "$rest" ;; esac; done)"
 if [ -n "$GC_LEFT" ]; then printf '%s\n' "$GC_LEFT" | sed 's/^/   còn sống: /'; echo "   ✗ test để lại tiến trình (dọn bằng đúng PID của chính nó — không pkill)"; exit 1; fi
 echo "   ✓ không tiến trình nào sót"
+home_check "toàn bộ test.sh"
+echo "   ✓ HOME thật không bị ghi (~/.local/bin/genchibi, ~/.local/lib/gen-chibi, ~/gen-chibi, ~/gen-chibi-trust; kể cả tạo rồi xoá)"

@@ -165,6 +165,10 @@ const r3 = cli(['agent', 'skill', 'codex']);   // cài vào thư mục người 
 ok(r3.code === 0 && fs.existsSync(path.join(U, 'AGENTS.md')) && !fs.existsSync(path.join(CH, 'AGENTS.md')), 'agent skill phải cài vào thư mục đang đứng: ' + r3.out.slice(0, 200));
 const SK = path.join(H, 'skills'); const r4 = cli(['agent', 'skill', 'claude', '--dir', SK]), r5 = cli(['agent', 'skill', 'claude', '--dir', SK]);
 ok(r4.code === 0 && r5.code === 0 && fs.existsSync(path.join(SK, 'gen-chibi/SKILL.md')), 'cài lại skill Claude (tệp do lệnh sinh) phải được: ' + r5.out.slice(0, 200));
+// v0.23.1: gói skill do app gửi là dữ liệu không tin — đích có liên kết cài sẵn (gen-chibi → thư mục khác) không bao giờ bị ghi xuyên, kể cả --force
+{ const SK2 = path.join(H, 'skills-link'), TGT = path.join(H, 'noi-khac'); fs.mkdirSync(SK2); fs.mkdirSync(TGT); fs.symlinkSync(TGT, path.join(SK2, 'gen-chibi'));
+  const r6 = cli(['agent', 'skill', 'claude', '--dir', SK2, '--force']);
+  ok(r6.code !== 0 && fs.readdirSync(TGT).length === 0 && r6.out.includes(path.join(SK2, 'gen-chibi')), 'agent skill: đích là liên kết cài sẵn → dừng, không ghi xuyên (kể cả --force): ' + r6.out.slice(0, 200)); }
 const tp = cli(['agent', 'topics']); ok(tp.code === 0 && /"id":"film"/.test(tp.out), 'agent topics qua token phải chạy: ' + tp.out.slice(0, 120));
 const con = cli(['agent', 'connect']); ok(con.code === 0 && /start_here/.test(con.out) && con.out.indexOf(TOKEN) < 0, 'agent connect không được in token');
 const CLI_ABS = path.join(ROOT, 'cli/genchibi');

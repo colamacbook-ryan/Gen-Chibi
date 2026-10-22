@@ -19,7 +19,9 @@ ok()  { echo "   ✓ $1"; PASS=$((PASS+1)); }
 bad() { echo "   ✗ $1"; FAIL=$((FAIL+1)); }
 check() { if [ "$1" = 0 ]; then ok "$2"; else bad "$2${3:+ — $3}"; fi; }
 CFPID=""
-stop_all() { for h in "$W"/*-home; do [ -x "$h/.local/bin/genchibi" ] && HOME="$h" "$h/.local/bin/genchibi" stop >/dev/null 2>&1; done; [ -z "$CFPID" ] || kill "$CFPID" 2>/dev/null; return 0; }
+stop_all() { for h in "$W"/*-home; do [ -x "$h/.local/bin/genchibi" ] && HOME="$h" "$h/.local/bin/genchibi" stop >/dev/null 2>&1; done; [ -z "$CFPID" ] || kill "$CFPID" 2>/dev/null
+  # lưới an toàn: launcher native còn sống (vd một đột biến làm genchibi stop đi nhầm đường docker) — dừng đúng PID trong logs/launcher.pid của chính test này
+  local f p; for f in "$W"/*/logs/launcher.pid; do [ -f "$f" ] || continue; p="$(cat "$f")"; case "$p" in ''|*[!0-9]*) continue ;; esac; kill "$p" 2>/dev/null || true; done; return 0; }
 trap 'stop_all; [ -n "${KEEP:-}" ] || rm -rf "$W"' EXIT
 TO=""; command -v timeout >/dev/null && TO="timeout 120"
 SID=""; command -v setsid >/dev/null && SID="setsid"
@@ -96,6 +98,12 @@ HOME="$W/plain-home" "$GP" stop >/dev/null 2>&1
 P_VI="$(freeport)"
 INST_PORT="$P_VI" inst vi --lang vi
 [ $IRC = 0 ] && [ "$(envlang vi)" = vi ] && echo "$INST_OUT" | grep -q 'Gói hợp lệ' && echo "$INST_OUT" | grep -q 'Ngôn ngữ: Tiếng Việt'; check $? "--lang vi → .env GC_LANG=vi, mọi bước báo bằng tiếng Việt" "mã $IRC: $(echo "$INST_OUT" | tail -3)"
+# v0.23.1: cài --native ghi bản ghi "native <thư mục>" (genchibi không đoán chế độ theo .env — container ghi được .env); cài lại --native thay bản ghi docker cũ
+RV="$(cd -P "$W/vi" && pwd)"; grep -qx "native $RV" "$W/vi-home/.local/lib/gen-chibi/installs"
+check $? "cài --native → ~/.local/lib/gen-chibi/installs có dòng 'native <thư mục cài>'" "$(cat "$W/vi-home/.local/lib/gen-chibi/installs" 2>&1)"
+printf 'docker %s\ndocker /srv/khac\n' "$RV" > "$W/vi-home/.local/lib/gen-chibi/installs"; inst vi --lang vi
+[ "$(grep -c " $RV\$" "$W/vi-home/.local/lib/gen-chibi/installs")" = 1 ] && grep -qx "native $RV" "$W/vi-home/.local/lib/gen-chibi/installs" && grep -qx 'docker /srv/khac' "$W/vi-home/.local/lib/gen-chibi/installs"
+check $? "cài lại --native lên thư mục có bản ghi docker cũ → chỉ còn 'native', bản ghi của bản cài khác giữ nguyên" "mã $IRC: $(cat "$W/vi-home/.local/lib/gen-chibi/installs" 2>&1)"
 
 if script --version 2>/dev/null | grep -q util-linux; then
   home="$W/tty-home"; mkdir -p "$home"
