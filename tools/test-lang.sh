@@ -7,8 +7,10 @@
 #   3) genchibi lang (CLI + mặc định THẬT của Studio) / lang xx / lang en (ghi .env + đổi mặc định Studio qua API, không khởi động lại)
 #      · Studio đã đổi mà .env vẫn cũ → lang vẫn đồng bộ được (CNS-153, app chạy và app dừng) · trợ giúp en không có chữ có dấu · trợ giúp vi đủ mọi lệnh
 #   4) README.md + tài liệu tiếng Anh không còn chữ tiếng Việt (trừ dòng chuyển ngôn ngữ, tên riêng) · en ↔ vi trỏ nhau · link tương đối không gãy
-#   5) trình cài --domain (A record sai → in bản ghi cần tạo, thoát rõ; dòng cuối = mã setup) · --cloudflare (không terminal + không GC_CF_TOKEN → dừng trước khi cài;
-#      có GC_CF_TOKEN → Cloudflare API giả tới bậc mật khẩu, token không vào argv / env của curl) · Docker vừa cài mà phiên chưa vào nhóm → sg docker / sudo docker (giả lập) + đột biến
+#   5) trình cài (v0.23): dòng cuối = "mở http://localhost:<cổng>, đăng nhập admin / admin trong 30 phút" (genchibi start mở cửa sổ) · --domain cần tài khoản chủ:
+#      GC_OWNER_USER / GC_OWNER_PASSWORD (không vào .env / argv / đầu ra) — thiếu (không terminal) → cài, không lên mạng, in lệnh làm tiếp ·
+#      A record sai → in bản ghi cần tạo, thoát rõ · --cloudflare (không terminal + không GC_CF_TOKEN → dừng trước khi cài; có GC_CF_TOKEN → Cloudflare API giả
+#      tới xong, setup.json stage mcp, token / mật khẩu không vào argv / env của curl) · Docker vừa cài mà phiên chưa vào nhóm → sg docker / sudo docker (giả lập) + đột biến
 # © 2026 Gen Labs — All rights reserved.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -60,6 +62,9 @@ inst bogus --lang xx
 inst plain
 [ $IRC = 0 ] && [ "$(envlang plain)" = en ]; check $? "không terminal, không chọn → cài xong, .env ghi GC_LANG=en" "mã $IRC: $(echo "$INST_OUT" | tail -3)"
 ! echo "$INST_OUT" | grep -q 'Language / ' ; check $? "không terminal → không hỏi ngôn ngữ (không treo)"
+LL="$(printf '%s\n' "$INST_OUT" | sed '/^[[:space:]]*$/d' | tail -n 1)"
+printf '%s' "$LL" | grep -qE '^Next: open http://localhost:[0-9]+ and sign in with admin / admin within 30 minutes \(until [0-9]{2}:[0-9]{2}' && [ -f "$W/plain/run/admin-window" ] && ! echo "$INST_OUT" | grep -qi 'setup code'
+check $? "v0.23: dòng cuối của trình cài = 'Next: open http://localhost:<cổng> and sign in with admin / admin within 30 minutes (until HH:MM…)' — genchibi start đã mở cửa sổ (run/admin-window), không còn mã setup" "$LL"
 grep -qE '^GC_API_TOKEN=[0-9a-f]{64}$' "$W/plain/.env" && ! printf '%s' "$INST_OUT" | grep -q "$(sed -n 's/^GC_API_TOKEN=//p' "$W/plain/.env")"
 check $? "v0.21: .env mới luôn có GC_API_TOKEN (256 bit, hex) — trình cài không in token ra màn hình"
 ! printf '%s' "$INST_OUT" | has_vi; check $? "đầu ra trình cài ở chế độ English không có chữ tiếng Việt" "$(printf '%s' "$INST_OUT" | grep -nP "$VI_RE" 2>/dev/null | head -3)"
@@ -163,7 +168,9 @@ cli "$G" stop >/dev/null 2>&1
 
 echo "   5) trình cài: --domain / --cloudflare (Go online một bước) · Docker vừa cài, phiên chưa vào nhóm docker (sg / sudo)"
 lastline() { printf '%s\n' "$1" | sed '/^[[:space:]]*$/d' | tail -n 1; }
-codeof() { sed -n '1p' "$W/$1/data/setup-code.txt" 2>/dev/null | tr -d ' \r'; }
+stageof() { sed -n 's/^[[:space:]]*"stage":[[:space:]]*"\([a-z_]*\)".*/\1/p' "$W/$1/data/setup.json" 2>/dev/null | head -1; }
+# mật khẩu chủ cho trình cài: biến môi trường của RIÊNG lần gọi (không nằm trong INST_ENV — chuỗi INST_ENV tự nó là một biến môi trường của tiến trình con)
+OWNPW="owner-pass-$(head -c 8 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 inst bogus --domain 'bad_domain!'
 [ $IRC = 2 ] && echo "$INST_OUT" | grep -q 'Invalid domain: bad_domain!' && [ ! -e "$W/bogus" ]; check $? "--domain sai dạng → thoát 2, chưa đụng tới đĩa" "$IRC $INST_OUT"
 inst bogus --cloudflare
@@ -171,11 +178,18 @@ inst bogus --cloudflare
 inst bogus --domain chibi.example.com --cloudflare
 [ $IRC = 2 ] && echo "$INST_OUT" | grep -q 'GC_CF_TOKEN' && echo "$INST_OUT" | grep -q 'never as an argument' && [ ! -e "$W/bogus" ]; check $? "--cloudflare, không terminal, không GC_CF_TOKEN → dừng NGAY (thoát 2, chưa cài gì), chỉ cách đặt GC_CF_TOKEN" "$IRC $INST_OUT"
 # đường A, A record sai (DNS / IP giả bằng biến kiểm thử, chỉ khi GC_TEST=1) → in IP cần trỏ, thoát rõ ràng; app vẫn cài + chạy; dòng cuối = mã setup
-INST_ENV="GC_TEST=1 GC_TEST_PUBLIC_IP=198.51.100.7 GC_TEST_DNS_A=203.0.113.9 GC_DNS_WAIT=0" inst doma --domain chibi.example.com
-c="$(codeof doma)"
-[ $IRC = 1 ] && echo "$INST_OUT" | grep -q 'now: 203.0.113.9' && echo "$INST_OUT" | grep -q 'A  chibi.example.com  →  198.51.100.7' && echo "$INST_OUT" | grep -q 'genchibi online caddy chibi.example.com' && echo "$INST_OUT" | grep -q 'is running'
+# --domain, không terminal, không GC_OWNER_* → cài + chạy, KHÔNG lên mạng (Go online cần tài khoản chủ), in lệnh làm tiếp; dòng cuối vẫn là admin / admin
+INST_ENV="GC_TEST=1 GC_TEST_PUBLIC_IP=198.51.100.7 GC_TEST_DNS_A=198.51.100.7 GC_DNS_WAIT=0" inst donc --domain chibi.example.com
+[ $IRC = 1 ] && echo "$INST_OUT" | grep -q 'Not going online: no owner account yet' && echo "$INST_OUT" | grep -q 'genchibi password (sets the owner account), then: genchibi online caddy chibi.example.com' && ! echo "$INST_OUT" | grep -q 'Checking that' && lastline "$INST_OUT" | grep -q 'sign in with admin / admin within 30 minutes' && [ "$(stageof donc)" = admin ]
+check $? "--domain không terminal + không GC_OWNER_USER / GC_OWNER_PASSWORD → cài, không lên mạng (không kiểm DNS), in 'genchibi password … then genchibi online caddy <tên>'; dòng cuối = admin / admin" "$IRC $(echo "$INST_OUT" | tail -5)"
+HOME="$W/donc-home" "$W/donc-home/.local/bin/genchibi" stop >/dev/null 2>&1
+GC_OWNER_USER=admin GC_OWNER_PASSWORD=mot-mat-khau-dai INST_ENV="GC_TEST=1" inst bogus --domain chibi.example.com
+[ $IRC = 2 ] && echo "$INST_OUT" | grep -q 'Invalid owner username' && [ ! -e "$W/bogus" ]; check $? "GC_OWNER_USER=admin → thoát 2 trước khi cài" "$IRC $INST_OUT"
+GC_OWNER_USER=ryan GC_OWNER_PASSWORD="$OWNPW" INST_ENV="GC_TEST=1 GC_TEST_PUBLIC_IP=198.51.100.7 GC_TEST_DNS_A=203.0.113.9 GC_DNS_WAIT=0" inst doma --domain chibi.example.com
+[ $IRC = 1 ] && echo "$INST_OUT" | grep -q 'Owner account ready: username ryan' && echo "$INST_OUT" | grep -q 'now: 203.0.113.9' && echo "$INST_OUT" | grep -q 'A  chibi.example.com  →  198.51.100.7' && echo "$INST_OUT" | grep -q 'genchibi online caddy chibi.example.com' && echo "$INST_OUT" | grep -q 'is running'
 check $? "--domain, bản ghi A sai → in đúng bản ghi cần tạo (A chibi.example.com → 198.51.100.7), thoát 1 rõ ràng kèm lệnh làm tiếp; app đã cài + chạy" "$IRC $(echo "$INST_OUT" | tail -6)"
-[ -n "$c" ] && lastline "$INST_OUT" | grep -q "^Setup code: .*$c.*http://localhost:[0-9]*/setup.*genchibi open"; check $? "dòng cuối = mã setup ($c) + http://localhost:<cổng>/setup + genchibi open" "$(lastline "$INST_OUT")"
+lastline "$INST_OUT" | grep -q "^Next: open http://localhost:[0-9]*, sign in as ryan and finish the first-run setup" && [ "$(stageof doma)" = domain ] && ! grep -q "$OWNPW" "$W/doma/.env" && ! echo "$INST_OUT" | grep -q "$OWNPW"
+check $? "GC_OWNER_* → owner khởi tạo trước khi lên mạng (stage domain); dòng cuối 'sign in as ryan and finish the first-run setup'; mật khẩu không vào .env / đầu ra" "$(lastline "$INST_OUT")"
 HOME="$W/doma-home" "$W/doma-home/.local/bin/genchibi" stop >/dev/null 2>&1
 INST_ENV="GC_TEST=1 GC_TEST_PUBLIC_IP=198.51.100.7 GC_TEST_DNS_A=198.51.100.7 GC_DNS_WAIT=0" inst doma --domain chibi.example.com
 [ $IRC = 1 ] && echo "$INST_OUT" | grep -q 'chibi.example.com → 198.51.100.7 (this machine)' && echo "$INST_OUT" | grep -q 'needs Docker mode' && echo "$INST_OUT" | grep -q 'genchibi online cloudflare chibi.example.com'
@@ -191,13 +205,12 @@ for i in $(seq 1 40); do [ -s "$CFOUT" ] && break; sleep 0.25; done
 SHIMD="$W/shim"; mkdir -p "$SHIMD"
 printf '#!/bin/bash\n{ printf "%%s\\0" ARGV "$0" "$@"; /usr/bin/env -0; printf "\\n"; } >> "%s/shim.log"\nexec %s "$@"\n' "$W" "$(command -v curl)" > "$SHIMD/curl"; chmod +x "$SHIMD/curl"
 PB="$(freeport)"
-GC_CF_TOKEN="$CFT" INST_PORT="$PB" INST_ENV="PATH=$SHIMD:$PATH GC_TEST=1 GC_TEST_CF_API=$(cat "$CFOUT" 2>/dev/null) GC_TEST_ONLINE_VIA=127.0.0.1:$((PB + 2)) GC_ONLINE_POLL=0.3 GC_ONLINE_RETRY=2.2" inst domb --domain chibi.example.com --cloudflare
-c="$(codeof domb)"
-[ $IRC = 0 ] && echo "$INST_OUT" | grep -q '✓ Tunnel' && echo "$INST_OUT" | grep -q '✓ MCP from the Internet' && echo "$INST_OUT" | grep -q 'Online (temporary — waiting for the owner password): .*https://chibi.example.com.*MCP: https://chibi.example.com/mcp'
-check $? "--domain chibi.example.com --cloudflare (GC_CF_TOKEN) → cài + genchibi online cloudflare tới bậc mật khẩu: in tiến độ, 'Online (temporary — waiting for the owner password)' https://chibi.example.com + /mcp, thoát 0 (VPS mới: chỉ còn đặt mật khẩu — CNS-209)" "$IRC $(echo "$INST_OUT" | tail -14)"
-[ -n "$c" ] && lastline "$INST_OUT" | grep -q "^Setup code: .*$c.*https://chibi.example.com/setup.*finishes going online by itself" && ! lastline "$INST_OUT" | grep -q 'genchibi open'; check $? "dòng cuối = mã setup ($c) + https://chibi.example.com/setup + 'đặt xong là app tự hoàn tất lên mạng'" "$(lastline "$INST_OUT")"
-! printf '%s' "$INST_OUT" | grep -q "$CFT" && ! grep -q "$CFT" "$W/shim.log" 2>/dev/null && ! grep -rq "$CFT" "$W/domb" 2>/dev/null && [ -s "$W/shim.log" ]
-check $? "token Cloudflare không có trong đầu ra trình cài, argv / môi trường của mọi lần gọi curl (shim), tệp nào của thư mục cài" "$(grep -c "$CFT" "$W/shim.log" 2>/dev/null) lần trong shim.log"
+GC_OWNER_USER=ryan GC_OWNER_PASSWORD="$OWNPW" GC_CF_TOKEN="$CFT" INST_PORT="$PB" INST_ENV="PATH=$SHIMD:$PATH GC_TEST=1 GC_TEST_CF_API=$(cat "$CFOUT" 2>/dev/null) GC_TEST_ONLINE_VIA=127.0.0.1:$((PB + 2)) GC_ONLINE_POLL=0.3 GC_ONLINE_RETRY=2.2" inst domb --domain chibi.example.com --cloudflare
+[ $IRC = 0 ] && echo "$INST_OUT" | grep -q 'Owner account ready: username ryan' && echo "$INST_OUT" | grep -q '✓ Tunnel' && echo "$INST_OUT" | grep -q '✓ MCP from the Internet' && echo "$INST_OUT" | grep -q 'Online: .*https://chibi.example.com.*MCP: https://chibi.example.com/mcp' && [ "$(stageof domb)" = mcp ]
+check $? "--domain chibi.example.com --cloudflare (GC_CF_TOKEN + GC_OWNER_*) → owner khởi tạo, genchibi online cloudflare tới xong: in tiến độ, 'Online:' https://chibi.example.com + /mcp, thoát 0, setup.json stage mcp (lần đầu vào Studio: chẩn đoán MCP)" "$IRC $(echo "$INST_OUT" | tail -14)"
+lastline "$INST_OUT" | grep -q "^Next: open https://chibi.example.com, sign in as ryan and finish the first-run setup"; check $? "dòng cuối = 'Next: open https://chibi.example.com, sign in as ryan and finish the first-run setup'" "$(lastline "$INST_OUT")"
+! printf '%s' "$INST_OUT" | grep -q "$CFT" && ! grep -q "$CFT" "$W/shim.log" 2>/dev/null && ! grep -rq "$CFT" "$W/domb" 2>/dev/null && [ -s "$W/shim.log" ] && ! printf '%s' "$INST_OUT" | grep -q "$OWNPW" && ! grep -q "$OWNPW" "$W/shim.log" && ! grep -rq "$OWNPW" "$W/domb" 2>/dev/null && ! grep -q 'GC_OWNER' "$W/shim.log" 
+check $? "token Cloudflare + mật khẩu chủ (GC_OWNER_PASSWORD) không có trong đầu ra trình cài, argv / môi trường của mọi lần gọi curl (shim — GC_OWNER_* đã xoá khỏi môi trường), tệp nào của thư mục cài (kể cả .env)" "cf: $(grep -c "$CFT" "$W/shim.log" 2>/dev/null) · pw-shim: $(grep -c "$OWNPW" "$W/shim.log") · pw-out: $(printf '%s' "$INST_OUT" | grep -c "$OWNPW") · pw-files: $(grep -rl "$OWNPW" "$W/domb" 2>/dev/null | tr '\n' ' ') · env: $(grep -c GC_OWNER "$W/shim.log")"
 HOME="$W/domb-home" "$W/domb-home/.local/bin/genchibi" stop >/dev/null 2>&1
 kill "$CFPID" 2>/dev/null; CFPID=""
 
@@ -263,6 +276,7 @@ echo "${FAKE_DOCKER_GROUP:+[sg]}${FAKE_SUDO:+[sudo]} $*" >> "$FAKE_STATE/docker.
 [ -f "$FAKE_STATE/installed" ] || { echo "docker: command not found" >&2; exit 127; }
 [ -n "${FAKE_DOCKER_GROUP:-}${FAKE_SUDO:-}${FAKE_ROOT:-}" ] || { echo "permission denied while trying to connect to the Docker daemon socket" >&2; exit 1; }
 if [ "$1" = compose ]; then
+  case " $* " in *" config --format json "*) echo '{"services":{"app":{"ports":[{"mode":"ingress","host_ip":"127.0.0.1","target":7480,"published":"7480","protocol":"tcp"}]}}}'; exit 0 ;; esac
   for a in "$@"; do [ "$a" = up ] || continue
     nohup node "$FAKE_STATE/../fakeapp.js" "$(sed -n 's/^GC_PORT=//p' .env)" "$PWD" >/dev/null 2>&1 &
     echo $! >> "$FAKE_STATE/app.pids"
@@ -272,12 +286,11 @@ exit 0
 EOF
 chmod +x "$FK"/*
 cat > "$W/fakeapp.js" <<'EOF'
-// app giả của "docker compose up" giả: /api/health + /api/auth/state, ghi mã setup như server thật
+// app giả của "docker compose up" giả: /api/health + /api/setup (stage admin, admin / admin dùng được — như server thật sau genchibi start)
 const fs = require('fs'), http = require('http'), [port, dir] = process.argv.slice(2);
 fs.mkdirSync(dir + '/data', { recursive: true });
-fs.writeFileSync(dir + '/data/setup-code.txt', 'FAKE1-CODE2\nexpires=' + (Math.floor(Date.now() / 1000) + 3600) + '\n');
-http.createServer((q, s) => { s.writeHead(q.url === '/api/health' || q.url === '/api/auth/state' ? 200 : 404, { 'Content-Type': 'application/json' });
-  s.end(q.url === '/api/health' ? '{"ok":true,"version":"v0.0.0","uiLang":"en"}' : '{"password":false}'); }).listen(+port, '127.0.0.1');
+const R = { '/api/health': '{"ok":true,"version":"v0.0.0","uiLang":"en"}', '/api/setup': '{"stage":"admin","admin":{"reasons":[]},"online":{"publicUrl":""}}' };
+http.createServer((q, s) => { s.writeHead(R[q.url] ? 200 : 404, { 'Content-Type': 'application/json' }); s.end(R[q.url] || '{}'); }).listen(+port, '127.0.0.1');
 setTimeout(() => process.exit(0), 120000);
 EOF
 printf '#!/bin/sh\ntouch "%s/installed"\n' "$FS" > "$W/get-docker.sh"
@@ -290,8 +303,8 @@ dockinst() { # dockinst <tên> [biến…]: cài KHÔNG --native, PATH có docke
 dockinst dsg
 [ $IRC = 0 ] && [ -f "$FS/installed" ] && grep -q 'usermod -aG docker tester' "$FS/usermod.log" && echo "$INST_OUT" | grep -q 'continuing with sg docker' && echo "$INST_OUT" | grep -q 'Log out and back in to use genchibi without sudo' && echo "$INST_OUT" | grep -q 'Run mode: docker'
 check $? "Docker chưa có → cài (giả) + usermod -aG docker tester; phiên chưa vào nhóm → tiếp tục bằng sg docker, in 'Log out and back in…'" "$IRC $(echo "$INST_OUT" | tail -8) · $(cat "$FS/docker.log" 2>/dev/null | tail -3)"
-grep -q '^\[sg\] compose -f docker-compose.yml up -d' "$FS/docker.log" && ! grep -qE '^ compose' "$FS/docker.log" && lastline "$INST_OUT" | grep -q '^Setup code: .*FAKE1-CODE2'
-check $? "genchibi start trong cùng phiên chạy docker compose qua sg (không lệnh compose nào chạy thẳng bị từ chối); dòng cuối = mã setup" "$(cat "$FS/docker.log" 2>/dev/null | tail -4) · $(lastline "$INST_OUT")"
+grep -q '^\[sg\] compose -f docker-compose.yml up -d' "$FS/docker.log" && ! grep -qE '^ compose' "$FS/docker.log" && grep -q '^\[sg\] compose -f docker-compose.yml config --format json' "$FS/docker.log" && [ -f "$W/dsg/run/admin-window" ] && lastline "$INST_OUT" | grep -q '^Next: open http://localhost:[0-9]* and sign in with admin / admin within 30 minutes'
+check $? "genchibi start trong cùng phiên chạy docker compose qua sg (không lệnh compose nào chạy thẳng bị từ chối); kiểm docker compose config (chỉ loopback) rồi mở cửa sổ; dòng cuối = admin / admin" "$(cat "$FS/docker.log" 2>/dev/null | tail -4) · $(lastline "$INST_OUT")"
 dockinst dsudo FAKE_NO_SG=1
 [ $IRC = 0 ] && echo "$INST_OUT" | grep -q 'continuing with sudo docker' && grep -q '^\[sudo\] compose -f docker-compose.yml up -d' "$FS/docker.log"
 check $? "không dùng được sg → sudo docker (không hỏi mật khẩu: -n), compose chạy qua sudo" "$IRC $(echo "$INST_OUT" | tail -4) · $(tail -3 "$FS/docker.log" 2>/dev/null)"

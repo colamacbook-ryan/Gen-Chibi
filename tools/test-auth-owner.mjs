@@ -1,15 +1,16 @@
-// Kiểm đăng nhập chủ máy + bảng truy cập v0.21 (spec v021 §3.2–§3.4; cortex CNS-166/167/173/191–199; L-66). Server tạm thật, không ra mạng ngoài.
-//  0) đơn vị (đồng hồ giả): mã setup (định dạng / TTL / một lần) · chính sách mật khẩu · phiên 30 ngày · cookie thiết bị (HMAC, thu hồi) · tên cookie theo cổng ·
+// Kiểm đăng nhập chủ máy + bảng truy cập v0.21 → v0.23 (spec v021 §3.2–§3.4, v023 §A; cortex CNS-166/167/173/191–199; L-66). Server tạm thật, không ra mạng ngoài.
+// (v0.23: mã setup v0.21 đã bỏ — lần đầu = admin / admin + màn khởi tạo: tools/test-setup.mjs. Ở đây khởi tạo bằng token chủ T.)
+//  0) đơn vị (đồng hồ giả): chính sách mật khẩu · phiên 30 ngày · cookie thiết bị (HMAC, thu hồi) · tên cookie theo cổng ·
 //     Secure · online-config (nguồn .env chỉ đọc / app, bật tạm → chính thức / trả về, hỏi trước khi đổi audience) + OAuth đọc publicUrl lúc chạy
-//  1) bảng §3.4 từng ô, trước / sau khi có mật khẩu, lớp N (máy mình = proxy tối giản kiểu nginx: không XFF, Host 127.0.0.1) và P (có XFF) — N KHÔNG được quyền chủ (CNS-191)
-//  2) mã setup qua HTTP: sai định dạng không đếm · trần riêng xét TRƯỚC khi kiểm · T đặt được không cần mã · một lần
+//  1) bảng truy cập từng ô, trước / sau khi có mật khẩu, lớp N (máy mình = proxy tối giản kiểu nginx: không XFF, Host 127.0.0.1) và P (có XFF) — N KHÔNG được quyền chủ (CNS-191)
+//  2) (v0.21: mã setup qua HTTP — đã bỏ ở v0.23; /api/auth/setup → 404)
 //  3) trần kiểu L-66: 10.000 lần đoán từ 500 IP → lần TRÚNG khi IP đã chạm trần vẫn 429; chủ có cookie thiết bị vẫn 200; kẻ lạ không khoá được chủ; trần riêng của thiết bị
 //  4) trần toàn cục chỉ làm CHẬM (không khoá): kẻ lạ đúng mật khẩu vẫn vào được nhưng chậm; chủ có cookie thiết bị không bị chậm
 //  5) phiên: đăng xuất · đổi mật khẩu thu hồi mọi phiên · CSRF X-GC-Request / Origin vẫn áp khi có cookie
 //  6) máy kế thừa (kiểu máy Ryan: .env GC_PUBLIC_URL + GC_ALLOWED_HOSTS + GC_API_TOKEN + GC_MCP_KEY, request mang XFF) · dấu legacy.json ghi một lần
-//  7) nâng cấp v0.20 không token: data/owner-token tự sinh (0600) · genchibi mcp (stdio) vẫn chạy · /mcp không header → 401 có hướng dẫn · Studio dẫn tới /setup
+//  7) nâng cấp v0.20 không token: data/owner-token tự sinh (0600) · genchibi mcp (stdio) vẫn chạy · /mcp không header → 401 có hướng dẫn · Studio dẫn tới admin / admin (stage admin)
 //  8) data/online.json đọc LÚC CHẠY: OAuth + Host được phép đổi theo tệp, không khởi động lại · bí mật không vào log · tệp bí mật 0600
-//  9) CLI thật (bản cài native giả): genchibi status / open in-mở mã setup · password (app chạy → API; app dừng → ghi thẳng) · agent connect · mcp — token / mật khẩu không vào argv
+//  9) CLI thật (bản cài native giả): genchibi status / open (cửa sổ admin) · password (app chạy → API = khởi tạo lần đầu; app dừng → ghi thẳng) · agent connect · mcp — token / mật khẩu không vào argv
 // Dùng: node tools/test-auth-owner.mjs   (cổng 7741–7749). GC_TEST_ROOT=<cây mã khác> để chạy bộ kiểm trên bản đã sửa (rào ngược).
 // © 2026 Gen Labs — All rights reserved.
 import http from 'http';
@@ -21,7 +22,7 @@ import path from 'path';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const ROOT = process.env.GC_TEST_ROOT ? path.resolve(process.env.GC_TEST_ROOT) : path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const { Auth, normCode, pwProblem, cookieName, isHttps } = require(ROOT + '/server/auth.js');
+const { Auth, pwProblem, cookieName, isHttps } = require(ROOT + '/server/auth.js');
 const { OnlineConfig, normUrl } = require(ROOT + '/server/online-config.js');
 const { OAuth } = require(ROOT + '/server/oauth.js');
 
@@ -69,7 +70,6 @@ async function pool(n, items, fn) { const out = new Array(items.length); let i =
 // băm mật khẩu kiểu của server với tham số NHẸ (N=1024) — fixture cho các ca đoán số lượng lớn (server kiểm theo tham số lưu trong chuỗi băm)
 function weakHash(pw) { const salt = crypto.randomBytes(16), h = crypto.scryptSync(pw, salt, 32, { N: 1024, r: 8, p: 1 }); return ['scrypt', 1024, 8, 1, salt.toString('base64url'), h.toString('base64url')].join('$'); }
 function seedPassword(home, pw) { fs.mkdirSync(path.join(home, 'data'), { recursive: true }); fs.writeFileSync(path.join(home, 'data/auth.json'), JSON.stringify({ v: 1, users: { owner: { id: 'owner', role: 'owner', hash: weakHash(pw), setAt: new Date().toISOString() } }, sessions: {}, devices: {} }), { mode: 0o600 }); }
-const codeOf = home => (fs.readFileSync(path.join(home, 'data/setup-code.txt'), 'utf8').split('\n')[0] || '').trim();
 const PW = 'correct horse battery staple', PW2 = 'một cụm từ mới dài hơn 12';
 const SECRETS = [PW];   // mọi bí mật đã dùng — kiểm cuối: không tệp log nào chứa
 
@@ -101,24 +101,11 @@ console.log('0) đơn vị (đồng hồ giả): mã setup · mật khẩu · ph
   const tok = a.token;
   ok(/^[0-9a-f]{64}$/.test(tok) && fs.readFileSync(path.join(dir, 'owner-token'), 'utf8').trim() === tok && mode(path.join(dir, 'owner-token')) === '600', 'env trống → sinh data/owner-token 256 bit, 0600');
   ok(new Auth({ dir, envToken: '', key, now }).token === tok && new Auth({ dir, envToken: 'tu-env-123', key, now }).token === 'tu-env-123', 'khởi động lại dùng lại owner-token; GC_API_TOKEN (env) thắng tệp');
-  a.ensureSetupCode(false);
-  const txt = fs.readFileSync(path.join(dir, 'setup-code.txt'), 'utf8'), code = txt.split('\n')[0];
-  ok(/^[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/.test(code) && /^expires=\d{10}$/m.test(txt) && mode(path.join(dir, 'setup-code.txt')) === '600' && mode(path.join(dir, 'setup-code')) === '600', 'mã setup: Crockford base32 10 ký tự (50 bit) dạng XXXXX-XXXXX, tệp bản rõ + tệp băm đều 0600: ' + code);
-  ok(!fs.readFileSync(path.join(dir, 'setup-code'), 'utf8').includes(code.replace('-', '')) && !logs.join('\n').includes(code), 'tệp setup-code chỉ có HMAC + hạn (không bản rõ); log không có mã');
-  ok(a.checkCode(code) === 'ok' && a.checkCode(code.toLowerCase().replace('-', ' ')) === 'ok' && a.checkCode('abc') === 'format' && a.checkCode(code.slice(0, 10) + (code[10] === '0' ? '1' : '0')) === 'wrong', 'kiểm mã: đúng (kể cả chữ thường / khoảng trắng) · sai định dạng → format · sai một ký tự → wrong');
-  ok(normCode('iloo0-11111') === '1100011111' && normCode(' ab cd e-fgh jk ') === 'ABCDEFGHJK' && normCode('ABCDE-FGHJU') === '', 'Crockford: chữ thường / khoảng trắng / I L → 1, O → 0 được chuẩn hoá; U (không có trong bảng) → sai định dạng');
-  t += 3600e3 + 1000;
-  ok(a.checkCode(code) === 'expired', 'TTL 1 giờ: sau 1 giờ mã đúng → expired');
-  a.tick(); const code2 = fs.readFileSync(path.join(dir, 'setup-code.txt'), 'utf8').split('\n')[0];
-  ok(code2 !== code && a.checkCode(code2) === 'ok' && a.checkCode(code) === 'wrong', 'mã hết hạn → tick sinh mã mới, mã cũ không còn dùng được');
-  const seen = new Set(); for (let i = 0; i < 300; i++) { a.ensureSetupCode(true); seen.add(fs.readFileSync(path.join(dir, 'setup-code.txt'), 'utf8').split('\n')[0]); }
-  ok(seen.size === 300 && [...seen].every(c => /^[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/.test(c)), '300 mã sinh liên tiếp đều khác nhau, đúng bảng chữ');
   // mật khẩu
   ok(pwProblem('ngắn quá 11') && !pwProblem('đủ mười hai!') && pwProblem('a'.repeat(1025)) && pwProblem('có\ttab dài dài') && pwProblem(' '.repeat(14)) && !pwProblem('Đường lên trời'), 'chính sách: ≥ 12 ký tự (đếm ký tự, không byte) · ≤ 1 KB · không ký tự điều khiển · không toàn khoảng trắng');
   await a.setPassword(PW, 'test');
   const u = JSON.parse(fs.readFileSync(path.join(dir, 'auth.json'), 'utf8')).users.owner;
   ok(/^scrypt\$16384\$8\$5\$[A-Za-z0-9_-]{22}\$[A-Za-z0-9_-]{43}$/.test(u.hash) && mode(path.join(dir, 'auth.json')) === '600' && !fs.readFileSync(path.join(dir, 'auth.json'), 'utf8').includes(PW), 'auth.json 0600: scrypt N=2^14 r=8 p=5 (OWASP), muối 16 byte, không có mật khẩu rõ; cấu trúc users{} để chỗ nhiều người dùng');
-  ok(!fs.existsSync(path.join(dir, 'setup-code')) && !fs.existsSync(path.join(dir, 'setup-code.txt')) && a.checkCode(code2) === 'wrong', 'đặt mật khẩu xong: xoá cả hai tệp mã setup (dùng một lần)');
   ok(await a.checkPassword(PW) && !(await a.checkPassword(PW + 'x')), 'kiểm mật khẩu đúng / sai');
   // băm cũ yếu hơn mặc định → băm lại khi đăng nhập đúng
   const d2 = tmp('u2'); seedPassword(d2, PW);
@@ -148,10 +135,10 @@ console.log('0) đơn vị (đồng hồ giả): mã setup · mật khẩu · ph
     ok(/ Secure$/.test(ap.issue(hostR('chibi.example.com'))[0]) && / Secure$/.test(ap.issue(hostR('chibi.example.com:443'))[0]) && !/Secure/.test(ap.issue(hostR('localhost:7480'))[0]) && !/Secure/.test(ap.issue(hostR('evil.example.com'))[0])
       && !isHttps(hostR('chibi.example.com'), 'http://chibi.example.com') && !isHttps(hostR('chibi.example.com'), '') && isHttps(hostR('CHIBI.example.com'), 'https://chibi.example.com'),
       'cờ Secure: publicUrl https + Host khớp tên → Secure (proxy không gửi X-Forwarded-Proto); Host loopback / tên khác / publicUrl http / không publicUrl → không'); }
-  // móc onPasswordSet (CNS-201) + thu hồi mọi phiên khi khôi phục sao lưu (CNS-202)
-  { let hook = 0; const ah = new Auth({ dir: tmp('hook'), envToken: '', key, now, onPasswordSet: () => { hook++; throw new Error('móc lỗi không làm hỏng đặt mật khẩu'); } });
+  // thu hồi mọi phiên khi khôi phục sao lưu (CNS-202) — v0.23: móc onPasswordSet bỏ (Go online chờ owner nhận móc của setup.json, test-setup.mjs)
+  { const ah = new Auth({ dir: tmp('hook'), envToken: '', key, now });
     await ah.setPassword(PW, 'test'); const j1 = jar(ah.issue(R())), j2 = jar(ah.issue(R()));
-    ok(hook === 1 && ah.hasPassword() && ah.ownerOf(R(cookie(j1))) === 'S', 'đặt mật khẩu → gọi onPasswordSet đúng một lần (móc ném lỗi cũng không làm hỏng việc đặt)');
+    ok(ah.hasPassword() && ah.ownerOf(R(cookie(j1))) === 'S', 'đặt mật khẩu (không setup.json = máy đã xong thiết lập) → đăng nhập phiên S');
     const rv = ah.revokeAll('test');
     ok(rv.sessions === 2 && rv.devices >= 1 && ah.ownerOf(R(cookie(j1))) === null && ah.ownerOf(R(cookie(j2))) === null && !ah.deviceOf(R(cookie(j1))) && ah.hasPassword() && await ah.checkPassword(PW), 'revokeAll: mọi phiên + thiết bị chết, mật khẩu giữ nguyên'); }
   ok(logs.every(l => !l.includes(tok) && !l.includes(PW) && !l.includes(PW2)), 'log của Auth không có token / mật khẩu');
@@ -199,7 +186,7 @@ console.log('0) đơn vị (đồng hồ giả): mã setup · mật khẩu · ph
 }
 
 /* ================================================================== 1) bảng §3.4 */
-console.log('1) bảng truy cập §3.4 — bản cài mới, trước / sau mật khẩu; lớp N (máy mình = proxy tối giản) và P (có XFF)');
+console.log('1) bảng truy cập — bản cài mới, trước / sau mật khẩu; lớp N (máy mình = proxy tối giản) và P (có XFF)');
 const KEY = 'linkkey_' + crypto.randomBytes(12).toString('hex'), HOST = 'chibi.example.test';
 const homeA = tmp('A'); fs.mkdirSync(path.join(homeA, 'data'), { recursive: true });
 fs.writeFileSync(path.join(homeA, 'data/online.json'), JSON.stringify({ v: 1, adopted: true, mode: 'proxy', publicUrl: 'https://' + HOST }));   // bản cài v0.21 đã online qua app (không phải .env)
@@ -210,20 +197,20 @@ const TA = fs.readFileSync(path.join(homeA, 'data/owner-token'), 'utf8').trim();
   const st = async (m, p, h, b) => (await req(7741, m, p, { headers: h, body: b })).status;
   const keys = async h => Object.keys((await req(7741, 'GET', '/api/health', { headers: h })).json || {}).sort().join(',');
   let s = [];
-  for (const p of ['/', '/xuong', '/thu-vien', '/tao-tac', '/studio/app.js', '/login', '/setup']) s.push(await st('GET', p, N), await st('GET', p, PX));
-  ok(s.every(x => x === 200), 'chưa có mật khẩu: Studio tĩnh (/, 3 khu, app.js, /login, /setup) → 200 mọi lớp');
+  for (const p of ['/', '/xuong', '/thu-vien', '/tao-tac', '/studio/app.js', '/login']) s.push(await st('GET', p, N), await st('GET', p, PX));
+  ok(s.every(x => x === 200) && (await req(7741, 'GET', '/setup', { headers: N })).headers.location === '/login', 'chưa có mật khẩu: Studio tĩnh (/, 3 khu, app.js, /login) → 200 mọi lớp; /setup (v0.21) → 302 /login');
   ok((await keys(N)) === 'ok,uiLang,version' && (await keys(PX)) === 'ok,uiLang,version', 'GET /api/health công khai, chỉ ok / version / uiLang (launcher, healthcheck Docker, màn đăng nhập)');
   s = [await st('GET', '/api/info', N), await st('GET', '/api/info', NG), await st('GET', '/api/info', LH), await st('GET', '/api/info', PX), await st('POST', '/api/works', { ...NG, ...W }, { title: 'x' }), await st('GET', '/api/info', { ...NG, cookie: 'gc_session_7741=' + 'A'.repeat(43) })];
   ok(s.every(x => x === 401), 'CNS-191: /api/* không bằng chứng → 401 ở MỌI lớp — kể cả N (máy mình) và proxy tối giản (Host 127.0.0.1, không XFF); cookie giả → 401 [' + s + ']');
   ok(await st('GET', '/api/info', { ...NG, ...bearer(TA) }) === 200 && await st('GET', '/api/info', { ...PX, ...bearer(TA) }) === 200, 'chưa có mật khẩu: /api/* với T (token chủ từ data/owner-token) → 200');
-  // CNS-210: /api/auth/state công khai chỉ trả cái màn /login · /setup cần (password, minLength, đường dẫn; legacy chỉ khi chưa có mật khẩu) — từng lớp N / nginx tối giản / P
+  // CNS-210: /api/auth/state công khai chỉ trả cái màn /login cần (password, minLength, đường dẫn, stage; legacy chỉ khi chưa có mật khẩu) — từng lớp N / nginx tối giản / P
   const sk = async h => { const j = (await req(7741, 'GET', '/api/auth/state', { headers: h })).json || {}; return { j, k: Object.keys(j).sort().join(',') }; };
   const sN = await sk(N), sNG = await sk(NG), sPX = await sk(PX), sT = await sk({ ...PX, ...bearer(TA) }), sFake = await sk({ ...NG, cookie: 'gc_session_7741=' + 'A'.repeat(43) });
-  ok([sN, sNG, sPX, sFake].every(x => x.k === 'legacy,login,minLength,password,setupUrl' && x.j.password === false && x.j.legacy === false && x.j.minLength === 12),
-    'CNS-210 chưa có mật khẩu, KHÔNG bằng chứng (N · nginx tối giản · P · cookie giả): /api/auth/state chỉ có password, legacy, minLength, login, setupUrl — không setup / locked / session / owner [' + sN.k + ']');
-  ok(sT.j.password === false && sT.j.setup === true && sT.j.owner === 'T' && sT.j.legacy === false && sT.j.session === false && sT.j.locked === 0, 'chủ (T): /api/auth/state đủ — setup = true (mã đang chờ), owner T, locked 0');
-  ok(await st('POST', '/api/auth/login', { ...N, ...W }, { password: PW }) === 409, '/login khi chưa có mật khẩu → 409 (chỉ đường /setup)');
-  ok(await st('POST', '/api/auth/setup', { ...NG, ...W }, { password: PW }) === 400 && await st('POST', '/api/auth/setup', { ...NG, ...W }, { code: 'AAAAA-AAAAA', password: PW }) === 401, '/setup không C / T → từ chối (thiếu mã 400, mã sai 401) — N không tự đặt được mật khẩu chủ');
+  ok([sN, sNG, sPX, sFake].every(x => x.k === 'legacy,login,minLength,password,stage' && x.j.password === false && x.j.legacy === false && x.j.minLength === 12 && x.j.stage === 'admin'),
+    'CNS-210 chưa có mật khẩu, KHÔNG bằng chứng (N · nginx tối giản · P · cookie giả): /api/auth/state chỉ có password, legacy, minLength, login, stage — không locked / session / owner / tên đăng nhập [' + sN.k + ']');
+  ok(sT.j.password === false && sT.j.owner === 'T' && sT.j.who === 'T' && sT.j.legacy === false && sT.j.session === false && sT.j.locked === 0, 'chủ (T): /api/auth/state đủ — owner T, locked 0');
+  ok(await st('POST', '/api/auth/login', { ...N, ...W }, { username: 'owner', password: PW }) === 409, '/login (tên thường) khi chưa có mật khẩu → 409 (lần đầu: admin / admin hoặc genchibi password)');
+  ok(await st('POST', '/api/auth/setup', { ...NG, ...W }, { password: PW }) === 404 && await st('POST', '/api/auth/init', { ...NG, ...W }, { username: 'owner', password: PW }) === 401, 'v0.23: /api/auth/setup (mã setup) → 404; /api/auth/init không A / T → 401 — N không tự khởi tạo được');
   // /mcp: K / O / T
   const kOk = (await mcpInit(7741, { host: HOST, ...P('203.0.113.5') }, '/mcp/' + KEY)).status, tOk = (await mcpInit(7741, { ...NG, ...bearer(TA) })).status, none = await mcpInit(7741, NG);
   ok(kOk === 200 && tOk === 200 && none.status === 401 && /resource_metadata="https:\/\/chibi\.example\.test\//.test(none.headers['www-authenticate'] || ''), '/mcp: K (link có khoá) 200 · T 200 · không header (kể cả N) 401 + WWW-Authenticate');
@@ -234,11 +221,10 @@ const TA = fs.readFileSync(path.join(homeA, 'data/owner-token'), 'utf8').trim();
   ok((await req(7741, 'GET', '/.well-known/oauth-protected-resource', { headers: { host: HOST } })).status === 200 && (await req(7741, 'POST', '/oauth/register', { headers: { host: HOST, ...P('203.0.113.6') }, body: { client_name: 'x', redirect_uris: ['https://claude.ai/api/mcp/auth_callback'] } })).status === 201, 'OAuth máy (.well-known, /oauth/register) công khai');
   ok(await st('GET', '/api/online/status', PX) === 401 && await st('GET', '/api/online/status', { ...PX, ...bearer(TA) }) === 404, '/api/online/*: không bằng chứng → 401 · T qua cổng (404 = route chưa có ở P1, P3 gắn)');
 
-  // ---- đặt mật khẩu bằng mã setup (C) từ N
-  const code = codeOf(homeA); SECRETS.push(code);
-  const su = await req(7741, 'POST', '/api/auth/setup', { headers: { ...NG, ...W }, body: { code, password: PW } }), cA = jar(su.set);
-  ok(su.status === 200 && cA.gc_session_7741 && cA.gc_device_7741 && su.set.every(c => /HttpOnly; SameSite=Lax/.test(c) && !/Secure/.test(c)), 'C: mã setup đúng → 200, đặt phiên + cookie thiết bị (HttpOnly, SameSite=Lax; http cục bộ không Secure)');
-  ok(!fs.existsSync(path.join(homeA, 'data/setup-code.txt')) && (await req(7741, 'POST', '/api/auth/setup', { headers: { ...NG, ...W }, body: { code, password: PW2 } })).status === 404, 'mã dùng một lần: tệp bị xoá; /setup lần nữa → 404 (đã có mật khẩu)');
+  // ---- khởi tạo tài khoản chủ bằng token chủ (T) từ N (v0.23: thay cho mã setup C) → bỏ qua wizard (genchibi setup skip) để kiểm bảng truy cập lúc stage done
+  const su = await req(7741, 'POST', '/api/auth/init', { headers: { ...NG, ...W, ...bearer(TA) }, body: { username: 'owner', displayName: 'Owner', password: PW, password2: PW } }), cA = jar(su.set);
+  ok(su.status === 200 && cA.gc_session_7741 && cA.gc_device_7741 && su.set.every(c => /HttpOnly; SameSite=Lax/.test(c) && !/Secure/.test(c)), 'T: khởi tạo → 200, đặt phiên + cookie thiết bị (HttpOnly, SameSite=Lax; http cục bộ không Secure)');
+  ok((await req(7741, 'POST', '/api/auth/init', { headers: { ...NG, ...W, ...bearer(TA) }, body: { username: 'owner2', password: PW2 } })).status === 409 && (await req(7741, 'POST', '/api/setup/skip', { headers: { ...NG, ...W, ...bearer(TA) }, body: { reason: 'test-auth-owner' } })).status === 200, 'khởi tạo một lần: lần nữa → 409; wizard bỏ qua bằng token (genchibi setup skip)');
   const SA = cookie(cA);
   // ---- sau khi có mật khẩu
   s = [];
@@ -250,15 +236,15 @@ const TA = fs.readFileSync(path.join(homeA, 'data/owner-token'), 'utf8').trim();
   ok(s.every(x => x === 401), 'CNS-191: có mật khẩu, không phiên / token → 401 ở mọi lớp (N, proxy tối giản, localhost, P) [' + s + ']');
   ok(await st('GET', '/api/info', { ...NG, ...SA }) === 200 && await st('GET', '/api/info', { ...NG, ...bearer(TA) }) === 200, 'có mật khẩu: /api/* với S (phiên) → 200, với T → 200');
   // đăng nhập qua proxy (P, https): cookie tên gốc + Secure
-  const lp = await req(7741, 'POST', '/api/auth/login', { headers: { ...PX, ...W }, body: { password: PW } }), cP = jar(lp.set);
+  const lp = await req(7741, 'POST', '/api/auth/login', { headers: { ...PX, ...W }, body: { username: 'owner', password: PW } }), cP = jar(lp.set);
   ok(lp.status === 200 && cP.gc_session && lp.set.every(c => / Secure$/.test(c)) && await st('GET', '/api/info', { ...PX, ...cookie(cP) }) === 200, '/login qua proxy https (P): 200, cookie gc_session / gc_device có Secure; /api/* bằng phiên đó → 200');
-  ok(await st('POST', '/api/auth/login', { ...PX, ...W }, { password: 'sai mật khẩu rồi nhé' }) === 401, '/login sai mật khẩu → 401');
+  ok(await st('POST', '/api/auth/login', { ...PX, ...W }, { username: 'owner', password: 'sai mật khẩu rồi nhé' }) === 401, '/login sai mật khẩu → 401');
   ok((await mcpInit(7741, { ...NG, ...SA })).status === 401 && (await mcpInit(7741, { ...NG, ...bearer(TA) })).status === 200 && (await mcpInit(7741, { host: HOST }, '/mcp/' + KEY)).status === 200 && (await mcpInit(7741, { host: HOST, ...bearer(g1.token) })).status === 200, '/mcp: phiên cookie (S) KHÔNG mở /mcp → 401; K / O / T vẫn 200');
   const g2 = await oauthGrant(7741, HOST, cookie(cP)), g3 = await oauthGrant(7741, HOST, null), g4 = await oauthGrant(7741, HOST, bearer(TA));
   ok(g2.approve.status === 200 && g2.data.needToken === false && g3.approve.status === 401 && g3.data.needToken === true && /^\/login\?next=%2Foauth%2Fauthorize%3F/.test(g3.data.loginUrl) && g4.approve.status === 200, 'có mật khẩu: Cấp phép với S → 200 (trang không hỏi token) · không bằng chứng → 401, trang có lối /login?next= quay lại đúng trang · T → 200');
   ok(await st('GET', '/api/online/status', { ...NG, ...SA }) === 404 && await st('GET', '/api/online/status', NG) === 401, '/api/online/*: S qua cổng (404 = route của P3), không bằng chứng → 401');
   // CSRF: cookie tự gửi → mọi lệnh thay đổi vẫn cần X-GC-Request + Origin hợp lệ
-  s = [await st('POST', '/api/works', { ...NG, ...SA }, { title: 'csrf' }), await st('POST', '/api/works', { ...NG, ...SA, ...W, origin: 'http://evil.example' }, { title: 'csrf' }), await st('POST', '/api/auth/login', NG, { password: PW }), await st('POST', '/api/auth/logout', { ...NG, ...SA })];
+  s = [await st('POST', '/api/works', { ...NG, ...SA }, { title: 'csrf' }), await st('POST', '/api/works', { ...NG, ...SA, ...W, origin: 'http://evil.example' }, { title: 'csrf' }), await st('POST', '/api/auth/login', NG, { username: 'owner', password: PW }), await st('POST', '/api/auth/logout', { ...NG, ...SA })];
   ok(s.every(x => x === 403) && await st('POST', '/api/works', { ...NG, ...SA, ...W }, { title: 'Phim S' }) === 200, 'CSRF: có phiên cookie nhưng thiếu X-GC-Request / Origin lạ → 403 (kể cả /login, /logout); đủ header → 200 [' + s + ']');
   // ---- 5) phiên: đăng xuất, đổi mật khẩu thu hồi
   console.log('5) phiên: đăng xuất · đổi mật khẩu thu hồi mọi phiên · danh sách / thu hồi thiết bị');
@@ -268,42 +254,13 @@ const TA = fs.readFileSync(path.join(homeA, 'data/owner-token'), 'utf8').trim();
   ok(lo2.status === 200 && await st('GET', '/api/info', { ...PX, ...cookie(cP) }) === 401, 'đăng xuất: phiên đó 401 ngay');
   const list = (await req(7741, 'GET', '/api/auth/sessions', { headers: { ...NG, ...SA } })).json;
   ok(list && list.sessions.some(x => x.current) && list.devices.length >= 1 && !JSON.stringify(list).includes(cA.gc_session_7741), 'GET /api/auth/sessions (S): liệt kê phiên + thiết bị, đánh dấu phiên hiện tại, không lộ giá trị cookie');
-  const cB = jar((await req(7741, 'POST', '/api/auth/login', { headers: { ...NG, ...W }, body: { password: PW } })).set);
+  const cB = jar((await req(7741, 'POST', '/api/auth/login', { headers: { ...NG, ...W }, body: { username: 'owner', password: PW } })).set);
   ok(await st('POST', '/api/auth/password', { ...NG, ...W, ...SA }, { current: 'sai rồi sai rồi', password: PW2 }) === 401 && await st('GET', '/api/info', { ...NG, ...cookie(cB) }) === 200, 'đổi mật khẩu bằng phiên cần mật khẩu hiện tại: sai → 401, không đổi gì');
   const ch = await req(7741, 'POST', '/api/auth/password', { headers: { ...NG, ...W, ...SA }, body: { current: PW, password: PW2 } }); SECRETS.push(PW2);
   ok(ch.status === 200 && ch.json.revoked >= 2 && await st('GET', '/api/info', { ...NG, ...cookie(cB) }) === 401 && await st('GET', '/api/info', { ...NG, ...cookie(jar(ch.set)) }) === 200, 'đổi mật khẩu: thu hồi MỌI phiên cũ (' + (ch.json && ch.json.revoked) + '); trình duyệt vừa đổi nhận phiên mới');
-  ok(await st('POST', '/api/auth/login', { ...NG, ...W }, { password: PW }) === 401 && await st('POST', '/api/auth/login', { ...NG, ...W }, { password: PW2 }) === 200, 'mật khẩu cũ hết tác dụng, mật khẩu mới đăng nhập được');
+  ok(await st('POST', '/api/auth/login', { ...NG, ...W }, { username: 'owner', password: PW }) === 401 && await st('POST', '/api/auth/login', { ...NG, ...W }, { username: 'owner', password: PW2 }) === 200, 'mật khẩu cũ hết tác dụng, mật khẩu mới đăng nhập được');
   const tr = await req(7741, 'POST', '/api/auth/password', { headers: { ...NG, ...W, ...bearer(TA) }, body: { password: PW } });
   ok(tr.status === 200 && await st('GET', '/api/info', { ...NG, ...cookie(jar(ch.set)) }) === 401, 'T (genchibi password, quên mật khẩu) đặt lại không cần mật khẩu cũ, thu hồi mọi phiên');
-}
-
-/* ================================================================== 2) mã setup qua HTTP */
-console.log('2) mã setup qua HTTP: trần riêng xét trước khi kiểm · sai định dạng không đếm · T đặt không cần mã');
-{
-  const S2 = await ready(boot(7742, { GC_CLIENT_IP_HEADER: 'x-forwarded-for' })), code = codeOf(S2.home), T2 = fs.readFileSync(path.join(S2.home, 'data/owner-token'), 'utf8').trim(); SECRETS.push(code, T2);
-  const try1 = (ip, c, pw) => req(7742, 'POST', '/api/auth/setup', { headers: { ...P(ip), ...W }, body: { code: c, password: pw || PW } });
-  const fmt = []; for (let i = 0; i < 15; i++) fmt.push((await try1('198.51.100.20', 'sai-dinh-dang')).status);
-  const bad = []; for (let i = 0; i < 12; i++) bad.push((await try1('198.51.100.21', 'ZZZZZ-ZZZZ' + (i % 10))).status);
-  ok(fmt.every(x => x === 400) && bad.slice(0, 10).every(x => x === 401) && bad.slice(10).every(x => x === 429), 'trần mã setup theo IP: 10 lần sai → 401, lần 11+ → 429; 15 lần sai ĐỊNH DẠNG → 400 và không bị đếm [' + bad + ']');
-  const hit = await try1('198.51.100.21', code), p = await req(7742, 'GET', '/api/auth/state');
-  ok(hit.status === 429 && Number(hit.headers['retry-after']) > 0 && p.json.password === false, 'mã ĐÚNG từ IP đã chạm trần → vẫn 429 + Retry-After, mật khẩu chưa được đặt (xét trần TRƯỚC khi kiểm — CNS-166)');
-  ok((await try1('198.51.100.20', code, 'ngắn')).status === 400 && (await req(7742, 'GET', '/api/auth/state')).json.password === false, 'mật khẩu < 12 ký tự → 400, không tiêu mã');
-  const okr = await try1('198.51.100.22', code);
-  ok(okr.status === 200 && (await req(7742, 'GET', '/api/auth/state')).json.password === true, 'IP khác, mã đúng → 200 (kẻ lạ chạm trần không khoá được người có mã)');
-  const S3 = await ready(boot(7743, {})), T3 = fs.readFileSync(path.join(S3.home, 'data/owner-token'), 'utf8').trim(); SECRETS.push(T3);
-  const rc = await req(7743, 'POST', '/api/auth/setup-code', { headers: { ...W, ...bearer(T3) } }), noT = await req(7743, 'POST', '/api/auth/setup-code', { headers: W });
-  ok(rc.status === 200 && rc.json.expiresAt && !rc.text.includes(codeOf(S3.home)) && noT.status === 401, 'CLI xin mã mới: POST /api/auth/setup-code chỉ với T (không T → 401); trả hạn, KHÔNG trả mã (CLI đọc tệp)');
-  const viaT = await req(7743, 'POST', '/api/auth/setup', { headers: { ...W, ...bearer(T3) }, body: { password: PW } });
-  ok(viaT.status === 200 && jar(viaT.set).gc_session_7743 && !fs.existsSync(path.join(S3.home, 'data/setup-code.txt')), 'T đặt mật khẩu đầu không cần mã (máy kế thừa / CLI); mã setup bị xoá');
-  await stop(S2); await stop(S3);
-  // mã setup dùng được MỘT lần kể cả khi gửi SONG SONG (review bảo mật 🟡1): mã tiêu thụ đồng bộ trước lần băm scrypt → đúng một 200, còn lại 409 / 401
-  const S4 = await ready(boot(7742, {})), code4 = codeOf(S4.home); SECRETS.push(code4);
-  const pws = Array.from({ length: 6 }, (_, i) => 'mat khau song song so ' + i);
-  const par = await Promise.all(pws.map(pw => req(7742, 'POST', '/api/auth/setup', { headers: W, body: { code: code4, password: pw } })));
-  const wins = par.map((r, i) => r.status === 200 ? i : -1).filter(i => i >= 0), logins = await Promise.all(pws.map(pw => req(7742, 'POST', '/api/auth/login', { headers: W, body: { password: pw } })));
-  ok(wins.length === 1 && par.every(r => [200, 401, 404, 409].includes(r.status)) && logins.filter(r => r.status === 200).length === 1 && logins[wins[0]].status === 200 && (S4.out.match(/owner password set/g) || []).length === 1,
-    'mã setup gửi song song 6 lần → đúng MỘT 200 (mật khẩu đó đăng nhập được, các mật khẩu kia không), log "owner password set" một lần [' + par.map(r => r.status) + ']');
-  await stop(S4);
 }
 
 /* ================================================================== 3) L-66: 10.000 lần đoán */
@@ -311,7 +268,7 @@ console.log('3) trần kiểu L-66: 10.000 lần đoán từ 500 IP (proxy riên
 {
   const hB = tmp('B'); seedPassword(hB, PW);
   const B = await ready(boot(7744, { GC_TEST: '1', GC_AUTH_RATE: '1000', GC_CLIENT_IP_HEADER: 'x-forwarded-for' }, hB));   // GC_AUTH_RATE: chỉ nâng ngưỡng LÀM CHẬM (không đổi trần IP / tài khoản) để đợt đoán chạy nhanh
-  const login = (h, pw) => req(7744, 'POST', '/api/auth/login', { headers: { ...W, ...h }, body: { password: pw } });
+  const login = (h, pw) => req(7744, 'POST', '/api/auth/login', { headers: { ...W, ...h }, body: { username: 'owner', password: pw } });
   const own = await login(P('203.0.113.250'), PW), D = { gc_device_7744: jar(own.set).gc_device_7744 };   // chủ đăng nhập trước đợt đoán → giữ cookie thiết bị (bỏ phiên)
   ok(own.status === 200 && D.gc_device_7744, 'chủ đăng nhập một lần trước đợt đoán, giữ cookie thiết bị (D)');
   const par = await Promise.all(Array.from({ length: 30 }, (x, i) => login(P('198.51.102.1'), 'song song ' + i + ' sai'))).then(rs => rs.map(r => r.status));
@@ -330,7 +287,7 @@ console.log('3) trần kiểu L-66: 10.000 lần đoán từ 500 IP (proxy riên
   const TB = fs.readFileSync(path.join(hB, 'data/owner-token'), 'utf8').trim();
   ok((await login({ ...P('198.51.100.8'), ...bearer(TB) }, PW)).status === 200, 'token chủ (T) cũng không bị trần');
   const stB = (await req(7744, 'GET', '/api/auth/state', { headers: bearer(TB) })).json, stB0 = (await req(7744, 'GET', '/api/auth/state', { headers: P('198.51.100.9') })).json;
-  ok(Object.keys(stB0).sort().join(',') === 'login,minLength,password,setupUrl' && stB0.password === true, 'CNS-210 đã có mật khẩu, người lạ: /api/auth/state chỉ password, minLength, login, setupUrl — không locked (kẻ đoán không biết đã chạm trần), không legacy [' + Object.keys(stB0).join(',') + ']');
+  ok(Object.keys(stB0).sort().join(',') === 'login,minLength,password,stage' && stB0.password === true, 'CNS-210 đã có mật khẩu, người lạ: /api/auth/state chỉ password, minLength, login, stage — không locked (kẻ đoán không biết đã chạm trần), không legacy, không tên đăng nhập [' + Object.keys(stB0).join(',') + ']');
   ok(stB.locked > 0 && stB.locked <= 900 && fresh.json.locked === true && /token/.test(fresh.json.error) && /genchibi password/.test(fresh.json.error) && /phút|minutes/.test(fresh.json.error), 'đang chặn: /api/auth/state.locked cho chủ (≤ 15 phút) + câu lỗi 429 cho người thử (locked: true) "đang bị chặn tạm — genchibi password trên máy chủ / dùng token / chờ N phút" (lối thoát nói thẳng — review bảo mật 🟡2) (Studio hiện kèm lối "Dùng token")');
   const alerts = (await req(7744, 'GET', '/api/info', { headers: bearer(TB) })).json.auth.alerts;
   ok(alerts.length === 1 && alerts[0].failures === 100 && alerts[0].ips >= 90 && alerts[0].at && alerts[0].until && /temporarily blocked/.test(B.out), 'báo chủ: sự kiện chặn (số lần sai, số địa chỉ, lúc chặn / tới khi) trong /api/info.auth.alerts + log server');
@@ -346,7 +303,7 @@ console.log('3b) cấu hình mặc định (không khai header IP): XFF / Cf-Con
 {
   const hS = tmp('Sp'); seedPassword(hS, PW);
   const Sp = await ready(boot(7744, {}, hS));
-  const login = (h, pw) => req(7744, 'POST', '/api/auth/login', { headers: { ...W, ...h }, body: { password: pw } });
+  const login = (h, pw) => req(7744, 'POST', '/api/auth/login', { headers: { ...W, ...h }, body: { username: 'owner', password: pw } });
   const D = { gc_device_7744: jar((await login({}, PW)).set).gc_device_7744 };
   const codes = await pool(16, Array.from({ length: 1000 }, (x, i) => i), i => login({ 'x-forwarded-for': '10.' + (i >> 8) + '.' + (i & 255) + '.9', 'cf-connecting-ip': '172.16.' + (i >> 8) + '.' + (i & 255), 'x-real-ip': '192.168.0.' + (i & 255) }, 'gia-ip-' + i).then(r => r.status));
   ok(codes.filter(c => c === 401).length === 10 && codes.filter(c => c === 429).length === 990, '1.000 lần đoán, mỗi lần một X-Forwarded-For / Cf-Connecting-Ip / X-Real-IP khác qua cổng chính → chỉ 10 lần được kiểm (cùng peer), 990 × 429');
@@ -361,7 +318,7 @@ console.log('4) trần toàn cục chỉ LÀM CHẬM kẻ lạ, không khoá; ch
 {
   const hC = tmp('C'); seedPassword(hC, PW);
   const C = await ready(boot(7745, { GC_CLIENT_IP_HEADER: 'x-forwarded-for' }, hC));
-  const login = (h, pw) => req(7745, 'POST', '/api/auth/login', { headers: { ...W, ...h }, body: { password: pw } });
+  const login = (h, pw) => req(7745, 'POST', '/api/auth/login', { headers: { ...W, ...h }, body: { username: 'owner', password: pw } });
   const D = { gc_device_7745: jar((await login(P('203.0.113.200'), PW)).set).gc_device_7745 };
   const st = []; for (let i = 0; i < 55; i++) st.push((await login(P('192.0.2.' + (i + 1)), 'sai ' + i + ' rồi nhé bạn')).status);
   ok(st.every(c => c === 401), '55 lần sai từ 55 IP khác nhau → đều 401 (không IP nào chạm trần riêng, trần toàn cục không từ chối)');
@@ -386,8 +343,9 @@ console.log('6) máy kế thừa kiểu máy Ryan: .env GC_PUBLIC_URL + GC_ALLOW
   const lj = JSON.parse(fs.readFileSync(path.join(homeD, 'data/legacy.json'), 'utf8'));
   ok(lj.envPublicUrl === 'https://' + HOST && lj.envAllowedHosts === HOST && lj.at && lj.tokenless === false && mode(path.join(homeD, 'data/legacy.json')) === '600', 'data/legacy.json ghi ở lần khởi động đầu: { envPublicUrl, envAllowedHosts, at } (+ tokenless = false vì đã có token)');
   ok((await mcpInit(7746, { ...CADDY }, '/mcp/' + KD)).status === 200 && (await mcpInit(7746, { ...CADDY, ...bearer(TD) })).status === 200, 'agent cũ: link có khoá + Bearer token vẫn chạy qua XFF');
-  const su = await req(7746, 'POST', '/api/auth/setup', { headers: { ...CADDY, ...W, ...bearer(TD) }, body: { password: PW } });
-  ok(su.status === 200 && su.set.every(c => / Secure$/.test(c)) && jar(su.set).gc_session, 'token chứng minh chủ để đặt mật khẩu đầu (qua proxy https → cookie Secure, tên gốc)');
+  const sp = await req(7746, 'POST', '/api/auth/password', { headers: { ...CADDY, ...W, ...bearer(TD) }, body: { password: PW } });
+  const su = await req(7746, 'POST', '/api/auth/login', { headers: { ...CADDY, ...W }, body: { username: 'owner', password: PW } });
+  ok(sp.status === 200 && sp.json.init === false && su.status === 200 && su.set.every(c => / Secure$/.test(c)) && jar(su.set).gc_session, 'máy kế thừa (stage done): token đặt mật khẩu đầu (không qua màn khởi tạo); đăng nhập "owner" qua proxy https → cookie Secure, tên gốc');
   ok((await req(7746, 'GET', '/api/info', { headers: { ...CADDY, ...cookie(jar(su.set)) } })).status === 200 && (await req(7746, 'GET', '/api/info', { headers: { ...CADDY, ...bearer(TD) } })).status === 200, 'sau đó: phiên cookie và token đều vào được (không ép bỏ token)');
   await stop(D);
   D = await ready(boot(7746, {}, homeD));
@@ -414,7 +372,7 @@ console.log('7) nâng cấp v0.20 không token → v0.21: owner-token tự sinh 
   const inf = (await req(7747, 'GET', '/api/info', { headers: bearer(TE) })).json;
   ok(inf.auth.agentsReconnect === true && inf.auth.tokenSource === 'file' && inf.auth.legacy === false, '/api/info.auth: agentsReconnect = true (dải "Agent cũ cần nối lại"), token từ tệp');
   const sj = (await req(7747, 'GET', '/api/auth/state', { headers: bearer(TE) })).json;
-  ok(sj.password === false && sj.setup === true && fs.existsSync(path.join(homeE, 'data/setup-code.txt')) && (await req(7747, 'GET', '/setup')).status === 200, 'Studio dẫn tới /setup: chưa có mật khẩu, mã setup sẵn cho genchibi open / status');
+  ok(sj.password === false && sj.stage === 'admin' && !fs.existsSync(path.join(homeE, 'data/setup-code.txt')), 'Studio dẫn tới lần đầu: chưa có mật khẩu, stage admin (admin / admin trong cửa sổ genchibi open), không còn mã setup');
   const stdio = (home) => new Promise(done => {
     const c = spawn(process.execPath, [path.join(ROOT, 'server/mcp-stdio.js')], { env: { ...baseEnv(), GC_HOME: home, GC_PORT: '7747' }, stdio: ['pipe', 'pipe', 'pipe'] });
     let out = ''; c.stdout.on('data', d => { out += d; }); c.on('exit', () => done(out.trim().split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch (e) { return { raw: l }; } })));
@@ -449,7 +407,7 @@ console.log('8) data/online.json đọc lúc chạy (không khởi động lại
   // bí mật: không tệp log nào của các server chứa token / mật khẩu / mã setup
   const logs = kids.map(k => k.out).join('\n');
   const leak = SECRETS.filter(s => s && logs.includes(s));
-  ok(!leak.length && /\[auth\] no owner password yet/.test(logs) && /\[auth\] owner password set/.test(logs), 'log server: có dòng [auth] (tiếng Anh) nhưng KHÔNG có token / mật khẩu / mã setup nào (' + SECRETS.length + ' bí mật đã kiểm)');
+  ok(!leak.length && /\[setup\] first-run stage: admin/.test(logs) && /\[auth\] owner account initialized/.test(logs), 'log server: có dòng [setup] / [auth] (tiếng Anh) nhưng KHÔNG có token / mật khẩu nào (' + SECRETS.length + ' bí mật đã kiểm)');
   const perms = ['owner-token', 'auth.json', 'legacy.json'].map(f => mode(path.join(homeA, 'data', f)));
   ok(perms.every(x => x === '600'), 'tệp bí mật của bản cài 0600: owner-token · auth.json · legacy.json [' + perms + ']');
 }
@@ -465,25 +423,17 @@ console.log('9) CLI: genchibi status / open (mã setup) · password (app chạy 
   const cli = (args, input) => { const r = spawnSync('bash', [path.join(ROOT, 'cli/genchibi')].concat(args), { env: { ...baseEnv(), GC_HOME: HD, GC_CLI_INNER: '1', PATH: FB + ':' + process.env.PATH }, input: input || '', encoding: 'utf8' }); return { code: r.status, out: (r.stdout || '') + (r.stderr || '') }; };
   let S = await ready(boot(7749, {}, HD));
   const TC = fs.readFileSync(path.join(HD, 'data/owner-token'), 'utf8').trim(); SECRETS.push(TC);
-  let code = codeOf(HD), st = cli(['status']);
-  ok(st.code === 0 && st.out.includes('Setup code: ' + code + ' (set the owner password'), 'genchibi status in "Setup code: XXXXX-XXXXX (set the owner password …)" khi chưa có mật khẩu');
-  fs.writeFileSync(path.join(HD, 'data/setup-code.txt'), code + '\nexpires=' + (Math.floor(Date.now() / 1000) + 60) + '\n');   // còn < 5 phút
-  const op = cli(['open']), opened = (fs.readFileSync(OPENED, 'utf8').trim().split('\n').pop() || ''), code2 = codeOf(HD);
-  // O1 (review bảo mật): mã KHÔNG nằm trong argv của open / xdg-open (/proc/<pid>/cmdline đọc được bởi mọi user) — argv chỉ là đường dẫn tệp chuyển hướng 0600
-  const redir = fs.existsSync(opened) ? fs.readFileSync(opened, 'utf8') : '';
-  ok(op.code === 0 && /No owner password yet/.test(op.out) && code2 !== code && !opened.includes(code2) && !opened.includes(code2.replace('-', '')) && opened.startsWith(path.join(HD, 'run') + '/open-setup-') && /\.html$/.test(opened)
-    && mode(opened) === '600' && mode(path.join(HD, 'run')) === '700' && redir.includes('location.replace("http://localhost:7749/setup#code=' + code2 + '")'),
-    'genchibi open: mã sắp hết hạn → xin mã mới qua API; argv của xdg-open CHỈ là tệp run/open-setup-*.html (0600, run/ 0700) — không có mã; tệp chuyển tới http://localhost:<cổng>/setup#code=<mã mới>', opened);
-  ok(op.out.includes('http://localhost:7749/setup') && op.out.includes(code2), 'genchibi open in /setup + mã ra terminal (lối dự phòng khi trình duyệt không đọc được tệp)');
-  const op1b = cli(['open']), opened2 = fs.readFileSync(OPENED, 'utf8').trim().split('\n').pop();
-  ok(op1b.code === 0 && !fs.existsSync(opened) && fs.existsSync(opened2) && opened2 !== opened, 'lần genchibi open sau xoá tệp chuyển hướng cũ (chỉ một tệp chứa mã tồn tại)');
-  SECRETS.push(code2);
+  let st = cli(['status']);
+  ok(st.code === 0 && /First run: the admin \/ admin window is closed/.test(st.out) && !/Setup code/.test(st.out), 'genchibi status (chưa khởi tạo, chưa cửa sổ): dòng lần đầu — không còn mã setup');
+  const op = cli(['open']), opened = (fs.readFileSync(OPENED, 'utf8').trim().split('\n').pop() || '');
+  ok(op.code === 0 && /sign in with admin \/ admin within 30 minutes/.test(op.out) && opened === 'http://localhost:7749' && mode(path.join(HD, 'run/admin-window')) === '600' && mode(path.join(HD, 'run')) === '700',
+    'genchibi open (v0.23): mở cửa sổ admin / admin (run/admin-window 0600, run/ 0700), argv của xdg-open chỉ là http://localhost:<cổng> — không mã nào', op.out);
   ok(cli(['password'], 'ngan qua\n').code === 1 && (await req(7749, 'GET', '/api/auth/state')).json.password === false, 'genchibi password: < 12 ký tự → từ chối, không đổi gì');
   const pw = cli(['password'], 'mat khau "kho" \\ dai hon 12\n');
-  const lg = await req(7749, 'POST', '/api/auth/login', { headers: W, body: { password: 'mat khau "kho" \\ dai hon 12' } });
-  ok(pw.code === 0 && /Owner password set/.test(pw.out) && lg.status === 200, 'genchibi password (app đang chạy → API bằng token chủ, mật khẩu có " và \\ qua stdin của curl) → đăng nhập được bằng mật khẩu đó');
-  ok(!cli(['status']).out.includes('Setup code') && !fs.existsSync(path.join(HD, 'data/setup-code.txt')), 'có mật khẩu: status không còn in mã setup');
-  const op2 = cli(['open']); ok(fs.readFileSync(OPENED, 'utf8').trim().split('\n').pop() === 'http://localhost:7749', 'có mật khẩu: genchibi open mở trang chính (không mã)');
+  const lg = await req(7749, 'POST', '/api/auth/login', { headers: W, body: { username: 'owner', password: 'mat khau "kho" \\ dai hon 12' } });
+  ok(pw.code === 0 && /Owner account ready: username owner/.test(pw.out) && lg.status === 200, 'genchibi password (app đang chạy, chưa khởi tạo → khởi tạo bằng token chủ, mật khẩu có " và \\ qua stdin của curl) → đăng nhập "owner" được', pw.out);
+  ok(!/First run: the admin/.test(cli(['status']).out) && !fs.existsSync(path.join(HD, 'run/admin-window')), 'đã khởi tạo: status không còn dòng admin / admin; app xoá cửa sổ');
+  const op2 = cli(['open']); ok(fs.readFileSync(OPENED, 'utf8').trim().split('\n').pop() === 'http://localhost:7749' && /sign in with your owner account/.test(op2.out) && !fs.existsSync(path.join(HD, 'run/admin-window')), 'có owner: genchibi open mở trang chính, không mở cửa sổ admin');
   const ac = cli(['agent', 'connect']);
   ok(ac.code === 0 && ac.out.includes('<token — see ' + HD + '/data/owner-token>') && !ac.out.includes(TC), 'agent connect: chỉ chỗ đọc token (data/owner-token khi .env trống), KHÔNG in token');
   const mc = spawnSync('bash', [path.join(ROOT, 'cli/genchibi'), 'mcp'], { env: { ...baseEnv(), GC_HOME: HD, GC_CLI_INNER: '1', PATH: FB + ':' + process.env.PATH }, input: '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}\n', encoding: 'utf8' });
@@ -492,14 +442,14 @@ console.log('9) CLI: genchibi status / open (mã setup) · password (app chạy 
   const pw2 = cli(['password'], 'mat khau moi khi app dung\n');
   ok(pw2.code === 0 && /applies at the next start/.test(pw2.out), 'genchibi password khi app dừng → ghi thẳng data/auth.json (server/auth-cli.js)');
   S = await ready(boot(7749, {}, HD));
-  const l1 = await req(7749, 'POST', '/api/auth/login', { headers: W, body: { password: 'mat khau moi khi app dung' } }), l0 = await req(7749, 'POST', '/api/auth/login', { headers: W, body: { password: 'mat khau "kho" \\ dai hon 12' } });
+  const l1 = await req(7749, 'POST', '/api/auth/login', { headers: W, body: { username: 'owner', password: 'mat khau moi khi app dung' } }), l0 = await req(7749, 'POST', '/api/auth/login', { headers: W, body: { username: 'owner', password: 'mat khau "kho" \\ dai hon 12' } });
   ok(l1.status === 200 && l0.status === 401 && (await req(7749, 'GET', '/api/info', { headers: cookie(jar(lg.set)) })).status === 401, '…chạy lại: mật khẩu mới vào được, mật khẩu cũ 401, phiên cũ bị thu hồi');
   const argv = fs.readFileSync(LOG, 'utf8');
-  ok(argv.length && !argv.includes(TC) && !argv.includes('dai hon 12') && !argv.includes(code2), 'token / mật khẩu / mã setup không nằm trong argv của curl (' + argv.trim().split('\n').length + ' lần gọi)');
+  ok(argv.length && !argv.includes(TC) && !argv.includes('dai hon 12'), 'token / mật khẩu không nằm trong argv của curl (' + argv.trim().split('\n').length + ' lần gọi)');
   // ---- khôi phục sao lưu (CNS-202): máy đang "online" (online.json tunnel + publicUrl, install-id, tunnel token, intent bật) → genchibi backup → restore
   //      → Go online về off, install-id mới, tunnel token xoá, intent off; mật khẩu của bản sao lưu giữ, MỌI phiên + thiết bị thu hồi
   const OLD = 'old-machine.example.test', PWR = 'mat khau moi khi app dung';
-  const lr = await req(7749, 'POST', '/api/auth/login', { headers: W, body: { password: PWR } }), LR = cookie(jar(lr.set));
+  const lr = await req(7749, 'POST', '/api/auth/login', { headers: W, body: { username: 'owner', password: PWR } }), LR = cookie(jar(lr.set));
   fs.writeFileSync(path.join(HD, 'data/online.json'), JSON.stringify({ v: 1, adopted: true, mode: 'tunnel', domain: OLD, publicUrl: 'https://' + OLD, cfResources: { tunnelId: 't-1', tunnelName: 'gen-chibi-aaaaaaaa', host: OLD } }));
   fs.writeFileSync(path.join(HD, 'data/install-id'), 'a'.repeat(32) + '\n');
   fs.mkdirSync(path.join(HD, 'run'), { recursive: true }); fs.writeFileSync(path.join(HD, 'run/tunnel.token'), 'tunnel-token-cua-may-goc', { mode: 0o600 }); fs.writeFileSync(path.join(HD, 'run/edge-intent.json'), '{"tunnel":"token","online":true}\n');
@@ -515,14 +465,14 @@ console.log('9) CLI: genchibi status / open (mã setup) · password (app chạy 
     'genchibi restore: báo trước "sao lưu chứa mật khẩu + phiên"; xoá install-id + run/tunnel.token, intent tunnel off, đặt data/restore-pending.json', rs.out);
   S = await ready(boot(7749, {}, HD));
   const onl = JSON.parse(fs.readFileSync(path.join(HD, 'data/online.json'), 'utf8')), prm1 = await req(7749, 'GET', '/.well-known/oauth-protected-resource', { headers: { host: OLD } });
-  const lr2 = await req(7749, 'POST', '/api/auth/login', { headers: W, body: { password: PWR } });
+  const lr2 = await req(7749, 'POST', '/api/auth/login', { headers: W, body: { username: 'owner', password: PWR } });
   ok(onl.mode === 'off' && onl.publicUrl === '' && !onl.publicUrlPending && onl.flow === null && onl.cfResources && onl.cfResources.tunnelId === 't-1' && prm1.status === 403 && !fs.existsSync(path.join(HD, 'data/restore-pending.json')) && /backup restored/.test(S.out),
     'server sau khôi phục: online.json mode off, publicUrl rỗng, luồng bỏ (cfResources giữ để Go offline còn dọn) · Host ' + OLD + ' bị chặn · dấu restore-pending đã xử lý');
   ok((await req(7749, 'GET', '/api/info', { headers: LR })).status === 401 && lr2.status === 200 && (await req(7749, 'GET', '/api/auth/sessions', { headers: cookie(jar(lr2.set)) })).json.devices.length === 1,
     'khôi phục: phiên cũ (trong bản sao lưu) 401, mật khẩu của bản sao lưu vẫn đăng nhập được; thiết bị cũ đã thu hồi (chỉ còn thiết bị vừa đăng nhập)');
   const S5out = S.out; await stop(S);
   S = await ready(boot(7749, {}, HD));
-  ok((await req(7749, 'POST', '/api/auth/login', { headers: W, body: { password: PWR } })).status === 200 && !/backup restored/.test(S.out) && /backup restored/.test(S5out), 'khởi động lần sau: không thu hồi lại (dấu chỉ dùng một lần)');
+  ok((await req(7749, 'POST', '/api/auth/login', { headers: W, body: { username: 'owner', password: PWR } })).status === 200 && !/backup restored/.test(S.out) && /backup restored/.test(S5out), 'khởi động lần sau: không thu hồi lại (dấu chỉ dùng một lần)');
   await stop(S);
 }
 console.log('   Kết quả đăng nhập chủ / bảng truy cập: ' + passn + ' đạt, ' + failn + ' trượt');

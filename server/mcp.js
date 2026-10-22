@@ -491,7 +491,7 @@ class MCP {
         const rec = this.store.saveEvent(args.event, args.author || 'agent qua MCP');
         return json({ saved: true, id: rec.id, studio: 'Studio › Create › Works › Standalone scripts › ' + args.event.title });
       }
-      case 'start_here': return json(this.startHere());
+      case 'start_here': return json(this.startHere(ctx));
       case 'get_guide': {
         const t = String(args.topic || 'guide'), md = Agent.guide(t);
         if (md == null) return toolError('No topic "' + t.slice(0, 40) + '"', { code: 'NOT_FOUND', allowed: ['guide', 'all'].concat(Agent.topics().map(x => x.id)) });
@@ -862,19 +862,32 @@ class MCP {
     return this.GC.registerScene(MY_PACK, rec).def;
   }
   // ---- mở đầu cho agent mới (bất kỳ hãng nào): trạng thái + luật + chủ đề + bước kế (luật đọc từ agent/GUIDE.md — một nguồn)
-  startHere() {
+  // ctx: kênh của người gọi (CNS-136) — connection nói agent đang nối bằng gì, phạm vi nào, làm được gì; next_steps chỉ gợi ý tool agent ĐƯỢC gọi
+  connectionOf(ctx) {
+    const c = ctx || {}, via = c.oauthScope ? 'oauth' : c.viaLink ? 'link' : c.channel === 'ui' ? 'studio' : 'owner';
+    const scope = c.oauthScope || (via === 'link' ? 'link' : via === 'studio' ? 'studio' : 'owner');
+    const out = { via, scope, can_write: !c.readOnly, can_update: !c.viaOAuth && c.channel !== 'ui' };
+    out.note = c.readOnly ? 'Read-only connection (mcp:read): only tools marked readOnlyHint work; anything that saves returns [FORBIDDEN]. To create or edit, ask the owner to raise the scope (Studio › System › Agent connections) — do not retry writes.'
+      : c.viaOAuth ? 'OAuth mcp:write: create / edit inside a project; no update / rollback, no paid AI voices, no removing sound packs — those need the owner (mcp:owner, Studio or genchibi).'
+      : via === 'link' ? 'Keyed link: like mcp:write (project-scoped saves); update only, no rollback / force.'
+      : via === 'studio' ? 'Studio AI dock: the owner approves edits on the spot.'
+      : 'Owner token / stdio / mcp:owner: full access.';
+    return out;
+  }
+  startHere(ctx) {
     this.sync();
     const GC = this.GC, mine = list => list.filter(x => x.pack === MY_PACK), pj = this.projects(), works = this.store.listWorks();
     const st = { projects: pj.map(p => ({ id: p.id, name: p.name, sample: !!p.sample, characters: p.characters, items: p.items, scenes: p.scenes })),
       characters: mine(GC.assets()).length, items: mine(GC.items()).length, scenes: mine(GC.scenes()).length, motionPacks: GC.choreo.packs().length, soundPacks: GC.sounds.packs().length, sounds: GC.sounds.names().length,
       works: works.length, samples: this.samples().map(x => ({ id: x.id, installed: x.installed, update: x.update })) };
     if (this.bootWarnings.length) st.warnings = this.bootWarnings.slice();   // gói đã lưu nạp khoan dung lúc khởi động (bỏ riêng chỗ sai) — chủ máy nên xem
-    const next = [];
-    if (!pj.some(p => !p.sample)) next.push('save_project — create the project you will work in (every asset you make belongs to it)');
-    if (!pj.length) next.push('install_sample with id "' + this.firstSample().id + '" — optional: a ready-made project to learn from');
+    const next = [], conn = this.connectionOf(ctx);
+    if (!conn.can_write) next.push('list_projects / list_works / get_work — this connection can only read; tell the owner what you would change');
+    else if (!pj.some(p => !p.sample)) next.push('save_project — create the project you will work in (every asset you make belongs to it)');
+    if (conn.can_write && !pj.length) next.push('install_sample with id "' + this.firstSample().id + '" — optional: a ready-made project to learn from');
     next.push('get_guide with topic "guide" (once), then the topic of your job');
     return { app: 'gen-chibi', version: this.version, protocol: 'MCP ' + PROTOCOLS[0], instructions: 'Read the golden rules below; follow get_guide procedures literally.',
-      rules: Agent.rules(), topics: Agent.topics(), state: st, next_steps: next,
+      connection: conn, rules: Agent.rules(), topics: Agent.topics(), state: st, next_steps: next,
       errors: 'Failed calls start with [CODE] (VALIDATION_FAILED, NOT_FOUND, CONFLICT, FORBIDDEN, BAD_REQUEST, UNAVAILABLE, INTERNAL) and carry structuredContent.error.details[].path.' };
   }
   // chuẩn gói động tác cho agent: từ vựng LẤY LÚC CHẠY từ engine (không chép tay — STD-10) + ví dụ chạy được
@@ -1935,9 +1948,9 @@ function reviewTouched(w, before, after) {
 //   mcp:write = kênh link (viaLink) + không cập nhật (viaOAuth): tạo / sửa trong dự án; không chi tiêu giọng AI, không gỡ gói âm, không rollback / update
 //   mcp:owner = như token chủ máy (ctx rỗng)
 function scopeCtx(scope) {
-  if (scope === 'mcp:owner') return { viaLink: false };
-  if (scope === 'mcp:write') return { viaLink: true, viaOAuth: true };
-  return { viaLink: true, viaOAuth: true, readOnly: true };   // mcp:read và mọi giá trị lạ → hẹp nhất (đóng khi nghi ngờ)
+  if (scope === 'mcp:owner') return { viaLink: false, oauthScope: 'mcp:owner' };   // oauthScope: chỉ để start_here nói đúng kênh / phạm vi (CNS-136) — quyền vẫn do các cờ còn lại
+  if (scope === 'mcp:write') return { viaLink: true, viaOAuth: true, oauthScope: 'mcp:write' };
+  return { viaLink: true, viaOAuth: true, readOnly: true, oauthScope: 'mcp:read' };   // mcp:read và mọi giá trị lạ → hẹp nhất (đóng khi nghi ngờ)
 }
 
 module.exports = { scopeCtx, MCP, TOOLS, INSTRUCTIONS, workInstructions, ZONES, UI_TOOLS, LIMITS, cleanContext, cleanAnchors };

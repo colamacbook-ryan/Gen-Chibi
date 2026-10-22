@@ -47,6 +47,27 @@ Pick the first option your environment supports.
 
 The owner can print ready-made client configs with `genchibi agent connect`.
 
+### Connection and scope
+
+How you connect decides what you may do. `start_here` tells you in `connection`:
+`{ via, scope, can_write, can_update, note }`.
+
+| via | How | scope | You may |
+|---|---|---|---|
+| `owner` | `Authorization: Bearer <owner token>` or `genchibi mcp` (stdio) | `owner` | everything |
+| `oauth` | OAuth at `<base>/mcp` (the owner approves in the browser and picks the scope) | `mcp:read` | read only: tools marked `readOnlyHint`; every save returns `[FORBIDDEN]` |
+| `oauth` | same | `mcp:write` | create / edit inside a project; no update / rollback, no paid AI voices, no removing sound packs |
+| `oauth` | same | `mcp:owner` | everything (like the owner token) |
+| `link` | keyed link `<base>/mcp/<key>` (older agents without OAuth) | `link` | like `mcp:write`; update only (no rollback / force) |
+
+- Prefer OAuth when your client supports it (MCP clients with OAuth 2.1 + dynamic client
+  registration, e.g. claude.ai connectors); otherwise ask the owner for the token config (`genchibi agent connect`).
+- `can_write: false` → do not call save tools and do not retry after `[FORBIDDEN]`: say what you would change
+  and ask the owner to raise the scope (Studio › System › Agent connections). `next_steps` already leaves out
+  tools you cannot call.
+- `[FORBIDDEN]` on a write tool with `can_write: true` is a channel rule (e.g. project required over a link),
+  not a broken app: read the error message, it names the fix.
+
 ## 2. First call — always
 
 Call **`start_here`** first. It returns the app version, what already exists (projects, assets,

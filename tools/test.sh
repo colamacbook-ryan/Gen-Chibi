@@ -13,6 +13,7 @@
 #   4f) Go online — edge, Caddy, Cloudflare API giả, wizard (tools/test-online.mjs)
 #   4g) cổng ingress của cloudflared + Go online link tạm đầu-cuối (tools/test-ingress.mjs)
 #   4h) genchibi online qua CLI: server thật + Cloudflare API giả + cloudflared giả, token không vào argv / env / log (tools/test-online-cli.mjs)
+#   4i) thiết lập lần đầu v0.23: admin / admin + cửa sổ host, khởi tạo owner, cổng stage, wizard, CLI (tools/test-setup.mjs)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -817,7 +818,7 @@ node tools/test-dock-core.mjs || exit 1
 
 echo "4) khoá truy cập"
 bash tools/test-auth.sh || exit 1
-echo "4e) đăng nhập chủ máy + bảng truy cập v0.21: mã setup · mật khẩu (scrypt) · phiên / cookie thiết bị · trần L-66 (10.000 lần đoán) · máy kế thừa · nâng cấp không token · online.json lúc chạy"
+echo "4e) đăng nhập chủ máy + bảng truy cập v0.21 → v0.23: khởi tạo bằng token (mã setup đã bỏ) · tên đăng nhập + mật khẩu (scrypt) · phiên / cookie thiết bị · trần L-66 (10.000 lần đoán) · máy kế thừa · nâng cấp không token · online.json lúc chạy"
 for P in 7741 7742 7743 7744 7745 7746 7747 7748 7749; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done
 node tools/test-auth-owner.mjs || exit 1
 
@@ -856,6 +857,10 @@ node tools/test-ingress.mjs || exit 1
 echo "4h) genchibi online (v0.21 P4): server + launcher thật, Cloudflare API giả, cloudflared giả — token trên dòng lệnh bị từ chối · không terminal + CNAME có sẵn → dừng, không đè · --token-stdin tới bậc mật khẩu (mã thoát 3 + mã setup) → password + recheck → xong · đổi địa chỉ cần --yes · proxy · WAF làm tay · nhiều tên miền · off dọn Cloudflare · có terminal hỏi ẩn · token không trong argv / env / log (shim + /proc) · đột biến curl -d · link tạm · máy kế thừa"
 for P in 7841 7843 7851 7853 7855 7861 7863 7891 7895; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done
 node tools/test-online-cli.mjs || exit 1
+
+echo "4i) thiết lập lần đầu (v0.23 §A): máy trạng thái setup.json + bảng lối vào · admin / admin chỉ trong cửa sổ do lệnh host mở (từng lý do từ chối) · phiên admin chỉ màn khởi tạo · init nguyên tử + 4 rào CSRF · cổng stage (phiên / token Studio / cookie thiết bị; agent + /mcp không chặn) · Go online chặn khi chưa khởi tạo · wizard (tự kiểm MCP thật, nối sau, lastClient, skip / reset) · khôi phục không mở lại admin / OAuth (CNS-138) · CLI open / start / password / setup (Docker giả: compose chỉ loopback)"
+for P in 7951 7952 7953 7954 7955 7956 7957 7958 7959; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done
+node tools/test-setup.mjs || exit 1
 
 echo "5) tự cập nhật"
 bash tools/test-update.sh

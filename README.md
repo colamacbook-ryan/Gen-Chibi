@@ -21,7 +21,14 @@ curl -fsSL https://raw.githubusercontent.com/colamacbook-ryan/Gen-Chibi/main/ins
 
 - Runs in **Docker**; on Linux the installer installs Docker itself when it is missing (get.docker.com) and keeps going in the same session even before your login picks up the `docker` group (log out and back in later to use `genchibi` without sudo). macOS: Docker Desktop, or **Node ≥ 18** with `--native`.
 - Installs to `~/gen-chibi` by default, port `7480`, reachable from this machine only. Open **http://localhost:7480**.
-- **First sign-in:** the Studio asks for the owner password, also on this machine. The installer's last line prints a one-time **setup code**; easier: run `genchibi open`, which opens the setup page with the code filled in. Choose a password of at least 12 characters (a memorable phrase works well); the browser remembers this device for 30 days. Forgot it: `genchibi password` on the server.
+- **First run (v0.23):** the installer's last line says what to do next. On this machine, open **http://localhost:7480** and sign in with **admin / admin** within 30 minutes. That window is opened only by a command on the server (the installer, `genchibi start`, `genchibi open`). It works only while the machine is **not online**, only from this machine (loopback, no proxy) and only until the owner account exists. When it is closed, the login page says exactly why and how to get in. Then:
+  1. **Owner account** (required before any page): your username (not `admin`), display name, email (optional — only used as the Let's Encrypt contact for the Caddy path) and a password of at least 12 characters (a memorable phrase works well). `admin / admin` stops working right away.
+  2. **Domain:** *Go online* (the same Go online steps as *System › Go online*) or *This machine only*. If an Internet step fails or takes too long, *Use it on this machine for now* lets you in and the home page keeps a reminder.
+  3. **MCP check:** a real self-test on this machine (HTTP `/mcp`, owner token, `genchibi mcp` stdio), the connect cards for Claude Code / claude.ai / other agents, then a live check that waits for the first agent call. *Done* unlocks when an agent has connected, or choose *I'll connect an agent later* (the home page reminds you).
+
+  Signing in again before the end takes you back to the step you were on. The browser remembers this device for 30 days. Forgot the password: `genchibi password` on the server. The check itself is broken: `genchibi setup skip` (logged); start over: `genchibi setup reset`. Over SSH: forward the port first (`ssh -L 7480:localhost:7480 <server>`), then open http://localhost:7480 on your computer.
+- **Install straight onto a domain** (`--domain` / `--cloudflare`): the installer first asks for the owner username and password (hidden), or reads `GC_OWNER_USER` / `GC_OWNER_PASSWORD` from the environment when there is no terminal (they are never written to `.env`, the command line or the logs). Without them it installs but does **not** go online and prints the two commands to run next (`genchibi password`, then `genchibi online …`). The Studio then opens straight at step 3 (MCP check).
+- **Upgrading from v0.22 or earlier:** your password keeps working; the username is `owner` (change it in *System › Owner account*). The home page shows a one-time *Check setup* banner (MCP self-test + connect cards). A v0.21 / v0.22 machine that was online and still waiting for the owner password stays online; set the owner account on the server with `genchibi password`.
 - Options: `--dir <folder>` · `--port <port>` · `--native` · `--version vX.Y.Z` · `--lang en|vi` · `--domain <name>` · `--cloudflare` (see [Go online](#go-online-domain-https-mcp-in-one-step)).
 
 ## Language
@@ -50,8 +57,9 @@ genchibi backup | restore <file>
 genchibi mcp               # MCP stdio bridge for agents
 genchibi token             # set the GitHub token (private repo), hidden input — NOT the owner token (that is GC_API_TOKEN in .env, or data/owner-token)
 genchibi lang [en|vi]      # show / set the language (CLI + Studio default)
-genchibi open              # open the Studio (first time: the owner-password setup page, code filled in)
-genchibi password          # set / reset the owner password
+genchibi open              # open the Studio (first run: opens the 30-minute admin / admin window)
+genchibi password          # set / reset the owner password (first run: creates the owner account)
+genchibi setup [skip|reset] # first-run setup: state · skip the wizard (logged) · run it again
 genchibi online …          # go online: domain + HTTPS + MCP (see below)
 genchibi agent connect     # connect configs for agents (never prints the token)
 genchibi uninstall
@@ -77,7 +85,7 @@ You do exactly **one** thing outside the app — point an A record at the machin
 
 **The Cloudflare API token (path B):** *Studio › System › Go online* and `genchibi online cloudflare` show a link that opens Cloudflare's token page with the permissions filled in. The token needs **Account › Cloudflare Tunnel › Edit**, **Zone › DNS › Edit**, **Zone › Zone › Read**, and optionally **Zone › WAF › Edit** (then the app adds the Skip rule that lets claude.ai through; without it the app shows the rule to add by hand). Set a short **TTL** (a day is plenty): the app deletes the token from memory when it is done (it keeps it, encrypted, only if you ask), and the running tunnel does not need it. The token is **never** accepted on the command line: in a terminal it is asked for hidden; without a terminal set `GC_CF_TOKEN` in the environment (or pipe it to `--token-stdin`).
 
-**Step by step, as you watch:** `genchibi online` prints every step (domain / DNS, edge, ports, certificate, public address, MCP from the Internet, owner password) with ✓ / ✗ and the fix for a ✗, then `https://your-domain` and `https://your-domain/mcp`. On a fresh VPS the last step is the owner password: open `https://your-domain/setup` and enter the setup code (printed by the installer and by `genchibi status`), or run `genchibi password` on the server. Until then the address is only on *temporarily* (`genchibi status` says "Online (temporary — waiting for the owner password)"); once the password is set the app finishes going online by itself — no recheck needed.
+**Step by step, as you watch:** `genchibi online` prints every step (domain / DNS, edge, ports, certificate, public address, MCP from the Internet) with ✓ / ✗ and the fix for a ✗, then `https://your-domain` and `https://your-domain/mcp`. Going online needs the owner account first: while the machine still has only `admin / admin` (or the account is not created yet), `genchibi online` and *Go online* refuse and say to run `genchibi password` on the server (or finish the first-run screen). The password is never asked for on the public address.
 
 ```
 genchibi online                         # status: mode, address, each step, edge
@@ -89,11 +97,11 @@ genchibi online off                     # go offline (with GC_CF_TOKEN: also rem
 genchibi online migrate                 # machines set up by hand in .env (GC_PUBLIC_URL / GC_ALLOWED_HOSTS) before v0.21
 ```
 
-Changing the public address signs out agents connected through OAuth (they must connect again); the command asks first (`--yes` without a terminal). Exit code `3` means "online, waiting for the owner password". `genchibi expose` / `genchibi link` (the v0.20 way) were removed in v0.23 — see [below](#removed-in-v023-genchibi-expose--genchibi-link).
+Changing the public address signs out agents connected through OAuth (they must connect again); the command asks first (`--yes` without a terminal). `genchibi expose` / `genchibi link` (the v0.20 way) were removed in v0.23 — see [below](#removed-in-v023-genchibi-expose--genchibi-link).
 
 **Backups contain your password and sessions; restoring turns Go online off.** `genchibi backup` saves `data/`, which now also holds the owner password (hashed), the Studio sessions / remembered devices and the online settings. `genchibi restore <file>` keeps the password of the backup but signs out every session and device, and turns Go online **off** (no public address, tunnel stopped, a new install id — a backup from another machine never takes over that machine's domain or tunnel). Run Go online again afterwards.
 
-**You already have your own login page in front of the app** (for example a proxy that sends people to its own `/login`): the app now has its own owner password and its own `/login` and `/setup` pages. In your proxy, protect only the people routes and let the app's `/login`, `/setup` and `/oauth/authorize` reach the app behind your login (machine routes — `/mcp`, `/.well-known/…`, `/oauth/register|token|revoke` — must stay unprotected, as before). The snippet printed by `genchibi online proxy` shows where your own login fits.
+**You already have your own login page in front of the app** (for example a proxy that sends people to its own `/login`): the app now has its own owner account and its own `/login` page (`/setup` from v0.21 / v0.22 now redirects to `/login`). In your proxy, protect only the people routes and let the app's `/login` and `/oauth/authorize` reach the app behind your login (machine routes — `/mcp`, `/.well-known/…`, `/oauth/register|token|revoke` — must stay unprotected, as before). The snippet printed by `genchibi online proxy` shows where your own login fits.
 
 ## Core frame (Workshop)
 Every asset is built from one **theme-neutral core frame** (like the greybox of game development):

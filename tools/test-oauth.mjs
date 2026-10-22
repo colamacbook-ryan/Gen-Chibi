@@ -268,6 +268,15 @@ try {
   let denied = 0; for (const n of rwNames) { const x = await call(M, S['mcp:read'].j.access_token, n, {}); if (forbidden(x)) denied++; }
   ok(denied === rwNames.length, 'mcp:read: MỌI tool ghi / tốn tài nguyên bị chặn FORBIDDEN (' + denied + '/' + rwNames.length + ')');
   const sp = await call(M, S['mcp:read'].j.access_token, 'save_project', { id: 'doc-thu', name: 'Thử' }); ok(forbidden(sp), 'mcp:read: save_project → FORBIDDEN');
+  // CNS-136: start_here biết kênh + phạm vi của người gọi; agent mcp:read không được bảo gọi tool ghi
+  const shOf = async tok => JSON.parse((await call(M, tok, 'start_here')).content[0].text);
+  const shR = await shOf(S['mcp:read'].j.access_token), shW = await shOf(S['mcp:write'].j.access_token), shO = await shOf(S['mcp:owner'].j.access_token), shT = await shOf(OWNER);
+  const roTools = new Set(roNames), named = st => st.next_steps.map(x => x.split(/[\s/—]+/)[0]).filter(Boolean);
+  ok(shR.connection && shR.connection.via === 'oauth' && shR.connection.scope === 'mcp:read' && shR.connection.can_write === false && shR.connection.can_update === false && /FORBIDDEN/.test(shR.connection.note), 'start_here mcp:read: connection { via oauth, scope mcp:read, can_write false, can_update false } + lời dặn: ' + JSON.stringify(shR.connection));
+  ok(named(shR).every(n => roTools.has(n)) && !/save_|install_sample/.test(shR.next_steps.join(' ')), 'start_here mcp:read: next_steps chỉ gợi ý tool đọc (không save_project / install_sample): ' + shR.next_steps.join(' | '));
+  ok(shW.connection.via === 'oauth' && shW.connection.scope === 'mcp:write' && shW.connection.can_write === true && shW.connection.can_update === false, 'start_here mcp:write: ghi được, không cập nhật');
+  ok(shO.connection.via === 'oauth' && shO.connection.scope === 'mcp:owner' && shO.connection.can_write && shO.connection.can_update, 'start_here mcp:owner: như chủ');
+  ok(shT.connection.via === 'owner' && shT.connection.scope === 'owner' && shT.connection.can_write && shT.connection.can_update, 'start_here token chủ: via owner');
   const wr = await call(M, S['mcp:write'].j.access_token, 'save_project', { id: 'ghi-thu', name: 'Ghi thử' }); ok(!wr.isError, 'mcp:write: save_project (tạo trong dự án) chạy được');
   for (const [n, a] of [['update_app', {}], ['update_app', { force: true }], ['rollback_app', { confirm: 'ROLLBACK' }], ['design_voice', { role: 'ong-lao' }], ['delete_sound_pack', { id: 'x' }]]) {
     const x = await call(M, S['mcp:write'].j.access_token, n, a); ok(forbidden(x), 'mcp:write: ' + n + (a.force ? '(force)' : '') + ' → FORBIDDEN');

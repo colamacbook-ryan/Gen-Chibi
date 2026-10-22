@@ -129,26 +129,27 @@
   }
   GC.pack({ id: MY_PACK, name: N_('Của tôi'), owner: N_('Bạn'), group: 'mine', visibility: 'private', license: N_('Thuộc người tạo'), description: N_('Nhân vật bạn tạo hoặc chỉnh trên máy này.') }, function () {});
 
-  /* ============================================================ đăng nhập chủ máy (v0.21, spec §3.3–§3.4) */
-  // Ba màn trên cùng một lớp phủ #gcLogin: ĐẶT MẬT KHẨU (máy chưa có mật khẩu: mã setup từ `genchibi open` — tự điền từ #code=… rồi xoá khỏi địa chỉ — hoặc token),
-  // ĐĂNG NHẬP (mật khẩu; trình duyệt nhớ 30 ngày bằng cookie HttpOnly) và TOKEN (máy kế thừa / CLI — như v0.20). Server là nơi kiểm duy nhất; ở đây chỉ dẫn đường.
+  /* ============================================================ đăng nhập chủ máy (v0.21 §3.3–§3.4; v0.23 §A.1 / §A.2) */
+  // Ba màn trên cùng một lớp phủ #gcLogin: ĐĂNG NHẬP (tên đăng nhập + mật khẩu; lần đầu: admin / admin trong cửa sổ 30 phút do lệnh trên máy chủ mở —
+  // không nhận thì server nói ĐÚNG lý do + cách vào), KHỞI TẠO tài khoản chủ (phiên admin hoặc token, bắt buộc trước mọi trang — §A.2) và TOKEN (máy kế
+  // thừa / CLI — như v0.20). Server là nơi kiểm duy nhất; ở đây chỉ dẫn đường. Mã setup v0.21 đã bỏ.
   var Auth = {
-    code: '', st: null,
+    st: null,
     // ?next=/đường/nội-bộ (trang Cấp phép gửi sang) — chỉ nhận đường cùng máy, không // (khác máy), không ký tự lạ
     next: function () { var n = ''; try { n = new URLSearchParams(location.search).get('next') || ''; } catch (e) { /* bỏ qua */ } return /^\/(?![\/\\])[A-Za-z0-9\/%._~!*'()?&=+,:;@-]*$/.test(n) ? n : '/'; },
     done: function () { if (/^\/(login|setup)$/.test(location.pathname)) location.replace(Auth.next()); else location.reload(); },
     post: function (url, body, token) {
       var hd = { 'Content-Type': 'application/json', 'X-GC-Request': '1', 'X-GC-Lang': I18N.lang() };
-      if (token) hd.Authorization = 'Bearer ' + token;
+      if (token) { hd.Authorization = 'Bearer ' + token; hd['X-GC-Studio'] = '1'; }
       return fetch(url, { method: 'POST', headers: hd, body: JSON.stringify(body || {}) }).then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { s: r.status, j: j }; }); });
     },
-    // mode: '' (tự chọn theo trạng thái máy) | 'token' | 'token-wrong' | 'setup' | 'login'
+    // mode: '' (tự chọn theo trạng thái máy) | 'token' | 'token-wrong' | 'login' | 'init'
     show: function (mode) {
       if (document.getElementById('gcLogin')) return new Promise(function () {});
-      fetch('api/auth/state', { headers: { 'X-GC-Lang': I18N.lang() } }).then(function (r) { return r.ok ? r.json() : {}; }).catch(function () { return {}; }).then(function (st) {
+      fetch('api/auth/state', { headers: Store.headers() }).then(function (r) { return r.ok ? r.json() : {}; }).catch(function () { return {}; }).then(function (st) {
         Auth.st = st;
-        // máy kế thừa (.env có GC_PUBLIC_URL / GC_ALLOWED_HOSTS từ trước v0.21) chưa có mật khẩu: vào bằng token như v0.20 (CNS-173); mở /setup hoặc có mã thì vẫn là màn đặt mật khẩu
-        var m = mode || (st.password ? 'login' : st.legacy && !Auth.code && location.pathname !== '/setup' ? 'token' : 'setup');
+        // phiên admin (A) / token khi chưa khởi tạo → màn khởi tạo; máy kế thừa chưa có mật khẩu → token như v0.20 (CNS-173); còn lại → đăng nhập
+        var m = mode || (st.who === 'A' || (st.who === 'T' && /^(admin|must_init)$/.test(st.stage)) ? 'init' : !st.password && st.legacy ? 'token' : 'login');
         Auth.render(m === 'token-wrong' ? 'token' : m, m === 'token-wrong');
       });
       return new Promise(function () {});
@@ -156,38 +157,46 @@
     render: function (mode, wrong) {
       var old = document.getElementById('gcLogin'); if (old) old.parentNode.removeChild(old);
       var st = Auth.st || {}, minLen = st.minLength || 12, tok = Store.token();
-      var err = h('div', { role: 'alert', hidden: true, style: 'color:var(--danger);font-size:12px' });
+      var err = h('div', { role: 'alert', hidden: true, style: 'color:var(--danger);font-size:12px;white-space:pre-line' });
       var fail = function (msg) { err.hidden = false; err.textContent = '✗ ' + msg; busy(false); };
       var btn = h('button', { class: 'btn primary', type: 'submit' }), busy = function (on) { btn.disabled = on; };
       var link = function (text, to) { return h('a', { href: '#', class: 'note', onclick: function (ev) { ev.preventDefault(); Auth.render(to); } }, text); };
-      var field = function (label, inp) { return h('label', { style: 'display:grid;gap:4px' }, h('span', { class: 'note', text: label }), inp); };
+      var field = function (label, inp, note) { return h('label', { style: 'display:grid;gap:4px' }, h('span', { class: 'note', text: label }), inp, note ? h('span', { class: 'note', text: note }) : null); };
       var input = function (o) { return h('input', Object.assign({ style: 'width:100%', spellcheck: 'false' }, o)); };
       var title, body = [], submit;
-      if (mode === 'setup') {
-        // dùng token khi trình duyệt đã đăng nhập bằng token (dải "Đặt mật khẩu" của máy kế thừa) — không cần mã
-        var useTok = !!tok && !Auth.code;
-        var code = input({ id: 'gcCode', name: 'code', placeholder: 'XXXXX-XXXXX', autocomplete: 'one-time-code', value: Auth.code, maxlength: '20' });
-        var p1 = input({ id: 'gcPw', type: 'password', autocomplete: 'new-password', minlength: String(minLen) }), p2 = input({ id: 'gcPw2', type: 'password', autocomplete: 'new-password' });
-        title = _t('Đặt mật khẩu chủ');
-        body.push(h('div', { class: 'note', text: useTok ? _t('Bạn đang đăng nhập bằng token của bản cài — đặt mật khẩu để lần sau đăng nhập bằng mật khẩu (trình duyệt nhớ 30 ngày).')
-          : _t('Máy này chưa có mật khẩu chủ. Chạy genchibi open trên máy chủ để lấy mã setup (mã dùng một lần, hạn 1 giờ; genchibi status cũng in mã).') }));
-        if (!useTok) body.push(field(_t('Mã setup'), code));
-        body.push(field(_t('Mật khẩu mới (ít nhất {n} ký tự — gợi ý: một cụm từ dễ nhớ)', { n: minLen }), p1), field(_t('Nhập lại mật khẩu'), p2));
-        btn.textContent = _t('Đặt mật khẩu');
+      if (mode === 'init') {
+        // KHỞI TẠO tài khoản chủ (§A.2): bắt buộc trước mọi trang. Phiên admin (30 phút) hoặc token của bản cài
+        var u = input({ id: 'gcUser', name: 'username', autocomplete: 'username', maxlength: '32', placeholder: 'ryan' });
+        var dn = input({ id: 'gcName', name: 'displayName', maxlength: '64', autocomplete: 'name' });
+        var em = input({ id: 'gcEmail', name: 'email', type: 'email', maxlength: '254', autocomplete: 'email', placeholder: _t('tuỳ chọn') });
+        var q1 = input({ id: 'gcPw', type: 'password', autocomplete: 'new-password', minlength: String(minLen) }), q2 = input({ id: 'gcPw2', type: 'password', autocomplete: 'new-password' });
+        title = _t('Khởi tạo tài khoản chủ');
+        body.push(h('div', { class: 'note', text: _t('Lần đầu: đặt tài khoản chủ của riêng bạn — admin / admin không dùng được nữa sau bước này. Sau đó Studio dẫn bạn qua tên miền và chẩn đoán MCP.') }),
+          st.who === 'A' && st.expiresAt ? h('div', { class: 'chip warn', id: 'gcAdminLeft', style: 'justify-self:start', text: _t('Phiên admin hết hạn lúc {at}', { at: fmtClock(st.expiresAt) }) }) : null,
+          field(_t('Tên đăng nhập (3–32 ký tự: a-z 0-9 . _ -, không phải admin)'), u),
+          field(_t('Tên hiển thị'), dn),
+          field(_t('Email (tuỳ chọn)'), em, _t('Chỉ dùng làm email liên hệ Let\'s Encrypt khi lên mạng bằng đường Caddy. Đổi được ở Tài khoản chủ.')),
+          field(_t('Mật khẩu mới (ít nhất {n} ký tự — gợi ý: một cụm từ dễ nhớ)', { n: minLen }), q1), field(_t('Nhập lại mật khẩu'), q2));
+        btn.textContent = _t('Khởi tạo');
         submit = function () {
-          if (Array.from(p1.value).length < minLen) return fail(_t('Mật khẩu cần ít nhất {n} ký tự', { n: minLen }));
-          if (p1.value !== p2.value) return fail(_t('Hai lần nhập mật khẩu không khớp'));
-          Auth.post('api/auth/setup', useTok ? { password: p1.value } : { code: code.value, password: p1.value }, useTok ? tok : '').then(function (x) {
+          var login = u.value.trim().toLowerCase();
+          if (!/^[a-z0-9._-]{3,32}$/.test(login) || login === 'admin') return fail(_t('Tên đăng nhập: 3–32 ký tự chữ thường, số, dấu chấm, gạch dưới, gạch ngang — không phải admin'));
+          if (Array.from(q1.value).length < minLen) return fail(_t('Mật khẩu cần ít nhất {n} ký tự', { n: minLen }));
+          if (q1.value !== q2.value) return fail(_t('Hai lần nhập mật khẩu không khớp'));
+          Auth.post('api/auth/init', { username: login, displayName: dn.value.trim(), email: em.value.trim(), password: q1.value, password2: q2.value }, st.who === 'T' ? tok : '').then(function (x) {
             if (x.s !== 200) return fail(x.j.error || _t('Lỗi {status}', { status: x.s }));
-            try { localStorage.removeItem('gc-token'); } catch (e) { /* bỏ qua */ }   // đã có phiên cookie: token không cần nằm trong trình duyệt nữa
-            Auth.done();
+            try { localStorage.removeItem('gc-token'); } catch (e) { /* bỏ qua */ }   // đã có phiên cookie của owner
+            location.replace('/');
           }).catch(function (e) { fail(e.message); });
         };
-        if (!tok) body.push(h('div', { class: 'row', style: 'justify-content:space-between' }, link(_t('Dùng token của bản cài'), 'token')));
+        if (st.who === 'A') body.push(h('div', { class: 'row', style: 'justify-content:flex-end' }, h('a', { href: '#', class: 'note', id: 'gcAdminOut', onclick: function (ev) { ev.preventDefault(); Auth.post('api/auth/logout', {}).then(function () { location.href = '/login'; }); } }, _t('Đăng xuất admin'))));
       } else if (mode === 'login') {
+        var un = input({ id: 'gcUser', name: 'username', autocomplete: 'username', maxlength: '32' });
         var pw = input({ id: 'gcPw', type: 'password', autocomplete: 'current-password' });
         title = _t('Đăng nhập gen-chibi');
-        body.push(h('div', { class: 'note', text: _t('Nhập mật khẩu chủ. Trình duyệt này nhớ đăng nhập 30 ngày.') }), field(_t('Mật khẩu'), pw));
+        if (st.stage === 'admin') body.push(h('div', { class: 'banner acc', id: 'gcFirstRun', role: 'note' }, h('span', { text: _t('Lần đầu: đăng nhập bằng admin / admin trên máy chủ, trong 30 phút sau genchibi start (hoặc genchibi open). Studio sẽ bắt bạn đặt tài khoản chủ của riêng mình.') })));
+        else if (!st.password) body.push(h('div', { class: 'banner warn', id: 'gcNoPw', role: 'note' }, h('span', { text: _t('Máy chưa có mật khẩu chủ: trên máy chủ chạy genchibi password (tên đăng nhập owner), hoặc dùng token của bản cài.') })));
+        body.push(h('div', { class: 'note', text: _t('Trình duyệt này nhớ đăng nhập 30 ngày.') }), field(_t('Tên đăng nhập'), un), field(_t('Mật khẩu'), pw));
         // trần theo tài khoản đang chặn người lạ (trình duyệt chưa từng đăng nhập): nói thẳng + lối token (token chủ không bị trần).
         // /api/auth/state công khai không còn báo locked (CNS-210) → dải hiện khi lần thử trả 429 locked (máy chủ xét trần trước khi kiểm mật khẩu)
         var lockBox = h('div', { id: 'gcLockedBox' });
@@ -196,14 +205,18 @@
         body.push(lockBox);
         btn.textContent = _t('Đăng nhập');
         submit = function () {
-          Auth.post('api/auth/login', { password: pw.value }).then(function (x) {
+          var user = un.value.trim().toLowerCase();
+          if (!user) return fail(_t('Cần tên đăng nhập'));
+          Auth.post('api/auth/login', { username: user, password: pw.value }).then(function (x) {
             if (x.s === 429 && x.j && x.j.locked) lockShow(+x.j.retryAfter || 60);
-            if (x.s !== 200) { pw.select(); return fail(x.j.error || _t('Lỗi {status}', { status: x.s })); }
+            if (x.s !== 200) { pw.select(); err.setAttribute('data-reason', x.j.reason || ''); return fail(x.j.error || _t('Lỗi {status}', { status: x.s })); }   // 403 admin: lý do + cách vào (server)
             try { localStorage.removeItem('gc-token'); } catch (e) { /* bỏ qua */ }
+            if (x.j.admin) { location.replace('/'); return; }   // phiên admin: Studio mở màn khởi tạo (cổng theo stage)
             Auth.done();
           }).catch(function (e) { fail(e.message); });
         };
-        body.push(h('div', { class: 'row', style: 'justify-content:space-between;flex-wrap:wrap;gap:6px' }, h('span', { class: 'note', text: _t('Quên mật khẩu? Chạy genchibi password trên máy chủ.') }), link(_t('Dùng token'), 'token')));
+        body.push(h('div', { class: 'note', text: _t('Nâng cấp từ v0.22 trở về trước: tên đăng nhập là owner.') }),
+          h('div', { class: 'row', style: 'justify-content:space-between;flex-wrap:wrap;gap:6px' }, h('span', { class: 'note', text: _t('Quên mật khẩu? Chạy genchibi password trên máy chủ.') }), link(_t('Dùng token'), 'token')));
       } else {
         var ti = input({ id: 'gcTok', type: 'password', placeholder: 'GC_API_TOKEN', autocomplete: 'current-password' });
         title = _t('Đăng nhập bằng token');
@@ -212,29 +225,29 @@
         btn.textContent = _t('Đăng nhập');
         submit = function () {
           var t = ti.value.trim(); if (!t) return fail(_t('Cần token'));
-          fetch('api/info', { headers: { Authorization: 'Bearer ' + t, 'X-GC-Lang': I18N.lang() } }).then(function (r) {
+          fetch('api/info', { headers: { Authorization: 'Bearer ' + t, 'X-GC-Lang': I18N.lang(), 'X-GC-Studio': '1' } }).then(function (r) {
             if (r.status === 401) return Auth.render('token', true);
             try { localStorage.setItem('gc-token', t); } catch (e) { /* bỏ qua */ }
             Auth.done();
           }).catch(function (e) { fail(e.message); });
         };
-        body.push(h('div', { class: 'row' }, link(st.password ? _t('Đăng nhập bằng mật khẩu') : _t('Đặt mật khẩu bằng mã setup'), st.password ? 'login' : 'setup')));
+        body.push(h('div', { class: 'row' }, link(_t('Đăng nhập bằng tên + mật khẩu'), 'login')));
       }
-      // đã ở trong Studio (mở từ dải "Đặt mật khẩu") thì có nút Huỷ; màn chặn do 401 thì không
-      var cancel = Store.mode === 'server' ? h('button', { class: 'btn', type: 'button', onclick: function () { var o = document.getElementById('gcLogin'); if (o) o.parentNode.removeChild(o); } }, _t('Huỷ')) : null;
-      var form = h('form', { class: 'panel', style: 'width:min(420px,calc(100vw - 32px))', 'data-auth': mode, novalidate: true, onsubmit: function (ev) { ev.preventDefault(); err.hidden = true; busy(true); submit(); } },
+      // đã ở trong Studio (mở từ Tài khoản chủ) thì có nút Huỷ; màn chặn do 401 / cổng khởi tạo thì không
+      var cancel = Store.mode === 'server' && mode !== 'init' && Store.info ? h('button', { class: 'btn', type: 'button', onclick: function () { var o = document.getElementById('gcLogin'); if (o) o.parentNode.removeChild(o); } }, _t('Huỷ')) : null;
+      var form = h('form', { class: 'panel', style: 'width:min(460px,calc(100vw - 32px))', 'data-auth': mode, novalidate: true, onsubmit: function (ev) { ev.preventDefault(); err.hidden = true; err.removeAttribute('data-reason'); busy(true); submit(); } },
         h('h3', null, title), h('div', { class: 'pad', style: 'display:grid;gap:10px' }, body, err, h('div', { class: 'row', style: 'justify-content:flex-end;gap:8px' }, cancel, btn)));
-      document.body.appendChild(h('div', { id: 'gcLogin', style: 'position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:var(--bg)' }, form));
+      document.body.appendChild(h('div', { id: 'gcLogin', style: 'position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:var(--bg);overflow:auto' }, form));
       var empty = Array.prototype.filter.call(form.querySelectorAll('input'), function (x) { return !x.value; })[0]; if (empty) empty.focus();
     },
-    // chân thanh bên: trạng thái đăng nhập + dải "Đặt mật khẩu" (đang vào bằng token, máy chưa có mật khẩu) + dải "agent cũ cần nối lại" (CNS-197) + Đăng xuất
+    // chân thanh bên: trạng thái đăng nhập + dải "agent cũ cần nối lại" (CNS-197) + cảnh báo chặn tạm + Đăng xuất
     paint: function () {
       var box = $('authNote'); if (!box) return;
       clear(box);
       var a = Store.mode === 'server' && Store.info && Store.info.auth; if (!a) return;
       if (a.session) { try { localStorage.removeItem('gc-token'); } catch (e) { /* bỏ qua */ } }
-      if (!a.password) box.appendChild(h('div', { class: 'row', style: 'gap:6px;flex-wrap:wrap' }, h('span', { class: 'chip warn', text: _t('Chưa có mật khẩu chủ') }),
-        h('a', { href: '#', id: 'authSetPw', onclick: function (ev) { ev.preventDefault(); Auth.st = a; Auth.render('setup'); } }, _t('Đặt mật khẩu'))));
+      if (!a.password) box.appendChild(h('div', { class: 'row', style: 'gap:6px;flex-wrap:wrap' }, h('span', { class: 'chip warn', id: 'authNoPw', title: _t('Trên máy chủ: genchibi password'), text: _t('Chưa có mật khẩu chủ') })));
+      else if (a.user && a.user.login) box.appendChild(h('div', { class: 'note', id: 'authUser', text: _t('Đăng nhập: {name}', { name: a.user.displayName || a.user.login }) }));
       var seen = false; try { seen = localStorage.getItem('gc-agents-ok') === '1'; } catch (e) { /* bỏ qua */ }
       if (a.agentsReconnect && !seen) box.appendChild(h('div', { id: 'authAgents' }, _t('Agent cũ nối không token cần nối lại — chạy genchibi agent connect trên máy chủ.') + ' ',
         h('a', { href: '#', onclick: function (ev) { ev.preventDefault(); try { localStorage.setItem('gc-agents-ok', '1'); } catch (e) { /* bỏ qua */ } Auth.paint(); } }, _t('Đã hiểu'))));
@@ -248,8 +261,21 @@
       } }, _t('Đăng xuất'))));
     }
   };
-  // mã setup trong fragment (#code=XXXXX-XXXXX, do `genchibi open` mở): đọc rồi XOÁ ngay khỏi địa chỉ (không nằm lại trong lịch sử / không bị chép theo link)
-  (function () { var m = /^#code=([0-9A-Za-z-]{10,12})$/.exec(location.hash || ''); if (m) { Auth.code = m[1]; try { history.replaceState(history.state, '', location.pathname + location.search); } catch (e) { location.hash = ''; } } })();
+
+  /* ============================================================ thiết lập lần đầu (v0.23 §A.0 / §A.3) */
+  // Cổng Studio theo stage của máy (data/setup.json, server là nơi quyết định — /api/* của Studio cũng 403 gate y hệt): admin / must_init → chỉ màn khởi tạo
+  // (Auth 'init'); domain / mcp → chỉ wizard + Lên mạng + Tài khoản chủ (wizard nhúng hai trang đó); done → Studio bình thường.
+  var Setup = {
+    locked: false, stage: '', pick: '',   // pick: lựa chọn ở bước 2 — sống qua repaint (đổi ngôn ngữ vẽ lại trang)
+    OPEN: { setup: 1, online: 1, account: 1 },
+    gate: function (kind, stage) {
+      Setup.stage = stage || '';
+      if (kind === 'init') return Auth.show('init');   // không bao giờ xong: lớp phủ chặn mọi trang tới khi khởi tạo
+      Setup.locked = true;
+      return Promise.resolve();
+    },
+    allowed: function (page) { return !Setup.locked || !!Setup.OPEN[page]; }
+  };
 
   var Store = {
     mode: 'browser', info: null,
@@ -258,7 +284,8 @@
     token: function () { try { return localStorage.getItem('gc-token') || ''; } catch (e) { return ''; } },
     headers: function () {
       var hd = { 'Content-Type': 'application/json', 'X-GC-Request': '1', 'X-GC-Lang': I18N.lang() }, t = this.token();   // X-GC-Lang: server trả lỗi theo ngôn ngữ người dùng
-      if (t) hd.Authorization = 'Bearer ' + t;
+      // X-GC-Studio: Studio đăng nhập bằng token vẫn đi qua CỔNG theo stage như phiên cookie (§A.0) — agent / CLI (không gắn) thì không bị chặn
+      if (t) { hd.Authorization = 'Bearer ' + t; hd['X-GC-Studio'] = '1'; }
       return hd;
     },
     api: function (method, url, body) {
@@ -291,13 +318,29 @@
         });
       });
     },
-    login: function (wrong) { return Auth.show(wrong ? 'token-wrong' : ''); },   // 401 → màn đăng nhập (v0.21: mật khẩu / mã setup / token) — xem Auth
+    login: function (wrong) { return Auth.show(wrong ? 'token-wrong' : ''); },   // 401 → màn đăng nhập (tên + mật khẩu / admin lần đầu / token) — xem Auth
     init: function () {
       var self = this;
       return fetch('api/info', { headers: this.headers() }).then(function (r) {
         if (r.status === 401) return self.login(!!self.token());
+        // cổng theo stage (§A.0): phiên admin → màn khởi tạo; chưa xong thiết lập lần đầu → wizard (không nạp dữ liệu Studio — server cũng chặn)
+        if (r.status === 403) return r.json().catch(function () { return {}; }).then(function (j) { if (!j.gate) throw 0; self.mode = 'server'; return Setup.gate(j.gate, j.stage); });
         if (!r.ok) throw 0;
-        return r.json().then(function (info) { self.mode = 'server'; self.info = info; return self.api('GET', 'api/parts').catch(function () { return []; }); })
+        return r.json().then(function (info) {
+          self.mode = 'server'; self.info = info;
+          var stg = info.setup && info.setup.stage;
+          if (stg && stg !== 'done') return Setup.gate(/^(admin|must_init)$/.test(stg) ? 'init' : 'wizard', stg);
+          return self.loadData();
+        });
+      }).catch(function () {
+          self.mode = 'browser';
+          try { JSON.parse(localStorage.getItem('gc-assets') || '[]').forEach(regStored); } catch (e) { /* bỏ qua */ }
+        });
+    },
+    // dữ liệu Studio của máy (linh kiện, item, cảnh, asset, gói âm, gói động tác) — chỉ khi thiết lập lần đầu đã xong
+    loadData: function () {
+      var self = this;
+      return self.api('GET', 'api/parts').catch(function () { return []; })
           .then(function (parts) {
             // linh kiện dữ liệu (agent tạo qua MCP): engine kiểm lại SVG trước khi đăng ký — phòng thủ nhiều lớp
             (parts || []).forEach(function (d) { var r0 = GC.registerDataPart(MY_PACK, d); if (r0.errors.length) console.warn('bỏ linh kiện', d.id, r0.errors); });
@@ -321,10 +364,6 @@
             // gói động tác (v0.16): sau nhân vật — màn diễn trong gói trỏ tới nhân vật của bộ
             (packs || []).forEach(function (d) { var r3 = GC.choreo && GC.choreo.registerPack(MY_PACK, d, { tolerant: true }); if (r3 && r3.errors.length) console.warn('bỏ gói động tác', d.id, r3.errors); });
           });
-      }).catch(function () {
-          self.mode = 'browser';
-          try { JSON.parse(localStorage.getItem('gc-assets') || '[]').forEach(regStored); } catch (e) { /* bỏ qua */ }
-        });
     },
     save: function (asset, note) {
       var key = asset.pack + '/' + asset.id;
@@ -394,6 +433,7 @@
   window.addEventListener('pageshow', function () { leaving = false; });   // quay lại từ bfcache: trang sống tiếp
   function zoneOf(page) {
     if (page === 'home') return 'home';
+    if (page === 'setup') return 'sys';   // thiết lập lần đầu: trang hệ thống (không nằm trong menu)
     var p = PAGE_ALIAS[page] || page, z = 'lib';
     NAV.forEach(function (g) { g[3].forEach(function (it) { if (it[0] === p) z = g[0]; }); });
     return z;
@@ -405,6 +445,13 @@
 
   function renderNav() {
     var nav = clear($('nav'));
+    if (Setup.locked) {   // wizard lần đầu: chỉ ba trang mở (server cũng chặn phần còn lại)
+      nav.appendChild(h('div', { class: 'nav-group zone-sys' }, h('b', { text: _t('Thiết lập lần đầu') }), h('span', { text: _t('xong thì mở cả Studio') })));
+      [['setup', _t('Thiết lập lần đầu')], ['online', _t('Lên mạng')], ['account', _t('Tài khoản chủ')]].forEach(function (it) {
+        nav.appendChild(h('button', { class: 'nav-item zone-sys', id: 'navSu-' + it[0], 'aria-current': route.page === it[0] ? 'page' : null, onclick: function () { go({ page: it[0] }); } }, it[1]));
+      });
+      return;
+    }
     // số đếm Thư viện không tính đồ của khung (khung thuộc Xưởng)
     var lib = function (arr) { return arr.filter(function (x) { return groupOf(x) !== 'frame'; }).length; };
     var COUNT = { 'lib-characters': function () { return lib(GC.assets()); }, 'lib-items': function () { return lib(GC.items()); }, 'lib-scenes': function () { return lib(GC.scenes()); }, projects: function () { return Projects.all().length; },
@@ -428,8 +475,21 @@
       });
     });
   }
+  // dải nhắc ở Trang chủ (v0.23 §A.3): lên mạng chưa xong ("Tạm dùng trên máy này") · chưa agent nào nối ("Tôi nối agent sau") · "Kiểm tra thiết lập" một lần (máy nâng cấp)
+  function reminders() {
+    var su = Store.mode === 'server' && Store.info && Store.info.setup; if (!su) return;
+    var rm = su.reminders || {}, v = $('view');
+    if (rm.online) v.appendChild(h('div', { class: 'banner warn', id: 'remOnline', style: 'margin-bottom:12px' }, h('span', { text: _t('Lên mạng chưa xong — Studio đang dùng trên máy này. Làm tiếp ở Hệ thống › Lên mạng khi tên miền sẵn sàng.') }),
+      h('button', { class: 'btn sm', style: 'margin-left:auto', onclick: function () { go({ page: 'online' }); } }, _t('Mở Lên mạng ›'))));
+    if (rm.agent) v.appendChild(h('div', { class: 'banner warn', id: 'remAgent', style: 'margin-bottom:12px' }, h('span', { text: _t('Chưa có agent nào nối MCP — làm theo thẻ hướng dẫn ở Hệ thống › Kết nối agent (dải này tự tắt khi agent đầu tiên gọi MCP).') }),
+      h('button', { class: 'btn sm', style: 'margin-left:auto', onclick: function () { go({ page: 'connect' }); } }, _t('Mở Kết nối agent ›'))));
+    if (su.review) v.appendChild(h('div', { class: 'banner acc', id: 'remReview', style: 'margin-bottom:12px' }, h('span', { text: _t('Bản mới có bước "Kiểm tra thiết lập": tự kiểm MCP trên máy + cách nối agent. Một lần, đóng được.') }),
+      h('button', { class: 'btn sm primary', style: 'margin-left:auto', id: 'remReviewOpen', onclick: function () { go({ page: 'setup' }); } }, _t('Kiểm tra')),
+      h('button', { class: 'btn sm', id: 'remReviewClose', onclick: function () { Store.api('POST', 'api/setup/review', {}).then(function () { su.review = false; go(route); }).catch(function (e) { toast(e.message); }); } }, _t('Đóng'))));
+  }
   function go(r) {
     if (leaving) return;   // trang đang đóng: không vẽ, không ghi tuyến (xem leaving ở trên)
+    if (!Setup.allowed(r.page)) r = { page: 'setup' };   // cổng theo stage (§A.0): chưa xong thiết lập lần đầu → chỉ wizard / Lên mạng / Tài khoản chủ
     var z = zoneOf(r.page);
     if (z !== 'sys' && z !== 'home' && (!APP || z !== APP.zone)) {   // trang thuộc lớp khác → sang ứng dụng của lớp đó
       var other = appOfZone(z);
@@ -441,7 +501,7 @@
     cleanup = [];
     route = r;
     if (r.page !== 'works') setHash('', !!location.hash);   // địa chỉ #/tac-pham/<id>/<tab> chỉ có ở Tạo tác › Tác phẩm
-    try { localStorage.setItem(routeKey(APP), JSON.stringify(r)); } catch (e) { /* bỏ qua */ }
+    if (r.page !== 'setup') { try { localStorage.setItem(routeKey(APP), JSON.stringify(r)); } catch (e) { /* bỏ qua */ } }
     renderNav();
     document.body.setAttribute('data-zone', APP ? APP.zone : 'home');
     clear($('actions'));
@@ -452,6 +512,7 @@
         h('span', { text: _t('Có bản mới {updateBadge}. Dữ liệu được sao lưu trước khi cập nhật; bản mới lỗi sẽ tự chạy lại bản cũ.', { updateBadge: updateBadge }) }),
         h('button', { class: 'btn sm', style: 'margin-left:auto', onclick: function () { go({ page: 'update' }); } }, _t('Xem và cập nhật'))));
     }
+    if (!Setup.locked && (r.page === 'home' || (APP && r.page === APP.home))) reminders();
     dockRoute(r);   // dock biết khu / trang trước; trang tự báo đối tượng đang xem (dockObj) khi dựng
     (PAGES[r.page] || PAGES['lib-characters'])(r);
   }
@@ -5764,22 +5825,9 @@
         voiceHost.scrollIntoView({ block: 'start' }); var k = voiceHost.querySelector('input[type="password"]'); if (k) k.focus({ preventScroll: true });
       });
 
-      var port = (Store.info && Store.info.port) || 7480;
-      var link = Store.info && Store.info.mcp && Store.info.mcp.link;
-      function copyBtn(label, t) { return h('button', { class: 'btn sm', text: label, onclick: function () { navigator.clipboard.writeText(t).then(function () { toast(_t('Đã sao chép')); }, function () { toast(_t('Không sao chép được — chọn và copy tay')); }); } }); }
-      box.appendChild(h('div', { class: 'panel' }, h('h3', null, _t('Nối agent qua MCP'), h('span', { class: 'r note', text: _t('agent tự viết công thức và kịch bản, không tốn LLM API lõi') })),
-        h('div', { class: 'pad stack' },
-          h('div', { class: 'note', text: _t('Agent (Claude Code, Claude web/desktop, hoặc agent bất kỳ hỗ trợ MCP) gọi các tool của nhà xưởng (danh sách đầy đủ: lệnh genchibi agent tools): tra kho, kiểm, dựng SVG; tạo nhân vật / linh kiện / vật phẩm / bối cảnh; dự án chủ đề và gói dự án; tác phẩm (kịch bản, phân cảnh); kiểm và cập nhật phiên bản. Kết quả hiện ngay trong Studio.') }),
-          h('div', { class: 'kv' },
-            h('label', { text: _t('Qua Internet') }),
-            link ? h('div', { class: 'stack' },
-              h('pre', { class: 'code', text: link }),
-              h('div', null, copyBtn(_t('Sao chép link'), link), ' ', copyBtn(_t('Sao chép lệnh Claude Code'), 'claude mcp add -s user --transport http gen-chibi ' + link)),
-              h('div', { class: 'note', text: _t('Claude web/desktop: Customize › Connectors › Add custom connector › dán link. Giữ kín link; lộ thì đổi GC_MCP_KEY trong .env (xoá dòng đó = tắt link có khoá) rồi chạy genchibi restart.') }))
-              : h('div', { class: 'note', text: _t('Chưa mở. Ra Internet: Hệ thống › Lên mạng (hoặc genchibi online trong terminal) — agent nối bằng OAuth tại <địa-chỉ>/mcp.') }),
-            h('label', { text: 'Claude Code (stdio)' }), h('pre', { class: 'code', text: 'claude mcp add gen-chibi -- genchibi mcp' }),
-            h('label', { text: 'Claude Code (HTTP)' }), h('pre', { class: 'code', text: 'claude mcp add --transport http gen-chibi http://localhost:' + port + '/mcp' }),
-            h('label', { text: _t('Cấu hình JSON') }), h('pre', { class: 'code', text: JSON.stringify({ mcpServers: { 'gen-chibi': { command: 'genchibi', args: ['mcp'] } } }, null, 2) })))));
+      // nối agent qua MCP: CÙNG component với Hệ thống › Kết nối agent và wizard lần đầu (CNS-134 — không còn bản chép riêng ở đây)
+      box.appendChild(h('div', { class: 'note', style: 'margin-top:4px', text: _t('Agent (Claude Code, claude.ai, hoặc agent bất kỳ hỗ trợ MCP) gọi các tool của nhà xưởng (danh sách đầy đủ: lệnh genchibi agent tools): tra kho, kiểm, dựng SVG; tạo nhân vật / linh kiện / vật phẩm / bối cảnh; dự án chủ đề và gói dự án; tác phẩm (kịch bản, phân cảnh); kiểm và cập nhật phiên bản. Kết quả hiện ngay trong Studio.') }));
+      box.appendChild(agentCards({ mcpUrl: (Store.info && Store.info.mcp && Store.info.mcp.oauth) || '', id: 'aiCards' }));
     }
   };
 
@@ -5830,6 +5878,172 @@
         res, host))));
   };
 
+  /* ============================================================ trang: Thiết lập lần đầu (wizard — v0.23 §A.3, Data Console STD-07) */
+  // 1 ✓ Tài khoản chủ · 2 Tên miền ("Đưa lên mạng" = Go online nhúng · "Chỉ dùng trên máy này") · 3 Chẩn đoán MCP (tự kiểm cục bộ BẮT BUỘC đạt · kiểm từ Internet
+  // chỉ báo · thẻ nối agent dùng chung · kiểm thật: chờ lời gọi MCP đầu tiên). Không khoá owner (CNS-254): bước Internet lỗi / chờ lâu → "Tạm dùng trên máy
+  // này"; phần tự kiểm hỏng vì lỗi của chính nó → genchibi setup skip trên máy chủ. Mở lại khi chưa xong → đúng bước đang dở (server giữ stage).
+  // stage done + review (máy v0.21 / v0.22 đã có mật khẩu): cùng trang ở chế độ "Kiểm tra thiết lập" một lần, đóng được.
+  var SU_CHECK = { http: N_('/mcp trên máy này (initialize + tools/list)'), token: N_('Token chủ (env hoặc data/owner-token)'), stdio: N_('genchibi mcp (stdio)') };
+  var SU_CHANNEL = { stdio: N_('genchibi mcp (stdio)'), http: N_('HTTP + token chủ'), oauth: N_('OAuth'), link: N_('link có khoá') };
+  PAGES.setup = function () {
+    crumbs([{ t: _t('Thiết lập lần đầu') }]);
+    if (Store.mode !== 'server') { $('view').appendChild(h('div', { class: 'panel empty', text: _t('Thiết lập lần đầu chỉ có ở bản cài trên máy.') })); return; }
+    var box = h('div', { class: 'stack', id: 'suBox' }), S = { v: null, pick: Setup.pick || '', timer: null, left: false, inet: null, testing: false, inetBusy: false, olHost: null, olFail: false, auto: false, el: {} };
+    $('view').appendChild(box);
+    onLeave(function () { S.left = true; clearTimeout(S.timer); });
+    function fail(e) { if (S.left) return; clear(box); box.appendChild(h('div', { class: 'banner bad', role: 'alert' }, h('span', { text: e.message }), h('button', { class: 'btn sm', onclick: load }, _t('Thử lại')))); }
+    function load() { clearTimeout(S.timer); return Store.api('GET', 'api/setup').then(function (v) { if (!S.left) render(v); }).catch(fail); }
+    function post(path, body) { return Store.api('POST', 'api/setup/' + path, body || {}); }
+    function done() { location.replace('/'); }   // tải lại: Studio đầy đủ (cổng mở)
+    // bước 3 hỏi lại mỗi 2 giây: agent đầu tiên gọi MCP (lastClient) — chỉ vẽ lại phần "kiểm thật" + nút, không đụng chữ đang chọn / đang chép
+    function poll() {
+      clearTimeout(S.timer);
+      if (S.left || !S.v || S.v.stage !== 'mcp') return;
+      S.timer = setTimeout(function () {
+        Store.api('GET', 'api/setup').then(function (v) { if (S.left) return; if (v.stage !== S.v.stage) return render(v); S.v = v; paintLive(); poll(); }).catch(function () { poll(); });
+      }, 2000);
+    }
+    function render(v) {
+      var prev = S.v; S.v = v;
+      if (v.stage === 'done' && (!v.review || (prev && prev.stage !== 'done'))) return done();
+      clear(box);
+      box.appendChild(stepper(v));
+      if (v.stage === 'domain') box.appendChild(stepDomain(v));
+      else box.appendChild(stepMcp(v));
+      box.appendChild(h('div', { class: 'note', id: 'suStuck', text: _t('Kẹt ở một bước vì chính phần kiểm bị lỗi? Trên máy chủ chạy genchibi setup skip (có ghi log). Làm lại từ đầu: genchibi setup reset.') }));
+      poll();
+      if (v.stage === 'mcp' && !v.mcp.selfTest && !S.auto) { S.auto = true; selfTest(); }   // vào bước 3 lần đầu: tự chạy tự kiểm
+    }
+    function stepper(v) {
+      var cur = v.stage === 'domain' ? 2 : 3, mm = v.mcp || {}, user = (Store.info && Store.info.auth && Store.info.auth.user) || {};
+      var cell = function (n, title, sub, state) {
+        return h('div', { 'data-step': String(n), 'data-state': state, 'aria-current': n === cur ? 'step' : null },
+          h('span', { class: 'n', text: _t('BƯỚC {n}', { n: n }) }), h('b', { text: (state === 'ok' ? '✓ ' : '') + title }), h('span', { class: 'note', text: sub }));
+      };
+      return h('div', { class: 'panel', id: 'suSteps' }, h('h3', null, v.review ? _t('Kiểm tra thiết lập') : _t('Thiết lập lần đầu'), h('span', { class: 'r note', text: v.review ? _t('một lần sau khi nâng cấp — đóng được') : _t('3 bước · đăng nhập lại thì về đúng bước đang dở') })),
+        h('div', { class: 'pad' }, h('div', { class: 'sustep' },
+          cell(1, _t('Tài khoản chủ'), user.login ? _t('Tên đăng nhập: {login}', { login: user.login }) : _t('Đã khởi tạo'), 'ok'),
+          cell(2, _t('Tên miền'), cur > 2 ? (v.choice === 'online' || (v.online && v.online.publicUrl) ? (v.online.publicUrl || _t('Đã lên mạng')) : v.choice === 'local-pending' ? _t('Tạm dùng trên máy này — lên mạng chưa xong') : _t('Chỉ dùng trên máy này')) : _t('Đưa lên mạng, hoặc chỉ dùng trên máy này'), cur > 2 ? 'ok' : 'cur'),
+          cell(3, _t('Chẩn đoán MCP'), mm.lastClient ? _t('Agent {name} đã nối', { name: mm.lastClient.name }) : _t('Tự kiểm trên máy + nối agent đầu tiên'), v.stage === 'done' ? 'ok' : cur === 3 ? 'cur' : 'todo'))));
+    }
+    // ---- bước 2: hai lựa chọn ngang hàng
+    function stepDomain(v) {
+      if (!S.pick && v.online && (v.online.busy || v.online.mode !== 'off' || v.online.pending)) S.pick = 'online';   // tải lại giữa luồng Go online → vẫn ở nhánh đang chạy
+      var grid = h('div', { class: 'olpaths', role: 'radiogroup', 'aria-label': _t('Tên miền') });
+      [['online', _t('Đưa lên mạng'), _t('Studio + MCP có HTTPS ở tên miền của bạn — claude.ai trên web nối được (Cấp phép bằng OAuth)')],
+        ['local', _t('Chỉ dùng trên máy này'), _t('Không mở gì ra Internet — Claude Code trên máy này nối bằng genchibi mcp')]].forEach(function (o) {
+        grid.appendChild(h('button', { type: 'button', class: 'olpath', role: 'radio', id: 'suPick-' + o[0], 'data-choice': o[0], 'aria-checked': S.pick === o[0] ? 'true' : 'false',
+          onclick: function () { S.pick = Setup.pick = o[0]; render(S.v); } }, h('b', { text: o[1] }), h('span', { class: 'note', text: o[2] })));
+      });
+      var body = h('div', { class: 'pad stack' }, grid);
+      if (S.pick === 'local') {
+        body.appendChild(h('div', { class: 'stack olform', id: 'suLocalBox' },
+          h('ul', { class: 'note', style: 'margin:0;padding-left:18px;display:grid;gap:2px' },
+            h('li', { text: _t('claude.ai trên web không nối được (cần địa chỉ công khai có HTTPS).') }),
+            h('li', { text: _t('Claude Code / agent trên máy này nối bằng genchibi mcp — bước sau kiểm thật.') }),
+            h('li', { text: _t('Đổi được bất cứ lúc nào: Hệ thống › Lên mạng.') })),
+          h('div', { class: 'row' }, h('button', { class: 'btn primary', id: 'suLocal', onclick: function () { this.disabled = true; post('choice', { choice: 'local' }).then(render).catch(function (e) { toast(e.message); load(); }); } }, _t('Tiếp tục — chỉ dùng trên máy này')))));
+      } else if (S.pick === 'online') {
+        if (!S.olHost) { S.olHost = h('div', { id: 'suOnline' }); onlineView(S.olHost, { embed: true, onRender: onOnline }); }
+        body.appendChild(S.olHost);
+        // KHÔNG KHOÁ owner (CNS-254): luôn có lối "tạm dùng trên máy này" — đỏ khi một bậc Internet đang lỗi
+        S.el.later = h('div', { class: 'banner ' + (S.olFail ? 'bad' : 'warn'), id: 'suLaterBar', role: 'status' },
+          h('span', { text: S.olFail ? _t('Bước Internet đang lỗi — sửa theo hàng ✗ ở trên rồi Kiểm lại, hoặc dùng Studio trên máy này trước và lên mạng sau.') : _t('Bước Internet chờ lâu (DNS, chứng chỉ, Cloudflare beta, quyền WAF)? Bạn không bị khoá: dùng Studio trên máy này trước, lên mạng sau.') }),
+          h('button', { class: 'btn sm', id: 'suLocalPending', onclick: function () { this.disabled = true; post('choice', { choice: 'local-pending' }).then(render).catch(function (e) { toast(e.message); load(); }); } }, _t('Tạm dùng trên máy này')));
+        body.appendChild(S.el.later);
+      }
+      return h('div', { class: 'panel', id: 'suDomain' }, h('h3', null, _t('Bước 2 · Tên miền'), h('span', { class: 'r note', text: _t('đổi được sau ở Hệ thống › Lên mạng') })), body);
+    }
+    // Go online (nhúng) vừa vẽ: luồng xong → server đã sang bước 3 → tải lại wizard; một bậc ✗ → dải "Tạm dùng trên máy này" chuyển đỏ
+    function onOnline(ov) {
+      var f = ov && ov.flow, bad = !!(f && !f.done && f.steps && f.steps.some(function (x) { return x.state === 'fail'; }));
+      if (f && f.done && f.mode !== 'off' && ov.mode !== 'off' && !ov.busy) { setTimeout(load, 300); return; }
+      if (bad !== S.olFail) { S.olFail = bad; if (S.v && S.v.stage === 'domain' && !S.left) render(S.v); }
+    }
+    // ---- bước 3
+    function selfTest() {
+      if (S.testing) return; S.testing = true; if (S.el.selfBtn) { S.el.selfBtn.disabled = true; S.el.selfBtn.textContent = _t('Đang tự kiểm…'); }
+      post('selftest', {}).then(function (v) { S.testing = false; if (!S.left) render(v); }).catch(function (e) { S.testing = false; toast(e.message); load(); });
+    }
+    function inetCheck() {
+      S.inetBusy = true; if (S.el.inetBtn) { S.el.inetBtn.disabled = true; S.el.inetBtn.textContent = _t('Đang kiểm từ Internet…'); }
+      post('internet', {}).then(function (r) { S.inetBusy = false; S.inet = r; if (!S.left) render(S.v); }).catch(function (e) { S.inetBusy = false; S.inet = { state: 'fail', detail: e.message }; if (!S.left) render(S.v); });
+    }
+    function stepMcp(v) {
+      var mm = v.mcp || {}, st = mm.selfTest, ok = !!(st && st.ok), wrap = h('div', { class: 'stack', id: 'suMcp' });
+      // 3a — tự kiểm trên máy này (bắt buộc đạt)
+      var tbl = h('table', { class: 'grid', id: 'suSelfGrid' }), cols = [_t('Kiểm'), _t('Trạng thái'), _t('Chi tiết')];
+      tbl.appendChild(h('tr', { class: 'letters' }, h('td'), cols.map(function (c, i) { return h('td', { text: String.fromCharCode(65 + i) }); })));
+      tbl.appendChild(h('tr', null, h('th', { text: 'ID' }), cols.map(function (c) { return h('th', { text: c }); })));
+      ((st && st.checks) || []).forEach(function (c, i) {
+        tbl.appendChild(h('tr', { 'data-check': c.id, 'data-state': c.ok ? 'ok' : 'fail' }, h('td', { class: 'id', text: 'MCP-' + String(i + 1).padStart(2, '0') }), h('td', { class: 'nw' }, h('b', { text: _t(SU_CHECK[c.id] || c.id) })),
+          h('td', { class: 'nw' }, h('span', { class: 'chip ' + (c.ok ? 'ok' : 'bad'), text: c.ok ? '✓ ' + _t('Đạt') : '✗ ' + _t('Lỗi') })), h('td', { class: 'wrap', text: c.detail || '' })));
+      });
+      S.el.selfBtn = h('button', { class: 'btn' + (ok ? '' : ' primary'), id: 'suSelfRun', disabled: S.testing, onclick: selfTest }, S.testing ? _t('Đang tự kiểm…') : st ? _t('Kiểm lại') : _t('Chạy tự kiểm'));
+      wrap.appendChild(h('div', { class: 'panel', id: 'suSelf' }, h('h3', null, _t('Bước 3 · Tự kiểm trên máy này'), h('span', { class: 'r note', text: _t('bắt buộc đạt') })),
+        st ? h('div', { class: 'scroll' }, tbl) : h('div', { class: 'pad note', text: S.testing ? _t('Đang tự kiểm…') : _t('Chưa chạy.') }),
+        h('div', { class: 'pad row' }, S.el.selfBtn, st ? h('span', { class: 'chip ' + (ok ? 'ok' : 'bad'), id: 'suSelfState', text: ok ? '✓ ' + _t('Tự kiểm đạt lúc {at}', { at: fmtClock(st.at) }) : '✗ ' + _t('Tự kiểm chưa đạt — sửa theo chi tiết rồi Kiểm lại') }) : null)));
+      // 3b — kiểm từ Internet (đã lên mạng): chỉ báo, không khoá
+      if (v.online && v.online.publicUrl) {
+        var r = S.inet;
+        S.el.inetBtn = h('button', { class: 'btn', id: 'suInetRun', disabled: S.inetBusy, onclick: inetCheck }, S.inetBusy ? _t('Đang kiểm từ Internet…') : r ? _t('Kiểm lại') : _t('Kiểm từ Internet'));
+        wrap.appendChild(h('div', { class: 'panel', id: 'suInet' }, h('h3', null, _t('Kiểm từ Internet'), h('span', { class: 'r note', text: _t('chỉ báo, không khoá — {url}', { url: v.online.publicUrl }) })),
+          h('div', { class: 'pad stack' },
+            r ? h('div', { class: 'row', id: 'suInetResult', 'data-state': r.state }, h('span', { class: 'chip ' + (r.state === 'ok' ? 'ok' : r.state === 'skip' ? '' : 'bad'), text: r.state === 'ok' ? '✓ ' + _t('Đạt') : r.state === 'skip' ? _t('Bỏ qua') : '✗ ' + _t('Lỗi') }), h('span', { class: 'wrap', text: r.detail || '' })) : h('div', { class: 'note', text: _t('Kiểm /mcp từ ngoài vào: 401 kèm metadata OAuth, đường của agent không bị luật chặn bot / WAF.') }),
+            r && r.fix ? h('div', { class: 'note', id: 'suInetFix' }, h('span', { text: '→ ' + r.fix }), fixCopies(r.fix)) : null,
+            h('div', { class: 'row' }, S.el.inetBtn))));
+      }
+      // 3c — thẻ nối agent (một component với Kết nối agent)
+      wrap.appendChild(agentCards({ mcpUrl: v.mcpUrl || '', id: 'suCards' }));
+      // 3d — kiểm thật: lời gọi MCP đầu tiên của agent
+      S.el.live = h('div', { class: 'sulive', id: 'suLive' });
+      S.el.finish = h('button', { class: 'btn primary', id: 'suFinish', onclick: function () { this.disabled = true; post('finish', {}).then(done).catch(function (e) { toast(e.message); load(); }); } }, _t('Xong'));
+      S.el.laterBtn = h('button', { class: 'btn', id: 'suLater', onclick: function () { this.disabled = true; post('finish', { later: true }).then(done).catch(function (e) { toast(e.message); load(); }); } }, _t('Tôi nối agent sau'));
+      var acts = v.review ? h('div', { class: 'row' }, h('button', { class: 'btn primary', id: 'suReviewDone', onclick: function () { post('review', {}).then(done).catch(function (e) { toast(e.message); }); } }, _t('Đã kiểm xong')))
+        : h('div', { class: 'row' }, S.el.finish, S.el.laterBtn, h('span', { class: 'note', id: 'suLaterNote', text: _t('"Tôi nối agent sau" bấm được khi tự kiểm đã đạt — Trang chủ giữ dải nhắc tới khi có agent nối.') }));
+      wrap.appendChild(h('div', { class: 'panel', id: 'suAgent' }, h('h3', null, _t('Kiểm thật: agent đầu tiên'), h('span', { class: 'r note', text: _t('chờ lời gọi MCP đầu tiên — tự cập nhật') })), h('div', { class: 'pad stack' }, S.el.live, acts)));
+      paintLive();
+      return wrap;
+    }
+    function paintLive() {
+      var v = S.v || {}, mm = v.mcp || {}, c = mm.lastClient, ok = !!(mm.selfTest && mm.selfTest.ok);
+      if (S.el.live) {
+        clear(S.el.live);
+        S.el.live.appendChild(c ? h('span', { class: 'chip ok', id: 'suLiveOk', 'data-client': c.name, text: '✓ ' + _t('Agent {name} đã nối lúc {at} ({channel})', { name: c.name, at: fmtClock(c.at), channel: _t(SU_CHANNEL[c.channel] || c.channel) }) })
+          : h('span', { class: 'chip warn', id: 'suLiveWait', text: '… ' + _t('Đang chờ agent gọi MCP lần đầu — làm theo một thẻ ở trên') }));
+      }
+      if (S.el.finish) S.el.finish.disabled = !(ok && c);
+      if (S.el.laterBtn) S.el.laterBtn.disabled = !ok;
+    }
+    load();
+  };
+
+  /* ============================================================ thẻ "Nối agent" (v0.23 — MỘT nguồn, CNS-134 / CNS-261) */
+  // Hướng dẫn nối agent CHỈ có ở đây; dùng chung bởi Hệ thống › Kết nối agent, Cài đặt AI và wizard lần đầu bước 3. Đường dẫn UI của claude.ai chép tay đúng
+  // một chỗ (CNS-137). o.mcpUrl: địa chỉ MCP công khai (OAuth) — rỗng = máy chưa lên mạng (claude.ai trên web không nối được; Claude Code dùng genchibi mcp)
+  function agentCards(o) {
+    o = o || {};
+    var url = o.mcpUrl || '';
+    var row = function (id, label, text) {
+      return h('div', { class: 'stack', style: 'gap:4px' }, h('div', { class: 'row', style: 'justify-content:space-between' }, h('span', { class: 'note', text: label }),
+        h('button', { class: 'btn sm', type: 'button', id: id + 'Copy', onclick: function () { copyText(text, label); } }, _t('Chép'))), h('pre', { class: 'code', id: id, text: text }));
+    };
+    var card = function (id, title, kids) { return h('div', { class: 'agcard', id: id }, h('b', { text: title }), kids); };
+    var json = JSON.stringify({ mcpServers: { 'gen-chibi': url ? { url: url } : { command: 'genchibi', args: ['mcp'] } } }, null, 2);
+    var cards = h('div', { class: 'agcards' },
+      card('agCc', 'Claude Code', [row('agCcLocal', _t('Trên máy này (stdio)'), 'claude mcp add -s user gen-chibi -- genchibi mcp'),
+        url ? row('agCcNet', _t('Qua Internet (OAuth)'), 'claude mcp add -s user --transport http gen-chibi ' + url) : null,
+        h('span', { class: 'note', text: _t('Mở phiên Claude Code mới rồi dặn: "gọi start_here trước".') })]),
+      card('agAi', 'claude.ai', url ? [row('agAiUrl', _t('Địa chỉ MCP'), url), h('ol', { class: 'note', style: 'margin:0;padding-left:18px;display:grid;gap:2px' },
+          h('li', { text: _t('Mở claude.ai › Customize › Connectors › Add custom connector, dán địa chỉ trên (để trống Client ID / Secret).') }),
+          h('li', { text: _t('Bấm Connect — trang "Cấp phép kết nối agent" của máy này hiện ra; chọn mức quyền, bấm Cấp phép. Đăng nhập Studio ở địa chỉ khác? Bấm Cấp phép ngay ở Hệ thống › Kết nối agent.') }),
+          h('li', { text: _t('Mở phiên chat mới: agent thấy các tool của gen-chibi. Thu hồi bất cứ lúc nào ở Hệ thống › Kết nối agent.') }))]
+        : [h('span', { class: 'note', id: 'agAiOff', text: _t('claude.ai trên web chỉ nối được khi máy đã lên mạng (Hệ thống › Lên mạng). Trên máy này: dùng Claude Code với genchibi mcp.') })]),
+      card('agJson', _t('Agent khác (JSON)'), [row('agJsonCfg', _t('Cấu hình MCP'), json),
+        h('span', { class: 'note', text: _t('Cursor, Gemini CLI, Codex…: dán vào tệp cấu hình MCP của client. Lệnh in đủ mọi client: genchibi agent connect.') })]));
+    return h('div', { class: 'panel', id: o.id || 'agCards' }, h('h3', null, _t('Nối agent'), h('span', { class: 'r note', text: _t('MCP 2025-06-18 · agent gọi start_here trước') })), h('div', { class: 'pad' }, cards));
+  }
+
   /* ============================================================ trang: Kết nối agent (OAuth, v0.19) */
   // Agent (claude.ai, Claude Code…) tự kết nối vào <GC_PUBLIC_URL>/mcp; chủ chỉ bấm "Cấp phép" ở trang của app. Ở đây: URL để dán, công tắc tự đăng ký, bảng client, đổi phạm vi / thu hồi.
   // KHÔNG bao giờ hiện token: server không trả token / băm / secret (GET api/oauth). Mọi chữ do agent tự khai (tên) đặt qua h() → textContent.
@@ -5842,6 +6056,19 @@
     var STATUS = { active: ['ok', _t('Đang kết nối')], pending: ['warn', _t('Chờ cấp phép (trên trang Cấp phép)')], expired: ['', _t('Hết hạn')], revoked: ['bad', _t('Đã thu hồi')] };
     var RANK = { active: 0, expired: 1, revoked: 2, pending: 3 };
     function scopeLabel(v, id) { var m = v.scopes.filter(function (x) { return x.id === id; })[0]; return m ? _l(m.label) + ' (' + id + ')' : id; }
+    // CNS-128: yêu cầu cấp phép đang chờ → nút Cấp phép ngay trong Studio (trang Cấp phép mở ở địa chỉ khác Studio thì không phải dán GC_API_TOKEN):
+    // duyệt qua cùng API của trang Cấp phép, rồi mở địa chỉ quay về của agent (callback đã đăng ký) ở thẻ mới để agent nhận mã
+    function approveBtn(c, q, sel) {
+      var b = h('button', { class: 'btn sm primary', type: 'button', 'data-request': q.id, text: _t('Cấp phép'), onclick: function () {
+        b.disabled = true;
+        Store.api('POST', 'api/oauth/approve', { request: q.id, decision: 'approve', scope: sel.value || q.requested || 'mcp:write' }).then(function (r) {
+          toast(_t('Đã cấp phép "{name}" — mở trang quay về của agent để hoàn tất.', { name: c.name }));
+          if (r && r.redirect) window.open(r.redirect, '_blank', 'noopener');
+          load();
+        }).catch(function (e) { b.disabled = false; toast(e.message); });
+      } });
+      return b;
+    }
     function render(v) {
       clear(box);
       var link = Store.info && Store.info.mcp && Store.info.mcp.link;
@@ -5855,14 +6082,8 @@
       } else {
         var url = v.mcpUrl;
         head.appendChild(h('div', { class: 'pad stack' },
-          h('div', { class: 'row' }, h('span', { class: v.tokenSet ? 'chip ok' : 'chip warn', text: v.tokenSet ? _t('Đã cấu hình') : _t('Đã cấu hình — nhưng chưa đặt GC_API_TOKEN') }), v.tokenSet ? null : h('span', { class: 'note', text: _t('Thiếu GC_API_TOKEN thì mọi request đi qua proxy / tunnel (kể cả từ claude.ai) bị chặn: đặt GC_API_TOKEN trong .env rồi genchibi restart.') })),
+          h('div', { class: 'row' }, h('span', { class: 'chip ok', text: _t('Đã bật') }), h('span', { class: 'mono', id: 'connectUrl', text: url }), h('button', { class: 'btn sm', id: 'connectCopy', type: 'button', onclick: function () { copyText(url, _t('địa chỉ MCP')); } }, _t('Sao chép địa chỉ'))),
           h('div', { class: 'kv' },
-            h('label', { text: _t('Địa chỉ MCP') }), h('div', { class: 'stack' }, h('pre', { class: 'code', id: 'connectUrl', text: url }), h('div', null, h('button', { class: 'btn sm', id: 'connectCopy', type: 'button', onclick: function () { copyText(url, _t('địa chỉ MCP')); } }, _t('Sao chép địa chỉ')), ' ',
-              h('button', { class: 'btn sm', type: 'button', onclick: function () { copyText('claude mcp add --transport http gen-chibi ' + url, _t('lệnh Claude Code')); } }, _t('Sao chép lệnh Claude Code')))),
-            h('label', { text: _t('3 bước') }), h('ol', { style: 'margin:0;padding-left:18px' },
-              h('li', { text: _t('Mở claude.ai › Customize › Connectors › Add custom connector, dán địa chỉ trên (để trống Client ID / Secret).') }),
-              h('li', { text: _t('Bấm Connect — trang "Cấp phép kết nối agent" của máy này hiện ra; chọn mức quyền, bấm Cấp phép (trình duyệt đã đăng nhập Studio ở cùng địa chỉ thì không phải nhập GC_API_TOKEN).') }),
-              h('li', { text: _t('Mở phiên chat mới: agent thấy các tool của gen-chibi. Thu hồi bất cứ lúc nào ở bảng dưới.') })),
             h('label', { text: _t('Tự đăng ký') }), h('label', { class: 'row' },
               h('input', { type: 'checkbox', id: 'connectReg', checked: v.register, onchange: function (ev) {
                 var on = ev.target.checked;
@@ -5871,6 +6092,8 @@
             h('label', { text: _t('Thêm callback') }), h('span', { class: 'note', text: _t('Agent khác (không phải claude.ai / claude.com / máy bạn): thêm GC_OAUTH_REDIRECTS=<url>,<url> trong .env rồi khởi động lại.') }))));
       }
       box.appendChild(head);
+      // ---- cách nối từng agent: MỘT component dùng chung với wizard lần đầu bước 3 và Cài đặt AI (CNS-134 / CNS-261)
+      box.appendChild(agentCards({ mcpUrl: v.enabled ? v.mcpUrl : '', id: 'connectCards' }));
       // ---- 2) bảng client
       var tbl = h('table', { class: 'grid', id: 'connectTable' });
       tbl.appendChild(h('tr', null, ['Agent', _t('Quay về'), _t('Phạm vi'), _t('Cấp lúc'), _t('Dùng lần cuối'), _t('Trạng thái'), ''].map(function (c) { return h('th', { text: c }); })));
@@ -5894,7 +6117,7 @@
           h('td', { class: 'nw note', text: fmtTime(c.approvedAt) }),
           h('td', { class: 'nw note', text: fmtTime(c.lastUsedAt) }),
           h('td', { class: 'nw' }, h('span', { class: 'chip ' + st[0], text: st[1] }), c.status === 'pending' && c.expiresAt ? h('div', { class: 'note', text: _t('tự xoá {fmtTime}', { fmtTime: fmtTime(c.expiresAt) }) }) : null),
-          h('td', { class: 'nw' }, rev)));
+          h('td', { class: 'nw' }, (c.requests || []).map(function (q) { return approveBtn(c, q, sel); }), rev)));
       });
       box.appendChild(h('div', { class: 'panel' }, h('h3', null, _t('Agent đã kết nối'), h('span', { class: 'r note', text: _t('{n} / 50 client · token không bao giờ hiện ở đây', { n: rows.length }) })),
         rows.length ? tbl : h('div', { class: 'pad note', text: _t('Chưa có agent nào. Dán địa chỉ MCP ở trên vào claude.ai (hoặc chạy lệnh Claude Code) là agent xuất hiện ở đây.') })));
@@ -5959,11 +6182,14 @@
     if (e) out.push(h('pre', { class: 'code olexpr', 'data-user-content': '', text: e[0] }), h('div', { class: 'row', style: 'margin-top:4px' }, h('button', { class: 'btn sm', type: 'button', onclick: function () { copyText(e[0], _t('biểu thức')); } }, _t('Chép biểu thức'))));
     return out;
   }
-  PAGES.online = function () {
-    crumbs([{ t: _t('Lên mạng') }]);
-    if (Store.mode !== 'server') { $('view').appendChild(h('div', { class: 'panel empty', text: _t('Lên mạng chỉ có ở bản cài trên máy.') })); return; }
+  PAGES.online = function () { crumbs([{ t: _t('Lên mạng') }]); onlineView($('view'), {}); };
+  // Go online ở HAI nơi, MỘT bộ mã (CNS-261 — không có bản chép thứ hai): trang Hệ thống › Lên mạng và wizard lần đầu bước 2 (v0.23 §A.3).
+  // opts.embed: vẽ trong khung của wizard — không đụng thanh tiêu đề / nút của trang; opts.onRender(v): báo wizard sau mỗi lần vẽ (luồng xong → wizard đi tiếp)
+  function onlineView(host, opts) {
+    opts = opts || {};
+    if (Store.mode !== 'server') { host.appendChild(h('div', { class: 'panel empty', text: _t('Lên mạng chỉ có ở bản cài trên máy.') })); return; }
     var box = h('div', { class: 'stack', id: 'olBox' });
-    $('view').appendChild(box);
+    host.appendChild(box);
     var S = { v: null, pick: null, ask: null, off: false, err: '', timer: null, left: false };
     onLeave(function () { S.left = true; clearTimeout(S.timer); });
     // ô nhập dùng lại qua mỗi lần vẽ (hỏi lại mỗi giây không làm mất chữ đang gõ)
@@ -6019,13 +6245,14 @@
       if (f && f.domain && f.mode === 'caddy' && !IN.domCaddy.value) IN.domCaddy.value = f.domain;
       if (f && f.domain && f.mode === 'proxy' && !IN.domProxy.value) IN.domProxy.value = f.domain;
       if (f && f.mode === 'cloudflare' && f.cloudflare) { if (f.cloudflare.zone && !IN.zone.value) IN.zone.value = f.cloudflare.zone; if (f.cloudflare.sub && IN.sub.value === 'chibi') IN.sub.value = f.cloudflare.sub; }
-      clear(box); clear($('actions'));
+      clear(box); if (!opts.embed) clear($('actions'));
       var reB = h('button', { class: 'btn', id: 'olRecheck', disabled: v.busy || !f || f.mode === 'off', onclick: function () { post('recheck', {}).then(function (x) { if (x) after(x); }); } }, _t('Kiểm lại'));
       var offB = h('button', { class: 'btn danger', id: 'olOffBtn', disabled: v.busy && !S.off, onclick: function () { S.off = true; render(S.v); var o = $('olOffPanel'); if (o) o.scrollIntoView({ block: 'nearest' }); } }, _t('Ngắt mạng (Go offline)'));
       // Go offline chỉ khi có gì đang ra ngoài để gỡ (CNS-211): đang online · publicUrl bật tạm · tunnel bật · luồng Cloudflare đã tạo tunnel (dọn ở Cloudflare)
       var tunOk = f && f.mode === 'cloudflare' && f.steps.some(function (s) { return s.id === 'tunnel' && s.state === 'ok'; });
       var anyOn = v.mode !== 'off' || !!v.publicUrlPending || ((v.edge || {}).intent && v.edge.intent !== 'off') || tunOk;
-      actions(f && f.mode !== 'off' ? reB : null, anyOn ? offB : null);
+      if (opts.embed) { if ((f && f.mode !== 'off') || anyOn) box.appendChild(h('div', { class: 'row', style: 'justify-content:flex-end;gap:8px' }, f && f.mode !== 'off' ? reB : null, anyOn ? offB : null)); }
+      else actions(f && f.mode !== 'off' ? reB : null, anyOn ? offB : null);
       if (S.err) box.appendChild(h('div', { class: 'banner bad', role: 'alert', id: 'olErr' }, h('span', { text: '✗ ' + S.err }), h('button', { class: 'btn sm', onclick: function () { S.err = ''; render(S.v); } }, _t('Đóng'))));
       // ---- trạng thái hiện tại
       var es = (v.edge || {}).status, edgeTxt;
@@ -6053,10 +6280,9 @@
       if (f && f.needs === 'urlChange' && !f.done) box.appendChild(h('div', { class: 'banner warn', id: 'olAskFinish', role: 'alertdialog' },
         h('span', { text: _t('Bật địa chỉ công khai mới {to}: {n} kết nối agent (OAuth) cũ sẽ bị gỡ và phải nối lại.', { to: f.url || _t('địa chỉ mới'), n: f.revokes || 0 }) }),
         h('button', { class: 'btn primary sm', id: 'olAskFinishYes', disabled: v.busy, onclick: function () { post('recheck', { confirmUrlChange: true }).then(function (x) { if (x) after(x); }); } }, _t('Đổi và tiếp tục'))));
-      // ---- chỉ còn bậc "mật khẩu chủ": địa chỉ đang bật TẠM; đặt mật khẩu (ở đây, /setup hay genchibi password) là app tự hoàn tất (CNS-201)
-      if (f && f.waitingPassword) box.appendChild(h('div', { class: 'banner warn', id: 'olWaitPw', role: 'status' },
-        h('span', { text: _t('Sắp xong: {url} đang bật tạm. Bước cuối — đặt mật khẩu chủ; đặt xong là app tự hoàn tất lên mạng (không cần Kiểm lại).', { url: v.publicUrlPending || f.url || '—' }) }),
-        h('button', { class: 'btn primary sm', id: 'olSetPw', onclick: function () { Auth.render('setup'); } }, _t('Đặt mật khẩu'))));
+      // ---- máy v0.21 / v0.22 nâng cấp lúc "online tạm, chờ mật khẩu": chỉ còn thiếu tài khoản chủ — đặt (genchibi password) là app tự hoàn tất
+      if (f && f.waitingOwner) box.appendChild(h('div', { class: 'banner warn', id: 'olWaitOwner', role: 'status' },
+        h('span', { text: _t('Sắp xong: {url} đang bật tạm, chờ tài khoản chủ — trên máy chủ chạy genchibi password; xong là app tự hoàn tất lên mạng.', { url: v.publicUrlPending || f.url || '—' }) })));
       // ---- Go offline: hỏi trước, liệt kê hệ quả; đường Cloudflare xin token để dọn tunnel + CNAME
       if (S.off) {
         var cfNeed = (v.mode === 'cloudflare' || (f && f.mode === 'cloudflare')) && !(v.cloudflare || {}).tokenKept && !(v.cloudflare || {}).tokenInMemory;
@@ -6086,6 +6312,7 @@
       if (v.snippets) box.appendChild(snippetPanel(v.snippets));
       // ---- lưới bậc
       if (f) box.appendChild(stepsPanel(v, f));
+      if (opts.onRender) opts.onRender(v);
     }
     function pathsPanel(v, locked) {
       var f = v.flow, grid = h('div', { class: 'olpaths', role: 'radiogroup', 'aria-label': _t('Chọn đường lên mạng') });
@@ -6107,7 +6334,13 @@
     function formOf(id, v) {
       var cf = v.cloudflare || {}, f = v.flow, body = [];
       if (id === 'caddy') body.push(field(_t('Tên miền'), IN.domCaddy, _t('Trước khi bấm: tạo bản ghi A của tên miền trỏ về IP công khai của máy (tắt proxy cam nếu tên miền ở Cloudflare). Edge Caddy chưa bật thì app báo đúng một lệnh chạy trên máy chủ.')), h('div', { class: 'row' }, goBtn(id, _t('Bắt đầu với Caddy'))));
-      else if (id === 'proxy') body.push(field(_t('Tên miền'), IN.domProxy, _t('Tên miền mà proxy của bạn đang phục vụ (HTTPS). App in đoạn cấu hình mẫu rồi kiểm từ ngoài vào.')), h('div', { class: 'row' }, goBtn(id, _t('Kiểm proxy của tôi'))));
+      else if (id === 'proxy') {
+        // CNS-128: Studio đang mở qua tên miền (proxy riêng của chủ đã chạy) → một nút điền đúng tên đó
+        var here = location.protocol === 'https:' && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname) && location.hostname !== String(IN.domProxy.value || '') ? location.hostname : '';
+        body.push(field(_t('Tên miền'), IN.domProxy, _t('Tên miền mà proxy của bạn đang phục vụ (HTTPS). App in đoạn cấu hình mẫu rồi kiểm từ ngoài vào.')),
+          here ? h('div', { class: 'row' }, h('button', { class: 'btn sm', type: 'button', id: 'olUseHere', onclick: function () { IN.domProxy.value = here; render(S.v); } }, _t('Dùng địa chỉ đang mở ({host})', { host: here }))) : null,
+          h('div', { class: 'row' }, goBtn(id, _t('Kiểm proxy của tôi'))));
+      }
       else if (id === 'quick') body.push(h('div', { class: 'note', text: _t('Mở một link *.trycloudflare.com ngay — tiện để thử; link đổi mỗi lần khởi động lại, agent nối bằng OAuth sẽ phải nối lại. Dùng lâu dài: đường Cloudflare hoặc Caddy.') }), h('div', { class: 'row' }, goBtn(id, _t('Mở link tạm'))));
       else {
         var choices = f && f.mode === 'cloudflare' && f.choices && f.choices.length ? f.choices : null;
@@ -6153,7 +6386,7 @@
       var title = f.mode === 'off' ? _t('Ngắt mạng') : _t(OL_MODE[f.mode] || f.mode);
       return h('div', { class: 'panel', id: 'olStepsPanel' }, h('h3', null, _t('Các bậc · {mode}', { mode: title }), f.domain ? h('span', { class: 'r mono note', text: f.mode === 'quick' && f.url ? f.url : f.domain }) : null),
         h('div', { class: 'scroll' }, tbl),
-        h('div', { class: 'olfoot note', id: 'olFoot' }, h('span', { text: _t('{n} bậc · {ok} đạt · {bad} lỗi', { n: f.steps.length, ok: n.ok, bad: n.fail }) }), h('span', { text: v.busy ? _t('đang chạy…') : f.done ? _t('xong lúc {at}', { at: fmtClock(f.doneAt) }) : f.waitingPassword ? _t('chờ mật khẩu chủ — đặt xong là tự hoàn tất') : f.needs === 'urlChange' ? _t('chờ bạn xác nhận đổi địa chỉ') : _t('dừng ở bậc lỗi — sửa rồi bấm Kiểm lại') }), h('span', { class: 'mono', text: _t('cập nhật {at}', { at: fmtClock(new Date().toISOString()) }) })));
+        h('div', { class: 'olfoot note', id: 'olFoot' }, h('span', { text: _t('{n} bậc · {ok} đạt · {bad} lỗi', { n: f.steps.length, ok: n.ok, bad: n.fail }) }), h('span', { text: v.busy ? _t('đang chạy…') : f.done ? _t('xong lúc {at}', { at: fmtClock(f.doneAt) }) : f.waitingOwner ? _t('chờ tài khoản chủ — genchibi password trên máy chủ') : f.needs === 'urlChange' ? _t('chờ bạn xác nhận đổi địa chỉ') : _t('dừng ở bậc lỗi — sửa rồi bấm Kiểm lại') }), h('span', { class: 'mono', text: _t('cập nhật {at}', { at: fmtClock(new Date().toISOString()) }) })));
     }
     function donePanel(v, f) {
       var url = v.publicUrl, mcpUrl = url + '/mcp', cert = f.steps.filter(function (s) { return s.id === 'cert' && s.expires; })[0], es = (v.edge || {}).status;
@@ -6162,7 +6395,7 @@
         h('div', { class: 'pad kv' },
           h('label', { text: 'Studio' }), copyRow('olDoneStudio', url, 'Studio'),
           h('label', { text: 'MCP' }), copyRow('olDoneMcp', mcpUrl, _t('địa chỉ MCP')),
-          h('label', { text: _t('Bước tiếp') }), h('div', { class: 'row' }, h('span', { text: _t('Nối claude.ai / agent: làm theo các bước ở Hệ thống › Kết nối agent.') }), h('button', { class: 'btn primary sm', id: 'olToConnect', onclick: function () { go({ page: 'connect' }); } }, _t('Mở Kết nối agent ›'))),
+          opts.embed ? null : h('label', { text: _t('Bước tiếp') }), opts.embed ? null : h('div', { class: 'row' }, h('span', { text: _t('Nối claude.ai / agent: làm theo các bước ở Hệ thống › Kết nối agent.') }), h('button', { class: 'btn primary sm', id: 'olToConnect', onclick: function () { go({ page: 'connect' }); } }, _t('Mở Kết nối agent ›'))),
           h('label', { text: _t('Trạng thái sống') }), h('div', { class: 'row' },
             f.mode === 'cloudflare' || f.mode === 'quick' ? (es && es.ready ? h('span', { class: 'chip ok', text: '✓ ' + _t('Tunnel sẵn sàng') }) : es && es.error ? h('span', { class: 'chip bad', text: '✗ ' + edgeErr(es.error) }) : h('span', { class: 'chip warn', text: '… ' + _t('Tunnel đang kết nối') })) : null,
             cert ? h('span', { class: 'chip ok', text: _t('Chứng chỉ hết hạn {at}', { at: fmtTime(cert.expires) }) }) : null,
@@ -6171,7 +6404,7 @@
           h('label'), h('div', { class: 'row' }, h('button', { class: 'btn danger sm', id: 'olDoneOff', onclick: function () { S.off = true; render(S.v); } }, _t('Ngắt mạng (Go offline)')))));
     }
     load();
-  };
+  }
 
   /* ============================================================ trang: Tài khoản chủ (v0.21, spec v021 §3.3 / §3.7, CNS-183) */
   // Đổi mật khẩu (phiên S phải nhập mật khẩu hiện tại; đổi = thu hồi MỌI phiên + thiết bị khác, trình duyệt này nhận phiên mới) · lưới phiên + thiết bị (thu hồi
@@ -6207,7 +6440,8 @@
       clear(box);
       // ---- mật khẩu
       var pwBox = h('div', { class: 'pad stack' });
-      if (!a.password) pwBox.appendChild(h('div', { class: 'row' }, h('span', { class: 'chip warn', text: _t('Chưa có mật khẩu chủ') }), h('button', { class: 'btn primary sm', onclick: function () { Auth.st = a; Auth.render('setup'); } }, _t('Đặt mật khẩu'))));
+      // chưa có mật khẩu: vào bằng token (máy kế thừa) → đặt ngay ở đây; không thì trên máy chủ
+      if (!a.password && a.owner !== 'T') pwBox.appendChild(h('div', { class: 'row' }, h('span', { class: 'chip warn', text: _t('Chưa có mật khẩu chủ') }), h('span', { class: 'note', text: _t('Trên máy chủ chạy genchibi password (tên đăng nhập owner — đổi được ở đây sau đó).') })));
       else {
         var minLen = a.minLength || 12, useS = a.owner === 'S';
         var cur = h('input', { type: 'password', id: 'acCur', autocomplete: 'current-password', style: 'width:100%' }), p1 = h('input', { type: 'password', id: 'acPw', autocomplete: 'new-password', style: 'width:100%' }), p2 = h('input', { type: 'password', id: 'acPw2', autocomplete: 'new-password', style: 'width:100%' });
@@ -6228,6 +6462,21 @@
           useS ? fl(_t('Mật khẩu hiện tại'), cur) : h('div', { class: 'note', text: _t('Bạn đang vào bằng token của bản cài — đổi mật khẩu không cần mật khẩu hiện tại.') }),
           h('div', { class: 'accpw2' }, fl(_t('Mật khẩu mới (ít nhất {n} ký tự — gợi ý: một cụm từ dễ nhớ)', { n: minLen }), p1), fl(_t('Nhập lại mật khẩu'), p2)),
           err, h('div', { class: 'row' }, btn, h('span', { class: 'note', text: _t('Đổi mật khẩu thu hồi mọi phiên và thiết bị khác (cả kẻ lạ nếu mật khẩu cũ đã lộ); trình duyệt này đăng nhập lại ngay.') }))));
+      }
+      // ---- hồ sơ chủ (v0.23 §A.2, CNS-260 / CNS-267): tên đăng nhập (chỉ là nhãn — id nội bộ luôn "owner", OAuth / MCP không đổi) · tên hiển thị · email Let's Encrypt
+      if (a.password) {
+        var uu = a.user || {}, inp2 = function (o) { return h('input', Object.assign({ style: 'width:100%', spellcheck: 'false' }, o)); };
+        var pl = inp2({ id: 'acLogin', value: uu.login || '', maxlength: '32', autocomplete: 'username' }), pn = inp2({ id: 'acName', value: uu.displayName || '', maxlength: '64' }), pe = inp2({ id: 'acEmail', type: 'email', value: uu.email || '', maxlength: '254', placeholder: _t('tuỳ chọn') });
+        var perr = h('div', { role: 'alert', id: 'acProfileErr', hidden: true, style: 'color:var(--danger);font-size:12px' }), pbtn = h('button', { class: 'btn primary', type: 'submit', id: 'acProfileSave' }, _t('Lưu hồ sơ'));
+        var fl2 = function (label, el, note) { return h('label', { style: 'display:grid;gap:4px' }, h('span', { class: 'note', text: label }), el, note ? h('span', { class: 'note', text: note }) : null); };
+        box.appendChild(h('div', { class: 'panel', id: 'acProfile' }, h('h3', null, _t('Hồ sơ chủ'), h('span', { class: 'r note', text: _t('đổi tên đăng nhập không đăng xuất ai') })),
+          h('form', { class: 'pad stack', novalidate: true, onsubmit: function (ev) {
+            ev.preventDefault(); perr.hidden = true; pbtn.disabled = true;
+            Store.api('PUT', 'api/auth/profile', { login: pl.value.trim().toLowerCase(), displayName: pn.value.trim(), email: pe.value.trim() }).then(function () { toast(_t('Đã lưu hồ sơ chủ.')); load(); })
+              .catch(function (e) { perr.hidden = false; perr.textContent = '✗ ' + e.message; pbtn.disabled = false; });
+          } }, h('div', { class: 'accpw2' }, fl2(_t('Tên đăng nhập'), pl), fl2(_t('Tên hiển thị'), pn)),
+            fl2(_t('Email (tuỳ chọn)'), pe, _t('Chỉ dùng làm email liên hệ Let\'s Encrypt khi lên mạng bằng đường Caddy (áp ở lần Go online / Kiểm lại tới).')),
+            perr, h('div', { class: 'row' }, pbtn))));
       }
       box.appendChild(h('div', { class: 'panel', id: 'acPassword' }, h('h3', null, _t('Mật khẩu chủ'), h('span', { class: 'r note', text: _t('Quên mật khẩu: chạy genchibi password trên máy chủ') })), pwBox));
       // ---- phiên đang mở
@@ -6378,11 +6627,11 @@
     if (window.GCDock && window.GCDock.relang) window.GCDock.relang();
     go(route);
   }
-  Lang.boot().then(function () { return Store.init(); }).then(function () { return Projects.load(); }).then(function () {
+  Lang.boot().then(function () { return Store.init(); }).then(function () { return Setup.locked ? null : Projects.load(); }).then(function () {
     if (Store.mode === 'server' && /^\/(login|setup)$/.test(location.pathname)) return location.replace(Auth.next());   // đã đăng nhập (phiên / token) mà mở trang đăng nhập → về trang đích
     paintChrome();
     try { var tmsg = localStorage.getItem('gc-toast'); if (tmsg) { localStorage.removeItem('gc-toast'); setTimeout(function () { toast(tmsg); }, 300); } } catch (e) { /* bỏ qua */ }
-    if (window.GCDock) window.GCDock.attach(DOCK_BRIDGE);   // dock Trợ lý AI ở cột phải: trước lần go() đầu tiên
+    if (window.GCDock && !Setup.locked) window.GCDock.attach(DOCK_BRIDGE);   // dock Trợ lý AI ở cột phải: trước lần go() đầu tiên (wizard lần đầu: không có dock)
     $('brand').setAttribute('href', appURL(''));
     var r = { page: APP ? APP.home : 'home' };
     try {
@@ -6394,7 +6643,8 @@
     if (hv) r = hv;
     // Back / Forward giữa danh sách và phòng tác phẩm
     window.addEventListener('popstate', function () { if (APP && APP.id === 'tao-tac') go(parseWorkHash() || { page: 'works' }); });
-    if (Store.mode === 'server') Store.api('GET', 'api/update').then(function (s) { updateBadge = s.available ? s.latest : false; go(r); }).catch(function () { go(r); });
+    if (Setup.locked) go({ page: 'setup' });
+    else if (Store.mode === 'server') Store.api('GET', 'api/update').then(function (s) { updateBadge = s.available ? s.latest : false; go(r); }).catch(function () { go(r); });
     else go(r);
   });
 })();

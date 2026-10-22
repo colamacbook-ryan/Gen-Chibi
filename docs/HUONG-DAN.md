@@ -5,6 +5,35 @@
 > gen-chibi là **nhà máy asset chibi theo chủ đề**: từ một bộ khung chuẩn dựng nhân vật, vật phẩm, bối cảnh → cất vào thư viện theo dự án chủ đề → phát hành thành **gói bán**. **Làm phim** với AI đạo diễn là cách dùng asset — và là bản demo sống của bộ thư viện.
 > © 2026 Gen Labs — All rights reserved · Tác giả: Ryan — 090.919.8823
 
+## Lần chạy đầu: tài khoản chủ và thiết lập (v0.23)
+
+1. **Cài xong, đọc dòng cuối của trình cài.** Trên máy chưa lên mạng, dòng đó bảo: mở `http://localhost:7480` và đăng nhập **admin / admin** trong vòng 30 phút. Qua SSH thì chuyển cổng trước: `ssh -L 7480:localhost:7480 <máy-chủ>`.
+2. **admin / admin chỉ dùng được khi đủ tất cả các điều sau** — thiếu điều nào thì trang đăng nhập nói đúng lý do và cách vào:
+   - chưa có tài khoản chủ;
+   - một lệnh trên máy chủ đã mở cửa sổ 30 phút (trình cài, `genchibi start`, `genchibi open` — Studio không bao giờ mở được);
+   - máy chưa lên mạng (không Go online, không `GC_PUBLIC_URL` / `GC_ALLOWED_HOSTS`, không edge Caddy, không tunnel);
+   - app chỉ nghe trên máy này (native: loopback; Docker: CLI đã kiểm compose chỉ publish ở 127.0.0.1);
+   - trình duyệt mở bằng `localhost` / `127.0.0.1` / `[::1]` và không có proxy ở giữa.
+3. **Tạo tài khoản chủ** (màn duy nhất phiên admin thấy; phiên dài 30 phút, không nhớ thiết bị): tên đăng nhập (3–32 ký tự, không phải `admin`), tên hiển thị, email (tuỳ chọn — chỉ dùng làm email liên hệ Let's Encrypt cho đường Caddy; đổi ở *Hệ thống › Tài khoản chủ*), mật khẩu ×2 (ít nhất 12 ký tự). Xong bước này, `admin / admin` mất hẳn.
+4. **Bước 2 · Tên miền:** *Đưa lên mạng* chạy đúng các bậc của *Hệ thống › Lên mạng*; *Chỉ dùng trên máy này* bỏ qua. Một bậc Internet đỏ hoặc chờ lâu: *Tạm dùng trên máy này* cho bạn vào; trang chủ khi đó hiện dải *Lên mạng chưa xong* tới khi xong.
+5. **Bước 3 · Chẩn đoán MCP:** tự kiểm thật chạy ngay (HTTP `/mcp`, token chủ, `genchibi mcp` stdio). Bên dưới là các thẻ nối (Claude Code, claude.ai, agent khác dạng JSON) — cùng các thẻ ở *Hệ thống › Kết nối agent*. Ô kiểm thật chuyển ✓ khi một agent gọi MCP lần đầu; lúc đó *Xong* mở. *Tôi nối agent sau* cũng kết thúc (trang chủ nhắc tới khi có agent nối).
+
+Tới khi thiết lập xong, Studio chỉ hiện *Thiết lập lần đầu*, *Lên mạng* và *Tài khoản chủ*; đăng nhập lại thì về đúng bước đang dở. Agent và CLI dùng token chủ vẫn chạy ở mọi bước (`genchibi mcp` dùng được ngay sau khi cài). Lên mạng cần có tài khoản chủ (bị từ chối khi máy còn chỉ có `admin / admin`). Lối thoát chỉ trên máy chủ: `genchibi setup` (trạng thái), `genchibi setup skip [lý do]` (có ghi log — khi chính phần kiểm bị lỗi), `genchibi setup reset` (làm lại wizard; không bao giờ mở lại `admin / admin`).
+
+**Cài thẳng lên tên miền** (`--domain` / `--cloudflare`): trình cài hỏi trước tên đăng nhập và mật khẩu chủ (nhập ẩn), hoặc đọc `GC_OWNER_USER` / `GC_OWNER_PASSWORD` khi không có terminal — không bao giờ ghi vào `.env`, dòng lệnh hay log. Không có thì không lên mạng và in các lệnh cần chạy tiếp.
+
+**Nâng cấp từ v0.22:** mật khẩu cũ vẫn dùng với tên đăng nhập `owner`; dải *Kiểm tra thiết lập* hiện một lần, mở tự kiểm MCP và các thẻ nối.
+
+**Ai làm được gì (v0.23):**
+
+| Ai | Bằng gì | Được gì |
+|---|---|---|
+| admin | `admin / admin`, chỉ khi đủ các điều trên | chỉ màn tạo tài khoản chủ (30 phút) |
+| Chủ (phiên) | tên đăng nhập + mật khẩu ở `/login` | Studio — trong lúc thiết lập chỉ ba trang thiết lập; không bao giờ `/mcp` |
+| Token chủ | `Authorization: Bearer` (CLI, `genchibi mcp`, agent trên máy này) | mọi API và `/mcp` ở mọi bước; `genchibi setup skip / reset` |
+| Agent OAuth | `https://tên-miền/mcp`, chủ bấm *Cấp phép* | `/mcp` trong phạm vi đã chọn (`mcp:read` · `mcp:write` · `mcp:owner`) |
+| Link có khoá | `https://tên-miền/mcp/<khoá>` (agent cũ) | `/mcp`, như `mcp:write` |
+
 ## Nhanh nhất: 10 giây để thấy cả luồng
 1. Mở gen-chibi (mặc định `http://localhost:7480`).
 2. Ở màn **Chọn khu làm việc**, bấm **✨ Mở dự án mẫu "Văn phòng vui"**.
@@ -200,13 +229,13 @@ Bảng kiểu Data Console (desktop): mỗi hàng một âm — **ID âm** (tên
 Đưa app lên `https://tên-miền` (Studio, sau mật khẩu chủ) và `https://tên-miền/mcp` (cho agent) mà không sửa `.env`, Caddyfile hay DNS bằng tay. *Beta:* đường A đã kiểm với Caddy thật (TLS nội bộ) trong Docker, đường B với Cloudflare API giả lập, link tạm với `cloudflared` giả lập — chưa chạy trên VPS hay tài khoản Cloudflare thật. Ở đường B còn hai việc có thể phải làm trong dashboard Cloudflare, mỗi việc là một bậc có hướng dẫn: luật WAF Skip khi token không có quyền WAF, và tắt *Bot Fight Mode* ở gói Free. Mở **Studio › Hệ thống › Lên mạng**, hoặc dùng `genchibi online` trên máy chủ — hai nơi chạy cùng các bậc và hiện từng bậc ✓ / ✗ kèm cách sửa.
 
 1. **Chọn đường.** *VPS có IP công khai* (đường A): tạo bản ghi A `tên-miền → IP máy`, mở cổng 80 và 443, rồi `genchibi online caddy tên-miền` (Docker; edge Caddy lấy chứng chỉ HTTPS). *Máy nhà, sau router, hoặc 80/443 bận* (đường B): tên miền phải ở Cloudflare; tạo API token bằng link điền sẵn mà app đưa (Account › Cloudflare Tunnel › Edit, Zone › DNS › Edit, Zone › Zone › Read, tuỳ chọn Zone › WAF › Edit; TTL ngắn), rồi `genchibi online cloudflare tên-miền` và dán token khi được hỏi (ẩn; không có terminal: `GC_CF_TOKEN`, không bao giờ là đối số). *Đã có reverse proxy riêng:* `genchibi online proxy tên-miền` in đoạn cấu hình để dán. *Chỉ thử:* `genchibi online quick` cho link tạm `*.trycloudflare.com`.
-2. **Theo dõi từng bậc.** Tên miền / DNS, edge, cổng, chứng chỉ, địa chỉ công khai, **MCP từ Internet** (thử bằng agent `Claude-User` của claude.ai, nên Cloudflare chặn bot sẽ lộ ra ở đây), mật khẩu chủ. Bậc ✗ in cách sửa; sửa xong chạy `genchibi online recheck` (hoặc bấm *Kiểm lại*).
-3. **Mật khẩu chủ.** Trên VPS mới, bậc cuối chờ mật khẩu (tới lúc đó địa chỉ chỉ bật *tạm*): mở `https://tên-miền/setup`, nhập mã setup (dòng cuối của trình cài; `genchibi status` in lại), hoặc chạy `genchibi password` trên máy chủ. Đặt xong mật khẩu là app tự hoàn tất lên mạng.
+2. **Theo dõi từng bậc.** Tên miền / DNS, edge, cổng, chứng chỉ, địa chỉ công khai, **MCP từ Internet** (thử bằng agent `Claude-User` của claude.ai, nên Cloudflare chặn bot sẽ lộ ra ở đây). Bậc ✗ in cách sửa; sửa xong chạy `genchibi online recheck` (hoặc bấm *Kiểm lại*).
+3. **Tài khoản chủ trước.** Lên mạng bị từ chối tới khi có tài khoản chủ (màn lần đầu, hoặc `genchibi password` trên máy chủ) — mật khẩu không bao giờ được đặt qua địa chỉ công khai.
 4. **Xong:** lệnh in `https://tên-miền` và `https://tên-miền/mcp`. Đọc tiếp bên dưới để nối claude.ai.
 
 Làm hết lúc cài cũng được: `--domain tên-miền` (đường A) hoặc `--domain tên-miền --cloudflare` (đường B) — xem [README › Ra Internet](../README.vi.md#ra-internet-tên-miền-https-mcp-một-bước). Thôi ra Internet: `genchibi online off` (có `GC_CF_TOKEN` thì app dọn cả tunnel, bản ghi DNS và luật WAF nó đã tạo). Máy cấu hình tay trước v0.21 (`GC_PUBLIC_URL` / `GC_ALLOWED_HOSTS` trong `.env`) vẫn chạy; `genchibi online migrate` chuyển sang Go online.
 
-**Sao lưu và khôi phục.** Bản sao lưu (`genchibi backup`) nay chứa mật khẩu chủ (đã băm) và các phiên Studio. `genchibi restore` giữ mật khẩu đó, đăng xuất mọi phiên và thiết bị, và tắt Go online trên máy này (mã bản cài mới, tunnel dừng) — khôi phục xong thì chạy lại Go online. **Đã có trang đăng nhập riêng đứng trước app:** chỉ chặn đường của người và để `/login`, `/setup`, `/oauth/authorize` của app đi qua phía sau lớp đăng nhập của bạn; đường máy vẫn để trống.
+**Sao lưu và khôi phục.** Bản sao lưu (`genchibi backup`) chứa tài khoản chủ (mật khẩu đã băm) và các phiên Studio. `genchibi restore` giữ tài khoản đó, đăng xuất mọi phiên và thiết bị, thu hồi mọi kết nối OAuth (agent nối lại và chủ duyệt lại), và tắt Go online trên máy này (mã bản cài mới, tunnel dừng) — khôi phục xong thì chạy lại Go online. Hai bản sao lưu trong cùng một giây không còn đè nhau. **Trang đăng nhập riêng đứng trước app:** chỉ chặn đường của người và để `/login`, `/oauth/authorize` của app đi qua sau lớp đăng nhập của bạn (`/setup` của v0.21 / v0.22 nay chuyển về `/login`); đường máy vẫn mở.
 
 ### Nối claude.ai bằng một địa chỉ `https://tên-miền/mcp` (OAuth, từ v0.19)
 Agent tự tìm cách đăng nhập, tự đăng ký, còn bạn chỉ cần bấm **Cấp phép** một lần trên trang web của app. Không phải chép khoá hay dán token vào agent.

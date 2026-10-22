@@ -1,5 +1,5 @@
 // Kiểm thử trong trình duyệt (cần Playwright — cục bộ hoặc CI: .github/workflows/browser.yml, mỗi nhóm GC_ONLY một máy): mọi lớp gắn vào đầu phải đi cùng đầu.
-// Dùng: node tools/test-browser.mjs   (cả bộ, tự dựng server tạm ở cổng 7496) · GC_ONLY=core → chỉ các khối chung (Studio, Thư viện, phim, biên đạo…) · GC_ONLY=a,b → nhiều nhóm · GC_ONLY=voice node tools/test-browser.mjs → chỉ nhóm giọng AI (cổng 7660) · GC_ONLY=lib → chỉ Thư viện Âm thanh / Giọng (cổng 7662) · GC_ONLY=oauth → chỉ nhóm OAuth (cổng 7664–7666) · GC_ONLY=online → chỉ Hệ thống › Lên mạng + Tài khoản chủ (cổng 7672–7680; GC_SHOTS=<thư mục> chụp màn en + vi) · GC_ONLY=bubble → chỉ "lời thoại chuyên nghiệp" (cổng 7495; GC_THROTTLE=4 → CPU trang chậm 4× như máy yếu) · GC_ONLY=video → chỉ xuất video v0.22 (cổng 7690; cần ffmpeg để so khung giải mã lại; GC_SHOTS=<thư mục> chụp bảng Xuất video en + vi)
+// Dùng: node tools/test-browser.mjs   (cả bộ, tự dựng server tạm ở cổng 7496) · GC_ONLY=core → chỉ các khối chung (Studio, Thư viện, phim, biên đạo…) · GC_ONLY=a,b → nhiều nhóm · GC_ONLY=voice node tools/test-browser.mjs → chỉ nhóm giọng AI (cổng 7660) · GC_ONLY=lib → chỉ Thư viện Âm thanh / Giọng (cổng 7662) · GC_ONLY=oauth → chỉ nhóm OAuth (cổng 7664–7666) · GC_ONLY=online → chỉ Hệ thống › Lên mạng + Tài khoản chủ (cổng 7672–7680; GC_SHOTS=<thư mục> chụp màn en + vi) · GC_ONLY=setup → chỉ thiết lập lần đầu v0.23 (cổng 7700–7704; GC_SHOTS=<thư mục> chụp en + vi) · GC_ONLY=bubble → chỉ "lời thoại chuyên nghiệp" (cổng 7495; GC_THROTTLE=4 → CPU trang chậm 4× như máy yếu) · GC_ONLY=video → chỉ xuất video v0.22 (cổng 7690; cần ffmpeg để so khung giải mã lại; GC_SHOTS=<thư mục> chụp bảng Xuất video en + vi)
 import { createRequire } from 'module';
 import { spawn, spawnSync, execFileSync } from 'child_process';
 import { mkdtempSync, readFileSync } from 'fs';
@@ -39,10 +39,10 @@ const viInit = () => { try { if (!localStorage.getItem('gc-lang')) localStorage.
 // ĐĂNG NHẬP CHỦ (v0.21, spec §3.4 — CNS-191): bản cài nào cũng có token chủ và Studio (kể cả ở localhost) phải đăng nhập. Harness KHÔNG nới luật:
 //  · mọi server thử dùng chung token chủ TEST_TOKEN (process.env.GC_API_TOKEN — nhóm nào cần token riêng / không token thì tự đặt env);
 //  · lời gọi Node tới /api/* của server thử tự gắn Authorization: Bearer TEST_TOKEN nếu chưa có (như CLI);
-//  · trước lần mở trang đầu tiên của mỗi server, trình duyệt đăng nhập THẬT bằng mật khẩu chủ (đặt lần đầu bằng token qua /api/auth/setup, sau đó
-//    /api/auth/login) rồi nhận cookie phiên của server đó — fetch trong trang (cùng nguồn) tự mang cookie như người dùng thật.
+//  · trước lần mở trang đầu tiên của mỗi server, trình duyệt đăng nhập THẬT bằng tên + mật khẩu chủ (v0.23: lần đầu khởi tạo owner bằng token qua
+//    /api/auth/password + bỏ qua wizard qua /api/setup/skip, sau đó /api/auth/login) rồi nhận cookie phiên của server đó — fetch trong trang (cùng nguồn) tự mang cookie như người dùng thật.
 //  Nhóm kiểm chính luồng đăng nhập / trang Cấp phép tắt việc này: autoLogin(false) trước khi mở trình duyệt.
-const TEST_TOKEN = 'tok-browser-' + Math.random().toString(36).slice(2) + Date.now().toString(36), TEST_PW = 'mat khau thu nghiem trinh duyet';
+const TEST_TOKEN = 'tok-browser-' + Math.random().toString(36).slice(2) + Date.now().toString(36), TEST_PW = 'mat khau thu nghiem trinh duyet', TEST_USER = 'owner';
 process.env.GC_API_TOKEN = TEST_TOKEN;
 const _fetch = globalThis.fetch;
 globalThis.fetch = (u, o) => {
@@ -58,7 +58,10 @@ async function ensureSession(ctx, origin) {
   let st; try { st = await (await _fetch(origin + '/api/auth/state', { headers: have ? { cookie: have } : {} })).json(); } catch (e) { return; }   // không có server ở đó (trang tĩnh, bản xem thử)
   if (st.session) return;
   const post = (p, body, tok) => _fetch(origin + p, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1', ...(tok ? { Authorization: 'Bearer ' + TEST_TOKEN } : {}) }, body: JSON.stringify(body) });
-  const r = st.password ? await post('/api/auth/login', { password: TEST_PW }) : await post('/api/auth/setup', { password: TEST_PW }, true);
+  // v0.23: bản cài mới ở stage admin → khởi tạo owner bằng token chủ (như genchibi password) rồi bỏ qua wizard lần đầu (genchibi setup skip) — nhóm 'setup' tự kiểm wizard
+  if (!st.password) await post('/api/auth/password', { password: TEST_PW }, true);   // admin / must_init: = khởi tạo (tên owner); máy kế thừa (done): đặt mật khẩu đầu
+  if (st.stage !== 'done') await post('/api/setup/skip', { reason: 'test-browser harness' }, true);
+  const r = await post('/api/auth/login', { username: TEST_USER, password: TEST_PW });
   if (r.status !== 200) return;   // server dùng token / mật khẩu riêng (nhóm OAuth, nhóm đăng nhập) — nhóm đó tự lo
   const kv = r.headers.getSetCookie().map(c => c.split(';')[0]);
   await ctx.addCookies(kv.map(x => ({ name: x.slice(0, x.indexOf('=')), value: x.slice(x.indexOf('=') + 1), url: origin, httpOnly: true, sameSite: 'Lax' })));
@@ -88,7 +91,7 @@ const ONLY = process.env.GC_ONLY || '';
 // v0.23 (B6, CNS-032): CI chạy bộ này theo NHÓM song song (ma trận trong .github/workflows/browser.yml) — GC_ONLY nhận một nhóm hoặc danh sách
 // "a,b". Nhóm "core" = các khối không tên (Studio, Thư viện, phim, biên đạo…). Mọi khối của bộ đều thuộc đúng một nhóm (test.sh 2v kiểm ma trận CI
 // phủ đủ nhóm). Tên nhóm sai → thoát 2 (không lặng lẽ chạy 0 kiểm).
-const GROUPS = ['core', 'auth', 'bubble', 'lib', 'voice', 'dock', 'oauth', 'online', 'i18n', 'video', 'video-ui'];
+const GROUPS = ['core', 'auth', 'bubble', 'lib', 'voice', 'dock', 'oauth', 'online', 'i18n', 'setup', 'video', 'video-ui'];
 const ONLY_SET = ONLY ? ONLY.split(',').map(x => x.trim()).filter(Boolean) : [];
 { const bad = ONLY_SET.filter(g => !GROUPS.includes(g)); if (bad.length) { console.error('GC_ONLY: nhóm không có: ' + bad.join(', ') + ' — có: ' + GROUPS.join(', ')); process.exit(2); } }
 const want = g => !ONLY_SET.length || ONLY_SET.includes(g);
@@ -138,8 +141,8 @@ try {
   else console.log('  ✓ mọi lớp gắn vào đầu đi cùng đầu (mọi nhân vật × 5 biểu cảm × 6 khung hình)');
 } finally { await b.close(); srv.kill(); }
 }
-// v0.21 (spec §3.3–§3.4, Q35): Studio đăng nhập chủ — kể cả mở ở localhost. Bản cài mới: màn Đặt mật khẩu (mã setup từ `genchibi open`, tự điền từ #code=…
-// rồi xoá khỏi địa chỉ) → đăng xuất → đăng nhập bằng mật khẩu → "Dùng token". Máy kế thừa (.env có GC_PUBLIC_URL từ trước): token như v0.20 + dải Đặt mật khẩu,
+// v0.21 (spec §3.3–§3.4, Q35): Studio đăng nhập chủ — kể cả mở ở localhost. Bản cài mới (v0.23): admin / admin + màn khởi tạo — nhóm setup; ở đây khởi tạo bằng token (mã setup v0.21 đã bỏ;
+// không còn #code=…) → đăng xuất → đăng nhập bằng mật khẩu → "Dùng token". Máy kế thừa (.env có GC_PUBLIC_URL từ trước): token như v0.20 + dải Đặt mật khẩu,
 // có phiên cookie thì xoá gc-token khỏi localStorage. GC_ONLY=auth chỉ chạy nhóm này (cổng 7497 + 7669).
 if (want('auth')) {
   const home2 = mkdtempSync(path.join(tmpdir(), 'gc-'));
@@ -154,32 +157,43 @@ if (want('auth')) {
   const alertText = async pg => { await pg.waitForSelector('#gcLogin [role=alert]:not([hidden])', { timeout: 5000 }); return pg.textContent('#gcLogin [role=alert]'); };
   try {
     q = await b2.newPage(); q.on('pageerror', e => errs2.push(e.message));
-    // 1) chưa có mật khẩu → màn Đặt mật khẩu, nhắc lệnh genchibi open (Studio không lùi về chế độ xem thử)
+    // 1) bản cài mới (stage admin), chưa cửa sổ → màn Đăng nhập có dải "lần đầu: admin / admin"; admin / admin bị từ chối kèm ĐÚNG lý do + cách vào
     await q.goto('http://localhost:7497/');
-    await q.waitForSelector('#gcLogin form[data-auth="setup"]', { timeout: 8000 });
-    if (!/genchibi open/.test(await q.textContent('#gcLogin'))) throw new Error('màn Đặt mật khẩu phải nhắc "genchibi open"');
-    // 2) genchibi open mở /setup#code=…: tự điền mã, xoá mã khỏi địa chỉ
-    const code = readFileSync(path.join(home2, 'data/setup-code.txt'), 'utf8').split('\n')[0];
-    await q.goto('http://localhost:7497/setup#code=' + code);
-    await q.waitForSelector('#gcCode', { timeout: 8000 });
-    if ((await q.inputValue('#gcCode')) !== code || (await q.evaluate(() => location.hash)) !== '' || /code=/.test(q.url())) throw new Error('mã setup phải tự điền từ #code= rồi xoá khỏi địa chỉ: ' + q.url());
-    await q.fill('#gcPw', 'ngan qua'); await q.fill('#gcPw2', 'ngan qua'); await q.click(SUB);
+    await q.waitForSelector('#gcLogin form[data-auth="login"] #gcFirstRun', { timeout: 8000 });
+    if (!/admin \/ admin/.test(await q.textContent('#gcFirstRun'))) throw new Error('màn đăng nhập lần đầu phải nhắc admin / admin');
+    await q.fill('#gcUser', 'admin'); await q.fill('#gcPw', 'admin'); await q.click(SUB);
+    if (!/genchibi open/.test(await alertText(q)) || await q.getAttribute('#gcLogin [role=alert]', 'data-reason') !== 'window') throw new Error('ngoài cửa sổ: admin / admin phải báo lý do "window" + genchibi open: ' + await q.textContent('#gcLogin [role=alert]'));
+    // 2) lệnh trên máy chủ mở cửa sổ (như genchibi open) → admin / admin → màn KHỞI TẠO (bắt buộc): luật tên / mật khẩu, rồi wizard
+    fs.mkdirSync(path.join(home2, 'run'), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(path.join(home2, 'run/admin-window'), JSON.stringify({ v: 1, exp: Date.now() + 1800e3, mode: 'native', composeLoopback: false, by: 'test' }), { mode: 0o600 });
+    await q.fill('#gcUser', 'admin'); await q.fill('#gcPw', 'admin'); await q.click(SUB);
+    await q.waitForSelector('#gcLogin form[data-auth="init"]', { timeout: 8000 });
+    if (!await q.$('#gcAdminLeft')) throw new Error('màn khởi tạo phải nói phiên admin hết hạn lúc nào');
+    await q.fill('#gcUser', 'admin'); await q.fill('#gcPw', PWB); await q.fill('#gcPw2', PWB); await q.click(SUB);
+    if (!/admin/.test(await alertText(q))) throw new Error('tên đăng nhập admin phải bị chặn');
+    await q.fill('#gcUser', 'ryan'); await q.fill('#gcPw', 'ngan qua'); await q.fill('#gcPw2', 'ngan qua'); await q.click(SUB);
     if (!/12/.test(await alertText(q))) throw new Error('mật khẩu < 12 ký tự phải báo lỗi');
     await q.fill('#gcPw', PWB); await q.fill('#gcPw2', PWB + 'x'); await q.click(SUB);
     if (!/không khớp/.test(await alertText(q))) throw new Error('hai lần nhập khác nhau phải báo lỗi');
-    await q.fill('#gcPw2', PWB); await q.click(SUB);
-    await studioUp(q);
-    if (new URL(q.url()).pathname !== '/' || await q.$('#gcLogin')) throw new Error('đặt mật khẩu xong phải vào Studio ở trang chính: ' + q.url());
+    await q.fill('#gcPw2', PWB); await q.fill('#gcName', 'Ryan'); await q.click(SUB);
+    await q.waitForSelector('#suBox #suDomain', { timeout: 10000 });
     if (await q.evaluate(() => document.cookie)) throw new Error('cookie phiên phải HttpOnly (JS không đọc được)');
-    console.log('  ✓ Đặt mật khẩu chủ: màn nhắc genchibi open · /setup#code= tự điền mã rồi xoá khỏi địa chỉ · chặn mật khẩu < 12 ký tự / hai lần khác nhau · vào Studio, cookie HttpOnly');
-    // 3) đăng xuất → màn Đăng nhập; sai → báo lỗi; đúng → vào lại
+    await _fetch('http://localhost:7497/api/setup/skip', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1', Authorization: 'Bearer tok-test-123' }, body: '{"reason":"test auth"}' });
+    await q.goto('http://localhost:7497/'); await studioUp(q);
+    console.log('  ✓ Lần đầu: màn đăng nhập nhắc admin / admin · ngoài cửa sổ → lý do "window" + genchibi open · cửa sổ mở → màn khởi tạo bắt buộc (chặn tên admin / mật khẩu < 12 / hai lần khác) → wizard; cookie HttpOnly');
+    // 3) đăng xuất → màn Đăng nhập; sai → báo lỗi; đúng (tên + mật khẩu) → vào lại
     await q.click('#authLogout');
     await q.waitForSelector('#gcLogin form[data-auth="login"]', { timeout: 8000 });
     if (new URL(q.url()).pathname !== '/login') throw new Error('đăng xuất phải về /login');
-    await q.fill('#gcPw', 'sai mat khau roi nhe'); await q.click(SUB);
+    if (await q.$('#gcFirstRun')) throw new Error('đã khởi tạo: màn đăng nhập không còn dải admin / admin');
+    await q.fill('#gcUser', 'ryan'); await q.fill('#gcPw', 'sai mat khau roi nhe'); await q.click(SUB);
     if (!/(không đúng|wrong)/.test(await alertText(q))) throw new Error('sai mật khẩu phải báo lỗi');
-    await q.fill('#gcPw', PWB); await q.click(SUB); await studioUp(q);
-    console.log('  ✓ Đăng xuất (chân thanh bên) → /login · sai mật khẩu → báo lỗi · đúng → vào lại (trình duyệt nhớ bằng cookie)');
+    await q.fill('#gcUser', 'admin'); await q.fill('#gcPw', 'admin'); await q.click(SUB);
+    // đợi CÂU TRẢ LỜI của lần bấm này (lỗi cũ "sai mật khẩu" bị ẩn + bỏ data-reason lúc gửi) rồi mới đọc lý do
+    const rsn = await q.waitForSelector('#gcLogin [role=alert][data-reason]:not([hidden])', { timeout: 8000 }).then(e => e.getAttribute('data-reason'));
+    if (rsn !== 'stage') throw new Error('sau khởi tạo: admin / admin phải báo lý do "stage": ' + rsn);
+    await q.fill('#gcUser', 'ryan'); await q.fill('#gcPw', PWB); await q.click(SUB); await studioUp(q);
+    console.log('  ✓ Đăng xuất (chân thanh bên) → /login · sai mật khẩu → báo lỗi · admin / admin sau khởi tạo → lý do "stage" · tên + mật khẩu đúng → vào lại');
     // 4) /setup khi đã có mật khẩu → /login; đã đăng nhập mà mở /login → về trang chính
     const ctx2 = await b2.newContext(); const q2 = await ctx2.newPage(); q2.on('pageerror', e => errs2.push(e.message));
     await q2.goto('http://localhost:7497/setup'); await q2.waitForSelector('#gcLogin form[data-auth="login"]', { timeout: 8000 });
@@ -194,12 +208,12 @@ if (want('auth')) {
     if (await q2.evaluate(() => localStorage.getItem('gc-token')) !== 'tok-test-123') throw new Error('đăng nhập bằng token phải nhớ token trong trình duyệt (như v0.20)');
     await ctx2.close();
     // 5b) trần theo tài khoản: 100 lần sai từ 100 "IP" (proxy khai tường minh) → màn đăng nhập báo chặn tạm + lối token; chủ vào bằng token thấy dải cảnh báo, "Đã xem" tắt
-    for (let i = 0; i < 100; i++) await _fetch('http://localhost:7497/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1', 'X-Forwarded-For': '198.51.100.' + (i + 1) }, body: JSON.stringify({ password: 'doan sai lan ' + i }) });
+    for (let i = 0; i < 100; i++) await _fetch('http://localhost:7497/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1', 'X-Forwarded-For': '198.51.100.' + (i + 1) }, body: JSON.stringify({ username: 'ryan', password: 'doan sai lan ' + i }) });
     const ctx4 = await b2.newContext(); const q4 = await ctx4.newPage(); q4.on('pageerror', e => errs2.push(e.message));
     await q4.goto('http://localhost:7497/login'); await q4.waitForSelector('#gcPw', { timeout: 8000 });
     // CNS-210: /api/auth/state công khai không báo locked → trước lần thử chưa có dải; lần thử trả 429 locked → dải "chặn tạm" + lối token
     if (await q4.$('#gcLocked')) throw new Error('CNS-210: trước khi thử, màn đăng nhập của người lạ không được biết tài khoản đang bị chặn');
-    await q4.fill('#gcPw', PWB); await q4.click(SUB);
+    await q4.fill('#gcUser', 'ryan'); await q4.fill('#gcPw', PWB); await q4.click(SUB);
     if (!/chặn tạm/.test(await alertText(q4))) throw new Error('đang bị chặn: đúng mật khẩu (chưa có cookie thiết bị) vẫn bị từ chối, kèm câu chặn tạm');
     await q4.waitForSelector('#gcLocked', { timeout: 8000 });
     if (!/chặn tạm/.test(await q4.textContent('#gcLocked'))) throw new Error('đang bị chặn theo tài khoản: sau lần thử, màn đăng nhập phải báo "chặn tạm — dùng token hoặc chờ N phút"');
@@ -214,16 +228,21 @@ if (want('auth')) {
     const ctx3 = await b2.newContext(); const q3 = await ctx3.newPage(); q3.on('pageerror', e => errs2.push(e.message));
     await q3.goto('http://localhost:7669/'); await q3.waitForSelector('#gcLogin form[data-auth="token"]', { timeout: 8000 });
     await q3.fill('#gcTok', 'tok-legacy-456'); await q3.click(SUB); await studioUp(q3);
-    await q3.waitForSelector('#authSetPw', { timeout: 5000 });
+    await q3.waitForSelector('#authNoPw', { timeout: 5000 });
     if (!/Chưa có mật khẩu chủ/.test(await q3.textContent('#authNote'))) throw new Error('máy kế thừa vào bằng token: chân thanh bên phải có dải "Chưa có mật khẩu chủ"');
-    await q3.click('#authSetPw'); await q3.waitForSelector('#gcLogin form[data-auth="setup"]');
-    if (await q3.$('#gcCode')) throw new Error('đang vào bằng token: đặt mật khẩu không cần mã setup');
-    await q3.fill('#gcPw', PWB); await q3.fill('#gcPw2', PWB); await q3.click(SUB); await studioUp(q3);
-    await q3.waitForSelector('#authLogout', { timeout: 8000 });
-    if (await q3.evaluate(() => localStorage.getItem('gc-token')) !== null) throw new Error('có phiên cookie thì Studio phải xoá gc-token khỏi localStorage');
-    if (await q3.$('#authSetPw')) throw new Error('đã có mật khẩu: không còn dải "Đặt mật khẩu"');
-    await ctx3.close();
-    console.log('  ✓ Máy kế thừa (.env GC_PUBLIC_URL): vào bằng token như v0.20 + dải "Chưa có mật khẩu chủ" → Đặt mật khẩu bằng token (không cần mã) → có phiên thì xoá gc-token');
+    if (await q3.$('#suBox')) throw new Error('máy kế thừa (stage done): không bị giữ ở wizard');
+    await q3.evaluate(() => { location.href = '/xuong'; }); await studioUp(q3);
+    await q3.click('#nav button:has-text("Tài khoản chủ")'); await q3.waitForSelector('#acPw', { timeout: 8000 });
+    if (await q3.$('#acCur')) throw new Error('đang vào bằng token: đặt mật khẩu không cần mật khẩu hiện tại');
+    await q3.fill('#acPw', PWB); await q3.fill('#acPw2', PWB); await q3.click('#acSave');
+    await q3.waitForSelector('#acProfile', { timeout: 8000 });   // có mật khẩu → hồ sơ chủ (tên đăng nhập owner) hiện
+    if (await q3.inputValue('#acLogin') !== 'owner') throw new Error('máy kế thừa: tên đăng nhập mặc định phải là owner');
+    const ctx3b = await b2.newContext(); const q3b = await ctx3b.newPage(); q3b.on('pageerror', e => errs2.push(e.message));
+    await q3b.goto('http://localhost:7669/login'); await q3b.waitForSelector('#gcUser', { timeout: 8000 });
+    await q3b.fill('#gcUser', 'owner'); await q3b.fill('#gcPw', PWB); await q3b.click(SUB); await studioUp(q3b);
+    await q3b.waitForSelector('#authLogout', { timeout: 8000 });
+    await ctx3b.close(); await ctx3.close();
+    console.log('  ✓ Máy kế thừa (.env GC_PUBLIC_URL): vào bằng token như v0.20, không bị giữ ở wizard, dải "Chưa có mật khẩu chủ" → Tài khoản chủ đặt mật khẩu bằng token (không cần mật khẩu cũ) → đăng nhập "owner" + mật khẩu');
     if (errs2.length) throw new Error('lỗi trang: ' + errs2.slice(0, 3).join(' | '));
   } catch (e) { fail = 1; console.log('  ✗ đăng nhập Studio:', e.message); if (q) { try { console.log('    trang:', q.url()); } catch (x) { /* đã đóng */ } } }
   finally { await b2.close(); srv2.kill(); srv2l.kill(); }
@@ -2779,7 +2798,9 @@ if (want('oauth')) {
     await q.click('.nav-item:has-text("Kết nối agent")'); await q.waitForSelector('#connectUrl');
     if ((await q.textContent('#connectUrl')) !== H + '/mcp') throw new Error('địa chỉ MCP sai: ' + await q.textContent('#connectUrl'));
     const pageTxt = await q.textContent('#connectBox');
-    if (!/Customize › Connectors › Add custom connector/.test(pageTxt) || !/3 bước/.test(pageTxt) || !/Ba mức quyền/.test(pageTxt) || !/Link có khoá \(cách cũ/.test(pageTxt)) throw new Error('thiếu hướng dẫn 3 bước / mức quyền / mục link cũ');
+    // v0.23: hướng dẫn nối agent = thẻ dùng chung (#connectCards — cùng component với wizard lần đầu, CNS-134 / CNS-261)
+    const cardsTxt = (await q.textContent('#connectCards').catch(() => '')) || '';
+    if (!/Customize › Connectors › Add custom connector/.test(cardsTxt) || !cardsTxt.includes('claude mcp add -s user --transport http gen-chibi ' + H + '/mcp') || !/Ba mức quyền/.test(pageTxt) || !/Link có khoá \(cách cũ/.test(pageTxt)) throw new Error('thiếu thẻ nối agent (claude.ai 3 bước + lệnh Claude Code OAuth) / mức quyền / mục link cũ');
     if (!(await q.isChecked('#connectReg'))) throw new Error('công tắc tự đăng ký mặc định phải BẬT khi có GC_PUBLIC_URL');
     const rows = await q.$$('#connectTable tr[data-client]');
     if (rows.length !== 3) throw new Error('bảng client: muốn 3 dòng, có ' + rows.length);
@@ -2836,7 +2857,7 @@ if (want('oauth')) {
     await q15b.goto('http://127.0.0.1:7666/oauth/authorize?' + k6.q); await q15b.waitForSelector('#lga');
     if (!(await q15b.isVisible('#lga')) || !/^\/login\?next=%2Foauth%2Fauthorize%3F/.test(await q15b.getAttribute('#lga', 'href'))) throw new Error('máy đã có mật khẩu, trình duyệt chưa đăng nhập: trang Cấp phép phải có lối "Đăng nhập bằng mật khẩu chủ" quay lại đúng trang');
     await q15b.click('#lga'); await q15b.waitForSelector('#gcLogin form[data-auth="login"]', { timeout: 8000 });
-    await q15b.fill('#gcPw', TEST_PW); await q15b.click('#gcLogin button[type=submit]');
+    await q15b.fill('#gcUser', TEST_USER); await q15b.fill('#gcPw', TEST_PW); await q15b.click('#gcLogin button[type=submit]');
     await q15b.waitForURL(/\/oauth\/authorize\?/, { timeout: 8000 }); await q15b.waitForSelector('#ok');
     if (await q15b.isVisible('#tk')) throw new Error('đăng nhập xong quay lại trang Cấp phép: không hỏi token nữa (phiên S)');
     await q15b.waitForFunction(() => !document.getElementById('ok').disabled); await q15b.click('#ok'); await q15b.waitForFunction(() => location.protocol === 'https:', null, { timeout: 8000 });
@@ -2938,7 +2959,7 @@ if (want('online')) {
     const sDom = await step(q, 'domain'), sEdge = await step(q, 'edge'), cmd = await q.$eval('#olSteps tr[data-step="edge"] .olcmd', e => e.textContent).catch(() => '');
     if (sDom.state !== 'ok' || cmd !== 'genchibi online --caddy' || !(await q.$('#olSteps tr[data-step="edge"] button'))) throw new Error('Caddy: domain ✓ rồi edge ✗ với lệnh host + nút chép: ' + JSON.stringify([sDom, sEdge, cmd]));
     const ids = await q.$$eval('#olSteps td.id', els => els.map(e => e.textContent).join(','));
-    if (ids !== 'GO-01,GO-02,GO-03,GO-04,GO-05,GO-06,GO-07' || !(await q.$('#olSteps tr.letters')) || !/1 /.test(await q.textContent('#olFoot'))) throw new Error('lưới bậc Data Console (ID hàng, chữ cột, chân lưới): ' + ids);
+    if (ids !== 'GO-01,GO-02,GO-03,GO-04,GO-05,GO-06' || !(await q.$('#olSteps tr.letters')) || !/1 /.test(await q.textContent('#olFoot'))) throw new Error('lưới bậc Data Console (ID hàng, chữ cột, chân lưới): ' + ids);
     // CNS-211: máy còn Offline (luồng dừng ở ✗, chưa có gì ra ngoài) → không có nút Go offline
     if (await q.$('#olOffBtn')) throw new Error('CNS-211: đang Offline (Caddy dừng ở bậc edge) mà vẫn hiện nút Go offline');
     await screen(q, '02-caddy-edge-chua-bat');
@@ -3020,10 +3041,10 @@ if (want('online')) {
     const files = fs.readdirSync(path.join(homeA, 'data')).map(f => { try { return fs.readFileSync(path.join(homeA, 'data', f), 'utf8'); } catch (e) { return ''; } }).join('\n');
     if (logA.includes(CF_TOK) || files.includes(CF_TOK)) throw new Error('token Cloudflare lọt vào log / data của server');
     // ---- 7) Tài khoản chủ: phiên + thiết bị, thu hồi, cảnh báo, đổi mật khẩu thu hồi phiên khác
-    const loginNode = async () => { const r = await _fetch(A + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0) Firefox/131.0' }, body: JSON.stringify({ password: TEST_PW }) }); return r.headers.getSetCookie().map(c => c.split(';')[0]).join('; '); };
+    const loginNode = async () => { const r = await _fetch(A + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0) Firefox/131.0' }, body: JSON.stringify({ username: TEST_USER, password: TEST_PW }) }); return r.headers.getSetCookie().map(c => c.split(';')[0]).join('; '); };
     const ck1 = await loginNode(), ck2 = await loginNode();
     const stOf = async ck => (await _fetch(A + '/api/auth/sessions', { headers: { cookie: ck } })).status;
-    for (let i = 0; i < 100; i++) await _fetch(A + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1', 'X-Forwarded-For': '198.51.100.' + (i % 10 + 1) + ', 203.0.113.' + (i % 10 + 1) }, body: JSON.stringify({ password: 'doan sai ' + i }) });
+    for (let i = 0; i < 100; i++) await _fetch(A + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1', 'X-Forwarded-For': '198.51.100.' + (i % 10 + 1) + ', 203.0.113.' + (i % 10 + 1) }, body: JSON.stringify({ username: TEST_USER, password: 'doan sai ' + i }) });
     await openPage(q, A, 'account', '#acSessGrid');
     const nS = (await q.$$('#acSessGrid tr[data-session]')).length, cur = await q.$$eval('#acSessGrid tr[data-current]', t => t.length);
     if (nS < 3 || cur !== 1 || !(await q.$('#acDevGrid tr[data-device]')) || !(await q.$('#acAlertGrid tr[data-alert]'))) throw new Error('Tài khoản chủ: lưới phiên (' + nS + ', hiện tại ' + cur + ') / thiết bị / cảnh báo');
@@ -3048,8 +3069,8 @@ if (want('online')) {
     await q.waitForFunction(() => document.querySelectorAll('#acSessGrid tr[data-session]').length === 1, null, { timeout: 8000 });
     if ((await stOf(ck1)) !== 401 || (await stOf(ck2)) !== 401 || (await q.evaluate(async () => (await fetch('api/auth/sessions')).status)) !== 200) throw new Error('đổi mật khẩu: phiên khác phải bị thu hồi, trình duyệt này vẫn vào được');
     // kẻ lạ đang bị khoá theo tài khoản (100 lần sai ở trên) — trình duyệt của chủ có cookie thiết bị (mới cấp khi đổi mật khẩu) vẫn đăng nhập được bằng mật khẩu mới
-    const relog = await q.evaluate(async pw => (await fetch('api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify({ password: pw }) })).status, NEWPW);
-    const stranger = await _fetch(A + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify({ password: NEWPW }) });
+    const relog = await q.evaluate(async pw => (await fetch('api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify({ username: 'owner', password: pw }) })).status, NEWPW);
+    const stranger = await _fetch(A + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify({ username: TEST_USER, password: NEWPW }) });
     if (relog !== 200 || stranger.status !== 429) throw new Error('mật khẩu mới: trình duyệt chủ (cookie thiết bị) ' + relog + ' (cần 200) · kẻ lạ lúc bị khoá ' + stranger.status + ' (cần 429)');
     console.log('  ✓ Tài khoản chủ: lưới phiên (' + nS + ') + thiết bị + cảnh báo đăng nhập sai (Đã xem), thu hồi một phiên → phiên đó 401; mật khẩu hiện tại sai báo lỗi tại chỗ; đổi mật khẩu → mọi phiên khác 401, trình duyệt này vẫn vào (cookie thiết bị mới — đăng nhập lại được cả khi kẻ lạ đang bị khoá); token chủ không hiện (chỉ "genchibi token")');
     // ---- 8) máy kế thừa: wizard chỉ đọc + Migrate
@@ -3384,6 +3405,167 @@ if (want('i18n')) {
     if (errs16.length) throw new Error('lỗi trang: ' + errs16.slice(0, 3).join(' | '));
   } catch (e) { fail = 1; console.log('  ✗ i18n (ngôn ngữ giao diện):', e.message); }
   finally { await b16.close(); srv16.kill(); }
+}
+// ---- v0.23 §A: THIẾT LẬP LẦN ĐẦU qua Studio thật — đăng nhập lần đầu (admin / admin, lý do khi bị từ chối) → màn khởi tạo bắt buộc → wizard: bước 2 tên miền
+// (Go online nhúng; bước Internet lỗi → đỏ + cách sửa + "Tạm dùng trên máy này" — không khoá) → bước 3 chẩn đoán MCP (tự kiểm cục bộ thật, thẻ nối agent dùng chung,
+// kiểm thật lời gọi MCP đầu tiên) → Studio + dải nhắc; đăng nhập lại về đúng bước đang dở · token trong Studio vẫn bị giữ ở màn khởi tạo · "Chỉ dùng trên máy này" +
+// "Tôi nối agent sau" · máy nâng cấp: "Kiểm tra thiết lập" một lần. Mỗi màn: en không lọt chữ Việt, vi là tiếng Việt; GC_SHOTS=<thư mục> chụp en + vi.
+// GC_ONLY=setup (cổng 7700, 7702, 7704).
+if (want('setup')) {
+  const crypto = await import('crypto');
+  const { fakeCloudflare } = await import('./fixtures/fake-cloudflare-api.mjs');
+  const SHOTS = process.env.GC_SHOTS || ''; if (SHOTS) fs.mkdirSync(SHOTS, { recursive: true });
+  const cf = await fakeCloudflare({ token: 'cfapi_' + crypto.randomBytes(18).toString('hex'), zones: [{ id: crypto.randomBytes(16).toString('hex'), name: 'example.com', status: 'active', type: 'full' }] });
+  const TOKS = 'tok-setup-' + crypto.randomBytes(8).toString('hex'), P1 = 7700, P2 = 7702, P3 = 7704;
+  const boot = (port, home, extra) => kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home, GC_PORT: String(port), GC_NO_AUTOCHECK: '1', GC_API_TOKEN: TOKS, GC_PUBLIC_URL: '', GC_ALLOWED_HOSTS: '',
+    GC_TEST: '1', GC_TEST_ONLINE_VIA: '127.0.0.1:' + port, GC_TEST_CF_API: cf.base, HTTPS_PROXY: 'http://127.0.0.1:9', https_proxy: '', ...(extra || {}) }, stdio: 'ignore' }));
+  const home1 = mkdtempSync(path.join(tmpdir(), 'gc-su1-')), home2 = mkdtempSync(path.join(tmpdir(), 'gc-su2-')), home3 = mkdtempSync(path.join(tmpdir(), 'gc-su3-'));
+  // máy v0.22 nâng cấp (đã có mật khẩu, chưa setup.json) — tên đăng nhập "owner"
+  { const salt = crypto.randomBytes(16), hh = crypto.scryptSync('mat khau cua ban v022', salt, 32, { N: 1024, r: 8, p: 1 });
+    fs.mkdirSync(path.join(home3, 'data'), { recursive: true });
+    fs.writeFileSync(path.join(home3, 'data/auth.json'), JSON.stringify({ v: 1, users: { owner: { id: 'owner', role: 'owner', hash: ['scrypt', 1024, 8, 1, salt.toString('base64url'), hh.toString('base64url')].join('$'), setAt: 'x' } }, sessions: {}, devices: {} }), { mode: 0o600 }); }
+  const s1 = boot(P1, home1), s2 = boot(P2, home2), s3 = boot(P3, home3);
+  for (const p of [P1, P2, P3]) for (let i = 0; i < 100; i++) { try { if ((await _fetch('http://127.0.0.1:' + p + '/api/health')).ok) break; } catch (e) { /* chưa lên */ } await new Promise(r => setTimeout(r, 100)); }
+  autoLogin(false); legacyVi(false); const bs = await pw.chromium.launch(); autoLogin(true); legacyVi(true);
+  const errsS = [], found = [], shots = [];
+  const VIS = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i;
+  const SUB = '#gcLogin button[type=submit]';
+  const win = home => { fs.mkdirSync(path.join(home, 'run'), { recursive: true, mode: 0o700 }); fs.writeFileSync(path.join(home, 'run/admin-window'), JSON.stringify({ v: 1, exp: Date.now() + 1800e3, mode: 'native', composeLoopback: false, by: 'test' }), { mode: 0o600 }); };
+  const stage = home => { try { return JSON.parse(fs.readFileSync(path.join(home, 'data/setup.json'), 'utf8')).stage; } catch (e) { return ''; } };
+  // chữ Việt lọt ở chế độ en (bỏ ô nhập / nội dung người dùng / phần tử lang="vi")
+  const scanEn = (pg, where) => pg.evaluate(([where, src]) => {
+    const VI = new RegExp(src, 'i'), out = [], vis = el => !!el && (el.checkVisibility ? el.checkVisibility({ visibilityProperty: true }) : el.getClientRects().length > 0);
+    const skip = el => !!el.closest('[data-user-content], [lang|="vi"], script, style, input, textarea, svg title');
+    const tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let n; (n = tw.nextNode());) { const el = n.parentElement; if (el && VI.test(n.nodeValue) && !skip(el) && vis(el)) out.push(where + ' · ' + el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + ' · ' + n.nodeValue.trim().slice(0, 90)); }
+    for (const el of document.body.querySelectorAll('[title], [placeholder], [aria-label]')) { if (el.closest('[data-user-content], [lang|="vi"]') || !vis(el)) continue; for (const a of ['title', 'placeholder', 'aria-label']) { const v = el.getAttribute(a); if (v && VI.test(v)) out.push(where + ' · [' + a + '] ' + v.slice(0, 60)); } }
+    const view = document.getElementById('view'); if (view && view.scrollWidth > view.clientWidth + 4) out.push('BỐ CỤC ' + where + ' · trang tràn ngang ' + view.scrollWidth + ' > ' + view.clientWidth);
+    return out;
+  }, [where, VIS.source]);
+  // một màn ở en + vi: đổi ngôn ngữ bằng gc-lang rồi nạp lại (lớp phủ đăng nhập che nút chuyển ngôn ngữ), redo dựng lại trạng thái chỉ có trong trang
+  const screen = async (pg, name, sel, redo) => {
+    for (const l of ['en', 'vi']) {
+      await pg.evaluate(l => localStorage.setItem('gc-lang', l), l); await pg.reload(); await pg.waitForSelector(sel, { timeout: 15000 });
+      if (redo) await redo(pg); await pg.waitForTimeout(400);
+      if (l === 'en') found.push(...await scanEn(pg, name));
+      else { const t = await pg.evaluate(() => document.body.innerText); if (!VIS.test(t)) found.push(name + ' · vi: không thấy chữ Việt'); }
+      if (SHOTS) {
+        const f = path.join(SHOTS, name + '-' + l + '.png'), hgt = await pg.evaluate(() => { const v = document.getElementById('view'); return v && !document.getElementById('gcLogin') ? v.scrollHeight + v.getBoundingClientRect().top + 24 : 900; });
+        await pg.setViewportSize({ width: 1366, height: Math.max(900, Math.min(4000, Math.ceil(hgt))) }); await pg.waitForTimeout(200);
+        await pg.screenshot({ path: f }); shots.push(f); await pg.setViewportSize({ width: 1366, height: 900 });
+      }
+    }
+    await pg.evaluate(() => localStorage.setItem('gc-lang', 'en'));
+  };
+  const alertOf = async pg => { await pg.waitForSelector('#gcLogin [role=alert]:not([hidden])', { timeout: 8000 }); return { text: await pg.textContent('#gcLogin [role=alert]'), reason: await pg.getAttribute('#gcLogin [role=alert]', 'data-reason') }; };
+  const loginAs = async (pg, u, p) => { await pg.fill('#gcUser', u); await pg.fill('#gcPw', p); await pg.click(SUB); };
+  try {
+    const ctx = await bs.newContext({ viewport: { width: 1366, height: 900 } });
+    const q = await ctx.newPage(); q.on('pageerror', e => errsS.push(e.message));
+    const A = 'http://localhost:' + P1;
+    // ---- 1) đăng nhập lần đầu: dải admin / admin; ngoài cửa sổ → ĐÚNG lý do + cách vào
+    await q.goto(A + '/'); await q.evaluate(() => localStorage.setItem('gc-lang', 'en'));
+    await screen(q, 'su-01-login', '#gcLogin form[data-auth="login"] #gcFirstRun');
+    await loginAs(q, 'admin', 'admin');
+    let al = await alertOf(q);
+    if (al.reason !== 'window' || !/genchibi open/.test(al.text) || !/genchibi password/.test(al.text)) throw new Error('ngoài cửa sổ: lý do window + genchibi open / password: ' + JSON.stringify(al));
+    await screen(q, 'su-02-login-reason', '#gcLogin form[data-auth="login"]', async pg => { await loginAs(pg, 'admin', 'admin'); await alertOf(pg); });
+    console.log('  ✓ Đăng nhập lần đầu: dải "admin / admin"; ngoài cửa sổ → lý do "window" + genchibi open / genchibi password (en + vi)');
+    // ---- 2) lệnh trên máy chủ mở cửa sổ → admin / admin → màn khởi tạo bắt buộc
+    win(home1);
+    await q.reload(); await q.waitForSelector('#gcUser'); await loginAs(q, 'admin', 'admin');
+    await q.waitForSelector('#gcLogin form[data-auth="init"]', { timeout: 10000 });
+    await screen(q, 'su-03-init', '#gcLogin form[data-auth="init"]');
+    const wantInit = ['#gcUser', '#gcName', '#gcEmail', '#gcPw', '#gcPw2', '#gcAdminLeft'];
+    for (const sel of wantInit) if (!(await q.$(sel))) throw new Error('màn khởi tạo thiếu ' + sel);
+    // phiên admin chỉ mở màn khởi tạo: đi tới trang khác vẫn là màn khởi tạo
+    await q.goto(A + '/xuong'); await q.waitForSelector('#gcLogin form[data-auth="init"]', { timeout: 10000 });
+    await q.fill('#gcUser', 'ryan'); await q.fill('#gcName', 'Ryan'); await q.fill('#gcEmail', 'ryan@example.com'); await q.fill('#gcPw', 'mot cum tu cua ryan day'); await q.fill('#gcPw2', 'mot cum tu cua ryan day'); await q.click(SUB);
+    // ---- 3) wizard bước 2: hai lựa chọn; "Đưa lên mạng" nhúng Go online
+    await q.waitForSelector('#suBox #suDomain', { timeout: 15000 });
+    if (stage(home1) !== 'domain' || await q.$('#gcLogin')) throw new Error('khởi tạo xong phải vào wizard bước 2 (stage domain): ' + stage(home1));
+    const nav = await q.$$eval('#nav .nav-item', els => els.map(e => e.id).join(','));
+    if (nav !== 'navSu-setup,navSu-online,navSu-account') throw new Error('wizard: thanh bên chỉ có Thiết lập lần đầu / Lên mạng / Tài khoản chủ: ' + nav);
+    await q.goto(A + '/thu-vien'); await q.waitForSelector('#suDomain', { timeout: 10000 });   // trang khác → vẫn wizard (cổng theo stage)
+    await screen(q, 'su-04-domain', '#suDomain');
+    console.log('  ✓ Màn khởi tạo bắt buộc (tên đăng nhập / tên hiển thị / email / mật khẩu ×2, phiên admin hết hạn lúc …) — mở trang khác vẫn là màn khởi tạo; xong → wizard bước 2, thanh bên chỉ ba trang, trang khác vẫn về wizard');
+    await q.click('#suPick-online'); await q.waitForSelector('#suOnline #olPaths', { timeout: 10000 });
+    await screen(q, 'su-05-online', '#suDomain', async pg => { await pg.click('#suPick-online'); await pg.waitForSelector('#suOnline #olPaths'); });
+    // ---- 4) bước Internet lỗi (token Cloudflare sai) → đỏ + cách sửa + "Tạm dùng trên máy này" (không khoá)
+    await q.click('.olpath[data-path="cloudflare"]'); await q.fill('#olToken', 'x'.repeat(40)); await q.click('#olGo');
+    await q.waitForSelector('#olSteps tr[data-step="token"][data-state="fail"]', { timeout: 20000 });
+    await q.waitForSelector('#suLaterBar.bad #suLocalPending', { timeout: 10000 });
+    const fixTxt = await q.textContent('#olSteps tr[data-step="token"]');
+    if (!/401/.test(fixTxt)) throw new Error('bậc token ✗ phải mang mã gốc 401 + cách sửa: ' + fixTxt);
+    if (SHOTS) for (const l of ['en', 'vi']) { await q.click('#langSwitch button[data-lang="' + l + '"]'); await q.waitForTimeout(600); if (l === 'en') found.push(...await scanEn(q, 'su-06-online-fail')); const hgt = await q.evaluate(() => { const v = document.getElementById('view'); return v ? v.scrollHeight + v.getBoundingClientRect().top + 24 : 900; }); await q.setViewportSize({ width: 1366, height: Math.max(900, Math.min(4000, Math.ceil(hgt))) }); await q.waitForTimeout(200); await q.screenshot({ path: path.join(SHOTS, 'su-06-online-fail-' + l + '.png') }); shots.push(path.join(SHOTS, 'su-06-online-fail-' + l + '.png')); await q.setViewportSize({ width: 1366, height: 900 }); }   // khung trang cố định, #view tự cuộn: kéo cao khung nhìn để ảnh có cả hàng ✗
+    else { await q.click('#langSwitch button[data-lang="en"]').catch(() => {}); await q.waitForTimeout(300); found.push(...await scanEn(q, 'su-06-online-fail')); }
+    await q.click('#langSwitch button[data-lang="en"]').catch(() => {}); await q.waitForTimeout(300);
+    await q.click('#suLocalPending');
+    console.log('  ✓ Bước Internet lỗi (Cloudflare 401) → bậc ✗ đỏ kèm mã gốc + cách sửa; dải "Tạm dùng trên máy này" chuyển đỏ — bấm được, không khoá owner');
+    // ---- 5) bước 3: tự kiểm cục bộ thật (tự chạy) → thẻ nối agent → kiểm thật
+    await q.waitForSelector('#suMcp #suSelfState', { timeout: 30000 });
+    const selfOk = await q.$eval('#suSelfState', e => e.className.includes('ok'));
+    const rows = await q.$$eval('#suSelfGrid tr[data-check]', t => t.map(x => x.getAttribute('data-check') + ':' + x.getAttribute('data-state')).join(' '));
+    if (!selfOk || rows !== 'http:ok token:ok stdio:ok') throw new Error('tự kiểm cục bộ phải đạt cả 3 (HTTP /mcp, token, stdio): ' + rows);
+    if (!(await q.$('#suCards #agCcLocal')) || !(await q.$('#suCards #agAiOff')) || !(await q.$('#suCards #agJsonCfg'))) throw new Error('thẻ nối agent (Claude Code / claude.ai khi chưa lên mạng / JSON) phải có ở bước 3');
+    if (!(await q.$eval('#suFinish', b => b.disabled)) || (await q.$eval('#suLater', b => b.disabled))) throw new Error('chưa agent nào nối: "Xong" khoá, "Tôi nối agent sau" mở (tự kiểm đã đạt)');
+    if (await q.$('#suInet')) throw new Error('chưa lên mạng: không có phần kiểm từ Internet');
+    await screen(q, 'su-07-mcp', '#suMcp #suSelfState');
+    // đăng nhập lại khi wizard chưa xong → về đúng bước đang dở (bước 3)
+    const ctxR = await bs.newContext({ viewport: { width: 1366, height: 900 } }), qr = await ctxR.newPage(); qr.on('pageerror', e => errsS.push(e.message));
+    await qr.goto(A + '/login'); await qr.evaluate(() => localStorage.setItem('gc-lang', 'en')); await qr.reload(); await qr.waitForSelector('#gcUser');
+    await loginAs(qr, 'ryan', 'mot cum tu cua ryan day'); await qr.waitForSelector('#suMcp', { timeout: 15000 });
+    if (await qr.$('#suDomain')) throw new Error('đăng nhập lại phải về đúng bước 3');
+    await ctxR.close();
+    // agent đầu tiên nối qua genchibi mcp (cầu stdio thật) → ✓ "Agent … đã nối", "Xong" mở
+    await new Promise(done => { const c = spawn(process.execPath, [path.join(ROOT, 'server/mcp-stdio.js')], { env: { ...process.env, GC_HOME: home1, GC_PORT: String(P1), GC_API_TOKEN: TOKS }, stdio: ['pipe', 'ignore', 'ignore'] }); c.on('exit', done);
+      c.stdin.end('{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"claude-code","version":"2"}}}\n'); });
+    await q.waitForSelector('#suLiveOk[data-client="claude-code"]', { timeout: 15000 });
+    if (await q.$eval('#suFinish', b => b.disabled)) throw new Error('agent đã nối: "Xong" phải mở');
+    await screen(q, 'su-08-agent', '#suLiveOk');
+    await q.click('#suFinish');
+    await q.waitForFunction(() => /^v\d/.test((document.getElementById('verChip') || {}).textContent) && !document.getElementById('suBox'), null, { timeout: 15000 });
+    await q.waitForSelector('#remOnline', { timeout: 10000 });
+    if (await q.$('#remAgent') || stage(home1) !== 'done') throw new Error('xong: Studio mở, dải "Lên mạng chưa xong" (tạm dùng trên máy này), không dải "chưa agent"');
+    await screen(q, 'su-09-home', '#remOnline');
+    console.log('  ✓ Bước 3: tự kiểm cục bộ THẬT tự chạy (HTTP /mcp · token · stdio ✓) · thẻ nối agent dùng chung · "Xong" chỉ mở khi agent gọi MCP (genchibi mcp → ✓ claude-code) · đăng nhập lại về đúng bước dở · xong → Studio + dải "Lên mạng chưa xong"');
+    await ctx.close();
+    // ---- 6) Studio vào bằng token ở stage admin → vẫn là màn khởi tạo (cổng đọc stage cho cả token); "Chỉ dùng trên máy này" + "Tôi nối agent sau"
+    const ctx2 = await bs.newContext({ viewport: { width: 1366, height: 900 } }), q2 = await ctx2.newPage(); q2.on('pageerror', e => errsS.push(e.message));
+    const B = 'http://localhost:' + P2;
+    await q2.goto(B + '/login'); await q2.evaluate(t => { localStorage.setItem('gc-lang', 'en'); localStorage.setItem('gc-token', t); }, TOKS);
+    await q2.goto(B + '/thu-vien'); await q2.waitForSelector('#gcLogin form[data-auth="init"]', { timeout: 10000 });
+    if (await q2.$('#gcAdminLeft')) throw new Error('token: màn khởi tạo không có phiên admin');
+    await q2.fill('#gcUser', 'chu-may'); await q2.fill('#gcPw', 'mat khau chu may hai'); await q2.fill('#gcPw2', 'mat khau chu may hai'); await q2.click(SUB);
+    await q2.waitForSelector('#suDomain', { timeout: 15000 });
+    await q2.click('#suPick-local'); await q2.waitForSelector('#suLocalBox'); await q2.click('#suLocal');
+    await q2.waitForSelector('#suSelfState.ok', { timeout: 30000 });
+    await q2.click('#suLater');
+    await q2.waitForSelector('#remAgent', { timeout: 15000 });
+    if (await q2.$('#remOnline')) throw new Error('"Chỉ dùng trên máy này": không có dải "Lên mạng chưa xong"');
+    await ctx2.close();
+    console.log('  ✓ Studio đăng nhập bằng token ở stage admin → vẫn màn khởi tạo (cổng theo stage cho cả token) · "Chỉ dùng trên máy này" → bước 3 · "Tôi nối agent sau" (tự kiểm đạt) → Studio + dải "chưa agent nào nối"');
+    // ---- 7) máy v0.22 nâng cấp: done + "Kiểm tra thiết lập" một lần
+    const ctx3 = await bs.newContext({ viewport: { width: 1366, height: 900 } }), q3 = await ctx3.newPage(); q3.on('pageerror', e => errsS.push(e.message));
+    const C = 'http://localhost:' + P3;
+    await q3.goto(C + '/login'); await q3.evaluate(() => localStorage.setItem('gc-lang', 'en')); await q3.reload(); await q3.waitForSelector('#gcUser');
+    if (await q3.$('#gcFirstRun')) throw new Error('máy có mật khẩu: không dải admin / admin');
+    await loginAs(q3, 'owner', 'mat khau cua ban v022');
+    await q3.waitForSelector('#remReview', { timeout: 15000 });
+    await q3.click('#remReviewOpen'); await q3.waitForSelector('#suReviewDone', { timeout: 10000 });
+    await q3.click('#suSelfRun'); await q3.waitForSelector('#suSelfState.ok', { timeout: 30000 });
+    await screen(q3, 'su-10-review', '#remReview', async pg => { await pg.click('#remReviewOpen'); await pg.waitForSelector('#suReviewDone', { timeout: 10000 }); await pg.waitForSelector('#suSelfState.ok', { timeout: 10000 }); });   // trang thiết lập không lưu làm route: tải lại → trang cũ + dải nhắc
+    await q3.click('#suReviewDone');
+    await q3.waitForFunction(() => /^v\d/.test((document.getElementById('verChip') || {}).textContent) && !document.getElementById('suBox'), null, { timeout: 15000 });
+    await q3.waitForTimeout(500);
+    if (await q3.$('#remReview')) throw new Error('đã kiểm xong: dải "Kiểm tra thiết lập" không hiện lại');
+    await ctx3.close();
+    console.log('  ✓ Máy v0.22 nâng cấp (có mật khẩu): đăng nhập "owner", Studio mở + dải "Kiểm tra thiết lập" một lần → trang kiểm (tự kiểm MCP + thẻ nối agent) → "Đã kiểm xong" → hết dải');
+    if (found.length) throw new Error('i18n / bố cục: ' + found.slice(0, 8).join(' | '));
+    console.log('  ✓ i18n: ' + 10 + ' màn của thiết lập lần đầu — en không lọt chữ Việt, vi là tiếng Việt' + (SHOTS ? ' · ' + shots.length + ' ảnh (en + vi) ở ' + SHOTS : ''));
+    if (errsS.length) throw new Error('lỗi trang: ' + errsS.slice(0, 3).join(' | '));
+  } catch (e) { fail = 1; console.log('  ✗ thiết lập lần đầu (Studio):', e.message); }
+  finally { await bs.close(); s1.kill(); s2.kill(); s3.kill(); try { cf.close(); } catch (e) { /* đã đóng */ } }
 }
 // ---- v0.22: XUẤT VIDEO — qua server THẬT + Studio thật (không file://), iframe ẩn studio/video-export.html dưới CSP của Studio (CNS-214). GC_ONLY=video (cổng 7690).
 //  Fun Office phân cảnh 1 (720p, giọng AI giả = clip WAV 2 kHz, MỘT câu cố ý thiếu clip — Q39): payload = phim HTML (CNS-219) · giống bộ phát sống ở 4 khung

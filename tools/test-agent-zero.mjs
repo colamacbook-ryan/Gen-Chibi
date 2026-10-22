@@ -26,7 +26,7 @@ ok(!missingDoc.length, 'tool chưa có trong hướng dẫn agent: ' + missingDo
 const cited = [...new Set([...corpus.matchAll(/`([a-z]+(?:_[a-z]+)+)`/g)].map(m => m[1]))].filter(n => /^(get|list|save|validate|render|preview|import|export|install|update|rollback|start|lint)_/.test(n));
 const stale = cited.filter(n => names.indexOf(n) < 0);
 ok(!stale.length, 'hướng dẫn nhắc tool không tồn tại: ' + stale.join(', '));
-const topicIds = Agent.topics().map(t => t.id), table = [...Agent.guide('guide').matchAll(/^\| `([a-z-]+)` \|/gm)].map(m => m[1]);
+const topicIds = Agent.topics().map(t => t.id), table = [...(Agent.guide('guide').split(/^## 4\. /m)[1] || '').split(/^## 5\. /m)[0].matchAll(/^\| `([a-z-]+)` \|/gm)].map(m => m[1]);   // chỉ bảng ở mục 4 (mục 1 có bảng kênh / phạm vi)
 ok(JSON.stringify(topicIds.slice().sort()) === JSON.stringify(table.slice().sort()), 'bảng chủ đề GUIDE.md lệch thư mục workflows: ' + table + ' ↔ ' + topicIds);
 ok(!/<!-- example: /.test(corpus), 'còn ví dụ không nhúng được (thiếu tệp agent/examples)');
 ok(Agent.rules().length >= 8, 'luật vàng đọc từ GUIDE.md thiếu');

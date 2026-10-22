@@ -1,7 +1,8 @@
 // Kiểm `genchibi online` (v0.21 P4) với server THẬT + launcher thật + Cloudflare API giả + cloudflared giả — không mạng ngoài, không Docker:
 //   1) cách dùng: token trên dòng lệnh bị từ chối (không gửi đi) · app dừng → báo rõ · trạng thái khi chưa online (en + vi)
 //   2) đường Cloudflare qua CLI: không terminal + không token → dừng có hướng dẫn · CNAME có sẵn + không terminal → dừng, KHÔNG đè ·
-//      --token-stdin --overwrite-dns → chạy hết các bậc tới "chờ mật khẩu" (mã thoát 3, in mã setup; status nói "tạm — chờ mật khẩu") · genchibi password → luồng TỰ xong (CNS-201)
+//      chưa khởi tạo owner → chặn (v0.23 §A.4: thoát 1, không gọi Cloudflare) · genchibi password (khởi tạo) · --token-stdin --overwrite-dns → chạy hết tới xong (thoát 0;
+//      bậc "mật khẩu" và mã thoát 3 đã bỏ), wizard lần đầu sang bước MCP
 //      (in https://tên + /mcp) · trạng thái · đổi địa chỉ không --yes → hỏi / dừng · proxy (in đoạn cấu hình, bậc lỗi in cách sửa) · Go offline dọn Cloudflare
 //   3) token API: không có trong argv / môi trường của bất kỳ tiến trình con nào (shim ghi argv + env của curl, awk, sed… và quét /proc/*/cmdline),
 //      không trong đầu ra CLI, log app / launcher, tệp dữ liệu · có terminal (script): hỏi ẩn, không hiện lại
@@ -127,7 +128,7 @@ console.log('   — cách dùng, app dừng');
   r = await cli(home, ['online']);
   ok(r.code === 1 && /does not answer at http:\/\/127\.0\.0\.1:7841 — start it: genchibi start/.test(r.out), 'app dừng → "does not answer … genchibi start", thoát 1', r.code + ' ' + r.out);
   r = await cli(home, ['online', '--help']);
-  ok(r.code === 0 && /online caddy <domain>/.test(r.out) && /cloudflare \[<domain>\]/.test(r.out) && /never accepted on the command line/.test(r.out) && /Exit code 3/.test(r.out), 'genchibi online --help: caddy · cloudflare · proxy · quick · recheck · off · migrate · mã thoát 3', r.out);
+  ok(r.code === 0 && /online caddy <domain>/.test(r.out) && /cloudflare \[<domain>\]/.test(r.out) && /never accepted on the command line/.test(r.out) && !/Exit code 3/.test(r.out) && /needs the owner account/.test(r.out), 'genchibi online --help: caddy · cloudflare · proxy · quick · recheck · off · migrate · cần tài khoản chủ (không còn mã thoát 3)', r.out);
   r = await cli(home, ['online', 'caddy', 'chibi.example.com']);
   ok(r.code === 1 && /needs Docker mode/.test(r.out), 'native: online caddy <tên-miền> → cần Docker, gợi ý Cloudflare (không gọi API)', r.out);
   r = await cli(home, ['online', 'bogus']);
@@ -162,6 +163,11 @@ console.log('   — đường Cloudflare qua CLI (Cloudflare API giả)');
   r = await cli(home, ['online', 'cloudflare', 'chibi.example.com']); outs.push(r.out);
   ok(r.code === 1 && /No Cloudflare API token/.test(r.out) && /GC_CF_TOKEN/.test(r.out) && cf.st.log.length === 0, 'không terminal, không GC_CF_TOKEN → dừng, chỉ cách đặt GC_CF_TOKEN (không gọi Cloudflare)', r.code + ' ' + r.out);
 
+  // v0.23: chưa khởi tạo owner → Go online bị chặn (kể cả CLI), không gọi Cloudflare
+  r = await cli(home, ['online', 'cloudflare', 'chibi.example.com', '--token-stdin'], { input: TOKEN + '\n' }); outs.push(r.out);
+  ok(r.code === 1 && /Set up the owner account first/.test(r.out) && cf.st.log.length === 0, 'chưa khởi tạo owner → genchibi online cloudflare thoát 1 "Set up the owner account first", không gọi Cloudflare', r.code + ' ' + r.out);
+  r = await cli(home, ['password'], { input: 'correct horse battery staple\n' });
+  ok(r.code === 0 && /Owner account ready: username owner/.test(r.out), 'genchibi password (stdin) khởi tạo tài khoản chủ', r.out);
   // CNAME / bản ghi có sẵn, không terminal → dừng, không đè
   procHits = [];
   r = await cli(home, ['online', 'cloudflare', 'chibi.example.com'], { env: { GC_CF_TOKEN: TOKEN } }); outs.push(r.out);
@@ -170,37 +176,25 @@ console.log('   — đường Cloudflare qua CLI (Cloudflare API giả)');
     'CNAME conflict + không terminal → dừng kèm hướng dẫn (tên khác / --overwrite-dns), bản ghi A giữ nguyên, không ghi DNS', r.code + ' ' + r.out);
   ok(!procHits.length, 'GC_CF_TOKEN: không tiến trình con nào (đã exec) có token trong argv / môi trường', procHits.join('\n'));
 
-  // --token-stdin --overwrite-dns: chạy hết tới "chờ mật khẩu"
+  // --token-stdin --overwrite-dns: chạy hết tới xong (v0.23: không còn bậc chờ mật khẩu — owner đã khởi tạo)
   procHits = [];
   r = await cli(home, ['online', 'cloudflare', 'chibi.example.com', '--token-stdin', '--overwrite-dns'], { input: TOKEN + '\n' }); outs.push(r.out);
-  const code = (/[0-9A-Z]{5}-[0-9A-Z]{5}/.exec(fs.existsSync(path.join(home, 'data', 'setup-code.txt')) ? fs.readFileSync(path.join(home, 'data', 'setup-code.txt'), 'utf8') : '') || [])[0];
   const cname = cf.st.dns.find(x => x.name === 'chibi.example.com');
-  ok(r.code === 3 && code && r.out.includes(code) && /https:\/\/chibi\.example\.com\/setup/.test(r.out) && /finishes going online by itself/.test(r.out) && /genchibi password/.test(r.out) && !/then run: genchibi online recheck/.test(r.out),
-    '--token-stdin --overwrite-dns → các bậc chạy tới "chờ mật khẩu": thoát 3, in mã setup ' + code + ' + https://chibi.example.com/setup', r.code + ' ' + r.out);
-  ok(['Owner', 'API token', 'Domain + sub-name', 'Tunnel', 'Public address', 'WAF rule', 'MCP from the Internet'].every(n => new RegExp('✓ ' + n.replace(/[+]/g, '\\+')).test(r.out)) && /… Owner password/.test(r.out),
-    'tiến độ từng bậc in ra: ✓ owner · token · zone · tunnel · public · waf · mcp, … mật khẩu', r.out);
+  ok(r.code === 0 && /✓ Online: https:\/\/chibi\.example\.com/.test(r.out) && !/setup code|Setup code|\/setup/.test(r.out), '--token-stdin --overwrite-dns → chạy hết các bậc tới xong: thoát 0, in ✓ Online (không mã setup, không mã thoát 3)', r.code + ' ' + r.out);
+  ok(['Owner', 'API token', 'Domain + sub-name', 'Tunnel', 'Public address', 'WAF rule', 'MCP from the Internet'].every(n => new RegExp('✓ ' + n.replace(/[+]/g, '\\+')).test(r.out)) && !/Owner password/.test(r.out),
+    'tiến độ từng bậc in ra: ✓ owner · token · zone · tunnel · public · waf · mcp (không còn bậc mật khẩu)', r.out);
   ok(cname && cname.type === 'CNAME' && cf.st.tunnels.length === 1 && cf.st.ruleset && cf.st.ruleset.rules.length === 1, 'Cloudflare giả: CNAME thay bản ghi A (đã xác nhận bằng --overwrite-dns), 1 tunnel, 1 luật WAF', JSON.stringify(cf.st.dns));
   ok(!procHits.length && !shimLeaks().length, '--token-stdin: token không có trong argv / môi trường của tiến trình nào (quét /proc + shim curl / awk / sed …)', procHits.concat(shimLeaks()).join('\n'));
-
-  // CNS-209: trong lúc chờ mật khẩu, status / online nói rõ trạng thái TẠM (không phải "off")
-  r = await cli(home, ['status']);
-  ok(/Online \(temporary — waiting for the owner password\): https:\/\/chibi\.example\.com \(mode cloudflare\)/.test(r.out) && /genchibi password/.test(r.out) && !/Online: off/.test(r.out), 'chờ mật khẩu: genchibi status in "Online (temporary — waiting for the owner password): https://chibi.example.com" + cách đặt, không báo off', r.out);
-  r = await cli(home, ['online']);
-  ok(/Waiting for the owner password: https:\/\/chibi\.example\.com is on temporarily/.test(r.out), 'genchibi online: dòng "Waiting for the owner password … on temporarily"', r.out);
-  const v0 = (await api(L, 'GET', '/api/online')).j;
-  ok(v0 && v0.mode === 'off' && v0.flow.waitingPassword === true && v0.cloudflare.tokenInMemory === true, 'server lúc chờ: mode còn off, luồng chờ ở bậc mật khẩu, token API còn trong bộ nhớ');
-  // CNS-201: genchibi password → app TỰ hoàn tất (không recheck): mode / publicUrl chính thức / online: true / bỏ API token
-  r = await cli(home, ['password'], { input: 'correct horse battery staple\n' });
-  ok(r.code === 0, 'genchibi password (stdin) đặt mật khẩu chủ', r.out);
   const v = await until(async () => { const x = (await api(L, 'GET', '/api/online')).j; return x && x.flow && x.flow.done && !x.busy ? x : null; }, 15000, 250);
   const intent = (() => { try { return JSON.parse(fs.readFileSync(path.join(home, 'run', 'edge-intent.json'), 'utf8')); } catch (e) { return {}; } })();
-  ok(v && v.mode === 'cloudflare' && v.publicUrl === 'https://chibi.example.com' && !v.publicUrlPending && v.flow.done && !v.cloudflare.tokenInMemory && intent.online === true && intent.tunnel === 'token',
-    'đặt mật khẩu → luồng TỰ xong, KHÔNG cần Kiểm lại: mode cloudflare, publicUrl chính thức, intent online: true, token API đã bỏ khỏi bộ nhớ', JSON.stringify(v && { mode: v.mode, pub: v.publicUrl, done: v.flow && v.flow.done, mem: v.cloudflare.tokenInMemory }) + ' ' + JSON.stringify(intent));
+  const stg = (() => { try { return JSON.parse(fs.readFileSync(path.join(home, 'data', 'setup.json'), 'utf8')).stage; } catch (e) { return ''; } })();
+  ok(v && v.mode === 'cloudflare' && v.publicUrl === 'https://chibi.example.com' && !v.publicUrlPending && v.flow.done && !v.cloudflare.tokenInMemory && intent.online === true && intent.tunnel === 'token' && stg === 'mcp',
+    'xong: mode cloudflare, publicUrl chính thức, intent online: true, token API đã bỏ khỏi bộ nhớ; setup.json stage mcp (lần đầu vào Studio: chẩn đoán MCP — dòng "trình cài --domain" của §A.0)', JSON.stringify(v && { mode: v.mode, pub: v.publicUrl, done: v.flow && v.flow.done, mem: v.cloudflare.tokenInMemory }) + ' ' + JSON.stringify(intent) + ' ' + stg);
   r = await cli(home, ['online', 'recheck']); outs.push(r.out);
   ok(r.code === 0 && /✓ Online: https:\/\/chibi\.example\.com/.test(r.out) && /https:\/\/chibi\.example\.com\/mcp/.test(r.out), 'genchibi online recheck (lối dự phòng) vẫn chạy: in https://chibi.example.com + https://chibi.example.com/mcp', r.code + ' ' + r.out);
   r = await cli(home, ['online']);
-  ok(r.code === 0 && /mode cloudflare · chibi\.example\.com/.test(r.out) && /Public address: https:\/\/chibi\.example\.com/.test(r.out) && /Last run: cloudflare · finished/.test(r.out) && (r.out.match(/  ✓ /g) || []).length === 8 && /tunnel token/.test(r.out),
-    'genchibi online: mode · địa chỉ · 8 bậc ✓ · edge tunnel token', r.out);
+  ok(r.code === 0 && /mode cloudflare · chibi\.example\.com/.test(r.out) && /Public address: https:\/\/chibi\.example\.com/.test(r.out) && /Last run: cloudflare · finished/.test(r.out) && (r.out.match(/  ✓ /g) || []).length === 7 && /tunnel token/.test(r.out),
+    'genchibi online: mode · địa chỉ · 7 bậc ✓ · edge tunnel token', r.out);
   r = await cli(home, ['status']);
   ok(/Online: https:\/\/chibi\.example\.com \(mode cloudflare/.test(r.out), 'genchibi status có dòng Online: https://chibi.example.com', r.out);
 
@@ -296,7 +290,7 @@ console.log('   — link tạm (quick) qua CLI: launcher + cloudflared giả đ�
   let r = await cli(hq, ['password'], { input: 'correct horse battery staple\n' });
   r = await cli(hq, ['online', 'quick']);
   const url = (/✓ Online: (https:\/\/fake-\d+\.trycloudflare\.com)/.exec(r.out) || [])[1];
-  ok(r.code === 0 && url && r.out.includes(url + '/mcp') && /✓ Tunnel/.test(r.out) && /✓ MCP from the Internet/.test(r.out), 'genchibi online quick → tunnel · public · mcp · mật khẩu ✓, in link tạm + /mcp', r.code + ' ' + r.out);
+  ok(r.code === 0 && url && r.out.includes(url + '/mcp') && /✓ Tunnel/.test(r.out) && /✓ MCP from the Internet/.test(r.out), 'genchibi online quick → tunnel · public · mcp ✓, in link tạm + /mcp', r.code + ' ' + r.out);
   r = await cli(hq, ['online', 'off']);
   ok(r.code === 0 && /Offline/.test(r.out), 'genchibi online off (link tạm) → offline', r.out);
   // bật lại trên CÙNG launcher: tunnel.log còn link cũ (đã chết) — bậc Tunnel phải đợi link MỚI của cloudflared mới, không lấy link cũ từ log
@@ -374,6 +368,7 @@ console.log('   — móc kiểm thử: GC_TEST_* / GC_AUTH_RATE không tác dụ
   const sv = spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env, stdio: 'ignore', detached: true }); kids.push(sv);
   await until(() => health(PG), 20000);
   const Lg = { port: PG, home: hg };
+  await api(Lg, 'POST', '/api/auth/password', { password: 'correct horse battery staple' });   // v0.23: Go online cần owner đã khởi tạo
   const st0 = await api(Lg, 'POST', '/api/online/cloudflare', { token: TOKEN, zone: 'example.com' });
   const vg = await until(async () => { const x = (await api(Lg, 'GET', '/api/online')).j; return x && !x.busy && x.flow ? x : null; }, 30000, 300);
   const tok = vg && vg.flow.steps.find(x => x.id === 'token');

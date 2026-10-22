@@ -23,7 +23,8 @@ function token() {
 function post(line) {
   return new Promise(resolve => {
     const data = Buffer.from(line);
-    const headers = { 'Content-Type': 'application/json', Accept: 'application/json', 'Content-Length': data.length, Host: '127.0.0.1:' + PORT };
+    // X-GC-Bridge: chỉ là NHÃN kênh cho wizard bước 3 ("Agent … đã nối qua stdio") — không cấp quyền gì (quyền vẫn là token chủ)
+    const headers = { 'Content-Type': 'application/json', Accept: 'application/json', 'Content-Length': data.length, Host: '127.0.0.1:' + PORT, 'X-GC-Bridge': 'stdio' };
     if (token()) headers.Authorization = 'Bearer ' + token();
     const req = http.request({ host: '127.0.0.1', port: PORT, path: '/mcp', method: 'POST', headers, timeout: 120000 }, res => {
       let s = '';

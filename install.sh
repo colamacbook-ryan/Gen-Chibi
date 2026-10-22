@@ -8,9 +8,16 @@
 #          --version vX.Y.Z (default: latest) · --lang en|vi (default en; or GC_LANG=vi)
 #          --domain <name> (go online: path A — the domain's A record → this machine, edge Caddy + HTTPS, Docker)
 #          --domain <name> --cloudflare (path B — Cloudflare Tunnel with an API token: asked hidden in a terminal, otherwise GC_CF_TOKEN; never an argument)
+#          --domain also sets up the owner account first (v0.23): username + password asked in the terminal (password hidden), otherwise read from
+#          GC_OWNER_USER / GC_OWNER_PASSWORD (read once, removed from the environment, never written to .env / argv / logs); neither → installs, does not go
+#          online, prints the next commands. Without --domain the last line says: open http://localhost:7480 and sign in with admin / admin within 30 minutes.
 # Private repo: set GC_GITHUB_TOKEN=<fine-grained token, Contents: Read-only> (see README). The token goes into .env and is never printed.
 # © 2026 Gen Labs — All rights reserved.
 set -euo pipefail
+# tài khoản chủ cho --domain (v0.23 §A.4, CNS-264): đọc GC_OWNER_USER / GC_OWNER_PASSWORD MỘT lần rồi xoá khỏi môi trường NGAY — trước mọi tiến trình con
+# (sed, curl, Docker, get.docker.com…): không tiến trình nào thừa hưởng, không vào .env / argv / log. Mật khẩu chỉ đi qua stdin của genchibi password.
+OWNER_U="${GC_OWNER_USER-}"; OWNER_P="${GC_OWNER_PASSWORD-}"; OWNER_FROM_ENV=""; [ -z "$OWNER_U$OWNER_P" ] || OWNER_FROM_ENV=1
+unset GC_OWNER_USER GC_OWNER_PASSWORD
 
 REPO="${GC_REPO:-colamacbook-ryan/Gen-Chibi}"
 DIR="${GC_DIR:-$HOME/gen-chibi}"
@@ -101,10 +108,17 @@ _en() {
     online_go) F="Going online: %s" ;;
     online_fail) F="Going online did not finish — gen-chibi is installed and running. Fix the step marked ✗ above, then: genchibi online recheck" ;;
     sum_online) F="  Online:    %s%s%s  ·  MCP: %s/mcp" ;;
-    sum_setup) F="Setup code: %s%s%s (one-time, 1 hour) — open %s/setup and choose the owner password%s" ;;
-    sum_setup_local) F=" (on this machine: genchibi open)" ;;
-    sum_online_wait) F="  Online (temporary — waiting for the owner password): %s%s%s  ·  MCP: %s/mcp" ;;
-    sum_setup_online) F=" — once it is set the app finishes going online by itself (or on the server: genchibi password)" ;;
+    own_intro) F="--domain: set up the owner account first (going online needs it; the Studio asks for nothing else at the first sign-in except the MCP check)." ;;
+    own_ask_user) F="Owner username (3–32: a-z 0-9 . _ -, not admin): " ;;
+    own_ask_pw) F="Owner password (at least 12 characters, hidden while typing): " ;;
+    own_ask_pw2) F="Repeat the password: " ;;
+    own_bad_user) F="Invalid owner username: 3–32 characters a-z 0-9 . _ - and not admin." ;;
+    own_bad_pw) F="The owner password needs at least 12 characters (no control characters, not admin)." ;;
+    own_mismatch) F="The two passwords differ." ;;
+    own_set) F="Owner account ready: username %s" ;;
+    own_fail) F="Could not set up the owner account — not going online. Next: genchibi password, then genchibi online %s %s" ;;
+    own_none) F="Not going online: no owner account yet (no terminal to ask, and GC_OWNER_USER / GC_OWNER_PASSWORD are not set). gen-chibi is installed and running." ;;
+    own_next) F="Next, on this machine: genchibi password (sets the owner account), then: genchibi online %s %s" ;;
   esac
 }
 _vi() {
@@ -169,10 +183,17 @@ _vi() {
     online_go) F="Đưa lên Internet: %s" ;;
     online_fail) F="Chưa ra Internet xong — gen-chibi đã cài và đang chạy. Sửa bậc ✗ ở trên rồi chạy: genchibi online recheck" ;;
     sum_online) F="  Online:  %s%s%s  ·  MCP: %s/mcp" ;;
-    sum_setup) F="Mã setup: %s%s%s (dùng một lần, 1 giờ) — mở %s/setup và đặt mật khẩu chủ%s" ;;
-    sum_setup_local) F=" (trên máy này: genchibi open)" ;;
-    sum_online_wait) F="  Online (tạm — chờ mật khẩu chủ): %s%s%s  ·  MCP: %s/mcp" ;;
-    sum_setup_online) F=" — đặt xong là app tự hoàn tất lên mạng (hoặc trên máy chủ: genchibi password)" ;;
+    own_intro) F="--domain: đặt tài khoản chủ trước (lên mạng cần tài khoản này; lần đăng nhập đầu Studio chỉ còn bước chẩn đoán MCP)." ;;
+    own_ask_user) F="Tên đăng nhập chủ (3–32: a-z 0-9 . _ -, không phải admin): " ;;
+    own_ask_pw) F="Mật khẩu chủ (ít nhất 12 ký tự, ẩn khi gõ): " ;;
+    own_ask_pw2) F="Nhập lại mật khẩu: " ;;
+    own_bad_user) F="Tên đăng nhập chủ không hợp lệ: 3–32 ký tự a-z 0-9 . _ - và không phải admin." ;;
+    own_bad_pw) F="Mật khẩu chủ cần ít nhất 12 ký tự (không ký tự điều khiển, không phải admin)." ;;
+    own_mismatch) F="Hai lần nhập mật khẩu không khớp." ;;
+    own_set) F="Đã có tài khoản chủ: tên đăng nhập %s" ;;
+    own_fail) F="Không đặt được tài khoản chủ — chưa lên mạng. Bước tiếp: genchibi password, rồi genchibi online %s %s" ;;
+    own_none) F="Chưa lên mạng: chưa có tài khoản chủ (không có terminal để hỏi, cũng không có GC_OWNER_USER / GC_OWNER_PASSWORD). gen-chibi đã cài và đang chạy." ;;
+    own_next) F="Bước tiếp, trên máy này: genchibi password (đặt tài khoản chủ), rồi: genchibi online %s %s" ;;
   esac
 }
 UI=en
@@ -239,6 +260,37 @@ if [ -n "$CF" ]; then
   elif ! can_ask; then say cf_tok_none >&2; exit 2; fi
 fi
 unset GC_CF_TOKEN
+# --domain cần tài khoản chủ (Go online bị chặn khi chưa khởi tạo owner — v0.23 §A.4). Hỏi TRƯỚC khi cài (chỉ khi máy này chưa có owner: bản cài mới, hoặc
+# setup.json còn admin / must_init): GC_OWNER_* (đã đọc + xoá ở đầu tệp) → hỏi trên terminal (tên hiện, mật khẩu ẩn ×2) → không có cả hai: cài nhưng không lên mạng
+OWNER_NEED=""; OWNER_SKIP=""
+if [ -n "$DOMAIN" ]; then
+  OST="$(sed -n 's/^[[:space:]]*"stage":[[:space:]]*"\([a-z_]*\)".*/\1/p' "$DIR/data/setup.json" 2>/dev/null | head -1 || true)"
+  if [ -z "$OST" ] && grep -q '"hash"' "$DIR/data/auth.json" 2>/dev/null; then OST=done; fi   # v0.21 / v0.22 đã có mật khẩu: server ghi done lúc khởi động
+  case "$OST" in ''|admin|must_init) OWNER_NEED=1 ;; esac
+fi
+owner_ok() { # kiểm OWNER_U / OWNER_P (luật như server: tên 3–32 [a-z0-9._-] khác admin · mật khẩu ≥ 12 ký tự, không ký tự điều khiển, khác admin)
+  OWNER_U="$(printf '%s' "$OWNER_U" | tr 'A-Z' 'a-z')"
+  case "$OWNER_U" in admin|*[!a-z0-9._-]*) say own_bad_user >&2; return 1 ;; esac
+  [ "${#OWNER_U}" -ge 3 ] && [ "${#OWNER_U}" -le 32 ] || { say own_bad_user >&2; return 1; }
+  case "$OWNER_P" in *[[:cntrl:]]*|admin|ADMIN|Admin) say own_bad_pw >&2; return 1 ;; esac
+  [ "${#OWNER_P}" -ge 12 ] || { say own_bad_pw >&2; return 1; }
+}
+if [ -n "$OWNER_NEED" ]; then
+  if [ -n "$OWNER_FROM_ENV" ]; then owner_ok || exit 2
+  elif can_ask; then
+    say own_intro
+    OP2=""
+    for _try in 1 2 3; do
+      printf '%s' "$(_t own_ask_user; printf '%s' "$F")" > /dev/tty; IFS= read -r OWNER_U < /dev/tty || OWNER_U=""
+      printf '%s' "$(_t own_ask_pw; printf '%s' "$F")" > /dev/tty; IFS= read -r -s OWNER_P < /dev/tty || OWNER_P=""; printf '\n' > /dev/tty
+      printf '%s' "$(_t own_ask_pw2; printf '%s' "$F")" > /dev/tty; IFS= read -r -s OP2 < /dev/tty || OP2=""; printf '\n' > /dev/tty
+      if [ "$OWNER_P" != "$OP2" ]; then say own_mismatch >&2; OWNER_P=""; OP2=""; continue; fi
+      OP2=""; owner_ok && break
+      OWNER_P=""
+    done
+    [ -n "$OWNER_P" ] || exit 2
+  else OWNER_SKIP=1; OWNER_U=""; OWNER_P=""; fi
+else OWNER_U=""; OWNER_P=""; fi
 
 OS="$(uname -s)"; ARCH="$(uname -m)"
 case "$OS" in Linux|Darwin) ;; *) die os_unsupported "$OS" ;; esac
@@ -475,8 +527,15 @@ public_ip() { # IPv4 ra Internet của máy (đi thẳng, không qua proxy công
   if [ "${GC_TEST:-}" = 1 ] && [ -n "${GC_TEST_PUBLIC_IP+x}" ]; then printf '%s' "$GC_TEST_PUBLIC_IP"; return 0; fi
   curl -fsS --noproxy '*' -m 6 https://1.1.1.1/cdn-cgi/trace 2>/dev/null | sed -n 's/^ip=\([0-9.]*\)$/\1/p' | head -n 1
 }
-go_online() { # 0 đã ra Internet (xong, hoặc chỉ còn chờ mật khẩu chủ — VPS mới luôn dừng ở đây, mã setup in ở dòng cuối) · khác: chưa xong (app vẫn chạy)
+go_online() { # 0 đã ra Internet · khác: chưa xong (app vẫn chạy). Tài khoản chủ đặt TRƯỚC (Go online bị chặn khi chưa khởi tạo — v0.23 §A.4)
   local ip a waited=0 limit poll rc
+  local how; if [ -n "$CF" ]; then how=cloudflare; else how=caddy; fi
+  if [ -n "$OWNER_SKIP" ]; then warn own_none; say own_next "$how" "$DOMAIN"; return 1; fi
+  if [ -n "$OWNER_U" ]; then
+    # tên + mật khẩu qua stdin (không argv); --init-stdin: chỉ khởi tạo, máy đã có owner thì không đè mật khẩu
+    if printf '%s\n%s\n' "$OWNER_U" "$OWNER_P" | "$BIN/genchibi" password --init-stdin >/dev/null; then OWNER_P=""; ok own_set "$OWNER_U"
+    else OWNER_P=""; warn own_fail "$how" "$DOMAIN"; return 1; fi
+  fi
   if [ -z "$CF" ]; then
     step dns_check "$DOMAIN"
     ip="$(public_ip)"
@@ -503,22 +562,14 @@ go_online() { # 0 đã ra Internet (xong, hoặc chỉ còn chờ mật khẩu c
     else "$BIN/genchibi" online cloudflare "$DOMAIN" --yes && rc=0 || rc=$?; fi   # hỏi token ẩn trên terminal
     CFTOK=""
   fi
-  case "$rc" in 0|3) ONLINE="https://$DOMAIN"; BASE="$ONLINE"; [ "$rc" = 3 ] && ONLINE_WAIT=1; return 0 ;; esac
+  case "$rc" in 0) ONLINE="https://$DOMAIN"; return 0 ;; esac
   warn online_fail; return "$rc"
 }
-finish_lines() { # dòng cuối: địa chỉ online (nếu có) + MÃ SETUP khi chưa có mật khẩu chủ (server ghi data/setup-code.txt lúc khởi động)
-  local c="" e="" i
-  # chưa có mật khẩu chủ: luồng Go online dừng ở bậc cuối, địa chỉ chỉ đang bật TẠM (CNS-209) — nói rõ, rồi dòng cuối = mã setup
-  local nopw=""; case "$(curl -fsS -m 5 "http://127.0.0.1:$PORT/api/auth/state" 2>/dev/null || true)" in *'"password":false'*) nopw=1 ;; esac
-  if [ -n "$ONLINE" ]; then if [ -n "$ONLINE_WAIT" ] && [ -n "$nopw" ]; then say sum_online_wait "$B" "$ONLINE" "$N" "$ONLINE"; else say sum_online "$B" "$ONLINE" "$N" "$ONLINE"; fi; fi
-  [ -n "$nopw" ] || return 0   # đã có mật khẩu chủ
-  for i in 1 2 3 4 5 6 7 8 9 10; do
-    if [ -r "$DIR/data/setup-code.txt" ]; then c="$(sed -n '1p' "$DIR/data/setup-code.txt" | tr -d ' \r')"; break; fi
-    sleep 0.5
-  done
-  case "$c" in [0-9A-Z][0-9A-Z][0-9A-Z][0-9A-Z][0-9A-Z]-[0-9A-Z][0-9A-Z][0-9A-Z][0-9A-Z][0-9A-Z]) ;; *) return 0 ;; esac
-  if [ "$BASE" = "http://localhost:$PORT" ]; then _t sum_setup_local; e="$F"; elif [ -n "$ONLINE_WAIT" ]; then _t sum_setup_online; e="$F"; fi
-  printf '\n'; say sum_setup "$B" "$c" "$N" "$BASE" "$e"
+finish_lines() { # dòng cuối (v0.23 §A.0 / spec "Đạt khi" 1): địa chỉ online (nếu có) + BƯỚC TIẾP theo stage — bản cài mới: mở http://localhost:<cổng>,
+  # đăng nhập admin / admin trong vòng 30 phút (genchibi start vừa mở cửa sổ) · không mở được cửa sổ: lý do + genchibi password · đã có owner: đăng nhập bằng tên đó.
+  # Câu do `genchibi setup hint` in (một nguồn với CLI; server quyết định admin / admin có dùng được không)
+  [ -z "$ONLINE" ] || say sum_online "$B" "$ONLINE" "$N" "$ONLINE"
+  printf '\n'; "$BIN/genchibi" setup hint || true
 }
 
 # ---------- chạy
@@ -538,7 +589,7 @@ for i in $(seq 1 60); do
     say sum_mcp_net
     say sum_update
     say sum_lang
-    RC=0; ONLINE=""; ONLINE_WAIT=""; BASE="http://localhost:$PORT"
+    RC=0; ONLINE=""
     if [ -n "$DOMAIN" ]; then go_online && RC=0 || RC=$?; fi
     finish_lines
     exit "$RC"

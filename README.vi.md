@@ -21,7 +21,14 @@ curl -fsSL https://raw.githubusercontent.com/colamacbook-ryan/Gen-Chibi/main/ins
 
 - Chạy bằng **Docker**; trên Linux trình cài tự cài Docker khi máy chưa có (get.docker.com) và chạy tiếp ngay trong phiên đó dù phiên đăng nhập chưa nhận nhóm `docker` (đăng xuất / vào lại sau đó để dùng `genchibi` không cần sudo). macOS: Docker Desktop, hoặc **Node ≥ 18** với `--native`.
 - Mặc định cài vào `~/gen-chibi`, cổng `7480`, chỉ mở cho máy này. Mở **http://localhost:7480**.
-- **Đăng nhập lần đầu:** Studio hỏi mật khẩu chủ, kể cả trên máy này. Dòng cuối của trình cài in **mã setup** dùng một lần; dễ hơn: chạy `genchibi open`, lệnh mở trang đặt mật khẩu đã điền sẵn mã. Chọn mật khẩu ít nhất 12 ký tự (một cụm từ dễ nhớ là tốt); trình duyệt nhớ thiết bị 30 ngày. Quên mật khẩu: `genchibi password` trên máy chủ.
+- **Lần chạy đầu (v0.23):** dòng cuối của trình cài nói bước tiếp theo. Trên máy này, mở **http://localhost:7480** và đăng nhập **admin / admin** trong vòng 30 phút. Cửa sổ đó chỉ do lệnh trên máy chủ mở (trình cài, `genchibi start`, `genchibi open`). Nó chỉ dùng được khi máy **chưa lên mạng**, chỉ từ chính máy này (loopback, không qua proxy) và chỉ tới khi có tài khoản chủ. Khi cửa sổ đóng, trang đăng nhập nói đúng lý do và cách vào. Sau đó:
+  1. **Tài khoản chủ** (bắt buộc trước mọi trang): tên đăng nhập của bạn (không phải `admin`), tên hiển thị, email (tuỳ chọn — chỉ dùng làm email liên hệ Let's Encrypt cho đường Caddy) và mật khẩu ít nhất 12 ký tự (một cụm từ dễ nhớ là tốt). `admin / admin` thôi dùng được ngay.
+  2. **Tên miền:** *Đưa lên mạng* (đúng các bậc của *Hệ thống › Lên mạng*) hoặc *Chỉ dùng trên máy này*. Một bậc Internet lỗi hoặc chờ lâu: *Tạm dùng trên máy này* cho bạn vào, trang chủ giữ dải nhắc.
+  3. **Chẩn đoán MCP:** tự kiểm thật trên máy (HTTP `/mcp`, token chủ, `genchibi mcp` stdio), các thẻ nối Claude Code / claude.ai / agent khác, rồi kiểm thật chờ lời gọi đầu tiên của agent. *Xong* mở khi một agent đã nối, hoặc chọn *Tôi nối agent sau* (trang chủ nhắc).
+
+  Đăng nhập lại khi chưa xong thì về đúng bước đang dở. Trình duyệt nhớ thiết bị 30 ngày. Quên mật khẩu: `genchibi password` trên máy chủ. Chính phần kiểm bị lỗi: `genchibi setup skip` (có ghi log); làm lại từ đầu: `genchibi setup reset`. Qua SSH: chuyển cổng trước (`ssh -L 7480:localhost:7480 <máy-chủ>`), rồi mở http://localhost:7480 trên máy của bạn.
+- **Cài thẳng lên tên miền** (`--domain` / `--cloudflare`): trình cài hỏi trước tên đăng nhập và mật khẩu chủ (nhập ẩn), hoặc đọc `GC_OWNER_USER` / `GC_OWNER_PASSWORD` từ môi trường khi không có terminal (không bao giờ ghi vào `.env`, dòng lệnh hay log). Không có thì vẫn cài nhưng **không** lên mạng và in hai lệnh cần chạy tiếp (`genchibi password`, rồi `genchibi online …`). Studio khi đó mở thẳng bước 3 (chẩn đoán MCP).
+- **Nâng cấp từ v0.22 trở về trước:** mật khẩu cũ vẫn dùng; tên đăng nhập là `owner` (đổi ở *Hệ thống › Tài khoản chủ*). Trang chủ hiện dải *Kiểm tra thiết lập* một lần (tự kiểm MCP + thẻ nối agent). Máy v0.21 / v0.22 đã lên mạng và còn chờ mật khẩu chủ thì vẫn ở trên mạng; đặt tài khoản chủ trên máy chủ bằng `genchibi password`.
 - Tuỳ chọn: `--dir <thư mục>` · `--port <cổng>` · `--native` · `--version vX.Y.Z` · `--lang en|vi` · `--domain <tên>` · `--cloudflare` (xem [Ra Internet](#ra-internet-tên-miền-https-mcp-một-bước)).
 
 ## Lệnh
@@ -34,8 +41,9 @@ genchibi backup | restore <tệp>
 genchibi mcp               # cầu MCP stdio cho agent
 genchibi token             # đặt token GitHub (repo private), nhập ẩn — KHÔNG phải token chủ (token chủ là GC_API_TOKEN trong .env, hoặc data/owner-token)
 genchibi lang [en|vi]      # xem / đặt ngôn ngữ (CLI + giao diện mặc định của Studio)
-genchibi open              # mở Studio (lần đầu: trang đặt mật khẩu chủ, mã điền sẵn)
-genchibi password          # đặt / đặt lại mật khẩu chủ
+genchibi open              # mở Studio (lần đầu: mở cửa sổ 30 phút cho admin / admin)
+genchibi password          # đặt / đặt lại mật khẩu chủ (lần đầu: tạo tài khoản chủ)
+genchibi setup [skip|reset] # thiết lập lần đầu: trạng thái · bỏ qua wizard (có log) · làm lại
 genchibi online …          # ra Internet: tên miền + HTTPS + MCP (xem dưới)
 genchibi agent connect     # cấu hình nối cho agent (không in token)
 genchibi uninstall
@@ -61,7 +69,7 @@ Bạn làm **đúng một** việc ngoài app — trỏ bản ghi A về máy (*
 
 **API token Cloudflare (đường B):** *Studio › Hệ thống › Lên mạng* và `genchibi online cloudflare` có link mở trang tạo token của Cloudflare với quyền điền sẵn. Token cần **Account › Cloudflare Tunnel › Edit**, **Zone › DNS › Edit**, **Zone › Zone › Read**, tuỳ chọn **Zone › WAF › Edit** (khi có, app tự thêm luật Skip cho claude.ai đi qua; không có thì app in luật để bạn thêm tay). Đặt **TTL** ngắn (một ngày là đủ): xong việc app xoá token khỏi bộ nhớ (chỉ giữ, có mã hoá, khi bạn yêu cầu), tunnel đang chạy không cần nó. **Không bao giờ** nhận token trên dòng lệnh: có terminal thì hỏi ẩn; không có terminal thì đặt `GC_CF_TOKEN` trong môi trường (hoặc đưa vào `--token-stdin` qua ống).
 
-**Từng bậc, nhìn thấy:** `genchibi online` in mỗi bậc (tên miền / DNS, edge, cổng, chứng chỉ, địa chỉ công khai, MCP từ Internet, mật khẩu chủ) với ✓ / ✗ và cách sửa khi ✗, rồi in `https://tên-miền` và `https://tên-miền/mcp`. Trên VPS mới, bậc cuối là mật khẩu chủ: mở `https://tên-miền/setup` và nhập mã setup (trình cài và `genchibi status` in mã), hoặc chạy `genchibi password` trên máy chủ. Tới lúc đó địa chỉ chỉ đang bật *tạm* (`genchibi status` ghi "Ra Internet (tạm — chờ mật khẩu chủ)"); đặt xong mật khẩu là app tự hoàn tất lên mạng — không cần kiểm lại.
+**Từng bậc, nhìn thấy:** `genchibi online` in mỗi bậc (tên miền / DNS, edge, cổng, chứng chỉ, địa chỉ công khai, MCP từ Internet) với ✓ / ✗ và cách sửa khi ✗, rồi in `https://tên-miền` và `https://tên-miền/mcp`. Lên mạng cần có tài khoản chủ trước: khi máy còn chỉ có `admin / admin` (hoặc chưa tạo tài khoản), `genchibi online` và *Lên mạng* từ chối và bảo chạy `genchibi password` trên máy chủ (hoặc làm xong màn lần đầu). Mật khẩu không bao giờ được hỏi trên địa chỉ công khai.
 
 ```
 genchibi online                         # trạng thái: chế độ, địa chỉ, từng bậc, edge
@@ -73,11 +81,11 @@ genchibi online off                     # thôi ra Internet (có GC_CF_TOKEN: d�
 genchibi online migrate                 # máy cấu hình tay trong .env (GC_PUBLIC_URL / GC_ALLOWED_HOSTS) trước v0.21
 ```
 
-Đổi địa chỉ công khai sẽ đăng xuất các agent nối bằng OAuth (phải nối lại); lệnh hỏi trước (`--yes` khi không có terminal). Mã thoát `3` nghĩa là "đã ra Internet, chờ đặt mật khẩu chủ". `genchibi expose` / `genchibi link` (cách của v0.20) đã bỏ ở v0.23 — xem [bên dưới](#đã-bỏ-ở-v023-genchibi-expose--genchibi-link).
+Đổi địa chỉ công khai sẽ đăng xuất các agent nối bằng OAuth (phải nối lại); lệnh hỏi trước (`--yes` khi không có terminal). `genchibi expose` / `genchibi link` (cách của v0.20) đã bỏ ở v0.23 — xem [bên dưới](#đã-bỏ-ở-v023-genchibi-expose--genchibi-link).
 
 **Bản sao lưu chứa mật khẩu và phiên; khôi phục thì Go online tắt.** `genchibi backup` lưu `data/`, nay gồm cả mật khẩu chủ (đã băm), các phiên Studio / thiết bị đã nhớ và cấu hình lên mạng. `genchibi restore <tệp>` giữ mật khẩu của bản sao lưu nhưng đăng xuất mọi phiên và thiết bị, và đưa Go online về **tắt** (không địa chỉ công khai, tunnel dừng, mã bản cài mới — bản sao lưu từ máy khác không bao giờ chiếm tên miền hay tunnel của máy đó). Khôi phục xong thì chạy lại Go online.
 
-**Máy đã có trang đăng nhập riêng đứng trước app** (vd proxy đưa người dùng tới `/login` của riêng nó): app nay có mật khẩu chủ và trang `/login`, `/setup` riêng. Trong proxy, chỉ chặn đường của người và để `/login`, `/setup`, `/oauth/authorize` của app đi tới app phía sau lớp đăng nhập của bạn (đường máy — `/mcp`, `/.well-known/…`, `/oauth/register|token|revoke` — vẫn phải để trống như trước). Đoạn mẫu `genchibi online proxy` in ra chỉ chỗ đặt lớp đăng nhập của bạn.
+**Máy đã có trang đăng nhập riêng đứng trước app** (vd proxy đưa người dùng tới `/login` của riêng nó): app nay có tài khoản chủ và trang `/login` riêng (`/setup` của v0.21 / v0.22 nay chuyển về `/login`). Trong proxy, chỉ chặn đường của người và để `/login`, `/oauth/authorize` của app đi tới app phía sau lớp đăng nhập của bạn (đường máy — `/mcp`, `/.well-known/…`, `/oauth/register|token|revoke` — vẫn phải để trống như trước). Đoạn mẫu `genchibi online proxy` in ra chỉ chỗ đặt lớp đăng nhập của bạn.
 
 ## Ngôn ngữ
 

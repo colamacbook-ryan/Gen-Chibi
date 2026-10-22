@@ -615,3 +615,14 @@ table.grid.vidshots .meter i { background: var(--ok); }
 .vidrow { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 12px; align-items: start; }
 .vidprev { width: 100%; max-height: 420px; background: #121214; border-radius: 6px; }
 .vidcover { width: 100%; max-height: 240px; object-fit: contain; background: #121214; border-radius: 6px; border: 1px solid var(--line); }
+/* v0.23: thẻ "Nối agent" (một component cho Kết nối agent · Cài đặt AI · wizard lần đầu) + wizard thiết lập lần đầu — Data Console (STD-07) */
+.agcards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 1100px) { .agcards { grid-template-columns: minmax(0, 1fr); } }
+.agcard { display: grid; gap: 8px; align-content: start; padding: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); min-width: 0; }
+.agcard pre.code { white-space: pre-wrap; word-break: break-all; margin: 0; }
+.sustep { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.sustep > div { padding: 10px 12px; display: grid; gap: 2px; border-right: 1px solid var(--line); background: var(--surface); }
+.sustep > div:last-child { border-right: 0; }
+.sustep > div[aria-current="step"] { background: var(--accent-soft); }
+.sustep .n { font: 600 11px/1 var(--mono, monospace); color: var(--fg2); }
+.sulive { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }

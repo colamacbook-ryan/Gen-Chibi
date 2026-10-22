@@ -200,9 +200,11 @@ else
   E="$W/edge"; mkdir -p "$E/conf" "$E/run" "$E/caddy-data" "$E/caddy-config"; chmod 700 "$E/run"
   sed "s#/edge/#$E/#g" "$ROOT/edge/Caddyfile.base" > "$E/conf/Caddyfile"; : > "$E/conf/sites.caddy"
   cx() { XDG_DATA_HOME="$E/caddy-data" XDG_CONFIG_HOME="$E/caddy-config" HOME="$E" "$CADDY" ${1+"$@"}; }
+  # chạy nền: exec trong subshell nền → $! là PID của CHÍNH caddy (gọi hàm cx ở nền thì $! là subshell — kill chỉ giết subshell, caddy mồ côi sống tiếp)
+  cxrun() { XDG_DATA_HOME="$E/caddy-data" XDG_CONFIG_HOME="$E/caddy-config" HOME="$E" exec "$CADDY" run --config "$E/conf/Caddyfile" --adapter caddyfile; }
   J="$(cx adapt --config "$E/conf/Caddyfile" --adapter caddyfile 2>/dev/null || true)"
   grep -q "\"listen\":\"unix/$E/run/caddy-admin.sock|0660\"" <<< "$J" && ok "Caddyfile.base hợp lệ (caddy $CADDY_VER adapt), admin = unix socket 0660" || bad "adapt: $J"
-  cx run --config "$E/conf/Caddyfile" --adapter caddyfile > "$W/caddy.log" 2>&1 & CPID=$!
+  cxrun > "$W/caddy.log" 2>&1 & CPID=$!
   SOCK="$E/run/caddy-admin.sock"
   for i in $(seq 1 40); do [ -S "$SOCK" ] && break; sleep 0.25; done
   [ -S "$SOCK" ] && [ "$(mode "$SOCK")" = 660 ] && ok "admin socket ./edge/run/caddy-admin.sock, quyền 660" || bad "không có admin socket 660 ($(ls -l "$SOCK" 2>&1))"
@@ -218,7 +220,7 @@ else
   r="$(curl -s --noproxy "*" -m 3 -o /dev/null -w "%{http_code} %{redirect_url}" -H 'Host: chibi.test' http://127.0.0.1:8080/ || true)"
   [ "$r" = "308 https://chibi.test/" ] && ok "8080 (HTTP) chuyển sang https://tên/ — không lộ cổng 8443 trong container" || bad "8080: $r"
   kill "$CPID"; wait "$CPID" 2>/dev/null || true; CPID=""
-  cx run --config "$E/conf/Caddyfile" --adapter caddyfile >> "$W/caddy.log" 2>&1 & CPID=$!
+  cxrun >> "$W/caddy.log" 2>&1 & CPID=$!
   body=""; for i in $(seq 1 40); do body="$(curl -sk --noproxy "*" -m 3 --resolve chibi.test:8443:127.0.0.1 https://chibi.test:8443/ 2>/dev/null || true)"; [ "$body" = "gen-chibi edge ok" ] && break; sleep 0.25; done
   [ "$body" = "gen-chibi edge ok" ] && ok "khởi động lại Caddy: cấu hình đọc lại từ tệp, site vẫn chạy" || bad "sau khởi động lại: '$body'"
   kill "$CPID"; wait "$CPID" 2>/dev/null || true; CPID=""

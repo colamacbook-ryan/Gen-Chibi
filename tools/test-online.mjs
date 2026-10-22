@@ -95,7 +95,7 @@ async function mkOnline(o = {}) {
     isOwner: req => req.headers.authorization === 'Bearer owner',
     resolve: netf.resolve, publicIp: netf.publicIp, probe: netf.probe, tlsInfo: netf.tlsInfo,
     cloudflare: opts => cfMake(Object.assign({ base: o.cfBase || 'http://127.0.0.1:9/client/v4' }, opts)),
-    hasPassword: () => o.hasPassword !== false, legacy: () => ({ active: !!o.legacy }),
+    ownerReady: () => o.ownerReady !== false, onDone: () => { o.doneCalls = (o.doneCalls || 0) + 1; }, legacy: () => ({ active: !!o.legacy }),
     tunnel: tl, installId: () => INSTALL,
     waits: Object.assign({ certMs: 0, certFailMs: 60000, tunnelMs: 0, tunnelFailMs: 60000, everyMs: 5 }, o.waits),
     rate: o.rate || { minGapMs: 0, perHour: 100000 }
@@ -469,13 +469,22 @@ console.log('   — đường A (Caddy)');
   const r = await x.post('/api/online/caddy', { domain: 'chibi.example.com' });
   await x.idle();
   const v = await x.view();
-  ok(r.status === 202 && v.flow.done && v.flow.steps.every(s => s.state === 'ok') && v.mode === 'caddy' && v.publicUrl === 'https://chibi.example.com', 'đủ 7 bậc ✓: ' + v.flow.steps.map(s => s.id + (s.state === 'ok' ? '✓' : '✗(' + s.detail + ')')).join(' '));
+  ok(r.status === 202 && v.flow.done && v.flow.steps.every(s => s.state === 'ok') && v.mode === 'caddy' && v.publicUrl === 'https://chibi.example.com', 'đủ 6 bậc ✓: ' + v.flow.steps.map(s => s.id + (s.state === 'ok' ? '✓' : '✗(' + s.detail + ')')).join(' '));
   const sites = fs.readFileSync(path.join(x.home, 'edge', 'conf', 'sites.caddy'), 'utf8'), nonce = x.online._flow().nonce;
   ok(sites.includes('https://chibi.example.com {') && sites.includes('respond "' + nonce + '" 200') && x.adm.calls.some(c => c.p === '/load' && c.body === ROOT_CADDYFILE), 'sites.caddy cho đúng tên + nonce của luồng; nạp lại qua admin kèm Caddyfile gốc');
   ok(/^[a-f0-9]{64}$/.test(fs.readFileSync(path.join(x.home, 'edge', 'conf', 'edge-secret'), 'utf8').trim()) && mode(path.join(x.home, 'edge', 'conf', 'edge-secret')) === 0o600, 'bật Caddy → sinh edge/conf/edge-secret (0600)');
   ok(x.net.calls.probe.some(c => c.url === 'http://chibi.example.com/.well-known/gen-chibi-check/' + nonce) && /hết hạn 2027-01-18/.test(x.step(v, 'cert').detail), 'bậc cổng gọi http://tên/.well-known/gen-chibi-check/<nonce>; bậc chứng chỉ báo hạn');
   ok(x.net.calls.probe.every(c => c.host === 'chibi.example.com' && c.ip === PUB4), 'mọi lời gọi chỉ tới tên miền đã lưu, ghim IP đã kiểm');
+  ok(!/\ttls /.test(sites), 'owner chưa nhập email → sites.caddy không có dòng tls <email> (CNS-267)');
   x.close(); x.adm.close();
+  // email Let's Encrypt (CNS-267): owner đã nhập ở màn khởi tạo / Tài khoản chủ → `tls <email>` trong khối https; email xấu (có dấu ngoặc / khoảng trắng) → bỏ qua
+  for (const [em, want] of [['ops@example.com', true], ['bad } email', false]]) {
+    const y = await flowA({ mk: { extra: { ownerEmail: () => em } } });
+    await y.post('/api/online/caddy', { domain: 'chibi.example.com' }); await y.idle();
+    const st2 = fs.readFileSync(path.join(y.home, 'edge', 'conf', 'sites.caddy'), 'utf8');
+    ok(want ? st2.includes('https://chibi.example.com {\n\ttls ops@example.com\n') : !/\ttls /.test(st2), want ? 'email owner → sites.caddy có "tls ops@example.com" (email liên hệ ACME, chỉ đường Caddy)' : 'email sai dạng → không ghi vào Caddyfile');
+    y.close(); y.adm.close();
+  }
 }
 console.log('   — đường A: DNS / IP / cổng / chứng chỉ');
 {
@@ -612,17 +621,18 @@ console.log('   — proxy riêng + link tạm');
   const vu = await qu.view(), su = qu.step(vu, 'tunnel');
   ok(su.state === 'fail' && /127\.0\.0\.1:7482/.test(su.detail) && /ss -ltnp/.test(su.fix) && !vu.flow.done, 'launcher báo ingress-unverified tới hết hạn chờ → bậc tunnel ✗ nói rõ cổng 7482 bị tiến trình khác giữ + cách sửa');
   qu.close();
-  // CNS-201: luồng dừng ở bậc "mật khẩu chủ" (publicUrl bật TẠM) → chủ đặt mật khẩu → auth gọi onPasswordSet → passwordSet() → tự xong, không cần Kiểm lại
-  const po = { name: 'pw', hasPassword: false, net: { dns: { 'chibi.example.com': { a: [PUB4] } } } }, pz = await mkOnline(po);
+  // v0.23 §A.4 (thay CNS-201): bậc "mật khẩu chủ" đã bỏ — owner chưa khởi tạo (setup.json stage admin / must_init) → Go online bị chặn từ đầu (409 needs owner);
+  // owner sẵn sàng → luồng chạy thẳng tới xong và báo onDone (wizard bước 2 đạt) đúng một lần
+  const po = { name: 'pw', ownerReady: false, net: { dns: { 'chibi.example.com': { a: [PUB4] } } } }, pz = await mkOnline(po);
+  const r0 = await pz.post('/api/online/proxy', { domain: 'chibi.example.com' }), j0 = r0.j || {};
+  const rq = await pz.post('/api/online/quick', {}), rc = await pz.post('/api/online/recheck', {}), roff = await pz.post('/api/online/off', {}); await pz.idle();
+  const pv0 = await pz.view();
+  ok(r0.status === 409 && j0.needs === 'owner' && rq.status === 409 && rc.status === 409 && roff.status === 202 && pv0.publicUrlPending === '' && !po.doneCalls, 'owner chưa khởi tạo: bắt đầu / Kiểm lại → 409 needs owner, không bật tạm gì; Go offline vẫn chạy');
+  po.ownerReady = true;
   await pz.post('/api/online/proxy', { domain: 'chibi.example.com' }); await pz.idle();
-  const pv0 = await pz.view(), ps0 = pz.step(pv0, 'password');
-  ok(ps0.state === 'running' && pv0.flow.waitingPassword === true && !pv0.flow.done && pv0.mode === 'off' && pv0.publicUrl === '' && pv0.publicUrlPending === 'https://chibi.example.com' && /tự hoàn tất/.test(ps0.fix) && pz.online.passwordSet() === false,
-    'chưa có mật khẩu: luồng dừng ở bậc mật khẩu (waitingPassword), publicUrl chỉ bật tạm, mode còn off; cách sửa nói "tự hoàn tất"; passwordSet() khi chưa có mật khẩu không làm gì');
-  po.hasPassword = true;
-  const fired = pz.online.passwordSet(); await pz.idle();
   const pv1 = await pz.view(), it1 = (() => { try { return JSON.parse(fs.readFileSync(path.join(pz.home, 'run', 'edge-intent.json'), 'utf8')); } catch (e) { return {}; } })();
-  ok(fired === true && pv1.flow.done && pv1.mode === 'proxy' && pv1.publicUrl === 'https://chibi.example.com' && pv1.publicUrlPending === '' && it1.online === true && pv1.flow.waitingPassword === false && pz.step(pv1, 'password').state === 'ok' && pz.online.passwordSet() === false,
-    'đặt mật khẩu → passwordSet() chạy tiếp tới finish(): mode proxy, publicUrl chính thức, intent online: true — không cần bấm Kiểm lại; gọi lại khi đã xong không làm gì');
+  ok(pv1.flow.done && pv1.mode === 'proxy' && pv1.publicUrl === 'https://chibi.example.com' && pv1.publicUrlPending === '' && it1.online === true && !pv1.flow.steps.some(x => x.id === 'password') && po.doneCalls === 1,
+    'owner sẵn sàng → luồng tới xong (không bậc mật khẩu): mode proxy, publicUrl chính thức, intent online: true, onDone (wizard) gọi đúng một lần');
   pz.close();
   // review bảo mật 🟡8: luồng không biết địa chỉ lúc bắt đầu (link tạm) + còn kết nối OAuth cũ (sau Go offline) → finish() KHÔNG gỡ kết nối mà dừng needs urlChange
   const uq = await mkOnline({ name: 'uq', impact: () => 2, net: { dns: { 'abc-def-ghi.trycloudflare.com': { a: ['104.16.1.1'] } } } });
@@ -715,7 +725,21 @@ console.log('   — server thật (main.js): cổng thứ hai, quyền, token');
     let log = ''; c.stdout.on('data', d => { log += d; }); c.stderr.on('data', d => { log += d; });
     return { home, c, log: () => log, base: 'http://127.0.0.1:' + port, tbase: 'http://127.0.0.1:' + (port + 2) };
   }
-  async function ready(s) { for (let i = 0; i < 100; i++) { try { const r = await fetch(s.base + '/api/health'); if (r.ok) return true; } catch (e) { /* chưa lên */ } await sleep(100); } throw new Error('server không lên: ' + s.log()); }
+  // v0.23: Go online cần owner đã khởi tạo — server mới (stage admin) được khởi tạo bằng token chủ (như genchibi password) ngay khi lên; máy kế thừa (stage done) giữ nguyên
+  async function ready(s) {
+    for (let i = 0; i < 100; i++) {
+      try {
+        const r = await fetch(s.base + '/api/health');
+        if (r.ok) {
+          const st = await (await fetch(s.base + '/api/auth/state')).json();
+          if (st.stage === 'admin') await fetch(s.base + '/api/auth/password', { method: 'POST', headers: { Authorization: 'Bearer ' + OWNER, 'X-GC-Request': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ password: 'mat khau chu cua test online' }) });
+          return true;
+        }
+      } catch (e) { /* chưa lên */ }
+      await sleep(100);
+    }
+    throw new Error('server không lên: ' + s.log());
+  }
   const portOpen = port => new Promise(r => { const s = net.connect(port, '127.0.0.1'); s.on('connect', () => { s.destroy(); r(true); }); s.on('error', () => r(false)); });
   let secret = '';
   const NONCE = crypto.randomBytes(32).toString('hex');
@@ -785,7 +809,7 @@ console.log('   — server thật (main.js): cổng thứ hai, quyền, token');
   ok(lc.status === 409 && lj.needs === 'legacy' && lv.legacy.active === true && lv.legacy.marked === true, '.env kế thừa (GC_PUBLIC_URL) → 409 needs legacy; legacy.marked từ data/legacy.json');
   const pw = 'correct horse battery staple';
   const sp = await fetch(C.base + '/api/auth/password', { method: 'POST', headers: hdr, body: JSON.stringify({ password: pw }) });
-  const lg = await fetch(C.base + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify({ password: pw }) });
+  const lg = await fetch(C.base + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify({ username: 'owner', password: pw }) });
   const ck = (lg.headers.getSetCookie ? lg.headers.getSetCookie() : [lg.headers.get('set-cookie')]).map(x => String(x).split(';')[0]).join('; ');
   const sv = await fetch(C.base + '/api/online', { headers: { Cookie: ck } });
   const nv = await fetch(C.base + '/api/online', { headers: { Cookie: 'gc_session=bogus' } });

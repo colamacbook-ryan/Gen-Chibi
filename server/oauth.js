@@ -88,6 +88,7 @@ class OAuth {
     this.srcUrl = typeof opts.publicUrl === 'function' ? opts.publicUrl : (v => () => v)(opts.publicUrl || '');
     // pruneOk: được gỡ token của audience khác không? false khi publicUrl đang bật TẠM (wizard kiểm tên miền mới) — trả về (revert) thì kết nối cũ còn nguyên
     this.pruneOk = opts.pruneOk || (() => true);
+    this.warn = opts.warn || (() => {});
     this.cfgMemo = null;
     this.now = opts.now || Date.now;
     this.accessTtl = Math.max(1, Math.min(86400, Math.round(+opts.accessTtl) || TTL.access));
@@ -419,8 +420,11 @@ class OAuth {
       const grants = Object.values(this.s.grants).filter(g => g.client === c.id);
       const status = !c.approvedAt ? 'pending' : grants.length ? 'active' : c.revokedAt ? 'revoked' : 'expired';
       const best = grants.length ? SCOPES[Math.max.apply(null, grants.map(g => SCOPES.indexOf(g.scope)))] : c.scope;
+      // requests: yêu cầu cấp phép đang chờ của client (CNS-128 — nút Cấp phép ngay trong Studio, khi trang Cấp phép mở ở địa chỉ khác Studio): id yêu cầu,
+      // mức quyền xin, hạn. Chỉ chủ (đã qua cổng /api) thấy; duyệt vẫn đi qua approve() như trang Cấp phép (redirect về callback đã đăng ký của client)
+      const requests = [...this.pending].filter(([, x]) => x.client === c.id && x.exp > this.now()).map(([rid, x]) => ({ id: rid, requested: x.requested, expiresAt: iso(x.exp) }));
       return { id: c.id, name: c.name, hosts: c.redirectUris.map(u => this.callbackInfo(u)), scope: best, createdAt: c.createdAt, approvedAt: c.approvedAt, lastUsedAt: c.lastUsedAt || null, status,
-        expiresAt: status === 'pending' ? iso(Date.parse(c.createdAt) + TTL.client * 1000) : null };
+        expiresAt: status === 'pending' ? iso(Date.parse(c.createdAt) + TTL.client * 1000) : null, requests };
     }).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   }
   setScope(id, scope) {
@@ -438,6 +442,18 @@ class OAuth {
     for (const [k, p] of this.pending) if (p.client === c.id) this.pending.delete(k);
     c.revokedAt = iso(this.now());
     this.save(); return true;
+  }
+  // khôi phục sao lưu (CNS-138): oauth.json trong bản sao lưu có thể còn kết nối chủ đã thu hồi SAU lúc sao lưu → thu hồi MỌI kết nối (agent cấp phép lại).
+  // Client giữ (bảng Kết nối agent còn tên + lịch sử), mọi grant / mã / yêu cầu chờ bị huỷ. Trả số kết nối đã thu hồi
+  revokeAll(why) {
+    let n = 0;
+    Object.values(this.s.clients).forEach(c => { if (Object.values(this.s.grants).some(g => g.client === c.id)) n++; });
+    Object.keys(this.s.grants).forEach(g => this.dropGrant(g));
+    this.codes.clear(); this.pending.clear();
+    Object.values(this.s.clients).forEach(c => { if (c.approvedAt && !c.revokedAt) c.revokedAt = iso(this.now()); });
+    this.save();
+    this.warn('[oauth] ' + (why || 'revoke all') + ': ' + n + ' agent connection(s) revoked - agents must be authorized again');
+    return n;
   }
 }
 

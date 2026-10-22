@@ -4,10 +4,14 @@
 // Một API cho Studio (wizard) và CLI (`genchibi online`). Mỗi bậc: { id, state: pending|running|ok|fail, detail, fix, at } — detail / fix lưu
 // dạng { msg: msgid tiếng Việt, vars } (dữ liệu trung lập ngôn ngữ trong data/online.json), dịch lúc trả về theo người gọi (ADR 0007).
 // Đường:
-//   caddy      (A) domain → edge → port → cert → public → mcp → password          (chỉ bản Docker)
-//   cloudflare (B) owner → token → zone → tunnel → public → waf → mcp → password
-//   proxy          domain → config → public → mcp → password                     (proxy riêng của owner)
-//   quick          tunnel → public → mcp → password                              (*.trycloudflare.com)
+//   caddy      (A) domain → edge → port → cert → public → mcp          (chỉ bản Docker)
+//   cloudflare (B) owner → token → zone → tunnel → public → waf → mcp
+//   proxy          domain → config → public → mcp                     (proxy riêng của owner)
+//   quick          tunnel → public → mcp                              (*.trycloudflare.com)
+// v0.23 (spec v023 §A.4): bậc `password` (chờ mật khẩu chủ / mã setup) đã bỏ — Go online CHỈ chạy khi owner đã khởi tạo (setup.json stage ≥ domain), nên
+// luồng không bao giờ đợi mật khẩu nữa. Bắt đầu / Kiểm lại khi stage admin / must_init → 409 needs 'owner' (cả qua CLI); máy kế thừa được miễn.
+// Máy v0.21 / v0.22 đang "online tạm, chờ mật khẩu" lúc nâng cấp: luồng giữ nguyên (vẫn online tạm), bậc password bỏ, cờ waitOwner → owner khởi tạo
+// (genchibi password / token chủ) là luồng tự xong (ownerReady()). Xong luồng → onDone() (wizard bước 2 đạt).
 // Máy kế thừa (.env GC_PUBLIC_URL / GC_ALLOWED_HOSTS): mọi luồng 409 needs legacy; POST /api/online/migrate chép .env vào online.json (migrate()).
 // publicUrl: bậc `public` bật TẠM (OAuth phục vụ metadata) → hết bậc thì chính thức; một bậc sau đó ✗ → trả về giá trị cũ (CNS-193).
 // Chống thành công cụ quét (CNS-180): chỉ chủ máy (isOwner — P1), chỉ gọi đúng tên miền của luồng, phân giải trước rồi TỪ CHỐI IP riêng /
@@ -73,10 +77,10 @@ function isPublicIp(ip) {
 const isCloudflareIp = ip => net.isIP(ip) > 0 && CFB.check(ip, fam(ip));
 
 const FLOWS = {
-  caddy: ['domain', 'edge', 'port', 'cert', 'public', 'mcp', 'password'],
-  cloudflare: ['owner', 'token', 'zone', 'tunnel', 'public', 'waf', 'mcp', 'password'],
-  proxy: ['domain', 'config', 'public', 'mcp', 'password'],
-  quick: ['tunnel', 'public', 'mcp', 'password'],
+  caddy: ['domain', 'edge', 'port', 'cert', 'public', 'mcp'],
+  cloudflare: ['owner', 'token', 'zone', 'tunnel', 'public', 'waf', 'mcp'],
+  proxy: ['domain', 'config', 'public', 'mcp'],
+  quick: ['tunnel', 'public', 'mcp'],
   off: ['local', 'remote']
 };
 // "Kiểm lại" sau khi xong: chỉ các bậc trạng thái SỐNG (không cần token API, không ghi gì ở Cloudflare)
@@ -192,7 +196,7 @@ function snippets(domain, port) {
     '\thandle @machine {',
     '\t\treverse_proxy ' + up,
     '\t}',
-    '\t# people (Studio, /setup, /login, /oauth/authorize): your own login may sit here (forward_auth …) — optional, gen-chibi has its own password',
+    '\t# people (Studio, /login, /oauth/authorize): your own login may sit here (forward_auth …) — optional, gen-chibi has its own password',
     '\thandle {',
     '\t\treverse_proxy ' + up,
     '\t}',
@@ -212,10 +216,19 @@ function snippets(domain, port) {
   return { caddy, nginx };
 }
 
+// luồng đang "online tạm, chờ owner"? — dạng v0.21 / v0.22 (mọi bậc ✓ trừ bậc `password` chưa ✓) hoặc cờ waitOwner của v0.23. Thuần dữ liệu: main.js (bảng lối vào
+// của setup.json) và server/auth-cli.js (genchibi password lúc app dừng) dùng chung
+function flowWaitsOwner(f) {
+  if (!f || f.done || f.needs || f.mode === 'off' || !Array.isArray(f.steps)) return false;
+  if (f.waitOwner) return true;
+  const pw = f.steps.find(x => x && x.id === 'password');
+  return !!pw && pw.state !== 'ok' && f.steps.filter(x => x && x.id !== 'password').every(x => x.state === 'ok');
+}
+
 function createOnline(opts) {
   const d = Object.assign({
     now: () => Date.now(), log: () => {}, resolve: resolveFresh, publicIp: traceIp, probe: probeUrl, tlsInfo,
-    cloudflare: o => createCloudflare(o), hasPassword: () => true, isOwner: () => false, inDocker: false,
+    cloudflare: o => createCloudflare(o), ownerReady: () => true, onDone: () => {}, ownerEmail: () => '', isOwner: () => false, inDocker: false,
     legacy: () => { const e = process.env; return { active: !!(e.GC_PUBLIC_URL || e.GC_ALLOWED_HOSTS), publicUrl: e.GC_PUBLIC_URL || '', allowedHosts: e.GC_ALLOWED_HOSTS || '', tunnel: e.GC_TUNNEL || '' }; },
     tunnel: { set() {}, listening: () => false }, secrets: null,
     waits: { certMs: 90000, certFailMs: 15 * 60000, tunnelMs: 60000, tunnelFailMs: 10 * 60000, everyMs: 5000 },
@@ -257,6 +270,12 @@ function createOnline(opts) {
   // ---- trạng thái luồng (data/online.json qua online-config)
   let flow = (d.config.get() || {}).flow || null;
   const save = () => d.config.set({ flow });
+  // nâng cấp từ v0.21 / v0.22: luồng còn bậc `password` (đã bỏ) → bỏ bậc đó; mọi bậc khác ✓ mà chưa xong = "online tạm, chờ owner" (waitOwner)
+  if (flow && Array.isArray(flow.steps) && flow.steps.some(x => x && x.id === 'password')) {
+    if (flowWaitsOwner(flow)) flow.waitOwner = true;
+    flow.steps = flow.steps.filter(x => x && x.id !== 'password');
+    save();
+  }
   function newFlow(mode, extra) {
     return Object.assign({ mode, domain: '', url: '', startedAt: iso(), done: false, nonce: crypto.randomBytes(16).toString('hex'), pending: false, needs: null, conflicts: null, choices: null, waitSince: {},
       steps: FLOWS[mode].map(id => ({ id, state: 'pending', detail: null, fix: null, at: null })) }, extra);
@@ -347,7 +366,7 @@ function createOnline(opts) {
     if (!d.inDocker) return fail(N_('Đường Caddy chỉ có ở bản cài Docker'), N_('Bản cài native: dùng Cloudflare (Tunnel) hoặc proxy riêng'));
     if (!caddy.enabled() || !(await caddy.adminUp())) return fail(N_('Edge Caddy chưa chạy (chưa publish cổng 80 / 443)'), N_('Chạy một lệnh trên máy chủ: genchibi online --caddy'));
     edge.ensureSecret();
-    caddy.writeSites([{ domain: flow.domain, nonce: flow.nonce }]);
+    caddy.writeSites([{ domain: flow.domain, nonce: flow.nonce }], { email: d.ownerEmail() });   // email liên hệ Let's Encrypt: chỉ khi owner đã nhập (CNS-267)
     try { await caddy.reload(); } catch (e) { return fail(N_('Caddy không nạp được cấu hình ({code}): {error}', { code: cut(e.code, 40), error: cut(e.message) }), N_('Xem log của edge: docker logs gen-chibi-edge')); }
     return ok(N_('Edge Caddy đang chạy, đã nạp cấu hình cho {domain}', { domain: flow.domain }));
   }
@@ -435,11 +454,6 @@ function createOnline(opts) {
     if ([403, 429, 503].includes(m.status)) return fail(N_('{path} trả {status} cho User-Agent Claude-User — có luật chặn bot / AI phía trước app', { path: 'POST /mcp', status: m.status }), blockedFix());
     if (m.status !== 401 || !/resource_metadata=/.test(String((m.headers || {})['www-authenticate'] || ''))) return fail(N_('POST /mcp phải trả 401 kèm WWW-Authenticate, nhận {error}', { error: errOf(m) }), N_('Proxy phía trước phải chuyển /mcp thẳng tới gen-chibi (không qua trang đăng nhập), giữ nguyên header WWW-Authenticate'));
     return ok(N_('Agent tới được MCP từ Internet (401 + WWW-Authenticate với User-Agent Claude-User). Không kiểm được luật chặn theo IP (dải Anthropic {ips})', { ips: ANTHROPIC.ips.join(', ') }));
-  }
-  async function stepPassword() {
-    if (d.hasPassword()) return ok(N_('Chủ máy đã có mật khẩu'));
-    // đặt mật khẩu (qua /setup, Tài khoản chủ hay genchibi password) → auth báo onPasswordSet → luồng tự đi tiếp tới xong (CNS-201), không cần Kiểm lại
-    return wait(N_('Chưa có mật khẩu chủ máy — địa chỉ công khai đang bật tạm, chờ bước cuối này'), N_('Mở {url}/setup, nhập mã setup (lệnh genchibi status in mã) rồi đặt mật khẩu — xong là app tự hoàn tất lên mạng (hoặc trên máy chủ: genchibi password)', { url: urlOf() }));
   }
   // ---- đường B
   function client() {
@@ -547,10 +561,10 @@ function createOnline(opts) {
     return ok(N_('Link tạm: {url} (đổi mỗi lần khởi động; không dùng cho kết nối OAuth lâu dài)', { url }));
   }
   const STEPS = {
-    caddy: { domain: () => stepDomain(true), edge: stepEdge, port: stepPort, cert: stepCert, public: stepPublic, mcp: stepMcp, password: stepPassword },
-    cloudflare: { owner: async () => ok(N_('Đã xác nhận chủ máy')), token: stepToken, zone: stepZone, tunnel: stepTunnel, public: stepPublic, waf: stepWaf, mcp: stepMcp, password: stepPassword },
-    proxy: { domain: () => stepDomain(false), config: stepConfig, public: stepPublic, mcp: stepMcp, password: stepPassword },
-    quick: { tunnel: stepQuick, public: stepPublic, mcp: stepMcp, password: stepPassword }
+    caddy: { domain: () => stepDomain(true), edge: stepEdge, port: stepPort, cert: stepCert, public: stepPublic, mcp: stepMcp },
+    cloudflare: { owner: async () => ok(N_('Đã xác nhận chủ máy')), token: stepToken, zone: stepZone, tunnel: stepTunnel, public: stepPublic, waf: stepWaf, mcp: stepMcp },
+    proxy: { domain: () => stepDomain(false), config: stepConfig, public: stepPublic, mcp: stepMcp },
+    quick: { tunnel: stepQuick, public: stepPublic, mcp: stepMcp }
   };
 
   // ---------------------------------------------------------------- chạy
@@ -589,7 +603,10 @@ function createOnline(opts) {
         return;
       }
     }
-    if (!live) finish();
+    if (!live) {
+      if (!d.ownerReady()) { flow.waitOwner = true; save(); return; }   // phòng xa: owner chưa khởi tạo thì không chính thức hoá (route đã chặn từ đầu)
+      finish();
+    }
   }
   // xong: publicUrl chính thức, mode mới, dọn edge cục bộ của mode cũ, bỏ token API (giữ chỉ khi chủ chọn)
   function finish() {
@@ -606,24 +623,32 @@ function createOnline(opts) {
     if (['cloudflare', 'quick'].includes(prev) && !['cloudflare', 'quick'].includes(flow.mode)) { try { fs.rmSync(files.tunnelToken, { force: true }); } catch (e) { /* không có */ } }
     writeIntent(flow.mode === 'cloudflare' ? 'token' : flow.mode === 'quick' ? 'quick' : 'off', true);   // online: true — launcher giữ edge khi cập nhật
     if (flow.mode === 'cloudflare') { if (mem && mem.keep && d.secrets) d.secrets.set(SECRET_KEY, mem.token); dropToken(); }
-    flow.done = true; flow.doneAt = iso(); flow.needs = null; delete flow.revokes;
+    flow.done = true; flow.doneAt = iso(); flow.needs = null; delete flow.revokes; delete flow.waitOwner;
     save();
     d.log('[online] online via ' + flow.mode + ' at ' + urlOf());
+    try { d.onDone(); } catch (e) { d.log('[online] onDone: ' + cut(e.message)); }   // wizard bước 2 (tên miền) đạt
   }
-  // luồng dừng ĐÚNG ở bậc "mật khẩu chủ" (mọi bậc trước đã ✓, publicUrl đang bật tạm)
-  function waitingPassword() {
-    if (!flow || flow.done || flow.mode === 'off' || flow.needs) return false;
-    const st = flow.steps.find(s => s.state !== 'ok');
-    return !!st && st.id === 'password';
-  }
-  // auth.setPassword → main.js → đây (CNS-201): đang chờ mật khẩu thì chạy tiếp ngay tới finish() (mode / publicUrl chính thức / online: true / bỏ API token).
-  // Lượt khác đang chạy → đợi nó xong rồi xét lại (lượt đó tới bậc mật khẩu thì tự thấy đã có)
-  function passwordSet() {
-    if (running || offQueued) { waitRun().then(() => { if (!offQueued) passwordSet(); }); return false; }
-    if (!waitingPassword() || !d.hasPassword()) return false;
-    d.log('[online] owner password set: finishing Go online (' + flow.mode + ')');
+  // luồng "online tạm, chờ owner" (nâng cấp từ v0.21 / v0.22 lúc đang chờ mật khẩu): mọi bậc ✓, publicUrl đang bật tạm, chỉ thiếu owner
+  function waitingOwner() { return !!(flow && flow.waitOwner && !flow.done && flow.mode !== 'off' && !flow.needs); }
+  // owner vừa khởi tạo (setup.json stage ≥ domain, mọi đường — màn khởi tạo, genchibi password, trình cài) → main.js → đây: luồng chờ owner chạy tiếp tới finish().
+  // Lượt khác đang chạy → đợi nó xong rồi xét lại
+  function ownerReady() {
+    if (running || offQueued) { waitRun().then(() => { if (!offQueued) ownerReady(); }); return false; }
+    if (!waitingOwner() || !d.ownerReady()) return false;
+    d.log('[online] owner account ready: finishing Go online (' + flow.mode + ')');
+    delete flow.waitOwner; save();
     kick(() => advance(false));
     return true;
+  }
+  const busy = () => !!running || offQueued;
+  // wizard bước 3 — kiểm TỪ INTERNET (chỉ báo, không khoá — Q49): máy đã lên mạng → bậc MCP của luồng (401 + WWW-Authenticate với User-Agent Claude-User,
+  // metadata OAuth) chạy lại trên địa chỉ công khai hiện tại; chưa lên mạng → skip. Không đổi luồng / cấu hình
+  async function internetCheck(lang) {
+    const c = d.config.get() || {};
+    if (!c.publicUrl || !flow || !flow.done || flow.mode === 'off' || running || offQueued) return { state: 'skip', detail: tx(N_('Máy chưa lên mạng — bỏ qua kiểm từ Internet (agent trên máy dùng genchibi mcp)'), lang), fix: null };
+    dnsCache = {};
+    let r; try { r = await stepMcp(); } catch (e) { r = fail(N_('Lỗi không lường trước: {error}', { error: cut(e.message) })); } finally { dnsCache = null; }
+    return { state: r.state, detail: tx(r.detail, lang), fix: tx(r.fix, lang), url: c.publicUrl, at: iso() };
   }
   // khôi phục sao lưu (CNS-202): data/ có thể của máy khác → không mang trạng thái online sang. mode off, publicUrl rỗng, bỏ luồng, intent off (tunnel dừng),
   // xoá run/tunnel.token + install-id (lần Go online sau dùng tên tunnel mới — không giành tunnel của máy gốc), bỏ site Caddy. Giữ cfResources: nó mang installId cũ
@@ -719,7 +744,7 @@ function createOnline(opts) {
     const c = d.config.get() || {}, h = (req && req.headers) || {};
     const f = flow && {
       mode: flow.mode, domain: flow.domain, url: urlOf(), startedAt: flow.startedAt, done: !!flow.done, doneAt: flow.doneAt || null, pending: !!flow.pending,
-      needs: flow.needs || null, conflicts: flow.conflicts || null, choices: flow.choices || null, revokes: flow.needs === 'urlChange' ? +flow.revokes || 0 : 0, waitingPassword: waitingPassword(),
+      needs: flow.needs || null, conflicts: flow.conflicts || null, choices: flow.choices || null, revokes: flow.needs === 'urlChange' ? +flow.revokes || 0 : 0, waitingOwner: waitingOwner(),
       steps: flow.steps.map(s => Object.assign({ id: s.id, state: s.state, detail: tx(s.detail, lang), fix: tx(s.fix, lang), at: s.at }, s.manual ? { manual: true } : {}, s.expires ? { expires: s.expires } : {})),
       cloudflare: flow.cf ? { zone: flow.cf.zone || '', sub: flow.cf.sub || '', tunnelName: flow.cf.tunnelName || '', cname: flow.cf.cname || '', waf: !!flow.cf.waf, overwrite: !!flow.cf.overwrite } : null
     };
@@ -741,6 +766,8 @@ function createOnline(opts) {
     if (p === '/api/online' && m === 'GET') return send(res, 200, view(req, lang));
     if (m !== 'POST' || !/^\/api\/online\/(caddy|cloudflare|cloudflare\/confirm|proxy|quick|recheck|off|migrate)$/.test(p)) return send(res, 404, { error: tr(SRC, 'không có API này') });
     const b = await h.body(req, 16 * 1024);
+    // v0.23 §A.4: chưa khởi tạo owner (stage admin / must_init) → không lên mạng được (cả qua CLI). Go offline và migrate (máy kế thừa) vẫn chạy
+    if (!d.ownerReady() && !/^\/api\/online\/(off|migrate)$/.test(p)) return send(res, 409, { error: tr(SRC, 'khởi tạo tài khoản chủ trước khi lên mạng — mở Studio trên máy này (lần đầu: admin / admin) hoặc chạy genchibi password trên máy chủ'), needs: 'owner' });
     const bad = msg => send(res, 400, { error: msg });
     if (p !== '/api/online/off' && (running || offQueued)) return send(res, 409, { error: tr(SRC, 'Go online đang chạy — đợi xong rồi thử lại') });
     const w = gate();
@@ -814,11 +841,11 @@ function createOnline(opts) {
   let watch = null;
   function init() {
     d.tunnel.set(intent() !== 'off');
-    if (waitingPassword() && d.hasPassword()) passwordSet();   // mật khẩu đặt lúc app dừng (genchibi password → auth-cli.js): xong nốt luồng
+    if (waitingOwner() && d.ownerReady()) ownerReady();   // owner khởi tạo lúc app dừng (genchibi password → auth-cli.js): xong nốt luồng
     if (!watch) { watch = setInterval(() => { if (!running) d.tunnel.set(intent() !== 'off'); }, 2000); if (watch.unref) watch.unref(); }
   }
 
-  return { route, checkRoute, view, init, intent, idle, migrate, passwordSet, waitingPassword, resetAfterRestore, files, tunnelPort, _flow: () => flow };
+  return { route, checkRoute, view, init, intent, idle, migrate, ownerReady, waitingOwner, busy, internetCheck, resetAfterRestore, files, tunnelPort, _flow: () => flow };
 }
 
-module.exports = { createOnline, isPublicIp, isCloudflareIp, probeUrl, resolveFresh, traceIp, snippets, ANTHROPIC, CF_IPS, FLOWS };
+module.exports = { createOnline, flowWaitsOwner, isPublicIp, isCloudflareIp, probeUrl, resolveFresh, traceIp, snippets, ANTHROPIC, CF_IPS, FLOWS };
