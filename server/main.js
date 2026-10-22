@@ -13,7 +13,7 @@ const { MCP, TOOLS: MCP_TOOLS, cleanContext, cleanAnchors, scopeCtx } = require(
 const Agent = require('./agent.js');
 const { OAuth, clientIp, isDirectLocal, SCOPES: OAUTH_SCOPES, SCOPE_INFO: OAUTH_SCOPE_INFO } = require('./oauth');
 const { Auth } = require('./auth');                       // v0.21: đăng nhập chủ máy — mật khẩu / phiên / cookie thiết bị / token chủ (spec §3.3–§3.4); v0.23: admin / admin + khởi tạo
-const { Setup, adminReasons } = require('./setup');       // v0.23: thiết lập lần đầu — data/setup.json stage + cửa sổ admin run/admin-window (spec v023 §A.0 / §A.1)
+const { Setup, adminReasons, loginReasons } = require('./setup');       // v0.23: thiết lập lần đầu — data/setup.json stage + cửa sổ admin run/admin-window (spec v023 §A.0 / §A.1)
 const { OnlineConfig } = require('./online-config');      // v0.21: data/online.json — publicUrl / Host / header IP đọc LÚC CHẠY (spec §3.2)
 const { consentPage, errorPage } = require('./oauth-page');
 const { Store, KEY, CHAT_KINDS, readJSON, writeJSON } = require('./store');
@@ -26,6 +26,8 @@ const APP = path.resolve(__dirname, '..');                       // thư mục p
 const HOME = process.env.GC_HOME || (path.basename(path.dirname(APP)) === 'releases' ? path.resolve(APP, '..', '..') : path.join(APP, '.home'));
 const VERSION = fs.readFileSync(path.join(APP, 'VERSION'), 'utf8').trim();
 const PORT = +(process.env.GC_PORT || 7480);
+// cổng owner thấy trên MÁY CHỦ (CNS-270): Docker map ${GC_PORT}:7480 nên trong container GC_PORT luôn 7480 — compose truyền GC_HOST_PORT; mọi câu / link cho owner dùng cổng này
+const HOST_PORT = /^\d{1,5}$/.test(String(process.env.GC_HOST_PORT || '')) ? +process.env.GC_HOST_PORT : PORT;
 const HOST = process.env.GC_LISTEN || '127.0.0.1';   // trong Docker đặt 0.0.0.0; cổng ngoài vẫn chỉ mở cho 127.0.0.1
 // Token chủ (T): GC_API_TOKEN; trống thì server tự sinh data/owner-token (CNS-195) — xem auth.loadToken. Bản cài nào cũng có token (v0.21)
 const ENV_TOKEN = process.env.GC_API_TOKEN || '';
@@ -112,7 +114,7 @@ function machineState() {
     tunnel: goOnline.intent() !== 'off', inDocker: IN_DOCKER, bind: process.env.GC_BIND || '', listen: HOST };
 }
 const auth = new Auth({ dir: DATA, envToken: ENV_TOKEN, key: secrets.key, log, ipHeader: () => online.ipHeader(), rate: TESTING ? process.env.GC_AUTH_RATE : 1,
-  publicUrl: () => online.publicUrl(), setup, port: PORT, adminCheck: req => adminReasons(machineState(), req) });
+  publicUrl: () => online.publicUrl(), setup, port: HOST_PORT, adminCheck: (req, key) => loginReasons(machineState(), req, key) });
 // dấu máy kế thừa (CNS-173, 199b): MỘT lần ở lần khởi động đầu của v0.21 — đọc env lúc đó; tokenless = bản cài đã có dữ liệu chạy không token (agent cũ cần nối lại, CNS-197)
 auth.markLegacy({ publicUrl: process.env.GC_PUBLIC_URL, allowedHosts: process.env.GC_ALLOWED_HOSTS, tokenless: !ENV_TOKEN && !TOKEN_FILE_EXISTED && hasUserData() });
 setInterval(() => auth.tick(), 60000).unref();   // phiên hết hạn (cả phiên admin), seenAt
@@ -787,7 +789,7 @@ async function selfTest() {
 function setupView(lang) {
   const v = setup.view(), c = online.get() || {}, st = v.mcp.selfTest;
   if (st) v.mcp.selfTest = Object.assign({}, st, { checks: (st.checks || []).map(x => Object.assign({}, x, { detail: txOf(x.detail, lang) })) });
-  return Object.assign(v, { admin: setup.stage === 'admin' ? { reasons: adminReasons(machineState()) } : null, port: PORT, localMcp: 'http://localhost:' + PORT + '/mcp',
+  return Object.assign(v, { admin: setup.stage === 'admin' ? { reasons: adminReasons(machineState()) } : null, port: HOST_PORT, localMcp: 'http://localhost:' + HOST_PORT + '/mcp',
     mcpUrl: oauth.enabled ? oauth.resource : null, online: { mode: c.mode || 'off', publicUrl: c.publicUrl || '', pending: c.publicUrlPending || '', busy: goOnline.busy(), legacy: auth.isLegacy() } });
 }
 async function setupRoute(req, res, p, m) {

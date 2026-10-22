@@ -37,7 +37,7 @@ function validDomain(d) {
 // email liên hệ Let's Encrypt (v0.23, CNS-267): chỉ khi owner đã nhập ở màn khởi tạo / Tài khoản chủ. Dạng chặt (không khoảng trắng, ngoặc, dấu nháy) — đi vào
 // Caddyfile như MỘT token: `tls <email>` trong khối https của từng site (Caddyfile gốc chỉ chép một lần nên không đặt ở khối global). Sai dạng → bỏ qua (không ghi)
 const EMAIL_RE = /^[A-Za-z0-9.!#$%&*+/=?^_`|~-]{1,64}@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
-const acmeEmail = e => typeof e === 'string' && e.length <= 254 && EMAIL_RE.test(e) ? e : '';
+const acmeEmail = e => typeof e === 'string' && e.length <= 254 && e[0] !== '#' && EMAIL_RE.test(e) ? e : '';   // '#' đầu token = chú thích Caddyfile (review bảo mật 🔵2)
 // nội dung sites.caddy — sites: [{ domain, nonce }] (đã kiểm lại ở đây: dữ liệu xấu → ném lỗi, không bao giờ ghi); opts.email: email ACME (tuỳ chọn)
 function sitesFile(sites, opts) {
   const email = acmeEmail(opts && opts.email);

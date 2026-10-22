@@ -395,7 +395,8 @@ class Auth {
   // tên đăng nhập (nửa còn lại của thông tin đăng nhập). Phiên admin (A) thêm who / expiresAt. Chủ (S / T) nhận đủ.
   state(req) {
     const who = this.whoOf(req), pw = this.hasPassword();
-    const pub = { password: pw, minLength: PW.min, login: '/login', stage: this.stage() };
+    const u0 = this.owner(), pub = { password: pw, minLength: PW.min, login: '/login', stage: this.stage() };
+    if (pw && u0 && !u0.login) pub.ownerDefault = true;   // máy nâng cấp chưa đặt tên đăng nhập → trang đăng nhập nói "tên là owner" (CNS-272); bản cài mới không thấy
     if (!who) return pw ? pub : Object.assign(pub, { legacy: this.isLegacy() });
     if (who === 'A') { const a = this.adminOf(req); return Object.assign(pub, { who, admin: true, session: false, expiresAt: iso(a.exp) }); }
     return Object.assign(pub, { who, legacy: this.isLegacy(), session: !!this.sessionOf(req), owner: who, locked: this.lockedFor('login'), user: this.profile() });
@@ -432,7 +433,9 @@ class Auth {
       if (!user) return json(400, { error: 'cần tên đăng nhập' });
       if (g.wait) return blocked(g);                                    // chạm trần → từ chối, KHÔNG kiểm gì thêm
       if (user === 'admin') {
-        const why = this.adminCheck(req);                               // điều kiện của máy + request: không đạt → nói ĐÚNG lý do + cách vào, không kiểm mật khẩu, không đếm
+        // request từ xa → chỉ 'local-only' · điều kiện của máy → đúng lý do + cách vào · khoá một lần của link (b.key) thiếu / sai → 'link' (đếm vào trần)
+        const why = this.adminCheck(req, typeof b.key === 'string' ? b.key : '');
+        if (why[0] === 'link') this.fail('login', g);
         if (why.length) return json(403, { error: tr(VI, REASON_MSG[why[0]] || REASON_MSG.stage, { port: this.port }), reason: why[0], reasons: why });
         if (!safeEq(b.password, 'admin')) { this.fail('login', g); return json(401, { error: 'tên đăng nhập hoặc mật khẩu không đúng' }); }
         this.log('[auth] admin / admin accepted for the first-run owner account screen (30 minutes)');

@@ -16,6 +16,7 @@
 // Thuần Node, không DOM, không HTTP server: main.js định tuyến + dựng ảnh chụp trạng thái máy (machine) cho adminReasons().
 'use strict';
 const fs = require('fs');
+const crypto = require('crypto');
 const path = require('path');
 
 const STAGES = ['admin', 'must_init', 'domain', 'mcp', 'done'];
@@ -25,6 +26,7 @@ const LOOP_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 // header của proxy / edge: có một cái là request KHÔNG đến thẳng từ trình duyệt trên máy (rào phụ — proxy tối giản không thêm gì: đó là rủi ro chấp nhận)
 const PROXY_HEADERS = ['x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'x-forwarded-port', 'forwarded', 'x-real-ip', 'true-client-ip', 'cf-connecting-ip', 'cf-ray', 'cf-ipcountry', 'cdn-loop', 'x-gc-edge', 'via'];
 const LOGIN_RE = /^[a-z0-9._-]{3,32}$/;
+const KEY_RE = /^[0-9a-f]{32}$/;                  // khoá một lần của cửa sổ admin (128 bit, hex) — CLI ghi, link http://localhost:<cổng>/login#k=<khoá>
 const EMAIL_RE = /^[A-Za-z0-9.!#$%&*+/=?^_`|~-]{1,64}@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
 const idx = s => STAGES.indexOf(s);
 const iso = ms => new Date(ms).toISOString();
@@ -53,7 +55,7 @@ function displayProblem(s) {
 // email (tuỳ chọn): CHỈ dùng làm email liên hệ Let's Encrypt của đường Caddy (CNS-267) — dạng chặt, ≤ 254, không khoảng trắng / dấu ngoặc (đi vào Caddyfile)
 function emailProblem(s) {
   if (s === undefined || s === null || s === '') return '';
-  if (typeof s !== 'string' || s.length > 254 || !EMAIL_RE.test(s)) return 'email không hợp lệ (dạng ten@example.com)';
+  if (typeof s !== 'string' || s.length > 254 || s[0] === '#' || !EMAIL_RE.test(s)) return 'email không hợp lệ (dạng ten@example.com)';   // '#' đầu = chú thích trong Caddyfile
   return '';
 }
 
@@ -109,9 +111,16 @@ class Setup {
       why = 'floor';
       this.log('[setup] setup.json said "admin" but the owner was already initialized on this machine (backup restored or file removed): admin / admin stays closed - sign in with the owner token or run `genchibi password`');
     }
+    // stage admin nhưng auth.json đã có mật khẩu (setup.json cũ / chép tay / khôi phục lệch) → must_init: admin KHÔNG BAO GIỜ được khởi tạo đè mật khẩu đang có
+    if (this.s.stage === 'admin' && ctx.hasPassword) {
+      this.s.stage = 'must_init'; this.s.at = iso(this.now()); this.s.by = 'password-exists';
+      this.s.history.push({ stage: 'must_init', at: this.s.at, by: 'password-exists' });
+      why = 'password-exists';
+      this.log('[setup] setup.json said "admin" but an owner password already exists: admin / admin stays closed - sign in with the owner token or run `genchibi password`');
+    }
     if (why) {
       this.save();
-      if (why !== 'floor') this.log('[setup] first-run stage: ' + this.s.stage + ' (' + why + ')');
+      if (why !== 'floor' && why !== 'password-exists') this.log('[setup] first-run stage: ' + this.s.stage + ' (' + why + ')');
       if (why === 'upgrade-online-waiting') this.log('[setup] this machine is online and waiting for the owner: run `genchibi password` on the server (sets the owner account; going online then finishes by itself)');
     }
     return this.s.stage;
@@ -193,10 +202,10 @@ class Setup {
     if (!st.isFile() || (st.mode & 0o077) || st.size > 1024) return { ok: false, reason: 'window-perms' };
     let j = null; try { j = JSON.parse(fs.readFileSync(this.f.window, 'utf8')); } catch (e) { return { ok: false, reason: 'window-perms' }; }
     const t = this.now(), exp = j && Number(j.exp);
-    if (!j || j.v !== 1 || !Number.isFinite(exp) || !['native', 'docker'].includes(j.mode)) return { ok: false, reason: 'window-perms' };
+    if (!j || j.v !== 1 || !Number.isFinite(exp) || !['native', 'docker'].includes(j.mode) || !KEY_RE.test(String(j.key || ''))) return { ok: false, reason: 'window-perms' };
     if (exp <= t) return { ok: false, reason: 'window', expired: true };
     if (exp > t + WINDOW_MS + 60e3) return { ok: false, reason: 'window-perms' };   // hạn xa hơn 30 phút: không phải do genchibi ghi
-    return { ok: true, exp, mode: j.mode, composeLoopback: j.composeLoopback === true, by: String(j.by || '') };
+    return { ok: true, exp, mode: j.mode, composeLoopback: j.composeLoopback === true, by: String(j.by || ''), key: j.key };
   }
   closeWindow() { try { fs.unlinkSync(this.f.window); } catch (e) { /* đã không còn */ } }
 }
@@ -205,7 +214,7 @@ class Setup {
 // machine: { stage, window: windowOf(), online: { mode, publicUrl, pending, busy }, legacyEnv, legacyMarked, caddy, tunnel, inDocker, bind, listen }
 // req (tuỳ chọn — bỏ qua thì chỉ xét điều kiện của MÁY: genchibi setup / trình cài in lý do): socket, Origin, Host, header proxy / edge
 // Trả [] = nhận; không thì danh sách mã theo thứ tự xét (mã đầu là lý do chính)
-function adminReasons(machine, req) {
+function machineReasons(machine) {
   const out = [], m = machine || {};
   if (m.stage !== 'admin') out.push('stage');
   const w = m.window || { ok: false, reason: 'window' };
@@ -220,18 +229,36 @@ function adminReasons(machine, req) {
     if ((m.bind && !isLoopName(m.bind)) || (m.listen && !isLoopName(m.listen))) out.push('bind');
     if (w.ok && w.mode !== 'native') out.push('docker-publish');
   }
-  if (req) {
-    const h = req.headers || {}, sock = req.socket || {};
-    if (!m.inDocker && (!isLoopIp(sock.localAddress) || !isLoopIp(sock.remoteAddress))) out.push('socket');
-    if (req.gcEdge || PROXY_HEADERS.some(k => h[k] !== undefined)) out.push('proxy');
-    // Origin BẮT BUỘC có và là http://localhost|127.0.0.1|[::1]:<cổng>, Host khớp đúng (cả cổng) — trình duyệt qua proxy công khai / trang khác không qua được
-    let oh = '', proto = '';
-    try { const u = new URL(String(h.origin || '')); oh = u.host.toLowerCase(); proto = u.protocol; } catch (e) { oh = ''; }
-    const host = String(h.host || '').toLowerCase(), name = oh.replace(/:\d+$/, '');
-    if (!oh || proto !== 'http:' || !LOOP_HOSTS.has(name) || !/:\d{1,5}$/.test(oh) || oh !== host) out.push('origin');
-  }
   return out;
 }
+// điều kiện của REQUEST: socket loopback (native), không header proxy / edge, Origin http://localhost|127.0.0.1|[::1]:<cổng> khớp Host
+function requestReasons(machine, req) {
+  const out = [], m = machine || {}, h = req.headers || {}, sock = req.socket || {};
+  if (!m.inDocker && (!isLoopIp(sock.localAddress) || !isLoopIp(sock.remoteAddress))) out.push('socket');
+  if (req.gcEdge || PROXY_HEADERS.some(k => h[k] !== undefined)) out.push('proxy');
+  // Origin BẮT BUỘC có và là http://localhost|127.0.0.1|[::1]:<cổng>, Host khớp đúng (cả cổng) — trình duyệt qua proxy công khai / trang khác không qua được
+  let oh = '', proto = '';
+  try { const u = new URL(String(h.origin || '')); oh = u.host.toLowerCase(); proto = u.protocol; } catch (e) { oh = ''; }
+  const host = String(h.host || '').toLowerCase(), name = oh.replace(/:\d+$/, '');
+  if (!oh || proto !== 'http:' || !LOOP_HOSTS.has(name) || !/:\d{1,5}$/.test(oh) || oh !== host) out.push('origin');
+  return out;
+}
+// đủ danh sách (máy + request) — genchibi setup / test đơn vị. KHÔNG trả nguyên cho request đăng nhập: xem loginReasons
+function adminReasons(machine, req) { return machineReasons(machine).concat(req ? requestReasons(machine, req) : []); }
+// lời từ chối cho POST /api/auth/login { username: admin } (CNS-268 / CNS-271):
+//   1) request không đạt điều kiện request (từ xa, qua proxy, Origin lạ) → CHỈ mã chung 'local-only' — người lạ không đọc được trạng thái máy;
+//   2) điều kiện của máy (stage, cửa sổ, online, edge, tunnel, bind, Docker publish) → đủ danh sách (người ở ngay máy cần biết đúng lý do);
+//   3) khoá một lần của cửa sổ (link do lệnh trên máy chủ in / mở) thiếu hoặc sai → 'link'. Cửa sổ chứng minh "owner đang ở máy", khoá chứng minh
+//      "request này của người đọc được run/admin-window (0600)" — user Unix khác / container khác chạm được cổng nhưng không có khoá.
+function loginReasons(machine, req, key) {
+  if (requestReasons(machine, req).length) return ['local-only'];
+  const mr = machineReasons(machine);
+  if (mr.length) return mr;
+  const w = (machine || {}).window || {};
+  if (typeof key !== 'string' || !KEY_RE.test(key) || !w.key || !safeEqStr(key, w.key)) return ['link'];
+  return [];
+}
+function safeEqStr(a, b) { const x = Buffer.from(String(a)), y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); }
 // câu cho từng mã (msgid tiếng Việt — main.js send() dịch theo người gọi): lý do + đúng cách vào
 const REASON_MSG = {
   stage: 'admin / admin chỉ dùng ở lần chạy đầu — máy này đã khởi tạo tài khoản chủ: đăng nhập bằng tên đăng nhập của bạn (quên mật khẩu: chạy genchibi password trên máy chủ)',
@@ -245,7 +272,9 @@ const REASON_MSG = {
   bind: 'app đang nghe ra mạng (GC_BIND / GC_LISTEN không phải 127.0.0.1) — admin / admin không dùng được: đặt GC_BIND=127.0.0.1 rồi genchibi restart, hoặc chạy genchibi password',
   socket: 'admin / admin chỉ nhận từ trình duyệt ngay trên máy chủ — mở http://localhost:{port} trên máy chủ, hoặc SSH port-forward: ssh -L {port}:localhost:{port} <máy-chủ> rồi mở http://localhost:{port}; hoặc chạy genchibi password',
   proxy: 'request đi qua proxy / edge — admin / admin chỉ nhận từ trình duyệt ngay trên máy chủ: mở http://localhost:{port} (hoặc SSH port-forward: ssh -L {port}:localhost:{port} <máy-chủ>), hoặc chạy genchibi password',
-  origin: 'admin / admin chỉ nhận khi trang mở đúng ở http://localhost:{port} (hoặc 127.0.0.1) — mở lại đúng địa chỉ đó trên máy chủ, hoặc SSH port-forward: ssh -L {port}:localhost:{port} <máy-chủ>'
+  origin: 'admin / admin chỉ nhận khi trang mở đúng ở http://localhost:{port} (hoặc 127.0.0.1) — mở lại đúng địa chỉ đó trên máy chủ, hoặc SSH port-forward: ssh -L {port}:localhost:{port} <máy-chủ>',
+  'local-only': 'admin / admin chỉ dùng được ngay trên máy chủ, qua link do máy chủ in ra — trên máy chủ chạy genchibi open (hoặc SSH port-forward: ssh -L {port}:localhost:{port} <máy-chủ>), hoặc chạy genchibi password',
+  link: 'mở đúng link do trình cài in ra, hoặc chạy genchibi open trên máy chủ (link mới, 30 phút) — admin / admin chỉ nhận qua link đó'
 };
 
-module.exports = { Setup, adminReasons, REASON_MSG, STAGES, CHOICES, WINDOW_MS, PROXY_HEADERS, loginProblem, displayProblem, emailProblem, isLoopIp, isLoopName };
+module.exports = { Setup, adminReasons, machineReasons, requestReasons, loginReasons, KEY_RE, REASON_MSG, STAGES, CHOICES, WINDOW_MS, PROXY_HEADERS, loginProblem, displayProblem, emailProblem, isLoopIp, isLoopName };

@@ -133,8 +133,27 @@
   // Ba màn trên cùng một lớp phủ #gcLogin: ĐĂNG NHẬP (tên đăng nhập + mật khẩu; lần đầu: admin / admin trong cửa sổ 30 phút do lệnh trên máy chủ mở —
   // không nhận thì server nói ĐÚNG lý do + cách vào), KHỞI TẠO tài khoản chủ (phiên admin hoặc token, bắt buộc trước mọi trang — §A.2) và TOKEN (máy kế
   // thừa / CLI — như v0.20). Server là nơi kiểm duy nhất; ở đây chỉ dẫn đường. Mã setup v0.21 đã bỏ.
+  var Auth0 = { key: '' };
+  // dải 3 bước của thiết lập lần đầu ở màn khởi tạo (CNS-272: owner thấy cả đường đi ngay ở bước bắt buộc đầu tiên) — cùng lớp .sustep với wizard
+  function setupSteps(cur) {
+    var cells = [[_t('Tài khoản chủ'), _t('Tên đăng nhập + mật khẩu của bạn')], [_t('Tên miền'), _t('Đưa lên mạng, hoặc chỉ dùng trên máy này')], [_t('Chẩn đoán MCP'), _t('Tự kiểm trên máy + nối agent đầu tiên')]];
+    return h('div', { class: 'sustep', id: 'gcSteps' }, cells.map(function (c, i) {
+      return h('div', { 'data-step': String(i + 1), 'data-state': i + 1 === cur ? 'cur' : 'todo', 'aria-current': i + 1 === cur ? 'step' : null },
+        h('span', { class: 'n', text: _t('BƯỚC {n}', { n: i + 1 }) }), h('b', { text: c[0] }), h('span', { class: 'note', text: c[1] }));
+    }));
+  }
+  // khoá một lần của link cửa sổ admin (CNS-268): http://localhost:<cổng>/login#k=<khoá> do lệnh trên máy chủ in / mở. Phần # không đi tới server trong URL;
+  // đọc một lần, xoá khỏi thanh địa chỉ (không lưu lịch sử / không lộ khi chia sẻ màn hình), chỉ giữ trong sessionStorage của tab này — gửi kèm khi đăng nhập admin
+  var ADMIN_KEY = 'gc-admin-key';
+  (function () {
+    var m = /^#k=([0-9a-f]{32})$/.exec(location.hash || '');
+    if (!m) return;
+    try { sessionStorage.setItem(ADMIN_KEY, m[1]); } catch (e) { /* trình duyệt chặn lưu: link vẫn dùng được trong lần tải này */ Auth0.key = m[1]; }
+    try { history.replaceState(history.state, '', location.pathname + location.search); } catch (e) { /* bỏ qua */ }
+  })();
   var Auth = {
     st: null,
+    adminKey: function () { var k = ''; try { k = sessionStorage.getItem(ADMIN_KEY) || ''; } catch (e) { k = Auth0.key || ''; } return /^[0-9a-f]{32}$/.test(k) ? k : ''; },
     // ?next=/đường/nội-bộ (trang Cấp phép gửi sang) — chỉ nhận đường cùng máy, không // (khác máy), không ký tự lạ
     next: function () { var n = ''; try { n = new URLSearchParams(location.search).get('next') || ''; } catch (e) { /* bỏ qua */ } return /^\/(?![\/\\])[A-Za-z0-9\/%._~!*'()?&=+,:;@-]*$/.test(n) ? n : '/'; },
     done: function () { if (/^\/(login|setup)$/.test(location.pathname)) location.replace(Auth.next()); else location.reload(); },
@@ -171,7 +190,7 @@
         var em = input({ id: 'gcEmail', name: 'email', type: 'email', maxlength: '254', autocomplete: 'email', placeholder: _t('tuỳ chọn') });
         var q1 = input({ id: 'gcPw', type: 'password', autocomplete: 'new-password', minlength: String(minLen) }), q2 = input({ id: 'gcPw2', type: 'password', autocomplete: 'new-password' });
         title = _t('Khởi tạo tài khoản chủ');
-        body.push(h('div', { class: 'note', text: _t('Lần đầu: đặt tài khoản chủ của riêng bạn — admin / admin không dùng được nữa sau bước này. Sau đó Studio dẫn bạn qua tên miền và chẩn đoán MCP.') }),
+        body.push(setupSteps(1), h('div', { class: 'note', text: _t('Lần đầu: đặt tài khoản chủ của riêng bạn — admin / admin không dùng được nữa sau bước này. Sau đó Studio dẫn bạn qua tên miền và chẩn đoán MCP.') }),
           st.who === 'A' && st.expiresAt ? h('div', { class: 'chip warn', id: 'gcAdminLeft', style: 'justify-self:start', text: _t('Phiên admin hết hạn lúc {at}', { at: fmtClock(st.expiresAt) }) }) : null,
           field(_t('Tên đăng nhập (3–32 ký tự: a-z 0-9 . _ -, không phải admin)'), u),
           field(_t('Tên hiển thị'), dn),
@@ -194,9 +213,12 @@
         var un = input({ id: 'gcUser', name: 'username', autocomplete: 'username', maxlength: '32' });
         var pw = input({ id: 'gcPw', type: 'password', autocomplete: 'current-password' });
         title = _t('Đăng nhập gen-chibi');
-        if (st.stage === 'admin') body.push(h('div', { class: 'banner acc', id: 'gcFirstRun', role: 'note' }, h('span', { text: _t('Lần đầu: đăng nhập bằng admin / admin trên máy chủ, trong 30 phút sau genchibi start (hoặc genchibi open). Studio sẽ bắt bạn đặt tài khoản chủ của riêng mình.') })));
+        var akey = Auth.adminKey();
+        if (st.stage === 'admin') body.push(akey
+          ? h('div', { class: 'banner acc', id: 'gcFirstRun', 'data-key': 'yes', role: 'note' }, h('span', { text: _t('Lần đầu: đăng nhập bằng admin / admin (link từ máy chủ, 30 phút). Studio sẽ bắt bạn đặt tài khoản chủ của riêng mình.') }))
+          : h('div', { class: 'banner warn', id: 'gcFirstRun', 'data-key': 'no', role: 'note' }, h('span', { text: _t('Lần đầu: admin / admin chỉ dùng được qua link do máy chủ in ra — mở link ở dòng cuối của trình cài, hoặc chạy genchibi open trên máy chủ (link mới, 30 phút). Hoặc đặt tài khoản chủ ngay trên máy chủ: genchibi password.') })));
         else if (!st.password) body.push(h('div', { class: 'banner warn', id: 'gcNoPw', role: 'note' }, h('span', { text: _t('Máy chưa có mật khẩu chủ: trên máy chủ chạy genchibi password (tên đăng nhập owner), hoặc dùng token của bản cài.') })));
-        body.push(h('div', { class: 'note', text: _t('Trình duyệt này nhớ đăng nhập 30 ngày.') }), field(_t('Tên đăng nhập'), un), field(_t('Mật khẩu'), pw));
+        body.push(st.stage === 'admin' ? null : h('div', { class: 'note', id: 'gcRemember', text: _t('Trình duyệt này nhớ đăng nhập 30 ngày.') }), field(_t('Tên đăng nhập'), un), field(_t('Mật khẩu'), pw));   // phiên admin: 30 phút, không nhớ thiết bị (CNS-272)
         // trần theo tài khoản đang chặn người lạ (trình duyệt chưa từng đăng nhập): nói thẳng + lối token (token chủ không bị trần).
         // /api/auth/state công khai không còn báo locked (CNS-210) → dải hiện khi lần thử trả 429 locked (máy chủ xét trần trước khi kiểm mật khẩu)
         var lockBox = h('div', { id: 'gcLockedBox' });
@@ -207,7 +229,7 @@
         submit = function () {
           var user = un.value.trim().toLowerCase();
           if (!user) return fail(_t('Cần tên đăng nhập'));
-          Auth.post('api/auth/login', { username: user, password: pw.value }).then(function (x) {
+          Auth.post('api/auth/login', user === 'admin' ? { username: user, password: pw.value, key: Auth.adminKey() } : { username: user, password: pw.value }).then(function (x) {
             if (x.s === 429 && x.j && x.j.locked) lockShow(+x.j.retryAfter || 60);
             if (x.s !== 200) { pw.select(); err.setAttribute('data-reason', x.j.reason || ''); return fail(x.j.error || _t('Lỗi {status}', { status: x.s })); }   // 403 admin: lý do + cách vào (server)
             try { localStorage.removeItem('gc-token'); } catch (e) { /* bỏ qua */ }
@@ -215,7 +237,7 @@
             Auth.done();
           }).catch(function (e) { fail(e.message); });
         };
-        body.push(h('div', { class: 'note', text: _t('Nâng cấp từ v0.22 trở về trước: tên đăng nhập là owner.') }),
+        body.push(st.ownerDefault ? h('div', { class: 'note', id: 'gcOwnerDefault', text: _t('Nâng cấp từ v0.22 trở về trước: tên đăng nhập là owner.') }) : null,   // chỉ máy nâng cấp chưa đặt tên (CNS-272)
           h('div', { class: 'row', style: 'justify-content:space-between;flex-wrap:wrap;gap:6px' }, h('span', { class: 'note', text: _t('Quên mật khẩu? Chạy genchibi password trên máy chủ.') }), link(_t('Dùng token'), 'token')));
       } else {
         var ti = input({ id: 'gcTok', type: 'password', placeholder: 'GC_API_TOKEN', autocomplete: 'current-password' });
@@ -525,11 +547,14 @@
     if (z === 'fab') { var p = PAGE_ALIAS[page] || page; return NAV.filter(function (g) { return g[4] === 'khung'; })[0][3].some(function (it) { return it[0] === p; }) ? 'khung' : 'xuong'; }   // nhóm NAV mang id 'khung' (Khung chuẩn) = khu Bộ khung
     return 'he-thong';
   }
+  var PAGE_EXTRA = { setup: N_('Thiết lập lần đầu') };   // trang ngoài menu (NAV) — dock không bao giờ hiện id thô (CNS-272, L-73)
   function pageLabel(page) {
-    var p = PAGE_ALIAS[page] || page, L = page === 'home' ? _t('Chọn khu') : '';
+    var p = PAGE_ALIAS[page] || page, L = page === 'home' ? _t('Chọn khu') : PAGE_EXTRA[p] ? _t(PAGE_EXTRA[p]) : '';
     NAV.forEach(function (g) { g[3].forEach(function (it) { if (it[0] === p) L = _t(it[1]); }); });
     return L || p;
   }
+  // chỉ đọc, cho test trình duyệt (bộ quét i18n): mọi trang có nhãn người đọc, không trang nào rơi về id thô
+  window.GCStudioPageLabels = function () { return Object.keys(PAGES).map(function (k) { return [k, pageLabel(k)]; }); };
   function dockRoute(r) { if (window.GCDock) window.GCDock.route({ zone: dockZone(r.page), page: r.page, pageLabel: pageLabel(r.page) }); }
   // trang báo đối tượng đang xem: kind asset | project | work; id thật (key asset, id dự án / tác phẩm)
   function dockObj(kind, id, label) { if (window.GCDock) window.GCDock.ctx({ object: id ? { kind: kind, id: id, label: label || id } : null }); }
