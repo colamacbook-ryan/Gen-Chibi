@@ -1,0 +1,768 @@
+{
+ "_": "gen-chibi v0.23 — đột biến cho mọi rào A.5 + review / cortex vòng 2. Chạy: node tools/mutate.mjs [--jobs N --wrap \"bash netns.sh\"] [ID…]; kiểm nhanh: --check. Bảng: v023.md. © 2026 Gen Labs — All rights reserved.",
+ "mutations": [
+  {
+   "id": "A01",
+   "guard": "admin từ chối: ngoài cửa sổ",
+   "file": "server/setup.js",
+   "find": "  if (!w.ok) out.push(w.reason === 'window-perms' ? 'window-perms' : 'window');\n",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "ngoài cửa sổ (chưa lệnh host nào mở) → 403 window"
+  },
+  {
+   "id": "A02",
+   "guard": "admin từ chối: online",
+   "file": "server/setup.js",
+   "find": "  if ((on.mode && on.mode !== 'off') || on.publicUrl || on.pending || on.busy) out.push('online');\n",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "máy đang online"
+  },
+  {
+   "id": "A03",
+   "guard": "admin từ chối: còn GC_PUBLIC_URL / GC_ALLOWED_HOSTS",
+   "file": "server/setup.js",
+   "find": "  if (m.legacyEnv || m.legacyMarked) out.push('legacy-env');\n",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "adminReasons: 28 ca"
+  },
+  {
+   "id": "A04",
+   "guard": "admin từ chối: có tunnel",
+   "file": "server/setup.js",
+   "find": "  if (m.tunnel) out.push('tunnel');\n",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "adminReasons: 28 ca"
+  },
+  {
+   "id": "A05",
+   "guard": "admin từ chối: có edge Caddy",
+   "file": "server/setup.js",
+   "find": "  if (m.caddy) out.push('edge');\n",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "adminReasons: 28 ca"
+  },
+  {
+   "id": "A06",
+   "guard": "admin từ chối: Docker publish ra ngoài loopback (phía app: cửa sổ phải mang bằng chứng compose)",
+   "file": "server/setup.js",
+   "find": "if (w.ok && (w.mode !== 'docker' || !w.composeLoopback)) out.push('docker-publish');",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "Docker: cửa sổ không kèm bằng chứng compose chỉ loopback"
+  },
+  {
+   "id": "A07",
+   "guard": "admin từ chối: Docker publish ra ngoài loopback (phía CLI: compose config)",
+   "file": "cli/genchibi",
+   "find": "  [ -z \"$PUBADDR\" ]\n}",
+   "replace": "  PUBADDR=\"\"; return 0\n}",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "Docker: override publish cổng ra 0.0.0.0"
+  },
+  {
+   "id": "A08",
+   "guard": "admin từ chối: Docker network_mode host / container / service (review F2)",
+   "file": "cli/genchibi",
+   "find": "  [ -z \"$PUBADDR\" ] || return 1\n",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "review F2: Docker network_mode host"
+  },
+  {
+   "id": "A09",
+   "guard": "admin từ chối: native GC_BIND / GC_LISTEN không phải loopback",
+   "file": "server/setup.js",
+   "find": "    if ((m.bind && !isLoopName(m.bind)) || (m.listen && !isLoopName(m.listen))) out.push('bind');\n",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "adminReasons: 28 ca"
+  },
+  {
+   "id": "A10",
+   "guard": "admin từ chối: Origin / Host lạ",
+   "file": "server/setup.js",
+   "find": "  if (!oh || proto !== 'http:' || !LOOP_HOSTS.has(name) || !/:\\d{1,5}$/.test(oh) || oh !== host) out.push('origin');\n",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "Origin / Host lạ"
+  },
+  {
+   "id": "A11",
+   "guard": "admin từ chối: header proxy / edge",
+   "file": "server/setup.js",
+   "find": "  if (req.gcEdge || PROXY_HEADERS.some(k => h[k] !== undefined)) out.push('proxy');\n",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "adminReasons: 28 ca"
+  },
+  {
+   "id": "A12",
+   "guard": "admin từ chối: socket không loopback (native)",
+   "file": "server/setup.js",
+   "find": "  if (!m.inDocker && (!isLoopIp(sock.localAddress) || !isLoopIp(sock.remoteAddress))) out.push('socket');\n",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "adminReasons: 28 ca"
+  },
+  {
+   "id": "A13",
+   "guard": "admin từ chối: sau khi đã khởi tạo (stage)",
+   "file": "server/setup.js",
+   "find": "  if (m.stage !== 'admin') out.push('stage');\n",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "adminReasons: 28 ca"
+  },
+  {
+   "id": "A14",
+   "guard": "admin từ chối: sau khôi phục bản sao lưu / xoá auth.json + setup.json (sàn run/setup-floor)",
+   "file": "server/setup.js",
+   "find": "    if (this.s.stage === 'admin' && this.adminClosed()) {",
+   "replace": "    if (false) {",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "setup.json nói admin nhưng sàn đã đóng"
+  },
+  {
+   "id": "A15",
+   "guard": "admin từ chối: stage admin nhưng auth.json đã có mật khẩu (review F3)",
+   "file": "server/setup.js",
+   "find": "    if (this.s.stage === 'admin' && ctx.hasPassword) {",
+   "replace": "    if (false) {",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "review F3"
+  },
+  {
+   "id": "A16",
+   "guard": "admin từ chối: thiếu / sai khoá một lần của link (CNS-268)",
+   "file": "server/setup.js",
+   "find": "  if (typeof key !== 'string' || !KEY_RE.test(key) || !w.key || !safeEqStr(key, w.key)) return ['link'];\n",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "thiếu / sai khoá của link"
+  },
+  {
+   "id": "A17",
+   "guard": "cửa sổ không có khoá hợp lệ → window-perms (CNS-268)",
+   "file": "server/setup.js",
+   "find": " || !KEY_RE.test(String(j.key || ''))) return { ok: false, reason: 'window-perms' };",
+   "replace": ") return { ok: false, reason: 'window-perms' };",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "không có khoá 128 bit hex hợp lệ"
+  },
+  {
+   "id": "A18",
+   "guard": "khoá ngẫu nhiên mỗi lần mở cửa sổ (CNS-268)",
+   "file": "cli/genchibi",
+   "find": "  key=\"$(od -An -tx1 -N16 /dev/urandom 2>/dev/null | tr -d ' \\n')\"",
+   "replace": "  key=\"0123456789abcdef0123456789abcdef\"",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "khoá MỚI (ngẫu nhiên 128 bit)"
+  },
+  {
+   "id": "A19",
+   "guard": "khoá không vào argv của trình mở (genchibi open dùng tệp chuyển hướng 0600)",
+   "file": "cli/genchibi",
+   "find": "target=\"$HOME_DIR/run/open-admin.html\" ;;",
+   "replace": "target=\"$u\" ;;",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "khoá KHÔNG nằm trong argv của trình mở"
+  },
+  {
+   "id": "A20",
+   "guard": "request từ xa chỉ thấy local-only (CNS-271)",
+   "file": "server/setup.js",
+   "find": "  if (requestReasons(machine, req).length) return ['local-only'];",
+   "replace": "  if (requestReasons(machine, req).length) return requestReasons(machine, req).concat(machineReasons(machine));",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "CNS-271"
+  },
+  {
+   "id": "A21",
+   "guard": "trần tần suất xét TRƯỚC khi so mật khẩu admin",
+   "file": "server/auth.js",
+   "find": "      if (g.wait) return blocked(g);                                    // chạm trần",
+   "replace": "      if (g.wait && user !== 'admin') return blocked(g);                                    // chạm trần",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "trần xét TRƯỚC khi so mật khẩu"
+  },
+  {
+   "id": "A22",
+   "guard": "GC_HOST_PORT: câu hướng dẫn nói đúng cổng trên máy chủ (CNS-270)",
+   "file": "server/main.js",
+   "find": "const HOST_PORT = /^\\d{1,5}$/.test(String(process.env.GC_HOST_PORT || '')) ? +process.env.GC_HOST_PORT : PORT;",
+   "replace": "const HOST_PORT = PORT;",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "GC_HOST_PORT=7481"
+  },
+  {
+   "id": "S01",
+   "guard": "phiên admin: đi tới trang khác → bị chặn (403 gate init)",
+   "file": "server/main.js",
+   "find": "    if (!who && auth.adminOf(req)) return send(res, 403,",
+   "replace": "    if (false) return send(res, 403,",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "phiên admin"
+  },
+  {
+   "id": "S02",
+   "guard": "phiên admin: không có cookie thiết bị",
+   "file": "server/auth.js",
+   "find": "    return [this.cookie(cookieName(COOKIE.session, req), raw, TTL.admin, isHttps(req, this.publicUrl()))];",
+   "replace": "    return [this.cookie(cookieName(COOKIE.session, req), raw, TTL.admin, isHttps(req, this.publicUrl())), this.cookie('gc_device', 'x', TTL.device, false)];",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "phiên admin: MỘT cookie (không cookie thiết bị)"
+  },
+  {
+   "id": "S03",
+   "guard": "phiên admin: hết hạn sau 30 phút",
+   "file": "server/auth.js",
+   "find": "admin: WINDOW_MS };",
+   "replace": "admin: 2 * WINDOW_MS };",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "phiên admin hết hạn sau 30 phút"
+  },
+  {
+   "id": "I01",
+   "guard": "init nguyên tử (setup.json lỗi → hoàn tác auth.json)",
+   "file": "server/auth.js",
+   "find": "    try { if (this.setup) this.setup.advance('domain', by); } catch (e) { undo();",
+   "replace": "    try { if (this.setup) this.setup.advance('domain', by); } catch (e) {",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "init NGUYÊN TỬ"
+  },
+  {
+   "id": "I02",
+   "guard": "init thu hồi mọi phiên (cả admin)",
+   "file": "server/auth.js",
+   "find": "    this.s.sessions = nul(); this.s.devices = nul();\n    const undo = () =>",
+   "replace": "\n    const undo = () =>",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "init: thu hồi MỌI phiên admin"
+  },
+  {
+   "id": "I03",
+   "guard": "init song song: khoá initBusy (lần thua không băm scrypt)",
+   "file": "server/auth.js",
+   "find": "      if (this.initBusy) return taken();\n      this.initBusy = true;",
+   "replace": "      this.initBusy = true;",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "init song song: các lần thua bị từ chối NGAY"
+  },
+  {
+   "id": "I04",
+   "guard": "init song song: kiểm lại sau khi băm",
+   "file": "server/auth.js",
+   "find": "    if (!this.initPending()) throw Object.assign(new Error('tài khoản chủ đã được khởi tạo — đăng nhập ở /login'), { code: 409 });\n    const prev",
+   "replace": "    const prev",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "initOwner gọi song song 2 lần"
+  },
+  {
+   "id": "I05",
+   "guard": "CSRF / rebinding: Host lạ (evil.example) và *.localhost",
+   "file": "server/main.js",
+   "find": "  if (!hostAllowed(hostName)) return fail(res, 403, 'Host không được phép');",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "4 rào CSRF / rebinding"
+  },
+  {
+   "id": "I06",
+   "guard": "CSRF: thiếu X-GC-Request",
+   "file": "server/main.js",
+   "find": "    if (req.headers['x-gc-request'] !== '1') return fail(res, 403, 'thiếu header X-GC-Request');\n    if (!originOK(req)) return fail(res, 403, originMsg(req));",
+   "replace": "    if (!originOK(req)) return fail(res, 403, originMsg(req));",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "4 rào CSRF / rebinding"
+  },
+  {
+   "id": "I07",
+   "guard": "CSRF: Origin khác cổng",
+   "file": "server/main.js",
+   "find": "    if (req.headers['x-gc-request'] !== '1') return fail(res, 403, 'thiếu header X-GC-Request');\n    if (!originOK(req)) return fail(res, 403, originMsg(req));",
+   "replace": "    if (req.headers['x-gc-request'] !== '1') return fail(res, 403, 'thiếu header X-GC-Request');",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "4 rào CSRF / rebinding"
+  },
+  {
+   "id": "I08",
+   "guard": "mật khẩu 'admin' (kể cả đệm khoảng trắng) bị từ chối",
+   "file": "server/auth.js",
+   "find": "  if (pw.trim().toLowerCase() === 'admin') return 'mật khẩu không được là admin';\n",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "kể cả đệm khoảng trắng"
+  },
+  {
+   "id": "I09",
+   "guard": "email ACME bắt đầu bằng '#' bị từ chối — màn khởi tạo (review 🔵2)",
+   "file": "server/setup.js",
+   "find": " || s[0] === '#' || !EMAIL_RE.test(s)",
+   "replace": " || !EMAIL_RE.test(s)",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "review 🔵2"
+  },
+  {
+   "id": "I10",
+   "guard": "email ACME bắt đầu bằng '#' bị từ chối — Caddy (review 🔵2)",
+   "file": "server/caddy.js",
+   "find": " && e[0] !== '#' && EMAIL_RE.test(e)",
+   "replace": " && EMAIL_RE.test(e)",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "review 🔵2"
+  },
+  {
+   "id": "G01",
+   "guard": "cổng stage: chặn cả Studio đăng nhập bằng token (X-GC-Studio)",
+   "file": "server/main.js",
+   "find": "const studio = who === 'S' || req.headers['x-gc-studio'] === '1';",
+   "replace": "const studio = who === 'S';",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "Studio vào bằng token (X-GC-Studio)"
+  },
+  {
+   "id": "G02",
+   "guard": "cổng stage: /mcp vẫn chạy ở mọi stage",
+   "file": "server/main.js",
+   "find": "  if (p === '/mcp') {\n    // GET cho agent",
+   "replace": "  if (p === '/mcp') {\n    if (setup.stage !== 'done') return fail(res, 403, 'gate');\n    // GET cho agent",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "/mcp initialize 200"
+  },
+  {
+   "id": "G03",
+   "guard": "Go online bị chặn khi chưa có owner (cả CLI)",
+   "file": "server/online.js",
+   "find": "    if (!d.ownerReady() && !/^\\/api\\/online\\/(off|migrate)$/.test(p)) return send(",
+   "replace": "    if (false) return send(",
+   "test": [
+    "node",
+    "tools/test-online.mjs"
+   ],
+   "expect": "owner chưa khởi tạo"
+  },
+  {
+   "id": "E01",
+   "guard": "lối vào: máy kế thừa (legacy.json) → done",
+   "file": "server/setup.js",
+   "find": "      if (ctx.legacy) { stage = 'done'; by = 'upgrade-legacy'; }",
+   "replace": "      if (ctx.legacy) { stage = 'admin'; by = 'upgrade-legacy'; }",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "máy kế thừa (legacy.json) → done"
+  },
+  {
+   "id": "E02",
+   "guard": "lối vào: v0.21 / v0.22 có mật khẩu → done + dải Kiểm tra thiết lập",
+   "file": "server/setup.js",
+   "find": "      else if (ctx.hasPassword) { stage = 'done'; by = 'upgrade-password'; review = true; }",
+   "replace": "      else if (ctx.hasPassword) { stage = 'done'; by = 'upgrade-password'; review = false; }",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "Kiểm tra thiết lập"
+  },
+  {
+   "id": "E03",
+   "guard": "lối vào: v0.21 / v0.22 online tạm chờ mật khẩu → must_init",
+   "file": "server/setup.js",
+   "find": "      else if (ctx.onlineWaiting) { stage = 'must_init'; by = 'upgrade-online-waiting'; }",
+   "replace": "      else if (ctx.onlineWaiting) { stage = 'admin'; by = 'upgrade-online-waiting'; }",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "must_init"
+  },
+  {
+   "id": "E04",
+   "guard": "lối vào: trình cài không để GC_OWNER_* trong môi trường (curl / tiến trình con)",
+   "file": "install.sh",
+   "find": "unset GC_OWNER_USER GC_OWNER_PASSWORD",
+   "replace": ":",
+   "test": [
+    "bash",
+    "tools/test-lang.sh"
+   ],
+   "expect": "GC_OWNER_PASSWORD"
+  },
+  {
+   "id": "W01",
+   "guard": "wizard: không khoá khi bước Internet lỗi — nút Tạm dùng trên máy này (giao diện)",
+   "file": "studio/app.js",
+   "find": "          h('button', { class: 'btn sm', id: 'suLocalPending',",
+   "replace": "          h('button', { class: 'btn sm', hidden: true, id: 'suLocalPending',",
+   "test": [
+    "node",
+    "tools/test-browser.mjs"
+   ],
+   "expect": "thiết lập lần đầu (Studio)",
+   "env": {
+    "GC_ONLY": "setup"
+   }
+  },
+  {
+   "id": "W02",
+   "guard": "wizard: Tạm dùng trên máy này chạy được (server)",
+   "file": "server/setup.js",
+   "find": "    if (!['local', 'local-pending'].includes(choice)) return false;",
+   "replace": "    if (!['local'].includes(choice)) return false;",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "local-pending"
+  },
+  {
+   "id": "W03",
+   "guard": "wizard: genchibi setup skip chạy được",
+   "file": "server/setup.js",
+   "find": "    if (!['domain', 'mcp'].includes(this.stage)) return false;\n    this.s.skipped",
+   "replace": "    return false;\n    this.s.skipped",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "genchibi setup skip"
+  },
+  {
+   "id": "W04",
+   "guard": "wizard: skip / reset chỉ token chủ (không phiên Studio)",
+   "file": "server/main.js",
+   "find": "    if (req.gcOwner !== 'T') return fail(res, 403, 'chỉ lệnh genchibi setup trên máy chủ",
+   "replace": "    if (false) return fail(res, 403, 'chỉ lệnh genchibi setup trên máy chủ",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "skip / reset từ Studio (phiên S) → 403"
+  },
+  {
+   "id": "W05",
+   "guard": "wizard: Xong cần tự kiểm cục bộ đạt",
+   "file": "server/main.js",
+   "find": "    if (!mm.selfTest || !mm.selfTest.ok) return fail(res, 409, 'phần tự kiểm",
+   "replace": "    if (false) return fail(res, 409, 'phần tự kiểm",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "chưa tự kiểm"
+  },
+  {
+   "id": "W06",
+   "guard": "wizard: Xong (không nối sau) cần agent thật đã gọi MCP",
+   "file": "server/main.js",
+   "find": "    if (b.later !== true && !mm.lastClient) return fail(",
+   "replace": "    if (false) return fail(",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "khi chưa agent nào gọi MCP"
+  },
+  {
+   "id": "W07",
+   "guard": "MCP-04: kiểm lệnh THẬT trên máy chủ (CNS-269)",
+   "file": "cli/genchibi",
+   "find": "    | \"$CLI_SELF\" mcp 2>\"$errf\")\" || true",
+   "replace": "    | cat 2>\"$errf\")\" || true",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "genchibi setup check: chạy thật"
+  },
+  {
+   "id": "W08",
+   "guard": "MCP-04: chỉ token chủ gửi kết quả (không phiên Studio)",
+   "file": "server/main.js",
+   "find": "    if (req.gcOwner !== 'T') return fail(res, 403, 'chỉ lệnh genchibi setup check",
+   "replace": "    if (false) return fail(res, 403, 'chỉ lệnh genchibi setup check",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "hostcheck từ phiên Studio"
+  },
+  {
+   "id": "W09",
+   "guard": "MCP-04: đường lệnh phải tuyệt đối mới ✓",
+   "file": "server/setup.js",
+   "find": "    const cmd = typeof r.cmd === 'string' && /^\\/[^\\u0000-\\u001f\\u007f]{0,511}$/.test(r.cmd) ? r.cmd : '';",
+   "replace": "    const cmd = String(r.cmd || '');",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "hostcheck với đường không tuyệt đối"
+  },
+  {
+   "id": "W10",
+   "guard": "thẻ nối agent dùng đường tuyệt đối (run/cli-path) — giao diện",
+   "file": "studio/app.js",
+   "find": "    var cli = o.cli || (Store.info && Store.info.mcp && Store.info.mcp.cli) || 'genchibi',",
+   "replace": "    var cli = 'genchibi',",
+   "test": [
+    "node",
+    "tools/test-browser.mjs"
+   ],
+   "expect": "thiết lập lần đầu (Studio)",
+   "env": {
+    "GC_ONLY": "setup"
+   }
+  },
+  {
+   "id": "W11",
+   "guard": "genchibi agent connect: stdio đường tuyệt đối đứng đầu (CNS-275)",
+   "file": "cli/genchibi",
+   "find": "Claude Code      claude mcp add -s user gen-chibi -- $qcmd mcp${oa:+\n                 (over the Internet, OAuth)",
+   "replace": "Claude Code      claude mcp add -s user gen-chibi -- genchibi mcp${oa:+\n                 (over the Internet, OAuth)",
+   "test": [
+    "node",
+    "tools/test-agent-zero.mjs"
+   ],
+   "expect": "agent connect: stdio"
+  },
+  {
+   "id": "W12",
+   "guard": "khôi phục bản sao lưu thu hồi OAuth (CNS-138)",
+   "file": "server/main.js",
+   "find": "auth.revokeAll('backup restored'); oauth.revokeAll('backup restored');",
+   "replace": "auth.revokeAll('backup restored');",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "CNS-138"
+  },
+  {
+   "id": "W13",
+   "guard": "danh sách OAuth kèm yêu cầu cấp phép đang chờ (CNS-128)",
+   "file": "server/oauth.js",
+   "find": "x.client === c.id && x.exp > this.now()).map(",
+   "replace": "false).map(",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "CNS-128"
+  },
+  {
+   "id": "W14",
+   "guard": "start_here lọc bước kế theo phạm vi OAuth (CNS-136)",
+   "file": "server/mcp.js",
+   "find": "    if (!conn.can_write) next.push(",
+   "replace": "    if (false) next.push(",
+   "test": [
+    "node",
+    "tools/test-oauth.mjs"
+   ],
+   "expect": "mcp:read: next_steps chỉ gợi ý tool đọc"
+  },
+  {
+   "id": "W15",
+   "guard": "Caddy ghi tls <email> của owner",
+   "file": "server/caddy.js",
+   "find": "email ? ['\\ttls ' + email] : []",
+   "replace": "[]",
+   "test": [
+    "node",
+    "tools/test-online.mjs"
+   ],
+   "expect": "tls ops@example.com"
+  },
+  {
+   "id": "U01",
+   "guard": "giao diện: màn khởi tạo có dải 3 bước (CNS-272)",
+   "file": "studio/app.js",
+   "find": "        body.push(setupSteps(1), h('div',",
+   "replace": "        body.push(h('div',",
+   "test": [
+    "node",
+    "tools/test-browser.mjs"
+   ],
+   "expect": "thiết lập lần đầu (Studio)",
+   "env": {
+    "GC_ONLY": "setup"
+   }
+  },
+  {
+   "id": "U02",
+   "guard": "giao diện: dock không hiện id thô của trang (L-73 / CNS-272)",
+   "file": "studio/app.js",
+   "find": "  var PAGE_EXTRA = { setup: N_('Thiết lập lần đầu') };",
+   "replace": "  var PAGE_EXTRA = {};",
+   "test": [
+    "node",
+    "tools/test-browser.mjs"
+   ],
+   "expect": "thiết lập lần đầu (Studio)",
+   "env": {
+    "GC_ONLY": "setup"
+   }
+  },
+  {
+   "id": "U03",
+   "guard": "giao diện: khoá của link rời thanh địa chỉ (chỉ sessionStorage)",
+   "file": "studio/app.js",
+   "find": "    try { history.replaceState(history.state, '', location.pathname + location.search); } catch (e) { /* bỏ qua */ }\n  })();",
+   "replace": "  })();",
+   "test": [
+    "node",
+    "tools/test-browser.mjs"
+   ],
+   "expect": "thiết lập lần đầu (Studio)",
+   "env": {
+    "GC_ONLY": "setup"
+   }
+  },
+  {
+   "id": "U04",
+   "guard": "giao diện: lúc stage admin không có câu nhớ 30 ngày (CNS-272)",
+   "file": "studio/app.js",
+   "find": "        body.push(st.stage === 'admin' ? null : h('div', { class: 'note', id: 'gcRemember',",
+   "replace": "        body.push(h('div', { class: 'note', id: 'gcRemember',",
+   "test": [
+    "node",
+    "tools/test-browser.mjs"
+   ],
+   "expect": "thiết lập lần đầu (Studio)",
+   "env": {
+    "GC_ONLY": "setup"
+   }
+  },
+  {
+   "id": "U05",
+   "guard": "i18n en: không thiếu bản dịch (chữ Việt lọt sang en)",
+   "file": "locales/en/studio.json",
+   "find": "\"Chưa chạy\": \"Not run yet\",\n",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/i18n-scan.mjs",
+    "--strict"
+   ],
+   "expect": "(a)"
+  }
+ ]
+}

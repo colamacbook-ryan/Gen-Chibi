@@ -45,15 +45,16 @@
  "khởi tạo tài khoản chủ trước": "set up the owner account first",
  "/mcp trên máy này trả lời: initialize + tools/list ({n} tool)": "/mcp on this machine answers: initialize + tools/list ({n} tools)",
  "/mcp trên máy này không trả lời đúng ({error})": "/mcp on this machine does not answer correctly ({error})",
- "Token chủ hợp lệ ({source}) — genchibi mcp và agent trên máy dùng được": "Owner token valid ({source}) — genchibi mcp and agents on this machine can use it",
  "Token chủ mà genchibi mcp đọc ({source}) không khớp token của app — chạy genchibi restart trên máy chủ": "The owner token genchibi mcp reads ({source}) does not match the app's token — run genchibi restart on the server",
- "genchibi mcp (stdio) chạy được: initialize + tools/list ({n} tool)": "genchibi mcp (stdio) works: initialize + tools/list ({n} tools)",
- "genchibi mcp (stdio) không chạy được ({error})": "genchibi mcp (stdio) does not work ({error})",
  "chỉ lệnh genchibi setup trên máy chủ (token của bản cài) làm được việc này": "only genchibi setup on the server (the install's token) can do this",
  "thiết lập lần đầu đã xong — không có gì để bỏ qua": "the first-run setup is already finished — nothing to skip",
  "chưa khởi tạo tài khoản chủ — chạy genchibi password trên máy chủ (bỏ qua chỉ áp cho bước tên miền / MCP)": "the owner account is not set up yet — run genchibi password on the server (skip only applies to the domain / MCP steps)",
  "chỉ chọn được ở bước tên miền: local (chỉ dùng trên máy này) hoặc local-pending (tạm dùng trên máy này)": "only possible at the domain step: local (this machine only) or local-pending (use on this machine for now)",
  "chưa tới bước chẩn đoán MCP": "not at the MCP check step yet",
  "phần tự kiểm cục bộ phải đạt trước (bấm Kiểm lại) — nếu chính phần kiểm bị lỗi: chạy genchibi setup skip trên máy chủ": "the local self-test must pass first (click Check again) — if the check itself is broken: run genchibi setup skip on the server",
- "chưa thấy agent nào gọi MCP — nối agent theo thẻ hướng dẫn, hoặc chọn \"Tôi nối agent sau\"": "no agent has called MCP yet — connect one with the cards, or choose \"I'll connect an agent later\""
+ "chưa thấy agent nào gọi MCP — nối agent theo thẻ hướng dẫn, hoặc chọn \"Tôi nối agent sau\"": "no agent has called MCP yet — connect one with the cards, or choose \"I'll connect an agent later\"",
+ "Token chủ hợp lệ ({source}) — cầu stdio và agent dùng token này": "Owner token valid ({source}) — the stdio bridge and agents use this token",
+ "Cầu stdio của app (chạy trong app) trả lời: initialize + tools/list ({n} tool) — lệnh trên máy chủ: xem MCP-04": "App's stdio bridge (inside the app) answers: initialize + tools/list ({n} tools) — the host command: see MCP-04",
+ "Cầu stdio của app (chạy trong app) không chạy được ({error})": "App's stdio bridge (inside the app) does not run ({error})",
+ "chỉ lệnh genchibi setup check trên máy chủ (token của bản cài) gửi được kết quả này": "only genchibi setup check on the server (install token) can send this result"
 }

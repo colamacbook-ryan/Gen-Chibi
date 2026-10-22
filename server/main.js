@@ -13,7 +13,7 @@ const { MCP, TOOLS: MCP_TOOLS, cleanContext, cleanAnchors, scopeCtx } = require(
 const Agent = require('./agent.js');
 const { OAuth, clientIp, isDirectLocal, SCOPES: OAUTH_SCOPES, SCOPE_INFO: OAUTH_SCOPE_INFO } = require('./oauth');
 const { Auth } = require('./auth');                       // v0.21: đăng nhập chủ máy — mật khẩu / phiên / cookie thiết bị / token chủ (spec §3.3–§3.4); v0.23: admin / admin + khởi tạo
-const { Setup, adminReasons } = require('./setup');       // v0.23: thiết lập lần đầu — data/setup.json stage + cửa sổ admin run/admin-window (spec v023 §A.0 / §A.1)
+const { Setup, adminReasons, loginReasons } = require('./setup');       // v0.23: thiết lập lần đầu — data/setup.json stage + cửa sổ admin run/admin-window (spec v023 §A.0 / §A.1)
 const { OnlineConfig } = require('./online-config');      // v0.21: data/online.json — publicUrl / Host / header IP đọc LÚC CHẠY (spec §3.2)
 const { consentPage, errorPage } = require('./oauth-page');
 const { Store, KEY, CHAT_KINDS, readJSON, writeJSON } = require('./store');
@@ -26,6 +26,8 @@ const APP = path.resolve(__dirname, '..');                       // thư mục p
 const HOME = process.env.GC_HOME || (path.basename(path.dirname(APP)) === 'releases' ? path.resolve(APP, '..', '..') : path.join(APP, '.home'));
 const VERSION = fs.readFileSync(path.join(APP, 'VERSION'), 'utf8').trim();
 const PORT = +(process.env.GC_PORT || 7480);
+// cổng owner thấy trên MÁY CHỦ (CNS-270): Docker map ${GC_PORT}:7480 nên trong container GC_PORT luôn 7480 — compose truyền GC_HOST_PORT; mọi câu / link cho owner dùng cổng này
+const HOST_PORT = /^\d{1,5}$/.test(String(process.env.GC_HOST_PORT || '')) ? +process.env.GC_HOST_PORT : PORT;
 const HOST = process.env.GC_LISTEN || '127.0.0.1';   // trong Docker đặt 0.0.0.0; cổng ngoài vẫn chỉ mở cho 127.0.0.1
 // Token chủ (T): GC_API_TOKEN; trống thì server tự sinh data/owner-token (CNS-195) — xem auth.loadToken. Bản cài nào cũng có token (v0.21)
 const ENV_TOKEN = process.env.GC_API_TOKEN || '';
@@ -112,7 +114,7 @@ function machineState() {
     tunnel: goOnline.intent() !== 'off', inDocker: IN_DOCKER, bind: process.env.GC_BIND || '', listen: HOST };
 }
 const auth = new Auth({ dir: DATA, envToken: ENV_TOKEN, key: secrets.key, log, ipHeader: () => online.ipHeader(), rate: TESTING ? process.env.GC_AUTH_RATE : 1,
-  publicUrl: () => online.publicUrl(), setup, port: PORT, adminCheck: req => adminReasons(machineState(), req) });
+  publicUrl: () => online.publicUrl(), setup, port: HOST_PORT, adminCheck: (req, key) => loginReasons(machineState(), req, key) });
 // dấu máy kế thừa (CNS-173, 199b): MỘT lần ở lần khởi động đầu của v0.21 — đọc env lúc đó; tokenless = bản cài đã có dữ liệu chạy không token (agent cũ cần nối lại, CNS-197)
 auth.markLegacy({ publicUrl: process.env.GC_PUBLIC_URL, allowedHosts: process.env.GC_ALLOWED_HOSTS, tokenless: !ENV_TOKEN && !TOKEN_FILE_EXISTED && hasUserData() });
 setInterval(() => auth.tick(), 60000).unref();   // phiên hết hạn (cả phiên admin), seenAt
@@ -401,12 +403,14 @@ async function route(req, res) {
   //   Studio tĩnh · GET /api/health · GET /api/auth/state (tối thiểu) · OAuth máy → mọi lớp · /setup (cũ) → 302 /login
   //   POST /api/auth/login { username: admin } → A khi và chỉ khi stage admin + cửa sổ run/admin-window (lệnh host, ≤ 30 phút) + chưa lên mạng (online.json off,
   //     không GC_PUBLIC_URL / GC_ALLOWED_HOSTS, không edge Caddy, không tunnel) + native: socket loopback + GC_BIND loopback / Docker: CLI đã kiểm compose chỉ
-  //     publish loopback + Origin http://localhost|127.0.0.1|[::1]:<cổng> khớp Host + không header proxy / edge; trần xét TRƯỚC (setup.js adminReasons)
+  //     publish loopback (kể cả network_mode mặc định) + Origin http://localhost|127.0.0.1|[::1]:<cổng> khớp Host + không header proxy / edge
+  //     + KHOÁ MỘT LẦN của link (body.key == run/admin-window.key, 128 bit, so thời gian hằng — CNS-268: user / container khác chạm được cổng nhưng không có khoá);
+  //     trần xét TRƯỚC. Từ chối: request không đạt điều kiện request → chỉ 'local-only' (CNS-271); máy chưa đạt → đúng lý do; khoá sai → 'link' (setup.js loginReasons)
   //   POST /api/auth/login { username: <tên> } → S (trần §3.3) · POST /api/auth/init → A hoặc T, chỉ khi stage admin / must_init (nguyên tử)
   //   /api/* khác: A → 403 gate init · S (Studio) và T kèm X-GC-Studio (Studio đăng nhập bằng token) → theo stage: admin / must_init chỉ /api/info;
   //     domain / mcp chỉ wizard (/api/info · /api/setup* · /api/online* · /api/oauth* · /api/agent/* · /api/settings); done → mọi /api
   //     T không kèm X-GC-Studio (agent, CLI) → mọi /api ở mọi stage (lời hứa v0.21: genchibi mcp chạy ngay) — Go online vẫn chặn khi stage admin / must_init
-  //     (trừ máy kế thừa; online.js) · /api/setup/skip | reset → chỉ T · /mcp → K, O, T ở mọi stage (S, A không bao giờ mở /mcp)
+  //     (trừ máy kế thừa; online.js) · /api/setup/skip | reset | hostcheck → chỉ T · /mcp → K, O, T ở mọi stage (S, A không bao giờ mở /mcp)
   // ---- OAuth (v0.19): khám phá + đăng ký + token + thu hồi là đường MÁY (công khai, bảo vệ bằng PKCE / token — không cần cookie hay phiên Studio); authorize là trang cho chủ
   if (p.startsWith('/oauth/') || p.startsWith('/.well-known/oauth-')) { const done = await oauthRoute(req, res, url, p, m); if (done) return; }
 
@@ -474,7 +478,7 @@ async function route(req, res) {
   // đăng nhập chủ: state (công khai) · setup (C / T) · login (mọi lớp, trần §3.3) · logout · password / setup-code / sessions (S / T) — luật trong auth.handle
   if (p.startsWith('/api/auth/')) return auth.handle(req, res, p, m, { send, body });
   if (p === '/api/setup' || p.startsWith('/api/setup/')) return setupRoute(req, res, p, m);   // thiết lập lần đầu (v0.23 §A.3) — S / T (đã qua cổng /api)
-  if (p === '/api/info') { const pub = online.publicUrl(); return send(res, 200, { version: VERSION, repo: REPO, home: HOME, port: PORT, settings: settings(), uiLang: settings().uiLang, lang: langOf(req), auth: auth.view(req), setup: setup.view(), mcp: { http: '/mcp', stdio: 'genchibi mcp', link: pub && MCP_KEY ? pub + '/mcp/' + MCP_KEY : null, oauth: oauth.enabled ? oauth.resource : null } }); }
+  if (p === '/api/info') { const pub = online.publicUrl(); return send(res, 200, { version: VERSION, repo: REPO, home: HOME, port: PORT, settings: settings(), uiLang: settings().uiLang, lang: langOf(req), auth: auth.view(req), setup: setup.view(), mcp: { http: '/mcp', stdio: 'genchibi mcp', cli: cliPath(), link: pub && MCP_KEY ? pub + '/mcp/' + MCP_KEY : null, oauth: oauth.enabled ? oauth.resource : null } }); }
   if (p === '/api/online' || p.startsWith('/api/online/')) return goOnline.route(req, res, p, m, { send, body, lang: langOf(req) });   // Go online (v0.21): S / T (đã qua cổng /api ở trên) — server/online.js
   if (p === '/api/settings' && m === 'PUT') {
     const b = await body(req);
@@ -779,15 +783,21 @@ async function selfTest() {
   let fileTok = ''; try { fileTok = fs.readFileSync(path.join(DATA, 'owner-token'), 'utf8').trim(); } catch (e) { /* không có tệp: token ở .env */ }
   const bridgeTok = process.env.GC_API_TOKEN || fileTok, src = process.env.GC_API_TOKEN ? 'GC_API_TOKEN · .env' : 'data/owner-token';
   const tokOk = auth.tokenOk(bridgeTok);
-  checks.push({ id: 'token', ok: tokOk, detail: tokOk ? N_('Token chủ hợp lệ ({source}) — genchibi mcp và agent trên máy dùng được', { source: src }) : N_('Token chủ mà genchibi mcp đọc ({source}) không khớp token của app — chạy genchibi restart trên máy chủ', { source: src }) });
+  checks.push({ id: 'token', ok: tokOk, detail: tokOk ? N_('Token chủ hợp lệ ({source}) — cầu stdio và agent dùng token này', { source: src }) : N_('Token chủ mà genchibi mcp đọc ({source}) không khớp token của app — chạy genchibi restart trên máy chủ', { source: src }) });
   const c = await selfStdio();
-  checks.push({ id: 'stdio', ok: c.ok, detail: c.ok ? N_('genchibi mcp (stdio) chạy được: initialize + tools/list ({n} tool)', { n: c.tools }) : N_('genchibi mcp (stdio) không chạy được ({error})', { error: String(c.error || '') }) });
+  // CNS-269: đây là cầu stdio CHẠY TRONG APP (Docker: trong container) — không phải lệnh owner dán cho agent; lệnh thật trên máy chủ là MCP-04 (genchibi setup check)
+  checks.push({ id: 'stdio', ok: c.ok, detail: c.ok ? N_('Cầu stdio của app (chạy trong app) trả lời: initialize + tools/list ({n} tool) — lệnh trên máy chủ: xem MCP-04', { n: c.tools }) : N_('Cầu stdio của app (chạy trong app) không chạy được ({error})', { error: String(c.error || '') }) });
   return { ok: checks.every(x => x.ok), at: new Date().toISOString(), checks };
+}
+// đường tuyệt đối của lệnh genchibi trên máy chủ (CLI ghi run/cli-path ở start / open / setup check) — thẻ nối agent dùng thay cho "genchibi" trần (CNS-269)
+function cliPath() {
+  let t = ''; try { t = fs.readFileSync(path.join(HOME, 'run', 'cli-path'), 'utf8').split('\n')[0]; } catch (e) { return ''; }
+  return /^\/[^\u0000-\u001f\u007f]{0,511}$/.test(t) ? t : '';
 }
 function setupView(lang) {
   const v = setup.view(), c = online.get() || {}, st = v.mcp.selfTest;
   if (st) v.mcp.selfTest = Object.assign({}, st, { checks: (st.checks || []).map(x => Object.assign({}, x, { detail: txOf(x.detail, lang) })) });
-  return Object.assign(v, { admin: setup.stage === 'admin' ? { reasons: adminReasons(machineState()) } : null, port: PORT, localMcp: 'http://localhost:' + PORT + '/mcp',
+  return Object.assign(v, { cli: cliPath(), admin: setup.stage === 'admin' ? { reasons: adminReasons(machineState()) } : null, port: HOST_PORT, localMcp: 'http://localhost:' + HOST_PORT + '/mcp',
     mcpUrl: oauth.enabled ? oauth.resource : null, online: { mode: c.mode || 'off', publicUrl: c.publicUrl || '', pending: c.publicUrlPending || '', busy: goOnline.busy(), legacy: auth.isLegacy() } });
 }
 async function setupRoute(req, res, p, m) {
@@ -819,6 +829,12 @@ async function setupRoute(req, res, p, m) {
     if (!mm.selfTest || !mm.selfTest.ok) return fail(res, 409, 'phần tự kiểm cục bộ phải đạt trước (bấm Kiểm lại) — nếu chính phần kiểm bị lỗi: chạy genchibi setup skip trên máy chủ');
     if (b.later !== true && !mm.lastClient) return fail(res, 409, 'chưa thấy agent nào gọi MCP — nối agent theo thẻ hướng dẫn, hoặc chọn "Tôi nối agent sau"');
     setup.finish(b.later === true);
+    return send(res, 200, setupView(lang));
+  }
+  // MCP-04: CLI trên máy chủ (genchibi setup check / start / open) gửi kết quả chạy THẬT "<đường tuyệt đối> mcp" — chỉ token chủ (T), như skip / reset
+  if (p === '/api/setup/hostcheck') {
+    if (req.gcOwner !== 'T') return fail(res, 403, 'chỉ lệnh genchibi setup check trên máy chủ (token của bản cài) gửi được kết quả này');
+    setup.setHostCheck(b || {});
     return send(res, 200, setupView(lang));
   }
   if (p === '/api/setup/review') { setup.dismissReview(); return send(res, 200, setupView(lang)); }

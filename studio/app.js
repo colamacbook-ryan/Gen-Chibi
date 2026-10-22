@@ -133,8 +133,27 @@
   // Ba màn trên cùng một lớp phủ #gcLogin: ĐĂNG NHẬP (tên đăng nhập + mật khẩu; lần đầu: admin / admin trong cửa sổ 30 phút do lệnh trên máy chủ mở —
   // không nhận thì server nói ĐÚNG lý do + cách vào), KHỞI TẠO tài khoản chủ (phiên admin hoặc token, bắt buộc trước mọi trang — §A.2) và TOKEN (máy kế
   // thừa / CLI — như v0.20). Server là nơi kiểm duy nhất; ở đây chỉ dẫn đường. Mã setup v0.21 đã bỏ.
+  var Auth0 = { key: '' };
+  // dải 3 bước của thiết lập lần đầu ở màn khởi tạo (CNS-272: owner thấy cả đường đi ngay ở bước bắt buộc đầu tiên) — cùng lớp .sustep với wizard
+  function setupSteps(cur) {
+    var cells = [[_t('Tài khoản chủ'), _t('Tên đăng nhập + mật khẩu của bạn')], [_t('Tên miền'), _t('Đưa lên mạng, hoặc chỉ dùng trên máy này')], [_t('Chẩn đoán MCP'), _t('Tự kiểm trên máy + nối agent đầu tiên')]];
+    return h('div', { class: 'sustep', id: 'gcSteps' }, cells.map(function (c, i) {
+      return h('div', { 'data-step': String(i + 1), 'data-state': i + 1 === cur ? 'cur' : 'todo', 'aria-current': i + 1 === cur ? 'step' : null },
+        h('span', { class: 'n', text: _t('BƯỚC {n}', { n: i + 1 }) }), h('b', { text: c[0] }), h('span', { class: 'note', text: c[1] }));
+    }));
+  }
+  // khoá một lần của link cửa sổ admin (CNS-268): http://localhost:<cổng>/login#k=<khoá> do lệnh trên máy chủ in / mở. Phần # không đi tới server trong URL;
+  // đọc một lần, xoá khỏi thanh địa chỉ (không lưu lịch sử / không lộ khi chia sẻ màn hình), chỉ giữ trong sessionStorage của tab này — gửi kèm khi đăng nhập admin
+  var ADMIN_KEY = 'gc-admin-key';
+  (function () {
+    var m = /^#k=([0-9a-f]{32})$/.exec(location.hash || '');
+    if (!m) return;
+    try { sessionStorage.setItem(ADMIN_KEY, m[1]); } catch (e) { /* trình duyệt chặn lưu: link vẫn dùng được trong lần tải này */ Auth0.key = m[1]; }
+    try { history.replaceState(history.state, '', location.pathname + location.search); } catch (e) { /* bỏ qua */ }
+  })();
   var Auth = {
     st: null,
+    adminKey: function () { var k = ''; try { k = sessionStorage.getItem(ADMIN_KEY) || ''; } catch (e) { k = Auth0.key || ''; } return /^[0-9a-f]{32}$/.test(k) ? k : ''; },
     // ?next=/đường/nội-bộ (trang Cấp phép gửi sang) — chỉ nhận đường cùng máy, không // (khác máy), không ký tự lạ
     next: function () { var n = ''; try { n = new URLSearchParams(location.search).get('next') || ''; } catch (e) { /* bỏ qua */ } return /^\/(?![\/\\])[A-Za-z0-9\/%._~!*'()?&=+,:;@-]*$/.test(n) ? n : '/'; },
     done: function () { if (/^\/(login|setup)$/.test(location.pathname)) location.replace(Auth.next()); else location.reload(); },
@@ -171,7 +190,7 @@
         var em = input({ id: 'gcEmail', name: 'email', type: 'email', maxlength: '254', autocomplete: 'email', placeholder: _t('tuỳ chọn') });
         var q1 = input({ id: 'gcPw', type: 'password', autocomplete: 'new-password', minlength: String(minLen) }), q2 = input({ id: 'gcPw2', type: 'password', autocomplete: 'new-password' });
         title = _t('Khởi tạo tài khoản chủ');
-        body.push(h('div', { class: 'note', text: _t('Lần đầu: đặt tài khoản chủ của riêng bạn — admin / admin không dùng được nữa sau bước này. Sau đó Studio dẫn bạn qua tên miền và chẩn đoán MCP.') }),
+        body.push(setupSteps(1), h('div', { class: 'note', text: _t('Lần đầu: đặt tài khoản chủ của riêng bạn — admin / admin không dùng được nữa sau bước này. Sau đó Studio dẫn bạn qua tên miền và chẩn đoán MCP.') }),
           st.who === 'A' && st.expiresAt ? h('div', { class: 'chip warn', id: 'gcAdminLeft', style: 'justify-self:start', text: _t('Phiên admin hết hạn lúc {at}', { at: fmtClock(st.expiresAt) }) }) : null,
           field(_t('Tên đăng nhập (3–32 ký tự: a-z 0-9 . _ -, không phải admin)'), u),
           field(_t('Tên hiển thị'), dn),
@@ -194,9 +213,12 @@
         var un = input({ id: 'gcUser', name: 'username', autocomplete: 'username', maxlength: '32' });
         var pw = input({ id: 'gcPw', type: 'password', autocomplete: 'current-password' });
         title = _t('Đăng nhập gen-chibi');
-        if (st.stage === 'admin') body.push(h('div', { class: 'banner acc', id: 'gcFirstRun', role: 'note' }, h('span', { text: _t('Lần đầu: đăng nhập bằng admin / admin trên máy chủ, trong 30 phút sau genchibi start (hoặc genchibi open). Studio sẽ bắt bạn đặt tài khoản chủ của riêng mình.') })));
+        var akey = Auth.adminKey();
+        if (st.stage === 'admin') body.push(akey
+          ? h('div', { class: 'banner acc', id: 'gcFirstRun', 'data-key': 'yes', role: 'note' }, h('span', { text: _t('Lần đầu: đăng nhập bằng admin / admin (link từ máy chủ, 30 phút). Studio sẽ bắt bạn đặt tài khoản chủ của riêng mình.') }))
+          : h('div', { class: 'banner warn', id: 'gcFirstRun', 'data-key': 'no', role: 'note' }, h('span', { text: _t('Lần đầu: admin / admin chỉ dùng được qua link do máy chủ in ra — mở link ở dòng cuối của trình cài, hoặc chạy genchibi open trên máy chủ (link mới, 30 phút). Hoặc đặt tài khoản chủ ngay trên máy chủ: genchibi password.') })));
         else if (!st.password) body.push(h('div', { class: 'banner warn', id: 'gcNoPw', role: 'note' }, h('span', { text: _t('Máy chưa có mật khẩu chủ: trên máy chủ chạy genchibi password (tên đăng nhập owner), hoặc dùng token của bản cài.') })));
-        body.push(h('div', { class: 'note', text: _t('Trình duyệt này nhớ đăng nhập 30 ngày.') }), field(_t('Tên đăng nhập'), un), field(_t('Mật khẩu'), pw));
+        body.push(st.stage === 'admin' ? null : h('div', { class: 'note', id: 'gcRemember', text: _t('Trình duyệt này nhớ đăng nhập 30 ngày.') }), field(_t('Tên đăng nhập'), un), field(_t('Mật khẩu'), pw));   // phiên admin: 30 phút, không nhớ thiết bị (CNS-272)
         // trần theo tài khoản đang chặn người lạ (trình duyệt chưa từng đăng nhập): nói thẳng + lối token (token chủ không bị trần).
         // /api/auth/state công khai không còn báo locked (CNS-210) → dải hiện khi lần thử trả 429 locked (máy chủ xét trần trước khi kiểm mật khẩu)
         var lockBox = h('div', { id: 'gcLockedBox' });
@@ -207,15 +229,19 @@
         submit = function () {
           var user = un.value.trim().toLowerCase();
           if (!user) return fail(_t('Cần tên đăng nhập'));
-          Auth.post('api/auth/login', { username: user, password: pw.value }).then(function (x) {
+          Auth.post('api/auth/login', user === 'admin' ? { username: user, password: pw.value, key: Auth.adminKey() } : { username: user, password: pw.value }).then(function (x) {
             if (x.s === 429 && x.j && x.j.locked) lockShow(+x.j.retryAfter || 60);
+            if (x.s === 401 && st.stage === 'done' && !odBox.firstChild) odBox.appendChild(h('div', { class: 'note', id: 'gcOwnerDefault', text: _t('Nâng cấp từ v0.22 trở về trước: tên đăng nhập là owner.') }));
             if (x.s !== 200) { pw.select(); err.setAttribute('data-reason', x.j.reason || ''); return fail(x.j.error || _t('Lỗi {status}', { status: x.s })); }   // 403 admin: lý do + cách vào (server)
             try { localStorage.removeItem('gc-token'); } catch (e) { /* bỏ qua */ }
             if (x.j.admin) { location.replace('/'); return; }   // phiên admin: Studio mở màn khởi tạo (cổng theo stage)
             Auth.done();
           }).catch(function (e) { fail(e.message); });
         };
-        body.push(h('div', { class: 'note', text: _t('Nâng cấp từ v0.22 trở về trước: tên đăng nhập là owner.') }),
+        // CNS-272: "nâng cấp từ v0.22: tên là owner" KHÔNG hiện sẵn (nhiễu với bản cài mới) — chỉ hiện sau một lần sai ở máy đã thiết lập (stage done).
+        // Không thêm trường nào vào /api/auth/state công khai (CNS-210: người lạ không biết tên đăng nhập của máy này) — câu tĩnh, như nhau mọi máy
+        var odBox = h('div', { id: 'gcOwnerDefaultBox' });
+        body.push(odBox,
           h('div', { class: 'row', style: 'justify-content:space-between;flex-wrap:wrap;gap:6px' }, h('span', { class: 'note', text: _t('Quên mật khẩu? Chạy genchibi password trên máy chủ.') }), link(_t('Dùng token'), 'token')));
       } else {
         var ti = input({ id: 'gcTok', type: 'password', placeholder: 'GC_API_TOKEN', autocomplete: 'current-password' });
@@ -525,11 +551,14 @@
     if (z === 'fab') { var p = PAGE_ALIAS[page] || page; return NAV.filter(function (g) { return g[4] === 'khung'; })[0][3].some(function (it) { return it[0] === p; }) ? 'khung' : 'xuong'; }   // nhóm NAV mang id 'khung' (Khung chuẩn) = khu Bộ khung
     return 'he-thong';
   }
+  var PAGE_EXTRA = { setup: N_('Thiết lập lần đầu') };   // trang ngoài menu (NAV) — dock không bao giờ hiện id thô (CNS-272, L-73)
   function pageLabel(page) {
-    var p = PAGE_ALIAS[page] || page, L = page === 'home' ? _t('Chọn khu') : '';
+    var p = PAGE_ALIAS[page] || page, L = page === 'home' ? _t('Chọn khu') : PAGE_EXTRA[p] ? _t(PAGE_EXTRA[p]) : '';
     NAV.forEach(function (g) { g[3].forEach(function (it) { if (it[0] === p) L = _t(it[1]); }); });
     return L || p;
   }
+  // chỉ đọc, cho test trình duyệt (bộ quét i18n): mọi trang có nhãn người đọc, không trang nào rơi về id thô
+  window.GCStudioPageLabels = function () { return Object.keys(PAGES).map(function (k) { return [k, pageLabel(k)]; }); };
   function dockRoute(r) { if (window.GCDock) window.GCDock.route({ zone: dockZone(r.page), page: r.page, pageLabel: pageLabel(r.page) }); }
   // trang báo đối tượng đang xem: kind asset | project | work; id thật (key asset, id dự án / tác phẩm)
   function dockObj(kind, id, label) { if (window.GCDock) window.GCDock.ctx({ object: id ? { kind: kind, id: id, label: label || id } : null }); }
@@ -5883,7 +5912,7 @@
   // chỉ báo · thẻ nối agent dùng chung · kiểm thật: chờ lời gọi MCP đầu tiên). Không khoá owner (CNS-254): bước Internet lỗi / chờ lâu → "Tạm dùng trên máy
   // này"; phần tự kiểm hỏng vì lỗi của chính nó → genchibi setup skip trên máy chủ. Mở lại khi chưa xong → đúng bước đang dở (server giữ stage).
   // stage done + review (máy v0.21 / v0.22 đã có mật khẩu): cùng trang ở chế độ "Kiểm tra thiết lập" một lần, đóng được.
-  var SU_CHECK = { http: N_('/mcp trên máy này (initialize + tools/list)'), token: N_('Token chủ (env hoặc data/owner-token)'), stdio: N_('genchibi mcp (stdio)') };
+  var SU_CHECK = { http: N_('/mcp trên máy này (initialize + tools/list)'), token: N_('Token chủ (env hoặc data/owner-token)'), stdio: N_('Cầu stdio của app (chạy trong app)'), host: N_('Lệnh trên máy chủ: genchibi mcp') };
   var SU_CHANNEL = { stdio: N_('genchibi mcp (stdio)'), http: N_('HTTP + token chủ'), oauth: N_('OAuth'), link: N_('link có khoá') };
   PAGES.setup = function () {
     crumbs([{ t: _t('Thiết lập lần đầu') }]);
@@ -5900,7 +5929,7 @@
       clearTimeout(S.timer);
       if (S.left || !S.v || S.v.stage !== 'mcp') return;
       S.timer = setTimeout(function () {
-        Store.api('GET', 'api/setup').then(function (v) { if (S.left) return; if (v.stage !== S.v.stage) return render(v); S.v = v; paintLive(); poll(); }).catch(function () { poll(); });
+        Store.api('GET', 'api/setup').then(function (v) { if (S.left) return; if (v.stage !== S.v.stage || v.cli !== S.v.cli || JSON.stringify((v.mcp || {}).hostCheck || null) !== JSON.stringify((S.v.mcp || {}).hostCheck || null)) return render(v); S.v = v; paintLive(); poll(); })   // MCP-04 / đường lệnh vừa báo về (genchibi setup check): vẽ lại cả bước (hiếm, một lần).catch(function () { poll(); });
       }, 2000);
     }
     function render(v) {
@@ -5977,8 +6006,15 @@
       tbl.appendChild(h('tr', null, h('th', { text: 'ID' }), cols.map(function (c) { return h('th', { text: c }); })));
       ((st && st.checks) || []).forEach(function (c, i) {
         tbl.appendChild(h('tr', { 'data-check': c.id, 'data-state': c.ok ? 'ok' : 'fail' }, h('td', { class: 'id', text: 'MCP-' + String(i + 1).padStart(2, '0') }), h('td', { class: 'nw' }, h('b', { text: _t(SU_CHECK[c.id] || c.id) })),
-          h('td', { class: 'nw' }, h('span', { class: 'chip ' + (c.ok ? 'ok' : 'bad'), text: c.ok ? '✓ ' + _t('Đạt') : '✗ ' + _t('Lỗi') })), h('td', { class: 'wrap', text: c.detail || '' })));
+          h('td', { class: 'nw' }, h('span', { class: 'chip ' + (c.ok ? 'ok' : 'bad'), text: c.ok ? '✓ ' + _t('Đã qua') : '✗ ' + _t('Lỗi') })), h('td', { class: 'wrap', text: c.detail || '' })));
       });
+      // MCP-04 (CNS-269): lệnh THẬT owner dán cho agent, chạy trên máy chủ bằng genchibi setup check (start / open tự chạy) — chỉ báo, không khoá
+      var hc = mm.hostCheck, hcmd = (hc && hc.cmd) || v.cli || 'genchibi';
+      tbl.appendChild(h('tr', { 'data-check': 'host', 'data-state': !hc ? 'wait' : hc.ok ? 'ok' : 'fail' }, h('td', { class: 'id', text: 'MCP-04' }), h('td', { class: 'nw' }, h('b', { text: _t(SU_CHECK.host) })),
+        h('td', { class: 'nw' }, h('span', { class: 'chip ' + (!hc ? 'warn' : hc.ok ? 'ok' : 'bad'), text: !hc ? '… ' + _t('Chưa chạy') : hc.ok ? '✓ ' + _t('Đã qua') : '✗ ' + _t('Lỗi') })),
+        h('td', { class: 'wrap', text: !hc ? _t('Trên máy chủ chạy: genchibi setup check — chạy thật {cmd} mcp (đúng lệnh agent sẽ gọi) rồi báo về đây.', { cmd: hcmd })
+          : hc.ok ? _t('{cmd} mcp chạy được trên máy chủ: initialize + tools/list ({n} tool) — lúc {at}', { cmd: hc.cmd, n: hc.tools, at: fmtClock(hc.at) })
+          : _t('{cmd} mcp lỗi trên máy chủ: {error} — sửa rồi chạy lại genchibi setup check', { cmd: hc.cmd || hcmd, error: hc.error || '?' }) })));
       S.el.selfBtn = h('button', { class: 'btn' + (ok ? '' : ' primary'), id: 'suSelfRun', disabled: S.testing, onclick: selfTest }, S.testing ? _t('Đang tự kiểm…') : st ? _t('Kiểm lại') : _t('Chạy tự kiểm'));
       wrap.appendChild(h('div', { class: 'panel', id: 'suSelf' }, h('h3', null, _t('Bước 3 · Tự kiểm trên máy này'), h('span', { class: 'r note', text: _t('bắt buộc đạt') })),
         st ? h('div', { class: 'scroll' }, tbl) : h('div', { class: 'pad note', text: S.testing ? _t('Đang tự kiểm…') : _t('Chưa chạy.') }),
@@ -5989,12 +6025,12 @@
         S.el.inetBtn = h('button', { class: 'btn', id: 'suInetRun', disabled: S.inetBusy, onclick: inetCheck }, S.inetBusy ? _t('Đang kiểm từ Internet…') : r ? _t('Kiểm lại') : _t('Kiểm từ Internet'));
         wrap.appendChild(h('div', { class: 'panel', id: 'suInet' }, h('h3', null, _t('Kiểm từ Internet'), h('span', { class: 'r note', text: _t('chỉ báo, không khoá — {url}', { url: v.online.publicUrl }) })),
           h('div', { class: 'pad stack' },
-            r ? h('div', { class: 'row', id: 'suInetResult', 'data-state': r.state }, h('span', { class: 'chip ' + (r.state === 'ok' ? 'ok' : r.state === 'skip' ? '' : 'bad'), text: r.state === 'ok' ? '✓ ' + _t('Đạt') : r.state === 'skip' ? _t('Bỏ qua') : '✗ ' + _t('Lỗi') }), h('span', { class: 'wrap', text: r.detail || '' })) : h('div', { class: 'note', text: _t('Kiểm /mcp từ ngoài vào: 401 kèm metadata OAuth, đường của agent không bị luật chặn bot / WAF.') }),
+            r ? h('div', { class: 'row', id: 'suInetResult', 'data-state': r.state }, h('span', { class: 'chip ' + (r.state === 'ok' ? 'ok' : r.state === 'skip' ? '' : 'bad'), text: r.state === 'ok' ? '✓ ' + _t('Đã qua') : r.state === 'skip' ? _t('Bỏ qua') : '✗ ' + _t('Lỗi') }), h('span', { class: 'wrap', text: r.detail || '' })) : h('div', { class: 'note', text: _t('Kiểm /mcp từ ngoài vào: 401 kèm metadata OAuth, đường của agent không bị luật chặn bot / WAF.') }),
             r && r.fix ? h('div', { class: 'note', id: 'suInetFix' }, h('span', { text: '→ ' + r.fix }), fixCopies(r.fix)) : null,
             h('div', { class: 'row' }, S.el.inetBtn))));
       }
       // 3c — thẻ nối agent (một component với Kết nối agent)
-      wrap.appendChild(agentCards({ mcpUrl: v.mcpUrl || '', id: 'suCards' }));
+      wrap.appendChild(agentCards({ mcpUrl: v.mcpUrl || '', cli: v.cli || '', id: 'suCards' }));
       // 3d — kiểm thật: lời gọi MCP đầu tiên của agent
       S.el.live = h('div', { class: 'sulive', id: 'suLive' });
       S.el.finish = h('button', { class: 'btn primary', id: 'suFinish', onclick: function () { this.disabled = true; post('finish', {}).then(done).catch(function (e) { toast(e.message); load(); }); } }, _t('Xong'));
@@ -6029,9 +6065,11 @@
         h('button', { class: 'btn sm', type: 'button', id: id + 'Copy', onclick: function () { copyText(text, label); } }, _t('Chép'))), h('pre', { class: 'code', id: id, text: text }));
     };
     var card = function (id, title, kids) { return h('div', { class: 'agcard', id: id }, h('b', { text: title }), kids); };
-    var json = JSON.stringify({ mcpServers: { 'gen-chibi': url ? { url: url } : { command: 'genchibi', args: ['mcp'] } } }, null, 2);
+    // lệnh đường TUYỆT ĐỐI (CNS-269): ứng dụng mở từ Dock / menu (Claude Desktop, Cursor…) không thấy PATH của terminal — "genchibi" trần hay hỏng ENOENT
+    var cli = o.cli || (Store.info && Store.info.mcp && Store.info.mcp.cli) || 'genchibi', shq = /^[A-Za-z0-9_\/.~+-]+$/.test(cli) ? cli : "'" + cli.replace(/'/g, "'\\''") + "'";
+    var json = JSON.stringify({ mcpServers: { 'gen-chibi': url ? { url: url } : { command: cli, args: ['mcp'] } } }, null, 2);
     var cards = h('div', { class: 'agcards' },
-      card('agCc', 'Claude Code', [row('agCcLocal', _t('Trên máy này (stdio)'), 'claude mcp add -s user gen-chibi -- genchibi mcp'),
+      card('agCc', 'Claude Code', [row('agCcLocal', _t('Trên máy này (stdio)'), 'claude mcp add -s user gen-chibi -- ' + shq + ' mcp'),
         url ? row('agCcNet', _t('Qua Internet (OAuth)'), 'claude mcp add -s user --transport http gen-chibi ' + url) : null,
         h('span', { class: 'note', text: _t('Mở phiên Claude Code mới rồi dặn: "gọi start_here trước".') })]),
       card('agAi', 'claude.ai', url ? [row('agAiUrl', _t('Địa chỉ MCP'), url), h('ol', { class: 'note', style: 'margin:0;padding-left:18px;display:grid;gap:2px' },
@@ -6040,7 +6078,8 @@
           h('li', { text: _t('Mở phiên chat mới: agent thấy các tool của gen-chibi. Thu hồi bất cứ lúc nào ở Hệ thống › Kết nối agent.') }))]
         : [h('span', { class: 'note', id: 'agAiOff', text: _t('claude.ai trên web chỉ nối được khi máy đã lên mạng (Hệ thống › Lên mạng). Trên máy này: dùng Claude Code với genchibi mcp.') })]),
       card('agJson', _t('Agent khác (JSON)'), [row('agJsonCfg', _t('Cấu hình MCP'), json),
-        h('span', { class: 'note', text: _t('Cursor, Gemini CLI, Codex…: dán vào tệp cấu hình MCP của client. Lệnh in đủ mọi client: genchibi agent connect.') })]));
+        h('span', { class: 'note', text: _t('Cursor, Gemini CLI, Codex…: dán vào tệp cấu hình MCP của client. Lệnh in đủ mọi client: genchibi agent connect.') }),
+        cli !== 'genchibi' ? h('span', { class: 'note', id: 'agCliNote', text: _t('Đường đầy đủ {cmd}: ứng dụng mở từ Dock / menu không thấy PATH của terminal.', { cmd: cli }) }) : null]));
     return h('div', { class: 'panel', id: o.id || 'agCards' }, h('h3', null, _t('Nối agent'), h('span', { class: 'r note', text: _t('MCP 2025-06-18 · agent gọi start_here trước') })), h('div', { class: 'pad' }, cards));
   }
 
@@ -6506,7 +6545,7 @@
       var al = a.alerts || [];
       var aRows = al.slice().reverse().map(function (e) {
         return h('tr', { 'data-alert': e.id },
-          h('td', { class: 'id', text: e.id }), h('td', { class: 'nw note', text: fmtShort(e.at) }), h('td', { class: 'nw', text: e.kind === 'setup' ? _t('Mã setup') : _t('Đăng nhập') }),
+          h('td', { class: 'id', text: e.id }), h('td', { class: 'nw note', text: fmtShort(e.at) }), h('td', { class: 'nw', text: e.kind === 'setup' ? _t('Mã setup (v0.21)') : _t('Đăng nhập') }),
           h('td', { class: 'v', text: String(e.failures) }), h('td', { class: 'v', text: String(e.ips) }), h('td', { class: 'mono note', text: (e.sample || []).join(', ') || '—' }), h('td', { class: 'nw note', text: fmtShort(e.until) }));
       });
       box.appendChild(h('div', { class: 'panel', id: 'acAlerts' }, h('h3', null, _t('Cảnh báo đăng nhập sai'), h('span', { class: 'r' }, al.length ? h('button', { class: 'btn sm', id: 'acAck', onclick: function () {

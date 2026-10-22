@@ -7,16 +7,17 @@
 
 ## First run: owner account and setup (v0.23)
 
-1. **Install, then read the installer's last line.** On a machine that is not online it says: open `http://localhost:7480` and sign in with **admin / admin** within 30 minutes. Over SSH, forward the port first: `ssh -L 7480:localhost:7480 <server>`.
+1. **Install, then read the installer's last line.** On a machine that is not online it prints a link — `http://localhost:7480/login#k=<key>` — open it and sign in with **admin / admin** within 30 minutes. **admin / admin works only through that link from the server** (`genchibi open` prints and opens a new one). Over SSH, forward the port first: `ssh -L 7480:localhost:7480 <server>`.
 2. **admin / admin works only when all of this is true** — otherwise the login page names the reason and how to get in:
    - the owner account does not exist yet;
    - a command on the server opened the 30-minute window (the installer, `genchibi start`, `genchibi open` — never the Studio);
+   - the page was opened through **the link that command printed**: it carries a one-time key from `run/admin-window` (0600), so another user or another container on the same machine cannot sign in with `admin / admin` (the key never goes into a command line; the page removes it from the address bar and keeps it only for that tab);
    - the machine is not online (no Go online, no `GC_PUBLIC_URL` / `GC_ALLOWED_HOSTS`, no edge Caddy, no tunnel);
    - the app only listens on this machine (native: loopback; Docker: the CLI checked that compose publishes on 127.0.0.1 only);
    - the browser is on `localhost` / `127.0.0.1` / `[::1]` and no proxy sits in between.
 3. **Create the owner account** (the only screen an admin session sees; it lasts 30 minutes and does not remember the device): username (3–32 characters, not `admin`), display name, email (optional — only used as the Let's Encrypt contact on the Caddy path; change it in *System › Owner account*), password ×2 (at least 12 characters). After this, `admin / admin` is gone for good.
 4. **Step 2 · Domain:** *Go online* runs the same steps as *System › Go online*; *This machine only* skips it. If an Internet step is red or slow, *Use it on this machine for now* lets you in; the home page then shows *Going online is not finished* until it is.
-5. **Step 3 · MCP check:** a real self-test runs on its own (HTTP `/mcp`, owner token, `genchibi mcp` stdio). Below it are the connect cards (Claude Code, claude.ai, other agents as JSON) — the same cards as *System › Agent connections*. The live check turns ✓ when an agent makes its first MCP call; then *Done* unlocks. *I'll connect an agent later* also finishes (the home page reminds you until an agent connects).
+5. **Step 3 · MCP check:** a real self-test runs on its own (MCP-01 HTTP `/mcp`, MCP-02 owner token, MCP-03 the app's own stdio bridge — inside the app, in Docker inside the container). **MCP-04** is the exact command agents will run on the server, `<full path>/genchibi mcp`: `genchibi setup check` runs it for real (initialize + tools/list) and reports here; `genchibi start` / `open` run it too. The connect cards use that full path, because apps opened from the Dock / menu do not see the terminal `PATH`. Below it are the connect cards (Claude Code, claude.ai, other agents as JSON) — the same cards as *System › Agent connections*. The live check turns ✓ when an agent makes its first MCP call; then *Done* unlocks. *I'll connect an agent later* also finishes (the home page reminds you until an agent connects).
 
 Until setup is done the Studio only shows *First-run setup*, *Go online* and *Owner account*; signing in again takes you back to the step you were on. Agents and the CLI with the owner token keep working at every step (`genchibi mcp` works right after install). Going online needs the owner account (it is refused while only `admin / admin` exists). Host-only escape hatches: `genchibi setup` (state), `genchibi setup skip [reason]` (logged — for when the check itself is broken), `genchibi setup reset` (run the wizard again; never brings `admin / admin` back).
 
@@ -28,7 +29,7 @@ Until setup is done the Studio only shows *First-run setup*, *Go online* and *Ow
 
 | Who | How | Gets |
 |---|---|---|
-| admin | `admin / admin`, only under the conditions above | only the owner-account screen (30 minutes) |
+| admin | `admin / admin` through the server's link (one-time key), only under the conditions above | only the owner-account screen (30 minutes) |
 | Owner (session) | username + password at `/login` | the Studio — during setup only the three setup pages; never `/mcp` |
 | Owner token | `Authorization: Bearer` (CLI, `genchibi mcp`, agents on this machine) | every API and `/mcp` at every step; `genchibi setup skip / reset` |
 | OAuth agent | `https://your-domain/mcp`, the owner clicks *Authorize* | `/mcp` within the chosen scope (`mcp:read` · `mcp:write` · `mcp:owner`) |

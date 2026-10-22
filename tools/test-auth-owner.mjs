@@ -93,7 +93,7 @@ async function oauthGrant(port, host, ownerHdr) {
 const mcpInit = (port, headers, p) => req(port, 'POST', p || '/mcp', { headers, body: { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '1' } } } });
 
 /* ================================================================== 0) đơn vị */
-console.log('0) đơn vị (đồng hồ giả): mã setup · mật khẩu · phiên · cookie thiết bị · online-config + OAuth đọc lúc chạy');
+console.log('0) đơn vị (đồng hồ giả): mật khẩu · phiên · cookie thiết bị · online-config + OAuth đọc lúc chạy');
 {
   let t = Date.parse('2026-10-20T00:00:00Z'); const now = () => t;
   const dir = tmp('u'), key = crypto.randomBytes(32), logs = [];
@@ -414,7 +414,7 @@ console.log('8) data/online.json đọc lúc chạy (không khởi động lại
 await stop(A);
 
 /* ================================================================== 9) CLI */
-console.log('9) CLI: genchibi status / open (mã setup) · password (app chạy → API, app dừng → ghi thẳng) · agent connect · mcp — token / mật khẩu không vào argv');
+console.log('9) CLI: genchibi status / open (cửa sổ admin) · password (app chạy → API, app dừng → ghi thẳng) · agent connect · mcp — token / mật khẩu không vào argv');
 {
   const HD = tmp('cli'); fs.symlinkSync(ROOT, path.join(HD, 'current')); fs.writeFileSync(path.join(HD, '.env'), 'GC_MODE=native\nGC_PORT=7749\nGC_LANG=en\n');   // bản cài v0.20 nâng cấp: .env KHÔNG có GC_API_TOKEN
   const FB = tmp('bin'), LOG = path.join(FB, 'argv.log'), OPENED = path.join(FB, 'opened.txt'), realCurl = execFileSync('bash', ['-c', 'command -v curl'], { encoding: 'utf8' }).trim();
@@ -426,8 +426,9 @@ console.log('9) CLI: genchibi status / open (mã setup) · password (app chạy 
   let st = cli(['status']);
   ok(st.code === 0 && /First run: the admin \/ admin window is closed/.test(st.out) && !/Setup code/.test(st.out), 'genchibi status (chưa khởi tạo, chưa cửa sổ): dòng lần đầu — không còn mã setup');
   const op = cli(['open']), opened = (fs.readFileSync(OPENED, 'utf8').trim().split('\n').pop() || '');
-  ok(op.code === 0 && /sign in with admin \/ admin within 30 minutes/.test(op.out) && opened === 'http://localhost:7749' && mode(path.join(HD, 'run/admin-window')) === '600' && mode(path.join(HD, 'run')) === '700',
-    'genchibi open (v0.23): mở cửa sổ admin / admin (run/admin-window 0600, run/ 0700), argv của xdg-open chỉ là http://localhost:<cổng> — không mã nào', op.out);
+  const wkey = JSON.parse(fs.readFileSync(path.join(HD, 'run/admin-window'), 'utf8')).key || '';
+  ok(op.code === 0 && /sign in with admin \/ admin within 30 minutes/.test(op.out) && opened === path.join(HD, 'run/open-admin.html') && /^[0-9a-f]{32}$/.test(wkey) && !opened.includes(wkey) && mode(path.join(HD, 'run/admin-window')) === '600' && mode(path.join(HD, 'run/open-admin.html')) === '600' && mode(path.join(HD, 'run')) === '700',
+    'genchibi open (v0.23): mở cửa sổ admin / admin (run/admin-window 0600, run/ 0700); argv của xdg-open chỉ là đường tệp run/open-admin.html (0600) — khoá một lần KHÔNG nằm trong argv (CNS-268)', op.out + ' | ' + opened);
   ok(cli(['password'], 'ngan qua\n').code === 1 && (await req(7749, 'GET', '/api/auth/state')).json.password === false, 'genchibi password: < 12 ký tự → từ chối, không đổi gì');
   const pw = cli(['password'], 'mat khau "kho" \\ dai hon 12\n');
   const lg = await req(7749, 'POST', '/api/auth/login', { headers: W, body: { username: 'owner', password: 'mat khau "kho" \\ dai hon 12' } });

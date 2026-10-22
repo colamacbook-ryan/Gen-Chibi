@@ -7,16 +7,17 @@
 
 ## Lần chạy đầu: tài khoản chủ và thiết lập (v0.23)
 
-1. **Cài xong, đọc dòng cuối của trình cài.** Trên máy chưa lên mạng, dòng đó bảo: mở `http://localhost:7480` và đăng nhập **admin / admin** trong vòng 30 phút. Qua SSH thì chuyển cổng trước: `ssh -L 7480:localhost:7480 <máy-chủ>`.
+1. **Cài xong, đọc dòng cuối của trình cài.** Trên máy chưa lên mạng, dòng đó in một link — `http://localhost:7480/login#k=<khoá>` — mở link đó và đăng nhập **admin / admin** trong vòng 30 phút. **admin / admin chỉ dùng được qua link đó từ máy chủ** (`genchibi open` in và mở link mới). Qua SSH thì chuyển cổng trước: `ssh -L 7480:localhost:7480 <máy-chủ>`.
 2. **admin / admin chỉ dùng được khi đủ tất cả các điều sau** — thiếu điều nào thì trang đăng nhập nói đúng lý do và cách vào:
    - chưa có tài khoản chủ;
    - một lệnh trên máy chủ đã mở cửa sổ 30 phút (trình cài, `genchibi start`, `genchibi open` — Studio không bao giờ mở được);
+   - trang được mở bằng **đúng link lệnh đó in ra**: link mang khoá dùng một lần từ `run/admin-window` (0600), nên user khác hay container khác trên cùng máy không đăng nhập `admin / admin` được (khoá không bao giờ vào dòng lệnh; trang xoá khoá khỏi thanh địa chỉ, chỉ giữ cho đúng tab đó);
    - máy chưa lên mạng (không Go online, không `GC_PUBLIC_URL` / `GC_ALLOWED_HOSTS`, không edge Caddy, không tunnel);
    - app chỉ nghe trên máy này (native: loopback; Docker: CLI đã kiểm compose chỉ publish ở 127.0.0.1);
    - trình duyệt mở bằng `localhost` / `127.0.0.1` / `[::1]` và không có proxy ở giữa.
 3. **Tạo tài khoản chủ** (màn duy nhất phiên admin thấy; phiên dài 30 phút, không nhớ thiết bị): tên đăng nhập (3–32 ký tự, không phải `admin`), tên hiển thị, email (tuỳ chọn — chỉ dùng làm email liên hệ Let's Encrypt cho đường Caddy; đổi ở *Hệ thống › Tài khoản chủ*), mật khẩu ×2 (ít nhất 12 ký tự). Xong bước này, `admin / admin` mất hẳn.
 4. **Bước 2 · Tên miền:** *Đưa lên mạng* chạy đúng các bậc của *Hệ thống › Lên mạng*; *Chỉ dùng trên máy này* bỏ qua. Một bậc Internet đỏ hoặc chờ lâu: *Tạm dùng trên máy này* cho bạn vào; trang chủ khi đó hiện dải *Lên mạng chưa xong* tới khi xong.
-5. **Bước 3 · Chẩn đoán MCP:** tự kiểm thật chạy ngay (HTTP `/mcp`, token chủ, `genchibi mcp` stdio). Bên dưới là các thẻ nối (Claude Code, claude.ai, agent khác dạng JSON) — cùng các thẻ ở *Hệ thống › Kết nối agent*. Ô kiểm thật chuyển ✓ khi một agent gọi MCP lần đầu; lúc đó *Xong* mở. *Tôi nối agent sau* cũng kết thúc (trang chủ nhắc tới khi có agent nối).
+5. **Bước 3 · Chẩn đoán MCP:** tự kiểm thật chạy ngay (MCP-01 HTTP `/mcp`, MCP-02 token chủ, MCP-03 cầu stdio của chính app — chạy trong app, ở Docker là trong container). **MCP-04** là đúng lệnh agent sẽ chạy trên máy chủ, `<đường đầy đủ>/genchibi mcp`: `genchibi setup check` chạy thật (initialize + tools/list) rồi báo về đây; `genchibi start` / `open` cũng tự chạy. Thẻ nối dùng đường đầy đủ đó, vì ứng dụng mở từ Dock / menu không thấy `PATH` của terminal. Bên dưới là các thẻ nối (Claude Code, claude.ai, agent khác dạng JSON) — cùng các thẻ ở *Hệ thống › Kết nối agent*. Ô kiểm thật chuyển ✓ khi một agent gọi MCP lần đầu; lúc đó *Xong* mở. *Tôi nối agent sau* cũng kết thúc (trang chủ nhắc tới khi có agent nối).
 
 Tới khi thiết lập xong, Studio chỉ hiện *Thiết lập lần đầu*, *Lên mạng* và *Tài khoản chủ*; đăng nhập lại thì về đúng bước đang dở. Agent và CLI dùng token chủ vẫn chạy ở mọi bước (`genchibi mcp` dùng được ngay sau khi cài). Lên mạng cần có tài khoản chủ (bị từ chối khi máy còn chỉ có `admin / admin`). Lối thoát chỉ trên máy chủ: `genchibi setup` (trạng thái), `genchibi setup skip [lý do]` (có ghi log — khi chính phần kiểm bị lỗi), `genchibi setup reset` (làm lại wizard; không bao giờ mở lại `admin / admin`).
 
@@ -28,7 +29,7 @@ Tới khi thiết lập xong, Studio chỉ hiện *Thiết lập lần đầu*, 
 
 | Ai | Bằng gì | Được gì |
 |---|---|---|
-| admin | `admin / admin`, chỉ khi đủ các điều trên | chỉ màn tạo tài khoản chủ (30 phút) |
+| admin | `admin / admin` qua link của máy chủ (khoá dùng một lần), chỉ khi đủ các điều trên | chỉ màn tạo tài khoản chủ (30 phút) |
 | Chủ (phiên) | tên đăng nhập + mật khẩu ở `/login` | Studio — trong lúc thiết lập chỉ ba trang thiết lập; không bao giờ `/mcp` |
 | Token chủ | `Authorization: Bearer` (CLI, `genchibi mcp`, agent trên máy này) | mọi API và `/mcp` ở mọi bước; `genchibi setup skip / reset` |
 | Agent OAuth | `https://tên-miền/mcp`, chủ bấm *Cấp phép* | `/mcp` trong phạm vi đã chọn (`mcp:read` · `mcp:write` · `mcp:owner`) |

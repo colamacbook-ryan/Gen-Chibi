@@ -48,5 +48,7 @@
  "lần đầu: đăng nhập bằng admin / admin (trong 30 phút sau genchibi start / genchibi open trên máy chủ), hoặc chạy genchibi password trên máy chủ": "first run: sign in with admin / admin (within 30 minutes after genchibi start / genchibi open on the server), or run genchibi password on the server",
  "máy chưa có mật khẩu chủ — chạy genchibi password trên máy chủ (hoặc dùng token của bản cài)": "this machine has no owner password yet — run genchibi password on the server (or use the install's token)",
  "cần đăng nhập admin / admin (lần đầu) hoặc token của bản cài": "sign in with admin / admin (first run) or use the install's token",
- "hai lần nhập mật khẩu không khớp": "the two passwords differ"
+ "hai lần nhập mật khẩu không khớp": "the two passwords differ",
+ "admin / admin chỉ dùng được ngay trên máy chủ, qua link do máy chủ in ra — trên máy chủ chạy genchibi open (hoặc SSH port-forward: ssh -L {port}:localhost:{port} <máy-chủ>), hoặc chạy genchibi password": "admin / admin only works right on the server, through the link the server prints — on the server run genchibi open (or SSH port-forward: ssh -L {port}:localhost:{port} <server>), or run genchibi password",
+ "mở đúng link do trình cài in ra, hoặc chạy genchibi open trên máy chủ (link mới, 30 phút) — admin / admin chỉ nhận qua link đó": "open the link printed by the installer, or run genchibi open on the server (new link, 30 minutes) — admin / admin is only accepted through that link"
 }

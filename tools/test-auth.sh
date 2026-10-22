@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Kiểm khoá truy cập: không có đường vòng qua Host/địa chỉ khi đã đặt token. v0.21 (spec §3.4, CNS-191): bản cài nào cũng có token chủ —
 # không đặt GC_API_TOKEN thì server tự sinh data/owner-token; KHÔNG lớp nào được quyền chủ vì thiếu header (localhost cũng phải có token / phiên).
-# Bảng truy cập đầy đủ (mật khẩu, mã setup, phiên, trần L-66, máy kế thừa…): tools/test-auth-owner.mjs
+# Bảng truy cập đầy đủ (mật khẩu, khởi tạo bằng token, phiên, trần L-66, máy kế thừa…): tools/test-auth-owner.mjs
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; T="$(mktemp -d)"; F=0
 K=linkkey_0123456789abcdefghijklmn

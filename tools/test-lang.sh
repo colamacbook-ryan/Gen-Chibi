@@ -63,8 +63,8 @@ inst plain
 [ $IRC = 0 ] && [ "$(envlang plain)" = en ]; check $? "không terminal, không chọn → cài xong, .env ghi GC_LANG=en" "mã $IRC: $(echo "$INST_OUT" | tail -3)"
 ! echo "$INST_OUT" | grep -q 'Language / ' ; check $? "không terminal → không hỏi ngôn ngữ (không treo)"
 LL="$(printf '%s\n' "$INST_OUT" | sed '/^[[:space:]]*$/d' | tail -n 1)"
-printf '%s' "$LL" | grep -qE '^Next: open http://localhost:[0-9]+ and sign in with admin / admin within 30 minutes \(until [0-9]{2}:[0-9]{2}' && [ -f "$W/plain/run/admin-window" ] && ! echo "$INST_OUT" | grep -qi 'setup code'
-check $? "v0.23: dòng cuối của trình cài = 'Next: open http://localhost:<cổng> and sign in with admin / admin within 30 minutes (until HH:MM…)' — genchibi start đã mở cửa sổ (run/admin-window), không còn mã setup" "$LL"
+printf '%s' "$LL" | grep -qE '^Next: open http://localhost:[0-9]+/login#k=[0-9a-f]{32} and sign in with admin / admin within 30 minutes \(until [0-9]{2}:[0-9]{2}' && [ -f "$W/plain/run/admin-window" ] && ! echo "$INST_OUT" | grep -qi 'setup code'
+check $? "v0.23: dòng cuối của trình cài = 'Next: open http://localhost:<cổng>/login#k=<khoá 128 bit> and sign in with admin / admin within 30 minutes (until HH:MM…)' — genchibi start đã mở cửa sổ (run/admin-window), không còn mã setup" "$LL"
 grep -qE '^GC_API_TOKEN=[0-9a-f]{64}$' "$W/plain/.env" && ! printf '%s' "$INST_OUT" | grep -q "$(sed -n 's/^GC_API_TOKEN=//p' "$W/plain/.env")"
 check $? "v0.21: .env mới luôn có GC_API_TOKEN (256 bit, hex) — trình cài không in token ra màn hình"
 ! printf '%s' "$INST_OUT" | has_vi; check $? "đầu ra trình cài ở chế độ English không có chữ tiếng Việt" "$(printf '%s' "$INST_OUT" | grep -nP "$VI_RE" 2>/dev/null | head -3)"
@@ -177,7 +177,7 @@ inst bogus --cloudflare
 [ $IRC = 2 ] && echo "$INST_OUT" | grep -q -- '--cloudflare goes with --domain' && [ ! -e "$W/bogus" ]; check $? "--cloudflare thiếu --domain → thoát 2, chưa đụng tới đĩa" "$IRC $INST_OUT"
 inst bogus --domain chibi.example.com --cloudflare
 [ $IRC = 2 ] && echo "$INST_OUT" | grep -q 'GC_CF_TOKEN' && echo "$INST_OUT" | grep -q 'never as an argument' && [ ! -e "$W/bogus" ]; check $? "--cloudflare, không terminal, không GC_CF_TOKEN → dừng NGAY (thoát 2, chưa cài gì), chỉ cách đặt GC_CF_TOKEN" "$IRC $INST_OUT"
-# đường A, A record sai (DNS / IP giả bằng biến kiểm thử, chỉ khi GC_TEST=1) → in IP cần trỏ, thoát rõ ràng; app vẫn cài + chạy; dòng cuối = mã setup
+# đường A, A record sai (DNS / IP giả bằng biến kiểm thử, chỉ khi GC_TEST=1) → in IP cần trỏ, thoát rõ ràng; app vẫn cài + chạy; dòng cuối = bước tiếp (genchibi setup hint)
 # --domain, không terminal, không GC_OWNER_* → cài + chạy, KHÔNG lên mạng (Go online cần tài khoản chủ), in lệnh làm tiếp; dòng cuối vẫn là admin / admin
 INST_ENV="GC_TEST=1 GC_TEST_PUBLIC_IP=198.51.100.7 GC_TEST_DNS_A=198.51.100.7 GC_DNS_WAIT=0" inst donc --domain chibi.example.com
 [ $IRC = 1 ] && echo "$INST_OUT" | grep -q 'Not going online: no owner account yet' && echo "$INST_OUT" | grep -q 'genchibi password (sets the owner account), then: genchibi online caddy chibi.example.com' && ! echo "$INST_OUT" | grep -q 'Checking that' && lastline "$INST_OUT" | grep -q 'sign in with admin / admin within 30 minutes' && [ "$(stageof donc)" = admin ]
@@ -303,7 +303,7 @@ dockinst() { # dockinst <tên> [biến…]: cài KHÔNG --native, PATH có docke
 dockinst dsg
 [ $IRC = 0 ] && [ -f "$FS/installed" ] && grep -q 'usermod -aG docker tester' "$FS/usermod.log" && echo "$INST_OUT" | grep -q 'continuing with sg docker' && echo "$INST_OUT" | grep -q 'Log out and back in to use genchibi without sudo' && echo "$INST_OUT" | grep -q 'Run mode: docker'
 check $? "Docker chưa có → cài (giả) + usermod -aG docker tester; phiên chưa vào nhóm → tiếp tục bằng sg docker, in 'Log out and back in…'" "$IRC $(echo "$INST_OUT" | tail -8) · $(cat "$FS/docker.log" 2>/dev/null | tail -3)"
-grep -q '^\[sg\] compose -f docker-compose.yml up -d' "$FS/docker.log" && ! grep -qE '^ compose' "$FS/docker.log" && grep -q '^\[sg\] compose -f docker-compose.yml config --format json' "$FS/docker.log" && [ -f "$W/dsg/run/admin-window" ] && lastline "$INST_OUT" | grep -q '^Next: open http://localhost:[0-9]* and sign in with admin / admin within 30 minutes'
+grep -q '^\[sg\] compose -f docker-compose.yml up -d' "$FS/docker.log" && ! grep -qE '^ compose' "$FS/docker.log" && grep -q '^\[sg\] compose -f docker-compose.yml config --format json' "$FS/docker.log" && [ -f "$W/dsg/run/admin-window" ] && lastline "$INST_OUT" | grep -qE '^Next: open http://localhost:[0-9]+/login#k=[0-9a-f]{32} and sign in with admin / admin within 30 minutes'
 check $? "genchibi start trong cùng phiên chạy docker compose qua sg (không lệnh compose nào chạy thẳng bị từ chối); kiểm docker compose config (chỉ loopback) rồi mở cửa sổ; dòng cuối = admin / admin" "$(cat "$FS/docker.log" 2>/dev/null | tail -4) · $(lastline "$INST_OUT")"
 dockinst dsudo FAKE_NO_SG=1
 [ $IRC = 0 ] && echo "$INST_OUT" | grep -q 'continuing with sudo docker' && grep -q '^\[sudo\] compose -f docker-compose.yml up -d' "$FS/docker.log"

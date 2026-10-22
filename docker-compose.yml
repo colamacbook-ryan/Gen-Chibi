@@ -15,6 +15,7 @@ services:
     environment:
       GC_HOME: /install
       GC_PORT: "7480"
+      GC_HOST_PORT: "${GC_PORT:-7480}"   # the port on the host — Studio messages / links show the port the owner actually opens
       GC_LISTEN: 0.0.0.0
       GC_IN_DOCKER: "1"
       GC_MASTER_KEY: ${GC_MASTER_KEY:?GC_MASTER_KEY missing in .env (run install.sh)}

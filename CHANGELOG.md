@@ -1,5 +1,68 @@
 # Changelog
 
+## v0.23.0 — Owner ready: first login with admin / admin, then a guided set-up (owner account → domain → MCP check)
+Ryan: "tài khoản owner phải được khởi tạo mặc định làm admin pass admin, rồi lần đầu đăng nhập yêu cầu owner bắt buộc phải update khởi tạo lại thông tin owner lần đầu và thực hiện qui trình đăng ký để nối tên miền và chuẩn đoán kết nối mcp" *(In English: "the owner account should start as admin / admin; on first login the owner must re-create the owner details and go through the steps to connect a domain and check the MCP connection")*. Google sign-in and multi-user are left for later (owner-only for now).
+
+### Breaking — read before updating
+- **Sign-in is now username + password.** Installs upgraded from v0.21 / v0.22 use the username `owner` (change it in *System › Owner account*).
+- **The one-time setup code of v0.21 is gone**:
+  - `/setup` redirects to `/login`;
+  - `/api/auth/setup*` return 404;
+  - `genchibi open` no longer prints a code;
+  - `genchibi online` no longer exits with code 3.
+- **Go online needs an owner account first** (Studio and CLI). Legacy installs configured through `.env` are exempt, and `genchibi online migrate` still works.
+- **`genchibi expose`, `genchibi link`, the compose profiles `tunnel` / `quick` and `GC_TUNNEL` are removed.** They now print "removed in v0.23 — use genchibi online …" and exit 2. Installs that still have `GC_TUNNEL` are told to run `genchibi online migrate`, which also stops the old tunnel.
+- **Restoring a backup revokes every OAuth agent connection.** Reconnect agents afterwards.
+- **Five built-in frame moves have new ids** so they no longer collide with poses: `weaponThrust`, `stompRage`, `joyHop`, `fistSalute`, `waveHello`. Saved works and packs are converted when read; the old ids keep working as hidden aliases.
+
+### New — first run
+- **A fresh install starts with `admin` / `admin`, accepted only through the link the server prints.** The installer's last line (and `genchibi open`, which opens it for you) gives `http://localhost:<port>/login#k=…`. The `#k` part is a one-time random key, valid for 30 minutes. On top of the key, every one of these must hold:
+  - the machine is not online;
+  - the app port only listens on this computer (Docker: the CLI checks the published ports, and refuses `network_mode: host`);
+  - the request comes straight from the browser on this computer.
+
+  Anywhere else, the sign-in page says exactly why and how to get in (`genchibi open`, `genchibi password`, or an SSH tunnel).
+- **Then you must create your own owner account**: username, display name, optional e-mail (used only as the Let's Encrypt contact) and a new password of at least 12 characters. After that, `admin` / `admin` never works again, even after a restore.
+- **Then the *First-time setup* wizard**, with a 3-step bar; signing in again resumes at the unfinished step:
+  1. **Owner account.**
+  2. **Domain.** Either *Put online* (the Go-online wizard) or *Only on this machine*. If the Internet side fails or is slow (DNS, certificate, Cloudflare), the step shows what is wrong and offers *Use on this machine for now*, so it never locks you out.
+  3. **MCP check**:
+     - local self-checks (`/mcp`, owner token, the app's stdio bridge);
+     - **a host check**: `genchibi setup check` runs the exact `genchibi mcp` command you paste into Claude Code / Cursor, with its absolute path;
+     - connection cards for Claude Code, claude.ai (when online) and other agents;
+     - a live wait for your agent's first call. *I'll connect an agent later* is available once the local checks pass, and the home page keeps a reminder until an agent connects.
+
+  `genchibi setup skip | reset` on the server is the escape hatch if a check itself is broken.
+- **Installer `--domain` / `--cloudflare`** asks for the owner username and password in the terminal (hidden), or reads `GC_OWNER_USER` / `GC_OWNER_PASSWORD` from the environment and removes them right away. Without them it installs but does not go online, and prints the next commands.
+- **Agents (B12)**:
+  - pending authorization requests can be approved from the Studio's *Agent connections* page;
+  - `start_here` tells an agent what its connection can do (read-only connections are not offered write tools);
+  - `genchibi agent connect` prints the stdio command first, the same order as the Studio.
+
+### Fixed
+- **Tables no longer hide their last column with wider fonts.** The Go-online steps and the sign-in sessions overflowed with DejaVu Sans; the cells now wrap.
+- **Reloading the page while a work was loading no longer sends you back to the works list.** The cancelled request used to overwrite the route.
+- **Two `genchibi backup` runs in the same second no longer overwrite each other.**
+
+### Security (reviewed before release, each guard with a test)
+- **`admin` / `admin` needs the key from the link.** So another user account on the same computer, another container, or a machine on the LAN cannot use the 30-minute window. The key is never put on a command line (the browser is opened through a private file), is removed from the address bar, and is compared in constant time.
+- **The rate limit is checked before the password.** Remote callers only get a generic `local-only` reason. Creating the owner is atomic and revokes every admin session. The set-up state only moves forward, so restoring or deleting files never brings `admin` back.
+- **Sign-in and owner creation are protected against cross-site requests and DNS rebinding.**
+- **The ACME e-mail is validated** before it reaches the Caddy config.
+
+### Accepted risk
+- During the 30-minute window, someone who can already run commands on the server, and builds their own forwarder (e.g. `ssh -R`), could use the link. Such a person already has owner-level access to that machine.
+
+### For developers
+- **Browser tests now run on CI for every push and every release**: 11 groups, Playwright 1.56.1 pinned, used only in CI.
+- **One list of engine / Studio scripts** in `engine/scripts.json`.
+- **`tools/mutate.mjs` + `tools/mutations/v023.json`**: 62 mutations, each must turn a named test red.
+- **`tools/test.sh` fails if a test leaves a server process behind.**
+
+### Not in this release (coming in v0.23.1 / v0.23.2)
+- v0.23.1: the root-takeover surface through files the app container can write (CNS-233), a `genchibi doctor` fix for older root installs, and keeping the install id when restoring on the same machine.
+- v0.23.2: real 9:16 video, a smoother 1080p export, more MCP tools, video settings stored with the work.
+
 ## v0.22.0 — Export video: one button in the Studio makes a video file you can upload to YouTube or TikTok
 Owner decision: Ryan approved the v0.22 spec on 2026-10-21 ("duyệt, làm tiếp đi" — *"approved, keep going"*) with all proposed defaults.
 

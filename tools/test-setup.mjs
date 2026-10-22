@@ -26,7 +26,8 @@ import path from 'path';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const ROOT = process.env.GC_TEST_ROOT ? path.resolve(process.env.GC_TEST_ROOT) : path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const { Setup, adminReasons, REASON_MSG, loginProblem, emailProblem } = require(ROOT + '/server/setup.js');
+const { Setup, adminReasons, loginReasons, REASON_MSG, loginProblem, emailProblem } = require(ROOT + '/server/setup.js');
+const { acmeEmail } = require(ROOT + '/server/caddy.js');
 const { Auth, TTL } = require(ROOT + '/server/auth.js');
 const VI_RE = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i;
 
@@ -43,7 +44,7 @@ const baseEnv = () => Object.fromEntries(Object.entries(process.env).filter(([k]
 function boot(port, env, home) {
   home = home || tmp('h' + port);
   const c = spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...baseEnv(), GC_HOME: home, GC_PORT: String(port), GC_NO_AUTOCHECK: '1', ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
-  const k = { c, home, port, out: '' }; kids.push(k);
+  const k = { c, home, port, out: '' }; kids.push(k); HOME_OF[port] = home;
   c.stdout.on('data', d => { k.out += d; }); c.stderr.on('data', d => { k.out += d; });
   return k;
 }
@@ -75,10 +76,15 @@ function openWindow(home, o) {
   o = o || {};
   fs.mkdirSync(path.join(home, 'run'), { recursive: true, mode: 0o700 });
   const f = path.join(home, 'run/admin-window');
-  fs.writeFileSync(f, JSON.stringify({ v: 1, exp: Date.now() + (o.ms === undefined ? 1800e3 : o.ms), mode: o.mode || 'native', composeLoopback: o.cl === true, by: 'test' }) + '\n', { mode: 0o600 });
+  const key = o.key === undefined ? crypto.randomBytes(16).toString('hex') : o.key;
+  fs.writeFileSync(f, JSON.stringify(Object.assign({ v: 1, exp: Date.now() + (o.ms === undefined ? 1800e3 : o.ms), mode: o.mode || 'native', composeLoopback: o.cl === true, by: 'test' }, key === null ? {} : { key })) + '\n', { mode: 0o600 });
   fs.chmodSync(f, o.perm || 0o600);
+  KEYS[home] = key; return key;
 }
-const adminLogin = (port, hd, pw) => req(port, 'POST', '/api/auth/login', { headers: Object.assign(local(port), hd || {}), body: { username: 'admin', password: pw || 'admin' } });
+// khoá một lần của cửa sổ (CNS-268): như trang /login#k=<khoá> gửi kèm. keyOf(port) = khoá của cửa sổ đang mở ở server cổng đó
+const KEYS = {}, HOME_OF = {};
+const keyOf = port => { try { return JSON.parse(fs.readFileSync(path.join(HOME_OF[port], 'run/admin-window'), 'utf8')).key || ''; } catch (e) { return ''; } };   // đọc như người có quyền đọc run/ (0700)
+const adminLogin = (port, hd, pw, key) => req(port, 'POST', '/api/auth/login', { headers: Object.assign(local(port), hd || {}), body: { username: 'admin', password: pw || 'admin', key: key === undefined ? keyOf(port) : key } });
 const PW = 'mot cum tu chu so huu dai', PW2 = 'mat khau moi cua owner day';
 const initBody = (u, pw) => ({ username: u || 'ryan', displayName: 'Ryan', email: 'ryan@example.com', password: pw || PW, password2: pw || PW });
 const mcpInit = (port, headers, name) => req(port, 'POST', '/mcp', { headers: Object.assign({ host: '127.0.0.1:' + port }, headers), body: { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: name || 't', version: '1' } } } });
@@ -106,6 +112,9 @@ console.log('0) đơn vị: setup.json (bảng lối vào, chỉ tiến, sàn) �
   let t = Date.parse('2026-10-22T00:00:00Z'); const now = () => t;
   const mk = () => { const h = tmp('u'); return { h, s: new Setup({ dataDir: path.join(h, 'data'), runDir: path.join(h, 'run'), now }) }; };
   let u = mk(); ok(u.s.boot({}) === 'admin' && stageOf(u.h) === 'admin', 'bản cài mới (chưa setup.json, không mật khẩu, không kế thừa) → admin');
+  { const u3 = mk(); u3.s.boot({}); const u4 = new Setup({ dataDir: path.join(u3.h, 'data'), runDir: path.join(u3.h, 'run'), now });
+    ok(u4.boot({ hasPassword: true }) === 'must_init' && stageOf(u3.h) === 'must_init', 'review F3: setup.json nói admin nhưng auth.json đã có mật khẩu → must_init (admin không bao giờ khởi tạo đè mật khẩu)'); }
+  ok(emailProblem('#ops@example.com') && acmeEmail('#ops@example.com') === '' && emailProblem('o#ps@example.com') === '' && acmeEmail('ops@example.com') === 'ops@example.com', "review 🔵2: email bắt đầu bằng '#' (chú thích Caddyfile) bị từ chối ở cả màn khởi tạo lẫn Caddy; lớp ký tự chặt giữ nguyên");
   u = mk(); ok(u.s.boot({ legacy: true, hasPassword: false }) === 'done' && !u.s.view().review, 'máy kế thừa (legacy.json) → done, không dải kiểm tra');
   u = mk(); ok(u.s.boot({ hasPassword: true }) === 'done' && u.s.view().review === true, 'máy v0.21 / v0.22 đã có mật khẩu → done + "Kiểm tra thiết lập" một lần');
   u = mk(); ok(u.s.boot({ onlineWaiting: true }) === 'must_init', 'máy v0.21 / v0.22 "online tạm, chờ mật khẩu" → must_init (owner vào bằng token / genchibi password)');
@@ -128,6 +137,19 @@ console.log('0) đơn vị: setup.json (bảng lối vào, chỉ tiến, sàn) �
   openWindow(w.h, { ms: t - Date.now() - 1000 }); ok(w.s.windowOf().reason === 'window', 'cửa sổ: hết hạn → window');
   openWindow(w.h, { ms: t - Date.now() + 5 * 3600e3 }); ok(w.s.windowOf().reason === 'window-perms', 'cửa sổ: hạn xa hơn 30 phút (không do genchibi ghi) → window-perms');
   fs.writeFileSync(path.join(w.h, 'run/admin-window'), 'not json', { mode: 0o600 }); ok(w.s.windowOf().reason === 'window-perms', 'cửa sổ: nội dung hỏng → window-perms');
+  for (const k of [null, 'abc', 'G'.repeat(32)]) { openWindow(w.h, { ms: t - Date.now() + 1800e3, key: k }); }
+  ok(w.s.windowOf().reason === 'window-perms', 'cửa sổ: không có khoá 128 bit hex hợp lệ (CLI cũ / ghi tay) → window-perms (CNS-268)');
+  openWindow(w.h, { ms: t - Date.now() + 1800e3, key: null }); ok(w.s.windowOf().reason === 'window-perms', 'cửa sổ: thiếu hẳn khoá → window-perms');
+  // CNS-268 / CNS-271 đơn vị: loginReasons — request từ xa chỉ local-only; Docker: container khác trên bridge (Origin / Host tự khai) mà không có khoá → link
+  { const OKm = { stage: 'admin', window: { ok: true, mode: 'docker', composeLoopback: true, key: 'a'.repeat(32) }, online: {}, inDocker: true };
+    const RQd = (hd, so) => ({ headers: Object.assign({ host: 'localhost:7480', origin: 'http://localhost:7480' }, hd || {}), socket: Object.assign({ remoteAddress: '172.18.0.5', localAddress: '172.18.0.2' }, so || {}) });
+    ok(JSON.stringify(loginReasons(OKm, RQd(), '')) === '["link"]' && JSON.stringify(loginReasons(OKm, RQd(), 'b'.repeat(32))) === '["link"]' && loginReasons(OKm, RQd(), 'a'.repeat(32)).length === 0,
+      'Docker: tiến trình / container khác gọi thẳng IP container với Origin / Host giả → link (thiếu / sai khoá); đúng khoá → nhận');
+    const OKn = Object.assign({}, OKm, { inDocker: false, window: Object.assign({}, OKm.window, { mode: 'native' }) });
+    ok(JSON.stringify(loginReasons(OKn, RQd({}, { remoteAddress: '203.0.113.9', localAddress: '10.0.0.2' }), 'a'.repeat(32))) === '["local-only"]'
+      && JSON.stringify(loginReasons(Object.assign({}, OKn, { stage: 'done', online: { mode: 'proxy' } }), RQd({ 'x-forwarded-for': '1.2.3.4' }, { remoteAddress: '127.0.0.1', localAddress: '127.0.0.1' }), '')) === '["local-only"]',
+      'CNS-271: request từ xa / qua proxy → CHỈ ["local-only"] (không lộ stage / online / cửa sổ), kể cả khi máy đã khởi tạo');
+    ok(JSON.stringify(loginReasons(Object.assign({}, OKn, { tunnel: true }), RQd({}, { remoteAddress: '127.0.0.1', localAddress: '127.0.0.1' }), 'a'.repeat(32))) === '["tunnel"]', 'request đạt điều kiện request → đủ lý do của máy (tunnel)'); }
   // adminReasons — một hàm, từng điều kiện
   const OK = { stage: 'admin', window: { ok: true, mode: 'native' }, online: { mode: 'off' }, inDocker: false, bind: '127.0.0.1', listen: '127.0.0.1' };
   const R = (hd, sock) => ({ headers: Object.assign({ host: 'localhost:7480', origin: 'http://localhost:7480' }, hd || {}), socket: Object.assign({ localAddress: '127.0.0.1', remoteAddress: '127.0.0.1' }, sock || {}) });
@@ -159,7 +181,7 @@ console.log('0) đơn vị: setup.json (bảng lối vào, chỉ tiến, sàn) �
   const setA = A.issueAdmin(RQ()), cjA = jar(setA);
   ok(setA.length === 1 && /Max-Age=1800\b/.test(setA[0]) && /HttpOnly; SameSite=Lax/.test(setA[0]) && !setA.some(c => /gc_device/.test(c)), 'phiên admin: MỘT cookie (không cookie thiết bị), HttpOnly, SameSite=Lax, Max-Age 1800 s');
   ok(A.whoOf(RQ(cookie(cjA))) === 'A' && A.ownerOf(RQ(cookie(cjA))) === null && !A.deviceOf(RQ(cookie(cjA))), 'phiên admin không phải quyền chủ (ownerOf null) và không có thiết bị');
-  t += TTL.admin - 2000; ok(A.whoOf(RQ(cookie(cjA))) === 'A', 'phiên admin còn sống ở phút 29:58');
+  t += 30 * 60e3 - 2000; ok(A.whoOf(RQ(cookie(cjA))) === 'A', 'phiên admin còn sống ở phút 29:58');   // số cứng 30 phút, KHÔNG lấy TTL.admin của auth.js (đột biến TTL phải làm đỏ)
   t += 4000; ok(A.whoOf(RQ(cookie(cjA))) === null, 'phiên admin hết hạn sau 30 phút');
   const cjB = jar(A.issueAdmin(RQ()));
   fs.mkdirSync(path.join(a0.h, 'data/setup.json.tmp'));   // ghi setup.json sẽ lỗi (tệp tạm là thư mục)
@@ -169,7 +191,7 @@ console.log('0) đơn vị: setup.json (bảng lối vào, chỉ tiến, sàn) �
   fs.rmdirSync(path.join(a0.h, 'data/setup.json.tmp'));
   const cjC = jar(A.issueAdmin(RQ()));
   const r0 = await A.initOwner({ login: 'ryan', displayName: 'R', email: '', password: PW }, 'test');
-  ok(r0.revoked >= 2 && A.whoOf(RQ(cookie(cjB))) === null && A.whoOf(RQ(cookie(cjC))) === null && a0.s.stage === 'domain' && A.loginName() === 'ryan' && A.profile().id === 'owner', 'init: thu hồi MỌI phiên admin (' + r0.revoked + '), stage → domain, id nội bộ vẫn owner, tên đăng nhập ryan');
+  ok(Object.keys(JSON.parse(fs.readFileSync(path.join(a0.h, 'data/auth.json'), 'utf8')).sessions || {}).length === 0 && r0.revoked >= 2 && A.whoOf(RQ(cookie(cjB))) === null && A.whoOf(RQ(cookie(cjC))) === null && a0.s.stage === 'domain' && A.loginName() === 'ryan' && A.profile().id === 'owner', 'init: thu hồi MỌI phiên admin (' + r0.revoked + '), stage → domain, id nội bộ vẫn owner, tên đăng nhập ryan');
   { // hai lời gọi initOwner cùng lúc (bỏ qua khoá của route): kiểm lại SAU khi băm → đúng một lần thắng
     const a2 = mk(), A2 = (a2.s.boot({}), new Auth({ dir: path.join(a2.h, 'data'), envToken: 'y'.repeat(40), key: crypto.randomBytes(32), now, setup: a2.s }));
     const rr = await Promise.allSettled(['ryana', 'ryanb'].map(l => A2.initOwner({ login: l, displayName: '', email: '', password: PW }, 'test')));
@@ -202,7 +224,14 @@ console.log('1) admin / admin qua HTTP: đúng lý do ở từng ca · trần x�
   ];
   const res = []; for (const [want, hd] of cases) { const y = await why(hd); res.push(want + ':' + y.s + '/' + y.reason); }
   // Origin trang khác / khác cổng: rào CSRF chung của /api (originOK) chặn trước cả lối admin — 403, không lý do riêng
-  ok(res.every((r, i) => r === cases[i][0] + ':403/' + cases[i][0] || (i === 1 || i === 2) && r === 'origin:403/undefined'), 'Origin / Host lạ (thiếu Origin · khác cổng · trang khác · Host ≠ Origin) và header proxy / edge (XFF · Forwarded · Via · Cf-Connecting-Ip) → 403, không so mật khẩu', res.join(' '));
+  // CNS-271: request không đạt điều kiện request chỉ nhận mã chung local-only (người lạ không đọc được trạng thái máy); Origin trang khác / khác cổng: rào CSRF chung chặn trước
+  ok(res.every((r, i) => r === cases[i][0] + ':403/local-only' || (i === 1 || i === 2) && r === 'origin:403/undefined'), 'Origin / Host lạ (thiếu Origin · khác cổng · trang khác · Host ≠ Origin) và header proxy / edge (XFF · Forwarded · Via · Cf-Connecting-Ip) → 403 local-only, không so mật khẩu', res.join(' '));
+  { const r = await adminLogin(P, { 'x-forwarded-for': '203.0.113.9' }); ok(r.status === 403 && JSON.stringify(r.json.reasons) === '["local-only"]' && !/window|online|tunnel|edge|stage/.test(JSON.stringify(r.json)), 'CNS-271: request qua proxy chỉ thấy ["local-only"] — không lộ cửa sổ / online / tunnel / stage', r.text); }
+  // CNS-268: khoá một lần của link (run/admin-window, 0600) — thiếu / sai / sai dạng → 403 link, không phiên; đúng khoá → nhận
+  { const y = []; for (const k of ['', 'f'.repeat(32), keyOf(P).toUpperCase(), keyOf(P).slice(0, 31), 'x']) { const r = await adminLogin(P, {}, 'admin', k); y.push(r.status + '/' + (r.json && r.json.reason) + '/' + r.set.length); }
+    ok(y.every(v => v === '403/link/0'), 'admin / admin đúng nhưng thiếu / sai khoá của link (rỗng · khoá khác · HOA · thiếu 1 ký tự · rác) → 403 link, không phiên — user Unix khác / container khác không có khoá', y.join(' '));
+    const r = await adminLogin(P, {}, 'admin', keyOf(P)); ok(r.status === 200 && r.set.length === 1, 'đúng khoá của link + admin / admin → phiên admin', r.text);
+    const lk = await adminLogin(P, {}, 'admin', ''); ok(/genchibi open/.test(lk.json.error) && /link/.test(lk.json.error), 'lý do link: câu nói mở link của trình cài hoặc chạy genchibi open', lk.text); }
   const ok1 = await why();
   ok(ok1.s === 200 && ok1.r.json.admin === true && jar(ok1.r.set)['gc_session_' + P] && !Object.keys(jar(ok1.r.set)).some(k => /device/.test(k)), 'đủ điều kiện → 200, phiên admin, KHÔNG cookie thiết bị');
   // trạng thái máy: online / tunnel / edge / GC_PUBLIC_URL / GC_BIND / Docker
@@ -229,6 +258,11 @@ console.log('1) admin / admin qua HTTP: đúng lý do ở từng ca · trần x�
   openWindow(S4.home, { mode: 'docker', cl: false }); x = await why(); ok(x.s === 403 && x.reason === 'docker-publish', 'Docker: cửa sổ không kèm bằng chứng compose chỉ loopback → 403 docker-publish', x.r.text);
   openWindow(S4.home, { mode: 'docker', cl: true }); ok((await why()).s === 200, 'Docker: CLI đã kiểm compose chỉ publish loopback → nhận');
   await stop(S4);
+  // CNS-270: Docker map ${GC_PORT}:7480 — app trong container biết cổng trên máy chủ qua GC_HOST_PORT; câu hướng dẫn / localMcp nói đúng cổng owner mở
+  const S5 = await ready(boot(P, { GC_HOST_PORT: '7481' }));
+  const lo = await adminLogin(P, { 'x-forwarded-for': '203.0.113.9' });
+  ok(lo.status === 403 && /ssh -L 7481:localhost:7481/.test(lo.json.error) && !/7951/.test(lo.json.error), 'GC_HOST_PORT=7481 (Docker, cổng khác 7480): câu từ chối chỉ đúng cổng trên máy chủ (ssh -L 7481…), không cổng trong container', lo.text);
+  await stop(S5);
 }
 
 /* ================================================================== 2) + 3) phiên admin, init, CSRF */
@@ -244,8 +278,9 @@ console.log('2) phiên admin chỉ mở màn khởi tạo · 3) init nguyên t�
   ok((await mcpInit(P, { ...A1 })).status === 401, 'phiên admin không mở /mcp (401)');
   // 4 rào CSRF / rebinding — cho cả đăng nhập admin lẫn init (CNS-262)
   const four = async (p, body, hd) => [
-    (await req(P, 'POST', p, { headers: { ...local(P), ...hd, host: 'evil.example' }, body })).status,
-    (await req(P, 'POST', p, { headers: { ...local(P), ...hd, host: 'x.localhost:' + P }, body })).status,
+    // DNS rebinding thật: trình duyệt ở trang kẻ lạ gửi Origin == Host == tên của kẻ lạ (trỏ về 127.0.0.1) — chỉ rào Host chặn được
+    (await req(P, 'POST', p, { headers: { ...local(P), ...hd, host: 'evil.example:' + P, origin: 'http://evil.example:' + P }, body })).status,
+    (await req(P, 'POST', p, { headers: { ...local(P), ...hd, host: 'x.localhost:' + P, origin: 'http://x.localhost:' + P }, body })).status,
     (await req(P, 'POST', p, { headers: { ...local(P), ...hd, origin: 'http://localhost:3000' }, body })).status,
     (await req(P, 'POST', p, { headers: { ...local(P), ...hd, 'x-gc-request': null }, body })).status];
   const fl = await four('/api/auth/login', { username: 'admin', password: 'admin' }, {}), fi = await four('/api/auth/init', initBody(), A1);
@@ -465,13 +500,18 @@ console.log('9) CLI: open / start mở cửa sổ (native GC_BIND · Docker gi�
   ok(st.code === 0 && /admin \/ admin window is closed/.test(st.out), 'genchibi status (stage admin, chưa cửa sổ): "admin / admin window is closed — genchibi open"', st.out);
   const op = cliRun(HD, FB, ['open']);
   const wf = path.join(HD, 'run/admin-window'), wj = JSON.parse(fs.readFileSync(wf, 'utf8'));
-  ok(op.code === 0 && /sign in with admin \/ admin within 30 minutes/.test(op.out) && (fs.statSync(wf).mode & 0o777) === 0o600 && (fs.statSync(path.join(HD, 'run')).mode & 0o777) === 0o700 && wj.mode === 'native' && Math.abs(wj.exp - Date.now() - 1800e3) < 60e3
-    && fs.readFileSync(path.join(FB, 'opened.txt'), 'utf8').trim().split('\n').pop() === 'http://localhost:' + P, 'genchibi open: ghi run/admin-window (0600, run/ 0700, native, hạn 30 phút), mở http://localhost:<cổng> (không mã nào trong argv)', op.out);
+  ok(op.code === 0 && /sign in with admin \/ admin within 30 minutes/.test(op.out) && (fs.statSync(wf).mode & 0o777) === 0o600 && (fs.statSync(path.join(HD, 'run')).mode & 0o777) === 0o700 && wj.mode === 'native' && Math.abs(wj.exp - Date.now() - 1800e3) < 60e3 && /^[0-9a-f]{32}$/.test(wj.key)
+    && op.out.includes('http://localhost:' + P + '/login#k=' + wj.key), 'genchibi open: ghi run/admin-window (0600, run/ 0700, native, hạn 30 phút, khoá 128 bit) + in link http://localhost:<cổng>/login#k=<khoá>', op.out);
+  { const opened = fs.readFileSync(path.join(FB, 'opened.txt'), 'utf8').trim().split('\n').pop(), red = path.join(HD, 'run/open-admin.html');
+    ok(opened === red && !opened.includes(wj.key) && (fs.statSync(red).mode & 0o777) === 0o600 && fs.readFileSync(red, 'utf8').includes('url=http://localhost:' + P + '/login#k=' + wj.key),
+      'genchibi open: trình duyệt mở run/open-admin.html (0600) chuyển sang link — khoá KHÔNG nằm trong argv của trình mở (ps của user khác không thấy)', opened); }
+  { const k1 = wj.key, op2 = cliRun(HD, FB, ['open']), k2 = JSON.parse(fs.readFileSync(wf, 'utf8')).key;
+    ok(op2.code === 0 && /^[0-9a-f]{32}$/.test(k2) && k2 !== k1 && (await adminLogin(P, {}, 'admin', k1)).json.reason === 'link', 'genchibi open lần nữa → khoá MỚI (ngẫu nhiên 128 bit), link cũ hết hiệu lực', k1 + ' ' + k2); }
   ok((await adminLogin(P)).status === 200, '…admin / admin nhận ngay sau genchibi open');
-  st = cliRun(HD, FB, ['status']); ok(/sign in with admin \/ admin \(window open until \d\d:\d\d\)/.test(st.out), 'genchibi status: "window open until HH:MM"', st.out);
+  st = cliRun(HD, FB, ['status']); ok(/open http:\/\/localhost:\d+\/login#k=[0-9a-f]{32} and sign in with admin \/ admin \(window open until \d\d:\d\d; only through this link\)/.test(st.out), 'genchibi status: "window open until HH:MM"', st.out);
   let sh = cliRun(HD, FB, ['setup', 'hint']);
   const lastLine = sh.out.trim().split('\n').pop();
-  ok(/^Next: open http:\/\/localhost:\d+ and sign in with admin \/ admin within 30 minutes/.test(lastLine) && /ssh -L/.test(sh.out), 'genchibi setup hint (dòng cuối của trình cài): "Next: open http://localhost:<cổng> and sign in with admin / admin within 30 minutes" + dòng SSH port-forward', sh.out);
+  ok(/^Next: open http:\/\/localhost:\d+\/login#k=[0-9a-f]{32} and sign in with admin \/ admin within 30 minutes/.test(lastLine) && /ssh -L/.test(sh.out), 'genchibi setup hint (dòng cuối của trình cài): "Next: open http://localhost:<cổng>/login#k=<khoá> and sign in with admin / admin within 30 minutes" + dòng SSH port-forward', sh.out);
   // native GC_BIND không loopback → không mở cửa sổ
   fs.rmSync(wf);
   const HB = cliHome(P, 'GC_MODE=native\nGC_PORT=' + P + '\nGC_LANG=en\nGC_BIND=0.0.0.0\nGC_API_TOKEN=' + tokOf(HD) + '\n');
@@ -496,6 +536,12 @@ console.log('9) CLI: open / start mở cửa sổ (native GC_BIND · Docker gi�
   ok(!fs.existsSync(path.join(HDk, 'run/admin-window')) && /beyond loopback \(0\.0\.0\.0:/.test(r.out), 'Docker: GC_BIND=0.0.0.0 (app publish 0.0.0.0) → không mở cửa sổ', r.out);
   r = cliRun(HDk, dk(null), ['open']);
   ok(!fs.existsSync(path.join(HDk, 'run/admin-window')) && /could not read the Docker compose configuration/.test(r.out), 'Docker: docker compose config lỗi → không mở cửa sổ (đóng khi nghi ngờ)', r.out);
+  for (const nm of ['host', 'container:other', 'service:db']) {
+    r = cliRun(HDk, dk({ services: { app: { network_mode: nm, ports: [{ mode: 'ingress', host_ip: '127.0.0.1', target: 7480, published: String(P), protocol: 'tcp' }] } } }), ['open']);
+    ok(!fs.existsSync(path.join(HDk, 'run/admin-window')) && new RegExp('beyond loopback \\(network_mode:' + nm + '\\)').test(r.out), 'review F2: Docker network_mode ' + nm + ' (mạng của host / service khác) → KHÔNG mở cửa sổ', r.out);
+  }
+  r = cliRun(HDk, dk({ services: { app: { network_mode: 'bridge', ports: [{ mode: 'ingress', host_ip: '127.0.0.1', target: 7480, published: String(P), protocol: 'tcp' }] } } }), ['open']);
+  ok(fs.existsSync(path.join(HDk, 'run/admin-window')), 'Docker network_mode bridge (mặc định) + publish loopback → cửa sổ mở', r.out); fs.rmSync(path.join(HDk, 'run/admin-window'));
   r = cliRun(HDk, dk(svc([{ mode: 'ingress', host_ip: '127.0.0.1', target: 7480, published: String(P), protocol: 'tcp' }])), ['start']);
   ok(fs.existsSync(path.join(HDk, 'run/admin-window')) && /within 30 minutes/.test(r.out) && /compose .*up -d/.test(fs.readFileSync(path.join(DD, 'docker.log'), 'utf8')), 'Docker: genchibi start (compose up giả) → mở cửa sổ', r.out);
   // genchibi password khởi tạo (app chạy) + --init-stdin
@@ -508,8 +554,21 @@ console.log('9) CLI: open / start mở cửa sổ (native GC_BIND · Docker gi�
   const ss = cliRun(HD, FB, ['setup']); ok(ss.code === 0 && /First-run setup: domain/.test(ss.out), 'genchibi setup: in stage', ss.out);
   const sk = cliRun(HD, FB, ['setup', 'skip', 'agent "test" \\ broken']); ok(sk.code === 0 && /skipped/.test(sk.out) && stageOf(HD) === 'done', 'genchibi setup skip [lý do] → done (lý do có " \\ bị lọc)', sk.out);
   const rr = cliRun(HD, FB, ['setup', 'reset']); ok(rr.code === 0 && /reset \(stage domain\)/.test(rr.out) && stageOf(HD) === 'domain', 'genchibi setup reset → domain', rr.out);
+  // MCP-04 (CNS-269): genchibi setup check chạy THẬT "<đường tuyệt đối> mcp" trên máy chủ, gửi kết quả (token) → wizard; ghi run/cli-path → thẻ nối agent dùng đường đầy đủ
+  const self = path.join(ROOT, 'cli/genchibi');
+  const hc = cliRun(HD, FB, ['setup', 'check']);
+  const sv = (await req(P, 'GET', '/api/setup', { headers: bearer(tokOf(HD)) })).json || {}, hk = (sv.mcp || {}).hostCheck || {};
+  ok(hc.code === 0 && hc.out.includes('MCP-04 ✓') && hk.ok === true && hk.cmd === self && hk.tools > 10 && sv.cli === self && fs.readFileSync(path.join(HD, 'run/cli-path'), 'utf8').trim() === self,
+    'genchibi setup check: chạy thật ' + self + ' mcp (initialize + tools/list) → MCP-04 ✓ trong /api/setup (cmd = đường tuyệt đối, ' + hk.tools + ' tool); run/cli-path → /api/setup.cli', hc.out + JSON.stringify(hk));
+  ok(!(sv.mcp || {}).lastClient, 'MCP-04 không tính là "agent đã nối" (clientInfo gen-chibi-selftest)');
+  { const lg = await req(P, 'POST', '/api/auth/login', { headers: local(P), body: { username: 'ryan', password: 'mot cum tu rat dai day' } }), ck = (lg.set[0] || '').split(';')[0];
+    const hs = await req(P, 'POST', '/api/setup/hostcheck', { headers: { ...local(P), cookie: ck }, body: { ok: true, tools: 5, cmd: '/tmp/x' } });
+    ok(lg.status === 200 && hs.status === 403, 'POST /api/setup/hostcheck từ phiên Studio (S) → 403 — chỉ CLI trên máy chủ (token chủ)', hs.text); }
+  { const bad = await req(P, 'POST', '/api/setup/hostcheck', { headers: { ...W, ...bearer(tokOf(HD)) }, body: { ok: true, tools: 5, cmd: 'relative/genchibi' } });
+    ok(bad.status === 200 && bad.json.mcp.hostCheck.ok === false, 'hostcheck với đường không tuyệt đối → không bao giờ ✓', bad.text); }
   ok(!fs.readFileSync(LOG, 'utf8').includes('rat dai day') && !fs.readFileSync(LOG, 'utf8').includes(tokOf(HD)), 'mật khẩu / token không nằm trong argv của curl');
   await stop(S);
+  { const hf = cliRun(HD, FB, ['setup', 'check']); ok(hf.code === 1 && hf.out.includes('MCP-04 ✗'), 'genchibi setup check khi app dừng → MCP-04 ✗ + cách kiểm, thoát 1', hf.out); }
   // genchibi password khi app DỪNG trên máy chưa khởi tạo → auth-cli.js khởi tạo (tên owner) + setup.json domain
   const HS = cliHome(P);
   let S2 = await ready(boot(P, {}, HS)); await stop(S2);

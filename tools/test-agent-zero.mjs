@@ -167,7 +167,11 @@ const SK = path.join(H, 'skills'); const r4 = cli(['agent', 'skill', 'claude', '
 ok(r4.code === 0 && r5.code === 0 && fs.existsSync(path.join(SK, 'gen-chibi/SKILL.md')), 'cài lại skill Claude (tệp do lệnh sinh) phải được: ' + r5.out.slice(0, 200));
 const tp = cli(['agent', 'topics']); ok(tp.code === 0 && /"id":"film"/.test(tp.out), 'agent topics qua token phải chạy: ' + tp.out.slice(0, 120));
 const con = cli(['agent', 'connect']); ok(con.code === 0 && /start_here/.test(con.out) && con.out.indexOf(TOKEN) < 0, 'agent connect không được in token');
-ok(/\[mcp_servers\.gen-chibi\]\n\s+command = "genchibi"\n\s+args = \["mcp"\]/.test(con.out), 'cấu hình Codex phải là TOML nhiều dòng');
+const CLI_ABS = path.join(ROOT, 'cli/genchibi');
+ok(con.out.includes('[mcp_servers.gen-chibi]\n                   command = "' + CLI_ABS + '"\n                   args = ["mcp"]'), 'cấu hình Codex phải là TOML nhiều dòng, command = đường TUYỆT ĐỐI của lệnh (CNS-269)');
+// CNS-275: cùng thứ tự với thẻ nối agent của Studio — stdio (đường tuyệt đối) trước, HTTP + token sau; JSON Cursor / Gemini mặc định là stdio
+{ const iStd = con.out.indexOf('claude mcp add -s user gen-chibi -- ' + CLI_ABS + ' mcp'), iHttp = con.out.indexOf('claude mcp add -s user --transport http gen-chibi http');
+  ok(iStd > 0 && iHttp > iStd && con.out.indexOf('"command":"' + CLI_ABS + '","args":["mcp"]') > 0 && /^\s+stdio\s/m.test(con.out.split('Claude Code')[0]), 'agent connect: stdio với đường tuyệt đối đứng đầu (Địa chỉ + Claude Code + JSON), HTTP + token là lựa chọn sau', con.out.slice(0, 600)); }
 const argv = fs.readFileSync(LOG, 'utf8'); ok(argv.length && argv.indexOf(TOKEN) < 0, 'token không được nằm trong argv của curl (lộ trong ps)');
 // giọng AI qua HTTP: cấu hình không lộ key, thiếu key → 409 rõ ràng, clip lạ / leo thư mục → 404
 const vc = await (await fetch(BASE + '/api/voice', { headers: H2 })).json();

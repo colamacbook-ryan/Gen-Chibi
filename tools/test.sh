@@ -17,6 +17,21 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+# tiến trình con mồ côi (bước cuối): caddy / node / cloudflared / chromium có thư mục làm việc trong cây repo mà còn sống sau cả bộ = test quên dọn
+# (vd test-edge.sh trước đây kill subshell, caddy sống tiếp). Chỉ Linux (/proc). Tiến trình đã có TRƯỚC khi bộ chạy (server dev của bạn) không tính
+gc_orphans() {
+  [ -d /proc/self ] || return 0
+  local d p c n
+  for d in /proc/[0-9]*; do
+    p="${d#/proc/}"; [ "$p" != "$$" ] || continue
+    c="$(readlink "$d/cwd" 2>/dev/null)" || continue
+    case "$c/" in "$ROOT"/*) ;; *) continue ;; esac
+    n="$(tr '\0' ' ' < "$d/cmdline" 2>/dev/null | cut -c1-160)" || continue
+    case "$(basename "${n%% *}" 2>/dev/null)" in caddy*|node|nodejs|cloudflared*|chrome|chromium*|headless_shell) printf '%s %s\n' "$p" "$n" ;; esac   # theo TÊN tệp chạy, không theo đường repo
+  done
+  return 0
+}
+GC_PRE_PIDS=" $(gc_orphans | awk '{ print $1 }' | tr '\n' ' ') "
 echo "1) cú pháp"
 for f in $(git ls-files '*.js' 2>/dev/null || find engine kinds server studio -name '*.js') launcher.js; do node --check "$f"; done
 bash -n install.sh; bash -n cli/genchibi; bash -n tools/package.sh; bash -n tools/test-lang.sh; bash -n tools/test-update.sh; bash -n tools/test-edge.sh
@@ -854,13 +869,15 @@ echo "4g) cổng ingress của cloudflared (v0.21, sửa bảo mật B) + Go onl
 for P in 7811 7813 7815 7821 7823 7825 7831 7833; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done
 node tools/test-ingress.mjs || exit 1
 
-echo "4h) genchibi online (v0.21 P4): server + launcher thật, Cloudflare API giả, cloudflared giả — token trên dòng lệnh bị từ chối · không terminal + CNAME có sẵn → dừng, không đè · --token-stdin tới bậc mật khẩu (mã thoát 3 + mã setup) → password + recheck → xong · đổi địa chỉ cần --yes · proxy · WAF làm tay · nhiều tên miền · off dọn Cloudflare · có terminal hỏi ẩn · token không trong argv / env / log (shim + /proc) · đột biến curl -d · link tạm · máy kế thừa"
+echo "4h) genchibi online (v0.21 P4): server + launcher thật, Cloudflare API giả, cloudflared giả — token trên dòng lệnh bị từ chối · không terminal + CNAME có sẵn → dừng, không đè · chưa có tài khoản chủ → 409 needs owner (v0.23: không còn bậc mật khẩu / mã thoát 3) → genchibi password → --token-stdin → xong · đổi địa chỉ cần --yes · proxy · WAF làm tay · nhiều tên miền · off dọn Cloudflare · có terminal hỏi ẩn · token không trong argv / env / log (shim + /proc) · đột biến curl -d · link tạm · máy kế thừa"
 for P in 7841 7843 7851 7853 7855 7861 7863 7891 7895; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done
 node tools/test-online-cli.mjs || exit 1
 
 echo "4i) thiết lập lần đầu (v0.23 §A): máy trạng thái setup.json + bảng lối vào · admin / admin chỉ trong cửa sổ do lệnh host mở (từng lý do từ chối) · phiên admin chỉ màn khởi tạo · init nguyên tử + 4 rào CSRF · cổng stage (phiên / token Studio / cookie thiết bị; agent + /mcp không chặn) · Go online chặn khi chưa khởi tạo · wizard (tự kiểm MCP thật, nối sau, lastClient, skip / reset) · khôi phục không mở lại admin / OAuth (CNS-138) · CLI open / start / password / setup (Docker giả: compose chỉ loopback)"
 for P in 7951 7952 7953 7954 7955 7956 7957 7958 7959; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done
 node tools/test-setup.mjs || exit 1
+echo "4j) đột biến v0.23 (CNS-273): mọi rào A.5 có một đột biến trong tools/mutations/v023.json — mẫu còn khớp đúng 1 lần, có trong bảng v023.md (chạy thật: node tools/mutate.mjs --jobs 4)"
+node tools/mutate.mjs --check || exit 1
 
 echo "5) tự cập nhật"
 bash tools/test-update.sh
@@ -868,3 +885,8 @@ echo "5b) edge (v0.21): compose ghép -f (không COMPOSE_FILE), sync_compose, on
 bash tools/test-edge.sh || exit 1
 echo "4b) token GitHub (repo private)"
 node tools/test-token.js
+
+echo "9) không còn tiến trình con mồ côi (caddy / node / cloudflared / chromium có thư mục làm việc trong repo)"
+GC_LEFT="$(gc_orphans | while read -r p rest; do case "$GC_PRE_PIDS" in *" $p "*) ;; *) printf '%s %s\n' "$p" "$rest" ;; esac; done)"
+if [ -n "$GC_LEFT" ]; then printf '%s\n' "$GC_LEFT" | sed 's/^/   còn sống: /'; echo "   ✗ test để lại tiến trình (dọn bằng đúng PID của chính nó — không pkill)"; exit 1; fi
+echo "   ✓ không tiến trình nào sót"

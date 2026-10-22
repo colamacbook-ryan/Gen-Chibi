@@ -432,7 +432,9 @@ class Auth {
       if (!user) return json(400, { error: 'cần tên đăng nhập' });
       if (g.wait) return blocked(g);                                    // chạm trần → từ chối, KHÔNG kiểm gì thêm
       if (user === 'admin') {
-        const why = this.adminCheck(req);                               // điều kiện của máy + request: không đạt → nói ĐÚNG lý do + cách vào, không kiểm mật khẩu, không đếm
+        // request từ xa → chỉ 'local-only' · điều kiện của máy → đúng lý do + cách vào · khoá một lần của link (b.key) thiếu / sai → 'link' (đếm vào trần)
+        const why = this.adminCheck(req, typeof b.key === 'string' ? b.key : '');
+        if (why[0] === 'link') this.fail('login', g);
         if (why.length) return json(403, { error: tr(VI, REASON_MSG[why[0]] || REASON_MSG.stage, { port: this.port }), reason: why[0], reasons: why });
         if (!safeEq(b.password, 'admin')) { this.fail('login', g); return json(401, { error: 'tên đăng nhập hoặc mật khẩu không đúng' }); }
         this.log('[auth] admin / admin accepted for the first-run owner account screen (30 minutes)');

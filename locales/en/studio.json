@@ -1659,7 +1659,7 @@
   "~{n} tokens"
  ],
  "Cảnh đã đổi sau khi duyệt — cần xem lại.": "The shot changed after it was approved — review it again.",
- "Mã setup": "Setup code",
+ "Mã setup (v0.21)": "Setup code (v0.21)",
  "Mật khẩu mới (ít nhất {n} ký tự — gợi ý: một cụm từ dễ nhớ)": "New password (at least {n} characters — tip: a memorable phrase)",
  "Nhập lại mật khẩu": "Repeat the password",
  "Mật khẩu cần ít nhất {n} ký tự": "The password needs at least {n} characters",
@@ -1992,7 +1992,6 @@
  "Khởi tạo": "Set up",
  "Tên đăng nhập: 3–32 ký tự chữ thường, số, dấu chấm, gạch dưới, gạch ngang — không phải admin": "Username: 3–32 characters — lowercase letters, digits, dot, underscore, hyphen — not admin",
  "Đăng xuất admin": "Sign out admin",
- "Lần đầu: đăng nhập bằng admin / admin trên máy chủ, trong 30 phút sau genchibi start (hoặc genchibi open). Studio sẽ bắt bạn đặt tài khoản chủ của riêng mình.": "First run: sign in with admin / admin on the server, within 30 minutes after genchibi start (or genchibi open). The Studio then makes you set your own owner account.",
  "Máy chưa có mật khẩu chủ: trên máy chủ chạy genchibi password (tên đăng nhập owner), hoặc dùng token của bản cài.": "This machine has no owner password yet: on the server run genchibi password (username owner), or use the install's token.",
  "Trình duyệt này nhớ đăng nhập 30 ngày.": "This browser stays signed in for 30 days.",
  "Tên đăng nhập": "Username",
@@ -2082,5 +2081,15 @@
  "Hồ sơ chủ": "Owner profile",
  "đổi tên đăng nhập không đăng xuất ai": "changing the username signs nobody out",
  "Đã lưu hồ sơ chủ.": "Owner profile saved.",
- "Chỉ dùng làm email liên hệ Let's Encrypt khi lên mạng bằng đường Caddy (áp ở lần Go online / Kiểm lại tới).": "Only used as the Let's Encrypt contact email when going online through the Caddy path (applies at the next Go online / Check again)."
+ "Chỉ dùng làm email liên hệ Let's Encrypt khi lên mạng bằng đường Caddy (áp ở lần Go online / Kiểm lại tới).": "Only used as the Let's Encrypt contact email when going online through the Caddy path (applies at the next Go online / Check again).",
+ "Tên đăng nhập + mật khẩu của bạn": "Your username + password",
+ "Lần đầu: đăng nhập bằng admin / admin (link từ máy chủ, 30 phút). Studio sẽ bắt bạn đặt tài khoản chủ của riêng mình.": "First run: sign in with admin / admin (link from the server, 30 minutes). The Studio then makes you set your own owner account.",
+ "Lần đầu: admin / admin chỉ dùng được qua link do máy chủ in ra — mở link ở dòng cuối của trình cài, hoặc chạy genchibi open trên máy chủ (link mới, 30 phút). Hoặc đặt tài khoản chủ ngay trên máy chủ: genchibi password.": "First run: admin / admin only works through the link printed by the server — open the link on the installer's last line, or run genchibi open on the server (new link, 30 minutes). Or set the owner account right on the server: genchibi password.",
+ "Cầu stdio của app (chạy trong app)": "App's stdio bridge (runs inside the app)",
+ "Lệnh trên máy chủ: genchibi mcp": "Host command: genchibi mcp",
+ "Chưa chạy": "Not run yet",
+ "Trên máy chủ chạy: genchibi setup check — chạy thật {cmd} mcp (đúng lệnh agent sẽ gọi) rồi báo về đây.": "On the server run: genchibi setup check — it really runs {cmd} mcp (the exact command agents will call) and reports here.",
+ "{cmd} mcp chạy được trên máy chủ: initialize + tools/list ({n} tool) — lúc {at}": "{cmd} mcp works on the server: initialize + tools/list ({n} tools) — at {at}",
+ "{cmd} mcp lỗi trên máy chủ: {error} — sửa rồi chạy lại genchibi setup check": "{cmd} mcp failed on the server: {error} — fix it, then run genchibi setup check again",
+ "Đường đầy đủ {cmd}: ứng dụng mở từ Dock / menu không thấy PATH của terminal.": "Full path {cmd}: apps opened from the Dock / menu do not see the terminal PATH."
 }

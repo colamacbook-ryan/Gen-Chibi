@@ -165,7 +165,9 @@ if (want('auth')) {
     if (!/genchibi open/.test(await alertText(q)) || await q.getAttribute('#gcLogin [role=alert]', 'data-reason') !== 'window') throw new Error('ngoài cửa sổ: admin / admin phải báo lý do "window" + genchibi open: ' + await q.textContent('#gcLogin [role=alert]'));
     // 2) lệnh trên máy chủ mở cửa sổ (như genchibi open) → admin / admin → màn KHỞI TẠO (bắt buộc): luật tên / mật khẩu, rồi wizard
     fs.mkdirSync(path.join(home2, 'run'), { recursive: true, mode: 0o700 });
-    fs.writeFileSync(path.join(home2, 'run/admin-window'), JSON.stringify({ v: 1, exp: Date.now() + 1800e3, mode: 'native', composeLoopback: false, by: 'test' }), { mode: 0o600 });
+    const key2 = (await import('crypto')).randomBytes(16).toString('hex');   // khoá một lần (CNS-268) — owner mở đúng link http://localhost:<cổng>/login#k=<khoá> do genchibi open in / mở
+    fs.writeFileSync(path.join(home2, 'run/admin-window'), JSON.stringify({ v: 1, exp: Date.now() + 1800e3, mode: 'native', composeLoopback: false, by: 'test', key: key2 }), { mode: 0o600 });
+    await q.goto('http://localhost:7497/login#k=' + key2); await q.waitForSelector('#gcFirstRun[data-key="yes"]', { timeout: 8000 });
     await q.fill('#gcUser', 'admin'); await q.fill('#gcPw', 'admin'); await q.click(SUB);
     await q.waitForSelector('#gcLogin form[data-auth="init"]', { timeout: 8000 });
     if (!await q.$('#gcAdminLeft')) throw new Error('màn khởi tạo phải nói phiên admin hết hạn lúc nào');
@@ -3430,7 +3432,8 @@ if (want('setup')) {
   const errsS = [], found = [], shots = [];
   const VIS = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i;
   const SUB = '#gcLogin button[type=submit]';
-  const win = home => { fs.mkdirSync(path.join(home, 'run'), { recursive: true, mode: 0o700 }); fs.writeFileSync(path.join(home, 'run/admin-window'), JSON.stringify({ v: 1, exp: Date.now() + 1800e3, mode: 'native', composeLoopback: false, by: 'test' }), { mode: 0o600 }); };
+  // cửa sổ admin như genchibi open ghi: khoá một lần 128 bit (CNS-268) — trả khoá; link = http://localhost:<cổng>/login#k=<khoá>
+  const win = home => { const key = crypto.randomBytes(16).toString('hex'); fs.mkdirSync(path.join(home, 'run'), { recursive: true, mode: 0o700 }); fs.writeFileSync(path.join(home, 'run/admin-window'), JSON.stringify({ v: 1, exp: Date.now() + 1800e3, mode: 'native', composeLoopback: false, by: 'test', key }), { mode: 0o600 }); return key; };
   const stage = home => { try { return JSON.parse(fs.readFileSync(path.join(home, 'data/setup.json'), 'utf8')).stage; } catch (e) { return ''; } };
   // chữ Việt lọt ở chế độ en (bỏ ô nhập / nội dung người dùng / phần tử lang="vi")
   const scanEn = (pg, where) => pg.evaluate(([where, src]) => {
@@ -3466,15 +3469,28 @@ if (want('setup')) {
     // ---- 1) đăng nhập lần đầu: dải admin / admin; ngoài cửa sổ → ĐÚNG lý do + cách vào
     await q.goto(A + '/'); await q.evaluate(() => localStorage.setItem('gc-lang', 'en'));
     await screen(q, 'su-01-login', '#gcLogin form[data-auth="login"] #gcFirstRun');
+    // CNS-272: lúc stage admin không có câu "nhớ 30 ngày" (phiên admin 30 phút, không nhớ thiết bị) và không có dòng "nâng cấp từ v0.22 … owner" (bản cài mới)
+    if (await q.$('#gcRemember') || await q.$('#gcOwnerDefault')) throw new Error('stage admin: không được có "nhớ đăng nhập 30 ngày" / "nâng cấp từ v0.22: tên owner"');
+    if (await q.getAttribute('#gcFirstRun', 'data-key') !== 'no' || !/genchibi open/.test(await q.textContent('#gcFirstRun'))) throw new Error('không mở bằng link: dải lần đầu phải nói admin / admin chỉ qua link (genchibi open)');
     await loginAs(q, 'admin', 'admin');
     let al = await alertOf(q);
     if (al.reason !== 'window' || !/genchibi open/.test(al.text) || !/genchibi password/.test(al.text)) throw new Error('ngoài cửa sổ: lý do window + genchibi open / password: ' + JSON.stringify(al));
     await screen(q, 'su-02-login-reason', '#gcLogin form[data-auth="login"]', async pg => { await loginAs(pg, 'admin', 'admin'); await alertOf(pg); });
     console.log('  ✓ Đăng nhập lần đầu: dải "admin / admin"; ngoài cửa sổ → lý do "window" + genchibi open / genchibi password (en + vi)');
     // ---- 2) lệnh trên máy chủ mở cửa sổ → admin / admin → màn khởi tạo bắt buộc
-    win(home1);
+    const key1 = win(home1);
+    // cửa sổ mở nhưng trang KHÔNG mở bằng link (không khoá) → lý do link (CNS-268: user Unix khác / container khác chạm được cổng nhưng không có khoá)
     await q.reload(); await q.waitForSelector('#gcUser'); await loginAs(q, 'admin', 'admin');
+    al = await alertOf(q);
+    if (al.reason !== 'link' || !/genchibi open/.test(al.text)) throw new Error('cửa sổ mở, không link → lý do link + genchibi open: ' + JSON.stringify(al));
+    // mở đúng link từ máy chủ: khoá đọc từ #k=…, xoá khỏi thanh địa chỉ ngay, chỉ giữ trong sessionStorage của tab
+    await q.goto(A + '/login#k=' + key1); await q.waitForSelector('#gcFirstRun[data-key="yes"]', { timeout: 10000 });
+    const kst = await q.evaluate(() => ({ hash: location.hash, href: location.href, ss: sessionStorage.getItem('gc-admin-key') }));
+    if (kst.hash || kst.href.includes(key1) || kst.ss !== key1) throw new Error('khoá của link phải rời thanh địa chỉ và chỉ nằm trong sessionStorage: ' + JSON.stringify(kst));
+    await screen(q, 'su-02b-login-link', '#gcFirstRun[data-key="yes"]');
+    await loginAs(q, 'admin', 'admin');
     await q.waitForSelector('#gcLogin form[data-auth="init"]', { timeout: 10000 });
+    if (await q.$$eval('#gcSteps > div', d => d.map(x => x.getAttribute('data-state')).join(',')) !== 'cur,todo,todo') throw new Error('màn khởi tạo phải có dải 3 bước, bước 1 đang làm (CNS-272)');
     await screen(q, 'su-03-init', '#gcLogin form[data-auth="init"]');
     const wantInit = ['#gcUser', '#gcName', '#gcEmail', '#gcPw', '#gcPw2', '#gcAdminLeft'];
     for (const sel of wantInit) if (!(await q.$(sel))) throw new Error('màn khởi tạo thiếu ' + sel);
@@ -3506,7 +3522,15 @@ if (want('setup')) {
     await q.waitForSelector('#suMcp #suSelfState', { timeout: 30000 });
     const selfOk = await q.$eval('#suSelfState', e => e.className.includes('ok'));
     const rows = await q.$$eval('#suSelfGrid tr[data-check]', t => t.map(x => x.getAttribute('data-check') + ':' + x.getAttribute('data-state')).join(' '));
-    if (!selfOk || rows !== 'http:ok token:ok stdio:ok') throw new Error('tự kiểm cục bộ phải đạt cả 3 (HTTP /mcp, token, stdio): ' + rows);
+    if (!selfOk || rows !== 'http:ok token:ok stdio:ok host:wait') throw new Error('tự kiểm cục bộ phải đạt cả 3 (HTTP /mcp, token, cầu stdio trong app) + MCP-04 chờ genchibi setup check: ' + rows);
+    if (!/genchibi setup check/.test(await q.textContent('#suSelfGrid tr[data-check="host"]'))) throw new Error('MCP-04 chưa chạy: phải nói đúng lệnh cần chạy trên máy chủ');
+    // MCP-04 THẬT (CNS-269): CLI thật trên thư mục cài giả (current → cây mã) chạy "<đường tuyệt đối> mcp" rồi báo về app
+    fs.symlinkSync(ROOT, path.join(home1, 'current')); fs.writeFileSync(path.join(home1, '.env'), 'GC_MODE=native\nGC_PORT=' + P1 + '\nGC_LANG=en\nGC_API_TOKEN=' + TOKS + '\n', { mode: 0o600 });
+    const hcr = spawnSync('bash', [path.join(ROOT, 'cli/genchibi'), 'setup', 'check'], { env: { PATH: process.env.PATH, HOME: home1, GC_HOME: home1, GC_CLI_INNER: '1' }, encoding: 'utf8', timeout: 60000 });
+    if (hcr.status !== 0 || !/MCP-04 ✓/.test(hcr.stdout)) throw new Error('genchibi setup check phải đạt: ' + hcr.stdout + hcr.stderr);
+    await q.waitForSelector('#suSelfGrid tr[data-check="host"][data-state="ok"]', { timeout: 15000 });
+    const cliAbs = path.join(ROOT, 'cli/genchibi');
+    if (!(await q.textContent('#suCards #agCcLocal')).includes(cliAbs + ' mcp') || !(await q.textContent('#suCards #agJsonCfg')).includes(JSON.stringify(cliAbs))) throw new Error('thẻ nối agent phải dùng đường tuyệt đối của lệnh (run/cli-path): ' + await q.textContent('#suCards #agCcLocal'));
     if (!(await q.$('#suCards #agCcLocal')) || !(await q.$('#suCards #agAiOff')) || !(await q.$('#suCards #agJsonCfg'))) throw new Error('thẻ nối agent (Claude Code / claude.ai khi chưa lên mạng / JSON) phải có ở bước 3');
     if (!(await q.$eval('#suFinish', b => b.disabled)) || (await q.$eval('#suLater', b => b.disabled))) throw new Error('chưa agent nào nối: "Xong" khoá, "Tôi nối agent sau" mở (tự kiểm đã đạt)');
     if (await q.$('#suInet')) throw new Error('chưa lên mạng: không có phần kiểm từ Internet');
@@ -3550,6 +3574,9 @@ if (want('setup')) {
     const C = 'http://localhost:' + P3;
     await q3.goto(C + '/login'); await q3.evaluate(() => localStorage.setItem('gc-lang', 'en')); await q3.reload(); await q3.waitForSelector('#gcUser');
     if (await q3.$('#gcFirstRun')) throw new Error('máy có mật khẩu: không dải admin / admin');
+    if ((await q3.$('#gcOwnerDefault')) || !(await q3.$('#gcRemember'))) throw new Error('máy đã thiết lập: có "nhớ 30 ngày", chưa có dòng "tên là owner" khi chưa sai lần nào (CNS-272)');
+    await loginAs(q3, 'ryan', 'sai mat khau roi day'); await alertOf(q3);
+    if (!(await q3.$('#gcOwnerDefault'))) throw new Error('sai một lần ở máy đã thiết lập → gợi ý "nâng cấp từ v0.22: tên đăng nhập là owner"');
     await loginAs(q3, 'owner', 'mat khau cua ban v022');
     await q3.waitForSelector('#remReview', { timeout: 15000 });
     await q3.click('#remReviewOpen'); await q3.waitForSelector('#suReviewDone', { timeout: 10000 });
@@ -3559,6 +3586,10 @@ if (want('setup')) {
     await q3.waitForFunction(() => /^v\d/.test((document.getElementById('verChip') || {}).textContent) && !document.getElementById('suBox'), null, { timeout: 15000 });
     await q3.waitForTimeout(500);
     if (await q3.$('#remReview')) throw new Error('đã kiểm xong: dải "Kiểm tra thiết lập" không hiện lại');
+    // L-73 / CNS-272: mọi trang có nhãn người đọc cho dock ("Đang xem: …") — không trang nào rơi về id thô, ở en không lọt chữ Việt
+    const labels = await q3.evaluate(() => window.GCStudioPageLabels());
+    const rawIds = labels.filter(([k, l]) => !l || l === k || VIS.test(l));
+    if (!labels.length || rawIds.length) throw new Error('nhãn trang cho dock lọt id thô / chữ Việt ở en: ' + JSON.stringify(rawIds));
     await ctx3.close();
     console.log('  ✓ Máy v0.22 nâng cấp (có mật khẩu): đăng nhập "owner", Studio mở + dải "Kiểm tra thiết lập" một lần → trang kiểm (tự kiểm MCP + thẻ nối agent) → "Đã kiểm xong" → hết dải');
     if (found.length) throw new Error('i18n / bố cục: ' + found.slice(0, 8).join(' | '));

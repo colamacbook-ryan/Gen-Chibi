@@ -22,13 +22,17 @@ _en() {
     st_mcp_off) F="  Online: off — this machine only (genchibi online --help: domain + HTTPS + MCP in one step)" ;;
     st_online) F="  Online: %s (mode %s · genchibi online shows each step)" ;;
     st_online_wait) F="  Online (temporary — waiting for the owner account): %s (mode %s). Set it here: genchibi password — going online then finishes by itself" ;;
-    st_setup_admin) F="  First run: open http://localhost:%s and sign in with admin / admin (window open until %s) — or set the owner account here: genchibi password" ;;
+    st_setup_admin) F="  First run: open %s and sign in with admin / admin (window open until %s; only through this link) — or set the owner account here: genchibi password" ;;
     st_setup_closed) F="  First run: the admin / admin window is closed — reopen it with genchibi open (30 minutes), or set the owner account here: genchibi password" ;;
     st_setup_init) F="  First run: the owner account is not set up yet — genchibi password (or sign in to the Studio with the owner token)" ;;
     st_setup_wizard) F="  First run: owner account ready — finish the first-run setup in the Studio (%s): domain, then the MCP check (stuck? genchibi setup skip)" ;;
-    win_opened) F="First run: open http://localhost:%s in a browser on this machine and sign in with admin / admin within 30 minutes (until %s). The Studio then asks for your own username and password." ;;
+    win_opened) F="First run: open %s in a browser on this machine and sign in with admin / admin within 30 minutes (until %s) — admin / admin works only through this link. The Studio then asks for your own username and password." ;;
     win_docker) F="admin / admin is not available: Docker publishes a port beyond loopback (%s) — set GC_BIND=127.0.0.1 in .env (and check docker-compose.override.yml), then run genchibi open. Or set the owner account here: genchibi password" ;;
     win_docker_cfg) F="admin / admin is not available: could not read the Docker compose configuration (compose config) to check which ports are published — set the owner account here: genchibi password" ;;
+    win_nokey) F="admin / admin is not available: could not read /dev/urandom for the one-time link key — set the owner account here: genchibi password" ;;
+    hc_ok) F="MCP-04 ✓ host command works: %s mcp (initialize + tools/list, %s tools) — use this full path in agent configs." ;;
+    hc_fail) F="MCP-04 ✗ host command failed: %s mcp — %s. Check: genchibi status (app running?), Docker permission (docker group / sudo), node on PATH (native)." ;;
+    hc_nopost) F="(could not send the result to the app — is it running? genchibi status)" ;;
     win_bind) F="admin / admin is not available: GC_BIND=%s opens the app to the network — set GC_BIND=127.0.0.1 in .env, then run genchibi restart and genchibi open. Or set the owner account here: genchibi password" ;;
     open_signin) F="Opening %s — sign in with your owner account (forgot the password: genchibi password)." ;;
     rs_stage) F="the owner account is already set up" ;;
@@ -40,14 +44,14 @@ _en() {
     rs_tunnel) F="a Cloudflare tunnel is on" ;;
     rs_docker_publish) F="Docker publishes the app beyond loopback" ;;
     rs_bind) F="GC_BIND / GC_LISTEN is not loopback" ;;
-    hint_ssh) F="Server without a browser: on your computer run  ssh -L %s:localhost:%s <server>  then open http://localhost:%s there (same 30-minute window)." ;;
-    hint_admin) F="Next: open http://localhost:%s and sign in with admin / admin within 30 minutes (until %s; later: genchibi open) — then set your own username and password." ;;
+    hint_ssh) F="Server without a browser: on your computer run  ssh -L %s:localhost:%s <server>  then open the link below there (same 30-minute window)." ;;
+    hint_admin) F="Next: open %s and sign in with admin / admin within 30 minutes (until %s; later: genchibi open prints a new link) — then set your own username and password." ;;
     hint_noadmin) F="Next: admin / admin is not available on this machine (%s) — set the owner account here: genchibi password, then sign in at http://localhost:%s" ;;
     hint_wizard) F="Next: open %s, sign in as %s and finish the first-run setup (domain, MCP check)." ;;
     hint_ready) F="Next: open %s and sign in as %s." ;;
-    setup_help) F="genchibi setup                  show the first-run state (stage, admin / admin window, MCP self-test, last agent)\ngenchibi setup skip [reason]    skip the rest of the first-run wizard (domain / MCP check) — when the check itself is broken; logged\ngenchibi setup reset            run the first-run wizard again (never brings back admin / admin)" ;;
+    setup_help) F="genchibi setup                  show the first-run state (stage, admin / admin window, MCP self-test, last agent)\ngenchibi setup skip [reason]    skip the rest of the first-run wizard (domain / MCP check) — when the check itself is broken; logged\ngenchibi setup reset            run the first-run wizard again (never brings back admin / admin)\ngenchibi setup check            MCP-04: run the real host command (<full path> mcp: initialize + tools/list) and show the result in the wizard" ;;
     setup_stage) F="First-run setup: %s%s" ;;
-    setup_admin_ok) F="  admin / admin: available until %s (http://localhost:%s on this machine)" ;;
+    setup_admin_ok) F="  admin / admin: available until %s, only through %s" ;;
     setup_admin_no) F="  admin / admin: not available — %s" ;;
     setup_selftest) F="  MCP self-test: %s (%s)" ;;
     setup_client) F="  Last agent: %s via %s at %s" ;;
@@ -200,13 +204,17 @@ _vi() {
     st_mcp_off) F="  Ra Internet: tắt — chỉ máy này (genchibi online --help: tên miền + HTTPS + MCP một bước)" ;;
     st_online) F="  Ra Internet: %s (chế độ %s · genchibi online xem từng bậc)" ;;
     st_online_wait) F="  Ra Internet (tạm — chờ tài khoản chủ): %s (chế độ %s). Đặt tại đây: genchibi password — app tự hoàn tất lên mạng" ;;
-    st_setup_admin) F="  Lần đầu: mở http://localhost:%s và đăng nhập admin / admin (cửa sổ mở tới %s) — hoặc đặt tài khoản chủ tại đây: genchibi password" ;;
+    st_setup_admin) F="  Lần đầu: mở %s và đăng nhập admin / admin (cửa sổ mở tới %s; chỉ qua link này) — hoặc đặt tài khoản chủ tại đây: genchibi password" ;;
     st_setup_closed) F="  Lần đầu: cửa sổ admin / admin đã đóng — mở lại bằng genchibi open (30 phút), hoặc đặt tài khoản chủ tại đây: genchibi password" ;;
     st_setup_init) F="  Lần đầu: chưa có tài khoản chủ — genchibi password (hoặc vào Studio bằng token chủ)" ;;
     st_setup_wizard) F="  Lần đầu: đã có tài khoản chủ — làm nốt thiết lập lần đầu trong Studio (%s): tên miền, rồi chẩn đoán MCP (kẹt: genchibi setup skip)" ;;
-    win_opened) F="Lần đầu: mở http://localhost:%s bằng trình duyệt trên máy này và đăng nhập admin / admin trong vòng 30 phút (tới %s). Sau đó Studio bắt đặt tên đăng nhập + mật khẩu của bạn." ;;
+    win_opened) F="Lần đầu: mở %s bằng trình duyệt trên máy này và đăng nhập admin / admin trong vòng 30 phút (tới %s) — admin / admin chỉ dùng được qua link này. Sau đó Studio bắt đặt tên đăng nhập + mật khẩu của bạn." ;;
     win_docker) F="admin / admin không dùng được: Docker đang mở cổng ra ngoài loopback (%s) — đặt GC_BIND=127.0.0.1 trong .env (và xem docker-compose.override.yml), rồi chạy genchibi open. Hoặc đặt tài khoản chủ tại đây: genchibi password" ;;
     win_docker_cfg) F="admin / admin không dùng được: không đọc được cấu hình Docker compose (compose config) để kiểm cổng nào đang mở — đặt tài khoản chủ tại đây: genchibi password" ;;
+    win_nokey) F="admin / admin không dùng được: không đọc được /dev/urandom để tạo khoá của link — đặt tài khoản chủ tại đây: genchibi password" ;;
+    hc_ok) F="MCP-04 ✓ lệnh trên máy chủ chạy được: %s mcp (initialize + tools/list, %s tool) — dùng đúng đường đầy đủ này trong cấu hình agent." ;;
+    hc_fail) F="MCP-04 ✗ lệnh trên máy chủ lỗi: %s mcp — %s. Kiểm: genchibi status (app đang chạy?), quyền Docker (nhóm docker / sudo), node trên PATH (native)." ;;
+    hc_nopost) F="(không gửi được kết quả lên app — app đang chạy? genchibi status)" ;;
     win_bind) F="admin / admin không dùng được: GC_BIND=%s mở app ra mạng — đặt GC_BIND=127.0.0.1 trong .env, rồi chạy genchibi restart và genchibi open. Hoặc đặt tài khoản chủ tại đây: genchibi password" ;;
     open_signin) F="Mở %s — đăng nhập bằng tài khoản chủ (quên mật khẩu: genchibi password)." ;;
     rs_stage) F="tài khoản chủ đã được khởi tạo" ;;
@@ -218,14 +226,14 @@ _vi() {
     rs_tunnel) F="tunnel Cloudflare đang bật" ;;
     rs_docker_publish) F="Docker đang mở cổng của app ra ngoài loopback" ;;
     rs_bind) F="GC_BIND / GC_LISTEN không phải loopback" ;;
-    hint_ssh) F="Máy chủ không có trình duyệt: trên máy của bạn chạy  ssh -L %s:localhost:%s <máy-chủ>  rồi mở http://localhost:%s ở đó (cùng cửa sổ 30 phút)." ;;
-    hint_admin) F="Bước tiếp: mở http://localhost:%s và đăng nhập admin / admin trong vòng 30 phút (tới %s; sau đó: genchibi open) — rồi đặt tên đăng nhập + mật khẩu của bạn." ;;
+    hint_ssh) F="Máy chủ không có trình duyệt: trên máy của bạn chạy  ssh -L %s:localhost:%s <máy-chủ>  rồi mở link bên dưới ở đó (cùng cửa sổ 30 phút)." ;;
+    hint_admin) F="Bước tiếp: mở %s và đăng nhập admin / admin trong vòng 30 phút (tới %s; sau đó: genchibi open in link mới) — rồi đặt tên đăng nhập + mật khẩu của bạn." ;;
     hint_noadmin) F="Bước tiếp: admin / admin không dùng được trên máy này (%s) — đặt tài khoản chủ tại đây: genchibi password, rồi đăng nhập ở http://localhost:%s" ;;
     hint_wizard) F="Bước tiếp: mở %s, đăng nhập bằng %s và làm nốt thiết lập lần đầu (tên miền, chẩn đoán MCP)." ;;
     hint_ready) F="Bước tiếp: mở %s và đăng nhập bằng %s." ;;
-    setup_help) F="genchibi setup                  xem trạng thái lần đầu (bước, cửa sổ admin / admin, tự kiểm MCP, agent gần nhất)\ngenchibi setup skip [lý do]     bỏ qua phần còn lại của wizard lần đầu (tên miền / chẩn đoán MCP) — khi chính phần kiểm bị lỗi; có ghi log\ngenchibi setup reset            làm lại wizard lần đầu (không bao giờ mở lại admin / admin)" ;;
+    setup_help) F="genchibi setup                  xem trạng thái lần đầu (bước, cửa sổ admin / admin, tự kiểm MCP, agent gần nhất)\ngenchibi setup skip [lý do]     bỏ qua phần còn lại của wizard lần đầu (tên miền / chẩn đoán MCP) — khi chính phần kiểm bị lỗi; có ghi log\ngenchibi setup reset            làm lại wizard lần đầu (không bao giờ mở lại admin / admin)\ngenchibi setup check            MCP-04: chạy thật lệnh trên máy chủ (<đường đầy đủ> mcp: initialize + tools/list) và hiện kết quả trong wizard" ;;
     setup_stage) F="Thiết lập lần đầu: %s%s" ;;
-    setup_admin_ok) F="  admin / admin: dùng được tới %s (http://localhost:%s trên máy này)" ;;
+    setup_admin_ok) F="  admin / admin: dùng được tới %s, chỉ qua %s" ;;
     setup_admin_no) F="  admin / admin: không dùng được — %s" ;;
     setup_selftest) F="  Tự kiểm MCP: %s (%s)" ;;
     setup_client) F="  Agent gần nhất: %s qua %s lúc %s" ;;
@@ -375,10 +383,14 @@ ENV_LANG="${GC_LANG:-}"   # GC_LANG=vi genchibi … (biến môi trường) th�
 pick_ui "$ENV_LANG"
 
 HOME_DIR="${GC_HOME:-__GC_HOME__}"
+# đường TUYỆT ĐỐI của lệnh owner gõ (CNS-269): thẻ nối agent + genchibi agent connect dùng đường này — ứng dụng mở từ Dock / menu không thấy PATH của terminal.
+# Bản ngoài (~/.local/bin/genchibi) chuyển cho bản trong (current/cli/genchibi) qua GC_CLI_SELF, để đường ghi ra là đường owner thật sự gọi
+case "$0" in /*) _self="$0" ;; */*) _self="$(cd "$(dirname "$0")" 2>/dev/null && pwd)/$(basename "$0")" ;; *) _self="$(command -v "$0" 2>/dev/null || printf '%s' "$0")" ;; esac
+CLI_SELF="${GC_CLI_SELF:-$_self}"; unset _self
 [ -d "$HOME_DIR" ] || { m no_home "$HOME_DIR" >&2; exit 1; }
 # Lệnh đi theo bản cài: chuyển cho cli/genchibi của bản đang chạy, để bản cập nhật mang theo lệnh mới.
 INNER="$HOME_DIR/current/cli/genchibi"
-if [ -z "${GC_CLI_INNER:-}" ] && [ -f "$INNER" ]; then GC_CLI_INNER=1 GC_HOME="$HOME_DIR" exec bash "$INNER" ${1+"$@"}; fi
+if [ -z "${GC_CLI_INNER:-}" ] && [ -f "$INNER" ]; then GC_CLI_INNER=1 GC_HOME="$HOME_DIR" GC_CLI_SELF="$CLI_SELF" exec bash "$INNER" ${1+"$@"}; fi
 ORIG_PWD="$PWD"   # thư mục người gọi lệnh (agent skill cài vào dự án của họ, không phải thư mục cài)
 cd "$HOME_DIR"
 # móc kiểm thử CHỈ từ shell gọi lệnh (bộ test), không bao giờ từ .env (review bảo mật 🟡7). Chỉ builtin (compgen, ${!v}): ở đây môi trường còn có thể
@@ -469,6 +481,7 @@ start() {
     echo $! > "$PIDF"; m started "$!"
   fi
   first_run_window start
+  host_check quiet
 }
 stop() {
   legacy_tunnel_down
@@ -481,7 +494,7 @@ status() {
   local h; h="$(curl -fsS "$URL/api/health" 2>/dev/null || true)"
   if [ -n "$h" ]; then m st_up "$(echo "$h" | json version | sed 's/^v//')" "$URL" "$MODE"; else m st_down "$MODE"; fi
   case "$(setup_stage)" in
-    admin) if [ -n "$(win_until)" ]; then m st_setup_admin "$PORT" "$(win_until)"; else m st_setup_closed; fi ;;
+    admin) if [ -n "$(win_until)" ]; then m st_setup_admin "$(win_link)" "$(win_until)"; else m st_setup_closed; fi ;;
     must_init) m st_setup_init ;;
     domain|mcp) m st_setup_wizard "http://localhost:$PORT" ;;
   esac
@@ -561,6 +574,9 @@ compose_loopback() {
   out="$(compose config --format json 2>/dev/null)" || { PUBADDR="?"; return 1; }
   [ -n "$out" ] || { PUBADDR="?"; return 1; }
   out="$(printf '%s\n' "$out" | jflat 2>/dev/null)" || { PUBADDR="?"; return 1; }
+  # network_mode khác mặc định (host, container:…, service:…) → container dùng mạng của host / service khác: không còn "chỉ publish loopback" (review bảo mật F2)
+  PUBADDR="$(printf '%s\n' "$out" | awk -F '\t' '$1 ~ /^services\.[^.]+\.network_mode$/ && $2 != "" && $2 != "bridge" && $2 != "default" && $2 != "null" { print "network_mode:" $2; exit }')"
+  [ -z "$PUBADDR" ] || return 1
   PUBADDR="$(printf '%s\n' "$out" | awk -F '\t' '
     $1 ~ /^services\.[^.]+\.ports\.[0-9]+\./ { k = $1; sub(/\.[^.]+$/, "", k); if (!(k in seen)) { seen[k] = 1; order[++n] = k } f = $1; sub(/^.*\./, "", f); v = $0; sub(/^[^\t]*\t/, "", v); a[k, f] = v }
     END { for (j = 1; j <= n; j++) { k = order[j]; h = a[k, "host_ip"]; if (h == "" || h == "null") h = "0.0.0.0"
@@ -573,7 +589,7 @@ compose_loopback() {
 # $1 = start | open | install → 0 đã mở (WIN_UNTIL) · 2 không cần (đã khởi tạo) · 1 từ chối (đã in lý do)
 WIN_UNTIL=""
 admin_window() {
-  local st cl=false now exp; st="$(setup_stage)"
+  local st cl=false now exp key; st="$(setup_stage)"
   case "$st" in ''|admin) ;; *) return 2 ;; esac
   if [ "$MODE" = docker ]; then
     if ! compose_loopback; then if [ "$PUBADDR" = "?" ]; then m win_docker_cfg >&2; else m win_docker "$PUBADDR" >&2; fi; return 1; fi
@@ -582,20 +598,33 @@ admin_window() {
     case "${GC_BIND:-127.0.0.1}" in 127.0.0.1|localhost|::1) ;; *) m win_bind "$GC_BIND" >&2; return 1 ;; esac
   fi
   now="$(date +%s)"; exp=$((now + 1800))
+  # khoá một lần 128 bit (CNS-268): chỉ ai đọc được run/admin-window (0600) — tức người chạy lệnh này — có link http://localhost:<cổng>/login#k=<khoá>
+  key="$(od -An -tx1 -N16 /dev/urandom 2>/dev/null | tr -d ' \n')"
+  case "$key" in ????????????????????????????????) ;; *) m win_nokey >&2; return 1 ;; esac
   mkdir -p run && chmod 700 run
-  ( umask 077; printf '{"v":1,"exp":%s000,"mode":"%s","composeLoopback":%s,"by":"%s"}\n' "$exp" "$MODE" "$cl" "$1" > run/admin-window.tmp ) || return 1
+  ( umask 077; printf '{"v":1,"exp":%s000,"mode":"%s","composeLoopback":%s,"by":"%s","key":"%s"}\n' "$exp" "$MODE" "$cl" "$1" "$key" > run/admin-window.tmp ) || return 1
   chmod 600 run/admin-window.tmp && mv -f run/admin-window.tmp run/admin-window
   own_fix run
   WIN_UNTIL="$(win_until)"
   return 0
 }
-first_run_window() { local rc=0; admin_window "$1" || rc=$?; [ "$rc" != 0 ] || m win_opened "$PORT" "$WIN_UNTIL"; return 0; }
-# genchibi open: máy chưa khởi tạo → mở cửa sổ admin / admin (30 phút) rồi mở Studio ở http://localhost:<cổng> — không mã nào trong argv (không còn mã setup)
+# link của cửa sổ đang mở: http://localhost:<cổng trên máy chủ>/login#k=<khoá> — phần # không bao giờ tới server trong URL (trang đọc rồi xoá khỏi thanh địa chỉ)
+win_link() { local k; k="$(sed -n 's/.*"key":"\([0-9a-f]\{32\}\)".*/\1/p' run/admin-window 2>/dev/null | head -1)"; [ -n "$k" ] && printf 'http://localhost:%s/login#k=%s' "$PORT" "$k"; return 0; }
+first_run_window() { local rc=0; admin_window "$1" || rc=$?; [ "$rc" != 0 ] || m win_opened "$(win_link)" "$WIN_UNTIL"; return 0; }
+# genchibi open: máy chưa khởi tạo → mở cửa sổ admin / admin (30 phút) rồi mở Studio ở link http://localhost:<cổng>/login#k=<khoá> (CNS-268).
+# KHOÁ KHÔNG BAO GIỜ VÀO ARGV (ps của user khác đọc được argv của xdg-open / trình duyệt): trình duyệt mở tệp run/open-admin.html (0600, run/ 0700) — tệp chuyển
+# sang link bằng meta refresh; argv chỉ có đường tệp. Đã khởi tạo → mở http://localhost:<cổng> như thường
 open_ui() {
-  local u="http://localhost:$PORT" rc=0
+  local u="http://localhost:$PORT" rc=0 target
   admin_window open || rc=$?
-  case "$rc" in 0) m win_opened "$PORT" "$WIN_UNTIL" ;; 2) m open_signin "$u" ;; esac
-  (command -v open >/dev/null && open "$u") || (command -v xdg-open >/dev/null && xdg-open "$u") || echo "$u"
+  target="$u"
+  case "$rc" in
+    0) u="$(win_link)"; m win_opened "$u" "$WIN_UNTIL"
+       ( umask 077; printf '<!doctype html><meta charset="utf-8"><meta name="referrer" content="no-referrer"><meta http-equiv="refresh" content="0;url=%s"><title>gen-chibi</title>\n' "$u" > run/open-admin.html ) && chmod 600 run/open-admin.html && target="$HOME_DIR/run/open-admin.html" ;;
+    2) m open_signin "$u" ;;
+  esac
+  host_check quiet
+  (command -v open >/dev/null && open "$target") || (command -v xdg-open >/dev/null && xdg-open "$target") || true
 }
 # genchibi password: đặt / đặt lại mật khẩu chủ (quên mật khẩu: ai vào được máy chủ là chủ — §3.3). Hỏi ẩn hai lần (không có terminal: đọc một dòng stdin).
 # Máy chưa khởi tạo (stage admin / must_init) → đây CHÍNH là khởi tạo (tên đăng nhập mặc định owner — đổi ở Tài khoản chủ), admin / admin đóng vĩnh viễn.
@@ -648,7 +677,7 @@ setup_status() {
   local st c; st="$(jv stage)"; c="$(jv skipped.reason)"
   m setup_stage "$st" "${c:+ (skip: $c)}"
   if [ "$st" = admin ]; then
-    if [ -z "$(jv admin.reasons.0)" ]; then m setup_admin_ok "$(win_until)" "$PORT"; else m setup_admin_no "$(rs_text "$(jv admin.reasons.0)")"; fi
+    if [ -z "$(jv admin.reasons.0)" ]; then m setup_admin_ok "$(win_until)" "$(win_link)"; else m setup_admin_no "$(rs_text "$(jv admin.reasons.0)")"; fi
   fi
   case "$(jv mcp.selfTest.ok)" in true) m setup_selftest "$(mn setup_w_ok)" "$(jv mcp.selfTest.at)" ;; false) m setup_selftest "$(mn setup_w_fail)" "$(jv mcp.selfTest.at)" ;; *) m setup_selftest "$(mn setup_w_none)" "-" ;; esac
   [ -z "$(jv mcp.lastClient.name)" ] || m setup_client "$(jv mcp.lastClient.name)" "$(jv mcp.lastClient.channel)" "$(jv mcp.lastClient.at)"
@@ -660,13 +689,38 @@ setup_hint() {
   st="$(jv stage)"; pub="$(jv online.publicUrl)"
   case "$st" in
     admin)
-      if [ -z "$(jv admin.reasons.0)" ]; then m hint_ssh "$PORT" "$PORT" "$PORT"; m hint_admin "$PORT" "$(win_until)"
+      if [ -z "$(jv admin.reasons.0)" ]; then m hint_ssh "$PORT" "$PORT"; m hint_admin "$(win_link)" "$(win_until)"
       else m hint_noadmin "$(rs_text "$(jv admin.reasons.0)")" "$PORT"; fi ;;
     must_init) m hint_noadmin "$(mn rs_stage)" "$PORT" ;;
     *) oapi GET /api/info; who="$(jv auth.user.login)"
        if [ "$st" = done ]; then m hint_ready "${pub:-$u}" "${who:-owner}"; else m hint_wizard "${pub:-$u}" "${who:-owner}"; fi ;;
   esac
   return 0
+}
+# MCP-04 (CNS-269): kiểm ĐÚNG lệnh owner dán cho agent — chạy thật "<đường tuyệt đối> mcp" trên MÁY CHỦ (Docker: compose exec; native: node), initialize +
+# tools/list qua stdio, rồi gửi kết quả (token chủ) lên app: wizard hiện dòng MCP-04. Ghi run/cli-path (đường tuyệt đối) để thẻ nối agent dùng.
+# $1 = quiet (start / open: một dòng, không bao giờ làm lệnh gọi thất bại) · rỗng (genchibi setup check: in chi tiết, thoát 1 khi lỗi)
+cli_path_save() { mkdir -p run 2>/dev/null && chmod 700 run 2>/dev/null; ( umask 077; printf '%s\n' "$CLI_SELF" > run/cli-path.tmp ) 2>/dev/null && mv -f run/cli-path.tmp run/cli-path 2>/dev/null; own_fix run 2>/dev/null || true; return 0; }
+host_check() {
+  local q="${1:-}" out errf n=0 ok=false err="" line body i=0
+  cli_path_save
+  if [ -n "$q" ]; then   # start / open: chỉ khi thiết lập lần đầu chưa xong, và đợi app trả lời (vừa khởi động) — không trả lời thì bỏ qua (không ghi kết quả sai)
+    [ "$(setup_stage)" != done ] || return 0
+    until curl -fsS -m 2 "$URL/api/health" >/dev/null 2>&1; do i=$((i + 1)); [ "$i" -lt "${GC_HOSTCHECK_WAIT:-20}" ] || return 0; sleep 0.5; done
+  fi
+  errf="$(mktemp "${TMPDIR:-/tmp}/gc-hc-XXXXXX")" || return 0
+  out="$(printf '%s\n%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"gen-chibi-selftest","version":"host"}}}' '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+    | "$CLI_SELF" mcp 2>"$errf")" || true
+  line="$(printf '%s\n' "$out" | grep '"id":2' | head -1)" || true
+  n="$(printf '%s' "$line" | grep -o '"inputSchema"' | wc -l | tr -d ' ')" || true
+  if [ "${n:-0}" -gt 0 ] && printf '%s\n' "$out" | grep -q '"id":1.*"protocolVersion"'; then ok=true
+  else err="$(tail -n 1 "$errf" 2>/dev/null | tr -d '"\\' | tr -cd '[:print:]' | cut -c1-200)"; [ -n "$err" ] || err="no tools/list reply"; fi
+  rm -f "$errf"
+  body="$(printf '{"ok":%s,"tools":%s,"cmd":"%s","error":"%s"}' "$ok" "${n:-0}" "$(cfg_esc "$CLI_SELF")" "$err")"
+  oapi POST /api/setup/hostcheck "$body"
+  if [ "$ok" = true ]; then m hc_ok "$CLI_SELF" "$n"; else m hc_fail "$CLI_SELF" "$err" >&2; fi
+  [ "$OCODE" = 200 ] || [ -n "$q" ] || m hc_nopost >&2
+  [ -n "$q" ] || [ "$ok" = true ]
 }
 setup_cmd() {
   local sub="${1:-}" reason
@@ -681,6 +735,7 @@ setup_cmd() {
       opost /api/setup/reset '{}'
       case "$OCODE" in 2??) m setup_reset "$(jv stage)" ;; *) online_err; return 1 ;; esac ;;
     hint) setup_hint ;;
+    check) host_check ;;
     -h|--help|help) m setup_help ;;
     *) m bad_opt "$sub" >&2; m setup_help >&2; return 2 ;;
   esac
@@ -1216,57 +1271,72 @@ agent_connect() {
   local jh="" target="${link:-$u}" ch=""; [ -n "$hdr" ] && jh=',"headers":{"Authorization":"Bearer <token>"}' && ch=" -H 'Authorization: Bearer <token>'"
   local cur_json='{"mcpServers":{"gen-chibi":{"url":"'"$target"'"'"$jh"'}}}' gem_json='{"mcpServers":{"gen-chibi":{"httpUrl":"'"$target"'"'"$jh"'}}}'
   local cc_hdr=""; [ -n "$hdr" ] && cc_hdr=' --header "Authorization: Bearer <token>"'
+  # CNS-275: MỘT nguồn chữ = agentCards của Studio; CLI chép đúng THỨ TỰ: stdio trên máy này → OAuth qua Internet → (khác) HTTP + token.
+  # CNS-269: lệnh stdio là đường TUYỆT ĐỐI (ứng dụng mở từ Dock / menu không thấy PATH của terminal)
+  local cmd="$CLI_SELF" qcmd jcmd
+  case "$cmd" in *[!A-Za-z0-9_/.~+-]*) qcmd="'${cmd//\'/\'\\\'\'}'" ;; *) qcmd="$cmd" ;; esac
+  jcmd="$(cfg_esc "$cmd")"
+  local std_json='{"mcpServers":{"gen-chibi":{"command":"'"$jcmd"'","args":["mcp"]}}}'
   if [ "$UI" = vi ]; then cat <<EOF
 Nối agent vào gen-chibi (MCP, giao thức 2025-06-18). Sau khi nối, dặn agent: "gọi start_here trước".
+Cùng thứ tự với Studio › Hệ thống › Kết nối agent: stdio trên máy này → OAuth qua Internet → (khác) HTTP + token.
 
 Địa chỉ
-  Trên máy này   $u${hdr:+   (header: $hdr)}
+  stdio          $qcmd mcp   (đường đầy đủ: ứng dụng mở từ Dock / menu không thấy PATH của terminal)
   Qua Internet   ${oa:-chưa mở — genchibi online --help (OAuth: <địa-chỉ>/mcp)}${oa:+   (OAuth: agent tự đăng ký, bạn bấm Cấp phép; không dán token)}
-  stdio          genchibi mcp
+  Trên máy này   $u${hdr:+   (header: $hdr)}
 
-Claude Code      claude mcp add -s user --transport http gen-chibi $target$cc_hdr
-                 (hoặc stdio)  claude mcp add -s user gen-chibi -- genchibi mcp${oa:+
+Claude Code      claude mcp add -s user gen-chibi -- $qcmd mcp${oa:+
                  (qua Internet, OAuth)  claude mcp add -s user --transport http gen-chibi $oa}
+                 (hoặc HTTP + token)  claude mcp add -s user --transport http gen-chibi $target$cc_hdr
 Claude app/web   ${oa:+Customize › Connectors › Add custom connector › dán $oa › Connect › trang Cấp phép: chọn mức quyền, bấm Cấp phép}${oa:-cần máy lên mạng trước: genchibi online --help (Studio › Hệ thống › Lên mạng)}
 Mức quyền OAuth  mcp:read (chỉ xem) · mcp:write (tạo và sửa — mặc định) · mcp:owner (toàn quyền chủ máy) — đổi / thu hồi ở Studio › Hệ thống › Kết nối agent
-Cursor           ~/.cursor/mcp.json   $cur_json
-Gemini CLI       ~/.gemini/settings.json   $gem_json
+Cursor           ~/.cursor/mcp.json   $std_json
+                 (hoặc HTTP + token)  $cur_json
+Gemini CLI       ~/.gemini/settings.json   $std_json
+                 (hoặc HTTP + token)  $gem_json
 Codex CLI        ~/.codex/config.toml (mỗi dòng một khoá):
                    [mcp_servers.gen-chibi]
-                   command = "genchibi"
+                   command = "$jcmd"
                    args = ["mcp"]
 Không có MCP     curl -s $target$ch -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"start_here","arguments":{}}}'
                  schema dạng function-calling: genchibi agent tools --format openai | gemini
 (Định dạng tệp cấu hình của từng client có thể đổi theo phiên bản client — đối chiếu tài liệu của client nếu không nhận.)
+Kiểm lệnh stdio trên máy chủ: genchibi setup check
 
 Hướng dẫn cho agent: genchibi agent guide [chủ đề]   ·   cài skill: genchibi agent skill claude | cursor | gemini | codex | generic [--dir thư-mục]
 EOF
   else cat <<EOF
 Connect an agent to gen-chibi (MCP, protocol 2025-06-18). After connecting, tell the agent: "call start_here first".
+Same order as Studio › System › Agent connections: stdio on this machine → OAuth over the Internet → (other) HTTP + token.
 
 Address
-  This machine   $u${hdr:+   (header: $hdr)}
+  stdio          $qcmd mcp   (full path: apps opened from the Dock / menu do not see the terminal PATH)
   Internet       ${oa:-not open — genchibi online --help (OAuth: <address>/mcp)}${oa:+   (OAuth: the agent registers itself, you click Authorize; no token to paste)}
-  stdio          genchibi mcp
+  This machine   $u${hdr:+   (header: $hdr)}
 
-Claude Code      claude mcp add -s user --transport http gen-chibi $target$cc_hdr
-                 (or stdio)  claude mcp add -s user gen-chibi -- genchibi mcp${oa:+
+Claude Code      claude mcp add -s user gen-chibi -- $qcmd mcp${oa:+
                  (over the Internet, OAuth)  claude mcp add -s user --transport http gen-chibi $oa}
+                 (or HTTP + token)  claude mcp add -s user --transport http gen-chibi $target$cc_hdr
 Claude app/web   ${oa:+Customize › Connectors › Add custom connector › paste $oa › Connect › Authorize page: pick the access level, click Authorize}${oa:-needs this machine online first: genchibi online --help (Studio › System › Go online)}
 OAuth access     mcp:read (view only) · mcp:write (create and edit — default) · mcp:owner (full owner access) — change / revoke in Studio › System › Agent connections
-Cursor           ~/.cursor/mcp.json   $cur_json
-Gemini CLI       ~/.gemini/settings.json   $gem_json
+Cursor           ~/.cursor/mcp.json   $std_json
+                 (or HTTP + token)  $cur_json
+Gemini CLI       ~/.gemini/settings.json   $std_json
+                 (or HTTP + token)  $gem_json
 Codex CLI        ~/.codex/config.toml (one key per line):
                    [mcp_servers.gen-chibi]
-                   command = "genchibi"
+                   command = "$jcmd"
                    args = ["mcp"]
 No MCP client    curl -s $target$ch -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"start_here","arguments":{}}}'
                  function-calling schema: genchibi agent tools --format openai | gemini
 (Each client's config file format may change between client versions — check the client's docs if it is not picked up.)
+Check the stdio command on the server: genchibi setup check
 
 Guide for agents: genchibi agent guide [topic]   ·   install as a skill: genchibi agent skill claude | cursor | gemini | codex | generic [--dir folder]
 EOF
   fi
+  cli_path_save
 }
 agent_cmd() {
   local sub="${1:-connect}"; shift || true
@@ -1306,7 +1376,7 @@ genchibi — quản lý gen-chibi ($HOME_DIR, chế độ $MODE)
   lang [en|vi]                      xem / đặt ngôn ngữ (CLI + giao diện mặc định của Studio)
   open                              mở Studio trong trình duyệt (lần đầu: mở cửa sổ 30 phút cho admin / admin)
   password                          đặt / đặt lại mật khẩu chủ (lần đầu: khởi tạo tài khoản chủ, tên đăng nhập owner); quên mật khẩu: chạy lệnh này trên máy chủ
-  setup [skip [lý do]|reset]        thiết lập lần đầu: xem trạng thái · bỏ qua wizard (khi chính phần kiểm lỗi) · làm lại wizard
+  setup [skip [lý do]|reset|check]  thiết lập lần đầu: xem trạng thái · bỏ qua wizard (khi chính phần kiểm lỗi) · làm lại wizard · kiểm lệnh MCP trên máy chủ
   uninstall                         gỡ (hỏi giữ hay xoá dữ liệu)
 EOF
   else cat <<EOF
@@ -1323,7 +1393,7 @@ genchibi — manage gen-chibi ($HOME_DIR, mode $MODE)
   lang [en|vi]                      show / set the language (CLI + Studio default)
   open                              open the Studio in the browser (first run: opens a 30-minute window for admin / admin)
   password                          set / reset the owner password (first run: creates the owner account, username owner); forgot it: run this on the server
-  setup [skip [reason]|reset]       first-run setup: show state · skip the wizard (when the check itself is broken) · run the wizard again
+  setup [skip [reason]|reset|check] first-run setup: show state · skip the wizard (when the check itself is broken) · run the wizard again · check the host MCP command
   uninstall                         uninstall (asks whether to keep or delete your data)
 EOF
   fi
