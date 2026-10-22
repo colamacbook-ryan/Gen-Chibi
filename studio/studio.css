@@ -593,6 +593,10 @@ body.dock-open:not(.dock-narrow) .toast { right: calc(var(--dock-w, 0px) + 20px)
 .olsnip pre.code { max-height: 260px; }
 table.grid.olsteps td.wrap { white-space: normal; min-width: 120px; overflow-wrap: anywhere; }
 table.grid.olsteps td { vertical-align: top; }
+/* lưới hẹp ở 1366 px: tên bậc / trình duyệt xuống dòng thay vì ép lưới cuộn ngang che cột cuối — phông rộng hơn (DejaVu Sans trên Linux không có
+   IBM Plex / Inter) vẫn vừa (CI run 39719396085: olSteps 762 > 724). Chữ ngắn vẫn một dòng: cột chỉ hẹp lại khi thiếu chỗ. */
+table.grid.olsteps td.olstep { white-space: normal; min-width: 96px; overflow-wrap: anywhere; }
+table.grid td.acua { white-space: normal; min-width: 72px; overflow-wrap: anywhere; }
 .olcmd { font-size: 12px; background: var(--sunken); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; }
 .olfoot { display: flex; gap: 16px; flex-wrap: wrap; padding: 6px 12px; border-top: 1px solid var(--line); }
 .olfoot > :last-child { margin-left: auto; }

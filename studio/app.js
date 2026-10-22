@@ -387,6 +387,11 @@
   })();
   function appURL(id) { return Store.mode === 'server' ? '/' + (id || '') : (id ? '?app=' + id : '?'); }
   function routeKey(app) { return 'gc-route-' + (app ? app.id : 'home'); }
+  // Đang rời trang (tải lại / sang địa chỉ khác): trình duyệt huỷ mọi fetch còn dở SAU pagehide — catch của chúng (vd. loadWork: "lỗi → về danh sách")
+  // không được go() nữa, vì go() ghi tuyến vào localStorage và đè tuyến trang kế tiếp sắp đọc (CI 2 vCPU: mở phòng tác phẩm lại ra danh sách).
+  var leaving = false;
+  window.addEventListener('pagehide', function () { leaving = true; });
+  window.addEventListener('pageshow', function () { leaving = false; });   // quay lại từ bfcache: trang sống tiếp
   function zoneOf(page) {
     if (page === 'home') return 'home';
     var p = PAGE_ALIAS[page] || page, z = 'lib';
@@ -424,6 +429,7 @@
     });
   }
   function go(r) {
+    if (leaving) return;   // trang đang đóng: không vẽ, không ghi tuyến (xem leaving ở trên)
     var z = zoneOf(r.page);
     if (z !== 'sys' && z !== 'home' && (!APP || z !== APP.zone)) {   // trang thuộc lớp khác → sang ứng dụng của lớp đó
       var other = appOfZone(z);
@@ -6136,7 +6142,7 @@
         var act = s.manual && s.id === 'waf' && s.state === 'fail' ? h('button', { class: 'btn sm primary', id: 'olWafDone', disabled: v.busy, onclick: function () { post('recheck', { confirmManual: 'waf' }).then(function (x) { if (x) after(x); }); } }, _t('Tôi đã làm')) : null;
         tbl.appendChild(h('tr', { 'data-step': s.id, 'data-state': s.state },
           h('td', { class: 'id', text: 'GO-' + String(i + 1).padStart(2, '0') }),
-          h('td', { class: 'nw' }, h('b', { text: _t(olStep(f.mode, s.id)) })),
+          h('td', { class: 'olstep' }, h('b', { text: _t(olStep(f.mode, s.id)) })),   // tên bậc xuống dòng được: phông rộng (DejaVu) không đẩy cột cuối ra khỏi lưới
           h('td', { class: 'nw' }, h('span', { class: 'chip ' + st[0], text: st[1] + ' ' + _t(st[2]) })),
           h('td', { class: 'wrap', text: s.detail || '' }, s.expires ? h('div', { class: 'note', text: _t('hết hạn {at}', { at: fmtTime(s.expires) }) }) : null),
           // biểu thức luật WAF dài: chữ trong câu rút thành "(…)", bản đầy đủ ở ô mã cuộn được + nút chép (fixCopies)
@@ -6228,7 +6234,7 @@
       var sess = (ss.sessions || []).slice().sort(function (x, y) { return (y.current ? 1 : 0) - (x.current ? 1 : 0) || String(y.seenAt).localeCompare(String(x.seenAt)); });
       var sRows = sess.map(function (s) {
         return h('tr', { 'data-session': s.id, 'data-current': s.current ? '1' : null },
-          h('td', { class: 'id', text: s.id }), h('td', { class: 'nw', title: s.ua || null, text: uaShort(s.ua) }), h('td', { class: 'v', text: String(s.device || '').slice(0, 8) || '—' }),
+          h('td', { class: 'id', text: s.id }), h('td', { class: 'acua', title: s.ua || null, text: uaShort(s.ua) }), h('td', { class: 'v', text: String(s.device || '').slice(0, 8) || '—' }),
           h('td', { class: 'nw note', text: fmtShort(s.createdAt) }), h('td', { class: 'nw note', text: fmtShort(s.seenAt) }), h('td', { class: 'nw note', text: fmtShort(s.expiresAt) }),
           // phiên của chính trình duyệt này: không thu hồi ở đây (dùng Đăng xuất) — ô hiện nhãn thay cho nút
           h('td', { class: 'nw' }, s.current ? h('span', { class: 'chip ok', title: _t('Phiên của trình duyệt này — dùng Đăng xuất'), text: _t('Phiên này') })

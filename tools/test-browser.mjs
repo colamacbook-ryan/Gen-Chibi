@@ -1734,6 +1734,14 @@ if (want('voice')) {
     const serverKeepsLang = probe.lang === 'en' && probe.accent === 'uk';
     await fetch(URL10 + 'api/works', { method: 'POST', headers: HDR, body: JSON.stringify({ id: WORK, lang: 'vi', accent: 'bac' }) });
     delete LANGMEM[WORK]; M.workPosts.length = 0;
+    // ---- 0b) tải lại khi phòng tác phẩm còn đang tải (CI 2 vCPU, run 39719396085): fetch dở bị huỷ lúc rời trang → catch của loadWork
+    //      ("lỗi → về danh sách") từng go() và ghi đè tuyến đã lưu → trang kế mở danh sách, không phải tác phẩm. Làm chậm GET tác phẩm cho chắc ca đó xảy ra.
+    { const rp = await pg(await ctx10.newPage(), { page: 'works', work: WORK }); await rp.waitForSelector('.shot', { timeout: 10000 });   // tuyến đã lưu = phòng tác phẩm
+      let slow = 0; await rp.route(u => new URL(u).pathname === '/api/works/' + WORK, async r => { slow++; await new Promise(x => setTimeout(x, 1500)); r.continue().catch(() => {}); });
+      await pg(rp, { page: 'works', work: WORK });   // lần mở đầu của pg đang chờ GET tác phẩm (chậm) thì pg đặt tuyến + tải lại
+      const got = await rp.waitForSelector('.shot', { timeout: 10000 }).then(() => 'work', async () => 'danh sách · tuyến đã lưu ' + await rp.evaluate(() => localStorage.getItem('gc-route-tao-tac')));
+      if (slow < 2 || got !== 'work') throw new Error('tải lại khi tác phẩm còn đang tải phải mở lại đúng tác phẩm (fetch bị huỷ không được đè tuyến): ' + got + ' · GET chậm ' + slow);
+      await rp.close(); console.log('  ✓ Tải lại khi phòng tác phẩm còn đang tải (GET chậm 1,5 s): mở lại đúng tác phẩm — fetch bị huỷ lúc rời trang không đè tuyến đã lưu'); }
 
     // ---- 1) Cài đặt AI › Giọng AI: dán key sai → lỗi rõ; đúng → tự bật ----
     q = await pg(await ctx10.newPage(), { page: 'ai' });
@@ -2399,7 +2407,7 @@ if (want('voice')) {
 
     if (M.leaks.length) throw new Error('có yêu cầu ra ngoài máy: ' + M.leaks.slice(0, 3).join(' | '));
     if (errs10.length) throw new Error('lỗi trang: ' + errs10.slice(0, 3).join(' | '));
-  } catch (e) { fail = 1; console.log('  ✗ giọng AI theo vai:', e.message); if (errs10.length) console.log('    lỗi trang:', errs10.slice(0, 3).join(' | ')); if (q) { try { console.log('    trang đang mở:', q.url(), '·', (await q.evaluate(() => document.getElementById('view').innerText)).slice(0, 240).replace(/\n/g, ' / ')); } catch (e2) { /* trang đã đóng */ } } }
+  } catch (e) { fail = 1; console.log('  ✗ giọng AI theo vai:', e.message); if (errs10.length) console.log('    lỗi trang:', errs10.slice(0, 3).join(' | ')); if (q) { try { console.log('    trang đang mở:', q.url(), '·', (await q.evaluate(() => document.getElementById('view').innerText)).slice(0, 240).replace(/\n/g, ' / '), '· toast:', await q.evaluate(() => (document.getElementById('toast') || {}).textContent || '—'), '· tuyến đã lưu:', await q.evaluate(() => localStorage.getItem('gc-route-tao-tac'))); } catch (e2) { /* trang đã đóng */ } } }
   finally { await b10.close(); srv10.kill(); }
 }
 // ===== v0.18 — Dock "Trợ lý AI" ở cột phải (mọi khu) + Tạo tác = danh sách tác phẩm → phòng làm phim riêng =====
@@ -2894,7 +2902,13 @@ if (want('online')) {
       for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) if (!items[i].contains(items[j]) && !items[j].contains(items[i]) && hit(R(items[i]), R(items[j]))) out.push('BỐ CỤC ' + where + ' · thanh đầu trang chồng: ' + items[i].textContent.trim().slice(0, 30) + ' ↔ ' + items[j].textContent.trim().slice(0, 30));
       for (const sp of document.querySelectorAll('.banner > span:first-child')) { if (!vis(sp)) continue; const w = R(sp).width, bw = R(sp.parentElement).width; if (bw > 320 && w < 180) out.push('BỐ CỤC ' + where + ' · chữ banner bị ép ' + Math.round(w) + 'px'); }
       const view = document.getElementById('view'); if (view && view.scrollWidth > view.clientWidth + 4) out.push('BỐ CỤC ' + where + ' · trang tràn ngang ' + view.scrollWidth + ' > ' + view.clientWidth);
-      for (const sc of document.querySelectorAll('#olBox .scroll, #acBox .scroll')) if (vis(sc) && sc.scrollWidth > sc.clientWidth + 2) out.push('BỐ CỤC ' + where + ' · lưới ' + ((sc.firstElementChild || {}).id || '') + ' tràn ngang ' + sc.scrollWidth + ' > ' + sc.clientWidth + ' (cột cuối bị che)');
+      // lưới không được tràn ngang ở MỌI bộ phông: đo với phông của máy, rồi đo lại với phông rộng (DejaVu Sans — mặc định sans-serif của runner Ubuntu
+      // khi không có IBM Plex / Inter: CI run 39719396085 tràn 729 > 724 chỉ ở đó) + giãn chữ 3 %. Bảng kiểu dựng sẵn (adoptedStyleSheets) không vướng CSP.
+      const gridOver = tag => { for (const sc of document.querySelectorAll('#olBox .scroll, #acBox .scroll')) if (vis(sc) && sc.scrollWidth > sc.clientWidth + 2) out.push('BỐ CỤC ' + where + tag + ' · lưới ' + ((sc.firstElementChild || {}).id || '') + ' tràn ngang ' + sc.scrollWidth + ' > ' + sc.clientWidth + ' (cột cuối bị che) · cột ' + [...sc.querySelectorAll('tr:not(.letters) > th')].map(t => t.textContent + ' ' + Math.round(R(t).width)).join(' | ')); };
+      gridOver('');
+      const wide = new CSSStyleSheet(); wide.replaceSync('#olBox, #olBox *, #acBox, #acBox * { font-family: "DejaVu Sans", Verdana, sans-serif !important; letter-spacing: .03em !important; }');
+      document.adoptedStyleSheets = [...document.adoptedStyleSheets, wide]; void document.body.offsetWidth; gridOver(' (phông rộng)');
+      document.adoptedStyleSheets = document.adoptedStyleSheets.filter(x => x !== wide);
       return out;
     }, [where, VI.source]);
     const setLang = async (pg, l) => { if ((await pg.evaluate(() => document.documentElement.lang)) === l) return; await pg.click('#langSwitch button[data-lang="' + l + '"]'); await pg.waitForFunction(l => document.documentElement.lang === l, l, { timeout: 5000 }); await pg.waitForTimeout(500); };
