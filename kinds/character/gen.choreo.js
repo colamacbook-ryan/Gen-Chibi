@@ -262,6 +262,7 @@
     cam: [[0.1, { z: 1.6, lead: 90, fy: 0.55, roll: 0, lag: 6 }]] });
 
   // TỪ VỰNG PHIM của BỘ KHUNG (trung lập chủ đề, Q10 — ADR 0006): bước kịch bản { action, target, react } → clip người đánh + clip phản ứng
+  //   id hành động (khoá dưới đây) KHÔNG trùng id hoạt động (activity) / trạng thái (state) của kịch bản — CNS-065, test.sh 2j2 kiểm; id clip là không gian tên riêng
   //   attack: cần target, có điểm va chạm (sự kiện hitstop / hit; điểm đánh = "at" của sự kiện: tip / hand / handL / foot)
   //   needs: 'weapon' — chỉ diễn viên cầm binh khí (heldR) mới dùng được; ranged: đòn ném (art: vật ném)
   //   Đòn riêng của một chủ đề (vd. thương / kiếm kiểu Tử Long) nằm trong GÓI ĐỘNG TÁC của bộ chủ đề đó, không ở khung.
@@ -270,14 +271,14 @@
     kick: { label: 'Đá thẳng', clips: ['kick'], attack: true, hint: 'tay không' },
     push: { label: 'Đẩy mặt', clips: ['push'], attack: true, aim: 'head', hint: 'hài, không đau' },
     throw: { label: 'Ném cà chua', clips: ['throw'], attack: true, ranged: true, art: 'tomato', hint: 'hài, ném từ xa — không cần áp sát' },
-    thrust: { label: 'Đâm thẳng (binh khí)', clips: ['thrust'], attack: true, needs: 'weapon' },
+    weaponThrust: { label: 'Đâm thẳng (binh khí)', clips: ['thrust'], attack: true, needs: 'weapon' },
     sweep: { label: 'Quét ngang (binh khí)', clips: ['sweep'], attack: true, needs: 'weapon' },
-    rage: { label: 'Dậm chân nổi giận', clips: ['rage'] },
+    stompRage: { label: 'Dậm chân nổi giận', clips: ['rage'] },
     hero: { label: 'Tạo dáng anh hùng', clips: ['heroPose'] },
-    victory: { label: 'Nhảy cẫng vui mừng', clips: ['victory'] },
+    joyHop: { label: 'Nhảy cẫng vui mừng', clips: ['victory'] },
     dance: { label: 'Nhảy mừng', clips: ['dance'] },
-    salute: { label: 'Ôm quyền thi lễ', clips: ['salute'] },
-    wave: { label: 'Vẫy chào', clips: ['wave'] },
+    fistSalute: { label: 'Ôm quyền thi lễ', clips: ['salute'] },
+    waveHello: { label: 'Vẫy chào', clips: ['wave'] },
     stretch: { label: 'Vươn vai', clips: ['stretch'] },
     scratch: { label: 'Gãi đầu', clips: ['scratch'] },
     startle: { label: 'Giật nảy mình', clips: ['startle'] },
@@ -291,4 +292,7 @@
     dodge: { label: 'Lộn ra sau né', clips: ['backflip'], contact: 0.3, miss: true }
   });
   Object.keys(C.ACTIONS).forEach(function (k) { if (!C.ACTIONS[k].pack) C.ACTIONS[k].pack = C.FRAME_PACK; });
+  // CNS-065 (v0.23): id đòn khung không trùng activity / state của kịch bản (luật như gói). Id cũ (≤ v0.22) còn là bí danh — tác phẩm cũ diễn y hệt,
+  // đọc / ghi qua server thì được chuyển sang id mới (engine/choreo.js migrateWork). Không thêm bí danh mới: id mới đặt đúng luật ngay từ đầu.
+  [['thrust', 'weaponThrust'], ['rage', 'stompRage'], ['victory', 'joyHop'], ['salute', 'fistSalute'], ['wave', 'waveHello']].forEach(function (p) { C.aliasAction(p[0], p[1]); });
 })(typeof window !== 'undefined' ? window.GenChibi : globalThis.GenChibi);

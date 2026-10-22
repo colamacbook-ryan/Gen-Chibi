@@ -8,7 +8,8 @@ const fs = require('fs'), path = require('path'), vm = require('vm');
 const ROOT = path.join(__dirname, '..');
 const args = process.argv.slice(2), frag = args.includes('--fragment'), pos = args.filter(a => !a.startsWith('--'));
 const demoId = pos[0] || 'tuLong30s', out = pos[1] || path.join(ROOT, 'choreo-' + demoId + '.html');
-const SCRIPTS = ['engine/core.js', 'engine/render.js', 'engine/sounds.js', 'engine/audio.js', 'engine/choreo.js', 'kinds/character/gen.core.js', 'kinds/khung/gen.khung.js', 'kinds/character/gen.choreo.js'];
+// một nguồn danh sách mã engine (engine/scripts.json, CNS-054): trang biên đạo không cần bộ phát phim / giọng / phông lời thoại / i18n
+const SCRIPTS = JSON.parse(fs.readFileSync(path.join(ROOT, 'engine/scripts.json'), 'utf8')).engine.filter(f => !/^engine\/(player|voices|fonts|i18n)\.js$/.test(f));
 const bundle = JSON.parse(fs.readFileSync(path.join(ROOT, 'studio/mau/tam-quoc.json'), 'utf8'));
 const version = fs.readFileSync(path.join(ROOT, 'VERSION'), 'utf8').trim();
 

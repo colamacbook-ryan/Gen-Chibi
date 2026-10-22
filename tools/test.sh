@@ -3,6 +3,8 @@
 #   1) cú pháp mọi tệp JS + script bash
 #   2) cổng kiểm của mọi nhân vật trong thư viện chính thức (chạy engine trong Node)
 #   2c/2d) item trang bị, cảnh (loại asset thứ hai, thứ ba)
+#   1c) CI chạy test trình duyệt: Playwright ghim bản, ma trận phủ đủ nhóm GC_ONLY (tools/test-ci-config.mjs) · 1d) danh sách mã engine một nguồn engine/scripts.json (tools/test-scripts.mjs)
+#   2j2) luật id của bộ khung: đòn khung không trùng activity / state, id cũ là bí danh + chuyển dữ liệu (tools/test-frame-ids.mjs)
 #   2o) xuất video v0.22 (tools/test-video.mjs): muxer MP4 / WebM, đồng hồ ảo, header trang xuất — phần trình duyệt: GC_ONLY=video node tools/test-browser.mjs
 #   3) MCP: bắt tay, danh sách tool, tạo nhân vật / linh kiện / item / cảnh, chặn dữ liệu xấu
 #   4) tự cập nhật end-to-end (tools/test-update.sh) + edge: launcher giám sát cloudflared, compose ghép -f, Caddy (tools/test-edge.sh)
@@ -54,6 +56,13 @@ grep -q '^## ' <<< "$RN" && { echo "   ✗ ghi chú Release tràn sang mục phi
 N191="$(bash tools/release-notes.sh v0.19.1)"; [[ "${N191%%$'\n'*}" == 'Ryan: "làm tiếp đi, sửa luôn CNS-146'* ]] || { echo "   ✗ release-notes.sh lấy sai mục v0.19.1"; exit 1; }
 [ -z "$(bash tools/release-notes.sh v0.1)" ] || { echo "   ✗ release-notes.sh khớp nhầm tiền tố (v0.1 ≠ v0.1x)"; exit 1; }
 echo "   ✓ ghi chú Release = mục CHANGELOG của VERSION (tiêu đề có mô tả, không tràn mục, không khớp nhầm tiền tố)"
+
+echo "1c) CI chạy test trình duyệt (v0.23 B6, CNS-032): Playwright ghim bản · ma trận phủ đủ nhóm GC_ONLY · release cần browser + video-mp4"
+node tools/test-ci-config.mjs || exit 1
+echo "1d) danh sách mã engine / Studio một nguồn (v0.23 B10, CNS-054): engine/scripts.json = index.html = trang xuất video = Node; không chép tay nơi khác"
+node tools/test-scripts.mjs || exit 1
+grep -q "^gen-chibi-v[^/]*/engine/scripts.json$" <<< "$PKG_LIST" || { echo "   ✗ gói phát hành thiếu engine/scripts.json (server/engine-node.js cần)"; exit 1; }
+echo "   ✓ gói phát hành có engine/scripts.json"
 
 echo "2) cổng kiểm thư viện"
 node -e '
@@ -529,7 +538,7 @@ node -e '
 const fs = require("fs"), os = require("os"), path = require("path"), vm = require("vm");
 const { MCP } = require("./server/mcp.js"); const { Store } = require("./server/store.js");
 const ctx = { window: {}, console }; vm.createContext(ctx);
-["engine/core.js", "engine/sounds.js", "engine/choreo.js", "kinds/character/gen.core.js", "kinds/khung/gen.khung.js", "kinds/character/gen.choreo.js", "engine/player.js"].forEach(f => vm.runInContext(fs.readFileSync(f, "utf8"), ctx, { filename: f }));
+require("./server/engine-node.js").engineScripts(".").forEach(f => vm.runInContext(fs.readFileSync(f, "utf8"), ctx, { filename: f }));   // một nguồn: engine/scripts.json (CNS-054)
 const GC = ctx.window.GenChibi, no = (c, msg) => { if (c) { console.log("   ✗", msg); process.exit(1); } };
 const m = new MCP({ engine: GC, store: new Store(fs.mkdtempSync(path.join(os.tmpdir(), "gc-p-"))), version: "t", system: {} });
 for (const f of ["van-phong-vui", "fun-office", "tam-quoc"]) no(m.importProject(JSON.parse(fs.readFileSync("studio/mau/" + f + ".json", "utf8")), {}).errors.length, f + " không qua cổng");
@@ -674,6 +683,8 @@ console.log("   ✓ " + M.behaviors + " hành vi không lặp · " + M.real.toFi
 ' || exit 1
 echo "2j) gói động tác: cổng chặn từng kiểu tấn công · hình học đòn tay không (đo độc lập) · bộ mẫu chặn bán theo nội dung · sao lưu tự đủ · dữ liệu cũ · hoạt ảnh trọn đòn · hợp đồng lỗi mọi tool"
 node tools/test-motion.js || exit 1
+echo "2j2) luật id của bộ khung (v0.23 B10, CNS-065): đòn khung không trùng activity / state · id cũ là bí danh ẩn (render / validate y hệt) · tác phẩm / kịch bản lưu chuyển sang id mới · gói không lấy được id cũ lẫn id khung"
+node tools/test-frame-ids.mjs || exit 1
 echo "2k) giọng AI (Google Gemini TTS) với mạng giả: lưu đệm, đổi model khi hết hạn mức, thẻ cảm xúc, không lộ key"
 node tools/test-voice.js || exit 1
 echo "2m) thư viện âm thanh: cổng kiểm gói âm (từng luật một ca sai, không mã, ≤ 60 node) · trùng tên chỉ ra gói giữ tên · 17 tên cũ · tự gán = bảng cũ · luật ghép S1–S7 · gói Tam Quốc"
@@ -843,7 +854,7 @@ for P in 7811 7813 7815 7821 7823 7825 7831 7833; do (echo > /dev/tcp/127.0.0.1/
 node tools/test-ingress.mjs || exit 1
 
 echo "4h) genchibi online (v0.21 P4): server + launcher thật, Cloudflare API giả, cloudflared giả — token trên dòng lệnh bị từ chối · không terminal + CNAME có sẵn → dừng, không đè · --token-stdin tới bậc mật khẩu (mã thoát 3 + mã setup) → password + recheck → xong · đổi địa chỉ cần --yes · proxy · WAF làm tay · nhiều tên miền · off dọn Cloudflare · có terminal hỏi ẩn · token không trong argv / env / log (shim + /proc) · đột biến curl -d · link tạm · máy kế thừa"
-for P in 7841 7843 7851 7853 7855 7861 7863; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done
+for P in 7841 7843 7851 7853 7855 7861 7863 7891 7895; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done
 node tools/test-online-cli.mjs || exit 1
 
 echo "5) tự cập nhật"

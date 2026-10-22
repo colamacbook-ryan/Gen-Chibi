@@ -5,13 +5,9 @@
 // window.AudioContext bằng một OfflineAudioContext giả vờ "running" (engine không cần sửa gì), gọi GC.audio.unlock() + sfx(name)
 // rồi startRendering(). Mỗi lần dựng nạp lại engine từ đầu (trạng thái sạch, MAX_FX về 0) và gieo Math.random theo seed → lặp lại được.
 // Trả về PCM float32 hai kênh + số node đã tạo. Chỉ số khách quan (đỉnh, RMS, LUFS xấp xỉ, trọng tâm phổ, ...) tính ở phía Node.
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
 
-export function loadPlaywright() {
-  try { return require('playwright'); } catch { /* không cài cục bộ */ }
-  try { return require('/opt/node22/lib/node_modules/playwright'); } catch { return null; }
-}
+import { loadPlaywright } from './pw.mjs';
+export { loadPlaywright };
 
 export const SR = 48000;
 

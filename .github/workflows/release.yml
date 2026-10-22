@@ -16,8 +16,11 @@ jobs:
   # CNS-236: bản phát hành không bao giờ ra nếu xuất video MP4 (Chrome thật, Windows / macOS) hỏng — cùng workflow với ci.yml
   video-mp4:
     uses: ./.github/workflows/video-mp4.yml
+  # v0.23 B6: bản phát hành không ra nếu bộ test trình duyệt (Ubuntu + Chromium ghim bản, mọi nhóm) đỏ — cùng workflow với ci.yml
+  browser:
+    uses: ./.github/workflows/browser.yml
   release:
-    needs: video-mp4
+    needs: [video-mp4, browser]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

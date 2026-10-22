@@ -407,7 +407,7 @@ else {
   no(!runs.every(r => /--require-mp4/.test(r) && /--require-ffmpeg/.test(r)) || !runs.some(r => !/--quality|--frame|--hidden/.test(r)) || !runs.some(r => /--hidden/.test(r)) || !runs.some(r => /--quality 1080p/.test(r) && !/--frame/.test(r)) || !runs.some(r => /--quality 1080p/.test(r) && /--frame 9x16/.test(r)),
     'video-mp4.yml chạy video-ci: mặc định + --hidden + --quality 1080p + --quality 1080p --frame 9x16 (đều --require-mp4 --require-ffmpeg): ' + JSON.stringify(runs));
   no(!/video-mp4:\n\s+uses: \.\/\.github\/workflows\/video-mp4\.yml/.test(ci), 'ci.yml gọi video-mp4.yml');
-  no(!/video-mp4:\n\s+uses: \.\/\.github\/workflows\/video-mp4\.yml/.test(rel) || !/\n  release:\n    needs: video-mp4\n/.test(rel), 'release.yml: job release CẦN video-mp4 (không phát hành khi nhánh MP4 hỏng)');
+  no(!/video-mp4:\n\s+uses: \.\/\.github\/workflows\/video-mp4\.yml/.test(rel) || !/\n  release:\n    needs: (video-mp4|\[([\w-]+, )*video-mp4(, [\w-]+)*\])\n/.test(rel), 'release.yml: job release CẦN video-mp4 (không phát hành khi nhánh MP4 hỏng; v0.23: needs [video-mp4, browser])');
   const vci = rd('tools/video-ci.mjs');
   no(!/--frame/.test(vci) || !/WANT\[0\] && st\.format\.height === WANT\[1\]/.test(vci), 'video-ci.mjs có --frame và kiểm cỡ khung của tệp ra');
   if (bad === b0) ok('CI: video-mp4.yml (Windows + macOS, Chrome thật) chạy mặc định / tab nền / 1080p / 9:16 1080p, dùng chung cho ci.yml và release.yml — release cần nó trước khi phát hành');

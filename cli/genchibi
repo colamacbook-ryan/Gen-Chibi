@@ -19,8 +19,6 @@ _en() {
     st_up) F="● running · v%s · %s · mode %s" ;;
     st_down) F="○ not running · mode %s" ;;
     st_releases) F="  installed: %s· in use %s" ;;
-    st_mcp_named) F="  MCP to the Internet: %s (genchibi link shows the connect link)" ;;
-    st_mcp_quick) F="  MCP to the Internet: temporary tunnel %s (genchibi link)" ;;
     st_mcp_off) F="  Online: off — this machine only (genchibi online --help: domain + HTTPS + MCP in one step)" ;;
     st_online) F="  Online: %s (mode %s · genchibi online shows each step)" ;;
     st_online_wait) F="  Online (temporary — waiting for the owner password): %s (mode %s). Set it at %s/setup with the setup code above, or here: genchibi password — the app then finishes going online by itself" ;;
@@ -53,19 +51,8 @@ _en() {
     tok_bad) F="The token has invalid characters — copy it again (letters, digits, _ . - only)." ;;
     tok_set) F="GC_GITHUB_TOKEN written to .env; restarting to apply…" ;;
     tok_cleared) F="GC_GITHUB_TOKEN removed; restarting…" ;;
-    tun_no_cf) F="! cloudflared is missing: MCP is not reachable from the Internet yet" ;;
-    wait_link) F="Waiting for the link to work over the Internet" ;;
-    wait_fail) F=" — not reachable after 2 minutes (new DNS can take a few more minutes). Check again: genchibi link --check" ;;
-    link_none) F="MCP is not exposed yet. Run: genchibi expose <domain>   (or genchibi expose --quick for a quick test)" ;;
     bad_domain) F="Invalid domain: %s" ;;
-    off_1) F="MCP to the Internet is off. Keys and tunnel config are kept in %s (reopen quickly with genchibi expose <domain>)." ;;
-    off_2) F="The DNS record on Cloudflare remains, pointing at the stopped tunnel." ;;
-    not_exposed) F="MCP is not exposed to the Internet." ;;
-    rotated) F="Key changed — the old link no longer works." ;;
-    bad_opt_expose) F="Unknown option %s (genchibi expose --help)" ;;
     bad_opt) F="Unknown option %s" ;;
-    link_ok) F="✓ MCP answers over the Internet" ;;
-    link_fail) F="✗ Could not reach %s — see genchibi status, genchibi logs" ;;
     hdr_token) F="Authorization: Bearer <token — see GC_API_TOKEN in %s/.env>" ;;
     hdr_token_file) F="Authorization: Bearer <token — see %s/data/owner-token>" ;;
     skill_usage) F="skill: claude | cursor | gemini | codex | generic" ;;
@@ -83,7 +70,8 @@ _en() {
     lang_restart) F="Restarting the app so the Studio default follows…" ;;
     lang_norun) F="The app is not running — the new default applies at the next start (genchibi start)." ;;
     lang_note) F="This is the default for the CLI and for everyone who opens the Studio. Each user can still switch language in the Studio (language switch); that choice is remembered in their browser." ;;
-    deprecated) F="Deprecated: genchibi %s is an alias of genchibi %s and will be removed in v0.23 — running that now." ;;
+    removed) F="genchibi %s was removed in v0.23 — use: genchibi %s" ;;
+    gc_tunnel) F="! .env still has GC_TUNNEL=%s from the old genchibi expose (removed in v0.23) — that tunnel is no longer started. Move this machine to Go online: genchibi online migrate" ;;
     caddy_native) F="genchibi online --caddy needs Docker mode: Caddy publishes ports 80/443 (below 1024). Native mode: use the Cloudflare path instead (Studio › System › Go online › Cloudflare)." ;;
     caddy_busy) F="Port(s) %s already in use on this machine — Caddy was NOT turned on (the app keeps running). Stop the service holding them, or use the Cloudflare path (Studio › System › Go online › Cloudflare, no open ports needed)." ;;
     caddy_old) F="The running version has no edge Caddy yet (needs v0.21 or newer) — run genchibi update first." ;;
@@ -175,8 +163,6 @@ _vi() {
     st_up) F="● đang chạy · v%s · %s · chế độ %s" ;;
     st_down) F="○ không chạy · chế độ %s" ;;
     st_releases) F="  bản cài: %s· đang dùng %s" ;;
-    st_mcp_named) F="  MCP ra ngoài: %s (genchibi link để xem link nối)" ;;
-    st_mcp_quick) F="  MCP ra ngoài: tunnel tạm %s (genchibi link)" ;;
     st_mcp_off) F="  Ra Internet: tắt — chỉ máy này (genchibi online --help: tên miền + HTTPS + MCP một bước)" ;;
     st_online) F="  Ra Internet: %s (chế độ %s · genchibi online xem từng bậc)" ;;
     st_online_wait) F="  Ra Internet (tạm — chờ mật khẩu chủ): %s (chế độ %s). Đặt mật khẩu ở %s/setup bằng mã setup ở trên, hoặc tại đây: genchibi password — app tự hoàn tất lên mạng" ;;
@@ -209,19 +195,8 @@ _vi() {
     tok_bad) F="Token có ký tự lạ — chép lại (chỉ gồm chữ, số, _ . -)." ;;
     tok_set) F="Đã ghi GC_GITHUB_TOKEN vào .env; khởi động lại để áp dụng…" ;;
     tok_cleared) F="Đã xoá GC_GITHUB_TOKEN; khởi động lại…" ;;
-    tun_no_cf) F="! Thiếu cloudflared: MCP chưa ra ngoài được" ;;
-    wait_link) F="Chờ link thông qua Internet" ;;
-    wait_fail) F=" — chưa thông sau 2 phút (DNS mới có thể cần thêm vài phút). Kiểm lại: genchibi link --check" ;;
-    link_none) F="MCP chưa mở ra ngoài. Chạy: genchibi expose <tên-miền>   (hoặc genchibi expose --quick để thử nhanh)" ;;
     bad_domain) F="Tên miền không hợp lệ: %s" ;;
-    off_1) F="Đã tắt MCP ra ngoài. Giữ khoá và cấu hình tunnel trong %s (mở lại nhanh bằng genchibi expose <tên-miền>)." ;;
-    off_2) F="Bản ghi DNS trên Cloudflare vẫn còn, trỏ vào tunnel đã tắt." ;;
-    not_exposed) F="MCP chưa mở ra ngoài." ;;
-    rotated) F="Đã đổi khoá — link cũ không dùng được nữa." ;;
-    bad_opt_expose) F="Không hiểu tuỳ chọn %s (genchibi expose --help)" ;;
     bad_opt) F="Không hiểu tuỳ chọn %s" ;;
-    link_ok) F="✓ MCP trả lời qua Internet" ;;
-    link_fail) F="✗ Chưa gọi được %s — xem genchibi status, genchibi logs" ;;
     hdr_token) F="Authorization: Bearer <token — xem GC_API_TOKEN trong %s/.env>" ;;
     hdr_token_file) F="Authorization: Bearer <token — xem %s/data/owner-token>" ;;
     skill_usage) F="skill: claude | cursor | gemini | codex | generic" ;;
@@ -239,7 +214,8 @@ _vi() {
     lang_restart) F="Khởi động lại app để giao diện mặc định đổi theo…" ;;
     lang_norun) F="App đang không chạy — mặc định mới có hiệu lực ở lần chạy tới (genchibi start)." ;;
     lang_note) F="Đây là mặc định cho CLI và cho mọi người mở Studio. Mỗi người vẫn đổi ngôn ngữ riêng trong Studio được (nút chuyển ngôn ngữ); lựa chọn đó được nhớ trong trình duyệt của họ." ;;
-    deprecated) F="Sắp bỏ: genchibi %s là bí danh của genchibi %s, sẽ bỏ ở v0.23 — đang chạy lệnh đó." ;;
+    removed) F="genchibi %s đã bỏ ở v0.23 — dùng: genchibi %s" ;;
+    gc_tunnel) F="! .env còn GC_TUNNEL=%s của genchibi expose cũ (đã bỏ ở v0.23) — tunnel đó không còn được chạy. Chuyển máy này sang Go online: genchibi online migrate" ;;
     caddy_native) F="genchibi online --caddy cần chế độ Docker: Caddy mở cổng 80/443 (dưới 1024). Chế độ native: dùng đường Cloudflare (Studio › Hệ thống › Lên mạng › Cloudflare)." ;;
     caddy_busy) F="Cổng %s trên máy này đang bị chiếm — CHƯA bật Caddy (app vẫn chạy). Dừng dịch vụ đang giữ cổng, hoặc dùng đường Cloudflare (Studio › Hệ thống › Lên mạng › Cloudflare, không cần mở cổng)." ;;
     caddy_old) F="Bản đang chạy chưa có edge Caddy (cần v0.21 trở lên) — chạy genchibi update trước." ;;
@@ -350,7 +326,6 @@ pick_ui "$UI_SRC"
 MODE="${GC_MODE:-docker}"; PORT="${GC_PORT:-7480}"
 URL="http://127.0.0.1:$PORT"
 PIDF="$HOME_DIR/logs/launcher.pid"; LOG="$HOME_DIR/logs/gen-chibi.log"
-TDIR="$HOME_DIR/tunnel"; TPID="$HOME_DIR/logs/tunnel.pid"; TLOG="$HOME_DIR/logs/tunnel.log"
 
 # token chủ (v0.21, CNS-195): GC_API_TOKEN trong .env → data/owner-token (server tự sinh khi .env trống). Đọc lúc gọi (server có thể vừa sinh tệp).
 # Không export, không in ra màn hình; đi qua stdin (curl -K -), không nằm trong argv → không lộ trong `ps`
@@ -416,6 +391,7 @@ own_fix() {
 }
 start() {
   guard_exposure
+  legacy_tunnel_down
   if [ "$MODE" = docker ]; then own_fix data run logs; sync_compose; edge_prepare; compose up -d --quiet-pull 2>&1 | grep -vE "Creating|Created|Starting|Network|Container .* (Running|Waiting)" || true
   else
     running_native && { m already_running "$(cat "$PIDF")"; return; }
@@ -423,13 +399,12 @@ start() {
     [ -n "${GC_EXTRA_CA:-}" ] && export NODE_EXTRA_CA_CERTS="$GC_EXTRA_CA"
     GC_HOME="$HOME_DIR" GC_PORT="$PORT" nohup node "$HOME_DIR/launcher.js" >> "$LOG" 2>&1 &
     echo $! > "$PIDF"; m started "$!"
-    tunnel_start
   fi
 }
 stop() {
+  legacy_tunnel_down
   if [ "$MODE" = docker ]; then compose stop
   else
-    tunnel_stop
     if running_native; then kill "$(cat "$PIDF")"; rm -f "$PIDF"; m stopped; else m not_running; fi
   fi
 }
@@ -438,13 +413,9 @@ status() {
   if [ -n "$h" ]; then m st_up "$(echo "$h" | json version | sed 's/^v//')" "$URL" "$MODE"; else m st_down "$MODE"; fi
   local sc; sc="$(setup_code)"; [ -z "$sc" ] || m st_setup "$sc" "$(setup_until)"
   m st_releases "$(cd releases 2>/dev/null && ls | tr '\n' ' ')" "$(basename "$(readlink current)")"
-  case "${GC_TUNNEL:-}" in
-    named) m st_mcp_named "${GC_PUBLIC_URL:-?}" ;;   # máy còn dùng genchibi expose cũ (bỏ ở v0.23)
-    quick) m st_mcp_quick "$(quick_url)" ;;
-    *) if [ -n "$h" ]; then oapi GET /api/online; fi
-       if [ "$OCODE" = 200 ] && [ "$(jv flow.waitingPassword)" = true ] && [ -n "$(jv publicUrlPending)" ]; then m st_online_wait "$(jv publicUrlPending)" "$(jv flow.mode)" "$(jv publicUrlPending)"   # CNS-209: trạng thái TẠM, không phải "off"
-       elif [ "$OCODE" = 200 ] && [ "$(jv mode)" != off ] && [ -n "$(jv publicUrl)" ]; then m st_online "$(jv publicUrl)" "$(jv mode)"; else m st_mcp_off; fi ;;
-  esac
+  if [ -n "$h" ]; then oapi GET /api/online; fi
+  if [ "$OCODE" = 200 ] && [ "$(jv flow.waitingPassword)" = true ] && [ -n "$(jv publicUrlPending)" ]; then m st_online_wait "$(jv publicUrlPending)" "$(jv flow.mode)" "$(jv publicUrlPending)"   # CNS-209: trạng thái TẠM, không phải "off"
+  elif [ "$OCODE" = 200 ] && [ "$(jv mode)" != off ] && [ -n "$(jv publicUrl)" ]; then m st_online "$(jv publicUrl)" "$(jv mode)"; else m st_mcp_off; fi
 }
 update() {
   m upd_checking
@@ -982,7 +953,12 @@ online_cmd() {
     migrate)
       opost /api/online/migrate '{}'
       if [ "$OCODE" = 404 ]; then m on_migrate_old >&2; return 1; fi
-      case "$OCODE" in 2??) m on_migrated; online_status ;; *) online_err; return 1 ;; esac ;;
+      case "$OCODE" in 2??) m on_migrated
+        # máy còn GC_TUNNEL (genchibi expose ≤ v0.22): cấu hình đã sang Go online → dừng tunnel cũ còn sót, bỏ GC_TUNNEL / profile cũ khỏi .env (hết dòng nhắc)
+        if [ -n "${GC_TUNNEL:-}" ]; then legacy_tunnel_down; set_env GC_TUNNEL ""; GC_TUNNEL=""
+          case "${COMPOSE_PROFILES:-}" in tunnel|quick) set_env COMPOSE_PROFILES ""; COMPOSE_PROFILES="" ;; esac; fi
+        online_status ;;
+        *) online_err; return 1 ;; esac ;;
     *) m bad_opt "$sub" >&2; online_usage >&2; return 2 ;;
   esac
 }
@@ -1045,131 +1021,32 @@ lang_cmd() {
   fi
   m lang_note
 }
-origin_url() { if [ "$MODE" = docker ]; then echo "http://app:7480"; else echo "http://127.0.0.1:$PORT"; fi; }
-quick_url() {
-  if [ "$MODE" = docker ]; then compose logs --no-log-prefix tunnel-quick 2>/dev/null | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1 || true
-  else grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' "$TLOG" 2>/dev/null | tail -1 || true; fi
-}
-tunnel_start() { # chế độ Node: chạy cloudflared nền (Docker do compose lo)
-  [ "$MODE" = docker ] && return 0
-  [ -n "${GC_TUNNEL:-}" ] || return 0
-  [ -f "$TPID" ] && kill -0 "$(cat "$TPID")" 2>/dev/null && return 0
-  command -v cloudflared >/dev/null || { m tun_no_cf; return 0; }
-  : > "$TLOG"
-  if [ "$GC_TUNNEL" = named ]; then HOME="$TDIR" nohup cloudflared --no-autoupdate tunnel --config "$TDIR/config.yml" run >> "$TLOG" 2>&1 &
-  else HOME="$TDIR" nohup cloudflared --no-autoupdate tunnel --url "$(origin_url)" >> "$TLOG" 2>&1 & fi
-  echo $! > "$TPID"
-}
-tunnel_stop() { [ -f "$TPID" ] && { kill "$(cat "$TPID")" 2>/dev/null || true; rm -f "$TPID"; }; return 0; }
 apply_env() { # khởi động lại để app nhận khoá/tên miền/ngôn ngữ mới
   if [ "$MODE" = docker ]; then sync_compose; edge_prepare; compose up -d --quiet-pull 2>&1 | grep -vE "Creating|Created|Starting|Started|Stopping|Stopped|Removing|Removed|Recreate|Network|Container .* (Running|Waiting)" || true
-  else tunnel_stop; stop >/dev/null; start >/dev/null; fi
+  else stop >/dev/null; start >/dev/null; fi
 }
-link_url() {
-  local base
-  if [ "${GC_TUNNEL:-}" = quick ]; then base="$(quick_url)"; else base="${GC_PUBLIC_URL:-}"; fi
-  [ -n "${GC_TUNNEL:-}" ] && [ -n "$base" ] && [ -n "${GC_MCP_KEY:-}" ] && echo "$base/mcp/$GC_MCP_KEY"
+# ---------------------------------------------------------------- genchibi expose / link: ĐÃ BỎ ở v0.23 (bí danh từ v0.21.3; CHANGELOG v0.22.0 báo trước)
+# Không chạy gì: một dòng chỉ lệnh online tương ứng (stderr), thoát 2. Không còn nhánh cũ (expose --off dọn .env, --rotate, link có khoá).
+removed_cmd() {
+  local old="$1" a="${2:-}" new
+  if [ "$old" = link ]; then case "$a" in --check) new="online recheck" ;; *) new="online" ;; esac
+  else case "$a" in --quick) new="online quick" ;; --off) new="online off" ;; ""|-*|help) new="online --help" ;; *) new="online cloudflare $a" ;; esac; fi
+  m removed "$old${a:+ $a}" "$new" >&2
+  exit 2
+}
+# Máy còn GC_TUNNEL trong .env (tunnel do genchibi expose ≤ v0.22 tạo; profiles tunnel / quick đã bỏ khỏi docker-compose.yml): start / update / status
+# in MỘT dòng nhắc genchibi online migrate. Tunnel cũ không còn được chạy; tiến trình / container cũ còn sót thì dừng (start, stop, migrate) —
+# không để thứ mở ra Internet mà genchibi stop không quản được.
+legacy_tunnel_note() { [ -z "${GC_TUNNEL:-}" ] || m gc_tunnel "$GC_TUNNEL" >&2; return 0; }
+legacy_tunnel_down() {
+  local pf="$HOME_DIR/logs/tunnel.pid" p
+  if [ -f "$pf" ]; then
+    p="$(tr -dc 0-9 < "$pf")"
+    if [ -n "$p" ]; then case "$(ps -p "$p" -o command= 2>/dev/null)" in *cloudflared*) kill "$p" 2>/dev/null || true ;; esac; fi   # chỉ đúng cloudflared cũ (pid có thể đã bị dùng lại)
+    rm -f "$pf"
+  fi
+  if [ "$MODE" = docker ] && [ -n "${GC_TUNNEL:-}" ]; then dk rm -f gen-chibi-tunnel gen-chibi-tunnel-quick >/dev/null 2>&1 || true; fi
   return 0
-}
-probe() { # probe <link> → 0 khi MCP trả lời qua Internet. Link đưa qua stdin, không lộ trong `ps`.
-  printf 'url = "%s"\n' "$1" | curl -fsS -m 10 -K - -X POST -H 'Content-Type: application/json' \
-    -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"genchibi-check","version":"1"}}}' 2>/dev/null | grep -q '"gen-chibi"'
-}
-wait_link() {
-  local u="$1" i
-  mn wait_link
-  for i in $(seq 1 "${GC_LINK_WAIT:-40}"); do probe "$u" && { echo " ✓"; return 0; }; printf "."; sleep 3; done
-  m wait_fail; return 1
-}
-print_link() {
-  local u; u="$(link_url)"
-  [ -n "$u" ] || { m link_none; return 1; }
-  if [ "$UI" = vi ]; then cat <<EOF
-
-Link MCP — giữ kín, ai có link là dùng được MCP của bạn (không mở được Studio hay cài đặt):
-  $u
-
-Nối agent:
-  Claude Code      claude mcp add -s user --transport http gen-chibi $u
-  Claude web/app   Customize › Connectors › Add custom connector › dán link
-  Cursor/khác      {"mcpServers":{"gen-chibi":{"url":"$u"}}}
-Lộ link: genchibi expose --rotate (link cũ chết ngay).
-EOF
-  else cat <<EOF
-
-MCP link — keep it secret: anyone with the link can use your MCP (it cannot open the Studio or settings):
-  $u
-
-Connect an agent:
-  Claude Code      claude mcp add -s user --transport http gen-chibi $u
-  Claude web/app   Customize › Connectors › Add custom connector › paste the link
-  Cursor/others    {"mcpServers":{"gen-chibi":{"url":"$u"}}}
-Link leaked: genchibi expose --rotate (the old link stops working immediately).
-EOF
-  fi
-  # OAuth (v0.19): không cần chép khoá — dán địa chỉ gốc vào Claude, bấm Cấp phép trên web. Cần GC_PUBLIC_URL (named tunnel); tunnel cũ phải chạy lại expose để mở thêm đường OAuth.
-  if [ "${GC_TUNNEL:-}" = named ] && [ -n "${GC_PUBLIC_URL:-}" ]; then
-    if [ "$UI" = vi ]; then cat <<EOF
-
-Kết nối OAuth (khuyên dùng — không phải chép khoá):
-  Claude web/app   Customize › Connectors › Add custom connector › dán ${GC_PUBLIC_URL}/mcp › Connect › "Cấp phép" (nhập GC_API_TOKEN, chọn mức quyền)
-  Claude Code      claude mcp add --transport http gen-chibi ${GC_PUBLIC_URL}/mcp
-  Quản lý / thu hồi: Studio › Hệ thống › Kết nối agent.  (Cập nhật từ bản trước v0.19: chạy lại genchibi expose ${GC_PUBLIC_URL#https://} để mở thêm đường OAuth)
-EOF
-    else cat <<EOF
-
-OAuth connection (recommended — no key to copy):
-  Claude web/app   Customize › Connectors › Add custom connector › paste ${GC_PUBLIC_URL}/mcp › Connect › "Authorize" (enter GC_API_TOKEN, pick a permission level)
-  Claude Code      claude mcp add --transport http gen-chibi ${GC_PUBLIC_URL}/mcp
-  Manage / revoke: Studio › System › Agent connections.  (Updated from a version before v0.19: run genchibi expose ${GC_PUBLIC_URL#https://} again to open the OAuth routes)
-EOF
-    fi
-  fi
-}
-expose_off() {
-  set_env GC_TUNNEL ""; set_env GC_PUBLIC_URL ""
-  if [ "$MODE" = docker ]; then
-    set_env COMPOSE_PROFILES ""
-    compose --profile tunnel --profile quick rm -sf tunnel tunnel-quick >/dev/null 2>&1 || true
-  fi
-  apply_env
-  m off_1 "$TDIR"
-  m off_2
-}
-# ---------------------------------------------------------------- expose / link: bí danh mỏng của genchibi online (CNS-204, spec §3.5; bỏ ở v0.23)
-# Một dòng nhắc (stderr) rồi chạy đúng lệnh online — cùng API /api/online/*, không còn đường cloudflared login riêng.
-#   expose <tên-miền> [--overwrite-dns] → online cloudflare <tên-miền> [--overwrite-dns]   (Cloudflare Tunnel; API token thay cho cloudflared login)
-#   expose --quick → online quick · expose --off → online off · expose (không đối số) / --help → online --help
-#   link → online (trạng thái: địa chỉ Studio + MCP) · link --check → online recheck (kiểm lại từ Internet)
-# Máy còn chạy tunnel do expose CŨ tạo (.env có GC_TUNNEL — profile tunnel / quick giữ thêm một bản, §3.5): expose --off dọn cấu hình .env đó
-# (expose_off), link in thêm link có khoá, expose --rotate đổi khoá của link đó. Các nhánh này mất cùng profile ở v0.23.
-legacy_note() { m deprecated "$1" "$2" >&2; }
-expose() {
-  local a="${1:-}"
-  case "$a" in
-    ""|-h|--help|help) legacy_note "expose${a:+ $a}" "online --help"; online_usage ;;
-    --quick) legacy_note "expose --quick" "online quick"; online_cmd quick ;;
-    --off)
-      if [ -n "${GC_TUNNEL:-}" ]; then legacy_note "expose --off" "online off"; expose_off
-      else legacy_note "expose --off" "online off"; online_cmd off; fi ;;
-    --rotate)
-      [ -n "${GC_TUNNEL:-}" ] || { m not_exposed; exit 1; }
-      set_env GC_MCP_KEY "$(rand_hex 24)"; apply_env; m rotated
-      wait_link "$(link_url)" || true; print_link ;;
-    -*) m bad_opt_expose "$a" >&2; exit 1 ;;
-    *) [ -z "${2:-}" ] || [ "$2" = --overwrite-dns ] || { m bad_opt "$2" >&2; exit 1; }
-       legacy_note "expose $a${2:+ $2}" "online cloudflare $a${2:+ $2}"; online_cmd cloudflare "$a" ${2:+"$2"} ;;
-  esac
-}
-link_cmd() {
-  case "${1:-}" in
-    --check) legacy_note "link --check" "online recheck"
-      local u; u="$(link_url)"
-      if [ -n "$u" ]; then if probe "$u"; then m link_ok; else m link_fail "$u"; exit 1; fi   # link có khoá của tunnel expose cũ
-      else online_cmd recheck; fi ;;
-    "") legacy_note link online; online_cmd status; [ -z "$(link_url)" ] || print_link ;;
-    *) m bad_opt "$1" >&2; exit 2 ;;
-  esac
 }
 
 # genchibi agent …: bootstrap cho agent BẤT KỲ hãng nào (INT-05) — cấu hình nối từng client, hướng dẫn, schema tool, cài skill.
@@ -1177,7 +1054,7 @@ link_cmd() {
 agent_curl() { auth_cfg | curl -fsS -K - ${1+"$@"}; }
 agent_connect() {
   local u link hdr=""
-  u="$URL/mcp"; link="$(link_url)"
+  u="$URL/mcp"; link=""   # link có khoá của genchibi expose cũ đã bỏ ở v0.23; Go online dùng OAuth (<địa-chỉ>/mcp)
   # link Internet tự mang khoá (không cần token — đừng dán token toàn quyền vào client bên thứ ba); địa chỉ máy này mới cần token nếu chủ đặt
   # v0.21: bản cài nào cũng có token chủ (.env hoặc data/owner-token) → địa chỉ máy này luôn cần header; KHÔNG in token, chỉ chỉ chỗ đọc
   if [ -z "$link" ]; then if [ -n "${GC_API_TOKEN:-}" ]; then hdr="$(m hdr_token "$HOME_DIR")"; else hdr="$(m hdr_token_file "$HOME_DIR")"; fi; fi
@@ -1264,7 +1141,6 @@ genchibi — quản lý gen-chibi ($HOME_DIR, chế độ $MODE)
   backup | restore <tệp>            sao lưu / khôi phục dữ liệu
   mcp                               cầu MCP (stdio) cho agent: claude mcp add gen-chibi -- genchibi mcp
   online [caddy|cloudflare|proxy|quick|recheck|off]   ra Internet một bước: tên miền + HTTPS + MCP (genchibi online --help)
-  expose | link                     (cũ, bí danh của online, bỏ ở v0.23) expose <tên-miền> = online cloudflare · --quick = online quick · --off = online off · link = online
   agent connect|guide|tools|skill   bootstrap cho agent mọi hãng: cấu hình nối, hướng dẫn, schema tool, cài skill
   token [giá-trị|--clear]           đặt token GitHub (repo private) cho tự cập nhật; bỏ trống = nhập ẩn
                                     (KHÔNG phải token chủ: token chủ là GC_API_TOKEN trong .env, hoặc data/owner-token — CLI tự đọc)
@@ -1281,7 +1157,6 @@ genchibi — manage gen-chibi ($HOME_DIR, mode $MODE)
   backup | restore <file>           back up / restore data
   mcp                               MCP bridge (stdio) for agents: claude mcp add gen-chibi -- genchibi mcp
   online [caddy|cloudflare|proxy|quick|recheck|off]   go online in one step: domain + HTTPS + MCP (genchibi online --help)
-  expose | link                     (deprecated aliases of online, removed in v0.23) expose <domain> = online cloudflare · --quick = online quick · --off = online off · link = online
   agent connect|guide|tools|skill   bootstrap for agents of any vendor: connect config, guide, tool schema, skill install
   token [value|--clear]             set the GitHub token (private repo) for auto-update; empty = hidden prompt
                                     (NOT the owner token: that is GC_API_TOKEN in .env, or data/owner-token — the CLI reads it itself)
@@ -1294,10 +1169,10 @@ EOF
 }
 
 case "${1:-help}" in
-  start) start ;; stop) stop ;; restart) stop; start ;; status) status ;; update) update ;;
+  start) legacy_tunnel_note; start ;; stop) stop ;; restart) legacy_tunnel_note; stop; start ;; status) legacy_tunnel_note; status ;; update) legacy_tunnel_note; update ;;
   logs) logs ;; backup) backup ;; restore) shift; restore "${1:-}" ;; uninstall) uninstall ;;
   mcp) mcp ;; open) open_ui ;; version) status ;; password) password_cmd ;;
-  expose) shift; expose ${1+"$@"}; exit $? ;; link) shift; link_cmd ${1+"$@"}; exit $? ;;
+  expose|link) removed_cmd "$1" "${2:-}" ;;   # bỏ ở v0.23 — thoát 2
   online) shift; online_cmd ${1+"$@"}; exit $? ;;
   token|github-token) shift; token_cmd "${1:-}" ;;
   lang|language) shift; lang_cmd "${1:-}" ;;

@@ -259,6 +259,8 @@ class MCP {
     this.GC = engine;
     this.smokeMs = smokeMs || 4000;
     this.store = store;
+    // CNS-065: tác phẩm lưu với id đòn khung cũ (thrust / rage / victory / salute / wave) → id mới khi đọc / ghi (engine/choreo.js migrateWork)
+    if (store && typeof store.setWorkMigration === 'function' && engine.choreo && engine.choreo.migrateWork) store.setWorkMigration(w => engine.choreo.migrateWork(w));
     this.version = version;
     this.system = system || null;
     this.restarting = false;

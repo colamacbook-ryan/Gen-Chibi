@@ -29,7 +29,7 @@ const HOST = process.env.GC_LISTEN || '127.0.0.1';   // trong Docker đặt 0.0.
 // Token chủ (T): GC_API_TOKEN; trống thì server tự sinh data/owner-token (CNS-195) — xem auth.loadToken. Bản cài nào cũng có token (v0.21)
 const ENV_TOKEN = process.env.GC_API_TOKEN || '';
 // Link MCP có khoá (https://<tên miền>/mcp/<GC_MCP_KEY>): chỉ cấp quyền MCP, không mở Studio hay /api.
-// Dùng cho agent không đặt được header (Claude web/desktop Connectors). Đổi khoá: genchibi expose --rotate.
+// Dùng cho agent không đặt được header (Claude web/desktop Connectors). Đổi khoá: sửa GC_MCP_KEY trong .env rồi genchibi restart (expose --rotate bỏ ở v0.23).
 const MCP_KEY = process.env.GC_MCP_KEY || '';
 if (MCP_KEY && !/^[A-Za-z0-9_-]{24,}$/.test(MCP_KEY)) { console.error('GC_MCP_KEY must be at least 24 characters of [A-Za-z0-9_-].'); process.exit(2); }
 function safeEq(x, y) {

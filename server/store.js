@@ -24,6 +24,7 @@ class Store {
     this.verDir = path.join(dataDir, 'versions');
     this.trashDir = path.join(dataDir, 'trash');
     this.eventDir = path.join(dataDir, 'events');
+    this.workMigrate = null;   // setWorkMigration
     this.partDir = path.join(dataDir, 'parts');
     this.itemDir = path.join(dataDir, 'items');
     this.sceneDir = path.join(dataDir, 'scenes');
@@ -145,9 +146,16 @@ class Store {
       .map(w => ({ id: w.id, title: w.title, project: w.project || '', shots: (w.shots || []).length, done: (w.shots || []).filter(s => s.event).length, version: w.version, savedAt: w.savedAt }))
       .sort((a, b) => String(b.savedAt).localeCompare(String(a.savedAt)));
   }
-  getWork(id) { return /^[a-z0-9][a-z0-9-]{0,63}$/.test(String(id)) ? readJSON(path.join(this.workDir, id + '.json'), null) : null; }
+  // chuyển dữ liệu tác phẩm cũ lúc đọc / ghi (MCP đặt theo engine — CNS-065: id đòn khung cũ → id mới). Đọc: chỉ đổi bản trả về, tệp đổi ở lần ghi sau.
+  setWorkMigration(fn) { this.workMigrate = typeof fn === 'function' ? fn : null; }
+  getWork(id) {
+    const w = /^[a-z0-9][a-z0-9-]{0,63}$/.test(String(id)) ? readJSON(path.join(this.workDir, id + '.json'), null) : null;
+    if (w && this.workMigrate) this.workMigrate(w);
+    return w;
+  }
   saveWork(w) {
     if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(String(w.id || ''))) throw Object.assign(new Error('id tác phẩm không hợp lệ'), { code: 400 });
+    if (this.workMigrate) this.workMigrate(w);
     const file = path.join(this.workDir, w.id + '.json'), old = readJSON(file, null);
     const rec = Object.assign({}, w, { version: old ? (old.version || 1) + 1 : 1, savedAt: new Date().toISOString() });
     if (old) writeJSON(path.join(this.verDir, 'works~' + w.id, old.version + '.json'), old);
@@ -197,10 +205,15 @@ class Store {
       return e && { id: e.id, title: e.event && e.event.title, steps: e.event && e.event.steps ? e.event.steps.length : 0, author: e.author || '', savedAt: e.savedAt };
     }).filter(Boolean).sort((a, b) => String(b.savedAt).localeCompare(String(a.savedAt)));
   }
-  getEvent(id) { return EVENT_ID.test(id) ? readJSON(path.join(this.eventDir, id + '.json'), null) : null; }
+  getEvent(id) {
+    const e = EVENT_ID.test(id) ? readJSON(path.join(this.eventDir, id + '.json'), null) : null;
+    if (e && this.workMigrate) this.workMigrate(e);   // { event: { steps } } — cùng luật chuyển với tác phẩm
+    return e;
+  }
   saveEvent(event, author) {
     const id = slug(event.title) + '-' + Date.now().toString(36);
     const rec = { id, event, author: String(author || '').slice(0, 80), savedAt: new Date().toISOString() };
+    if (this.workMigrate) this.workMigrate(rec);
     writeJSON(path.join(this.eventDir, id + '.json'), rec);
     return rec;
   }

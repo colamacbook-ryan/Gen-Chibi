@@ -1,0 +1,44 @@
+# Bộ test trình duyệt (tools/test-browser.mjs) trên Ubuntu — B6 v0.23 (CNS-032, CNS-258). Dùng CHUNG cho ci.yml (mỗi lần đẩy main / PR) và
+# release.yml (không phát hành nếu nhóm nào đỏ) — một nơi định nghĩa, như video-mp4.yml.
+# Playwright + Chromium CHỈ là công cụ CI, cài toàn cục trong job này theo bản GHIM (không vào package.json, không vào gói phát hành; sản phẩm vẫn
+# không có phụ thuộc npm lúc chạy). Playwright 1.56.1 ghim luôn bản Chromium (build 1194 = Chromium 141) — đổi bản: sửa PLAYWRIGHT_VERSION dưới đây
+# (test.sh 2v kiểm bản ghim đúng dạng X.Y.Z và ma trận phủ đủ nhóm của bộ test).
+# Mỗi nhóm GC_ONLY một máy riêng, song song: cổng cố định của từng nhóm không giành nhau, một nhóm đỏ không che nhóm khác (fail-fast: false).
+# Runner GitHub chạy bằng user thường (runner, không phải root — L-77): bộ test không giả định root.
+name: browser
+on:
+  workflow_call:
+permissions:
+  contents: read
+env:
+  PLAYWRIGHT_VERSION: '1.56.1'
+jobs:
+  browser:
+    name: browser (${{ matrix.group }})
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [core, auth, bubble, lib, voice, dock, oauth, online, i18n, video]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Playwright + Chromium (bản ghim, chỉ cho CI)
+        run: |
+          npm install -g --no-fund --no-audit "playwright@${PLAYWRIGHT_VERSION}"
+          playwright install --with-deps chromium
+          echo "user: $(id -un) (uid $(id -u)) · node $(node -v) · playwright $(playwright --version)"
+          node --input-type=module -e "import { loadPlaywright } from './tools/pw.mjs'; const pw = loadPlaywright(); const b = await pw.chromium.launch(); console.log('Chromium ' + b.version()); await b.close();"
+      # nhóm video so khung giải mã lại bằng ffmpeg (không có thì bỏ phần so đó) — runner có sẵn thì dùng, không thì cài từ apt
+      - name: ffmpeg (nhóm video)
+        if: matrix.group == 'video'
+        run: |
+          command -v ffmpeg >/dev/null 2>&1 || { sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends ffmpeg; }
+          ffmpeg -hide_banner -version | head -1
+      - name: test-browser (GC_ONLY=${{ matrix.group }})
+        env:
+          GC_ONLY: ${{ matrix.group }}
+        run: node tools/test-browser.mjs

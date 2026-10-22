@@ -73,7 +73,7 @@ genchibi online off                     # thôi ra Internet (có GC_CF_TOKEN: d�
 genchibi online migrate                 # máy cấu hình tay trong .env (GC_PUBLIC_URL / GC_ALLOWED_HOSTS) trước v0.21
 ```
 
-Đổi địa chỉ công khai sẽ đăng xuất các agent nối bằng OAuth (phải nối lại); lệnh hỏi trước (`--yes` khi không có terminal). Mã thoát `3` nghĩa là "đã ra Internet, chờ đặt mật khẩu chủ". `genchibi expose` (cách của v0.20, đăng nhập Cloudflare bằng trình duyệt) vẫn chạy ở bản này (là bí danh của `genchibi online`) và bỏ ở v0.23.
+Đổi địa chỉ công khai sẽ đăng xuất các agent nối bằng OAuth (phải nối lại); lệnh hỏi trước (`--yes` khi không có terminal). Mã thoát `3` nghĩa là "đã ra Internet, chờ đặt mật khẩu chủ". `genchibi expose` / `genchibi link` (cách của v0.20) đã bỏ ở v0.23 — xem [bên dưới](#đã-bỏ-ở-v023-genchibi-expose--genchibi-link).
 
 **Bản sao lưu chứa mật khẩu và phiên; khôi phục thì Go online tắt.** `genchibi backup` lưu `data/`, nay gồm cả mật khẩu chủ (đã băm), các phiên Studio / thiết bị đã nhớ và cấu hình lên mạng. `genchibi restore <tệp>` giữ mật khẩu của bản sao lưu nhưng đăng xuất mọi phiên và thiết bị, và đưa Go online về **tắt** (không địa chỉ công khai, tunnel dừng, mã bản cài mới — bản sao lưu từ máy khác không bao giờ chiếm tên miền hay tunnel của máy đó). Khôi phục xong thì chạy lại Go online.
 
@@ -152,17 +152,17 @@ Tạo linh kiện: `get_part_spec` → vẽ (SVG an toàn, token màu) → `prev
 ### Nối claude.ai bằng `https://tên-miền/mcp` — OAuth, chỉ cần bấm Cấp phép (v0.19)
 App tự làm máy chủ cấp phép OAuth 2.1, gồm khám phá RFC 9728 / 8414, tự đăng ký client (DCR), PKCE S256 và token có hạn, lưu dạng băm. Cách nối: ra Internet trước ([ở trên](#ra-internet-tên-miền-https-mcp-một-bước) — bước này đặt địa chỉ công khai), vào claude.ai *Customize › Connectors › Add custom connector*, dán `https://tên-miền/mcp` rồi bấm **Connect**. Trang **Cấp phép** của app hiện ra để chọn mức quyền (`mcp:read` · `mcp:write` · `mcp:owner`); trang dùng phiên đăng nhập Studio (mật khẩu chủ), chưa đăng nhập thì mời đăng nhập. Quản lý và thu hồi ở **Studio › Hệ thống › Kết nối agent**. Nếu dùng proxy hoặc trang đăng nhập riêng thì các đường máy (`/mcp`, `/.well-known/oauth-*`, `/oauth/register|token|revoke`) phải đi thẳng tới app — `genchibi online proxy <tên-miền>` in sẵn cấu hình đó. Đoạn Caddy mẫu nằm ở `docs/Caddyfile.oauth.example`; cách xử lý Cloudflare và các lỗi thường gặp nằm trong `docs/HUONG-DAN.md` › mục 6.
 
-### Cách cũ: `genchibi expose` / `genchibi link` — bí danh của `genchibi online`, bỏ ở v0.23
-Giờ hai lệnh này chỉ là bí danh mỏng: in một dòng "Sắp bỏ" rồi chạy đúng lệnh [Ra Internet](#ra-internet-tên-miền-https-mcp-một-bước) tương ứng (cùng các bước, cùng mã thoát). Không còn đăng nhập Cloudflare bằng trình duyệt (`cloudflared login`) — đường B dùng API token.
+### Đã bỏ ở v0.23: `genchibi expose` / `genchibi link`
+Từ v0.21.3 hai lệnh này là bí danh của `genchibi online`. Giờ chúng không chạy gì: in một dòng `genchibi … đã bỏ ở v0.23 — dùng: genchibi online …` rồi thoát với mã `2`.
 
-| Lệnh cũ | Chạy |
+| Lệnh cũ | Dùng thay |
 |---|---|
 | `genchibi expose <tên-miền> [--overwrite-dns]` | `genchibi online cloudflare <tên-miền> [--overwrite-dns]` |
 | `genchibi expose --quick` | `genchibi online quick` |
 | `genchibi expose --off` | `genchibi online off` |
 | `genchibi link` · `genchibi link --check` | `genchibi online` · `genchibi online recheck` |
 
-Máy còn chạy tunnel do `expose` cũ tạo (`.env` có `GC_TUNNEL`, profile Docker `tunnel` / `quick`) vẫn chạy tới v0.23: `genchibi link` in thêm link MCP có khoá của máy đó (`https://<tên-miền>/mcp/<khoá>` — chỉ MCP, không cần header), `genchibi expose --rotate` đổi khoá (link cũ chết ngay), `genchibi expose --off` gỡ cấu hình cũ đó. Chuyển sang Ra Internet: `genchibi online migrate`.
+Máy ra Internet bằng `expose` cũ (`.env` có `GC_TUNNEL`): profile Docker `tunnel` / `quick` và cloudflared chạy kèm `genchibi start` (bản native) đã bỏ, nên tunnel cũ không còn được chạy. `genchibi start` / `update` / `status` in một dòng nhắc chạy `genchibi online migrate`: lệnh này chuyển `GC_PUBLIC_URL` / `GC_ALLOWED_HOSTS` sang Ra Internet, dừng tunnel cũ còn sót và bỏ `GC_TUNNEL` khỏi `.env`. Sau đó mở lại tên miền bằng `genchibi online cloudflare <tên-miền>` (hoặc `genchibi online quick`). Link MCP có khoá (`https://<tên-miền>/mcp/<khoá>`) vẫn chạy khi còn `GC_MCP_KEY`; lộ link thì đổi `GC_MCP_KEY` trong `.env` rồi chạy `genchibi restart` (`expose --rotate` đã bỏ).
 
 Tunnel hoặc proxy riêng, mạng LAN: dùng `genchibi online proxy <tên-miền>` (hoặc đặt `GC_BIND` và `GC_ALLOWED_HOSTS` trong `.env` cho mạng LAN). Từ v0.21 app không bao giờ tin một request chỉ vì thiếu header proxy: Studio luôn cần mật khẩu chủ (đăng nhập), script gọi `/api` hoặc `/mcp` gửi `Authorization: Bearer <token chủ>`.
 

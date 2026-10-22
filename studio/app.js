@@ -364,7 +364,7 @@
   //   TẠO TÁC  = làm phim / truyện với AI đạo diễn từ asset trong Thư viện. Dòng chảy: Xưởng → Thư viện → Tạo tác (docs/spec/DAC-TA-3-GIAI-DOAN.md).
   var NAV = [
     ['fab', N_('Xưởng'), N_('tạo asset từ khung'), [['create', N_('Tạo asset mới')], ['characters', N_('Bàn chỉnh nhân vật')], ['items', N_('Bàn chỉnh vật phẩm')], ['scenes', N_('Bàn chỉnh bối cảnh')]]],
-    ['fab', N_('Khung chuẩn'), N_('quy cách · kiểm (Gen Labs giữ)'), [['khung', N_('Bộ khung chuẩn')], ['library', N_('Kho linh kiện & phông')], ['poses', N_('Khung tư thế & hoạt động')], ['states', N_('Khung biểu cảm & động tác')], ['gates', N_('Cổng kiểm & hiệu năng')]], 'khung'],
+    ['fab', N_('Khung chuẩn'), N_('quy cách · kiểm (Gen Labs giữ)'), [['khung', N_('Bộ khung chuẩn')], ['library', N_('Kho linh kiện & phông')], ['poses', N_('Khung tư thế & hoạt động')], ['states', N_('Khung biểu cảm & chuyển động')], ['gates', N_('Cổng kiểm & hiệu năng')]], 'khung'],
     ['lib', N_('Thư viện'), N_('theo dự án chủ đề · lấy về dùng'), [['projects', N_('Dự án chủ đề')], ['lib-characters', N_('Nhân vật')], ['lib-items', N_('Vật phẩm')], ['lib-scenes', N_('Bối cảnh')], ['lib-motions', N_('Động tác')], ['lib-sounds', N_('Âm thanh')], ['lib-voices', N_('Giọng')]]],
     ['make', N_('Tạo tác'), N_('làm phim / truyện với AI'), [['works', N_('Tác phẩm')]]],
     ['sys', N_('Hệ thống'), '', [['ai', N_('Cài đặt AI')], ['connect', N_('Kết nối agent')], ['online', N_('Lên mạng')], ['account', N_('Tài khoản chủ')], ['update', N_('Cập nhật')], ['lang', N_('Ngôn ngữ')]]]
@@ -403,7 +403,7 @@
     // số đếm Thư viện không tính đồ của khung (khung thuộc Xưởng)
     var lib = function (arr) { return arr.filter(function (x) { return groupOf(x) !== 'frame'; }).length; };
     var COUNT = { 'lib-characters': function () { return lib(GC.assets()); }, 'lib-items': function () { return lib(GC.items()); }, 'lib-scenes': function () { return lib(GC.scenes()); }, projects: function () { return Projects.all().length; },
-      'lib-motions': function () { return GC.choreo ? Object.keys(GC.choreo.ACTIONS).length : 0; },
+      'lib-motions': function () { var C = GC.choreo; return C ? Object.keys(C.ACTIONS).filter(function (k) { return C.ACTIONS[k].pack !== C.FRAME_PACK; }).length : 0; },   // đòn của khung không tính (CNS-065)
       'lib-sounds': function () { return GC.sounds ? GC.sounds.names().length : 0; }, 'lib-voices': function () { return GC.voices ? GC.voices.roleList().length : 0; } };
     // chuyển ứng dụng: 3 lớp, lớp đang mở nổi bật; các lớp khác là liên kết sang ứng dụng riêng
     var sw = h('div', { class: 'appswitch' });
@@ -830,7 +830,7 @@
           changed(false); paintGrid(); paintEditor();
         }
         [['eyes', _t('Dáng mắt'), Object.keys(LIB.eyePoses)], ['brows', _t('Dáng mày'), Object.keys(LIB.browPoses)], ['mouth', _t('Miệng'), Object.keys(LIB.mouths)],
-         ['motion', _t('Động tác'), Object.keys(LIB.motions)]].forEach(function (c) {
+         ['motion', _t('Chuyển động'), Object.keys(LIB.motions)]].forEach(function (c) {
           var s = h('select', { 'aria-label': c[1], onchange: function () { setOv(c[0], s.value); } });
           s.appendChild(h('option', { value: '', text: _t('— kế thừa —') }));
           c[2].forEach(function (id) {
@@ -1057,18 +1057,18 @@
     if (first) showBench('hat', first);
   };
 
-  /* ============================================================ trang: Biểu cảm & động tác */
+  /* ============================================================ trang: Biểu cảm & chuyển động (LIB.motions — vòng lặp thân người; "Động tác" = đòn biên đạo ở Thư viện, CNS-065) */
   PAGES.states = function () {
-    crumbs([{ t: _t('Khung biểu cảm & động tác') }]);
+    crumbs([{ t: _t('Khung biểu cảm & chuyển động') }]);
     var st = h('table', { class: 'grid' });
-    st.appendChild(h('tr', null, [_t('Mã'), _t('Biểu cảm'), _t('Khi nào'), _t('Mắt'), _t('Mày'), _t('Miệng'), _t('Hiệu ứng'), _t('Động tác')].map(function (c) { return h('th', { text: c }); })));
+    st.appendChild(h('tr', null, [_t('Mã'), _t('Biểu cảm'), _t('Khi nào'), _t('Mắt'), _t('Mày'), _t('Miệng'), _t('Hiệu ứng'), _t('Chuyển động')].map(function (c) { return h('th', { text: c }); })));
     LIB.stateOrder.forEach(function (id) {
       var s = LIB.states[id];
       st.appendChild(h('tr', null, h('td', { class: 'v', text: id }), h('td', null, h('b', { text: _l(s.label) })), h('td', { class: 'note', text: _l(s.hint) }),
         h('td', { class: 'v', text: s.eyes }), h('td', { class: 'v', text: s.brows }), h('td', { class: 'v', text: s.mouth }), h('td', { class: 'v', text: s.fx.join(', ') || '—' }), h('td', { class: 'v', text: s.motion })));
     });
     var mt = h('table', { class: 'grid' });
-    mt.appendChild(h('tr', null, [_t('Mã'), _t('Động tác'), _t('Chu kỳ'), _t('Khớp điều khiển'), _t('Cất đồ cầm'), _t('Dùng ở')].map(function (c) { return h('th', { text: c }); })));
+    mt.appendChild(h('tr', null, [_t('Mã'), _t('Chuyển động'), _t('Chu kỳ'), _t('Khớp điều khiển'), _t('Cất đồ cầm'), _t('Dùng ở')].map(function (c) { return h('th', { text: c }); })));
     Object.keys(LIB.motions).forEach(function (id) {
       var m = LIB.motions[id];
       var used = LIB.stateOrder.filter(function (s) { return LIB.states[s].motion === id; }).map(stateLabel)
@@ -3726,7 +3726,7 @@
       server ? projectSelect(impProj, function (v) { impProj = v; }) : null,
       server ? h('button', { class: 'btn', title: _t('Tệp gói động tác (.json, {format}) — đi qua cổng kiểm như mọi asset. Gói thuộc dự án đang chọn ở ô bên cạnh', { format: C.MOTION.format }), onclick: pickPack }, _t('Nhập gói động tác (.json)')) : null);
     var ids = Object.keys(C.ACTIONS);
-    var u = { action: r.action && C.ACTIONS[r.action] ? r.action : ids[0], who: GC.ASSETS[r.who] ? r.who : MANNEQUIN, partner: MANNEQUIN, react: 'hit', fps: 12, cell: 256 };
+    var u = { action: r.action && C.ACTIONS[r.action] ? (C.actionId ? C.actionId(r.action) : r.action) : ids[0], who: GC.ASSETS[r.who] ? r.who : MANNEQUIN, partner: MANNEQUIN, react: 'hit', fps: 12, cell: 256 };
     if (!GC.ASSETS[u.partner]) u.partner = (GC.assets()[0] || {}).key;
     if (!GC.ASSETS[u.who]) u.who = u.partner;
     var q = '', errBox = h('div'), body = h('div', { class: 'stack' }), insp = h('div', { class: 'stack' });
@@ -5769,8 +5769,8 @@
             link ? h('div', { class: 'stack' },
               h('pre', { class: 'code', text: link }),
               h('div', null, copyBtn(_t('Sao chép link'), link), ' ', copyBtn(_t('Sao chép lệnh Claude Code'), 'claude mcp add -s user --transport http gen-chibi ' + link)),
-              h('div', { class: 'note', text: _t('Claude web/desktop: Customize › Connectors › Add custom connector › dán link. Giữ kín link; lộ thì chạy genchibi expose --rotate.') }))
-              : h('div', { class: 'note', text: _t('Chưa mở. Trong terminal: genchibi expose <tên-miền> (tên miền do Cloudflare quản lý) hoặc genchibi expose --quick để thử nhanh. Lệnh in ra một link — agent dán link là nối được.') }),
+              h('div', { class: 'note', text: _t('Claude web/desktop: Customize › Connectors › Add custom connector › dán link. Giữ kín link; lộ thì đổi GC_MCP_KEY trong .env (xoá dòng đó = tắt link có khoá) rồi chạy genchibi restart.') }))
+              : h('div', { class: 'note', text: _t('Chưa mở. Ra Internet: Hệ thống › Lên mạng (hoặc genchibi online trong terminal) — agent nối bằng OAuth tại <địa-chỉ>/mcp.') }),
             h('label', { text: 'Claude Code (stdio)' }), h('pre', { class: 'code', text: 'claude mcp add gen-chibi -- genchibi mcp' }),
             h('label', { text: 'Claude Code (HTTP)' }), h('pre', { class: 'code', text: 'claude mcp add --transport http gen-chibi http://localhost:' + port + '/mcp' }),
             h('label', { text: _t('Cấu hình JSON') }), h('pre', { class: 'code', text: JSON.stringify({ mcpServers: { 'gen-chibi': { command: 'genchibi', args: ['mcp'] } } }, null, 2) })))));
@@ -5844,7 +5844,7 @@
       if (!v.enabled) {
         head.appendChild(h('div', { class: 'pad stack' },
           h('div', { class: 'row' }, h('span', { class: 'chip warn', text: _t('Chưa bật') }), h('button', { class: 'btn sm primary', id: 'connectGoOnline', onclick: function () { go({ page: 'online' }); } }, _t('Đưa máy lên mạng ở Hệ thống › Lên mạng ›'))),
-          h('div', { text: v.configured ? _t('GC_PUBLIC_URL không hợp lệ: phải là gốc của địa chỉ công khai, vd. https://chibi.example.com (không có đường dẫn).') : _t('Cần đặt GC_PUBLIC_URL (địa chỉ công khai của máy này) để bật. Tên miền CHƯA trỏ đi đâu: genchibi expose <tên-miền> — lệnh tự đặt GC_PUBLIC_URL và mở tunnel (đừng chạy với tên miền đã đứng sau proxy riêng như Caddy: DNS sẽ chuyển sang tunnel). Đã có proxy riêng: tự đặt GC_PUBLIC_URL=https://<tên-miền> trong .env rồi cho proxy của bạn chuyển /mcp, /.well-known/oauth-*, /oauth/* về app (xem docs/HUONG-DAN.md).') }),
+          h('div', { text: v.configured ? _t('GC_PUBLIC_URL không hợp lệ: phải là gốc của địa chỉ công khai, vd. https://chibi.example.com (không có đường dẫn).') : _t('Cần địa chỉ công khai của máy này để bật: Hệ thống › Lên mạng (hoặc genchibi online) đặt tên miền + HTTPS và mở các đường OAuth. Đã có proxy riêng (như Caddy): genchibi online proxy <tên-miền>, rồi cho proxy của bạn chuyển /mcp, /.well-known/oauth-*, /oauth/* về app (xem docs/HUONG-DAN.md).') }),
           h('div', { class: 'note', text: _t('Khi chưa bật, /mcp vẫn dùng như cũ: token chủ máy hoặc link có khoá (mục dưới).') })));
       } else {
         var url = v.mcpUrl;
@@ -5898,8 +5898,8 @@
       box.appendChild(h('div', { class: 'panel' }, h('h3', null, _t('Link có khoá (cách cũ, vẫn dùng được)'), h('span', { class: 'r note', text: _t('không qua OAuth') })),
         h('div', { class: 'pad stack' },
           link ? h('div', { class: 'stack' }, h('pre', { class: 'code', text: link }), h('div', null, h('button', { class: 'btn sm', type: 'button', onclick: function () { copyText(link, 'link MCP'); } }, _t('Sao chép link'))))
-            : h('div', { class: 'note', text: _t('Chưa có. Trong terminal: genchibi expose <tên-miền>.') }),
-          h('div', { class: 'note', text: _t('Ai có link là dùng được MCP: tạo / sửa như mức "Tạo và sửa", và còn cập nhật được app (không mở Studio). Lộ link: genchibi expose --rotate. Link không đổi gì khi bạn dùng OAuth.') }))));
+            : h('div', { class: 'note', text: _t('Chưa có. Ra Internet: Hệ thống › Lên mạng (hoặc genchibi online).') }),
+          h('div', { class: 'note', text: _t('Ai có link là dùng được MCP: tạo / sửa như mức "Tạo và sửa", và còn cập nhật được app (không mở Studio). Lộ link: đổi GC_MCP_KEY trong .env rồi chạy genchibi restart. Link không đổi gì khi bạn dùng OAuth.') }))));
     }
     load();
   };

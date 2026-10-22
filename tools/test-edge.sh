@@ -158,8 +158,22 @@ out="$(gc online --caddy 2>&1)" && rc=0 || rc=$?
 [ $rc != 0 ] && grep -q 'needs Docker mode' <<< "$out" && ok "native: online --caddy từ chối (cổng < 1024), gợi ý Cloudflare" || bad "native ($rc): $out"
 out="$(GC_HOME="$C" GC_CLI_INNER=1 GC_LANG=vi PATH="$W/fakebin:$PATH" bash "$ROOT/cli/genchibi" online --caddy 2>&1)" || true
 grep -q 'cần chế độ Docker' <<< "$out" && ok "câu báo có bản tiếng Việt" || bad "thiếu câu tiếng Việt: $out"
-out="$(gc expose --help 2>&1)" || true
-grep -q 'Deprecated: genchibi expose --help is an alias of genchibi online --help' <<< "$out" && grep -q 'genchibi online quick' <<< "$out" && ok "genchibi expose: bí danh của online (một dòng Deprecated, bỏ ở v0.23 — CNS-204)" || bad "expose: $out"
+out="$(gc expose --help 2>&1)" && rc=0 || rc=$?
+[ $rc = 2 ] && [ "$out" = "genchibi expose --help was removed in v0.23 — use: genchibi online --help" ] && ok "genchibi expose: đã bỏ ở v0.23 — một dòng chỉ lệnh online, thoát 2 (B11)" || bad "expose ($rc): $out"
+# v0.23 B11: máy Docker còn GC_TUNNEL + COMPOSE_PROFILES=tunnel (genchibi expose cũ) — docker-compose.yml không còn service tunnel / tunnel-quick
+grep -qE '^  tunnel(-quick)?:|profiles:' "$ROOT/docker-compose.yml" && bad "docker-compose.yml còn service / profile tunnel cũ" || ok "docker-compose.yml không còn service tunnel / tunnel-quick (profiles tunnel / quick đã bỏ)"
+DL="$W/dleg"; mkinst "$DL"; printf 'GC_TUNNEL=named\nGC_PUBLIC_URL=https://old.example.com\nCOMPOSE_PROFILES=tunnel\n' >> "$DL/.env"; : > "$W/docker.log"
+out="$(GC_HOME="$DL" GC_CLI_INNER=1 GC_LANG=en PATH="$W/fakebin:$PATH" bash "$ROOT/cli/genchibi" start 2>&1)" && rc=0 || rc=$?
+nn="$(grep -c '^! .env still has GC_TUNNEL=named from the old genchibi expose (removed in v0.23) — that tunnel is no longer started. Move this machine to Go online: genchibi online migrate$' <<< "$out" || true)"
+[ $rc = 0 ] && [ "$nn" = 1 ] && grep -q '^rm -f gen-chibi-tunnel gen-chibi-tunnel-quick$' "$W/docker.log" && grep -q 'compose .*up -d' "$W/docker.log" && ! grep -q 'profile' "$W/docker.log" \
+  && ok "Docker + GC_TUNNEL: genchibi start in đúng một dòng nhắc genchibi online migrate, gỡ container tunnel cũ còn sót, compose up không profile cũ" || bad "Docker + GC_TUNNEL ($rc, $nn dòng nhắc): $out / $(cat "$W/docker.log")"
+: > "$W/docker.log"; printf 'GC_MODE=docker\nGC_MASTER_KEY=test-key\n' > "$DL/.env"
+GC_HOME="$DL" GC_CLI_INNER=1 GC_LANG=en PATH="$W/fakebin:$PATH" bash "$ROOT/cli/genchibi" start >/dev/null 2>&1 || true
+grep -q 'gen-chibi-tunnel' "$W/docker.log" && bad "máy không có GC_TUNNEL vẫn gọi docker rm tunnel cũ" || ok "máy không có GC_TUNNEL: start không đụng container tunnel cũ"
+if [ -n "$HAVE_COMPOSE" ]; then
+  svl="$(cd "$DL"; COMPOSE_PROFILES=tunnel docker compose -f docker-compose.yml config --services 2>&1 | tr '\n' ' ')"
+  [ "$svl" = "app " ] && ok "docker compose với COMPOSE_PROFILES=tunnel còn sót trong .env: không lỗi, chỉ có app" || bad "COMPOSE_PROFILES=tunnel: $svl"
+fi
 
 echo "4) Caddy thật: Caddyfile.base + nạp lại qua unix socket"
 CADDY_VER=2.11.7

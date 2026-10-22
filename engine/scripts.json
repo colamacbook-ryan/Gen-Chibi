@@ -1,0 +1,41 @@
+{
+  "_": "gen-chibi — MỘT nguồn danh sách mã engine / Studio (v0.23, CNS-054). Thứ tự = thứ tự nạp. engine: mọi <script> engine/ + kinds/ của studio/index.html (phim HTML và trang xuất video lấy đúng danh sách này qua document.scripts); dom: phần cần DOM, Node (server/engine-node.js, MCP, test) bỏ qua; nodeModules: mô-đun Node trong engine/ không nạp vào trang (require trực tiếp); studio: <script> còn lại của studio/index.html; videoPage: <script> của studio/video-export.html; workers: Worker / AudioWorklet nạp theo URL lúc chạy (không qua thẻ script). test.sh 2w trượt nếu một tệp chỉ thêm ở một nơi. © 2026 Gen Labs — All rights reserved.",
+  "engine": [
+    "engine/core.js",
+    "engine/i18n.js",
+    "engine/render.js",
+    "engine/fonts.js",
+    "engine/voices.js",
+    "engine/sounds.js",
+    "engine/audio.js",
+    "engine/player.js",
+    "engine/choreo.js",
+    "kinds/character/gen.core.js",
+    "kinds/khung/gen.khung.js",
+    "kinds/character/gen.choreo.js"
+  ],
+  "dom": [
+    "engine/render.js",
+    "engine/fonts.js",
+    "engine/audio.js"
+  ],
+  "nodeModules": [
+    "engine/i18n-msg.js"
+  ],
+  "studio": [
+    "studio/gif.js",
+    "studio/dock.js",
+    "studio/video/client.js",
+    "studio/app.js"
+  ],
+  "workers": [
+    "studio/video/probe-worker.js",
+    "studio/video/tap-worklet.js"
+  ],
+  "videoPage": [
+    "video/vclock.js",
+    "video/mux.js",
+    "video/text.js",
+    "video/capture.js"
+  ]
+}

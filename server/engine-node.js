@@ -7,10 +7,18 @@ const path = require('path');
 const vm = require('vm');
 const { readLocales } = require('./i18n');
 
+// danh sách mã engine nạp vào Node — MỘT nguồn engine/scripts.json (CNS-054), cùng thứ tự với studio/index.html, bỏ phần cần DOM (render, phông,
+// âm thanh). opts.without: bỏ thêm vài tệp (test đường dự phòng, vd. engine không có sounds.js)
+function engineScripts(appDir, opts) {
+  const M = JSON.parse(fs.readFileSync(path.join(appDir, 'engine/scripts.json'), 'utf8'));
+  const skip = new Set(M.dom.concat((opts && opts.without) || []));
+  return M.engine.filter(f => !skip.has(f));
+}
+
 function loadEngine(appDir) {
   const ctx = { window: {}, console };
   vm.createContext(ctx);
-  ['engine/core.js', 'engine/i18n.js', 'engine/voices.js', 'engine/sounds.js', 'engine/choreo.js', 'kinds/character/gen.core.js', 'kinds/khung/gen.khung.js', 'kinds/character/gen.choreo.js', 'engine/player.js'].forEach(f => {
+  engineScripts(appDir).forEach(f => {
     vm.runInContext(fs.readFileSync(path.join(appDir, f), 'utf8'), ctx, { filename: f });
   });
   const GC = ctx.window.GenChibi;
@@ -22,4 +30,4 @@ function loadEngine(appDir) {
   return GC;
 }
 
-module.exports = { loadEngine };
+module.exports = { loadEngine, engineScripts };

@@ -1,7 +1,7 @@
 // gen-chibi — cấu hình online lúc chạy (v0.21, spec v021 §3.2): data/online.json là NGUỒN DUY NHẤT của mode / domain / publicUrl / clientIpHeader.
 // © 2026 Gen Labs — All rights reserved.
 //
-// .env (GC_PUBLIC_URL, GC_ALLOWED_HOSTS, GC_TUNNEL, GC_CLIENT_IP_HEADER) là cấu hình KẾ THỪA: khi .env có GC_PUBLIC_URL hoặc GC_ALLOWED_HOSTS và
+// .env (GC_PUBLIC_URL, GC_ALLOWED_HOSTS, GC_TUNNEL — chỉ còn để migrate() biết mode cũ, genchibi expose bỏ ở v0.23 —, GC_CLIENT_IP_HEADER) là cấu hình KẾ THỪA: khi .env có GC_PUBLIC_URL hoặc GC_ALLOWED_HOSTS và
 // online.json chưa được app nhận quyền (adopted) → dùng nguyên .env, chỉ đọc (wizard hiện "đang cấu hình bằng .env" + nút di chuyển = migrate()).
 // Không trộn từng khoá giữa hai nguồn (CNS-177). Đọc lúc chạy (OAuth, Host được phép, header IP) — đổi không cần khởi động lại.
 // publicUrl hai bậc: setPending(url) bật TẠM (OAuth phục vụ metadata theo url mới để wizard kiểm từ ngoài vào) → commit() chính thức | revert() về giá trị cũ.

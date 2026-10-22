@@ -1,5 +1,5 @@
-// Kiểm thử trong trình duyệt (chạy cục bộ, cần Playwright): mọi lớp gắn vào đầu phải đi cùng đầu.
-// Dùng: node tools/test-browser.mjs   (tự dựng server tạm ở cổng 7496) · GC_ONLY=voice node tools/test-browser.mjs → chỉ nhóm giọng AI (cổng 7660) · GC_ONLY=lib → chỉ Thư viện Âm thanh / Giọng (cổng 7662) · GC_ONLY=oauth → chỉ nhóm OAuth (cổng 7664–7666) · GC_ONLY=online → chỉ Hệ thống › Lên mạng + Tài khoản chủ (cổng 7672–7680; GC_SHOTS=<thư mục> chụp màn en + vi) · GC_ONLY=bubble → chỉ "lời thoại chuyên nghiệp" (cổng 7495; GC_THROTTLE=4 → CPU trang chậm 4× như máy yếu) · GC_ONLY=video → chỉ xuất video v0.22 (cổng 7690; cần ffmpeg để so khung giải mã lại; GC_SHOTS=<thư mục> chụp bảng Xuất video en + vi)
+// Kiểm thử trong trình duyệt (cần Playwright — cục bộ hoặc CI: .github/workflows/browser.yml, mỗi nhóm GC_ONLY một máy): mọi lớp gắn vào đầu phải đi cùng đầu.
+// Dùng: node tools/test-browser.mjs   (cả bộ, tự dựng server tạm ở cổng 7496) · GC_ONLY=core → chỉ các khối chung (Studio, Thư viện, phim, biên đạo…) · GC_ONLY=a,b → nhiều nhóm · GC_ONLY=voice node tools/test-browser.mjs → chỉ nhóm giọng AI (cổng 7660) · GC_ONLY=lib → chỉ Thư viện Âm thanh / Giọng (cổng 7662) · GC_ONLY=oauth → chỉ nhóm OAuth (cổng 7664–7666) · GC_ONLY=online → chỉ Hệ thống › Lên mạng + Tài khoản chủ (cổng 7672–7680; GC_SHOTS=<thư mục> chụp màn en + vi) · GC_ONLY=bubble → chỉ "lời thoại chuyên nghiệp" (cổng 7495; GC_THROTTLE=4 → CPU trang chậm 4× như máy yếu) · GC_ONLY=video → chỉ xuất video v0.22 (cổng 7690; cần ffmpeg để so khung giải mã lại; GC_SHOTS=<thư mục> chụp bảng Xuất video en + vi)
 import { createRequire } from 'module';
 import { spawn, spawnSync, execFileSync } from 'child_process';
 import { mkdtempSync, readFileSync } from 'fs';
@@ -8,7 +8,9 @@ import { tmpdir } from 'os';
 import path from 'path';
 const require = createRequire(import.meta.url);
 const { Store } = require('../server/store.js');
-let pw; try { pw = require('playwright'); } catch { pw = require('/opt/node22/lib/node_modules/playwright'); }
+import { loadPlaywright } from './pw.mjs';
+const pw = loadPlaywright();
+if (!pw) { console.error('  ✗ không có Playwright — cài: npm i -g playwright@<bản ghim trong .github/workflows/browser.yml> && npx playwright install chromium'); process.exit(1); }
 // Phòng tác phẩm (v0.18) có 5 tab: thao tác vào phần tử đang nằm ở tab ẩn thì bấm đúng tab trước — như người dùng. Chỉ có tác dụng khi phần tử nằm trong [role=tabpanel] đang ẩn.
 async function revealTab(page, sel, ms) {
   const t0 = Date.now();
@@ -78,17 +80,25 @@ const CSP_VIOL = [];
     return b;
   }; }
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const SCRIPTS = JSON.parse(readFileSync(path.join(ROOT, 'engine/scripts.json'), 'utf8'));   // một nguồn danh sách mã engine (CNS-054)
 // server con do test dựng: tắt hết khi thoát — kể cả khi test sập giữa chừng (L-55: server sót lại khiến lần chạy sau dùng nhầm dữ liệu cũ)
 const kids = []; const kid = c => { kids.push(c); return c; };
 // GC_ONLY=voice node tools/test-browser.mjs → chỉ chạy nhóm "giọng AI" (lặp nhanh khi làm giọng); không đặt = chạy cả bộ như CI
 const ONLY = process.env.GC_ONLY || '';
+// v0.23 (B6, CNS-032): CI chạy bộ này theo NHÓM song song (ma trận trong .github/workflows/browser.yml) — GC_ONLY nhận một nhóm hoặc danh sách
+// "a,b". Nhóm "core" = các khối không tên (Studio, Thư viện, phim, biên đạo…). Mọi khối của bộ đều thuộc đúng một nhóm (test.sh 2v kiểm ma trận CI
+// phủ đủ nhóm). Tên nhóm sai → thoát 2 (không lặng lẽ chạy 0 kiểm).
+const GROUPS = ['core', 'auth', 'bubble', 'lib', 'voice', 'dock', 'oauth', 'online', 'i18n', 'video', 'video-ui'];
+const ONLY_SET = ONLY ? ONLY.split(',').map(x => x.trim()).filter(Boolean) : [];
+{ const bad = ONLY_SET.filter(g => !GROUPS.includes(g)); if (bad.length) { console.error('GC_ONLY: nhóm không có: ' + bad.join(', ') + ' — có: ' + GROUPS.join(', ')); process.exit(2); } }
+const want = g => !ONLY_SET.length || ONLY_SET.includes(g);
 process.on('exit', () => kids.forEach(c => { try { c.kill(); } catch (e) { /* đã tắt */ } }));
 // bị dừng giữa chừng (timeout, Ctrl+C, harness huỷ): thoát có trật tự để 'exit' ở trên tắt mọi server con — không để lại main.js mồ côi
 for (const sg of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(sg, () => process.exit(130));
 process.on('uncaughtException', e => { console.error(e); process.exit(1); });
 let fail = 0;
 const home = mkdtempSync(path.join(tmpdir(), 'gc-'));
-if (!ONLY) {
+if (want('core')) {
 const srv = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home, GC_PORT: '7496', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
 await new Promise(r => setTimeout(r, 1200));
 const b = await pw.chromium.launch();
@@ -131,7 +141,7 @@ try {
 // v0.21 (spec §3.3–§3.4, Q35): Studio đăng nhập chủ — kể cả mở ở localhost. Bản cài mới: màn Đặt mật khẩu (mã setup từ `genchibi open`, tự điền từ #code=…
 // rồi xoá khỏi địa chỉ) → đăng xuất → đăng nhập bằng mật khẩu → "Dùng token". Máy kế thừa (.env có GC_PUBLIC_URL từ trước): token như v0.20 + dải Đặt mật khẩu,
 // có phiên cookie thì xoá gc-token khỏi localStorage. GC_ONLY=auth chỉ chạy nhóm này (cổng 7497 + 7669).
-if (!ONLY || ONLY === 'auth') {
+if (want('auth')) {
   const home2 = mkdtempSync(path.join(tmpdir(), 'gc-'));
   const srv2 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home2, GC_PORT: '7497', GC_NO_AUTOCHECK: '1', GC_API_TOKEN: 'tok-test-123', GC_CLIENT_IP_HEADER: 'x-forwarded-for' }, stdio: 'ignore' }));
   const home2l = mkdtempSync(path.join(tmpdir(), 'gc-'));
@@ -220,7 +230,7 @@ if (!ONLY || ONLY === 'auth') {
 }
 // Studio tách hai khu: Thư viện (thành phẩm, lấy về dùng) và Xưởng (tạo lập). Mọi trang mở không lỗi;
 // thư viện có thẻ theo nhóm + khu "Dùng" (tải ảnh, chép mã); đạo diễn diễn được trong cảnh.
-if (!ONLY) {
+if (want('core')) {
   const home3 = mkdtempSync(path.join(tmpdir(), 'gc-'));
   const srv3 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home3, GC_PORT: '7498', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
   await new Promise(r => setTimeout(r, 1200));
@@ -279,7 +289,7 @@ if (!ONLY) {
   finally { await b3.close(); srv3.kill(); }
 }
 // Giai đoạn ②: Xưởng › Tạo asset mới (chọn khung → tham số → soát → cổng → lưu) → Thư viện xếp theo dự án chủ đề
-if (!ONLY) {
+if (want('core')) {
   const home4 = mkdtempSync(path.join(tmpdir(), 'gc-'));
   const srv4 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home4, GC_PORT: '7499', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
   await new Promise(r => setTimeout(r, 1200));
@@ -356,7 +366,7 @@ if (!ONLY) {
   finally { await b4.close(); srv4.kill(); }
 }
 // Người dùng mới: màn chọn khu → "Mở dự án mẫu" một chạm → Thư viện có dự án đủ asset → Tạo tác sẵn sàng diễn cả phim
-if (!ONLY) {
+if (want('core')) {
   const home5 = mkdtempSync(path.join(tmpdir(), 'gc-'));
   const srv5 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home5, GC_PORT: '7494', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
   await new Promise(r => setTimeout(r, 1200));
@@ -514,14 +524,14 @@ if (!ONLY) {
       await q.click('.sheet .fxchips button:text-is("Gia Cát Lượng")'); await q.click('.sheet button:text-is("+ Thêm bước")');
       await q.selectOption('.sheet select[data-cell="8:actor"]', 'tq-gia-cat-luong');
       const gcl = await q.$$eval('.sheet select[data-cell="8:action"] option', o => o.map(x => x.value));
-      if (gcl.includes('thrust') || gcl.includes('combo') || !gcl.includes('punch')) throw new Error('ô action của Gia Cát Lượng: ' + gcl.join(','));
+      if (gcl.includes('weaponThrust') || gcl.includes('thrust') || gcl.includes('combo') || !gcl.includes('punch')) throw new Error('ô action của Gia Cát Lượng: ' + gcl.join(','));
       // lỗi sống ngay cạnh hàng: đổi người ra đòn binh khí sang người tay không → báo lỗi needs, khoá nút lưu
       await q.selectOption('.sheet select[data-cell="2:actor"]', 'tq-gia-cat-luong');
       const rowErr = await q.$$eval('.sheet tr.errrow:not([hidden])', e => e.map(x => x.textContent).join(' | '));
-      if (!/không làm được "thrust"/.test(rowErr) || !(await q.$eval('.sheet button:text-is("Lưu bước")', x => x.disabled))) throw new Error('không báo lỗi needs cạnh hàng / không khoá nút lưu: ' + rowErr);
+      if (!/không làm được "weaponThrust"/.test(rowErr) || !(await q.$eval('.sheet button:text-is("Lưu bước")', x => x.disabled))) throw new Error('không báo lỗi needs cạnh hàng / không khoá nút lưu: ' + rowErr);
       await q.selectOption('.sheet select[data-cell="2:actor"]', 'tq-trieu-van');
       await q.click('.sheet button[aria-label="Xoá bước 9"]'); await q.click('.sheet .fxchips button:text-is("Gia Cát Lượng")');
-      // đổi đòn bước 3 (Triệu Vân cầm thương): thrust → sweep → lưu → tải lại trang → vẫn là sweep
+      // đổi đòn bước 3 (Triệu Vân cầm thương): weaponThrust (bộ mẫu ghi "thrust" — id cũ, server chuyển khi nhập, CNS-065) → sweep → lưu → tải lại trang → vẫn là sweep
       await q.selectOption('.sheet select[data-cell="2:action"]', 'sweep');
       await q.click('.sheet button:text-is("Lưu bước")');
       await q.waitForFunction(() => /Đã lưu/.test(document.querySelector('.sheet .pad > .row.note').textContent), null, { timeout: 5000 });
@@ -533,7 +543,7 @@ if (!ONLY) {
       if (await q.$('.sheet')) throw new Error('Esc không đóng bảng bước');
       if (!/Sẵn sàng diễn cả 6 phân cảnh/.test(await q.textContent('.readybar'))) throw new Error('sau khi sửa đòn: ' + await q.textContent('.readybar'));
       if (errs.length) throw new Error(errs.slice(0, 3).join(' | '));
-      console.log('  ✓ Bảng bước (không cần AI): 8 bước "Đấu tập"; ô action lọc theo người làm được (Gia Cát Lượng tay không: không có thrust); lỗi needs cạnh hàng; đổi đòn → lưu qua cổng → tải lại còn');
+      console.log('  ✓ Bảng bước (không cần AI): 8 bước "Đấu tập"; ô action lọc theo người làm được (Gia Cát Lượng tay không: không có weaponThrust); lỗi needs cạnh hàng; đổi đòn → lưu qua cổng → tải lại còn');
     } catch (e) { fail = 1; console.log('  ✗ bảng bước:', e.message); }
     // Bảng bước — độ bền khi dùng thật (review v0.16): nền / kéo bôi chữ, cảnh báo đạo diễn không tính lại mỗi phím,
     // tiêu điểm bàn phím, chặn đóng nhầm khi còn chữ chưa lưu, và đua giữa "đang lưu" với "sửa tiếp"
@@ -564,7 +574,7 @@ if (!ONLY) {
       await q.waitForTimeout(800);
       if ((await q.evaluate(() => window.__direct)) !== d0) throw new Error('gõ lời thoại làm tính lại cảnh báo đạo diễn (direct gọi lại)');
       const a2 = await q.$eval('.sheet select[data-cell="2:action"]', x => x.value);
-      await q.selectOption('.sheet select[data-cell="2:action"]', a2 === 'thrust' ? 'sweep' : 'thrust');
+      await q.selectOption('.sheet select[data-cell="2:action"]', a2 === 'weaponThrust' ? 'sweep' : 'weaponThrust');
       await q.waitForFunction(n => window.__direct > n, d0, { timeout: 3000 });
       // (3) tiêu điểm: chip hiệu ứng giữ tiêu điểm sau khi bật / tắt; xoá hàng thì tiêu điểm sang hàng kế (hết thì hàng trước)
       await q.click('.sheet button[data-cell="0:more"]');
@@ -629,20 +639,23 @@ if (!ONLY) {
       await q.goto('http://localhost:7494/thu-vien'); await q.waitForSelector('.libcard.act');
       const nFrame = await q.$$eval('[data-pack="gen.dong-tac"] .libcard.act', e => e.length), nTq = await q.$$eval('[data-pack="local.my/tq-dong-tac"] .libcard.act', e => e.length);
       if (nFrame < 16 || nTq < 1) throw new Error('danh sách: ' + nFrame + ' đòn khung, ' + nTq + ' đòn của gói tq-dong-tac');
+      // CNS-065: số đếm Thư viện › Động tác không tính đòn của khung (như Nhân vật / Vật phẩm / Bối cảnh không tính đồ của khung); id cũ không thành thẻ riêng
+      const navN = await q.evaluate(() => { const b = document.querySelector('.nav-item[aria-current="page"] .n'), C = GenChibi.choreo; return { n: b ? +b.textContent : -1, packs: Object.keys(C.ACTIONS).filter(k => C.ACTIONS[k].pack !== C.FRAME_PACK).length, old: ['thrust', 'rage', 'victory', 'salute', 'wave'].filter(k => document.querySelector('.libcard.act[data-action="' + k + '"]')) }; });
+      if (navN.n !== navN.packs || navN.old.length) throw new Error('CNS-065: số đếm Thư viện › Động tác = ' + navN.n + ' (cần ' + navN.packs + ' đòn của gói, không tính ' + nFrame + ' đòn khung); thẻ id cũ: ' + navN.old.join(','));
       // Gia Cát Lượng (tay không) chọn đòn ai cũng làm được → rồi đổi sang đòn binh khí: báo vì sao + không dựng; trong ô chọn người, ai không làm được thì mờ kèm lý do
       await q.click('.libcard.act[data-action="punch"]');
       await q.selectOption('.sticky select[aria-label="Nhân vật"]', 'local.my/tq-gia-cat-luong');
-      await q.click('.libcard.act[data-action="thrust"]');
+      await q.click('.libcard.act[data-action="weaponThrust"]');
       if (!/không làm được/.test(await q.textContent('.sticky .banner.bad')) || await q.$('.mstage')) throw new Error('người tay không chọn đòn binh khí: phải báo vì sao và không dựng');
       const opts = await q.$$eval('.sticky select[aria-label="Nhân vật"] option', os => os.map(o => ({ v: o.value, off: o.disabled, t: o.textContent })));
       const oG = opts.find(o => o.v === 'local.my/tq-gia-cat-luong'), oT = opts.find(o => o.v === 'local.my/tq-trieu-van');
-      if (!oG || !oG.off || !/cần binh khí/.test(oG.t) || !oT || oT.off) throw new Error('ô chọn người ra đòn "thrust": Gia Cát Lượng phải mờ + "cần binh khí", Triệu Vân chọn được: ' + JSON.stringify([oG, oT]));
+      if (!oG || !oG.off || !/cần binh khí/.test(oG.t) || !oT || oT.off) throw new Error('ô chọn người ra đòn "weaponThrust": Gia Cát Lượng phải mờ + "cần binh khí", Triệu Vân chọn được: ' + JSON.stringify([oG, oT]));
       await q.selectOption('.sticky select[aria-label="Nhân vật"]', 'local.my/tq-trieu-van');
       const fr = new Set(); for (let k = 0; k < 10; k++) { await q.waitForTimeout(120); fr.add(await q.getAttribute('.mstage', 'data-frame')); }
       if (fr.size < 3) throw new Error('xem trước không chạy (khung: ' + [...fr].join(',') + ')');
       const grab = async label => { const [d] = await Promise.all([q.waitForEvent('download'), q.click('.sticky .usebar button:text-is("' + label + '")')]); return { name: d.suggestedFilename(), buf: require('fs').readFileSync(await d.path()) }; };
       const png = await grab('PNG sprite sheet'), gif = await grab('GIF'), js = await grab('JSON');
-      if (png.name !== 'tq-trieu-van-thrust-12fps.png' || png.buf.length < 1024 || png.buf.readUInt32BE(0) !== 0x89504e47) throw new Error('PNG sprite sheet: ' + png.name + ' ' + png.buf.length + ' B');
+      if (png.name !== 'tq-trieu-van-weaponThrust-12fps.png' || png.buf.length < 1024 || png.buf.readUInt32BE(0) !== 0x89504e47) throw new Error('PNG sprite sheet: ' + png.name + ' ' + png.buf.length + ' B');
       if (gif.buf.slice(0, 6).toString() !== 'GIF89a' || gif.buf.length < 1024) throw new Error('GIF: ' + gif.name + ' ' + gif.buf.length + ' B');
       const meta = JSON.parse(js.buf.toString());
       if (meta.format !== 'gen-chibi.anim/1' || meta.frames.length !== meta.frameCount) throw new Error('JSON timeline: ' + JSON.stringify(meta).slice(0, 160));
@@ -652,10 +665,10 @@ if (!ONLY) {
       const tqj = JSON.parse(require('fs').readFileSync(await tqp.path(), 'utf8'));
       if (!tqj.sample || tqj.sample.owner !== 'Gen Labs' || !/không bán lại/.test(tqj.sample.license) || tqj.key) throw new Error('tải gói bộ mẫu thiếu dấu sample: ' + JSON.stringify(tqj.sample));
       // đòn của khung với nhân vật của khung (không thuộc bộ mẫu nào): giữ câu cũ
-      await q.click('.libcard.act[data-action="wave"]'); await q.selectOption('.sticky select[aria-label="Nhân vật"]', 'gen.khung/ma-no-canh');
+      await q.click('.libcard.act[data-action="waveHello"]'); await q.selectOption('.sticky select[aria-label="Nhân vật"]', 'gen.khung/ma-no-canh');
       const wv = JSON.parse((await grab('JSON')).buf.toString());
       if (/Bộ mẫu/.test(wv.license) || wv.sample) throw new Error('nhân vật của khung bị ghi nhầm giấy phép bộ mẫu: ' + wv.license);
-      await q.click('.libcard.act[data-action="thrust"]'); await q.selectOption('.sticky select[aria-label="Nhân vật"]', 'local.my/tq-trieu-van');
+      await q.click('.libcard.act[data-action="weaponThrust"]'); await q.selectOption('.sticky select[aria-label="Nhân vật"]', 'local.my/tq-trieu-van');
       // đòn dài: engine tự hạ fps cho đủ cả đòn (anim.fps < fps đã chọn) → Studio nói rõ, GIF / JSON / tên tệp theo fps thật; cắt cụt thì cảnh báo.
       // (giả lập engine trả về fps đã hạ + cờ truncated để kiểm phần hiển thị của Studio — phần tính fps của engine do bài test engine kiểm)
       await q.evaluate(() => { const C = GenChibi.choreo, o = C.animate; window.__animate0 = o; C.animate = function (tl, op) { const a = o.call(C, tl, { fps: Math.min(op.fps, 8) }); a.meta.requestedFps = op.fps; if (op.fps >= 24) a.meta.truncated = true; return a; }; });
@@ -665,7 +678,7 @@ if (!ONLY) {
       if (!/bị cắt/.test(await q.textContent('.sticky [data-note="truncated"]'))) throw new Error('đòn bị cắt cụt mà không cảnh báo');
       const g8 = await grab('GIF'), j8 = await grab('JSON'), m8 = JSON.parse(j8.buf.toString());
       const dl8 = []; for (let i = 0; i < g8.buf.length - 6; i++) if (g8.buf[i] === 0x21 && g8.buf[i + 1] === 0xF9 && g8.buf[i + 2] === 4) dl8.push(g8.buf.readUInt16LE(i + 4));
-      if (g8.name !== 'tq-trieu-van-thrust-8fps.gif' || m8.fps !== 8 || dl8.length !== m8.frameCount || dl8[0] < 12 || dl8[0] > 13) throw new Error('GIF / JSON phải theo fps thật (8): ' + JSON.stringify([g8.name, m8.fps, dl8.slice(0, 3), dl8.length, m8.frameCount]));
+      if (g8.name !== 'tq-trieu-van-weaponThrust-8fps.gif' || m8.fps !== 8 || dl8.length !== m8.frameCount || dl8[0] < 12 || dl8[0] > 13) throw new Error('GIF / JSON phải theo fps thật (8): ' + JSON.stringify([g8.name, m8.fps, dl8.slice(0, 3), dl8.length, m8.frameCount]));
       await q.evaluate(() => { GenChibi.choreo.animate = window.__animate0; });
       await q.click('.sticky .seg button:text-is("12 fps")');
       if (await q.$('.sticky [data-note]')) throw new Error('đòn vừa khung mà vẫn hiện ghi chú / cảnh báo fps');
@@ -722,7 +735,7 @@ if (!ONLY) {
 }
 // Bảng bước › Thêm… › Âm thanh (CNS-104 / CNS-109 d): chip lấy NHÃN tiếng Việt từ thư viện âm; danh sách âm theo dự án của TÁC PHẨM chứ không theo dàn diễn viên —
 // phim Tam Quốc có trống trận; phim của dự án KHÁC dùng cùng nhân vật Tam Quốc thì không được mời âm Tam Quốc (từng mời rồi bị luật S6 từ chối lúc lưu)
-if (!ONLY) {
+if (want('core')) {
   const home5s = mkdtempSync(path.join(tmpdir(), 'gc-'));
   const srv5s = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home5s, GC_PORT: '7573', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
   await new Promise(r => setTimeout(r, 1200));
@@ -753,7 +766,7 @@ if (!ONLY) {
 }
 // Biên đạo liên hoàn: trang "Tử Long 30 giây" xuất bằng tools/choreo-demo.js chạy độc lập (file://), không lỗi, phát thật,
 // khung vẽ rẻ (≤ 8 ms), nhân vật đổi góc nhìn + nét mặt khi diễn, tua được, âm thanh bật khi bấm xem
-if (!ONLY) {
+if (want('core')) {
   const out = path.join(home, 'choreo.html');
   execFileSync(process.execPath, [path.join(ROOT, 'tools/choreo-demo.js'), 'tuLong30s', out], { stdio: 'ignore' });
   const b6 = await pw.chromium.launch(), q = await b6.newPage({ viewport: { width: 1280, height: 900 } }), errs = [];
@@ -786,12 +799,12 @@ if (!ONLY) {
 }
 // Biên đạo trong phim (v0.15): phân cảnh "Đấu tập trước trận" của phim Tam Quốc diễn được thật — diễn viên lướt / văng,
 // hiệu ứng va chạm có chữ tượng thanh, người xem giật mình, xong màn đấu thì thôi điều khiển và dọn lớp hiệu ứng
-if (!ONLY) {
+if (want('core')) {
   const R = (f) => 'file://' + path.join(ROOT, f), B = JSON.parse(require('fs').readFileSync(path.join(ROOT, 'studio/mau/tam-quoc.json'), 'utf8'));
   const shot = B.works[0].shots.find(s => s.id === 'canh-dau-tap');
   const page = path.join(home, 'duel.html');
   require('fs').writeFileSync(page, '<!doctype html><meta charset=utf-8><body style="margin:0"><div id=st style="width:960px"></div><div id=pg></div>' +
-    ['engine/core.js', 'engine/render.js', 'engine/sounds.js', 'engine/audio.js', 'engine/player.js', 'engine/choreo.js', 'kinds/character/gen.core.js', 'kinds/khung/gen.khung.js', 'kinds/character/gen.choreo.js'].map(f => '<script src="' + R(f) + '"></script>').join('') +
+    SCRIPTS.engine.map(f => '<script src="' + R(f) + '"></script>').join('') +   // đúng danh sách + thứ tự của Studio (engine/scripts.json, CNS-054)
     '<script>var B=' + JSON.stringify({ parts: B.parts, items: B.items, scenes: B.scenes, characters: B.characters, motionPacks: B.motionPacks || [] }) + ',SHOT=' + JSON.stringify(shot) + ';var GC=window.GenChibi;' +
     'GC.pack({id:"local.my",name:"x",owner:"x",group:"mine",license:"x"},function(){});B.parts.forEach(function(p){GC.registerDataPart("local.my",p)});B.items.forEach(function(x){GC.registerItem("local.my",x)});' +
     'B.scenes.forEach(function(x){GC.registerScene("local.my",x)});B.characters.forEach(function(a){GC.registerAsset("local.my",a)});' +
@@ -833,7 +846,7 @@ if (!ONLY) {
 // (không đuôi) so với hình chữ nhật của ĐẦU mọi diễn viên (hợp getBoundingClientRect các lớp mặt / tai / tóc mái / mũ ĐANG vẽ — không dùng số liệu
 // của chính bộ giải), đo hai lần cách nhau 1 s vì nhân vật vẫn cử động. Mỗi rào đã thử ngược: tắt bộ giải → test đỏ.
 // CNS-099: máy chậm / bảy trang song song thì khung hình chạy SAU đồng hồ hẹn giờ — bong bóng phải mở khi sân khấu ĐÃ đứng yên trên màn hình và hiện đủ lâu tính từ lúc thật sự hiện.
-if (!ONLY || ONLY === 'bubble') {
+if (want('bubble')) {
   const fs = require('fs');
   const home9 = mkdtempSync(path.join(tmpdir(), 'gc-'));
   const srv9 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home9, GC_PORT: '7495', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
@@ -1158,7 +1171,7 @@ if (!ONLY || ONLY === 'bubble') {
 }
 // Thư viện › Âm thanh + Thư viện › Giọng (v0.18, Data Console STD-07). TUYỆT ĐỐI không gọi Google / mạng thật: api/voice* và api/sound-packs bị chặn và trả lời giả
 // bằng máy chủ trong bộ nhớ; mọi địa chỉ ngoài máy bị chặn và đếm. GC_ONLY=lib → chỉ nhóm này. GC_SHOTS=<thư mục> → chụp màn hình 1440×900 (tên lib-*), GC_SCHEME=light|dark.
-if (!ONLY || ONLY === 'lib') {
+if (want('lib')) {
   const fs = require('fs'), crypto = require('crypto'), GV = require('../engine/voices.js'), SND = require('../engine/sounds.js'), TQ = JSON.parse(fs.readFileSync(path.join(ROOT, 'kinds/sound/tq-am.json'), 'utf8'));
   const home11 = mkdtempSync(path.join(tmpdir(), 'gc-')), PORT11 = 7662, URL11 = 'http://localhost:' + PORT11 + '/', SHOTS = process.env.GC_SHOTS || '', SCHEME = process.env.GC_SCHEME === 'light' ? 'light' : 'dark';
   const srv11 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home11, GC_PORT: String(PORT11), GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
@@ -1587,7 +1600,7 @@ if (!ONLY || ONLY === 'lib') {
 // Lồng tiếng AI (đủ câu, dừng đúng khi hết lượt) · bộ phát dùng clip và rơi về giọng máy khi clip lỗi · phim xuất có giọng AI nhúng, chạy file:// không gọi mạng ·
 // Hồ sơ nhân vật (vai · giọng vùng · giọng AI; cao độ / tốc độ chỉ ghi khi đã kéo). TUYỆT ĐỐI không gọi Google: mọi api/voice/* bị chặn và trả lời giả bằng page.route,
 // mọi địa chỉ ngoài máy bị chặn và đếm. GC_SHOTS=<thư mục> → chụp màn hình các màn chính.
-if (!ONLY || ONLY === 'voice') {
+if (want('voice')) {
   const fs = require('fs'), crypto = require('crypto'), GV = require('../engine/voices.js');
   const home10 = mkdtempSync(path.join(tmpdir(), 'gc-')), PORT10 = 7660, URL10 = 'http://localhost:' + PORT10 + '/', SHOTS = process.env.GC_SHOTS || '';
   const srv10 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home10, GC_PORT: String(PORT10), GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
@@ -2391,7 +2404,7 @@ if (!ONLY || ONLY === 'voice') {
 }
 // ===== v0.18 — Dock "Trợ lý AI" ở cột phải (mọi khu) + Tạo tác = danh sách tác phẩm → phòng làm phim riêng =====
 // LLM giả lập chuẩn OpenAI (tất định, không ra mạng ngoài); server tạm có bộ mẫu Tam Quốc. GC_ONLY=dock chỉ chạy nhóm này.
-if (!ONLY || ONLY === 'dock') {
+if (want('dock')) {
   const http11 = require('http');
   const LLM = { steps: [], reply: 'Xong.', last: null, calls: 0 };
   const mock11 = http11.createServer((req, res) => {
@@ -2688,7 +2701,7 @@ if (!ONLY || ONLY === 'dock') {
 }
 // ---- v0.19: OAuth cho MCP từ xa — trang "Cấp phép kết nối agent" (tự chứa, ngoài Studio) + Cài đặt › Kết nối agent. GC_ONLY=oauth chỉ chạy nhóm này (cổng 7664–7666).
 // Không ra mạng ngoài: callback của agent (claude.ai …) bị chặn lại bằng page.route và đọc URL đích.
-if (!ONLY || ONLY === 'oauth') {
+if (want('oauth')) {
   const crypto = await import('crypto');
   const H = 'https://chibi.example.test', TOK = 'tok-oauth-' + crypto.randomBytes(6).toString('hex'), CB = 'https://claude.ai/api/mcp/auth_callback', ALT = 'https://agent.example.org/cb';
   const home13 = mkdtempSync(path.join(tmpdir(), 'gc-')), srv13 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home13, GC_PORT: '7664', GC_NO_AUTOCHECK: '1', GC_API_TOKEN: TOK, GC_PUBLIC_URL: H, GC_OAUTH_REDIRECTS: ALT }, stdio: 'ignore' }));
@@ -2796,8 +2809,8 @@ if (!ONLY || ONLY === 'oauth') {
     await q14.goto('http://127.0.0.1:7665/xuong'); await q14.waitForFunction(() => /^v\d/.test((document.getElementById('verChip') || {}).textContent), null, { timeout: 8000 });
     await q14.click('.nav-item:has-text("Kết nối agent")'); await q14.waitForSelector('#connectBox .chip');
     const off14 = await q14.textContent('#connectBox');
-    if (!/Chưa bật/.test(off14) || !/GC_PUBLIC_URL/.test(off14) || await q14.$('#connectUrl')) throw new Error('thiếu GC_PUBLIC_URL: phải báo cần đặt + không có địa chỉ MCP: ' + off14.slice(0, 200));
-    console.log('  ✓ Chưa đặt GC_PUBLIC_URL: Cài đặt báo "Chưa bật — cần đặt GC_PUBLIC_URL", không có địa chỉ MCP');
+    if (!/Chưa bật/.test(off14) || !/genchibi online/.test(off14) || /genchibi expose/.test(off14) || await q14.$('#connectUrl')) throw new Error('thiếu địa chỉ công khai: phải chỉ Lên mạng / genchibi online (không còn genchibi expose, bỏ ở v0.23) + không có địa chỉ MCP: ' + off14.slice(0, 300));
+    console.log('  ✓ Chưa có địa chỉ công khai: Cài đặt báo "Chưa bật" + chỉ Hệ thống › Lên mạng / genchibi online (không còn genchibi expose), không có địa chỉ MCP');
     // ---- v0.21 (CNS-191): máy không đặt GC_API_TOKEN vẫn có token chủ (tự sinh) — chủ mở ở chính máy KHÔNG còn được miễn; cấp phép bằng phiên đăng nhập (S)
     const c5 = await reg('http://127.0.0.1:7666', 'Agent local', CB), k5 = mkq(c5), ctx15 = await b13.newContext(), q15 = await ctx15.newPage();
     q15.on('pageerror', e => errs13.push(e.message));
@@ -2838,7 +2851,7 @@ if (!ONLY || ONLY === 'oauth') {
 //   · server B (7680): máy kế thừa (.env GC_PUBLIC_URL) — wizard chỉ đọc + Migrate (POST /api/online/migrate);
 //   · launcher thật + app + cloudflared giả (7676, như tools/test-ingress.mjs): Link tạm đi hết qua cổng ingress → Xong → Go offline (cloudflared dừng).
 //   Ở mỗi màn chính: chế độ en không còn chữ Việt, bố cục 1366 px không chồng; GC_SHOTS=<thư mục> → chụp en + vi (Q29). GC_ONLY=online chỉ chạy nhóm này.
-if (!ONLY || ONLY === 'online') {
+if (want('online')) {
   const crypto = await import('crypto'), net = await import('net'), http = await import('http'), os = await import('os');
   const { fakeCloudflare } = await import('./fixtures/fake-cloudflare-api.mjs');
   const SHOTS = process.env.GC_SHOTS || '';
@@ -3074,7 +3087,7 @@ if (!ONLY || ONLY === 'online') {
     if (launcher) { try { process.kill(-launcher.pid, 'SIGTERM'); } catch (e) { /* đã tắt */ } await sleep(1500); try { process.kill(-launcher.pid, 'SIGKILL'); } catch (e) { /* đã tắt */ } }
   }
 }
-if (!ONLY || ONLY === 'i18n') {
+if (want('i18n')) {
   const home16 = mkdtempSync(path.join(tmpdir(), 'gc-'));
   const srv16 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home16, GC_PORT: '7668', GC_NO_AUTOCHECK: '1', GC_LANG: '' }, stdio: 'ignore' }));
   await new Promise(r => setTimeout(r, 1200));
@@ -3366,8 +3379,8 @@ if (!ONLY || ONLY === 'i18n') {
 //  P3 (bảng Xuất video trong Studio, đi bằng nút thật): nút khoá đúng lý do theo phép dò (không an toàn / thiếu VideoEncoder / không phải Chromium) · dùng lại
 //  askExport · bảng chọn (định dạng dò thật, trần độ dài, ước tính, vượt trần → chặn) · Bắt đầu → chọn thư mục trong cú bấm → tiến độ theo phân cảnh → 4 tệp
 //  (OPFS) · Xem thử phát · Chọn khung khác thay bìa · 9:16 ra 1080×1920 · Huỷ không để tệp · Fun Office 1080p nhịp tim (chặn 250 ms) · en / vi. GC_SHOTS=<thư mục> chụp màn.
-if (!ONLY || ONLY === 'video' || ONLY === 'video-ui') {
-  const P3_ONLY = ONLY === 'video-ui';   // GC_ONLY=video-ui: chỉ phần P3 (bảng Xuất video) — lặp nhanh khi sửa giao diện / chạy đột biến
+if (want('video') || want('video-ui')) {
+  const P3_ONLY = ONLY_SET.includes('video-ui') && !ONLY_SET.includes('video');   // GC_ONLY=video-ui: chỉ phần P3 (bảng Xuất video) — lặp nhanh khi sửa giao diện / chạy đột biến
   const { inspectMp4, inspectWebm } = require('./media-inspect.js');
   const { launch: cdpLaunch } = await import('./cdp.mjs');
   const VI = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ]/;

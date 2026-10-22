@@ -370,6 +370,27 @@
     d.kind = 'motion'; d.format = MOTION.format;
     return { errors: errs, def: errs.length ? null : d, notes: notes };
   }
+  // CNS-065 (v0.23): id hành động của BỘ KHUNG cũng theo luật registerPack áp cho gói — không trùng tên hoạt động (activity) / trạng thái (state)
+  // của kịch bản. 5 đòn khung đổi tên (thrust · rage · victory · salute · wave); id cũ còn là BÍ DANH: thuộc tính ẩn của ACTIONS (tra được, hasOwn
+  // đúng, không liệt kê — danh sách, số đếm, guide chỉ thấy id mới), nên tác phẩm / đề xuất / agent cũ diễn y hệt. Tác phẩm lưu với id cũ được
+  // chuyển sang id mới khi đọc / ghi (migrateWork — server/store.js qua MCP). Bí danh không bao giờ là id của gói (registerPack chặn trùng activity / state).
+  var ALIASES = {};
+  function defineAlias(map, old, id) { Object.defineProperty(map, old, { get: function () { return map[id]; }, enumerable: false, configurable: true }); }
+  function aliasAction(old, id) {
+    var C = GC.choreo;
+    if (!hasOwn(C.ACTIONS, id) || hasOwn(ALIASES, old)) return false;
+    ALIASES[old] = id; defineAlias(C.ACTIONS, old, id);
+    return true;
+  }
+  function actionId(id) { return typeof id === 'string' && hasOwn(ALIASES, id) ? ALIASES[id] : id; }
+  // tác phẩm (hoặc một phân cảnh) dùng id cũ → id mới, sửa tại chỗ; trả số bước đã đổi
+  function migrateWork(w) {
+    var n = 0;
+    ((w && Array.isArray(w.shots)) ? w.shots : (w && w.event ? [w] : [])).forEach(function (s) {
+      ((s && s.event && Array.isArray(s.event.steps)) ? s.event.steps : []).forEach(function (st) { if (st && typeof st.action === 'string' && hasOwn(ALIASES, st.action)) { st.action = ALIASES[st.action]; n++; } });
+    });
+    return n;
+  }
   // gỡ mọi thứ một gói đã nạp (nạp lại bản mới / xoá gói)
   function unregisterPack(key) {
     var P = PACKS[key]; if (!P) return;
@@ -1178,7 +1199,7 @@
     build: build, duel: duel, solo: solo, impacts: impacts, finalAt: finalAt, allAt: allAt, pointAt: pointAt, weaponOf: weaponOf, fxSvg: fxSvg, overlaySvg: overlaySvg, storyToReal: storyToReal, realToStory: realToStory, camAt: camAt,
     frameSVG: frameSVG, player: player, measure: measure, demos: {}, ACTIONS: {}, REACTS: {},
     MOTION: MOTION, FRAME_PACK: FRAME_PACK, PACKS: PACKS, packs: function () { return PACK_ORDER.map(function (k) { return PACKS[k]; }); },
-    checkPack: checkPack, registerPack: registerPack, unregisterPack: unregisterPack, hasWeapon: hasWeapon, canDo: canDo, actionsFor: actionsFor,
+    checkPack: checkPack, registerPack: registerPack, unregisterPack: unregisterPack, ACTION_ALIASES: ALIASES, aliasAction: aliasAction, actionId: actionId, migrateWork: migrateWork, hasWeapon: hasWeapon, canDo: canDo, actionsFor: actionsFor,
     actionTimeline: actionTimeline, animBox: animBox, animFrame: animFrame, animate: animate, sheetSVG: sheetSVG
   };
 })(typeof window !== 'undefined' ? window.GenChibi : globalThis.GenChibi);

@@ -20,3 +20,6 @@ jobs:
   # Đồng bộ tiếng: in độ trễ mồi AAC của từng nền tảng + đo THẬT bằng ffmpeg (mẫu dấu đầu / cuối lệch ≤ 1 khung và ≤ 3 ms, thời lượng tiếng ∈ [hình − 1 khung, hình + 1 khung AAC]).
   video-mp4:
     uses: ./.github/workflows/video-mp4.yml
+  # v0.23 B6 (CNS-032): bộ test trình duyệt trên Ubuntu + Chromium ghim bản (Playwright chỉ cài trong job CI) — mỗi nhóm GC_ONLY một máy, song song
+  browser:
+    uses: ./.github/workflows/browser.yml

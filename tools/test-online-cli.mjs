@@ -98,6 +98,7 @@ function cli(home, args, { env = {}, input = '', cliPath = CLI, timeoutMs = 1200
     const iv = setInterval(procScan, 15);
     const to = setTimeout(() => { try { process.kill(-c.pid, 'SIGKILL'); } catch (er) { /* đã tắt */ } }, timeoutMs);
     c.on('close', code => { clearInterval(iv); clearTimeout(to); resolve({ code, out }); });
+    c.stdin.on('error', () => {});   // lệnh thoát trước khi đọc stdin (vd. lệnh đã bỏ, thoát 2 ngay) → EPIPE là bình thường
     c.stdin.end(input);
   });
 }
@@ -131,18 +132,21 @@ console.log('   — cách dùng, app dừng');
   ok(r.code === 1 && /needs Docker mode/.test(r.out), 'native: online caddy <tên-miền> → cần Docker, gợi ý Cloudflare (không gọi API)', r.out);
   r = await cli(home, ['online', 'bogus']);
   ok(r.code === 2 && /Unknown option bogus/.test(r.out), 'lệnh con lạ → thoát 2 + trợ giúp', r.out);
-  // CNS-204 (spec §3.5): expose / link = bí danh mỏng của online — một dòng "Deprecated … removed in v0.23", rồi ĐÚNG đầu ra + mã thoát của lệnh online tương ứng
-  const DEP = /^Deprecated: genchibi (.+) is an alias of genchibi (.+) and will be removed in v0\.23 — running that now\.$/m;
-  const strip = o => o.split('\n').filter(l => !DEP.test(l)).join('\n');
-  const pairs = [[['expose', 'chibi.example.com', '--overwrite-dns'], ['online', 'cloudflare', 'chibi.example.com', '--overwrite-dns']], [['expose', '--quick'], ['online', 'quick']],
-    [['expose', '--off'], ['online', 'off']], [['expose', '--help'], ['online', '--help']], [['link'], ['online']], [['link', '--check'], ['online', 'recheck']]];
-  for (const [old, neu] of pairs) {
-    const a = await cli(home, old), b = await cli(home, neu), dl = a.out.split('\n').filter(l => DEP.test(l)), mm = DEP.exec(a.out) || [];
-    ok(dl.length === 1 && mm[1] === old.join(' ') && mm[2] === neu.join(' '), 'genchibi ' + old.join(' ') + ': đúng một dòng "Deprecated … alias of genchibi ' + neu.join(' ') + ' … removed in v0.23"', a.out);
-    ok(a.code === b.code && strip(a.out) === b.out && cf.st.log.length === 0, 'genchibi ' + old.join(' ') + ' ≡ genchibi ' + neu.join(' ') + ' (cùng đầu ra, cùng mã thoát ' + b.code + ')', 'expose: ' + a.code + ' ' + a.out + '\nonline: ' + b.code + ' ' + b.out);
+  // v0.23 B11 (CNS-256): expose / link ĐÃ BỎ (bí danh từ v0.21.3, CHANGELOG v0.22.0 báo trước) — một dòng "removed in v0.23 — use: genchibi online …",
+  // thoát 2, KHÔNG chạy gì (không gọi API Cloudflare, không đụng .env); kể cả các nhánh cũ --rotate / --off của máy còn GC_TUNNEL
+  const REM = /^genchibi (.+) was removed in v0\.23 — use: genchibi (.+)$/;
+  const env0 = fs.readFileSync(path.join(home, '.env'), 'utf8');
+  const gone = [[['expose', 'chibi.example.com', '--overwrite-dns'], 'online cloudflare chibi.example.com'], [['expose', '--quick'], 'online quick'], [['expose', '--off'], 'online off'],
+    [['expose', '--rotate'], 'online --help'], [['expose'], 'online --help'], [['expose', '--help'], 'online --help'], [['expose', '--bogus'], 'online --help'], [['link'], 'online'], [['link', '--check'], 'online recheck']];
+  for (const [old, neu] of gone) {
+    const a = await cli(home, old), lines = a.out.split('\n').filter(Boolean), mm = REM.exec(lines[0] || '') || [];
+    ok(a.code === 2 && lines.length === 1 && mm[1] === old.slice(0, 2).join(' ') && mm[2] === neu && cf.st.log.length === 0, 'genchibi ' + old.join(' ') + ' → đúng một dòng "removed in v0.23 — use: genchibi ' + neu + '", thoát 2, không chạy gì', a.code + ' ' + a.out);
   }
-  r = await cli(home, ['expose', '--bogus']);
-  ok(r.code === 1 && /--bogus/.test(r.out) && !/cloudflared login/.test(r.out), 'expose với tuỳ chọn lạ → báo lỗi (thoát 1), không còn đường cloudflared login', r.code + ' ' + r.out);
+  r = await cli(home, ['expose', '--off'], { env: { GC_LANG: 'vi' } });
+  ok(r.code === 2 && /^genchibi expose --off đã bỏ ở v0\.23 — dùng: genchibi online off$/m.test(r.out), 'tiếng Việt: "genchibi expose --off đã bỏ ở v0.23 — dùng: genchibi online off"', r.out);
+  ok(fs.readFileSync(path.join(home, '.env'), 'utf8') === env0, 'lệnh đã bỏ không sửa .env');
+  r = await cli(home, ['--help']);
+  ok(r.code === 0 && !/expose|genchibi link|\blink\b/.test(r.out) && /online \[caddy\|cloudflare/.test(r.out), 'trợ giúp genchibi không còn expose / link', r.out);
 }
 
 const L = startLauncher(home, P, { GC_TEST_CF_API: cf.base, GC_TEST_ONLINE_VIA: '127.0.0.1:' + (P + 2) });
@@ -303,21 +307,6 @@ console.log('   — link tạm (quick) qua CLI: launcher + cloudflared giả đ�
   r = await cli(hq, ['online', 'off']);
   ok(r.code === 0 && /Offline/.test(r.out), 'genchibi online off lần hai → offline', r.out);
   await stopLauncher(LQ);
-  // CNS-204: bí danh cũ chạy đúng luồng mới tới xong (app chạy) — bản cài riêng
-  const PQ2 = 7891, PX2 = 7897, hq2 = mkHome('quick2', PQ2);
-  fs.writeFileSync(path.join(hq2, 'fake-cf-proxy-port'), String(PX2));
-  const LQ2 = startLauncher(hq2, PQ2, { GC_TEST_ONLINE_VIA: '127.0.0.1:' + PX2 });
-  await until(() => health(PQ2), 30000);
-  r = await cli(hq2, ['password'], { input: 'correct horse battery staple\n' });
-  r = await cli(hq2, ['expose', '--quick']);
-  const url2 = (/✓ Online: (https:\/\/fake-\d+\.trycloudflare\.com)/.exec(r.out) || [])[1];
-  ok(r.code === 0 && url2 && /^Deprecated: genchibi expose --quick is an alias of genchibi online quick/m.test(r.out) && /✓ MCP from the Internet/.test(r.out), 'genchibi expose --quick (cũ) → nhắc một dòng rồi chạy online quick tới xong, in link tạm', r.code + ' ' + r.out);
-  r = await cli(hq2, ['link']);
-  ok(r.code === 0 && /^Deprecated: genchibi link is an alias of genchibi online/m.test(r.out) && url2 && r.out.includes(url2), 'genchibi link → trạng thái online: in địa chỉ (Studio + /mcp)', r.code + ' ' + r.out);
-  await sleep(2200);
-  r = await cli(hq2, ['expose', '--off']);
-  ok(r.code === 0 && /^Deprecated: genchibi expose --off is an alias of genchibi online off/m.test(r.out) && /Offline/.test(r.out), 'genchibi expose --off → online off', r.code + ' ' + r.out);
-  await stopLauncher(LQ2);
 }
 
 // ---------------------------------------------------------------- 6) máy kế thừa (.env có GC_PUBLIC_URL) → needs legacy · migrate
@@ -334,6 +323,46 @@ console.log('   — máy kế thừa: cấu hình ra ngoài bằng .env');
   r = await cli(hl, ['online', 'migrate']);
   ok((r.code === 1 && /no migrate step yet — update first: genchibi update/.test(r.out)) || (r.code === 0 && /now live in Go online/.test(r.out)), 'genchibi online migrate: route chưa có (404) → "cần bản mới"; có route → chuyển xong', r.code + ' ' + r.out);
   await stopLauncher(LL);
+}
+
+// ---------------------------------------------------------------- 6b) máy còn GC_TUNNEL (genchibi expose ≤ v0.22) — v0.23 B11
+// .env kiểu named (GC_TUNNEL=named + GC_PUBLIC_URL + COMPOSE_PROFILES=tunnel) và kiểu quick (GC_TUNNEL=quick + GC_ALLOWED_HOSTS=*.trycloudflare.com):
+// start / status / update in ĐÚNG một dòng nhắc genchibi online migrate · tunnel cũ không được chạy · migrate chạy được, dừng cloudflared cũ còn sót
+// (tiến trình mà logs/tunnel.pid trỏ tới), bỏ GC_TUNNEL / COMPOSE_PROFILES cũ khỏi .env → hết dòng nhắc
+console.log('   — máy còn GC_TUNNEL (genchibi expose cũ): dòng nhắc + genchibi online migrate');
+for (const [kind, PT, envs, mode] of [['named', 7891, { GC_TUNNEL: 'named', GC_PUBLIC_URL: 'https://old.example.com', GC_ALLOWED_HOSTS: 'old.example.com', COMPOSE_PROFILES: 'tunnel' }, 'cloudflare'],
+  ['quick', 7895, { GC_TUNNEL: 'quick', GC_PUBLIC_URL: '', GC_ALLOWED_HOSTS: '*.trycloudflare.com', COMPOSE_PROFILES: 'quick' }, 'quick']]) {
+  const ht = mkHome('tunnel-' + kind, PT);
+  fs.appendFileSync(path.join(ht, '.env'), Object.entries(envs).map(([k, v]) => k + '=' + v).join('\n') + '\n');
+  // cloudflared cũ do genchibi start ≤ v0.22 chạy (bản native) — tên lệnh có "cloudflared", pid trong logs/tunnel.pid
+  const oldCf = path.join(ht, 'h', 'cloudflared-old.js'); fs.writeFileSync(oldCf, 'setInterval(() => {}, 1000);\n');
+  const cfOld = spawn(process.execPath, [oldCf, 'tunnel', 'run'], { stdio: 'ignore', detached: true }); kids.push(cfOld);
+  fs.writeFileSync(path.join(ht, 'logs', 'tunnel.pid'), String(cfOld.pid));
+  const LT = startLauncher(ht, PT, Object.assign({ GC_FEED_URL: 'http://127.0.0.1:9/feed' }, envs));   // genchibi update: kênh phát hành giả, không ra mạng
+  await until(() => health(PT), 30000);
+  const NOTE = /^! \.env still has GC_TUNNEL=(\w+) from the old genchibi expose \(removed in v0\.23\) — that tunnel is no longer started\. Move this machine to Go online: genchibi online migrate$/;
+  const notes = o => o.split('\n').filter(l => NOTE.test(l));
+  let r = await cli(ht, ['status']);
+  ok(r.code === 0 && notes(r.out).length === 1 && NOTE.exec(notes(r.out)[0])[1] === kind && !/genchibi link|expose --rotate/.test(r.out), kind + ': genchibi status → đúng một dòng nhắc genchibi online migrate', r.out);
+  r = await cli(ht, ['start']);
+  ok(notes(r.out).length === 1 && alive(LT.c.pid), kind + ': genchibi start → đúng một dòng nhắc (app vẫn chạy)', r.out);
+  ok(!alive(cfOld.pid) && !fs.existsSync(path.join(ht, 'logs', 'tunnel.pid')), kind + ': cloudflared cũ còn sót bị dừng (start không chạy lại tunnel cũ)');
+  r = await cli(ht, ['update']);
+  ok(notes(r.out).length === 1, kind + ': genchibi update → đúng một dòng nhắc', r.out);
+  // pid cũ trỏ vào tiến trình KHÔNG phải cloudflared (pid đã bị dùng lại) → không bị giết
+  const other = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore', detached: true }); kids.push(other);
+  fs.writeFileSync(path.join(ht, 'logs', 'tunnel.pid'), String(other.pid));
+  await sleep(2200);
+  r = await cli(ht, ['online', 'migrate']);
+  const v = (await api(LT, 'GET', '/api/online')).j || {}, envAfter = fs.readFileSync(path.join(ht, '.env'), 'utf8');
+  const oj = (() => { try { return JSON.parse(fs.readFileSync(path.join(ht, 'data', 'online.json'), 'utf8')); } catch (e) { return {}; } })();
+  ok(r.code === 0 && /now live in Go online/.test(r.out) && v.mode === mode && v.publicUrl === envs.GC_PUBLIC_URL && oj.adopted === true, kind + ': genchibi online migrate chạy được → Go online nhận cấu hình (data/online.json adopted, mode ' + v.mode + ', địa chỉ "' + v.publicUrl + '")', r.code + ' ' + r.out + ' ' + JSON.stringify(oj));
+  ok(!/^GC_TUNNEL=\S/m.test(envAfter) && !/^COMPOSE_PROFILES=\S/m.test(envAfter) && new RegExp('^GC_ALLOWED_HOSTS=' + envs.GC_ALLOWED_HOSTS.replace(/[.*]/g, '\\$&') + '$', 'm').test(envAfter), kind + ': migrate bỏ GC_TUNNEL + COMPOSE_PROFILES cũ khỏi .env, giữ phần còn lại', envAfter);
+  ok(alive(other.pid), kind + ': tunnel.pid trỏ vào tiến trình không phải cloudflared → không bị giết');
+  try { process.kill(other.pid, 'SIGKILL'); } catch (e) { /* đã tắt */ }
+  r = await cli(ht, ['status']);
+  ok(r.code === 0 && !notes(r.out).length, kind + ': sau migrate, status hết dòng nhắc', r.out);
+  await stopLauncher(LT);
 }
 
 // ---------------------------------------------------------------- 7) móc kiểm thử chỉ có tác dụng khi GC_TEST=1 (review bảo mật 🟡7)

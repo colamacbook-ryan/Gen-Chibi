@@ -6,7 +6,7 @@
 'use strict';
 const fs = require('fs'), os = require('os'), path = require('path'), vm = require('vm'), { spawn } = require('child_process');
 const ROOT = path.join(__dirname, '..');
-const { MCP, TOOLS } = require(ROOT + '/server/mcp.js'), { Store } = require(ROOT + '/server/store.js'), { loadEngine } = require(ROOT + '/server/engine-node.js'), Agent = require(ROOT + '/server/agent.js');
+const { MCP, TOOLS } = require(ROOT + '/server/mcp.js'), { Store } = require(ROOT + '/server/store.js'), { loadEngine, engineScripts } = require(ROOT + '/server/engine-node.js'), Agent = require(ROOT + '/server/agent.js');
 const SOUNDS_SRC = fs.readFileSync(path.join(ROOT, 'engine/sounds.js'), 'utf8');
 let n = 0;
 const FAILS = [];   // GC_KEEP_GOING=1: không thoát ở lỗi đầu — in hết để thấy ca nào đỏ trên mã cũ (thử ngược)
@@ -21,7 +21,7 @@ const errOf = r => (r.structuredContent && r.structuredContent.error) || {};
 // engine KHÔNG nạp sounds.js (đường dự phòng: bản cũ / trang chủ không nạp thư viện âm)
 function engineWithout() {
   const ctx = { window: {}, console }; vm.createContext(ctx);
-  ['engine/core.js', 'engine/voices.js', 'engine/choreo.js', 'kinds/character/gen.core.js', 'kinds/khung/gen.khung.js', 'kinds/character/gen.choreo.js', 'engine/player.js'].forEach(f => vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f }));
+  engineScripts(ROOT, { without: ['engine/sounds.js'] }).forEach(f => vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f }));   // engine/scripts.json (CNS-054) trừ sounds.js
   return ctx.window.GenChibi;
 }
 // gói âm nhỏ dựng nhanh (cổng thật vẫn chạy trên nó)
@@ -606,7 +606,7 @@ const sect = async f => { try { await f(); } catch (e) { if (!process.env.GC_KEE
     // CNS-109 (a): preview_shot cho agent (không nghe được) thấy ÂM NÀO SẼ PHÁT ở từng bước — tự gán, ghi tay, bước im ([]), bước ra đòn — kèm dự án + không khí
     const pvj = async shot => J(await m.callTool('preview_shot', { work: 'tq-vuon-dao-xich-bich', shot })), pv1 = await pvj('canh-1'), pv0 = await pvj('0'), pvd = await pvj('canh-dau-tap'), pv4 = await pvj('canh-4');
     no(!pv1.ready || pv1.project !== 'mau-tam-quoc' || pv1.mood !== 'epic' || JSON.stringify(pv1.beats.map(b => b.sfx)) !== '[["sparkle"],[],["tu-va","chime"],[],[],["sparkle","party"]]' || JSON.stringify(pv0.beats) !== JSON.stringify(pv1.beats), 'preview_shot canh-1: project + mood + sfx từng bước (tự gán; [] = bước im; tù và ở bước im trước lời thề): ' + JSON.stringify(pv1.beats.map(b => b.sfx)));
-    no(pvd.mood !== 'tense' || pvd.beats.find(b => b.act === 'combo').sfx.join() !== 'trong-tran' || pvd.beats.find(b => b.act === 'thrust').sfx !== undefined || pv4.beats[0].sfx.join() !== 'vo-ngua', 'preview_shot: bước ra đòn mang sfx ghi tay (trống trận), đòn không âm thì bỏ trường; sfx ghi tay của bước thoại (vó ngựa)');
+    no(pvd.mood !== 'tense' || pvd.beats.find(b => b.act === 'combo').sfx.join() !== 'trong-tran' || pvd.beats.find(b => b.act === 'weaponThrust').sfx !== undefined || pv4.beats[0].sfx.join() !== 'vo-ngua', 'preview_shot: bước ra đòn mang sfx ghi tay (trống trận), đòn không âm thì bỏ trường; sfx ghi tay của bước thoại (vó ngựa)');
     console.log('   ✓ bộ mẫu Tam Quốc: kèm gói âm tq-am (7 âm), 3 phân cảnh gán âm, lintSoundTrack sạch, phiên bản mẫu ' + TQB.sample.version + ' khớp Studio');
   });
 
