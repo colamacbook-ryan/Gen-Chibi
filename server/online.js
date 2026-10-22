@@ -237,18 +237,42 @@ function createOnline(opts) {
   if (!d.config) throw new Error('online: config missing');
   const home = d.home, dataDir = d.dataDir || path.join(home, 'data');
   const edgeDir = path.join(home, 'edge'), runDir = path.join(home, 'run');
-  const files = { intent: path.join(runDir, 'edge-intent.json'), status: path.join(runDir, 'edge-status.json'), tunnelToken: path.join(runDir, 'tunnel.token'), installId: path.join(dataDir, 'install-id'), cfLog: path.join(home, 'logs', 'tunnel.log') };
+  const files = { intent: path.join(runDir, 'edge-intent.json'), status: path.join(runDir, 'edge-status.json'), tunnelToken: path.join(runDir, 'tunnel.token'), installId: path.join(dataDir, 'install-id'), installMachine: path.join(dataDir, 'install-id.machine'), machineId: path.join(runDir, 'machine-id'), hostId: path.join(runDir, 'host-id'), cfLog: path.join(home, 'logs', 'tunnel.log') };
   const caddy = d.caddy || createCaddy({ edgeDir });
   const edge = d.edge || createEdge({ edgeDir });
   const tunnelPort = (+d.port || 7480) + 2;
   const iso = () => new Date(d.now()).toISOString();
 
+  // ---- dấu máy (v0.23.1, CNS-235): KHÔNG nằm trong data/ (không theo bản sao lưu) — mid = SHA-256 của run/machine-id (ngẫu nhiên; trình cài / server tạo),
+  // host = SHA-256 của máy chủ: run/host-id (CLI ghi băm /etc/machine-id / IOPlatformUUID — cả trong Docker, nơi app không thấy máy chủ), không có thì
+  // (native) băm /etc/machine-id. data/install-id.machine ghi dấu của máy tạo install-id → khôi phục sao lưu: cùng mid và host (host trống một bên = chỉ so mid)
+  // → CHÍNH máy này: giữ install-id (Go offline dọn được tunnel / DNS của mình); khác / không có dấu (bản sao lưu cũ) → install-id mới như CNS-213
+  const sha = s => crypto.createHash('sha256').update(String(s)).digest('hex');
+  function readHex(f, re) { try { const v = fs.readFileSync(f, 'utf8').trim(); return re.test(v) ? v : ''; } catch (e) { return ''; } }
+  function machineMark() {
+    let mid = readHex(files.machineId, /^[a-f0-9]{16,128}$/);
+    if (!mid) { mid = crypto.randomBytes(16).toString('hex'); try { writeAtomic(files.machineId, mid + '\n', 0o600); } catch (e) { d.log('[online] run/machine-id: ' + cut(e.message)); } }
+    let host = readHex(files.hostId, /^[a-f0-9]{64}$/);
+    if (!host && !d.inDocker) for (const f of (d.machineIdFiles || ['/etc/machine-id', '/var/lib/dbus/machine-id'])) { const v = readHex(f, /^[A-Za-z0-9-]{8,128}$/); if (v) { host = sha(v); break; } }
+    return { v: 1, mid: sha('gc-machine:' + mid), host };
+  }
+  function sameMachine(rec, cur) {
+    if (!rec || rec.v !== 1 || typeof rec.mid !== 'string' || rec.mid !== cur.mid) return false;
+    return !rec.host || !cur.host || rec.host === cur.host;
+  }
+  // bản cài có install-id từ trước v0.23.1: ghi dấu máy lúc khởi động (main.js gọi SAU bước khôi phục) — bản sao lưu về sau mang dấu đó
+  function noteMachine() { if (readHex(files.installId, /^[a-f0-9]{16,64}$/) && !fs.existsSync(files.installMachine)) recordMachine(); }
+  function recordMachine() { try { writeAtomic(files.installMachine, JSON.stringify(machineMark()) + '\n', 0o600); } catch (e) { d.log('[online] install-id.machine: ' + cut(e.message)); } }
   // ---- installId: tên tunnel gen-chibi-<8 ký tự đầu> (CNS-179: một tunnel cho một bản cài)
   function installId() {
     if (typeof d.installId === 'function') return d.installId();
-    try { const v = fs.readFileSync(files.installId, 'utf8').trim(); if (/^[a-f0-9]{16,64}$/.test(v)) return v; } catch (e) { /* chưa có */ }
+    try {
+      const v = fs.readFileSync(files.installId, 'utf8').trim();
+      if (/^[a-f0-9]{16,64}$/.test(v)) { if (!fs.existsSync(files.installMachine)) recordMachine(); return v; }   // install-id có từ trước v0.23.1 → ghi dấu máy này
+    } catch (e) { /* chưa có */ }
     const v = crypto.randomBytes(16).toString('hex');
     writeAtomic(files.installId, v + '\n', 0o600);
+    recordMachine();
     return v;
   }
   const tunnelName = () => 'gen-chibi-' + installId().slice(0, 8);
@@ -656,11 +680,14 @@ function createOnline(opts) {
   function resetAfterRestore() {
     flow = null;
     try { writeIntent('off', false); } catch (e) { d.log('[online] restore: ' + cut(e.message)); }
-    [files.tunnelToken, files.installId].forEach(f => { try { fs.rmSync(f, { force: true }); } catch (e) { /* không có */ } });
+    let rec = null; try { rec = JSON.parse(fs.readFileSync(files.installMachine, 'utf8')); } catch (e) { /* bản sao lưu cũ / không có */ }
+    const same = !!readHex(files.installId, /^[a-f0-9]{16,64}$/) && sameMachine(rec, machineMark());
+    (same ? [files.tunnelToken] : [files.tunnelToken, files.installId, files.installMachine]).forEach(f => { try { fs.rmSync(f, { force: true }); } catch (e) { /* không có */ } });
     try { d.config.revert(); } catch (e) { /* .env kế thừa: chỉ đọc */ }
     const r = d.config.set({ mode: 'off', domain: '', clientIpHeader: '', publicUrl: '', flow: null });
     clearCaddy().catch(e => d.log('[online] caddy cleanup: ' + cut(e.message)));
-    d.log('[online] backup restored: Go online is off on this machine (new install id; run Go online again to put it online)');
+    d.log(same ? '[online] backup restored: Go online is off on this machine (same machine: install id kept — Go offline can still clean its Cloudflare tunnel / DNS; run Go online again to put it online)'
+      : '[online] backup restored: Go online is off on this machine (new install id; run Go online again to put it online)');
     return r;
   }
   async function clearCaddy() {
@@ -845,7 +872,7 @@ function createOnline(opts) {
     if (!watch) { watch = setInterval(() => { if (!running) d.tunnel.set(intent() !== 'off'); }, 2000); if (watch.unref) watch.unref(); }
   }
 
-  return { route, checkRoute, view, init, intent, idle, migrate, ownerReady, waitingOwner, busy, internetCheck, resetAfterRestore, files, tunnelPort, _flow: () => flow };
+  return { route, checkRoute, view, init, intent, idle, migrate, ownerReady, waitingOwner, busy, internetCheck, resetAfterRestore, machineMark, noteMachine, files, tunnelPort, _flow: () => flow };
 }
 
 module.exports = { createOnline, flowWaitsOwner, isPublicIp, isCloudflareIp, probeUrl, resolveFresh, traceIp, snippets, ANTHROPIC, CF_IPS, FLOWS };

@@ -22,6 +22,7 @@ const path = require('path');
 const STAGES = ['admin', 'must_init', 'domain', 'mcp', 'done'];
 const CHOICES = ['online', 'local', 'local-pending'];
 const WINDOW_MS = 30 * 60e3;                       // cửa sổ admin + phiên admin: 30 phút
+const SEEN_DONE_MS = 24 * 3600e3;               // lastClient cùng agent sau khi thiết lập xong: ghi đĩa ≤ 1 lần / ngày (CNS-277)
 const LOOP_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 // header của proxy / edge: có một cái là request KHÔNG đến thẳng từ trình duyệt trên máy (rào phụ — proxy tối giản không thêm gì: đó là rủi ro chấp nhận)
 const PROXY_HEADERS = ['x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'x-forwarded-port', 'forwarded', 'x-real-ip', 'true-client-ip', 'cf-connecting-ip', 'cf-ray', 'cf-ipcountry', 'cdn-loop', 'x-gc-edge', 'via'];
@@ -177,12 +178,13 @@ class Setup {
     this.s.mcp = Object.assign({}, this.s.mcp, { hostCheck: v }); this.save(); return v;
   }
   setSelfTest(r) { this.s.mcp = Object.assign({}, this.s.mcp, { selfTest: r }); this.save(); }
-  // agent đầu tiên / mới nhất gọi MCP (lastClient: tên, lúc, kênh) — ghi đĩa khi đổi tên / kênh hoặc mỗi ≥ 60 giây
+  // agent đầu tiên / mới nhất gọi MCP (lastClient: tên, lúc, kênh) — ghi đĩa khi đổi tên / kênh; cùng agent: mỗi ≥ 60 giây khi wizard còn chờ (dòng "agent vừa nối"),
+  // mỗi ≥ 24 giờ khi đã xong (CNS-277: không ghi setup.json mỗi phút mãi mãi). Một bản ghi duy nhất — không có danh sách nào lớn dần
   seenClient(name, channel) {
     if (!this.s) return;
     const n = String(name || '').replace(/[\u0000-\u001f\u007f<>]/g, '').slice(0, 80) || 'agent', ch = String(channel || ''), t = this.now();
-    const cur = this.s.mcp.lastClient;
-    if (cur && cur.name === n && cur.channel === ch && Date.parse(cur.at) + 60e3 > t) return;
+    const cur = this.s.mcp.lastClient, gap = this.stage === 'done' ? SEEN_DONE_MS : 60e3;
+    if (cur && cur.name === n && cur.channel === ch && Date.parse(cur.at) + gap > t) return;
     this.s.mcp = Object.assign({}, this.s.mcp, { lastClient: { name: n, channel: ch, at: iso(t) } });
     this.save();
   }
@@ -284,4 +286,4 @@ const REASON_MSG = {
   link: 'mở đúng link do trình cài in ra, hoặc chạy genchibi open trên máy chủ (link mới, 30 phút) — admin / admin chỉ nhận qua link đó'
 };
 
-module.exports = { Setup, adminReasons, machineReasons, requestReasons, loginReasons, KEY_RE, REASON_MSG, STAGES, CHOICES, WINDOW_MS, PROXY_HEADERS, loginProblem, displayProblem, emailProblem, isLoopIp, isLoopName };
+module.exports = { Setup, SEEN_DONE_MS, adminReasons, machineReasons, requestReasons, loginReasons, KEY_RE, REASON_MSG, STAGES, CHOICES, WINDOW_MS, PROXY_HEADERS, loginProblem, displayProblem, emailProblem, isLoopIp, isLoopName };

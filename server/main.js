@@ -867,7 +867,7 @@ const goOnline = require('./online').createOnline(Object.assign({ home: HOME, da
   legacy: () => { const c = online.get(); return { active: !!c.readOnly, marked: auth.isLegacy(), publicUrl: c.env.publicUrl, allowedHosts: c.env.allowedHosts.join(','), tunnel: c.env.tunnel }; } }, onlineTestNet, onlineTestCf));
 
 // KHÔI PHỤC SAO LƯU (CNS-202): `genchibi restore` đặt data/restore-pending.json vào bản vừa giải nén. Lần khởi động đầu sau đó: Go online về off
-// (online.json mode off, publicUrl rỗng, intent off, xoá run/tunnel.token, install-id mới) và THU HỒI mọi phiên + thiết bị (mật khẩu giữ theo bản sao lưu).
+// (online.json mode off, publicUrl rỗng, intent off, xoá run/tunnel.token, install-id mới — trừ khi bản sao lưu là của CHÍNH máy này, CNS-235) và THU HỒI mọi phiên + thiết bị (mật khẩu giữ theo bản sao lưu).
 // Sao lưu có thể từ máy khác: không quảng bá tên miền / không giành tunnel của máy gốc, phiên cũ không sống lại.
 {
   const mark = path.join(DATA, 'restore-pending.json');
@@ -876,6 +876,7 @@ const goOnline = require('./online').createOnline(Object.assign({ home: HOME, da
     try { goOnline.resetAfterRestore(); auth.revokeAll('backup restored'); oauth.revokeAll('backup restored'); fs.rmSync(mark, { force: true }); }
     catch (e) { log('[server] after restore: ' + MSG.en(e.message)); }
   }
+  try { goOnline.noteMachine(); } catch (e) { log('[server] machine mark: ' + MSG.en(e.message)); }   // CNS-235: install-id cũ → ghi dấu máy này (data/install-id.machine)
 }
 // bảng lối vào (§A.0): SAU khôi phục + khi đã biết luồng Go online v0.21 / v0.22 đang "chờ mật khẩu" (máy đó vẫn online, stage must_init).
 // Owner vừa khởi tạo (mọi đường) → luồng đó tự xong (thay móc onPasswordSet của v0.21)

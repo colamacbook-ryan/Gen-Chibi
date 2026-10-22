@@ -461,14 +461,14 @@ console.log('9) CLI: genchibi status / open (cửa sổ admin) · password (app 
   fs.writeFileSync(path.join(HD, 'launcher.js'), '');   // genchibi start (native) chạy launcher của bản cài — ở đây là tệp rỗng (server bật tay ở dưới)
   const rs = cli(['restore', bkf], 'yes\n');
   const intentR = (() => { try { return JSON.parse(fs.readFileSync(path.join(HD, 'run/edge-intent.json'), 'utf8')); } catch (e) { return null; } })();
-  ok(bk.code === 0 && fs.existsSync(bkf) && rs.code === 0 && /holds the owner password/.test(rs.out) && /Go online is off/.test(rs.out) && fs.existsSync(path.join(HD, 'data/restore-pending.json')) && !fs.existsSync(path.join(HD, 'data/install-id'))
+  ok(bk.code === 0 && fs.existsSync(bkf) && rs.code === 0 && /holds the owner password/.test(rs.out) && /Go online is off/.test(rs.out) && fs.existsSync(path.join(HD, 'data/restore-pending.json'))
     && !fs.existsSync(path.join(HD, 'run/tunnel.token')) && intentR && intentR.tunnel === 'off' && intentR.online === false,
-    'genchibi restore: báo trước "sao lưu chứa mật khẩu + phiên"; xoá install-id + run/tunnel.token, intent tunnel off, đặt data/restore-pending.json', rs.out);
+    'genchibi restore: báo trước "sao lưu chứa mật khẩu + phiên"; xoá run/tunnel.token, intent tunnel off, đặt data/restore-pending.json (install-id: server quyết theo dấu máy — CNS-235)', rs.out);
   S = await ready(boot(7749, {}, HD));
   const onl = JSON.parse(fs.readFileSync(path.join(HD, 'data/online.json'), 'utf8')), prm1 = await req(7749, 'GET', '/.well-known/oauth-protected-resource', { headers: { host: OLD } });
   const lr2 = await req(7749, 'POST', '/api/auth/login', { headers: W, body: { username: 'owner', password: PWR } });
-  ok(onl.mode === 'off' && onl.publicUrl === '' && !onl.publicUrlPending && onl.flow === null && onl.cfResources && onl.cfResources.tunnelId === 't-1' && prm1.status === 403 && !fs.existsSync(path.join(HD, 'data/restore-pending.json')) && /backup restored/.test(S.out),
-    'server sau khôi phục: online.json mode off, publicUrl rỗng, luồng bỏ (cfResources giữ để Go offline còn dọn) · Host ' + OLD + ' bị chặn · dấu restore-pending đã xử lý');
+  ok(onl.mode === 'off' && onl.publicUrl === '' && !onl.publicUrlPending && onl.flow === null && onl.cfResources && onl.cfResources.tunnelId === 't-1' && prm1.status === 403 && !fs.existsSync(path.join(HD, 'data/restore-pending.json')) && /backup restored/.test(S.out) && !fs.existsSync(path.join(HD, 'data/install-id')) && /new install id/.test(S.out),
+    'server sau khôi phục: online.json mode off, publicUrl rỗng, luồng bỏ (cfResources giữ để Go offline còn dọn) · Host ' + OLD + ' bị chặn · dấu restore-pending đã xử lý · bản sao lưu không mang dấu máy (install-id có trước v0.23.1) → install-id mới (CNS-213)');
   ok((await req(7749, 'GET', '/api/info', { headers: LR })).status === 401 && lr2.status === 200 && (await req(7749, 'GET', '/api/auth/sessions', { headers: cookie(jar(lr2.set)) })).json.devices.length === 1,
     'khôi phục: phiên cũ (trong bản sao lưu) 401, mật khẩu của bản sao lưu vẫn đăng nhập được; thiết bị cũ đã thu hồi (chỉ còn thiết bị vừa đăng nhập)');
   const S5out = S.out; await stop(S);

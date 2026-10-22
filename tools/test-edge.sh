@@ -19,7 +19,7 @@ skp() { echo "  - bỏ qua: $1"; skip=$((skip+1)); }
 sha() { node -e 'console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync(process.argv[1])).digest("hex"))' "$1"; }
 mode() { node -e 'console.log((require("fs").statSync(process.argv[1]).mode & 0o777).toString(8))' "$1"; }
 # các hàm compose của CLI, chạy trong thư mục cài giả (CLI thật cd vào thư mục cài rồi mới gọi)
-CLI_FUNCS="$(sed -n -e '/^EDGE_MARK=/p' -e '/^DOCKER_VIA=/p' -e '/^dk_pick() {/,/^}/p' -e '/^dk() {/,/^}/p' -e '/^compose_override() {/,/^}/p' -e '/^compose_files() {/,/^}/p' -e '/^compose() {/,/^}/p' -e '/^own_fix() {/,/^}/p' \
+CLI_FUNCS="$(sed -n -e '/^EDGE_MARK=/p' -e '/^DOCKER_VIA=/p' -e '/^as_app() {/,/^}/p' -e '/^rd() {/p' -e '/^aw() {/p' -e '/^dk_pick() {/,/^}/p' -e '/^dk() {/,/^}/p' -e '/^compose_override() {/,/^}/p' -e '/^compose_files() {/,/^}/p' -e '/^compose() {/,/^}/p' -e '/^own_fix() {/,/^}/p' \
   -e '/^sync_compose() {/,/^}/p' -e '/^edge_prepare() {/,/^}/p' -e '/^port_busy() {/,/^}/p' "$ROOT/cli/genchibi")"
 HAVE_COMPOSE=""; docker compose version >/dev/null 2>&1 && HAVE_COMPOSE=1
 

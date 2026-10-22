@@ -436,10 +436,44 @@ console.log('   — đường B: tài nguyên Cloudflare gắn install-id (CNS-2
   await w.post('/api/online/off', { token: API_TOKEN }); await w.idle();
   ok(!w.cf.st.tunnels.some(z => !z.deleted_at) && !w.cf.st.dns.some(d => d.name === 'chibi.example.com'), 'cfResources kiểu v0.21 (không installId), cùng máy → khớp theo tên tunnel, vẫn dọn');
   w.close(); w.cf.close();
-  // khôi phục sang máy khác: data/ (online.json có cfResources) mang theo, install-id mới (resetAfterRestore như server) → Go offline KHÔNG xoá gì ở Cloudflare, báo rõ
+  // v0.23.1 (CNS-235): khôi phục trên CHÍNH máy này — dấu máy (run/machine-id + run/host-id, ngoài data/) khớp dấu ghi lúc tạo install-id → GIỮ install-id
+  // → Go offline vẫn xoá đúng tunnel / CNAME / luật WAF của máy mình (fake Cloudflare API)
+  const z = await flowB({ mk: fileId });
+  fs.mkdirSync(path.join(z.home, 'run'), { recursive: true }); fs.writeFileSync(path.join(z.home, 'run', 'host-id'), 'b'.repeat(64) + '\n');
+  await z.post('/api/online/cloudflare', { token: API_TOKEN, zone: 'example.com', sub: 'chibi' }); await z.idle();
+  const zid = fs.readFileSync(path.join(z.dataDir, 'install-id'), 'utf8').trim(), zrec = JSON.parse(fs.readFileSync(path.join(z.dataDir, 'install-id.machine'), 'utf8'));
+  ok(zrec.v === 1 && /^[a-f0-9]{64}$/.test(zrec.mid) && zrec.host === 'b'.repeat(64) && !JSON.stringify(zrec).includes(fs.readFileSync(path.join(z.home, 'run', 'machine-id'), 'utf8').trim()),
+    'tạo install-id → data/install-id.machine ghi dấu máy (băm run/machine-id + run/host-id; không chép giá trị gốc)');
+  z.logs.length = 0;
+  z.online.resetAfterRestore();
+  const zid2 = (() => { try { return fs.readFileSync(path.join(z.dataDir, 'install-id'), 'utf8').trim(); } catch (e) { return '(đã xoá)'; } })();
+  await z.post('/api/online/off', { token: API_TOKEN }); await z.idle();
+  ok(zid2 === zid && z.logs.some(l => /same machine: install id kept/.test(l)) && !z.cf.st.tunnels.some(t => !t.deleted_at) && !z.cf.st.dns.some(d => d.name === 'chibi.example.com') && z.cf.st.ruleset.rules.length === 0 && deletes(z.cf).length >= 3,
+    'khôi phục trên CHÍNH máy này (dấu máy khớp) → install-id giữ nguyên → Go offline xoá tunnel + CNAME + luật WAF của mình', 'id ' + zid + ' → ' + zid2 + ' · ' + z.logs.join(' | '));
+  z.close(); z.cf.close();
+  // cùng run/machine-id nhưng máy chủ khác (thư mục cài chép sang máy khác — run/host-id khác) → coi là máy khác
+  const q = await flowB({ mk: fileId });
+  fs.mkdirSync(path.join(q.home, 'run'), { recursive: true }); fs.writeFileSync(path.join(q.home, 'run', 'host-id'), 'c'.repeat(64) + '\n');
+  await q.post('/api/online/cloudflare', { token: API_TOKEN, zone: 'example.com', sub: 'chibi' }); await q.idle();
+  const qid = fs.readFileSync(path.join(q.dataDir, 'install-id'), 'utf8').trim();
+  fs.writeFileSync(path.join(q.home, 'run', 'host-id'), 'd'.repeat(64) + '\n');
+  q.online.resetAfterRestore();
+  ok(!fs.existsSync(path.join(q.dataDir, 'install-id')) && !fs.existsSync(path.join(q.dataDir, 'install-id.machine')) && qid.length === 32,
+    'cùng run/machine-id nhưng run/host-id khác (thư mục cài chép sang máy khác) → install-id bỏ (máy khác)');
+  q.close(); q.cf.close();
+  // bản sao lưu cũ (install-id không có dấu máy — trước v0.23.1) → install-id mới như CNS-213
+  const o = await flowB({ mk: fileId });
+  await o.post('/api/online/cloudflare', { token: API_TOKEN, zone: 'example.com', sub: 'chibi' }); await o.idle();
+  fs.rmSync(path.join(o.dataDir, 'install-id.machine'));
+  o.online.resetAfterRestore();
+  ok(!fs.existsSync(path.join(o.dataDir, 'install-id')), 'bản sao lưu không có data/install-id.machine (trước v0.23.1) → install-id mới');
+  o.close(); o.cf.close();
+  // khôi phục sang máy khác: data/ (online.json có cfResources) mang theo, dấu máy khác (run/machine-id của máy này ≠ máy tạo install-id) → install-id mới
+  // (resetAfterRestore như server) → Go offline KHÔNG xoá gì ở Cloudflare, báo rõ
   const y = await flowB({ mk: fileId });
   await y.post('/api/online/cloudflare', { token: API_TOKEN, zone: 'example.com', sub: 'chibi' }); await y.idle();
   const old = y.cfg.get().cfResources, nLog = y.cf.st.log.length;
+  fs.writeFileSync(path.join(y.home, 'run', 'machine-id'), 'f'.repeat(32) + '\n');   // data/ của máy kia đặt lên máy này: run/ là của máy này
   y.online.resetAfterRestore();
   await sleep(5);
   const off = await y.post('/api/online/off', { token: API_TOKEN }); await y.idle();

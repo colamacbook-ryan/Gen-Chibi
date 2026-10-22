@@ -129,6 +129,18 @@ console.log('0) đơn vị: setup.json (bảng lối vào, chỉ tiến, sàn) �
   ok(u2.reset(false, 't') === 'must_init' && u2.reset(true, 't') === 'domain' && u2.stage !== 'admin', 'genchibi setup reset: có mật khẩu → domain, không → must_init — không bao giờ admin');
   ok(u2.skip('x', 't') && u2.stage === 'done' && u2.view().skipped.reason === 'x' && !u2.skip('y', 't'), 'genchibi setup skip: domain → done, ghi lý do; đã done thì không còn gì để bỏ qua');
   const u3 = mk(); u3.s.boot({}); ok(!u3.s.skip('x', 't') && u3.s.stage === 'admin', 'skip KHÔNG bỏ được khởi tạo owner (stage admin giữ nguyên)');
+  // CNS-277 (v0.23.1): agent gọi MCP mãi mãi — sau khi xong, setup.json chỉ ghi lại lastClient cùng agent ≤ 1 lần / 24 giờ (trước: mỗi 60 giây, mãi mãi)
+  { const sc = mk(); sc.s.boot({}); const f = path.join(sc.h, 'data/setup.json'), writes = () => fs.statSync(f).mtimeMs;
+    const t0 = t; sc.s.seenClient('claude-code', 'stdio'); const a1 = sc.s.view().mcp.lastClient.at;
+    t += 61e3; sc.s.seenClient('claude-code', 'stdio'); const a2 = sc.s.view().mcp.lastClient.at;
+    sc.s.advance('done', 'skip'); const m0 = writes(); const at0 = JSON.parse(fs.readFileSync(f, 'utf8')).mcp.lastClient.at;
+    let n = 0; for (let i = 0; i < 300; i++) { t += 61e3; const b = JSON.parse(fs.readFileSync(f, 'utf8')).mcp.lastClient.at; sc.s.seenClient('claude-code', 'stdio'); if (JSON.parse(fs.readFileSync(f, 'utf8')).mcp.lastClient.at !== b) n++; }
+    const late = JSON.parse(fs.readFileSync(f, 'utf8')).mcp.lastClient.at;
+    t += 24 * 3600e3; sc.s.seenClient('claude-code', 'stdio'); const day = JSON.parse(fs.readFileSync(f, 'utf8')).mcp.lastClient.at;
+    sc.s.seenClient('cursor', 'http'); const other = JSON.parse(fs.readFileSync(f, 'utf8')).mcp.lastClient;
+    ok(a2 !== a1 && n === 0 && late === at0 && day !== late && other.name === 'cursor' && other.channel === 'http' && Object.keys(JSON.parse(fs.readFileSync(f, 'utf8')).mcp).length <= 6 && m0 > 0,
+      'CNS-277: lastClient — trước khi xong ghi mỗi ≥ 60 s; đã xong: 300 lần gọi cách 61 s (5 giờ) KHÔNG ghi lại setup.json, sau 24 giờ ghi một lần, agent / kênh khác ghi ngay; một bản ghi duy nhất (không danh sách lớn dần)', JSON.stringify({ a1, a2, n, at0, late, day, other }));
+    t = t0; }
   // cửa sổ admin
   const w = mk(); w.s.boot({});
   ok(w.s.windowOf().reason === 'window', 'cửa sổ: không có tệp → window');

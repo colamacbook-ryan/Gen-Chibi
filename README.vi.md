@@ -36,6 +36,9 @@ curl -fsSL https://raw.githubusercontent.com/colamacbook-ryan/Gen-Chibi/main/ins
 ```
 genchibi start | stop | restart | status
 genchibi update            # kiểm tra và cập nhật ngay
+genchibi rollback [--yes]  # chạy lại bản trước
+genchibi doctor [--yes]    # kiểm bản cài: user của container, cổng, thiết lập lần đầu, edge, lệnh root (và chuyển bản cài root cũ sang tài khoản genchibi)
+genchibi override [approve|off] [--yes]  # (root) quyết docker-compose.override.yml: dùng hay chạy không có nó (chưa quyết thì start / update / … dừng)
 genchibi logs
 genchibi backup | restore <tệp>
 genchibi mcp               # cầu MCP stdio cho agent
@@ -48,6 +51,24 @@ genchibi online …          # ra Internet: tên miền + HTTPS + MCP (xem dư�
 genchibi agent connect     # cấu hình nối cho agent (không in token)
 genchibi uninstall
 ```
+
+### Chạy `genchibi` bằng root (v0.23.1)
+
+Bản cài Docker làm bằng root (`sudo bash install.sh`, hoặc đăng nhập root): container của app chạy bằng user thường (user gọi sudo, hoặc tài khoản hệ thống `genchibi`) và ghi được cả thư mục cài — app tự cập nhật ở đó. Vì vậy `genchibi` chạy bằng root **không bao giờ chạy hay nạp thứ gì trong thư mục cài**:
+
+- **Bản chép riêng đã kiểm.** Lệnh của root là `~/.local/bin/genchibi`, chuyển sang `~/.local/lib/gen-chibi/genchibi` (thư mục 0700 của root). Cả hai lấy từ gói phát hành có SHA-256 khớp `SHA256SUMS` của bản phát hành — cùng phép kiểm của trình cài và bộ cập nhật. App tự cập nhật xong thì root tự tải và kiểm gói của bản mới một lần (`Release vX verified (SHA-256)`), rồi mới dùng lệnh của bản đó. Lệnh root chỉ tiến: rollback app không kéo lệnh root cũ về. Bản không kiểm được (mất mạng, sai checksum) không bao giờ được dùng — root giữ tệp đã kiểm gần nhất và báo rõ.
+- **`.env` là dữ liệu.** Root đọc các dòng `KHOÁ=giá trị` theo một danh sách khoá cố định; không gì trong đó được chạy hay mở rộng (không `source`, không `$(…)`). Container luôn chạy bằng chủ của thư mục cài — `GC_UID=0` trong `.env` không làm container thành root.
+- **Tệp compose lấy từ gói đã kiểm** (`~/.local/lib/gen-chibi/rel/<bản>/`), thư mục cài là thư mục dự án.
+- **`docker-compose.override.yml` của bạn cần root quyết.** Tệp nằm trong thư mục cài (app ghi được) nên root không tự dùng — nhưng chạy thiếu nó có thể gỡ một service bạn đang dựa vào (vd trang đăng nhập riêng đứng trước app). Vì vậy khi override chưa được duyệt, hoặc đã đổi từ lúc duyệt, `start`, `restart`, `update`, `rollback`, `restore`, `lang <x>`, `token` và `online …` **dừng trước khi đụng container nào** (container đang chạy giữ nguyên), in nội dung override rồi thoát lỗi; `status` và `doctor` báo ✗. Quyết một lần: `sudo genchibi override approve` (hiện nội dung, rồi root dùng bản chép riêng `~/.local/lib/gen-chibi/override.yml`) hoặc `sudo genchibi override off` (chạy không có nó). Không có terminal thì thêm `--yes`. Tệp đổi về sau thì được hỏi lại.
+- **Trong thư mục cài, root làm việc bằng chủ của thư mục** (`setpriv`, hoặc `sudo -u`): sao lưu, khôi phục, sửa `.env`, tệp lần đầu. Liên kết cài sẵn ở đó không chuyển hướng được chỗ root đọc / ghi.
+
+Máy cài bằng root với bản cũ tự chuyển sang ngay lần đầu gõ `genchibi` sau khi app tự cập nhật lên v0.23.1 (in `… now runs only verified code`). `genchibi` chạy bằng user của bạn (bản cài không root, hoặc `--native`) vẫn như cũ.
+
+### `genchibi doctor`
+
+Kiểm bản cài, mỗi mục một dòng ✓ / ! / ✗: app trả lời, lệnh root và tệp compose đã kiểm, override đã duyệt, container chạy bằng user nào, cổng (`GC_BIND`, Docker chỉ publish ở loopback, cổng bị chương trình khác chiếm), bước thiết lập lần đầu, edge Caddy (cổng 80/443) và tunnel. Thoát 1 khi có ✗.
+
+Bản cài bằng root **không qua sudo** với v0.21.0–0.21.2 cho container chạy bằng uid `1000` — một phép đoán, trên máy dùng chung có thể là tài khoản của người khác. `doctor` nhận ra (uid 1000, và không ghi ai cài — trình cài ghi `GC_INSTALLED_BY` từ v0.23.1) và, khi chạy bằng root, đề nghị chuyển sang tài khoản hệ thống `genchibi`: dừng app, tạo / dùng lại tài khoản (không đăng nhập được), đổi chủ **chỉ** các tệp thuộc uid cũ (không đi theo liên kết), sửa `GC_UID` / `GC_GID` / `GC_INSTALLED_BY` trong `.env` rồi chạy lại. Lệnh hỏi trước; `genchibi doctor --yes` làm luôn không hỏi. Chạy lại trình cài không tự đổi uid — nó nhắc chạy `genchibi doctor`.
 
 ## Ra Internet (tên miền, HTTPS, MCP) một bước
 
@@ -83,7 +104,7 @@ genchibi online migrate                 # máy cấu hình tay trong .env (GC_PU
 
 Đổi địa chỉ công khai sẽ đăng xuất các agent nối bằng OAuth (phải nối lại); lệnh hỏi trước (`--yes` khi không có terminal). `genchibi expose` / `genchibi link` (cách của v0.20) đã bỏ ở v0.23 — xem [bên dưới](#đã-bỏ-ở-v023-genchibi-expose--genchibi-link).
 
-**Bản sao lưu chứa mật khẩu và phiên; khôi phục thì Go online tắt.** `genchibi backup` lưu `data/`, nay gồm cả mật khẩu chủ (đã băm), các phiên Studio / thiết bị đã nhớ và cấu hình lên mạng. `genchibi restore <tệp>` giữ mật khẩu của bản sao lưu nhưng đăng xuất mọi phiên và thiết bị, và đưa Go online về **tắt** (không địa chỉ công khai, tunnel dừng, mã bản cài mới — bản sao lưu từ máy khác không bao giờ chiếm tên miền hay tunnel của máy đó). Khôi phục xong thì chạy lại Go online.
+**Bản sao lưu chứa mật khẩu và phiên; khôi phục thì Go online tắt.** `genchibi backup` lưu `data/`, nay gồm cả mật khẩu chủ (đã băm), các phiên Studio / thiết bị đã nhớ và cấu hình lên mạng. `genchibi restore <tệp>` giữ mật khẩu của bản sao lưu nhưng đăng xuất mọi phiên và thiết bị, và đưa Go online về **tắt** (không địa chỉ công khai, tunnel dừng). Bản sao lưu làm trên **chính máy này** giữ mã bản cài, nên *Go offline* vẫn xoá được tunnel và bản ghi DNS Cloudflare của máy mình; bản sao lưu từ máy khác (hoặc làm trước v0.23.1) nhận mã bản cài mới, nên không bao giờ chiếm tên miền hay tunnel của máy đó. Máy được nhận ra bằng `run/machine-id` (ngẫu nhiên, tạo lúc cài) và băm của machine id hệ thống — cả hai nằm ngoài `data/`, không bao giờ vào bản sao lưu. Khôi phục xong thì chạy lại Go online.
 
 **Máy đã có trang đăng nhập riêng đứng trước app** (vd proxy đưa người dùng tới `/login` của riêng nó): app nay có tài khoản chủ và trang `/login` riêng (`/setup` của v0.21 / v0.22 nay chuyển về `/login`). Trong proxy, chỉ chặn đường của người và để `/login`, `/oauth/authorize` của app đi tới app phía sau lớp đăng nhập của bạn (đường máy — `/mcp`, `/.well-known/…`, `/oauth/register|token|revoke` — vẫn phải để trống như trước). Đoạn mẫu `genchibi online proxy` in ra chỉ chỗ đặt lớp đăng nhập của bạn.
 

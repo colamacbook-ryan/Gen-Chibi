@@ -83,11 +83,15 @@ _en() {
     starting) F="Starting…" ;;
     running) F="✓ gen-chibi %s is running" ;;
     sum_studio) F="  Studio:    %s%s%s" ;;
-    sum_cmds) F="  Commands:  genchibi start|stop|status|update|logs|backup|restore|mcp|online|open|password|lang|uninstall" ;;
+    sum_cmds) F="  Commands:  genchibi start|stop|status|update|rollback|doctor|logs|backup|restore|mcp|online|open|password|lang|uninstall" ;;
     sum_mcp) F="  MCP:       claude mcp add gen-chibi -- %s mcp" ;;
     sum_mcp_net) F="  Go online (domain + HTTPS + MCP): genchibi online --help, or Studio › System › Go online" ;;
     root_uid) F="Running as root: the containers run as user %s:%s (not root) — %s now belongs to that user" ;;
     sys_user_ok) F="Running as root without sudo: the containers run as the system account %s (%s:%s, no login) — not root, not a person's account" ;;
+    root_trust) F="Root commands: verified copy in %s (root never runs or loads files the app can write)" ;;
+    root_nodrop) F="Cannot act as the install folder's owner (uid %s): neither setpriv nor sudo is available. Refusing to write into it as root." ;;
+    root_link) F="Refusing to install: %s is a symbolic link — an existing install folder must not redirect root's writes. Remove the link (or use another --dir) and run again." ;;
+    root_legacy_uid) F="This install keeps GC_UID=%s from an old root install (v0.21.0–0.21.2 guessed 1000). Check and move it to the genchibi system account: genchibi doctor" ;;
     sys_user_fail) F="Running as root without sudo, and the system account %s could not be created (no useradd / adduser). gen-chibi was not installed. Rerun from your own account: sudo bash install.sh … — the app then runs as your user, never as root." ;;
     sum_update) F="  Auto-update: on (turn off in Studio › System › Updates)" ;;
     sum_lang) F="  Language:  English (Vietnamese: genchibi lang vi, or the language switch in the Studio)" ;;
@@ -158,11 +162,15 @@ _vi() {
     starting) F="Khởi động…" ;;
     running) F="✓ gen-chibi %s đang chạy" ;;
     sum_studio) F="  Studio:  %s%s%s" ;;
-    sum_cmds) F="  Lệnh:    genchibi start|stop|status|update|logs|backup|restore|mcp|online|open|password|lang|uninstall" ;;
+    sum_cmds) F="  Lệnh:    genchibi start|stop|status|update|rollback|doctor|logs|backup|restore|mcp|online|open|password|lang|uninstall" ;;
     sum_mcp) F="  MCP:     claude mcp add gen-chibi -- %s mcp" ;;
     sum_mcp_net) F="  Ra Internet (tên miền + HTTPS + MCP): genchibi online --help, hoặc Studio › Hệ thống › Lên mạng" ;;
     root_uid) F="Đang chạy bằng root: container chạy bằng user %s:%s (không phải root) — %s giờ thuộc user đó" ;;
     sys_user_ok) F="Đang chạy bằng root không qua sudo: container chạy bằng tài khoản hệ thống %s (%s:%s, không đăng nhập được) — không phải root, không phải tài khoản của ai" ;;
+    root_trust) F="Lệnh của root: bản chép đã kiểm ở %s (root không bao giờ chạy hay nạp tệp mà app ghi được)" ;;
+    root_nodrop) F="Không làm việc được bằng chủ thư mục cài (uid %s): không có setpriv hay sudo. Từ chối ghi vào đó bằng root." ;;
+    root_link) F="Từ chối cài: %s là liên kết tượng trưng — thư mục cài có sẵn không được chuyển hướng chỗ root ghi. Gỡ liên kết (hoặc dùng --dir khác) rồi chạy lại." ;;
+    root_legacy_uid) F="Bản cài này giữ GC_UID=%s của bản cài root cũ (v0.21.0–0.21.2 đoán 1000). Kiểm và chuyển sang tài khoản hệ thống genchibi: genchibi doctor" ;;
     sys_user_fail) F="Đang chạy bằng root không qua sudo và không tạo được tài khoản hệ thống %s (không có useradd / adduser). Chưa cài gen-chibi. Chạy lại từ tài khoản của bạn: sudo bash install.sh … — app sẽ chạy bằng user của bạn, không bao giờ bằng root." ;;
     sum_update) F="  Tự cập nhật: bật (tắt trong Studio › Hệ thống › Cập nhật)" ;;
     sum_lang) F="  Ngôn ngữ: Tiếng Việt (English: genchibi lang en, hoặc nút chuyển ngôn ngữ trong Studio)" ;;
@@ -219,14 +227,27 @@ ask_lang() {
   if ! read -r -t 60 a < /dev/tty; then a=""; printf "\n" > /dev/tty; fi   # hết 60 giây hay EOF → English, không treo
   case "$a" in 2|vi|VI|v|V) echo vi ;; *) echo en ;; esac
 }
+# Thư mục cài CÓ SẴN thuộc user khác (bản cài Docker cũ — user của container ghi được cả thư mục) mà trình cài chạy bằng root (CNS-257): mọi đọc / ghi trong đó
+# chạy bằng CHÍNH user đó (in_dir: setpriv → sudo -u '#uid'), không bằng root — symlink cài sẵn (.env.gc-tmp → /etc/shadow, releases/<bản> → /etc…) không
+# chuyển hướng được chỗ root ghi, tệp của root không bị đọc vào. Thư mục mới / của root / trình cài không chạy bằng root → chạy thẳng như cũ.
+DIR_UID=0; DIR_GID=0
+if [ -d "$DIR" ]; then DIR_UID="$(ls -ldn "$DIR/." | awk '{ print $3 }')"; DIR_GID="$(ls -ldn "$DIR/." | awk '{ print $4 }')"; fi
+in_dir() {
+  if [ "$(id -u)" != 0 ] || [ "$DIR_UID" = 0 ]; then ${1+"$@"}; return; fi
+  if command -v setpriv >/dev/null 2>&1; then setpriv --reuid="$DIR_UID" --regid="$DIR_GID" --clear-groups -- env -i PATH="$PATH" LC_ALL=C ${1+"$@"}
+  elif command -v sudo >/dev/null 2>&1; then sudo -n -u "#$DIR_UID" -g "#$DIR_GID" -- env -i PATH="$PATH" LC_ALL=C ${1+"$@"}
+  else die root_nodrop "$DIR_UID"; fi
+}
+rd_dir() { in_dir cat -- "$DIR/$1" 2>/dev/null || true; }   # đọc một tệp của thư mục cài như dữ liệu
+env_has() { rd_dir .env | grep -c -- "$1" >/dev/null; }   # .env có dòng khớp mẫu (grep -c đọc hết — không SIGPIPE dưới pipefail)
 studio_lang() { # mặc định của Studio đang dùng (data/settings.json › uiLang, do server ghi) — sed, không cần node / jq
-  sed -n 's/.*"uiLang"[[:space:]]*:[[:space:]]*"\([A-Za-z_-]*\)".*/\1/p' "$DIR/data/settings.json" 2>/dev/null | head -1 || true
+  rd_dir data/settings.json | sed -n 's/.*"uiLang"[[:space:]]*:[[:space:]]*"\([A-Za-z_-]*\)".*/\1/p' | head -1 || true
 }
 # MỘT nguồn sự thật cho ngôn ngữ của máy: data/settings.json › uiLang. GC_LANG trong .env chỉ là giá trị KHỞI TẠO (cài mới) hoặc ghi đè CÓ CHỦ Ý.
 LANG_SET=""   # có giá trị khi người cài chọn rõ (--lang / GC_LANG / câu hỏi) → ghi vào .env cả khi .env đã có
 KEPT=""       # bản cài đã có (.env chưa có GC_LANG — trước v0.20 — hoặc đã có settings.json) mà lần này không chọn → không hỏi, không ghi GC_LANG:
               # server áp luật nâng cấp (có dữ liệu → giữ tiếng Việt), mặc định của Studio giữ nguyên (CNS-152)
-OLD="$( [ -f "$DIR/.env" ] && sed -n 's/^GC_LANG=//p' "$DIR/.env" | tail -1 || true)"   # ngôn ngữ ghi trong .env của bản cài cũ (cài lại / nâng cấp)
+OLD="$( [ -f "$DIR/.env" ] && rd_dir .env | sed -n 's/^GC_LANG=//p' | tail -1 || true)"   # ngôn ngữ ghi trong .env của bản cài cũ (cài lại / nâng cấp)
 if [ -n "$HAS_LANG_ARG" ]; then
   UI="$(lang_of "$LANG_ARG")"; [ -n "$UI" ] || bad_lang "$LANG_ARG"; LANG_SET="$UI"
 elif [ -n "${GC_LANG:-}" ]; then
@@ -264,8 +285,8 @@ unset GC_CF_TOKEN
 # setup.json còn admin / must_init): GC_OWNER_* (đã đọc + xoá ở đầu tệp) → hỏi trên terminal (tên hiện, mật khẩu ẩn ×2) → không có cả hai: cài nhưng không lên mạng
 OWNER_NEED=""; OWNER_SKIP=""
 if [ -n "$DOMAIN" ]; then
-  OST="$(sed -n 's/^[[:space:]]*"stage":[[:space:]]*"\([a-z_]*\)".*/\1/p' "$DIR/data/setup.json" 2>/dev/null | head -1 || true)"
-  if [ -z "$OST" ] && grep -q '"hash"' "$DIR/data/auth.json" 2>/dev/null; then OST=done; fi   # v0.21 / v0.22 đã có mật khẩu: server ghi done lúc khởi động
+  OST="$(rd_dir data/setup.json | sed -n 's/^[[:space:]]*"stage":[[:space:]]*"\([a-z_]*\)".*/\1/p' | head -1 || true)"
+  if [ -z "$OST" ] && rd_dir data/auth.json | grep -c '"hash"' >/dev/null; then OST=done; fi   # v0.21 / v0.22 đã có mật khẩu: server ghi done lúc khởi động
   case "$OST" in ''|admin|must_init) OWNER_NEED=1 ;; esac
 fi
 owner_ok() { # kiểm OWNER_U / OWNER_P (luật như server: tên 3–32 [a-z0-9._-] khác admin · mật khẩu ≥ 12 ký tự, không ký tự điều khiển, khác admin)
@@ -346,10 +367,9 @@ fi
 # (không đăng nhập, không home; có rồi thì dùng lại; không bao giờ uid 0) — KHÔNG đoán 1000: trên máy dùng chung uid 1000 có thể là người khác.
 # Không tạo được (không useradd / adduser) → dừng TRƯỚC khi cài gì, bảo owner chạy lại bằng sudo từ tài khoản của mình.
 # Thư mục cài chown -R cho user này (ở dưới): bind mount ./:/install phải ghi được, và tự cập nhật ghi releases/ + đổi current.
-# CÒN LẠI (chưa đóng, ghi ở CNS-212): root về sau vẫn chạy mã từ thư mục thuộc user này — lệnh ~/.local/bin/genchibi của root là BẢN CHÉP
-# (không phải symlink) nhưng chuyển sang current/cli/genchibi, đọc .env (set -a) và docker-compose*.yml của thư mục cài. Vì vậy ai ghi được thư mục
-# cài (chính app trong container, nếu app bị chiếm) leo được lên root khi root gõ genchibi. Đóng hẳn cần tách releases/ khỏi bind mount ghi được
-# (app chỉ ghi data/ run/ logs/ edge/, launcher bên ngoài đổi phiên bản) — việc của v0.22. Với `genchibi` (nologin) không còn NGƯỜI nào khác ghi được.
+# v0.23.1 (CNS-233 / CNS-257): thư mục cài vẫn ghi được bởi user này (app tự cập nhật trong container), nhưng root KHÔNG BAO GIỜ chạy / nạp tệp nào trong đó:
+# lệnh ~/.local/bin/genchibi + ~/.local/lib/gen-chibi/genchibi là bản chép từ gói ĐÃ KIỂM SHA-256 (ở $TMP, trước khi thư mục cài thấy nó), tệp compose root
+# dùng nằm ở ~/.local/lib/gen-chibi/rel/<bản>/, .env đọc như dữ liệu, thao tác trong thư mục cài chạy bằng user này (cli/genchibi: mô hình root).
 SYS_USER=genchibi
 sys_ids() { # CUID/CGID của tài khoản hệ thống; 1 nếu chưa có hoặc là root
   local u g; u="$(id -u "$SYS_USER" 2>/dev/null)" || return 1; g="$(id -g "$SYS_USER" 2>/dev/null)" || return 1
@@ -372,9 +392,9 @@ CUID="$(id -u)"; CGID="$(id -g)"; AS_ROOT=""
 if [ "$CUID" = 0 ] && [ "$MODE" = docker ]; then
   AS_ROOT=1
   if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ] && id -u "$SUDO_USER" >/dev/null 2>&1 && [ "$(id -u "$SUDO_USER")" != 0 ]; then CUID="$(id -u "$SUDO_USER")"; CGID="$(id -g "$SUDO_USER")"
-  elif [ -f "$DIR/.env" ] && grep -q '^GC_UID=[1-9][0-9]*$' "$DIR/.env" && grep -q '^GC_GID=[1-9][0-9]*$' "$DIR/.env"; then
+  elif [ -f "$DIR/.env" ] && env_has '^GC_UID=[1-9][0-9]*$' && env_has '^GC_GID=[1-9][0-9]*$'; then
     # cài lại: .env đã có user (khác 0) → giữ (chown theo nó ở dưới), không tạo tài khoản
-    CUID="$(sed -n 's/^GC_UID=//p' "$DIR/.env" | tail -1)"; CGID="$(sed -n 's/^GC_GID=//p' "$DIR/.env" | tail -1)"
+    CUID="$(rd_dir .env | sed -n 's/^GC_UID=//p' | tail -1)"; CGID="$(rd_dir .env | sed -n 's/^GC_GID=//p' | tail -1)"
   else
     sys_user || die sys_user_fail "$SYS_USER"
     ok sys_user_ok "$SYS_USER" "$CUID" "$CGID"
@@ -382,7 +402,9 @@ if [ "$CUID" = 0 ] && [ "$MODE" = docker ]; then
 fi
 
 # ---------- tải bản phát hành
-mkdir -p "$DIR/releases" "$DIR/data" "$DIR/backups" "$DIR/logs"
+# root (CNS-257): thư mục cài có sẵn có thể đã bị user của container sửa — không để liên kết tượng trưng chuyển chỗ root ghi (releases → /etc …)
+if [ "$(id -u)" = 0 ]; then for p in "$DIR" "$DIR/releases" "$DIR/data" "$DIR/backups" "$DIR/logs" "$DIR/run" "$DIR/.env" "$DIR/launcher.js" "$DIR/docker-compose.yml"; do [ ! -L "$p" ] || die root_link "$p"; done; fi
+in_dir mkdir -p "$DIR/releases" "$DIR/data" "$DIR/backups" "$DIR/logs"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 if [ -n "${GC_TARBALL:-}" ]; then
   # chỉ dùng khi kiểm thử: cài từ gói cục bộ (kèm SHA256SUMS cùng thư mục)
@@ -437,26 +459,35 @@ ok sum_ok
 
 VER="$(echo "$TARNAME" | sed 's/^gen-chibi-\(v[0-9][^/]*\)\.tar\.gz$/\1/')"
 case "$VER" in v[0-9]*) ;; *) die bad_name;; esac
-rm -rf "$DIR/releases/$VER"; mkdir -p "$DIR/releases/$VER"
-tar -xzf "$TMP/$TARNAME" -C "$DIR/releases/$VER" --strip-components=1
-ln -sfn "releases/$VER" "$DIR/current"
-cp "$DIR/current/launcher.js" "$DIR/launcher.js"
-cp "$DIR/current/docker-compose.yml" "$DIR/docker-compose.yml"
+# giải nén ở $TMP (của người cài) TRƯỚC: lệnh + tệp compose của root lấy từ đây, không từ thư mục cài (user của container ghi được)
+PKG="$TMP/pkg"; mkdir -p "$PKG"
+tar -xzf "$TMP/$TARNAME" -C "$PKG" --strip-components=1
+in_dir sh -c 'rm -rf "$1" && mkdir -p "$1" && tar -xzf - -C "$1" --strip-components=1' sh "$DIR/releases/$VER" < "$TMP/$TARNAME"
+in_dir ln -sfn "releases/$VER" "$DIR/current"
+put_file() { in_dir sh -c 'rm -f "$1.gc-tmp" && cat > "$1.gc-tmp" && mv -f "$1.gc-tmp" "$1"' sh "$DIR/$1"; }   # stdin → tệp của thư mục cài (tệp tạm + mv, bằng in_dir)
+put_file launcher.js < "$PKG/launcher.js"
+put_file docker-compose.yml < "$PKG/docker-compose.yml"
+# dấu máy (v0.23.1, CNS-235): ngẫu nhiên, ngoài data/ (không theo bản sao lưu) — khôi phục trên chính máy này giữ install-id
+in_dir mkdir -p "$DIR/run" && in_dir chmod 700 "$DIR/run"
+[ -s "$DIR/run/machine-id" ] || head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n' | in_dir sh -c 'umask 077; rm -f "$1.gc-tmp" && cat > "$1.gc-tmp" && mv -f "$1.gc-tmp" "$1"' sh "$DIR/run/machine-id"
 ok extracted "$VER"
 
 # đặt/ thêm một dòng KHOÁ=giá trị trong .env mà không đưa giá trị lên dòng lệnh (awk đọc từ môi trường)
-env_put() { # env_put KHOÁ BIẾN_CHỨA_GIÁ_TRỊ
-  local tmp; tmp="$(mktemp)"
-  K="$1" V="${!2}" awk 'BEGIN { k = ENVIRON["K"]; v = ENVIRON["V"]; d = 0 }
-    index($0, k "=") == 1 { print k "=" v; d = 1; next } { print } END { if (!d) print k "=" v }' "$DIR/.env" > "$tmp" && cat "$tmp" > "$DIR/.env"; rm -f "$tmp"
-}
+# env_put KHOÁ BIẾN_CHỨA_GIÁ_TRỊ — bằng in_dir (thư mục cài có sẵn của user khác: chạy bằng user đó), tệp tạm cạnh .env rồi mv, giữ 600
+ENV_AWK='BEGIN { k = ENVIRON["K"]; v = ENVIRON["V"]; d = 0 } index($0, k "=") == 1 { print k "=" v; d = 1; next } { print } END { if (!d) print k "=" v }'
+env_put() { in_dir env K="$1" V="${!2}" P="$ENV_AWK" F="$DIR/.env" sh -c 'umask 077; rm -f "$F.gc-tmp"; awk "$P" "$F" > "$F.gc-tmp" && mv -f "$F.gc-tmp" "$F"'; }
+# ai cài (v0.23.1, CNS-234 — genchibi doctor đọc): sudo:<user> · root (root không sudo) · user:<tên> (không root)
+if [ "$(id -u)" = 0 ]; then
+  if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then INSTALLED_BY="sudo:$SUDO_USER"; else INSTALLED_BY=root; fi
+else INSTALLED_BY="user:$(id -un 2>/dev/null || id -u)"; fi
+case "$INSTALLED_BY" in *[!A-Za-z0-9:._-]*) INSTALLED_BY="${INSTALLED_BY%%:*}:?" ;; esac
 
 # ---------- .env (sinh một lần; không có bí mật mặc định)
 if [ ! -f "$DIR/.env" ]; then
   KEY="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
   APITOKEN="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"   # v0.21: bản cài nào cũng có token chủ (CLI, agent, đăng nhập dự phòng — spec §3.4 T)
   ENV_LANG="$UI"; [ -z "$KEPT" ] || ENV_LANG=""   # dữ liệu có sẵn mà không chọn: không đặt GC_LANG (giữ mặc định của Studio)
-  cat > "$DIR/.env" <<EOF
+  in_dir sh -c 'umask 077; rm -f "$1.gc-tmp" && cat > "$1.gc-tmp" && mv -f "$1.gc-tmp" "$1"' sh "$DIR/.env" <<EOF
 # gen-chibi — generated at install time. Do not share this file.
 GC_MODE=$MODE
 GC_PORT=$PORT
@@ -465,6 +496,7 @@ GC_MASTER_KEY=$KEY
 GC_AUTO_UPDATE=1
 GC_UID=$CUID
 GC_GID=$CGID
+GC_INSTALLED_BY=$INSTALLED_BY
 GC_REPO=$REPO
 # Interface language (CLI + initial Studio default): en | vi — change with: genchibi lang vi|en (empty = follow the Studio default)
 GC_LANG=$ENV_LANG
@@ -479,37 +511,59 @@ HTTPS_PROXY=${HTTPS_PROXY:-${https_proxy:-}}
 NO_PROXY=${NO_PROXY:-${no_proxy:-}}
 GC_EXTRA_CA=
 EOF
-  chmod 600 "$DIR/.env"
   # chứng chỉ CA bổ sung của proxy công ty (nếu máy có): chép vào thư mục cài để cả Docker lẫn Node đọc được
   if [ -n "${NODE_EXTRA_CA_CERTS:-}" ] && [ -f "$NODE_EXTRA_CA_CERTS" ]; then
-    mkdir -p "$DIR/certs"; cp "$NODE_EXTRA_CA_CERTS" "$DIR/certs/extra-ca.pem"
+    in_dir mkdir -p "$DIR/certs"; put_file certs/extra-ca.pem < "$NODE_EXTRA_CA_CERTS"
     if [ "$MODE" = docker ]; then CA=/install/certs/extra-ca.pem; else CA="$DIR/certs/extra-ca.pem"; fi
-    sed -i.bak "s#^GC_EXTRA_CA=.*#GC_EXTRA_CA=$CA#" "$DIR/.env" && rm -f "$DIR/.env.bak"
+    env_put GC_EXTRA_CA CA
   fi
   case "${HTTPS_PROXY:-${https_proxy:-}}" in *127.0.0.1*|*localhost*) [ "$MODE" = docker ] && warn proxy_local "$DIR" ;; esac
   ok env_created
 else
-  sed -i.bak "s/^GC_MODE=.*/GC_MODE=$MODE/" "$DIR/.env" && rm -f "$DIR/.env.bak"
-  [ -z "$TOKEN" ] || { env_put GC_GITHUB_TOKEN TOKEN; chmod 600 "$DIR/.env"; ok env_token; }
+  env_has '^GC_MODE=' && env_put GC_MODE MODE
+  [ -z "$TOKEN" ] || { env_put GC_GITHUB_TOKEN TOKEN; ok env_token; }
   # ngôn ngữ: CHỈ ghi khi người cài chọn rõ lần này. .env cũ (trước v0.20) chưa có GC_LANG → không ghi gì: server giữ ngôn ngữ đang dùng (CNS-152)
   if [ -n "$LANG_SET" ]; then env_put GC_LANG UI; fi
   # bản cài cũ do root cài (GC_UID=0) → đổi sang user thường (chown ở dưới)
   # (thiếu dòng GC_UID cũng vậy: compose sẽ rơi về mặc định 1000 — CNS-212)
-  if [ -n "$AS_ROOT" ] && { grep -q '^GC_UID=0$' "$DIR/.env" || ! grep -q '^GC_UID=[0-9]' "$DIR/.env" || ! grep -q '^GC_GID=[1-9]' "$DIR/.env"; }; then env_put GC_UID CUID; env_put GC_GID CGID; fi
+  if [ -n "$AS_ROOT" ] && { env_has '^GC_UID=0$' || ! env_has '^GC_UID=[0-9]' || ! env_has '^GC_GID=[1-9]'; }; then env_put GC_UID CUID; env_put GC_GID CGID; fi
+  # bản cài root cũ (v0.21.0–0.21.2) không sudo, chưa ghi ai cài, GC_UID=1000 (đoán) → chỉ báo; genchibi doctor hỏi rồi chuyển (CNS-234)
+  if [ -n "$AS_ROOT" ] && [ -z "${SUDO_USER:-}" ] && env_has '^GC_UID=1000$' && ! env_has '^GC_INSTALLED_BY='; then LEGACY_UID=1000; fi
+  env_put GC_INSTALLED_BY INSTALLED_BY
   # móc kiểm thử không bao giờ nằm trong .env (review bảo mật 🟡7): CLI nạp .env bằng set -a → app / launcher sẽ thấy
-  if grep -q '^[[:space:]]*\(export[[:space:]]\{1,\}\)\{0,1\}GC_TEST' "$DIR/.env"; then tmp="$(mktemp)"; grep -v '^[[:space:]]*\(export[[:space:]]\{1,\}\)\{0,1\}GC_TEST' "$DIR/.env" > "$tmp"; cat "$tmp" > "$DIR/.env"; rm -f "$tmp"; fi
+  if env_has '^[[:space:]]*\(export[[:space:]]\{1,\}\)\{0,1\}GC_TEST'; then in_dir sh -c 'umask 077; rm -f "$1.gc-tmp"; { grep -v "^[[:space:]]*\(export[[:space:]]\{1,\}\)\{0,1\}GC_TEST" "$1" || true; } > "$1.gc-tmp" && mv -f "$1.gc-tmp" "$1"' sh "$DIR/.env"; fi
   ok env_kept
 fi
 if [ -n "$AS_ROOT" ]; then
   # GC_UID trong .env (có thể đã có từ trước, khác 0) là user container dùng — chown theo đúng nó
-  CUID="$(sed -n 's/^GC_UID=\([0-9]*\)$/\1/p' "$DIR/.env" | tail -1)"; CGID="$(sed -n 's/^GC_GID=\([0-9]*\)$/\1/p' "$DIR/.env" | tail -1)"
+  CUID="$(rd_dir .env | sed -n 's/^GC_UID=\([0-9]*\)$/\1/p' | tail -1)"; CGID="$(rd_dir .env | sed -n 's/^GC_GID=\([0-9]*\)$/\1/p' | tail -1)"
   [ -n "$CUID" ] && [ -n "$CGID" ] && [ "$CUID" != 0 ] && [ "$CGID" != 0 ] || die sys_user_fail "$SYS_USER"   # không bao giờ chown cho root / đoán uid
-  chown -R "$CUID:$CGID" "$DIR"; warn root_uid "$CUID" "$CGID" "$DIR"
+  # không theo symlink (-h), một filesystem, KHÔNG đổi chủ tệp có nhiều liên kết cứng (liên kết cứng tới tệp của root cài sẵn trong thư mục) (CNS-257)
+  find "$DIR" -xdev \( -type d -o -type l -o -links 1 \) -exec chown -h "$CUID:$CGID" {} +; warn root_uid "$CUID" "$CGID" "$DIR"
+  [ -z "${LEGACY_UID:-}" ] || warn root_legacy_uid "$LEGACY_UID"
 fi
 
-# ---------- CLI
+# ---------- CLI (từ gói đã kiểm ở $TMP — không từ thư mục cài)
 BIN="$HOME/.local/bin"; mkdir -p "$BIN"
-sed "s#__GC_HOME__#$DIR#" "$DIR/current/cli/genchibi" > "$BIN/genchibi"; chmod +x "$BIN/genchibi"
+if [ -n "$AS_ROOT" ]; then
+  # root: tệp đã kiểm của lệnh root (cli/genchibi › mô hình root) — ~/.local/lib/gen-chibi (0700): rel/<bản>/ compose + lệnh, genchibi (bản mới nhất), repo
+  TRUSTD="$HOME/.local/lib/gen-chibi"
+  ( umask 077; mkdir -p "$TRUSTD/rel" "$TRUSTD/run" ); chmod 700 "$TRUSTD"
+  TRUSTD="$(cd -P "$TRUSTD" && pwd)"
+  R="$TRUSTD/rel/$VER"; rm -rf "$R.tmp"; mkdir -p "$R.tmp"
+  cp "$PKG/docker-compose.yml" "$R.tmp/"
+  [ ! -f "$PKG/docker-compose.edge.yml" ] || cp "$PKG/docker-compose.edge.yml" "$R.tmp/"
+  [ ! -f "$PKG/edge/Caddyfile.base" ] || cp "$PKG/edge/Caddyfile.base" "$R.tmp/Caddyfile.base"
+  cp "$PKG/cli/genchibi" "$R.tmp/genchibi"; printf '%s\n' "$VER" > "$R.tmp/VERSION"; printf '%s\n' "$WANTSUM" > "$R.tmp/SHA256"
+  rm -rf "$R"; mv "$R.tmp" "$R"
+  printf '%s\n' "$REPO" > "$TRUSTD/repo"
+  sed -e "s#__GC_HOME__#$DIR#" -e "s#__GC_TRUST__#$TRUSTD#" "$PKG/cli/genchibi" > "$TRUSTD/genchibi.tmp" && chmod 755 "$TRUSTD/genchibi.tmp" && mv -f "$TRUSTD/genchibi.tmp" "$TRUSTD/genchibi"
+  printf '%s\n' "$VER" > "$TRUSTD/genchibi.version"
+  cp "$TRUSTD/genchibi" "$BIN/genchibi.tmp" && chmod 755 "$BIN/genchibi.tmp" && mv -f "$BIN/genchibi.tmp" "$BIN/genchibi"
+  ok root_trust "$TRUSTD"
+else
+  sed "s#__GC_HOME__#$DIR#" "$PKG/cli/genchibi" > "$BIN/genchibi"; chmod +x "$BIN/genchibi"
+fi
 ok cli_ok "$BIN"
 case ":$PATH:" in *":$BIN:"*) ;; *) warn path_hint "$BIN" "$(basename "${SHELL:-bash}")" ;; esac
 

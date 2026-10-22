@@ -14,6 +14,7 @@
 #   4g) cổng ingress của cloudflared + Go online link tạm đầu-cuối (tools/test-ingress.mjs)
 #   4h) genchibi online qua CLI: server thật + Cloudflare API giả + cloudflared giả, token không vào argv / env / log (tools/test-online-cli.mjs)
 #   4i) thiết lập lần đầu v0.23: admin / admin + cửa sổ host, khởi tạo owner, cổng stage, wizard, CLI (tools/test-setup.mjs)
+#   4k) mô hình root v0.23.1: lệnh root tự đủ + gói đã kiểm SHA, .env là dữ liệu, compose đã kiểm, hạ quyền, doctor, dấu máy (tools/test-root.sh; L-77: cả bằng nobody)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -34,7 +35,7 @@ gc_orphans() {
 GC_PRE_PIDS=" $(gc_orphans | awk '{ print $1 }' | tr '\n' ' ') "
 echo "1) cú pháp"
 for f in $(git ls-files '*.js' 2>/dev/null || find engine kinds server studio -name '*.js') launcher.js; do node --check "$f"; done
-bash -n install.sh; bash -n cli/genchibi; bash -n tools/package.sh; bash -n tools/test-lang.sh; bash -n tools/test-update.sh; bash -n tools/test-edge.sh
+bash -n install.sh; bash -n cli/genchibi; bash -n tools/package.sh; bash -n tools/test-lang.sh; bash -n tools/test-update.sh; bash -n tools/test-edge.sh; bash -n tools/test-root.sh
 echo "   ✓ cú pháp"
 # luật cấu trúc: không đặt animation/transform CSS lên nhóm lớp của khung xương (lỗi mắt đứng yên v0.1.3)
 if grep -nE "\[data-l=[^]]*\][^{]*\{[^}]*(animation|transform)" engine/render.js studio/*.css 2>/dev/null; then echo "   ✗ CSS đặt transform/animation lên nhóm lớp [data-l]"; exit 1; fi
@@ -840,24 +841,25 @@ node tools/test-auth-owner.mjs || exit 1
 echo "4d) ngôn ngữ (ADR 0007): trình cài --lang / GC_LANG / câu hỏi khi có terminal · genchibi lang · trợ giúp en / vi · README + tài liệu tiếng Anh"
 bash tools/test-lang.sh || exit 1
 # L-77: CI GitHub chạy bằng user thường (runner, uid 1001); test.sh chạy bằng root THẬT ở máy dev thì giả định "chỉ đúng khi là root" (chown, ghi /root…) lọt qua.
-# Root → chạy lại test-lang.sh (trình cài + CLI) bằng nobody (setpriv) từ một bản chép của cây làm việc trong /tmp (không nằm dưới thư mục 0700 nào),
+# Root → chạy lại <script> (trình cài + CLI) bằng nobody (setpriv) từ một bản chép của cây làm việc trong /tmp (không nằm dưới thư mục 0700 nào),
 # HOME / TMPDIR riêng ngoài bản chép. Không phải root (CI) → bỏ qua; thiếu setpriv / nobody → báo rõ rồi bỏ qua.
-if [ "$(id -u)" != 0 ]; then echo "   · L-77: không phải root — bước chạy lại bằng user thường không cần (CI đã chạy không root)"
-elif ! command -v setpriv >/dev/null 2>&1 || ! id -u nobody >/dev/null 2>&1; then echo "   ! L-77: thiếu setpriv hoặc user nobody — KHÔNG chạy lại được test-lang.sh bằng user thường (giả định chỉ-root có thể lọt tới CI)"
-else
-  L77="$(mktemp -d /tmp/gc-l77-XXXXXX)"
+l77_rerun() { # l77_rerun tools/<script>.sh
+  if [ "$(id -u)" != 0 ]; then echo "   · L-77: không phải root — bước chạy lại $1 bằng user thường không cần (CI đã chạy không root)"; return 0; fi
+  if ! command -v setpriv >/dev/null 2>&1 || ! id -u nobody >/dev/null 2>&1; then echo "   ! L-77: thiếu setpriv hoặc user nobody — KHÔNG chạy lại được $1 bằng user thường (giả định chỉ-root có thể lọt tới CI)"; return 0; fi
+  local L77; L77="$(mktemp -d /tmp/gc-l77-XXXXXX)"
   l77_clean() { case "$L77" in /tmp/gc-l77-??????) rm -rf -- "$L77" ;; esac; }   # chỉ xoá đúng thư mục tạm vừa tạo
   mkdir -p "$L77/repo" "$L77/home" "$L77/tmp"
   tar -C "$ROOT" --exclude=./.git --exclude=./dist -cf - . | tar -C "$L77/repo" -xf -
   chown -R "$(id -u nobody):$(id -g nobody)" "$L77"; chmod 755 "$L77"
   if setpriv --reuid="$(id -u nobody)" --regid="$(id -g nobody)" --clear-groups --reset-env -- \
-       env HOME="$L77/home" TMPDIR="$L77/tmp" PATH="$PATH" SHELL=/bin/bash LANG=C.UTF-8 bash "$L77/repo/tools/test-lang.sh" > "$L77/out.txt" 2>&1; then
-    echo "   ✓ L-77: test-lang.sh chạy lại bằng nobody (uid $(id -u nobody), như runner CI không root): $(grep -c '^   ✓' "$L77/out.txt") ✓"
+       env HOME="$L77/home" TMPDIR="$L77/tmp" PATH="$PATH" SHELL=/bin/bash LANG=C.UTF-8 bash "$L77/repo/$1" > "$L77/out.txt" 2>&1; then
+    echo "   ✓ L-77: $1 chạy lại bằng nobody (uid $(id -u nobody), như runner CI không root): $(grep -c '^   ✓' "$L77/out.txt") ✓"
     l77_clean
   else
-    grep -E '^   ✗|Kết quả' "$L77/out.txt" | sed 's/^/   [nobody] /'; echo "   ✗ L-77: test-lang.sh xanh bằng root nhưng ĐỎ bằng user thường — giả định chỉ-root (xem $L77/out.txt)"; exit 1
+    grep -E '^   ✗|Kết quả' "$L77/out.txt" | sed 's/^/   [nobody] /'; echo "   ✗ L-77: $1 xanh bằng root nhưng ĐỎ bằng user thường — giả định chỉ-root (xem $L77/out.txt)"; exit 1
   fi
-fi
+}
+l77_rerun tools/test-lang.sh
 
 echo "4c) OAuth 2.1 cho MCP từ xa (v0.19): 401 khám phá · metadata · DCR (allowlist callback, không secret, trần, tốc độ) · authorize chỉ chủ duyệt · PKCE / resource / iss · code một lần · refresh xoay vòng · hết hạn · thu hồi · phạm vi → kênh sẵn có · oauth.json chỉ băm · đường máy qua cổng đăng nhập ngoài giả"
 node tools/test-oauth.mjs || exit 1
@@ -878,6 +880,12 @@ for P in 7951 7952 7953 7954 7955 7956 7957 7958 7959; do (echo > /dev/tcp/127.0
 node tools/test-setup.mjs || exit 1
 echo "4j) đột biến v0.23 (CNS-273): mọi rào A.5 có một đột biến trong tools/mutations/v023.json — mẫu còn khớp đúng 1 lần, có trong bảng v023.md (chạy thật: node tools/mutate.mjs --jobs 4)"
 node tools/mutate.mjs --check || exit 1
+node tools/mutate.mjs --check --data tools/mutations/v0231.json || exit 1
+
+echo "4k) mô hình root v0.23.1 (CNS-233 / CNS-257 / CNS-234 / CNS-235): máy kiểu Ryan (lệnh root cũ → tự lắp bản đã kiểm SHA, update / rollback / status / online bằng root) · container bị chiếm (canary) · override đã duyệt · khôi phục cùng máy / máy khác · doctor · root thật (setpriv thật)"
+for P in 7981 7983 7985 7987 7989; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done
+bash tools/test-root.sh || exit 1
+l77_rerun tools/test-root.sh
 
 echo "5) tự cập nhật"
 bash tools/test-update.sh

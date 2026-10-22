@@ -52,6 +52,9 @@ English is the default everywhere: installer, CLI and Studio. Vietnamese can be 
 ```
 genchibi start | stop | restart | status
 genchibi update            # check and update now
+genchibi rollback [--yes]  # run the previous version again
+genchibi doctor [--yes]    # check the install: container user, ports, first-run setup, edge, root commands (and move an old root install to the genchibi account)
+genchibi override [approve|off] [--yes]  # (root) decide on docker-compose.override.yml: use it or run without it (until then start / update / … stop)
 genchibi logs
 genchibi backup | restore <file>
 genchibi mcp               # MCP stdio bridge for agents
@@ -64,6 +67,24 @@ genchibi online …          # go online: domain + HTTPS + MCP (see below)
 genchibi agent connect     # connect configs for agents (never prints the token)
 genchibi uninstall
 ```
+
+### Running `genchibi` as root (v0.23.1)
+
+On a Docker install made as root (`sudo bash install.sh`, or logged in as root), the app container runs as a normal user (your sudo user, or the system account `genchibi`) and can write the whole install folder — it updates itself there. So `genchibi` run as root **never runs or loads anything from the install folder**:
+
+- **Its own verified copy.** The root command is `~/.local/bin/genchibi`, which hands over to `~/.local/lib/gen-chibi/genchibi` (folder 0700, owned by root). Both come from a release package whose SHA-256 matches the release's `SHA256SUMS` — the same check the installer and the updater do. After the app updates itself, root downloads and checks the package of the new version once (`Release vX verified (SHA-256)`), and only then uses its commands. The root command only moves forward: a rollback of the app never brings an older root command back. A version that cannot be verified (offline, wrong checksum) is never used — root keeps the files it verified last and says so.
+- **`.env` is data.** Root reads `KEY=value` lines for a fixed list of keys; nothing in it is executed or expanded (no `source`, no `$(…)`). The containers always run as the owner of the install folder — `GC_UID=0` in `.env` cannot make them root.
+- **Compose files come from the verified package** (`~/.local/lib/gen-chibi/rel/<version>/`), with your install folder as the project folder.
+- **Your `docker-compose.override.yml` needs a decision from root.** It lives in the install folder, which the app can write, so root never uses it on its own — but running without it could remove a service you rely on (for example your own login page in front of the app). So while an override is not approved, or has changed since, `start`, `restart`, `update`, `rollback`, `restore`, `lang <x>`, `token` and `online …` **stop before touching any container** (running containers stay as they are), print the override's content and exit with an error; `status` and `doctor` show it as ✗. Decide once: `sudo genchibi override approve` (shows the content, then root uses its own copy `~/.local/lib/gen-chibi/override.yml`) or `sudo genchibi override off` (run without it). Without a terminal add `--yes`. If the file changes later, you are asked again.
+- **Inside the install folder root acts as the folder's owner** (`setpriv`, or `sudo -u`): backups, restore, `.env` edits, first-run files. A link planted there cannot redirect root's reads or writes.
+
+Machines installed as root with an older version switch over by themselves the first time `genchibi` runs after the app updated to v0.23.1 (it prints `… now runs only verified code`). `genchibi` run as your own user (non-root install, or `--native`) works as before.
+
+### `genchibi doctor`
+
+Checks the install and prints one line per item with ✓ / ! / ✗: the app answers, root commands and compose files verified, override approved, which user the containers run as, ports (`GC_BIND`, Docker publishing only on loopback, port taken by another program), first-run setup stage, edge Caddy (ports 80/443) and the tunnel. Exit code 1 when something is ✗.
+
+Installs made by root **without sudo** with v0.21.0–0.21.2 run the containers as uid `1000` — a guess that can be another person's account on a shared machine. `doctor` spots it (uid 1000, and nobody recorded who installed — the installer records `GC_INSTALLED_BY` from v0.23.1) and, run as root, offers to move to the system account `genchibi`: it stops the app, creates or reuses the account (no login), changes the owner of **only** the files that belonged to the old uid (never following links), updates `GC_UID` / `GC_GID` / `GC_INSTALLED_BY` in `.env` and starts again. It asks first; `genchibi doctor --yes` does it without asking. Running the installer again does not change the uid by itself — it reminds you to run `genchibi doctor`.
 
 ## Go online (domain, HTTPS, MCP) in one step
 
@@ -99,7 +120,7 @@ genchibi online migrate                 # machines set up by hand in .env (GC_PU
 
 Changing the public address signs out agents connected through OAuth (they must connect again); the command asks first (`--yes` without a terminal). `genchibi expose` / `genchibi link` (the v0.20 way) were removed in v0.23 — see [below](#removed-in-v023-genchibi-expose--genchibi-link).
 
-**Backups contain your password and sessions; restoring turns Go online off.** `genchibi backup` saves `data/`, which now also holds the owner password (hashed), the Studio sessions / remembered devices and the online settings. `genchibi restore <file>` keeps the password of the backup but signs out every session and device, and turns Go online **off** (no public address, tunnel stopped, a new install id — a backup from another machine never takes over that machine's domain or tunnel). Run Go online again afterwards.
+**Backups contain your password and sessions; restoring turns Go online off.** `genchibi backup` saves `data/`, which now also holds the owner password (hashed), the Studio sessions / remembered devices and the online settings. `genchibi restore <file>` keeps the password of the backup but signs out every session and device, and turns Go online **off** (no public address, tunnel stopped). A backup made on **this** machine keeps its install id, so *Go offline* can still remove this machine's own Cloudflare tunnel and DNS record; a backup from another machine (or made before v0.23.1) gets a new install id, so it never takes over that machine's domain or tunnel. The machine is recognised by `run/machine-id` (random, made at install) and a hash of the system's machine id — both outside `data/`, so they are never in a backup. Run Go online again afterwards.
 
 **You already have your own login page in front of the app** (for example a proxy that sends people to its own `/login`): the app now has its own owner account and its own `/login` page (`/setup` from v0.21 / v0.22 now redirects to `/login`). In your proxy, protect only the people routes and let the app's `/login` and `/oauth/authorize` reach the app behind your login (machine routes — `/mcp`, `/.well-known/…`, `/oauth/register|token|revoke` — must stay unprotected, as before). The snippet printed by `genchibi online proxy` shows where your own login fits.
 

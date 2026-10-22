@@ -1,0 +1,389 @@
+{
+ "_": "gen-chibi v0.23.1 — đột biến cho mô hình root (CNS-233 / CNS-257), doctor (CNS-234), dấu máy khi khôi phục (CNS-235), seenClient (CNS-277). Chạy: node tools/mutate.mjs --data tools/mutations/v0231.json [--jobs N --wrap \"bash netns.sh\"] [ID…]; kiểm nhanh: --check. Bảng: v0231.md. © 2026 Gen Labs — All rights reserved.",
+ "mutations": [
+  {
+   "id": "R01",
+   "guard": "root: thư mục cài của user khác → mô hình root (không exec current/cli/genchibi)",
+   "file": "cli/genchibi",
+   "find": "if [ \"$(id -u)\" = 0 ] && [ -n \"$APP_UID\" ] && [ \"$APP_UID\" != 0 ]; then TRUST=1; fi",
+   "replace": "if false; then TRUST=1; fi",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "KHÔNG một tệp canary nào"
+  },
+  {
+   "id": "R02",
+   "guard": ".env là dữ liệu (không eval / source)",
+   "file": "cli/genchibi",
+   "find": "    printf -v \"$k\" '%s' \"$v\"\n    if [ -z \"$TRUST\" ]; then export",
+   "replace": "    eval \"$k=$v\"\n    if [ -z \"$TRUST\" ]; then export",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "KHÔNG một tệp canary nào"
+  },
+  {
+   "id": "R03",
+   "guard": ".env: chỉ khoá trong danh sách cho phép",
+   "file": "cli/genchibi",
+   "find": "    case \"$ENV_KEYS\" in *\" $k \"*) ;; *) continue ;; esac\n",
+   "replace": "",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "KHÔNG một tệp canary nào"
+  },
+  {
+   "id": "R04",
+   "guard": "compose: tệp từ gói đã kiểm, không từ thư mục cài",
+   "file": "cli/genchibi",
+   "find": "printf '%s\\n' -f \"$d/docker-compose.yml\"\n    if [ -f \"$EDGE_MARK\" ] && [ -f \"$d/docker-compose.edge.yml\" ]",
+   "replace": "printf '%s\\n' -f \"$HOME_DIR/docker-compose.yml\"\n    if [ -f \"$EDGE_MARK\" ] && [ -f \"$d/docker-compose.edge.yml\" ]",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "compose chỉ nhận tệp đã kiểm"
+  },
+  {
+   "id": "R05",
+   "guard": "override: root chỉ dùng bản đã duyệt",
+   "file": "cli/genchibi",
+   "find": "    if file_safe \"$TD/override.yml\"; then printf '%s\\n' -f \"$TD/override.yml\"; fi\n",
+   "replace": "    ov=\"$(compose_override)\"; [ -z \"$ov\" ] || printf '%s\\n' -f \"$HOME_DIR/$ov\"\n",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "override approve --yes rồi genchibi start (root)"
+  },
+  {
+   "id": "R06",
+   "guard": "compose: GC_UID = chủ thư mục cài (không theo .env)",
+   "file": "cli/genchibi",
+   "find": "GC_UID='$APP_UID'",
+   "replace": "GC_UID='${GC_UID:-$APP_UID}'",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "GC_UID = chủ thư mục cài"
+  },
+  {
+   "id": "R07",
+   "guard": "root hạ quyền xuống user thư mục cài (setpriv)",
+   "file": "cli/genchibi",
+   "find": "  if [ -z \"${TRUST:-}\" ]; then ${1+\"$@\"}; return; fi\n",
+   "replace": "  if true; then ${1+\"$@\"}; return; fi\n",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "qua setpriv --reuid"
+  },
+  {
+   "id": "R08",
+   "guard": "gói phát hành phải khớp SHA256SUMS",
+   "file": "cli/genchibi",
+   "find": "{ [ -n \"$want\" ] && [ \"$got\" = \"$want\" ]; } || TRUST_ERR=\"sha256\"",
+   "replace": "true || TRUST_ERR=\"sha256\"",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "gói phát hành không khớp SHA256SUMS"
+  },
+  {
+   "id": "R09",
+   "guard": "lệnh root chỉ tiến (rollback không kéo lệnh cũ về)",
+   "file": "cli/genchibi",
+   "find": "  if file_safe \"$TD/genchibi\" && [ -n \"$have\" ] && ! ver_gt \"$tag\" \"$have\"; then return 0; fi\n",
+   "replace": "",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "lệnh root KHÔNG lùi"
+  },
+  {
+   "id": "R10",
+   "guard": "lệnh root cũ → lắp bản đã kiểm, thay lệnh trong PATH",
+   "file": "cli/genchibi",
+   "find": "      if file_safe \"$CLI_SELF\" && ! cmp -s \"$TD/genchibi\" \"$CLI_SELF\"; then",
+   "replace": "      if false; then",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "THAY lệnh trong PATH bằng bản đã kiểm"
+  },
+  {
+   "id": "R11",
+   "guard": "GC_MODE=native trong thư mục của user khác → từ chối",
+   "file": "cli/genchibi",
+   "find": "if [ -n \"$TRUST\" ] && [ \"$MODE\" != docker ]; then m root_native",
+   "replace": "if false; then m root_native",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "root từ chối, thoát 1"
+  },
+  {
+   "id": "R12",
+   "guard": "thư mục tệp đã kiểm phải an toàn (không ai khác tráo được)",
+   "file": "cli/genchibi",
+   "find": "    case \"$l\" in d????????[tT]*) ;; ?????w*|????????w*) return 1 ;; esac\n",
+   "replace": "    case \"$l\" in d????????[tT]*) ;; esac\n",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "root từ chối chạy, thoát 1"
+  },
+  {
+   "id": "R13",
+   "guard": "--env-file: giá trị nguyên văn trong nháy đơn",
+   "file": "cli/genchibi",
+   "find": "    out=\"$out$k='$v'\"$'\\n'",
+   "replace": "    out=\"$out$k=$v\"$'\\n'",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "giá trị $(…) đi nguyên văn"
+  },
+  {
+   "id": "R14",
+   "guard": "rollback cần --yes khi không có terminal",
+   "file": "cli/genchibi",
+   "find": "  if [ -z \"$y\" ] && ! ask_yn \"$(mn rb_ask)\"; then",
+   "replace": "  if false; then",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "không terminal, không --yes → không làm gì"
+  },
+  {
+   "id": "R15",
+   "guard": "doctor: không terminal + không --yes → không đổi gì",
+   "file": "cli/genchibi",
+   "find": "    elif [ -n \"$y\" ] || ask_yn \"$(mn dr_mig_ask \"$APP_UID\" \"$SYS_USER\")\"; then",
+   "replace": "    elif true; then",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "KHÔNG đổi gì"
+  },
+  {
+   "id": "R16",
+   "guard": "doctor: chỉ đổi chủ tệp của uid cũ (find -user, chown -h)",
+   "file": "cli/genchibi",
+   "find": "find \"$HOME_DIR\" -xdev -user \"$old\" -exec chown -h \"$NU:$NG\" {} +",
+   "replace": "chown -R \"$NU:$NG\" \"$HOME_DIR\"",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "đổi chủ CHỈ tệp đang thuộc uid cũ"
+  },
+  {
+   "id": "R17",
+   "guard": "doctor: nhận bản cài root cũ GC_UID=1000",
+   "file": "cli/genchibi",
+   "find": "        *) [ \"$su\" = 1000 ] || mig=1 ;;\n",
+   "replace": "        *) ;;\n",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "báo container chạy bằng uid 1000"
+  },
+  {
+   "id": "R18",
+   "guard": "trình cài ghi GC_INSTALLED_BY",
+   "file": "install.sh",
+   "find": "  env_put GC_INSTALLED_BY INSTALLED_BY\n",
+   "replace": "",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "ghi GC_INSTALLED_BY=root"
+  },
+  {
+   "id": "R19",
+   "guard": "sửa .env bằng user thư mục cài (không ghi xuyên symlink) — root thật",
+   "file": "cli/genchibi",
+   "find": "{ if (!d) print k \"=\" v }' | aw .env 600\n  if [ -z \"${TRUST:-}\" ]; then export \"$k=$v\"",
+   "replace": "{ if (!d) print k \"=\" v }' > .env\n  if [ -z \"${TRUST:-}\" ]; then export \"$k=$v\"",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "root thật"
+  },
+  {
+   "id": "G01",
+   "guard": "override chưa quyết → start / update / rollback… dừng trước khi đụng container",
+   "file": "cli/genchibi",
+   "find": "  start|restart|update|rollback|restore|token|github-token) override_gate || exit 1 ;;\n",
+   "replace": "  start|restart|update|rollback|restore|token|github-token) ;;\n",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "genchibi update (root) DỪNG"
+  },
+  {
+   "id": "G02",
+   "guard": "override đổi sau khi duyệt → lại dừng",
+   "file": "cli/genchibi",
+   "find": "if file_safe \"$TD/override.yml\" && [ \"$(sha256_of \"$TD/override.yml\")\" = \"$h\" ]; then return 0; fi",
+   "replace": "if file_safe \"$TD/override.yml\"; then return 0; fi",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "override đổi sau khi duyệt"
+  },
+  {
+   "id": "G03",
+   "guard": "override off chỉ cho đúng nội dung đã chọn",
+   "file": "cli/genchibi",
+   "find": "if file_safe \"$TD/override.off\" && [ \"$(head -n 1 \"$TD/override.off\")\" = \"$h\" ]; then return 0; fi",
+   "replace": "if file_safe \"$TD/override.off\"; then return 0; fi",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "override đổi tiếp sau khi chọn off"
+  },
+  {
+   "id": "G04",
+   "guard": "override approve không tự duyệt (cần --yes / terminal)",
+   "file": "cli/genchibi",
+   "find": "if [ -n \"$y\" ] || ask_yn \"$(mn ov_ask)\"; then",
+   "replace": "if true; then",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "không tự duyệt"
+  },
+  {
+   "id": "G05",
+   "guard": "override off cần --yes / terminal",
+   "file": "cli/genchibi",
+   "find": "if [ -n \"$y\" ] || ask_yn \"$(mn ov_off_ask)\"; then",
+   "replace": "if true; then",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "override off không terminal"
+  },
+  {
+   "id": "G06",
+   "guard": "status / doctor báo ✗ override chưa duyệt",
+   "file": "cli/genchibi",
+   "find": "if [ -n \"$TRUST\" ] && ! ov_state; then m st_ov_block",
+   "replace": "if false; then m st_ov_block",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "status + doctor"
+  },
+  {
+   "id": "G07",
+   "guard": "online … cũng dừng khi override chưa quyết",
+   "file": "cli/genchibi",
+   "find": "  online) case \"${2:-}\" in \"\"|status|-h|--help|help) ;; *) override_gate || exit 1 ;; esac ;;\n",
+   "replace": "  online) ;;\n",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "đều DỪNG"
+  },
+  {
+   "id": "I01",
+   "guard": "trình cài: xoá tệp tạm cài sẵn trước khi ghi .env",
+   "file": "install.sh",
+   "find": "rm -f \"$F.gc-tmp\"; awk \"$P\" \"$F\"",
+   "replace": "awk \"$P\" \"$F\"",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "tệp đích NGUYÊN"
+  },
+  {
+   "id": "I02",
+   "guard": "trình cài: đọc / ghi thư mục cài có sẵn bằng chủ của nó (setpriv)",
+   "file": "install.sh",
+   "find": "  if [ \"$(id -u)\" != 0 ] || [ \"$DIR_UID\" = 0 ]; then ${1+\"$@\"}; return; fi\n",
+   "replace": "  if true; then ${1+\"$@\"}; return; fi\n",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "tệp đích NGUYÊN"
+  },
+  {
+   "id": "B01",
+   "guard": "khôi phục cùng máy giữ install-id (CNS-235)",
+   "file": "server/online.js",
+   "find": "const same = !!readHex(files.installId, /^[a-f0-9]{16,64}$/) && sameMachine(rec, machineMark());",
+   "replace": "const same = false;",
+   "test": [
+    "node",
+    "tools/test-online.mjs"
+   ],
+   "expect": "khôi phục trên CHÍNH máy này"
+  },
+  {
+   "id": "B02",
+   "guard": "dấu máy: host khác → máy khác",
+   "file": "server/online.js",
+   "find": "return !rec.host || !cur.host || rec.host === cur.host;",
+   "replace": "return true;",
+   "test": [
+    "node",
+    "tools/test-online.mjs"
+   ],
+   "expect": "run/host-id khác"
+  },
+  {
+   "id": "B03",
+   "guard": "dấu máy: run/machine-id khác → máy khác",
+   "file": "server/online.js",
+   "find": "if (!rec || rec.v !== 1 || typeof rec.mid !== 'string' || rec.mid !== cur.mid) return false;",
+   "replace": "if (!rec || rec.v !== 1) return false;",
+   "test": [
+    "node",
+    "tools/test-online.mjs"
+   ],
+   "expect": "khôi phục sang máy khác"
+  },
+  {
+   "id": "C01",
+   "guard": "seenClient: sau khi xong ≤ 1 lần / 24 giờ (CNS-277)",
+   "file": "server/setup.js",
+   "find": "gap = this.stage === 'done' ? SEEN_DONE_MS : 60e3;",
+   "replace": "gap = 60e3;",
+   "test": [
+    "node",
+    "tools/test-setup.mjs"
+   ],
+   "expect": "CNS-277"
+  }
+ ]
+}
