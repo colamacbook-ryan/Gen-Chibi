@@ -104,6 +104,7 @@ function shims(dir, extra) {
   Object.entries(extra || {}).forEach(([n, body]) => fs.writeFileSync(path.join(FB, n), body, { mode: 0o755 }));
   return { FB, LOG };
 }
+const cliRunK = (HD, FB, args) => cliRun(HD, FB, args, '', { HOME: path.join(fs.readlinkSync(path.join(HD, '.khome'))) });   // bản cài Docker giả (HOME riêng — xem HDk)
 const cliRun = (HD, FB, args, input, env) => { const r = spawnSync('bash', [path.join(ROOT, 'cli/genchibi')].concat(args), { env: { ...baseEnv(), GC_HOME: HD, GC_CLI_INNER: '1', PATH: FB + ':' + process.env.PATH, ...(env || {}) }, input: input || '', encoding: 'utf8', timeout: 60000 }); return { code: r.status, out: (r.stdout || '') + (r.stderr || '') }; };
 
 /* ================================================================== 0) đơn vị */
@@ -493,7 +494,7 @@ console.log('8) khôi phục sao lưu (CLI genchibi restore): admin không sốn
   const rs0 = cliRun(HD, FB, ['restore', pre], 'yes\n');
   S = await ready(boot(P, {}, HD)); openWindow(HD);
   const ad = await adminLogin(P);
-  ok(rs0.code === 0 && stageOf(HD) === 'must_init' && ad.status === 403 && ad.json.reason === 'stage', 'khôi phục bản sao lưu chụp TRƯỚC khi khởi tạo (setup.json admin) → must_init, admin / admin 403 (sàn run/setup-floor)', ad.text);
+  ok(rs0.code === 0 && stageOf(HD) === 'must_init' && ad.status === 403 && ad.json.reason === 'stage', 'khôi phục bản sao lưu chụp TRƯỚC khi khởi tạo (setup.json admin) → must_init, admin / admin 403 (sàn run/setup-floor)', 'restore ' + rs0.code + ': ' + rs0.out.slice(-400) + ' · stage ' + stageOf(HD) + ' · ' + ad.text);
   await stop(S);
   // xoá auth.json → không mở lại admin
   fs.rmSync(path.join(HD, 'data/auth.json'));
@@ -535,26 +536,34 @@ console.log('9) CLI: open / start mở cửa sổ (native GC_BIND · Docker gi�
   const fakeDocker = cfg => '#!/usr/bin/env bash\necho "$*" >> ' + JSON.stringify(path.join(DD, 'docker.log')) + '\ncase " $* " in *" info "*) exit 0 ;; *" config --format json"*) ' + (cfg === null ? 'exit 1' : 'cat <<\'JSON\'\n' + JSON.stringify(cfg) + '\nJSON\n') + ' ;; esac\nexit 0\n';
   const HDk = cliHome(P, 'GC_MODE=docker\nGC_PORT=' + P + '\nGC_LANG=en\nGC_API_TOKEN=' + tokOf(HD) + '\nGC_DOCKER_VIA=direct\n');
   fs.mkdirSync(path.join(HDk, 'data'), { recursive: true });
+  // v0.23.1 (CNS-279): bản cài Docker ở MỌI uid dùng tệp compose đã kiểm của ~/.local/lib/gen-chibi — dựng sẵn như trình cài (rel/<bản>/ + mode), HOME riêng;
+  // root: home của uid 0 theo passwd → getent giả trả HOME này. Chạy bằng root thật: thư mục cài thuộc nobody (như user của container) — genchibi hạ quyền
+  const HKH = tmp('home'), KTD = path.join(HKH, '.local/lib/gen-chibi'); fs.mkdirSync(path.join(KTD, 'rel/v0.0.0'), { recursive: true, mode: 0o700 }); fs.chmodSync(KTD, 0o700);
+  for (const f of ['docker-compose.yml', 'docker-compose.edge.yml']) fs.copyFileSync(path.join(ROOT, f), path.join(KTD, 'rel/v0.0.0', f));
+  fs.writeFileSync(path.join(KTD, 'installs'), 'docker ' + fs.realpathSync(HDk) + '\n');
+  fs.writeFileSync(path.join(FB, 'getent'), '#!/usr/bin/env bash\nif [ "$1 $2" = "passwd 0" ]; then echo "root:x:0:0:root:' + HKH + ':/bin/bash"; exit 0; fi\nexec /usr/bin/getent "$@"\n', { mode: 0o755 });
+  fs.symlinkSync(HKH, path.join(HDk, '.khome'));
+  if (process.getuid && process.getuid() === 0) execFileSync('chown', ['-hR', '65534:65534', HDk]);
   const dk = cfg => { const b = path.join(DD, 'bin-' + crypto.randomBytes(4).toString('hex')); fs.mkdirSync(b); fs.writeFileSync(path.join(b, 'docker'), fakeDocker(cfg), { mode: 0o755 }); return b + ':' + FB; };
   const svc = (ports) => ({ services: { app: { ports } } });
   try { fs.rmSync(path.join(HDk, 'run/admin-window')); } catch (e) { /* chưa có */ }
-  let r = cliRun(HDk, dk(svc([{ mode: 'ingress', host_ip: '127.0.0.1', target: 7480, published: String(P), protocol: 'tcp' }])), ['open']);
+  let r = cliRunK(HDk, dk(svc([{ mode: 'ingress', host_ip: '127.0.0.1', target: 7480, published: String(P), protocol: 'tcp' }])), ['open']);
   let dw = fs.existsSync(path.join(HDk, 'run/admin-window')) ? JSON.parse(fs.readFileSync(path.join(HDk, 'run/admin-window'), 'utf8')) : null;
   ok(dw && dw.mode === 'docker' && dw.composeLoopback === true && /within 30 minutes/.test(r.out), 'Docker: compose config chỉ publish 127.0.0.1 → cửa sổ mở, composeLoopback true', r.out);
   fs.rmSync(path.join(HDk, 'run/admin-window'));
-  r = cliRun(HDk, dk({ services: { app: { ports: [{ mode: 'ingress', host_ip: '127.0.0.1', target: 7480, published: String(P), protocol: 'tcp' }] }, proxy: { ports: [{ mode: 'ingress', target: 80, published: '8080', protocol: 'tcp' }] } } }), ['open']);
+  r = cliRunK(HDk, dk({ services: { app: { ports: [{ mode: 'ingress', host_ip: '127.0.0.1', target: 7480, published: String(P), protocol: 'tcp' }] }, proxy: { ports: [{ mode: 'ingress', target: 80, published: '8080', protocol: 'tcp' }] } } }), ['open']);
   ok(!fs.existsSync(path.join(HDk, 'run/admin-window')) && /Docker publishes a port beyond loopback \(0\.0\.0\.0:8080\)/.test(r.out), 'Docker: override publish cổng ra 0.0.0.0 (service khác, không host_ip) → KHÔNG mở cửa sổ, nói lý do + địa chỉ', r.out);
-  r = cliRun(HDk, dk(svc([{ mode: 'ingress', host_ip: '0.0.0.0', target: 7480, published: String(P), protocol: 'tcp' }])), ['open']);
+  r = cliRunK(HDk, dk(svc([{ mode: 'ingress', host_ip: '0.0.0.0', target: 7480, published: String(P), protocol: 'tcp' }])), ['open']);
   ok(!fs.existsSync(path.join(HDk, 'run/admin-window')) && /beyond loopback \(0\.0\.0\.0:/.test(r.out), 'Docker: GC_BIND=0.0.0.0 (app publish 0.0.0.0) → không mở cửa sổ', r.out);
-  r = cliRun(HDk, dk(null), ['open']);
+  r = cliRunK(HDk, dk(null), ['open']);
   ok(!fs.existsSync(path.join(HDk, 'run/admin-window')) && /could not read the Docker compose configuration/.test(r.out), 'Docker: docker compose config lỗi → không mở cửa sổ (đóng khi nghi ngờ)', r.out);
   for (const nm of ['host', 'container:other', 'service:db']) {
-    r = cliRun(HDk, dk({ services: { app: { network_mode: nm, ports: [{ mode: 'ingress', host_ip: '127.0.0.1', target: 7480, published: String(P), protocol: 'tcp' }] } } }), ['open']);
+    r = cliRunK(HDk, dk({ services: { app: { network_mode: nm, ports: [{ mode: 'ingress', host_ip: '127.0.0.1', target: 7480, published: String(P), protocol: 'tcp' }] } } }), ['open']);
     ok(!fs.existsSync(path.join(HDk, 'run/admin-window')) && new RegExp('beyond loopback \\(network_mode:' + nm + '\\)').test(r.out), 'review F2: Docker network_mode ' + nm + ' (mạng của host / service khác) → KHÔNG mở cửa sổ', r.out);
   }
-  r = cliRun(HDk, dk({ services: { app: { network_mode: 'bridge', ports: [{ mode: 'ingress', host_ip: '127.0.0.1', target: 7480, published: String(P), protocol: 'tcp' }] } } }), ['open']);
+  r = cliRunK(HDk, dk({ services: { app: { network_mode: 'bridge', ports: [{ mode: 'ingress', host_ip: '127.0.0.1', target: 7480, published: String(P), protocol: 'tcp' }] } } }), ['open']);
   ok(fs.existsSync(path.join(HDk, 'run/admin-window')), 'Docker network_mode bridge (mặc định) + publish loopback → cửa sổ mở', r.out); fs.rmSync(path.join(HDk, 'run/admin-window'));
-  r = cliRun(HDk, dk(svc([{ mode: 'ingress', host_ip: '127.0.0.1', target: 7480, published: String(P), protocol: 'tcp' }])), ['start']);
+  r = cliRunK(HDk, dk(svc([{ mode: 'ingress', host_ip: '127.0.0.1', target: 7480, published: String(P), protocol: 'tcp' }])), ['start']);
   ok(fs.existsSync(path.join(HDk, 'run/admin-window')) && /within 30 minutes/.test(r.out) && /compose .*up -d/.test(fs.readFileSync(path.join(DD, 'docker.log'), 'utf8')), 'Docker: genchibi start (compose up giả) → mở cửa sổ', r.out);
   // genchibi password khởi tạo (app chạy) + --init-stdin
   const pi = cliRun(HD, FB, ['password', '--init-stdin'], 'Ryan\nmot cum tu rat dai day\n');

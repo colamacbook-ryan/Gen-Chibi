@@ -191,30 +191,28 @@ _en() {
     sn_config) F="Proxy config" ;;
     sn_local) F="This machine" ;;
     sn_remote) F="Cloudflare cleanup" ;;
-    root_td_unsafe) F="Refusing to run as root: %s (root's verified files) or a folder above it can be changed by another user." ;;
     root_nodrop) F="Cannot switch to the install folder's user (uid %s): neither setpriv nor sudo is available. Refusing to touch the install folder as root." ;;
     root_native) F="This install (%s) runs in Node mode as uid %s: run genchibi as that user, not as root." ;;
-    root_verify) F="Checking release %s for root: downloading the package and its SHA-256 (once per version)…" ;;
-    root_verified) F="✓ Release %s verified (SHA-256): root now uses its commands and compose files." ;;
-    root_unverified) F="! Could not verify release %s (%s) — root keeps using the verified files of %s. Run the command again when the machine is online." ;;
-    root_nofiles) F="✗ No verified compose files for release %s (%s). Root never uses the files in the install folder (the app can write them): connect the machine to the Internet and run the command again, or reinstall with the install command." ;;
+    root_verify) F="Checking release %s: downloading the package and its SHA-256 (once per version)…" ;;
+    root_verified) F="✓ Release %s verified (SHA-256): genchibi now uses its commands and compose files." ;;
+    root_unverified) F="! Could not verify release %s (%s) — genchibi keeps using the verified files of %s. Run the command again when the machine can reach github.com." ;;
+    root_nofiles) F="✗ No verified compose files for release %s (%s). genchibi never uses the files in the install folder (the app can write them): connect the machine to github.com and run the command again, or reinstall with the install command. (stop, logs and mcp still work: they use the container names directly.)" ;;
     root_booted) F="✓ %s now runs only verified code (root model of v0.23.1)." ;;
-    root_boot_fail) F="! This command ran from the install folder (old root command) and release %s could not be verified (%s). Run it again when the machine is online, or reinstall with the install command." ;;
-    ov_block) F="✗ Stopped before touching any container: %s is not approved for root (or changed since). It is in the install folder, which the app can write, so root does not use it on its own — and running without it could remove a service you rely on (for example a login page in front of the app). Running containers are left as they are. Its content:" ;;
-    ov_block_fix) F="Use it: sudo genchibi override approve   ·   run WITHOUT it: sudo genchibi override off   (without a terminal add --yes) — then run the command again. File: %s" ;;
-    ov_block_short) F="%s is not approved for root (or changed since): start / update / rollback / online stop until you choose — sudo genchibi override approve (use it) or sudo genchibi override off (run without it)" ;;
-    st_ov_block) F="  ✗ Override not approved: %s — start / update / rollback / online are stopped until you choose: sudo genchibi override approve (use it) · sudo genchibi override off (run without it)" ;;
-    ov_skipped) F="Root runs WITHOUT %s (chosen with genchibi override off). Use it: genchibi override approve" ;;
+    root_boot_fail) F="! This command ran from the install folder (old genchibi command) and release %s could not be verified (%s). Run it again when the machine can reach github.com, or reinstall with the install command." ;;
+    ov_block) F="✗ Stopped before touching any container: %s is not approved (or changed since). It is in the install folder, which the app can write, so genchibi does not use it on its own — and running without it could remove a service you rely on (for example a login page in front of the app). Running containers are left as they are. Its content:" ;;
+    ov_block_fix) F="Use it: %s override approve   ·   run WITHOUT it: %s override off   (without a terminal add --yes) — then run the command again. File: %s" ;;
+    ov_block_short) F="%s is not approved (or changed since): start / update / rollback / online stop until you choose — %s override approve (use it) or %s override off (run without it)" ;;
+    st_ov_block) F="  ✗ Override not approved: %s — start / update / rollback / online are stopped until you choose: %s override approve (use it) · %s override off (run without it)" ;;
+    ov_skipped) F="genchibi runs WITHOUT %s (chosen with override off). Use it: %s override approve" ;;
     ov_off_ask) F="Run the containers WITHOUT this override when genchibi runs as root (services it adds will not be started)? [y/N] " ;;
-    ov_notroot) F="Overrides only need approval when genchibi runs as root; as this user docker-compose.override.yml is used as before." ;;
+    ov_notroot) F="Overrides need a decision only on Docker installs; this install runs in Node mode (no containers)." ;;
     ov_same) F="✓ %s is approved (root uses its copy %s)." ;;
-    ov_only) F="Root uses the approved override %s (the install folder has none). Stop using it: genchibi override off" ;;
     ov_none) F="No docker-compose.override.yml in the install folder." ;;
     ov_show) F="Content of %s:" ;;
     ov_ask) F="Use this override when genchibi runs as root (it can add services and mounts)? [y/N] " ;;
     ov_approved) F="✓ Approved: root uses %s from now on (changes to the file in the install folder need a new approval)." ;;
     ov_off) F="Root now runs the containers without the override (chosen by you; a changed override asks again)." ;;
-    ov_help) F="genchibi override [status | approve [--yes] | off [--yes]] — as root, start / update / rollback / online stop until you approve docker-compose.override.yml (use it) or turn it off (run without it)" ;;
+    ov_help) F="genchibi override [status | approve [--yes] | off [--yes]] — on a Docker install, start / update / rollback / online stop until you approve docker-compose.override.yml (use it, with the .env variables it names) or turn it off (run without it). A changed or deleted override asks again." ;;
     rb_ask) F="Run the previous version again (the Studio restarts)? [y/N] " ;;
     rb_stop) F="Not rolled back. Without a terminal: genchibi rollback --yes" ;;
     dr_title) F="genchibi doctor — %s (mode %s)" ;;
@@ -226,7 +224,7 @@ _en() {
     dr_root_files_none) F="Compose files for %s are not verified yet (the machine could not download the release) — run genchibi doctor again when online" ;;
     dr_root_inner) F="This root command runs from the install folder (%s): reinstall to close it" ;;
     dr_uid_env) F=".env says GC_UID=%s but the install folder belongs to uid %s — the containers run as %s" ;;
-    dr_uid_legacy) F="The containers run as uid %s (%s), guessed by an old root install (v0.21.0–0.21.2) — that may be another person's account. Move to the system account %s: genchibi doctor (as root)" ;;
+    dr_uid_legacy) F="The containers run as uid %s (%s), guessed by an old root install (v0.21.0–0.21.2) — that may be another person's account. Move to the system account %s: %s doctor" ;;
     dr_uid_sys) F="Containers run as the system account %s (uid %s, no login)" ;;
     dr_uid_ok) F="Containers run as uid %s (installed by %s)" ;;
     dr_bind_local) F="Port %s is on this machine only (127.0.0.1)" ;;
@@ -244,8 +242,8 @@ _en() {
     dr_tunnel_ok) F="Tunnel (%s): running and connected" ;;
     dr_tunnel_bad) F="Tunnel (%s) is not connected: %s (genchibi online)" ;;
     dr_test_hooks) F=".env has GC_TEST* lines (test hooks) — they are ignored; remove them" ;;
-    dr_mig_root) F="Run as root to move the containers to the genchibi account: sudo genchibi doctor" ;;
-    dr_mig_ask) F="Move the containers from uid %s to the system account %s now (the app stops for a moment)? [y/N] " ;;
+    dr_mig_root) F="Run as root to move the containers to the genchibi account: %s doctor" ;;
+    dr_mig_ask) F="Move the containers from uid %s (%s) to the system account %s now (the app stops for a moment)? If uid %s is you, answer N. [y/N] " ;;
     dr_mig_skip) F="Not moved. Later: genchibi doctor (asks again) or genchibi doctor --yes — the containers keep running as before (account %s not used)." ;;
     dr_mig_nouser) F="Could not create the system account %s (no useradd / adduser) — nothing changed." ;;
     dr_mig_same) F="The containers already run as %s (uid %s)." ;;
@@ -254,6 +252,19 @@ _en() {
     dr_mig_done) F="✓ Moved: files of uid %s now belong to %s (%s:%s), .env updated. Starting…" ;;
     dr_ok) F="No problem found." ;;
     dr_bad) F="%s problem(s) found (✗ above)." ;;
+    td_unsafe) F="Refusing to run: %s (genchibi's verified files) or a folder above it can be changed by another user." ;;
+    td_in_install) F="Refusing to run: %s (genchibi's verified files) is inside the install folder %s, which the app can write. Reinstall with the default folders." ;;
+    uid0_refuse) F="The install folder %s belongs to root (or a privileged group): the containers must not run as root. Run the install command again to move it to a normal account." ;;
+    root_fallback) F="(no verified compose files yet — %s runs on the container names directly)" ;;
+    ov_gone) F="✗ docker-compose.override.yml was removed from the install folder, but genchibi still has the approved copy (%s). Run without it: %s override off  (or put the file back to keep using it). start / update / rollback / online stop until then." ;;
+    st_ov_gone) F="  ✗ Override removed from the install folder, approved copy still kept — choose: %s override off" ;;
+    ov_keys_show) F="It uses these .env variables (approving passes their values from .env to docker compose): %s" ;;
+    edge_unsafe) F="Refusing to start the edge Caddy: %s must be a real folder (not a link) owned by the install folder's user, in a folder only you / root can change." ;;
+    dr_stub_old) F="%s is an old genchibi command that runs the install folder's copy (the app can write it) — run genchibi once as that file's owner, or reinstall" ;;
+    dr_uid_unknown) F="The containers run as uid %s (%s). If that is not the owner's account (old root install without sudo), move it: %s doctor --migrate" ;;
+    dr_pub_unknown) F="Could not read the Docker Compose configuration (compose config) — published ports not checked" ;;
+    dr_mig_stopfail) F="Could not stop the app — nothing moved (files are not changed while the app is running). Stop it, then run genchibi doctor again." ;;
+    un_down_fail) F="Removing the containers (compose down) failed — nothing was removed. Stop the containers, then run genchibi uninstall again." ;;
   esac
 }
 _vi() {
@@ -436,30 +447,28 @@ _vi() {
     sn_config) F="Cấu hình proxy" ;;
     sn_local) F="Máy này" ;;
     sn_remote) F="Dọn Cloudflare" ;;
-    root_td_unsafe) F="Từ chối chạy bằng root: %s (tệp đã kiểm của root) hoặc một thư mục phía trên nó user khác đổi được." ;;
     root_nodrop) F="Không chuyển được sang user của thư mục cài (uid %s): không có setpriv hay sudo. Từ chối đụng vào thư mục cài bằng root." ;;
     root_native) F="Bản cài này (%s) chạy chế độ Node bằng uid %s: chạy genchibi bằng user đó, không bằng root." ;;
-    root_verify) F="Kiểm bản phát hành %s cho root: tải gói và SHA-256 của nó (mỗi phiên bản một lần)…" ;;
-    root_verified) F="✓ Bản %s đã kiểm (SHA-256): từ giờ root dùng lệnh và tệp compose của bản này." ;;
-    root_unverified) F="! Không kiểm được bản %s (%s) — root tiếp tục dùng tệp đã kiểm của %s. Chạy lại lệnh khi máy có mạng." ;;
-    root_nofiles) F="✗ Chưa có tệp compose đã kiểm cho bản %s (%s). Root không bao giờ dùng tệp trong thư mục cài (app ghi được): nối mạng rồi chạy lại lệnh, hoặc cài lại bằng lệnh cài." ;;
+    root_verify) F="Kiểm bản phát hành %s: tải gói và SHA-256 của nó (mỗi phiên bản một lần)…" ;;
+    root_verified) F="✓ Bản %s đã kiểm (SHA-256): từ giờ genchibi dùng lệnh và tệp compose của bản này." ;;
+    root_unverified) F="! Không kiểm được bản %s (%s) — genchibi tiếp tục dùng tệp đã kiểm của %s. Chạy lại lệnh khi máy tới được github.com." ;;
+    root_nofiles) F="✗ Chưa có tệp compose đã kiểm cho bản %s (%s). genchibi không bao giờ dùng tệp trong thư mục cài (app ghi được): cho máy tới được github.com rồi chạy lại lệnh, hoặc cài lại bằng lệnh cài. (stop, logs và mcp vẫn chạy: dùng thẳng tên container.)" ;;
     root_booted) F="✓ %s giờ chỉ chạy mã đã kiểm (mô hình root của v0.23.1)." ;;
-    root_boot_fail) F="! Lệnh này chạy từ thư mục cài (lệnh root cũ) và không kiểm được bản %s (%s). Chạy lại khi máy có mạng, hoặc cài lại bằng lệnh cài." ;;
-    ov_block) F="✗ Dừng trước khi đụng container nào: %s chưa được duyệt cho root (hoặc đã đổi từ lúc duyệt). Tệp nằm trong thư mục cài (app ghi được) nên root không tự dùng — nhưng chạy thiếu nó có thể gỡ một service bạn đang dựa vào (vd trang đăng nhập đứng trước app). Container đang chạy giữ nguyên. Nội dung:" ;;
-    ov_block_fix) F="Dùng nó: sudo genchibi override approve   ·   chạy KHÔNG có nó: sudo genchibi override off   (không có terminal thì thêm --yes) — rồi chạy lại lệnh. Tệp: %s" ;;
-    ov_block_short) F="%s chưa được duyệt cho root (hoặc đã đổi): start / update / rollback / online dừng tới khi bạn chọn — sudo genchibi override approve (dùng) hoặc sudo genchibi override off (chạy không có nó)" ;;
-    st_ov_block) F="  ✗ Override chưa duyệt: %s — start / update / rollback / online đang dừng tới khi bạn chọn: sudo genchibi override approve (dùng) · sudo genchibi override off (chạy không có nó)" ;;
-    ov_skipped) F="Root chạy KHÔNG có %s (đã chọn bằng genchibi override off). Dùng nó: genchibi override approve" ;;
+    root_boot_fail) F="! Lệnh này chạy từ thư mục cài (lệnh genchibi cũ) và không kiểm được bản %s (%s). Chạy lại khi máy tới được github.com, hoặc cài lại bằng lệnh cài." ;;
+    ov_block) F="✗ Dừng trước khi đụng container nào: %s chưa được duyệt (hoặc đã đổi từ lúc duyệt). Tệp nằm trong thư mục cài (app ghi được) nên genchibi không tự dùng — nhưng chạy thiếu nó có thể gỡ một service bạn đang dựa vào (vd trang đăng nhập đứng trước app). Container đang chạy giữ nguyên. Nội dung:" ;;
+    ov_block_fix) F="Dùng nó: %s override approve   ·   chạy KHÔNG có nó: %s override off   (không có terminal thì thêm --yes) — rồi chạy lại lệnh. Tệp: %s" ;;
+    ov_block_short) F="%s chưa được duyệt (hoặc đã đổi): start / update / rollback / online dừng tới khi bạn chọn — %s override approve (dùng) hoặc %s override off (chạy không có nó)" ;;
+    st_ov_block) F="  ✗ Override chưa duyệt: %s — start / update / rollback / online đang dừng tới khi bạn chọn: %s override approve (dùng) · %s override off (chạy không có nó)" ;;
+    ov_skipped) F="genchibi chạy KHÔNG có %s (đã chọn bằng override off). Dùng nó: %s override approve" ;;
     ov_off_ask) F="Chạy container KHÔNG có override này khi genchibi chạy bằng root (service nó thêm sẽ không được bật)? [c/K] " ;;
-    ov_notroot) F="Override chỉ cần duyệt khi chạy genchibi bằng root; bằng user này docker-compose.override.yml vẫn dùng như cũ." ;;
+    ov_notroot) F="Override chỉ cần quyết ở bản cài Docker; bản cài này chạy chế độ Node (không container)." ;;
     ov_same) F="✓ %s đã duyệt (root dùng bản chép %s)." ;;
-    ov_only) F="Root dùng override đã duyệt %s (thư mục cài không còn tệp nào). Thôi dùng: genchibi override off" ;;
     ov_none) F="Thư mục cài không có docker-compose.override.yml." ;;
     ov_show) F="Nội dung %s:" ;;
     ov_ask) F="Dùng override này khi chạy genchibi bằng root (nó thêm được service và thư mục mount)? [c/K] " ;;
     ov_approved) F="✓ Đã duyệt: từ giờ root dùng %s (sửa tệp trong thư mục cài thì phải duyệt lại)." ;;
     ov_off) F="Từ giờ root chạy container không có override (bạn đã chọn; override đổi nội dung thì hỏi lại)." ;;
-    ov_help) F="genchibi override [status | approve [--yes] | off [--yes]] — chạy bằng root: start / update / rollback / online dừng tới khi bạn duyệt docker-compose.override.yml (dùng) hoặc tắt nó (chạy không có nó)" ;;
+    ov_help) F="genchibi override [status | approve [--yes] | off [--yes]] — bản cài Docker: start / update / rollback / online dừng tới khi bạn duyệt docker-compose.override.yml (dùng, kèm các biến .env nó gọi tên) hoặc tắt nó (chạy không có nó). Override đổi hay bị xoá thì hỏi lại." ;;
     rb_ask) F="Chạy lại bản trước (Studio khởi động lại)? [c/K] " ;;
     rb_stop) F="Không chạy lại bản cũ. Không có terminal: genchibi rollback --yes" ;;
     dr_title) F="genchibi doctor — %s (chế độ %s)" ;;
@@ -471,7 +480,7 @@ _vi() {
     dr_root_files_none) F="Tệp compose của %s chưa được kiểm (máy chưa tải được bản phát hành) — chạy lại genchibi doctor khi có mạng" ;;
     dr_root_inner) F="Lệnh root này chạy từ thư mục cài (%s): cài lại để đóng" ;;
     dr_uid_env) F=".env ghi GC_UID=%s nhưng thư mục cài thuộc uid %s — container chạy bằng %s" ;;
-    dr_uid_legacy) F="Container chạy bằng uid %s (%s), do bản cài root cũ (v0.21.0–0.21.2) đoán — có thể là tài khoản của người khác. Chuyển sang tài khoản hệ thống %s: genchibi doctor (bằng root)" ;;
+    dr_uid_legacy) F="Container chạy bằng uid %s (%s), do bản cài root cũ (v0.21.0–0.21.2) đoán — có thể là tài khoản của người khác. Chuyển sang tài khoản hệ thống %s: %s doctor" ;;
     dr_uid_sys) F="Container chạy bằng tài khoản hệ thống %s (uid %s, không đăng nhập)" ;;
     dr_uid_ok) F="Container chạy bằng uid %s (cài bởi %s)" ;;
     dr_bind_local) F="Cổng %s chỉ mở trên máy này (127.0.0.1)" ;;
@@ -489,8 +498,8 @@ _vi() {
     dr_tunnel_ok) F="Tunnel (%s): đang chạy, đã nối" ;;
     dr_tunnel_bad) F="Tunnel (%s) chưa nối: %s (genchibi online)" ;;
     dr_test_hooks) F=".env có dòng GC_TEST* (móc kiểm thử) — bị bỏ qua; nên xoá" ;;
-    dr_mig_root) F="Chạy bằng root để chuyển container sang tài khoản genchibi: sudo genchibi doctor" ;;
-    dr_mig_ask) F="Chuyển container từ uid %s sang tài khoản hệ thống %s ngay (app dừng một lát)? [c/K] " ;;
+    dr_mig_root) F="Chạy bằng root để chuyển container sang tài khoản genchibi: %s doctor" ;;
+    dr_mig_ask) F="Chuyển container từ uid %s (%s) sang tài khoản hệ thống %s ngay (app dừng một lát)? Nếu uid %s là bạn, trả lời K. [c/K] " ;;
     dr_mig_skip) F="Chưa chuyển. Sau này: genchibi doctor (hỏi lại) hoặc genchibi doctor --yes — container vẫn chạy như cũ (chưa dùng tài khoản %s)." ;;
     dr_mig_nouser) F="Không tạo được tài khoản hệ thống %s (không có useradd / adduser) — chưa đổi gì." ;;
     dr_mig_same) F="Container đã chạy bằng %s (uid %s)." ;;
@@ -499,11 +508,27 @@ _vi() {
     dr_mig_done) F="✓ Đã chuyển: tệp của uid %s giờ thuộc %s (%s:%s), đã sửa .env. Đang khởi động…" ;;
     dr_ok) F="Không thấy vấn đề nào." ;;
     dr_bad) F="Có %s vấn đề (✗ ở trên)." ;;
+    td_unsafe) F="Từ chối chạy: %s (tệp đã kiểm của genchibi) hoặc một thư mục phía trên nó user khác đổi được." ;;
+    td_in_install) F="Từ chối chạy: %s (tệp đã kiểm của genchibi) nằm trong thư mục cài %s (app ghi được). Cài lại với thư mục mặc định." ;;
+    uid0_refuse) F="Thư mục cài %s thuộc root (hoặc nhóm đặc quyền): container không được chạy bằng root. Chạy lại lệnh cài để chuyển sang tài khoản thường." ;;
+    root_fallback) F="(chưa có tệp compose đã kiểm — %s chạy thẳng theo tên container)" ;;
+    ov_gone) F="✗ docker-compose.override.yml đã bị xoá khỏi thư mục cài, nhưng genchibi còn bản đã duyệt (%s). Chạy không có nó: %s override off  (hoặc đặt tệp lại để dùng tiếp). Tới lúc đó start / update / rollback / online dừng." ;;
+    st_ov_gone) F="  ✗ Override đã bị xoá khỏi thư mục cài, còn giữ bản đã duyệt — chọn: %s override off" ;;
+    ov_keys_show) F="Override dùng các biến .env này (duyệt thì giá trị của chúng từ .env được đưa cho docker compose): %s" ;;
+    edge_unsafe) F="Từ chối bật edge Caddy: %s phải là thư mục thật (không phải liên kết) thuộc user của thư mục cài, nằm trong thư mục chỉ bạn / root đổi được." ;;
+    dr_stub_old) F="%s là lệnh genchibi cũ, chạy bản trong thư mục cài (app ghi được) — chạy genchibi một lần bằng chủ của tệp đó, hoặc cài lại" ;;
+    dr_uid_unknown) F="Container chạy bằng uid %s (%s). Nếu đó không phải tài khoản của chủ (bản cài root cũ không sudo), chuyển: %s doctor --migrate" ;;
+    dr_pub_unknown) F="Không đọc được cấu hình Docker Compose (compose config) — chưa kiểm cổng publish" ;;
+    dr_mig_stopfail) F="Không dừng được app — chưa chuyển gì (không đổi tệp khi app còn chạy). Dừng app rồi chạy lại genchibi doctor." ;;
+    un_down_fail) F="Gỡ container (compose down) lỗi — chưa xoá gì. Dừng container rồi chạy lại genchibi uninstall." ;;
   esac
 }
 _t() { F=""; if [ "$UI" = vi ]; then _vi "$1"; fi; if [ -z "$F" ]; then _en "$1"; fi; if [ -z "$F" ]; then F="$1"; fi; }
-m()  { _t "$1"; shift; printf "%s$F\n" "" ${1+"$@"}; }   # "%s" + "" đứng đầu: câu bắt đầu bằng "-" không bị printf hiểu là tuỳ chọn
-mn() { _t "$1"; shift; printf "%s$F" "" ${1+"$@"}; }
+# san: bỏ ký tự điều khiển (trừ \t \n) — MỌI chuỗi do app / API / thư mục cài đưa ra terminal đi qua đây (ESC không đổi được terminal của người gõ — F2)
+san() { LC_ALL=C tr -d '\000-\010\013-\037\177'; }
+san_args() { SA=(); local a; for a in ${1+"$@"}; do case "$a" in *[[:cntrl:]]*) SA+=("$(printf '%s' "$a" | san)") ;; *) SA+=("$a") ;; esac; done; }
+m()  { _t "$1"; shift; local SA; san_args ${1+"$@"}; printf "%s$F\n" "" ${SA[@]+"${SA[@]}"}; }   # "%s" + "" đứng đầu: câu bắt đầu bằng "-" không bị printf hiểu là tuỳ chọn
+mn() { _t "$1"; shift; local SA; san_args ${1+"$@"}; printf "%s$F" "" ${SA[@]+"${SA[@]}"}; }
 pick_ui() { case "${1:-}" in vi|vi[_.-]*|VI|VI[_.-]*|Vi) UI=vi ;; *) UI=en ;; esac; }
 lang_name() { case "$1" in vi) echo "Tiếng Việt" ;; *) echo "English" ;; esac; }
 # mặc định của Studio ghi trong data/settings.json › uiLang (một nguồn sự thật — server ghi). sed thuần: không cần node / jq, chạy được với bash 3.2
@@ -521,22 +546,26 @@ SELF_FILE="$_self"; CLI_SELF="${GC_CLI_SELF:-$_self}"; unset _self
 [ -d "$HOME_DIR" ] || { m no_home "$HOME_DIR" >&2; exit 1; }
 HOME_PHYS="$(cd -P "$HOME_DIR" && pwd)"   # đường thật (HOME_DIR có thể đi qua symlink) — để nhận ra lệnh đang chạy từ TRONG thư mục cài
 
-# ---------------------------------------------------------------- mô hình root (v0.23.1, CNS-233 / CNS-257)
-# Thư mục cài thuộc user của container (GC_UID, bind mount ./:/install, ghi được toàn bộ). Root gõ genchibi → KHÔNG BAO GIỜ chạy / nạp tệp nào user đó ghi được:
-#   (a) lệnh của root là bản tự đủ: ~/.local/bin/genchibi (trình cài chép) → $TD/genchibi (bản mới nhất ĐÃ KIỂM — tải gói phát hành + SHA256SUMS, giải nén ở $TD);
-#       không bao giờ exec current/cli/genchibi
+# ---------------------------------------------------------------- mô hình tin cậy (v0.23.1, CNS-233 / CNS-257 / CNS-278 / CNS-279)
+# Bản cài Docker: thư mục cài là bind mount ./:/install của container — app (nếu bị chiếm) ghi được TOÀN BỘ. Ai gõ genchibi (root, hay user trong nhóm docker
+# — tương đương root) → KHÔNG BAO GIỜ chạy / nạp tệp nào trong đó:
+#   (a) lệnh là bản tự đủ: ~/.local/bin/genchibi (trình cài chép) → $TD/genchibi (bản mới nhất ĐÃ KIỂM — tải gói phát hành + SHA256SUMS); không exec current/
 #   (b) .env đọc như DỮ LIỆU (env_load: KHOÁ=giá trị, danh sách khoá cho phép, không source / eval)
-#   (c) tệp compose đưa cho docker compose: $TD/rel/<bản>/ (từ gói đã kiểm SHA) + --project-directory thư mục cài + --env-file $TD/run/compose.env (đã lọc);
-#       override của chủ chỉ dùng bản root đã duyệt ($TD/override.yml — genchibi override approve)
-#   (d) mọi đọc / ghi trong thư mục cài chạy bằng user của thư mục (as_app: setpriv → sudo -u '#uid'), không bằng root
-# TRUST = 1 khi chạy bằng root VÀ thư mục cài thuộc user khác (bản cài Docker bằng root / sudo). Còn lại (user thường, native) → như cũ.
+#   (c) compose: $TD/rel/<bản>/ (gói đã kiểm) + --project-directory thư mục cài + --env-file $TD/run/compose.env (đã lọc); override chỉ khi đã duyệt
+#   (d) root: mọi đọc / ghi trong thư mục cài chạy bằng chủ của nó (as_app: setpriv → sudo -u '#uid'), cwd = thư mục cài (đi được cả khi cha là /root 0700)
+# $TD: root → home của uid 0 theo passwd (KHÔNG theo $HOME — sudo -E / HOME của user, CNS-284); user → $HOME của chính mình (container chỉ thấy /install).
+# Chế độ: $TD/installs — mỗi dòng "<chế độ> <đường thật thư mục cài>" (trình cài / lần đầu ghi — .env không đổi được nó về sau); chưa có dòng cho thư mục này
+# → GC_MODE của .env (dữ liệu). TRUST = chế độ docker, mọi uid. Theo từng thư mục cài: một user có thể có bản native + bản Docker.
+# Native (không container): app chạy bằng chính user này, không có ranh giới để giữ → như cũ (exec current/cli/genchibi) — nói rõ trong README.
+IS_ROOT=""; [ "$(id -u)" = 0 ] && IS_ROOT=1
 dir_ids() { ls -ldn "$1/." 2>/dev/null | awk '{ print $3 " " $4 }'; }
 APP_UID=""; APP_GID=""; read -r APP_UID APP_GID <<EOF_IDS
 $(dir_ids "$HOME_DIR")
 EOF_IDS
+DROP=""; [ -n "$IS_ROOT" ] && [ -n "$APP_UID" ] && [ "$APP_UID" != 0 ] && DROP=1   # root trên thư mục của user khác → hạ quyền khi đụng tệp trong đó
 TRUST=""; TD=""; BOOT=""
-if [ "$(id -u)" = 0 ] && [ -n "$APP_UID" ] && [ "$APP_UID" != 0 ]; then TRUST=1; fi
-# path_safe P: P và mọi thư mục cha thuộc chính mình hoặc root, không ai khác ghi được (trừ thư mục dính bit t như /tmp) — không ai đổi tên / tráo được
+# path_safe P: P và mọi thư mục cha thuộc chính mình hoặc root, không ai khác ghi được (trừ thư mục dính bit t như /tmp), không ACL mở rộng
+# (getfacl, nếu có) — không ai khác đổi tên / tráo được
 path_safe() {
   local p="$1" l
   while :; do
@@ -544,39 +573,70 @@ path_safe() {
     l="$(ls -ldn "$p" 2>/dev/null)" || return 1
     if [ ! -O "$p" ] && [ "$(printf '%s' "$l" | awk '{ print $3 }')" != 0 ]; then return 1; fi
     case "$l" in d????????[tT]*) ;; ?????w*|????????w*) return 1 ;; esac
+    if command -v getfacl >/dev/null 2>&1 && [ -n "$(getfacl -cp "$p" 2>/dev/null | grep -Ev '^(user|group|other|mask)::|^$' || true)" ]; then return 1; fi
     [ "$p" = / ] && return 0
     p="$(dirname "$p")"
   done
 }
 file_safe() { [ -f "$1" ] && [ ! -L "$1" ] && [ -O "$1" ] && path_safe "$1"; }
+# as_app LỆNH…: root trên thư mục của user khác → chạy bằng user đó (môi trường sạch env -i, cwd hiện tại); không hạ được → từ chối. Còn lại chạy thẳng
+as_app() {
+  if [ -z "${DROP:-}" ]; then ${1+"$@"}; return; fi
+  if command -v setpriv >/dev/null 2>&1; then setpriv --reuid="$APP_UID" --regid="$APP_GID" --clear-groups -- env -i PATH="$PATH" LC_ALL=C ${1+"$@"}
+  elif command -v sudo >/dev/null 2>&1; then sudo -n -u "#$APP_UID" -g "#$APP_GID" -- env -i PATH="$PATH" LC_ALL=C ${1+"$@"}
+  else m root_nodrop "$APP_UID" >&2; return 1; fi
+}
+rd() { ( cd "$HOME_DIR" && as_app cat -- "$1" ) 2>/dev/null; }   # đọc một tệp của thư mục cài (đường tương đối, như dữ liệu)
+home_of() { # home của uid theo passwd (getent → /etc/passwd → dscl macOS)
+  local h=""
+  h="$(getent passwd "$1" 2>/dev/null | cut -d: -f6)" || h=""
+  [ -n "$h" ] || h="$(awk -F: -v u="$1" '$3 == u { print $6; exit }' /etc/passwd 2>/dev/null)" || h=""
+  [ -n "$h" ] || { [ "$1" = 0 ] && h="$(dscl . -read /Users/root NFSHomeDirectory 2>/dev/null | awk '{ print $2 }')"; } || h=""
+  [ -n "$h" ] || { [ "$1" = 0 ] && h=/root; }
+  printf '%s' "$h"
+}
+# root: $HOME chỉ khi nó (và mọi thư mục cha) an toàn — thuộc root, không ai khác ghi được; không thì home của uid 0 theo passwd (sudo -E / HOME của user — CNS-284)
+if [ -n "$IS_ROOT" ]; then if [ -n "${HOME:-}" ] && path_safe "$HOME"; then TRUST_HOME="$HOME"; else TRUST_HOME="$(home_of 0)"; fi; else TRUST_HOME="$HOME"; fi
+case "$TRUST_BAKED" in __GC_TRUST*) TD="$TRUST_HOME/.local/lib/gen-chibi" ;; *) TD="$TRUST_BAKED" ;; esac
+# thư mục gần nhất đã có trên đường $TD phải an toàn TRƯỚC khi mkdir (CNS-284) — không an toàn (vd bản chép của user chạy bằng root) → $TD mặc định của mình
+td_parent_ok() { local p="$1"; while [ ! -e "$p" ]; do p="$(dirname "$p")"; done; path_safe "$p"; }
+td_parent_ok "$TD" || TD="$TRUST_HOME/.local/lib/gen-chibi"
+EDGE_DIR="$TD/edge"   # nguồn bind mount của edge Caddy — NGOÀI thư mục cài (container không tráo được bằng symlink — F1)
+# nhóm đặc quyền: container / tệp không bao giờ chạy với gid của root, docker, sudo, wheel, adm, admin
+priv_gid() { local n x; [ "$1" = 0 ] && return 0; for n in docker sudo wheel adm admin root; do x="$(getent group "$n" 2>/dev/null | cut -d: -f3)" || x=""; [ "$x" != "$1" ] || [ -z "$x" ] || return 0; done; return 1; }
+MODE_T=""
+mode_get() { file_safe "$TD/installs" || return 0; awk -v p="$HOME_PHYS" '{ m = $1; sub(/^[^ ]* /, ""); if ($0 == p) r = m } END { print r }' "$TD/installs"; }
+mode_put() { # mode_put CHẾ_ĐỘ — chốt chế độ của thư mục cài này (thay dòng cũ của nó)
+  local t; t="$(mktemp "$TD/installs.XXXXXX" 2>/dev/null)" || return 0
+  { if file_safe "$TD/installs"; then awk -v p="$HOME_PHYS" '{ l = $0; sub(/^[^ ]* /, ""); if ($0 != p) print l }' "$TD/installs"; fi; [ -z "$1" ] || printf '%s %s\n' "$1" "$HOME_PHYS"; } > "$t" && chmod 600 "$t" && mv -f "$t" "$TD/installs"
+}
+MODE_T="$(mode_get)" || MODE_T=""
+case "$MODE_T" in docker|native) ;; *) MODE_T="$(rd .env | sed -n 's/^\(export \)\{0,1\}GC_MODE=["'"'"']\{0,1\}\([a-z]*\).*/\2/p' | tail -n 1)" || MODE_T=""; [ "$MODE_T" = native ] || MODE_T=docker ;; esac
+# root + thư mục của user khác + native → root sẽ phải chạy node launcher.js của user đó → từ chối
+if [ -n "$DROP" ] && [ "$MODE_T" != docker ]; then m root_native "$HOME_DIR" "$APP_UID" >&2; exit 1; fi
+[ "$MODE_T" = docker ] && TRUST=1
 if [ -n "$TRUST" ]; then
-  case "$TRUST_BAKED" in __GC_TRUST*) TD="$HOME/.local/lib/gen-chibi" ;; *) TD="$TRUST_BAKED" ;; esac
+  td_parent_ok "$TD" || { m td_unsafe "$TD" >&2; exit 1; }
   ( umask 077; mkdir -p "$TD/rel" "$TD/run" ) 2>/dev/null || true
   [ -d "$TD" ] && TD="$(cd -P "$TD" && pwd)"
-  path_safe "$TD" || { m root_td_unsafe "$TD" >&2; exit 1; }
-  # bản mới nhất đã kiểm ($TD/genchibi) thắng bản trong PATH — giống trước kia chuyển cho current/cli/genchibi, nhưng tệp thuộc root
+  path_safe "$TD" || { m td_unsafe "$TD" >&2; exit 1; }
+  case "$TD/" in "$HOME_PHYS"/*) m td_in_install "$TD" "$HOME_DIR" >&2; exit 1 ;; esac   # container ghi được → không còn là chỗ tin cậy
+  [ -n "$(mode_get)" ] || mode_put docker 2>/dev/null || true
+  # bản mới nhất đã kiểm ($TD/genchibi) thắng bản trong PATH
   if [ -z "${GC_CLI_INNER:-}" ] && [ "$SELF_FILE" != "$TD/genchibi" ] && file_safe "$TD/genchibi"; then
     GC_CF_TOKEN="${GC_CF_TOKEN-}" GC_CLI_INNER=1 GC_HOME="$HOME_DIR" GC_CLI_SELF="$CLI_SELF" exec bash "$TD/genchibi" ${1+"$@"}
   fi
-  # được lệnh root cũ (≤ v0.23.0, exec sang current/cli/genchibi) gọi từ TRONG thư mục cài → tự lắp lệnh đã kiểm rồi chuyển sang nó (trust_boot, dưới)
+  # chạy từ TRONG thư mục cài (lệnh cũ ≤ v0.23.0 exec sang current/cli/genchibi) → tự lắp lệnh đã kiểm, thay các lệnh cũ, chuyển sang (trust_boot, dưới)
   case "$SELF_FILE" in "$HOME_DIR"/*|"$HOME_PHYS"/*) BOOT=1 ;; esac
+  case "$CLI_SELF" in "$HOME_DIR"/*|"$HOME_PHYS"/*) CLI_SELF="" ;; esac   # đường thật owner gõ không biết (lệnh ≤ v0.22 không truyền GC_CLI_SELF) → trust_boot dò
 else
-  # Lệnh đi theo bản cài: chuyển cho cli/genchibi của bản đang chạy, để bản cập nhật mang theo lệnh mới (user thường — cùng user với app, không leo quyền)
+  # native: app chạy bằng chính user này (không container) — lệnh đi theo bản cài như trước
   INNER="$HOME_DIR/current/cli/genchibi"
   if [ -z "${GC_CLI_INNER:-}" ] && [ -f "$INNER" ]; then GC_CF_TOKEN="${GC_CF_TOKEN-}" GC_CLI_INNER=1 GC_HOME="$HOME_DIR" GC_CLI_SELF="$CLI_SELF" exec bash "$INNER" ${1+"$@"}; fi
 fi
 ORIG_PWD="$PWD"   # thư mục người gọi lệnh (agent skill cài vào dự án của họ, không phải thư mục cài)
 cd "$HOME_DIR"
 
-# as_app LỆNH…: chạy bằng user của thư mục cài khi TRUST (root không đụng tệp user đó ghi được); còn lại chạy thẳng. Môi trường sạch (env -i): tiến trình con
-# không thừa hưởng gì của root. Không hạ được quyền → từ chối (không bao giờ rơi về chạy bằng root)
-as_app() {
-  if [ -z "${TRUST:-}" ]; then ${1+"$@"}; return; fi
-  if command -v setpriv >/dev/null 2>&1; then setpriv --reuid="$APP_UID" --regid="$APP_GID" --clear-groups -- env -i PATH="$PATH" LC_ALL=C ${1+"$@"}
-  elif command -v sudo >/dev/null 2>&1; then sudo -n -u "#$APP_UID" -g "#$APP_GID" -- env -i PATH="$PATH" LC_ALL=C ${1+"$@"}
-  else m root_nodrop "$APP_UID" >&2; return 1; fi
-}
-rd() { as_app cat -- "$1" 2>/dev/null; }   # đọc một tệp của thư mục cài (như dữ liệu)
 # aw TỆP [chế-độ]: stdin → TỆP (tệp tạm cạnh nó rồi mv — không ghi xuyên symlink có sẵn), bằng user của thư mục cài; chế độ mặc định 600
 aw() { as_app sh -c 'umask 077; rm -f "$1.gc-tmp" && cat > "$1.gc-tmp" && chmod "$2" "$1.gc-tmp" && mv -f "$1.gc-tmp" "$1"' sh "$1" "${2:-600}"; }
 
@@ -585,21 +645,33 @@ aw() { as_app sh -c 'umask 077; rm -f "$1.gc-tmp" && cat > "$1.gc-tmp" && chmod 
 # Thường (không TRUST): export như trước (app native nhận môi trường). TRUST: không export gì — compose nhận bản đã lọc qua --env-file (compose_env).
 ENV_KEYS=" GC_MODE GC_PORT GC_BIND GC_MASTER_KEY GC_AUTO_UPDATE GC_UID GC_GID GC_REPO GC_LANG GC_GITHUB_TOKEN GC_API_TOKEN GC_ALLOWED_HOSTS GC_MCP_KEY GC_PUBLIC_URL GC_OAUTH_REDIRECTS GC_OAUTH_ACCESS_TTL GC_CLIENT_IP_HEADER GC_EXTRA_CA GC_TUNNEL COMPOSE_PROFILES GC_DOCKER_VIA GC_INSTALLED_BY GC_LISTEN GC_NO_AUTOCHECK GC_FEED_URL GC_HEALTH_WINDOW_MS GC_EDGE_HEALTH_WINDOW_MS HTTPS_PROXY https_proxy HTTP_PROXY http_proxy NO_PROXY no_proxy "
 ENV_RAW=""   # các dòng KHOÁ=giá trị đã nhận (compose_env lọc lại)
+ENV_ALL=""   # MỌI dòng KHOÁ=giá trị hợp lệ (dữ liệu, không đặt biến) — compose_env lấy khoá mà override đã duyệt cần (CNS-281)
+env_line() { # env_line DÒNG → EK / EV (0) hoặc 1: KHOÁ=giá trị, "export " đầu dòng chấp nhận, "…" / '…' bỏ nháy, không ký tự điều khiển
+  local line="${1%$'\r'}"
+  case "$line" in "export "*) line="${line#export }" ;; esac
+  case "$line" in [A-Za-z_]*=*) ;; *) return 1 ;; esac
+  EK="${line%%=*}"; EV="${line#*=}"
+  case "$EK" in *[!A-Za-z0-9_]*) return 1 ;; esac
+  case "$EV" in \"*\") EV="${EV#\"}"; EV="${EV%\"}" ;; \'*\') EV="${EV#\'}"; EV="${EV%\'}" ;; esac
+  case "$EV" in *[[:cntrl:]]*) return 1 ;; esac
+  return 0
+}
+env_get() { # env_get KHOÁ → giá trị cuối trong .env (một nguồn đọc — cùng luật với env_load)
+  local line v=""; while IFS= read -r line || [ -n "$line" ]; do env_line "$line" && [ "$EK" = "$1" ] && v="$EV"; done < <(rd .env); printf '%s' "$v"
+}
 env_load() {
-  local line k v
+  local line EK EV
   [ -f .env ] || return 0
   while IFS= read -r line || [ -n "$line" ]; do
-    line="${line%$'\r'}"
-    case "$line" in "export "*) line="${line#export }" ;; esac
-    case "$line" in [A-Za-z_]*=*) ;; *) continue ;; esac
-    k="${line%%=*}"; v="${line#*=}"
-    case "$k" in *[!A-Za-z0-9_]*) continue ;; esac
-    case "$ENV_KEYS" in *" $k "*) ;; *) continue ;; esac
-    case "$v" in \"*\") v="${v#\"}"; v="${v%\"}" ;; \'*\') v="${v#\'}"; v="${v%\'}" ;; esac
-    case "$v" in *[[:cntrl:]]*) continue ;; esac
-    printf -v "$k" '%s' "$v"
-    if [ -z "$TRUST" ]; then export "$k"; else export -n "$k" 2>/dev/null || true; fi
-    ENV_RAW="$ENV_RAW$k=$v"$'\n'
+    env_line "$line" || continue
+    case "$EK" in GC_TEST*) continue ;; esac
+    ENV_ALL="$ENV_ALL$EK=$EV"$'\n'
+    case "$ENV_KEYS" in *" $EK "*) ;; *) continue ;; esac
+    ENV_RAW="$ENV_RAW$EK=$EV"$'\n'
+    # TRUST: proxy của .env chỉ là dữ liệu cho container (compose_env) — không đè / gỡ export proxy sẵn có của người gọi (CNS-283)
+    if [ -n "$TRUST" ]; then case "$EK" in HTTPS_PROXY|https_proxy|HTTP_PROXY|http_proxy|NO_PROXY|no_proxy) continue ;; esac; fi
+    printf -v "$EK" '%s' "$EV"
+    if [ -z "$TRUST" ]; then export "$EK"; else export -n "$EK" 2>/dev/null || true; fi
   done < <(rd .env)
 }
 env_load
@@ -611,8 +683,8 @@ case "$PORT" in ''|*[!0-9]*) PORT=7480 ;; esac
 [ "$PORT" -ge 1 ] && [ "$PORT" -le 65535 ] || PORT=7480
 URL="http://127.0.0.1:$PORT"
 PIDF="$HOME_DIR/logs/launcher.pid"; LOG="$HOME_DIR/logs/gen-chibi.log"
-# TRUST: bản cài Docker. GC_MODE=native trong thư mục của user khác → root sẽ phải chạy node launcher.js của user đó → từ chối
-if [ -n "$TRUST" ] && [ "$MODE" != docker ]; then m root_native "$HOME_DIR" "$APP_UID" >&2; exit 1; fi
+# TRUST: chế độ đã chốt ở $TD/installs — .env (container ghi được) đổi GC_MODE=native không làm genchibi chạy node launcher.js của thư mục cài
+[ -z "$TRUST" ] || MODE=docker
 
 # token chủ (v0.21, CNS-195): GC_API_TOKEN trong .env → data/owner-token (server tự sinh khi .env trống). Đọc lúc gọi (server có thể vừa sinh tệp).
 # Không export, không in ra màn hình; đi qua stdin (curl -K -), không nằm trong argv → không lộ trong `ps`
@@ -657,7 +729,7 @@ compose_files() { # in các cặp "-f tệp", mỗi phần một dòng
 # nhận nhóm mới (CNS-174): mọi lệnh vẫn chạy ngay, đăng xuất / vào lại thì đi thẳng. GC_DOCKER_VIA = direct | sg | sudo (trình cài đặt);
 # trống → dò một lần: docker thẳng được → direct; user có tên trong nhóm docker (/etc/group) → sg (không hỏi mật khẩu nhóm); sudo không hỏi mật khẩu → sudo.
 DOCKER_VIA="${GC_DOCKER_VIA:-}"
-[ -z "${TRUST:-}" ] || DOCKER_VIA=""   # root: docker thẳng — không theo GC_DOCKER_VIA của .env
+[ -z "${IS_ROOT:-}" ] || DOCKER_VIA=""   # root: docker thẳng — không theo GC_DOCKER_VIA của .env (user: direct | sg | sudo đều chỉ chạy docker với đúng đối số này)
 dk_pick() {
   [ -z "$DOCKER_VIA" ] || return 0
   DOCKER_VIA=direct
@@ -679,15 +751,29 @@ compose() { # compose <lệnh docker compose…> — chạy trong thư mục cà
   local a=() l
   if [ -n "${TRUST:-}" ]; then
     [ -n "$(trust_files)" ] || trust_sync   # chưa có tệp đã kiểm nào (vd genchibi mcp ngay sau khi cài lại) → tải một lần
-    [ -n "$(trust_files)" ] || return 1
-    compose_env || return 1
+    if [ -z "$(trust_files)" ]; then compose_fallback ${1+"$@"}; return; fi
+    compose_env || { m uid0_refuse "$HOME_DIR" >&2; return 1; }
     [ "${1:-}" != up ] || override_gate || return 1   # rào cuối: không bao giờ dựng container khi override chưa được quyết
+    if [ "${1:-}" = up ] && [ -f "$EDGE_MARK" ]; then edge_prepare_trust || return 1; fi   # nguồn mount edge kiểm NGAY trước up (F1)
     while IFS= read -r l; do a+=("$l"); done < <(compose_files)
     ( cd "$TD/run" && dk compose "${a[@]}" ${1+"$@"} )
     return
   fi
   while IFS= read -r l; do a+=("$l"); done < <(compose_files)
   dk compose "${a[@]}" ${1+"$@"}
+}
+# chưa có tệp compose đã kiểm nào (máy cũ, lần đầu, không tới được GitHub — CNS-282): lệnh chỉ cần container có sẵn vẫn chạy được, KHÔNG dùng tệp của thư mục
+# cài — stop / logs / exec (cầu MCP) dùng thẳng tên container cố định (gen-chibi, gen-chibi-edge). Còn lại (up, run…) → báo rõ, thoát 1
+compose_fallback() {
+  local a
+  case "${1:-}" in
+    stop) m root_fallback "${1:-}" >&2; dk stop gen-chibi gen-chibi-edge 2>/dev/null || dk stop gen-chibi ;;
+    logs) m root_fallback "${1:-}" >&2; dk logs -f --tail 200 gen-chibi ;;
+    exec) shift; a=(); while [ $# -gt 0 ]; do case "$1" in -T) ;; app) shift; break ;; *) a+=("$1") ;; esac; shift; done
+          dk exec -i ${a[@]+"${a[@]}"} gen-chibi ${1+"$@"} ;;
+    down) m root_fallback "${1:-}" >&2; dk rm -sf gen-chibi gen-chibi-edge 2>/dev/null || dk rm -sf gen-chibi ;;
+    *) m root_nofiles "$(cur_tag)" "${TRUST_ERR:-?}" >&2; return 1 ;;
+  esac
 }
 # ---------------------------------------------------------------- tệp đã kiểm của root ($TD, v0.23.1 — CNS-233 / CNS-257)
 # $TD/rel/<bản>/  docker-compose.yml · docker-compose.edge.yml · Caddyfile.base · genchibi · VERSION · SHA256 — lấy từ GÓI PHÁT HÀNH root tự tải + kiểm SHA-256
@@ -696,7 +782,7 @@ compose() { # compose <lệnh docker compose…> — chạy trong thư mục cà
 # $TD/override.yml  override compose root đã duyệt (genchibi override approve) · $TD/repo  repo phát hành (trình cài ghi; .env GC_REPO không được tin)
 # $TD/run/        compose.env (đã lọc), thư mục tải tạm
 TRUST_REPO_DEFAULT="colamacbook-ryan/Gen-Chibi"
-TRUST_ERR=""
+TRUST_ERR=""; TRUST_TRIED=""
 ver_tag() { case "$1" in v[0-9]*.[0-9]*.[0-9]*) case "$1" in *[!A-Za-z0-9.-]*|*..*) return 1 ;; esac; return 0 ;; esac; return 1; }
 cur_tag() { local t; t="$(readlink current 2>/dev/null)" || t=""; t="${t##*/}"; if ver_tag "$t"; then printf '%s' "$t"; fi; return 0; }
 ver_gt() { # ver_gt A B → 0 khi A > B (ba số đầu)
@@ -727,6 +813,24 @@ trust_files() {
 }
 # trust_fetch <tag>: tải gen-chibi-<tag>.tar.gz + SHA256SUMS của repo phát hành ($TD/repo), kiểm SHA-256, giải nén ở $TD/run (root), giữ phần root cần ở $TD/rel/<tag>.
 # Repo private: GC_GITHUB_TOKEN (.env) chỉ để xác thực với GitHub — đi qua stdin của curl (-K -); repo và địa chỉ tải KHÔNG lấy từ .env
+# dl URL TỆP [token]: MỘT lần tải, --connect-timeout 10 (mạng "đen" không treo lâu — CNS-282). Proxy / CA tường minh qua cấu hình curl (stdin, không argv):
+# proxy = biến môi trường của người gọi, không có thì HTTPS_PROXY / NO_PROXY của .env (dữ liệu, kiểm dạng) — proxy không làm giả được TLS. CA bổ sung CHỈ từ
+# $TD/ca.pem (trình cài chép từ NODE_EXTRA_CA_CERTS của người cài) hoặc CURL_CA_BUNDLE / SSL_CERT_FILE của người gọi — KHÔNG từ GC_EXTRA_CA của .env:
+# container ghi được .env + certs/, có CA + proxy của nó là giả được cả gói lẫn SHA256SUMS (CNS-283)
+dl_cfg() {
+  local px="${HTTPS_PROXY:-${https_proxy:-}}" np="${NO_PROXY:-${no_proxy:-}}" l
+  if [ -z "$px" ]; then
+    px="$(printf '%s' "$ENV_RAW" | awk -F= '$1 == "HTTPS_PROXY" || $1 == "https_proxy" { sub(/^[^=]*=/, ""); v = $0 } END { print v }')"
+    np="$(printf '%s' "$ENV_RAW" | awk -F= '$1 == "NO_PROXY" || $1 == "no_proxy" { sub(/^[^=]*=/, ""); v = $0 } END { print v }')"
+  fi
+  case "$px" in http://*|https://*) case "$px" in *[!A-Za-z0-9._~:@%/+=-]*) px="" ;; esac ;; *) px="" ;; esac
+  case "$np" in *[!A-Za-z0-9.,*:_-]*) np="" ;; esac
+  [ -z "$px" ] || printf 'proxy = "%s"\n' "$px"
+  [ -z "$np" ] || printf 'noproxy = "%s"\n' "$np"
+  if file_safe "$TD/ca.pem"; then printf 'cacert = "%s"\n' "$TD/ca.pem"; fi
+  return 0
+}
+dl() { { dl_cfg; [ -z "${3:-}" ] || printf 'header = "Authorization: Bearer %s"\n' "$3"; [ -z "${4:-}" ] || printf 'header = "%s"\n' "$4"; } | curl -fsSL --connect-timeout 10 -m 300 -K - -o "$2" "$1" 2>/dev/null; }
 trust_fetch() {
   local tag="$1" tar="gen-chibi-$1.tar.gz" w repo tok base meta i n u want got
   TRUST_ERR=""
@@ -735,16 +839,16 @@ trust_fetch() {
   tok="${GC_GITHUB_TOKEN:-}"; case "$tok" in *[!A-Za-z0-9_.-]*) tok="" ;; esac
   if [ "${GC_TEST:-}" = 1 ] && [ -n "${GC_TEST_RELEASE_BASE:-}" ]; then   # CHỈ kiểm thử (từ shell gọi lệnh, không bao giờ từ .env): thư mục / URL chứa <tag>/<gói> + <tag>/SHA256SUMS
     base="$GC_TEST_RELEASE_BASE/$tag"
-    curl -fsSL -m 120 -o "$w/$tar" "$base/$tar" 2>/dev/null && curl -fsSL -m 60 -o "$w/SHA256SUMS" "$base/SHA256SUMS" 2>/dev/null || TRUST_ERR="download"
+    dl "$base/$tar" "$w/$tar" && dl "$base/SHA256SUMS" "$w/SHA256SUMS" || TRUST_ERR="download"
   elif [ -n "$tok" ]; then
-    meta="$(printf 'header = "Authorization: Bearer %s"\n' "$tok" | curl -fsSL -m 60 -K - -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$repo/releases/tags/$tag" 2>/dev/null)" || TRUST_ERR="download"
+    meta="$(dl "https://api.github.com/repos/$repo/releases/tags/$tag" - "$tok" 'Accept: application/vnd.github+json')" || TRUST_ERR="download"
     if [ -z "$TRUST_ERR" ]; then
       J="$(printf '%s' "$meta" | jflat)"; i=0
       while n="$(jv "assets.$i.name")"; [ -n "$n" ]; do
         u="$(jv "assets.$i.url")"
         case "$u" in https://api.github.com/repos/*/releases/assets/[0-9]*) ;; *) u="" ;; esac
         if [ -n "$u" ] && { [ "$n" = "$tar" ] || [ "$n" = SHA256SUMS ]; }; then
-          printf 'header = "Authorization: Bearer %s"\n' "$tok" | curl -fsSL -m 120 -K - -H 'Accept: application/octet-stream' -o "$w/$n" "$u" 2>/dev/null || TRUST_ERR="download"
+          dl "$u" "$w/$n" "$tok" 'Accept: application/octet-stream' || TRUST_ERR="download"
         fi
         i=$((i + 1))
       done
@@ -752,7 +856,7 @@ trust_fetch() {
     fi
   else
     base="https://github.com/$repo/releases/download/$tag"
-    curl -fsSL -m 120 -o "$w/$tar" "$base/$tar" 2>/dev/null && curl -fsSL -m 60 -o "$w/SHA256SUMS" "$base/SHA256SUMS" 2>/dev/null || TRUST_ERR="download"
+    dl "$base/$tar" "$w/$tar" && dl "$base/SHA256SUMS" "$w/SHA256SUMS" || TRUST_ERR="download"
   fi
   if [ -z "$TRUST_ERR" ]; then
     want="$(awk -v n="$tar" '{ f = $2; sub(/^\*/, "", f); if (f == n) { print $1; exit } }' "$w/SHA256SUMS")"
@@ -794,6 +898,8 @@ trust_sync() {
   [ -n "${TRUST:-}" ] || return 0
   local t; t="$(cur_tag)"; [ -n "$t" ] || return 0
   if [ ! -f "$TD/rel/$t/docker-compose.yml" ]; then
+    case " $TRUST_TRIED " in *" $t "*) return 0 ;; esac   # một lần thử cho mỗi bản trong một lệnh (CNS-282)
+    TRUST_TRIED="$TRUST_TRIED $t"
     m root_verify "$t" >&2
     if trust_fetch "$t"; then m root_verified "$t" >&2
     else
@@ -804,33 +910,75 @@ trust_sync() {
   trust_install_cli "$t" || true
   return 0
 }
-# lệnh root cũ (≤ v0.23.0) exec sang current/cli/genchibi (tệp container ghi được) → bản này tải + kiểm gói của chính nó, lắp $TD/genchibi, thay lệnh root
-# trong PATH (GC_CLI_SELF — tệp thường của root, ngoài thư mục cài) bằng bản đã kiểm, rồi chuyển sang đó. Không kiểm được → báo, chạy tiếp như cũ (một lần)
+# Lệnh cũ (≤ v0.23.0) trong PATH = bản chép ĐẦY ĐỦ của cli/genchibi cũ, exec sang current/cli/genchibi (container ghi được) MỖI lần gõ. Lệnh ≤ v0.22 không
+# truyền GC_CLI_SELF (CNS-278) nên không biết owner đã gõ tệp nào → dò: GC_CLI_SELF · ~/.local/bin/genchibi (home theo passwd khi root) · genchibi trong PATH.
+# Chỉ thay tệp là lệnh CŨ của CHÍNH bản cài này (dấu: dòng đầu "gen-chibi — lệnh quản lý trên máy chủ", INNER=current/cli/genchibi, không có TRUST_BAKED, đường
+# thư mục cài cài sẵn trùng) và thuộc chính mình (file_safe) — bằng $TD/genchibi đã kiểm. Gọi ở MỌI lần chạy TRUST (rẻ: 2–3 tệp)
+is_old_stub() { # is_old_stub TỆP → 0: lệnh gen-chibi cũ (exec current/cli/genchibi); in đường thư mục cài cài sẵn vào STUB_HOME
+  [ -f "$1" ] || return 1
+  grep -q '^# gen-chibi — lệnh quản lý trên máy chủ' "$1" 2>/dev/null && grep -q 'INNER="$HOME_DIR/current/cli/genchibi"' "$1" 2>/dev/null || return 1
+  ! grep -q '^TRUST_BAKED=' "$1" 2>/dev/null || return 1
+  STUB_HOME="$(sed -n 's/^HOME_DIR="${GC_HOME:-\(.*\)}"$/\1/p' "$1" | head -n 1)"
+  return 0
+}
+stub_candidates() { # các tệp genchibi owner có thể gõ (mỗi dòng một)
+  local p; { [ -z "$CLI_SELF" ] || printf '%s\n' "$CLI_SELF"; printf '%s\n' "$TRUST_HOME/.local/bin/genchibi"; p="$(type -P genchibi 2>/dev/null || true)"; [ -z "$p" ] || printf '%s\n' "$p"; } | awk '!s[$0]++'
+}
+STUB_MAIN=""
+stub_fix() {
+  file_safe "$TD/genchibi" || return 0
+  local f STUB_HOME
+  while IFS= read -r f; do
+    [ -n "$f" ] && [ -f "$f" ] || continue
+    case "$f" in "$HOME_DIR"/*|"$HOME_PHYS"/*) continue ;; esac
+    if is_old_stub "$f"; then
+      case "$STUB_HOME" in "$HOME_DIR"|"$HOME_PHYS") ;; *) continue ;; esac   # lệnh của bản cài khác: không đụng
+      file_safe "$f" || continue
+      cp "$TD/genchibi" "$f.gc-tmp" && chmod 755 "$f.gc-tmp" && mv -f "$f.gc-tmp" "$f" && m root_booted "$f" >&2 && { [ -n "$STUB_MAIN" ] || STUB_MAIN="$f"; }
+    elif grep -q '^TRUST_BAKED=' "$f" 2>/dev/null; then [ -n "$STUB_MAIN" ] || STUB_MAIN="$f"; fi
+  done < <(stub_candidates)
+  return 0
+}
+# chạy từ TRONG thư mục cài (lệnh cũ exec sang current/cli/genchibi) → tải + kiểm gói của bản đang chạy, lắp $TD/genchibi, thay các lệnh cũ, rồi chuyển sang
+# bản đã kiểm. Không kiểm được (mất mạng) → báo, chạy tiếp lần này (mã mới) — lần gõ sau thử lại
 trust_boot() {
   [ -n "$BOOT" ] || return 0
   trust_sync
   if file_safe "$TD/genchibi"; then
-    case "$CLI_SELF" in "$HOME_DIR"/*|"$HOME_PHYS"/*) ;; *)
-      if file_safe "$CLI_SELF" && ! cmp -s "$TD/genchibi" "$CLI_SELF"; then cp "$TD/genchibi" "$CLI_SELF.gc-tmp" && chmod 755 "$CLI_SELF.gc-tmp" && mv -f "$CLI_SELF.gc-tmp" "$CLI_SELF" && m root_booted "$CLI_SELF" >&2; fi ;;
-    esac
+    stub_fix
+    [ -n "$CLI_SELF" ] || CLI_SELF="${STUB_MAIN:-$TD/genchibi}"
     GC_CF_TOKEN="${GC_CF_TOKEN-}" GC_CLI_INNER=1 GC_HOME="$HOME_DIR" GC_CLI_SELF="$CLI_SELF" exec bash "$TD/genchibi" ${1+"$@"}
   fi
+  [ -n "$CLI_SELF" ] || CLI_SELF="$SELF_FILE"
   m root_boot_fail "$(cur_tag)" "${TRUST_ERR:-?}" >&2
 }
 # --env-file của compose khi root: các khoá .env đã nhận, nguyên văn trong '…' (compose không mở rộng $ trong nháy đơn). GC_UID / GC_GID = chủ thư mục cài
 # (không bao giờ 0 — .env đặt GC_UID=0 không làm container chạy root), GC_PORT / GC_BIND đã kiểm dạng. Giá trị có ' bị bỏ
 compose_env() {
   local out="" line k v bind="${GC_BIND:-127.0.0.1}"
+  # user thường mà thư mục cài thuộc root (không ghi được nó) → container chạy bằng chính user này; root: không bao giờ uid / gid 0
+  if [ -z "$IS_ROOT" ] && [ "$APP_UID" = 0 ]; then APP_UID="$(id -u)"; APP_GID="$(id -g)"; fi
   [ "$APP_UID" != 0 ] && [ "$APP_GID" != 0 ] || return 1
+  priv_gid "$APP_GID" && return 1   # nhóm đặc quyền (docker, sudo, wheel, adm…) → container không bao giờ chạy với nó
   while IFS= read -r line; do
     [ -n "$line" ] || continue
     k="${line%%=*}"; v="${line#*=}"
-    case "$k" in GC_UID|GC_GID|GC_PORT|GC_BIND|GC_MODE|GC_DOCKER_VIA|GC_INSTALLED_BY|GC_TUNNEL|COMPOSE_PROFILES) continue ;; esac
+    case "$k" in GC_UID|GC_GID|GC_PORT|GC_BIND|GC_MODE|GC_DOCKER_VIA|GC_INSTALLED_BY|GC_TUNNEL|COMPOSE_PROFILES|GC_EDGE_DIR) continue ;; esac
     case "$v" in *"'"*) continue ;; esac
     out="$out$k='$v'"$'\n'
   done <<EOF_ENV
 $ENV_RAW
 EOF_ENV
+  # khoá .env mà override ĐÃ DUYỆT dùng (${VAR} — CNS-281): danh sách duyệt cùng override ($TD/override.keys), giá trị từ .env (dữ liệu, nháy đơn)
+  if file_safe "$TD/override.keys" && file_safe "$TD/override.yml"; then
+    while IFS= read -r k; do
+      [ -n "$k" ] || continue
+      v="$(printf '%s' "$ENV_ALL" | awk -v k="$k" 'index($0, k "=") == 1 { v = substr($0, length(k) + 2) } END { print v }')"
+      case "$v" in *"'"*) continue ;; esac
+      out="$out$k='$v'"$'\n'
+    done < "$TD/override.keys"
+  fi
+  out="${out}GC_EDGE_DIR='$EDGE_DIR'"$'\n'   # nguồn bind mount của edge NGOÀI thư mục cài (F1)
   case "$bind" in ::1) ;; *) [[ "$bind" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || bind=127.0.0.1 ;; esac
   out="${out}GC_UID='$APP_UID'"$'\n'"GC_GID='$APP_GID'"$'\n'"GC_PORT='$PORT'"$'\n'"GC_BIND='$bind'"$'\n'
   ( umask 077; printf '%s' "$out" > "$TD/run/compose.env.tmp" ) && mv -f "$TD/run/compose.env.tmp" "$TD/run/compose.env"
@@ -839,23 +987,39 @@ EOF_ENV
 # nhập riêng của chủ đứng trước app — máy của Ryan): vì vậy mọi lệnh sẽ dựng / tạo lại container DỪNG trước khi đụng container nào (override_gate), in nội dung
 # (đã lọc) + lý do + lệnh làm tiếp. Quyết định của root ở $TD: override.yml (bản đã duyệt) · override.off (SHA-256 của override mà root chọn chạy KHÔNG có nó).
 # ov_state → 0: không có override / đúng bản đã duyệt / đúng bản đã chọn bỏ · 1: chưa duyệt hoặc đã đổi từ lúc quyết (OV_F = tệp)
-OV_F=""
+OV_F=""; OV_GONE=""
+# ov_keys TỆP → các biến ${VAR} / $VAR override dùng (bỏ $$), trừ khoá genchibi tự đưa vào compose — mỗi dòng một, sắp xếp
+ov_keys() {
+  rd "$1" | sed 's/\$\$//g' | { grep -oE '\$\{?[A-Za-z_][A-Za-z0-9_]*' || true; } | sed 's/^\$[{]\{0,1\}//' | sort -u | while IFS= read -r k; do
+    case "$ENV_KEYS GC_EDGE_DIR " in *" $k "*) continue ;; esac
+    printf '%s\n' "$k"
+  done
+}
+gc_cmd() { if [ -n "$IS_ROOT" ]; then printf 'sudo %s' "${CLI_SELF:-$TD/genchibi}"; else printf '%s' "${CLI_SELF:-genchibi}"; fi; }   # lệnh chạy lại được (đường tuyệt đối — sudo secure_path không có ~/.local/bin, CNS-285)
 ov_state() {
-  OV_F="$(compose_override)"; [ -n "$OV_F" ] || return 0
+  OV_F="$(compose_override)"; OV_GONE=""
+  if [ -z "$OV_F" ]; then
+    # chủ xoá override trong thư mục cài mà root còn bản đã duyệt → phải quyết lại (không lặng lẽ dựng lại service cũ — CNS-286)
+    if file_safe "$TD/override.yml"; then OV_GONE=1; return 1; fi
+    return 0
+  fi
   local h; h="$(rd "$OV_F" | sha256_of)"
-  if file_safe "$TD/override.yml" && [ "$(sha256_of "$TD/override.yml")" = "$h" ]; then return 0; fi
+  if file_safe "$TD/override.yml" && [ "$(sha256_of "$TD/override.yml")" = "$h" ] && [ "$(ov_keys "$OV_F" | sha256_of)" = "$(sha256_of "$TD/override.keys" 2>/dev/null)" ]; then return 0; fi
   if file_safe "$TD/override.off" && [ "$(head -n 1 "$TD/override.off")" = "$h" ]; then return 0; fi
   return 1
 }
-ov_print() { rd "$1" | tr -d '\000-\010\013-\037\177' | head -n 60; }   # nội dung override cho người đọc: bỏ ký tự điều khiển (terminal), tối đa 60 dòng
-override_gate() { # TRUST: override chưa duyệt / đã đổi → in lý do + nội dung + cách làm tiếp, trả 1 (lệnh gọi dừng TRƯỚC khi đụng container)
+ov_print() { rd "$1" | san | head -n 60; }   # nội dung override cho người đọc: bỏ ký tự điều khiển (terminal), tối đa 60 dòng
+override_gate() { # TRUST: override chưa duyệt / đã đổi / đã xoá → in lý do + nội dung + cách làm tiếp, trả 1 (lệnh gọi dừng TRƯỚC khi đụng container)
   [ -n "${TRUST:-}" ] || return 0
   ov_state && return 0
-  { m ov_block "$HOME_DIR/$OV_F"; ov_print "$OV_F"; echo; m ov_block_fix "$HOME_DIR/$OV_F"; } >&2
+  if [ -n "$OV_GONE" ]; then { m ov_gone "$TD/override.yml" "$(gc_cmd)"; } >&2; return 1; fi
+  { m ov_block "$HOME_DIR/$OV_F"; ov_print "$OV_F"; echo; ov_keys_note "$OV_F"; m ov_block_fix "$(gc_cmd)" "$(gc_cmd)" "$HOME_DIR/$OV_F"; } >&2
   return 1
 }
-# genchibi override [status | approve [--yes] | off [--yes]] — root quyết override của chủ: xem nội dung (đã lọc), xác nhận → approve: chép thành $TD/override.yml
-# (của root, compose dùng bản này) · off: chạy KHÔNG có override này (ghi SHA của nó; nội dung đổi → hỏi lại). Không có terminal → cần --yes
+ov_keys_note() { local k l=""; k="$(ov_keys "$1" | tr '\n' ' ')"; [ -z "${k% }" ] || m ov_keys_show "${k% }"; }
+# genchibi override [status | approve [--yes] | off [--yes]] — quyết override của chủ: xem nội dung (đã lọc) + biến .env nó dùng, xác nhận → approve: chép thành
+# $TD/override.yml + danh sách biến $TD/override.keys (compose nhận đúng các biến đó từ .env) · off: chạy KHÔNG có override này (ghi SHA của nó; nội dung đổi → hỏi
+# lại; không còn tệp → thôi dùng bản đã duyệt). Không có terminal → cần --yes
 override_cmd() {
   local sub="${1:-status}" f a y="" tmp h
   [ $# -eq 0 ] || shift
@@ -864,21 +1028,24 @@ override_cmd() {
   f="$(compose_override)"
   case "$sub" in
     status)
-      if ! ov_state; then m ov_block "$HOME_DIR/$OV_F"; m ov_block_fix "$HOME_DIR/$OV_F"; return 1
-      elif [ -z "$f" ]; then if file_safe "$TD/override.yml"; then m ov_only "$TD/override.yml"; else m ov_none; fi
-      elif file_safe "$TD/override.yml" && [ "$(sha256_of "$TD/override.yml")" = "$(rd "$f" | sha256_of)" ]; then m ov_same "$HOME_DIR/$f" "$TD/override.yml"
-      else m ov_skipped "$HOME_DIR/$f"; fi ;;
+      if ! ov_state; then
+        if [ -n "$OV_GONE" ]; then m ov_gone "$TD/override.yml" "$(gc_cmd)"; else m ov_block_short "$HOME_DIR/$OV_F" "$(gc_cmd)" "$(gc_cmd)"; fi; return 1
+      elif [ -z "$f" ]; then m ov_none
+      elif file_safe "$TD/override.yml"; then m ov_same "$HOME_DIR/$f" "$TD/override.yml"; ov_keys_note "$f"
+      else m ov_skipped "$HOME_DIR/$f" "$(gc_cmd)"; fi ;;
     approve)
       [ -n "$f" ] || { m ov_none; return 1; }
       tmp="$(mktemp "$TD/run/ov-XXXXXX")" || return 1
       rd "$f" > "$tmp" || true
-      m ov_show "$HOME_DIR/$f"; tr -d '\000-\010\013-\037\177' < "$tmp"; echo
-      if [ -n "$y" ] || ask_yn "$(mn ov_ask)"; then chmod 600 "$tmp" && mv -f "$tmp" "$TD/override.yml" && rm -f "$TD/override.off" && m ov_approved "$TD/override.yml"
+      m ov_show "$HOME_DIR/$f"; san < "$tmp"; echo; ov_keys_note "$f"
+      if [ -n "$y" ] || ask_yn "$(mn ov_ask)"; then
+        ov_keys "$f" > "$tmp.keys"; chmod 600 "$tmp" "$tmp.keys"
+        mv -f "$tmp.keys" "$TD/override.keys" && mv -f "$tmp" "$TD/override.yml" && rm -f "$TD/override.off" && m ov_approved "$TD/override.yml"
       else rm -f "$tmp"; m cancelled; return 1; fi ;;
     off)
       if [ -n "$f" ]; then m ov_show "$HOME_DIR/$f"; ov_print "$f"; echo; fi
       if [ -n "$y" ] || ask_yn "$(mn ov_off_ask)"; then
-        rm -f "$TD/override.yml"
+        rm -f "$TD/override.yml" "$TD/override.keys"
         if [ -n "$f" ]; then h="$(rd "$f" | sha256_of)"; ( umask 077; printf '%s\n' "$h" > "$TD/override.off" ); else rm -f "$TD/override.off"; fi
         m ov_off
       else m cancelled; return 1; fi ;;
@@ -903,7 +1070,11 @@ start() {
   guard_exposure
   legacy_tunnel_down
   host_id_save
-  if [ "$MODE" = docker ]; then own_fix data run logs; sync_compose; edge_prepare; compose up -d --quiet-pull 2>&1 | grep -vE "Creating|Created|Starting|Network|Container .* (Running|Waiting)" || true
+  if [ "$MODE" = docker ]; then
+    own_fix data run logs; sync_compose; edge_prepare
+    local out rc=0; out="$(compose up -d --quiet-pull 2>&1)" || rc=$?
+    printf '%s\n' "$out" | grep -vE "Creating|Created|Starting|Network|Container .* (Running|Waiting)|^$" || true
+    [ "$rc" = 0 ] || exit 1   # compose (hoặc rào trước nó) từ chối → start thất bại, không báo "đã chạy"
   else
     running_native && { m already_running "$(cat "$PIDF")"; return; }
     mkdir -p logs
@@ -929,7 +1100,7 @@ status() {
     must_init) m st_setup_init ;;
     domain|mcp) m st_setup_wizard "http://localhost:$PORT" ;;
   esac
-  if [ -n "$TRUST" ] && ! ov_state; then m st_ov_block "$HOME_DIR/$OV_F"; fi
+  if [ -n "$TRUST" ] && ! ov_state; then if [ -n "$OV_GONE" ]; then m st_ov_gone "$(gc_cmd)"; else m st_ov_block "$HOME_DIR/$OV_F" "$(gc_cmd)" "$(gc_cmd)"; fi; fi
   m st_releases "$(cd releases 2>/dev/null && ls | tr '\n' ' ' | tr -cd '[:alnum:]._ -')" "$(basename "$(readlink current)" | tr -cd '[:alnum:]._-')"   # tên do app ghi: bỏ ký tự điều khiển (terminal)
   if [ -n "$h" ]; then oapi GET /api/online; fi
   if [ "$OCODE" = 200 ] && [ "$(jv flow.waitingOwner)" = true ] && [ -n "$(jv publicUrlPending)" ]; then m st_online_wait "$(jv publicUrlPending)" "$(jv flow.mode)"   # CNS-209: trạng thái TẠM, không phải "off" (máy v0.21 / v0.22 nâng cấp lúc đang chờ mật khẩu)
@@ -939,7 +1110,7 @@ update() {
   m upd_checking
   api POST /api/update/check >/dev/null || { m upd_nocheck; exit 1; }
   local r; r="$(api POST /api/update/apply '{}')" || { m upd_failed; exit 1; }
-  echo "$r" | json message
+  echo "$r" | json message | san
   if echo "$r" | grep -q '"restart":true'; then
     for i in $(seq 1 60); do sleep 1; curl -fsS "$URL/api/health" >/dev/null 2>&1 && break; done
     sleep 2
@@ -981,18 +1152,22 @@ uninstall() {
   # câu trả lời xoá dữ liệu: k/K (tiếng Việt, "không") · n/N (tiếng Anh, "no"); mọi câu khác giữ dữ liệu
   if [ "$UI" = vi ]; then case "$a" in k|K) wipe=1 ;; esac; else case "$a" in n|N) wipe=1 ;; esac; fi
   stop || true
-  [ "$MODE" = docker ] && compose down || true
-  rm -f "$HOME/.local/bin/genchibi"
-  if [ -n "${TRUST:-}" ]; then rm -f "$TD/genchibi" "$TD/genchibi.version" "$TD/override.yml" "$TD/run/compose.env"; rm -rf -- "${TD:?}/rel"; fi   # tệp đã kiểm của root
-  if [ -n "$wipe" ]; then cd / && rm -rf "$HOME_DIR"; m un_wiped
-  else rm -rf "$HOME_DIR/releases" "$HOME_DIR/current" "$HOME_DIR/previous" "$HOME_DIR/launcher.js" "$HOME_DIR/docker-compose.yml" "$HOME_DIR/docker-compose.edge.yml"; m un_kept "$HOME_DIR" "$HOME_DIR"; fi
+  # container còn sống thì không xoá tệp dưới chân nó — compose down lỗi → dừng, không xoá gì
+  if [ "$MODE" = docker ]; then compose down || { m un_down_fail >&2; exit 1; }; fi
+  rm -f "$HOME/.local/bin/genchibi" "$TRUST_HOME/.local/bin/genchibi"
+  if [ -n "${TRUST:-}" ]; then rm -f "$TD/genchibi" "$TD/genchibi.version" "$TD/override.yml" "$TD/override.keys" "$TD/override.off" "$TD/run/compose.env"; mode_put ""; [ -s "$TD/installs" ] || rm -rf -- "${TD:?}/rel" "${TD:?}/installs"; fi   # tệp đã kiểm (rel/ còn dùng nếu user còn bản cài Docker khác)
+  # xoá trong thư mục cài bằng chủ của nó (cwd = thư mục cài; root không đi xuyên symlink của user đó)
+  if [ -n "$wipe" ]; then as_app find . -mindepth 1 -maxdepth 1 -exec rm -rf {} + && cd / && rmdir "$HOME_DIR" && m un_wiped
+  else as_app rm -rf releases current previous launcher.js docker-compose.yml docker-compose.edge.yml; m un_kept "$HOME_DIR" "$HOME_DIR"; fi
 }
 mcp() {
   # cầu stdio cho agent (Claude Code, Claude Desktop…)
   if [ "$MODE" = docker ]; then compose exec -T app node /install/current/server/mcp-stdio.js
   else GC_HOME="$HOME_DIR" GC_PORT="$PORT" exec node "$HOME_DIR/current/server/mcp-stdio.js"; fi   # GC_HOME: cầu đọc data/owner-token khi .env trống (CNS-197)
 }
-logs() { if [ "$MODE" = docker ]; then compose logs -f --tail 200; else tail -n 200 -f "$LOG"; fi; }
+# log của app: bỏ ký tự điều khiển (dòng log do app / người gửi request viết ra — F2), xả từng dòng
+log_san() { awk '{ gsub(/[\001-\010\013-\037\177]/, ""); print; fflush() }'; }
+logs() { if [ "$MODE" = docker ]; then compose logs -f --tail 200 2>&1 | log_san; else tail -n 200 -f "$LOG" | log_san; fi; }
 # ---------------------------------------------------------------- lần đầu (v0.23, spec v023 §A.0 / §A.1): data/setup.json stage + cửa sổ admin / admin
 # stage do server ghi (data/setup.json); đọc bằng sed — CLI không cần node / jq. Rỗng = server chưa chạy v0.23 lần nào (bản cài mới vừa giải nén)
 setup_stage() { rd data/setup.json | sed -n 's/^[[:space:]]*"stage":[[:space:]]*"\([a-z_]*\)".*/\1/p' | head -1 || true; }
@@ -1198,11 +1373,39 @@ edge_prepare() {
   # (Docker tự tạo sẽ mang chủ root → Caddy / app không ghi được), Caddyfile sống từ bản gốc nếu chưa có, sites.caddy rỗng nếu chưa có
   # (Caddy dừng khi tệp import không tồn tại). Không ghi đè tệp nào đã có. Caddy KHÔNG thấy phần còn lại của edge/ hay run/ (tunnel token).
   [ -f "$EDGE_MARK" ] || return 0
+  if [ -n "${TRUST:-}" ]; then edge_prepare_trust; return; fi
   as_app mkdir -p edge/conf edge/run edge/caddy-data edge/caddy-config && as_app chmod 700 edge/conf edge/run
   [ -f edge/conf/Caddyfile ] || { [ -f edge/Caddyfile.base ] && as_app cp edge/Caddyfile.base edge/conf/Caddyfile; }
   [ -f edge/conf/sites.caddy ] || as_app touch edge/conf/sites.caddy
   own_fix edge
   return 0
+}
+# TRUST (F1): nguồn bind mount của Caddy + hai thư mục app dùng chung với nó nằm ở $EDGE_DIR = $TD/edge (NGOÀI thư mục cài). $TD / $EDGE_DIR thuộc root (hoặc
+# chính user) — container ghi được BÊN TRONG conf/ run/ caddy-data/ caddy-config/ (đã mount) nhưng không bao giờ tráo được chính các thư mục nguồn bằng symlink
+# (docker daemon — root — sẽ đi theo symlink đó khi mount). Lần đầu: chép nội dung edge/<…> cũ của thư mục cài sang (chứng chỉ, Caddyfile) — đọc và ghi đều bằng
+# chủ thư mục cài, mỗi phía cwd riêng (tar qua ống). Ngay trước compose up: mỗi nguồn phải là thư mục thật, không symlink, thuộc chủ thư mục cài.
+edge_prepare_trust() {
+  local d base
+  ( umask 022; mkdir -p "$EDGE_DIR" ) && chmod 755 "$EDGE_DIR" || return 1
+  for d in conf run caddy-data caddy-config; do
+    if [ ! -e "$EDGE_DIR/$d" ] && [ ! -L "$EDGE_DIR/$d" ]; then   # symlink có sẵn: không "chữa" lặng lẽ — edge_sources_ok từ chối, chủ xem
+      mkdir -m 700 "$EDGE_DIR/$d" || return 1
+      [ -z "$DROP" ] || chown -h "$APP_UID:$APP_GID" "$EDGE_DIR/$d" || return 1
+      as_app sh -c '[ -d "edge/$1" ] && [ ! -L "edge/$1" ] && cd "edge/$1" && tar -cf - .' sh "$d" 2>/dev/null | ( cd "$EDGE_DIR/$d" && as_app tar -xf - ) 2>/dev/null || true
+    fi
+  done
+  base="$(trust_files)/Caddyfile.base"
+  if [ ! -f "$EDGE_DIR/conf/Caddyfile" ] && [ -f "$base" ]; then ( cd "$EDGE_DIR/conf" && as_app sh -c 'rm -f Caddyfile.gc-tmp; cat > Caddyfile.gc-tmp && mv -f Caddyfile.gc-tmp Caddyfile' ) < "$base"; fi
+  [ -f "$EDGE_DIR/conf/sites.caddy" ] || ( cd "$EDGE_DIR/conf" && as_app touch sites.caddy )
+  edge_sources_ok
+}
+edge_sources_ok() { # mỗi nguồn mount edge là thư mục thật (không symlink) thuộc chủ thư mục cài, trong $EDGE_DIR an toàn
+  local d o
+  path_safe "$EDGE_DIR" || { m edge_unsafe "$EDGE_DIR" >&2; return 1; }
+  for d in conf run caddy-data caddy-config; do
+    [ -d "$EDGE_DIR/$d" ] && [ ! -L "$EDGE_DIR/$d" ] || { m edge_unsafe "$EDGE_DIR/$d" >&2; return 1; }
+    o="$(ls -ldn "$EDGE_DIR/$d" | awk '{ print $3 }')"; [ "$o" = "$APP_UID" ] || { m edge_unsafe "$EDGE_DIR/$d" >&2; return 1; }
+  done
 }
 port_busy() { # port_busy <cổng> → 0 khi có tiến trình đang nghe trên máy này
   # ss thấy cả tiến trình chỉ nghe trên IP công khai; không có ss (macOS) / ss lỗi → thử nối 127.0.0.1 bằng /dev/tcp (bash 3.2 có).
@@ -1314,7 +1517,7 @@ oapi() { # oapi PHƯƠNG_THỨC ĐƯỜNG [JSON] → OCODE (000 = app không tr�
   r="$( { auth_cfg; if [ -n "${3:-}" ]; then printf 'data = "%s"\n' "$(cfg_esc "$3")"; fi; } | curl -sS -m 30 -K - -X "$1" -H 'X-GC-Request: 1' -H "X-GC-Lang: $UI" -H 'Content-Type: application/json' -w '\n%{http_code}' "$URL$2" 2>/dev/null)" || true
   OCODE="$(printf '%s\n' "$r" | tail -n 1)"; OBODY="$(printf '%s\n' "$r" | sed '$d')"
   case "$OCODE" in [1-5][0-9][0-9]) ;; *) OCODE=000 ;; esac
-  J="$(printf '%s\n' "$OBODY" | jflat 2>/dev/null)" || J=""
+  J="$(printf '%s\n' "$OBODY" | jflat 2>/dev/null | LC_ALL=C tr -d '\000-\010\013-\035\037\177')" || J=""   # bỏ ký tự điều khiển của app (giữ \t \n và \036 của jflat) — F2
 }
 opost() { # opost ĐƯỜNG [JSON] — 429 (trần tần suất của app) → đợi rồi gửi lại, tối đa 5 lần
   local n=0 b="${2:-}"; [ -n "$b" ] || b='{}'
@@ -1483,8 +1686,10 @@ online_go_caddy() { # genchibi online caddy <tên-miền>: bật edge Caddy nế
   [ "$MODE" = docker ] || { m caddy_native >&2; return 1; }
   valid_host "$d" || { m bad_domain "$d" >&2; return 2; }
   online_caddy flow
-  local i; for i in $(seq 1 "${GC_EDGE_WAIT:-60}"); do [ -S edge/run/caddy-admin.sock ] && break; [ "$i" = 1 ] && m on_wait_caddy; sleep 1; done
-  [ -S edge/run/caddy-admin.sock ] || { m on_caddy_nostart >&2; return 1; }
+  # socket admin của Caddy nằm ở nguồn mount edge/run: $EDGE_DIR/run (bản cài Docker v0.23.1 — ngoài thư mục cài, F1), không thì edge/run của thư mục cài
+  local i sk="edge/run/caddy-admin.sock"; [ -z "${TRUST:-}" ] || sk="$EDGE_DIR/run/caddy-admin.sock"
+  for i in $(seq 1 "${GC_EDGE_WAIT:-60}"); do [ -S "$sk" ] && break; [ "$i" = 1 ] && m on_wait_caddy; sleep 1; done
+  [ -S "$sk" ] || { m on_caddy_nostart >&2; return 1; }
   m on_start "caddy" "$d"
   online_send /api/online/caddy "\"domain\":\"$d\"" || return 1
   online_follow && a=0 || a=$?; online_done "$a"
@@ -1630,10 +1835,7 @@ token_cmd() {
     [ -n "$t" ] || { m tok_none >&2; exit 1; }
   fi
   case "$t" in *[!A-Za-z0-9_.-]*) m tok_bad >&2; exit 1 ;; esac
-  tmp="$(rd .env)" || tmp=""
-  printf '%s\n' "$tmp" | K=GC_GITHUB_TOKEN V="$t" awk 'BEGIN { k = ENVIRON["K"]; v = ENVIRON["V"]; d = 0 }
-    NR == 1 && $0 == "" { next } index($0, k "=") == 1 { print k "=" v; d = 1; next } { print } END { if (!d) print k "=" v }' | aw .env 600; tmp=""
-  if [ -z "${TRUST:-}" ]; then export GC_GITHUB_TOKEN="$t"; else GC_GITHUB_TOKEN="$t"; fi
+  set_env GC_GITHUB_TOKEN "$t"   # một bộ ghi .env (bỏ dòng GC_TEST* như mọi lần ghi — CNS-287)
   if [ -n "$t" ]; then m tok_set; else m tok_cleared; fi
   if [ "$MODE" = docker ]; then start; else stop; start; fi
 }
@@ -1643,7 +1845,7 @@ lang_cmd() {
   #   app đang chạy → PUT /api/settings { uiLang, uiLangEnv } (đánh dấu giá trị .env đã áp: lần khởi động sau không áp lại đè lựa chọn Studio về sau);
   #   app dừng → sửa uiLang / uiLangEnv trong data/settings.json (thiếu khoá thì server tự áp GC_LANG mới ở lần chạy tới).
   local want="${1:-}" cur real h="" run=""
-  cur="$(rd .env | sed -n 's/^GC_LANG=//p' | tail -1)" || cur=""
+  cur="$(env_get GC_LANG)"
   case "$cur" in en|vi) ;; *) cur="" ;; esac
   h="$(curl -fsS -m 5 "$URL/api/health" 2>/dev/null || true)"; [ -n "$h" ] && run=1
   if [ -n "$run" ]; then real="$(printf '%s' "$h" | sed -n 's/.*"uiLang"[[:space:]]*:[[:space:]]*"\([A-Za-z_-]*\)".*/\1/p')"; else real="$(settings_lang)"; fi
@@ -1855,16 +2057,18 @@ doctor_migrate() {
   local old="$APP_UID" NU="" NG=""
   sys_user_make || { m dr_mig_nouser "$SYS_USER" >&2; return 1; }
   [ "$NU" != "$old" ] || { m dr_mig_same "$SYS_USER" "$NU"; return 0; }
-  m dr_mig_stop; stop >/dev/null 2>&1 || true
-  find "$HOME_DIR" -xdev -user "$old" -exec chown -h "$NU:$NG" {} + || { m dr_mig_chown "$HOME_DIR" >&2; return 1; }
+  m dr_mig_stop; stop >/dev/null 2>&1 || { m dr_mig_stopfail >&2; return 1; }   # app còn chạy (còn ghi) → không đổi chủ dưới chân nó
+  # chỉ tệp đang thuộc uid cũ, không theo symlink, một filesystem, không tệp có nhiều liên kết cứng (liên kết tới tệp của người khác)
+  find "$HOME_DIR" -xdev -user "$old" \( -type d -o -type l -o -links 1 \) -exec chown -h "$NU:$NG" {} + || { m dr_mig_chown "$HOME_DIR" >&2; return 1; }
   APP_UID="$NU"; APP_GID="$NG"
   set_env GC_UID "$NU"; set_env GC_GID "$NG"; set_env GC_INSTALLED_BY root
   m dr_mig_done "$old" "$SYS_USER" "$NU" "$NG"
   start
 }
 doctor_cmd() {
-  local y="" a h t f st es tun rdy err mig="" by n nu who="" su="" NU="" NG=""
-  for a in ${1+"$@"}; do case "$a" in --yes|-y) y=1 ;; *) m bad_opt "$a" >&2; return 2 ;; esac; done
+  local y="" a h t f st es tun rdy err mig="" by n nu who="" su="" NU="" NG="" force="" me
+  for a in ${1+"$@"}; do case "$a" in --yes|-y) y=1 ;; --migrate) force=1 ;; *) m bad_opt "$a" >&2; return 2 ;; esac; done
+  me="$(id -u)"
   m dr_title "$HOME_DIR" "$MODE"
   h="$(curl -fsS -m 5 "$URL/api/health" 2>/dev/null || true)"
   if [ -n "$h" ]; then dr "✓" "$(mn dr_up "$(printf '%s' "$h" | json version)" "$URL")"; else dr "!" "$(mn dr_down "$URL")"; fi
@@ -1873,24 +2077,32 @@ doctor_cmd() {
     if file_safe "$TD/genchibi"; then dr "✓" "$(mn dr_root_cli "$TD/genchibi" "$(head -n 1 "$TD/genchibi.version" 2>/dev/null)")"; else dr "!" "$(mn dr_root_cli_none "$TD")"; fi
     t="$(cur_tag)"
     if [ -n "$t" ] && [ -f "$TD/rel/$t/docker-compose.yml" ]; then dr "✓" "$(mn dr_root_files "$t")"; else dr "✗" "$(mn dr_root_files_none "${t:-?}")"; fi
-    if ! ov_state; then dr "✗" "$(mn ov_block_short "$HOME_DIR/$OV_F")"; fi
+    if ! ov_state; then if [ -n "$OV_GONE" ]; then dr "✗" "$(mn st_ov_gone "$(gc_cmd)" | sed 's/^ *✗ //')"; else dr "✗" "$(mn ov_block_short "$HOME_DIR/$OV_F" "$(gc_cmd)" "$(gc_cmd)")"; fi; fi
     case "$SELF_FILE" in "$HOME_DIR"/*|"$HOME_PHYS"/*) dr "✗" "$(mn dr_root_inner "$SELF_FILE" )";; esac
+    # lệnh cũ (exec current/cli/genchibi) còn ở đâu đó trong PATH của root / của người gọi sudo (CNS-278)
+    { stub_candidates; [ -z "${SUDO_USER:-}" ] || printf '%s\n' "$(home_of "$(id -u "$SUDO_USER" 2>/dev/null || echo x)")/.local/bin/genchibi"; } | awk '!s[$0]++' | while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      STUB_HOME=""; if is_old_stub "$f"; then dr "✗" "$(mn dr_stub_old "$f")"; fi
+    done
+    if [ -n "$(stub_candidates | while IFS= read -r f; do STUB_HOME=""; is_old_stub "$f" && echo x; done)" ]; then DR_BAD=$((DR_BAD + 1)); fi
   fi
   # user của container (CNS-234)
   if [ "$MODE" = docker ]; then
     if [ -n "${GC_UID:-}" ] && [ "$GC_UID" != "$APP_UID" ]; then dr "!" "$(mn dr_uid_env "$GC_UID" "$APP_UID" "$APP_UID")"; fi
     by="${GC_INSTALLED_BY:-}"
     [ -z "${SUDO_USER:-}" ] || su="$(id -u "$SUDO_USER" 2>/dev/null || true)"
-    if [ "$APP_UID" = 1000 ] || [ "${GC_UID:-}" = 1000 ]; then
+    # CNS-280: KHÔNG BAO GIỜ đề nghị khi người chạy chính là chủ thư mục cài (bản cài thường của uid 1000). Root: cần bằng chứng DƯƠNG "root cài không sudo, uid 1000
+    # do đoán": GC_INSTALLED_BY=root · sudo:<người khác uid 1000> · uid 1000 không có trong passwd (không là ai) · hoặc owner tự chọn --migrate. Không biết → chỉ báo
+    if [ "$me" != "$APP_UID" ] && [ -n "$IS_ROOT" ] && { [ "$APP_UID" = 1000 ] || [ "${GC_UID:-}" = 1000 ]; }; then
       who="$(id -nu 1000 2>/dev/null || true)"
       case "$by" in
         sudo:*) n="${by#sudo:}"; nu="$(id -u "$n" 2>/dev/null || true)"; [ "$nu" = 1000 ] || mig=1 ;;
         user:*) ;;
         root) mig=1 ;;
-        *) [ "$su" = 1000 ] || mig=1 ;;
+        *) if [ -z "$who" ] || [ -n "$force" ]; then mig=1; elif [ "$su" != 1000 ]; then dr "·" "$(mn dr_uid_unknown "$APP_UID" "$who" "$(gc_cmd)")"; fi ;;
       esac
     fi
-    if [ -n "$mig" ]; then dr "!" "$(mn dr_uid_legacy "$APP_UID" "${who:-?}" "$SYS_USER")"
+    if [ -n "$mig" ]; then dr "!" "$(mn dr_uid_legacy "$APP_UID" "${who:-?}" "$SYS_USER" "$(gc_cmd)")"
     elif sys_ids && [ "$NU" = "$APP_UID" ]; then dr "✓" "$(mn dr_uid_sys "$SYS_USER" "$APP_UID")"
     else dr "✓" "$(mn dr_uid_ok "$APP_UID" "${by:-?}")"; fi
   fi
@@ -1900,7 +2112,7 @@ doctor_cmd() {
     *) if [ -n "$(owner_token)" ]; then dr "!" "$(mn dr_bind_open "${GC_BIND}" "$PORT")"; else dr "✗" "$(mn refuse_bind "${GC_BIND}")"; fi ;;
   esac
   if [ "$MODE" = docker ]; then
-    if compose_loopback; then dr "✓" "$(mn dr_pub_ok)"; elif [ "$PUBADDR" = "?" ]; then dr "!" "$(mn win_docker_cfg)"; else dr "!" "$(mn dr_pub_open "$PUBADDR")"; fi
+    if compose_loopback; then dr "✓" "$(mn dr_pub_ok)"; elif [ "$PUBADDR" = "?" ]; then dr "!" "$(mn dr_pub_unknown)"; else dr "!" "$(mn dr_pub_open "$PUBADDR")"; fi
   fi
   if [ -z "$h" ] && port_busy "$PORT"; then dr "✗" "$(mn dr_port_busy "$PORT")"; fi
   # thiết lập lần đầu
@@ -1927,9 +2139,9 @@ doctor_cmd() {
   if rd .env | grep -c '^[[:space:]]*\(export[[:space:]]\{1,\}\)\{0,1\}GC_TEST' >/dev/null; then dr "!" "$(mn dr_test_hooks)"; fi
   # chuyển user
   if [ -n "$mig" ]; then
-    if [ -z "$TRUST" ]; then m dr_mig_root
+    if [ -z "$IS_ROOT" ] || [ -z "$TRUST" ]; then m dr_mig_root "sudo ${CLI_SELF:-$TD/genchibi}"
     elif ! override_gate; then DR_BAD=$((DR_BAD + 1))   # chuyển user dừng + chạy lại container → cùng rào override
-    elif [ -n "$y" ] || ask_yn "$(mn dr_mig_ask "$APP_UID" "$SYS_USER")"; then doctor_migrate || DR_BAD=$((DR_BAD + 1))
+    elif [ -n "$y" ] || ask_yn "$(mn dr_mig_ask "$APP_UID" "${who:-?}" "$SYS_USER" "$APP_UID")"; then doctor_migrate || DR_BAD=$((DR_BAD + 1))
     else m dr_mig_skip "$SYS_USER"; fi
   fi
   if [ "$DR_BAD" = 0 ]; then m dr_ok; return 0; fi
@@ -1941,8 +2153,8 @@ genchibi — quản lý gen-chibi ($HOME_DIR, chế độ $MODE)
   start | stop | restart | status   chạy, dừng, xem trạng thái
   update                            kiểm tra và cập nhật ngay (tự rollback nếu bản mới lỗi)
   rollback [--yes]                  chạy lại bản trước
-  doctor [--yes]                    kiểm sức khoẻ bản cài (user container, cổng, thiết lập, edge, lệnh root) · chuyển bản cài root cũ sang user genchibi
-  override [approve|off] [--yes]    (root) quyết docker-compose.override.yml: dùng (approve) hay chạy không có nó (off) — chưa quyết thì start / update / rollback / online dừng
+  doctor [--yes] [--migrate]        kiểm sức khoẻ bản cài (user container, cổng, thiết lập, edge, lệnh cũ trong PATH) · chuyển bản cài root cũ sang user genchibi (--migrate: khi doctor không tự nhận ra)
+  override [approve|off] [--yes]    (Docker) quyết docker-compose.override.yml: dùng (approve) hay chạy không có nó (off) — chưa quyết thì start / update / rollback / online dừng
   logs                              xem log
   backup | restore <tệp>            sao lưu / khôi phục dữ liệu
   mcp                               cầu MCP (stdio) cho agent: claude mcp add gen-chibi -- genchibi mcp
@@ -1961,8 +2173,8 @@ genchibi — manage gen-chibi ($HOME_DIR, mode $MODE)
   start | stop | restart | status   run, stop, show status
   update                            check and update now (automatic rollback if the new version fails)
   rollback [--yes]                  run the previous version again
-  doctor [--yes]                    check the install (container user, ports, setup, edge, root commands) · move an old root install to the genchibi user
-  override [approve|off] [--yes]    (root) decide on docker-compose.override.yml: use it (approve) or run without it (off) — until then start / update / rollback / online stop
+  doctor [--yes] [--migrate]        check the install (container user, ports, setup, edge, old commands on PATH) · move an old root install to the genchibi user (--migrate: when doctor cannot tell on its own)
+  override [approve|off] [--yes]    (Docker) decide on docker-compose.override.yml: use it (approve) or run without it (off) — until then start / update / rollback / online stop
   logs                              show logs
   backup | restore <file>           back up / restore data
   mcp                               MCP bridge (stdio) for agents: claude mcp add gen-chibi -- genchibi mcp
@@ -1981,6 +2193,7 @@ EOF
 
 trust_boot ${1+"$@"}   # root được lệnh cũ gọi từ trong thư mục cài → lắp lệnh đã kiểm rồi chuyển sang (không quay lại)
 case "${1:-help}" in mcp|help|-h|--help|override) ;; *) trust_sync ;; esac
+[ -z "$TRUST" ] || stub_fix   # lệnh cũ còn trong PATH (vd owner gõ bằng đường khác) → thay ở mọi lần chạy (CNS-278)
 # override chưa quyết (TRUST) → lệnh dựng / tạo lại / khởi động lại container dừng NGAY, trước khi đụng container nào (container đang chạy giữ nguyên)
 case "${1:-help}" in
   start|restart|update|rollback|restore|token|github-token) override_gate || exit 1 ;;

@@ -287,6 +287,12 @@ if [ "$1" = compose ]; then
 fi
 exit 0
 EOF
+# getent giả: home của uid 0 = HOME của lần cài thử (trình cài + lệnh root lấy home của root theo passwd, không theo $HOME — CNS-284)
+cat > "$FK/getent" <<'EOF'
+#!/bin/bash
+if [ "$1 $2" = "passwd 0" ]; then echo "root:x:0:0:root:${FAKE_ROOT_HOME:-$HOME}:/bin/bash"; exit 0; fi
+exec /usr/bin/getent "$@"
+EOF
 # setpriv giả (v0.23.1): root hạ quyền xuống user của thư mục cài — ghi lại lệnh rồi chạy phần sau "--" (runner CI không root: setpriv thật sẽ lỗi; L-77)
 cat > "$FK/setpriv" <<'EOF'
 #!/bin/bash
@@ -313,10 +319,10 @@ dockinst() { # dockinst <tên> [biến…]: cài KHÔNG --native, PATH có docke
 dockinst dsg
 [ $IRC = 0 ] && [ -f "$FS/installed" ] && grep -q 'usermod -aG docker tester' "$FS/usermod.log" && echo "$INST_OUT" | grep -q 'continuing with sg docker' && echo "$INST_OUT" | grep -q 'Log out and back in to use genchibi without sudo' && echo "$INST_OUT" | grep -q 'Run mode: docker'
 check $? "Docker chưa có → cài (giả) + usermod -aG docker tester; phiên chưa vào nhóm → tiếp tục bằng sg docker, in 'Log out and back in…'" "$IRC $(echo "$INST_OUT" | tail -8) · $(cat "$FS/docker.log" 2>/dev/null | tail -3)"
-grep -q '^\[sg\] compose -f docker-compose.yml up -d' "$FS/docker.log" && ! grep -qE '^ compose' "$FS/docker.log" && grep -q '^\[sg\] compose -f docker-compose.yml config --format json' "$FS/docker.log" && [ -f "$W/dsg/run/admin-window" ] && lastline "$INST_OUT" | grep -qE '^Next: open http://localhost:[0-9]+/login#k=[0-9a-f]{32} and sign in with admin / admin within 30 minutes'
+grep -q '^\[sg\] compose -f [^ ]*/.local/lib/gen-chibi/rel/v[^ ]*/docker-compose.yml --project-directory [^ ]* --env-file [^ ]* up -d' "$FS/docker.log" && ! grep -qE '^ compose' "$FS/docker.log" && grep -q '^\[sg\] compose -f [^ ]*/.local/lib/gen-chibi/rel/v[^ ]*/docker-compose.yml .* config --format json' "$FS/docker.log" && [ -f "$W/dsg/run/admin-window" ] && lastline "$INST_OUT" | grep -qE '^Next: open http://localhost:[0-9]+/login#k=[0-9a-f]{32} and sign in with admin / admin within 30 minutes'
 check $? "genchibi start trong cùng phiên chạy docker compose qua sg (không lệnh compose nào chạy thẳng bị từ chối); kiểm docker compose config (chỉ loopback) rồi mở cửa sổ; dòng cuối = admin / admin" "$(cat "$FS/docker.log" 2>/dev/null | tail -4) · $(lastline "$INST_OUT")"
 dockinst dsudo FAKE_NO_SG=1
-[ $IRC = 0 ] && echo "$INST_OUT" | grep -q 'continuing with sudo docker' && grep -q '^\[sudo\] compose -f docker-compose.yml up -d' "$FS/docker.log"
+[ $IRC = 0 ] && echo "$INST_OUT" | grep -q 'continuing with sudo docker' && grep -q '^\[sudo\] compose -f [^ ]*/.local/lib/gen-chibi/rel/v[^ ]*/docker-compose.yml .* up -d' "$FS/docker.log"
 check $? "không dùng được sg → sudo docker (không hỏi mật khẩu: -n), compose chạy qua sudo" "$IRC $(echo "$INST_OUT" | tail -4) · $(tail -3 "$FS/docker.log" 2>/dev/null)"
 # trình cài chạy bằng root (sudo bash install.sh): container KHÔNG chạy root — GC_UID = uid của SUDO_USER (giả: tester = 1001), không có thì 1000; thư mục cài chown theo
 dockinst droot FAKE_ROOT=1 SUDO_USER=tester

@@ -1,0 +1,1413 @@
+#!/usr/bin/env bash
+# gen-chibi — lệnh quản lý trên máy chủ. install.sh thay __GC_HOME__ bằng thư mục cài.
+# © 2026 Gen Labs — All rights reserved.
+set -euo pipefail
+
+# ---------------------------------------------------------------- ngôn ngữ (ADR 0007): GC_LANG = en | vi; rỗng → mặc định của Studio (data/settings.json › uiLang) → en
+# Câu chữ nằm ở hai bảng _en / _vi, mỗi khoá một dòng `khoá) F="chuỗi printf" ;;` (%s = đối số, %% = dấu phần trăm).
+# m KHOÁ [đối số…] in một dòng · mn KHOÁ [đối số…] in không xuống dòng (lời hỏi). Khoá thiếu ở _vi → dùng _en.
+# Viết cho bash 3.2 (macOS): không mảng kết hợp, không ${x,,}; "$@" luôn viết ${1+"$@"} (bash < 4 báo "unbound variable" khi rỗng dưới set -u).
+# tools/test-lang.sh kiểm mọi khoá dùng tới có đủ hai bảng.
+_en() {
+  case "$1" in
+    no_home) F="Install folder not found: %s" ;;
+    refuse_bind) F="Refusing to start: GC_BIND=%s opens the app to the network but GC_API_TOKEN is not set in .env." ;;
+    already_running) F="Already running (pid %s)" ;;
+    started) F="Started (pid %s)" ;;
+    stopped) F="Stopped" ;;
+    not_running) F="Not running" ;;
+    st_up) F="● running · v%s · %s · mode %s" ;;
+    st_down) F="○ not running · mode %s" ;;
+    st_releases) F="  installed: %s· in use %s" ;;
+    st_mcp_off) F="  Online: off — this machine only (genchibi online --help: domain + HTTPS + MCP in one step)" ;;
+    st_online) F="  Online: %s (mode %s · genchibi online shows each step)" ;;
+    st_online_wait) F="  Online (temporary — waiting for the owner account): %s (mode %s). Set it here: genchibi password — going online then finishes by itself" ;;
+    st_setup_admin) F="  First run: open %s and sign in with admin / admin (window open until %s; only through this link) — or set the owner account here: genchibi password" ;;
+    st_setup_closed) F="  First run: the admin / admin window is closed — reopen it with genchibi open (30 minutes), or set the owner account here: genchibi password" ;;
+    st_setup_init) F="  First run: the owner account is not set up yet — genchibi password (or sign in to the Studio with the owner token)" ;;
+    st_setup_wizard) F="  First run: owner account ready — finish the first-run setup in the Studio (%s): domain, then the MCP check (stuck? genchibi setup skip)" ;;
+    win_opened) F="First run: open %s in a browser on this machine and sign in with admin / admin within 30 minutes (until %s) — admin / admin works only through this link. The Studio then asks for your own username and password." ;;
+    win_docker) F="admin / admin is not available: Docker publishes a port beyond loopback (%s) — set GC_BIND=127.0.0.1 in .env (and check docker-compose.override.yml), then run genchibi open. Or set the owner account here: genchibi password" ;;
+    win_docker_cfg) F="admin / admin is not available: could not read the Docker compose configuration (compose config) to check which ports are published — set the owner account here: genchibi password" ;;
+    win_nokey) F="admin / admin is not available: could not read /dev/urandom for the one-time link key — set the owner account here: genchibi password" ;;
+    hc_ok) F="MCP-04 ✓ host command works: %s mcp (initialize + tools/list, %s tools) — use this full path in agent configs." ;;
+    hc_fail) F="MCP-04 ✗ host command failed: %s mcp — %s. Check: genchibi status (app running?), Docker permission (docker group / sudo), node on PATH (native)." ;;
+    hc_nopost) F="(could not send the result to the app — is it running? genchibi status)" ;;
+    win_bind) F="admin / admin is not available: GC_BIND=%s opens the app to the network — set GC_BIND=127.0.0.1 in .env, then run genchibi restart and genchibi open. Or set the owner account here: genchibi password" ;;
+    open_signin) F="Opening %s — sign in with your owner account (forgot the password: genchibi password)." ;;
+    rs_stage) F="the owner account is already set up" ;;
+    rs_window) F="the 30-minute window is closed (genchibi open reopens it)" ;;
+    rs_window_perms) F="run/admin-window has wrong permissions (genchibi open writes it again)" ;;
+    rs_online) F="this machine is online (Go online)" ;;
+    rs_legacy_env) F=".env opens the app to the network (GC_PUBLIC_URL / GC_ALLOWED_HOSTS)" ;;
+    rs_edge) F="the edge Caddy holds ports 80/443" ;;
+    rs_tunnel) F="a Cloudflare tunnel is on" ;;
+    rs_docker_publish) F="Docker publishes the app beyond loopback" ;;
+    rs_bind) F="GC_BIND / GC_LISTEN is not loopback" ;;
+    hint_ssh) F="Server without a browser: on your computer run  ssh -L %s:localhost:%s <server>  then open the link below there (same 30-minute window)." ;;
+    hint_admin) F="Next: open %s and sign in with admin / admin within 30 minutes (until %s; later: genchibi open prints a new link) — then set your own username and password." ;;
+    hint_noadmin) F="Next: admin / admin is not available on this machine (%s) — set the owner account here: genchibi password, then sign in at http://localhost:%s" ;;
+    hint_wizard) F="Next: open %s, sign in as %s and finish the first-run setup (domain, MCP check)." ;;
+    hint_ready) F="Next: open %s and sign in as %s." ;;
+    setup_help) F="genchibi setup                  show the first-run state (stage, admin / admin window, MCP self-test, last agent)\ngenchibi setup skip [reason]    skip the rest of the first-run wizard (domain / MCP check) — when the check itself is broken; logged\ngenchibi setup reset            run the first-run wizard again (never brings back admin / admin)\ngenchibi setup check            MCP-04: run the real host command (<full path> mcp: initialize + tools/list) and show the result in the wizard" ;;
+    setup_stage) F="First-run setup: %s%s" ;;
+    setup_admin_ok) F="  admin / admin: available until %s, only through %s" ;;
+    setup_admin_no) F="  admin / admin: not available — %s" ;;
+    setup_selftest) F="  MCP self-test: %s (%s)" ;;
+    setup_client) F="  Last agent: %s via %s at %s" ;;
+    setup_skipped) F="First-run wizard skipped (logged) — the Studio opens normally." ;;
+    setup_reset) F="First-run wizard reset (stage %s): the Studio walks you through it again." ;;
+    setup_w_none) F="none yet" ;;
+    setup_w_ok) F="passed" ;;
+    setup_w_fail) F="failed" ;;
+    restored_oauth) F="Agent connections (OAuth) from the backup were revoked: authorize the agents again (Studio › System › Agent connections)." ;;
+    pw_user_bad) F="Invalid username: 3–32 characters a-z 0-9 . _ - and not admin — nothing changed." ;;
+    pw_init_done) F="Owner account ready: username %s. Sign in to the Studio with it — the Studio then walks you through the first-run setup (domain, MCP check)." ;;
+    pw_init_done_off) F="Owner account set while the app is stopped (username %s) — it applies at the next start (genchibi start)." ;;
+    pw_init_only) F="The owner account already exists — the password was not changed." ;;
+    on_need_owner) F="Set up the owner account first: open the Studio on this machine (first run: admin / admin — genchibi open) or run genchibi password here, then run this command again." ;;
+    on_wait_owner) F="  Online temporarily, waiting for the owner account: %s — run genchibi password here and going online finishes by itself" ;;
+    upd_checking) F="Checking for a new version…" ;;
+    upd_nocheck) F="Could not check (is the app running?)" ;;
+    upd_failed) F="Update failed; still running the current version." ;;
+    backed_up) F="Backed up: %s" ;;
+    restore_usage) F="Usage: genchibi restore <.tar.gz file in backups/>" ;;
+    restore_ask) F="Replace the current data with %s? (type 'yes') " ;;
+    cancelled) F="Cancelled." ;;
+    restored) F="Restored." ;;
+    restore_note) F="Note: a backup holds the owner password and the Studio sessions of the moment it was made. After restoring, Go online is OFF on this machine (run it again to go online) and every session / remembered device is signed out — sign in with the password of the backup (forgot it: genchibi password)." ;;
+    restored_off) F="Go online is off and all sessions / devices were signed out (the password is the one in the backup). Go online again: genchibi online --help" ;;
+    un_ask) F="Uninstall gen-chibi. Keep your data (characters, scripts, backups)? [Y/n] " ;;
+    un_wiped) F="Uninstalled and all data deleted." ;;
+    un_kept) F="Uninstalled. Data kept in %s/data and %s/backups." ;;
+    pw_ask) F="New owner password (at least 12 characters, hidden while typing): " ;;
+    pw_again) F="Repeat the password: " ;;
+    pw_mismatch) F="The two passwords differ — nothing changed." ;;
+    pw_short) F="The password needs at least 12 characters (tip: a memorable phrase) — nothing changed." ;;
+    pw_ctrl) F="The password must not contain control characters (tab, newline…) — nothing changed." ;;
+    pw_done) F="Owner password set. Studio sessions were signed out (%s); sign in again with the new password." ;;
+    pw_done_off) F="Owner password set while the app is stopped — it applies at the next start (genchibi start). All Studio sessions were signed out." ;;
+    pw_fail) F="Could not set the password: %s" ;;
+    tok_ask) F="Paste GitHub token (Contents: Read-only, hidden while typing): " ;;
+    tok_none) F="No token — nothing changed." ;;
+    tok_bad) F="The token has invalid characters — copy it again (letters, digits, _ . - only)." ;;
+    tok_set) F="GC_GITHUB_TOKEN written to .env; restarting to apply…" ;;
+    tok_cleared) F="GC_GITHUB_TOKEN removed; restarting…" ;;
+    bad_domain) F="Invalid domain: %s" ;;
+    bad_opt) F="Unknown option %s" ;;
+    hdr_token) F="Authorization: Bearer <token — see GC_API_TOKEN in %s/.env>" ;;
+    hdr_token_file) F="Authorization: Bearer <token — see %s/data/owner-token>" ;;
+    skill_usage) F="skill: claude | cursor | gemini | codex | generic" ;;
+    skill_dl_fail) F="Could not download the guide (is the app running?)" ;;
+    skill_clash) F="Your own files are already there, not overwriting:%s" ;;
+    skill_clash2) F="→ pick another folder (--dir), merge by hand, or add --force to overwrite." ;;
+    skill_done) F="Installed the gen-chibi guide for %s into %s (generated from agent/ of the running version — run this again after updating the app)" ;;
+    agent_usage) F="genchibi agent connect | guide [topic] | topics | tools [--format openai|gemini|mcp] | skill <vendor> [--dir folder] [--force]" ;;
+    lang_now) F="CLI: %s (%s) · Studio default: %s (%s)" ;;
+    lang_hint) F="Change: genchibi lang en | vi  (CLI + Studio default for this install)" ;;
+    lang_bad) F="Unsupported language: %s — use en (English) or vi (Vietnamese)." ;;
+    lang_same) F="Language is already %s (%s) — nothing changed." ;;
+    lang_set) F="Language set to %s: GC_LANG=%s written to .env." ;;
+    lang_live) F="Studio default switched to %s." ;;
+    lang_restart) F="Restarting the app so the Studio default follows…" ;;
+    lang_norun) F="The app is not running — the new default applies at the next start (genchibi start)." ;;
+    lang_note) F="This is the default for the CLI and for everyone who opens the Studio. Each user can still switch language in the Studio (language switch); that choice is remembered in their browser." ;;
+    removed) F="genchibi %s was removed in v0.23 — use: genchibi %s" ;;
+    gc_tunnel) F="! .env still has GC_TUNNEL=%s from the old genchibi expose (removed in v0.23) — that tunnel is no longer started. Move this machine to Go online: genchibi online migrate" ;;
+    caddy_native) F="genchibi online --caddy needs Docker mode: Caddy publishes ports 80/443 (below 1024). Native mode: use the Cloudflare path instead (Studio › System › Go online › Cloudflare)." ;;
+    caddy_busy) F="Port(s) %s already in use on this machine — Caddy was NOT turned on (the app keeps running). Stop the service holding them, or use the Cloudflare path (Studio › System › Go online › Cloudflare, no open ports needed)." ;;
+    caddy_old) F="The running version has no edge Caddy yet (needs v0.21 or newer) — run genchibi update first." ;;
+    caddy_on) F="Edge Caddy is on: ports 80 and 443 now go to container gen-chibi-edge. Continue in Studio › System › Go online." ;;
+    caddy_already) F="Edge Caddy was already on — making sure it is running." ;;
+    caddy_off) F="Edge Caddy is off: ports 80/443 released. Certificates are kept in %s/edge (turn it on again: genchibi online --caddy)." ;;
+    caddy_not_on) F="Edge Caddy is not on — nothing to do." ;;
+    caddy_on_flow) F="Edge Caddy is on: ports 80 and 443 go to container gen-chibi-edge." ;;
+    on_help) F="genchibi online                         show the Go online status (mode, address, each step ✓/✗, edge)\ngenchibi online caddy <domain>          path A (beta, Docker): your domain's A record → this machine's IP; turns on the edge Caddy (ports 80/443), gets HTTPS\ngenchibi online cloudflare [<domain>]   path B (beta): Cloudflare Tunnel with an API token (asked hidden; without a terminal: GC_CF_TOKEN) — chibi.example.com or example.com (+ --sub name)\ngenchibi online proxy <domain>          you already run a reverse proxy: prints the config to paste, then checks from outside\ngenchibi online quick                   temporary *.trycloudflare.com link (changes on every restart)\ngenchibi online recheck [--waf-done]    check again / continue after you fixed a step\ngenchibi online off                     go offline (with GC_CF_TOKEN set: also removes the tunnel / DNS / WAF rule the app created)\ngenchibi online migrate                 move GC_PUBLIC_URL / GC_ALLOWED_HOSTS from .env into Go online\ngenchibi online --caddy | --caddy-off   only publish / release ports 80/443 (edge Caddy)\nOptions: --yes (confirm an address change) · --overwrite-dns (replace an existing DNS record) · --token-stdin (read the API token from stdin)\nThe API token is never accepted on the command line. Going online needs the owner account (first run: admin / admin in the Studio, or genchibi password)." ;;
+    on_down) F="The app does not answer at %s — start it: genchibi start" ;;
+    on_auth) F="The app refused the owner token (HTTP %s) — check GC_API_TOKEN in %s/.env (or data/owner-token)." ;;
+    on_err) F="✗ %s (HTTP %s)" ;;
+    on_title) F="Go online · mode %s%s" ;;
+    on_url) F="  Public address: %s" ;;
+    on_url_none) F="  Public address: none (this machine only)" ;;
+    on_url_pending) F="  Temporary address being checked: %s" ;;
+    on_flow) F="  Last run: %s · %s" ;;
+    on_w_busy) F="running" ;;
+    on_w_done) F="finished" ;;
+    on_w_stopped) F="stopped (see the step marked ✗ / …)" ;;
+    on_w_on) F="on" ;;
+    on_w_off) F="off" ;;
+    on_w_ready) F="connected" ;;
+    on_w_starting) F="starting" ;;
+    on_w_new) F="a new address" ;;
+    on_edge) F="  Edge: Caddy %s · tunnel %s%s" ;;
+    on_legacy_note) F="  This machine goes online through .env (GC_PUBLIC_URL / GC_ALLOWED_HOSTS, read-only here) — move it: genchibi online migrate" ;;
+    on_hint) F="  Commands: genchibi online caddy <domain> | cloudflare <domain> | proxy <domain> | quick | recheck | off   (genchibi online --help)" ;;
+    on_fix) F="      → %s" ;;
+    on_wait_caddy) F="Waiting for the edge Caddy to start…" ;;
+    on_caddy_nostart) F="The edge Caddy did not start (no admin socket in edge/run after 60 s) — see: docker logs gen-chibi-edge" ;;
+    on_start) F="Go online · %s · %s — each step below (Ctrl-C only stops watching; the app carries on — genchibi online shows where it is)" ;;
+    on_done) F="✓ Online: %s" ;;
+    on_done_studio) F="  Studio: %s (sign in with your owner username and password)" ;;
+    on_done_mcp) F="  MCP:    %s/mcp — claude.ai: Customize › Connectors › Add custom connector › paste it › Connect › Authorize (Studio › System › Agent connections lists it)" ;;
+    on_timeout) F="Still waiting after %s minutes — the step keeps its state; check again later: genchibi online recheck" ;;
+    on_failed) F="✗ Stopped at: %s. Fix it as shown above, then: genchibi online recheck" ;;
+    on_url_change) F="This changes the public address (%s → %s): %s connected agent(s) will be signed out and must connect again." ;;
+    on_url_ask) F="Continue? [y/N] " ;;
+    on_url_stop) F="Nothing changed. To confirm without a terminal, add --yes." ;;
+    on_legacy) F="This machine goes online through .env (GC_PUBLIC_URL / GC_ALLOWED_HOSTS set before v0.21). Go online does not mix the two: move those settings first with genchibi online migrate, then run this command again." ;;
+    on_migrate_old) F="The running version has no migrate step yet — update first: genchibi update" ;;
+    on_migrated) F="The .env settings now live in Go online (you can remove GC_PUBLIC_URL / GC_ALLOWED_HOSTS from .env later)." ;;
+    on_proxy_snip) F="Paste one of these into your proxy — machine routes (MCP, OAuth) go straight to the app, people may go through your own login:" ;;
+    on_off_done) F="Offline: no public address any more (this machine only)." ;;
+    on_off_caddy) F="The edge Caddy still holds ports 80/443 — release them: genchibi online --caddy-off" ;;
+    cf_tok_link) F="Create a Cloudflare API token (permissions pre-filled: Account › Cloudflare Tunnel › Edit, Zone › DNS › Edit, Zone › Zone › Read, optional Zone › WAF › Edit; set a short TTL):\n  %s" ;;
+    cf_tok_ask) F="Cloudflare API token (hidden while typing): " ;;
+    cf_tok_none) F="No Cloudflare API token. In a terminal the command asks for it (hidden); without a terminal set GC_CF_TOKEN in the environment — never on the command line." ;;
+    cf_tok_bad) F="The API token looks wrong (too short or unexpected characters) — copy it again from dash.cloudflare.com." ;;
+    cf_tok_argv) F="The API token is not accepted on the command line (other users could read it in the process list, and it stays in shell history). Paste it when asked, or set GC_CF_TOKEN." ;;
+    cf_choices) F="The token sees several domains — pick one:" ;;
+    cf_choice_row) F="  %s) %s" ;;
+    cf_choice_ask) F="Number: " ;;
+    cf_choice_stop) F="No domain picked. Run again with one of them: genchibi online cloudflare <domain>" ;;
+    cf_cname_ask) F="Replace those DNS records with a CNAME to the tunnel? [y/N] " ;;
+    cf_cname_stop) F="Nothing replaced. Pick another name (genchibi online cloudflare other.%s), or confirm in a terminal, or add --overwrite-dns." ;;
+    cf_waf_ask) F="Have you created that rule in Cloudflare? [y/N] " ;;
+    cf_waf_stop) F="Create the rule shown above in Cloudflare, then run: genchibi online recheck --waf-done" ;;
+    cf_retry_zone) F="Trying %s as the domain (sub-name %s)…" ;;
+    sn_domain) F="Domain / DNS" ;;
+    sn_edge) F="Edge Caddy" ;;
+    sn_port) F="Ports 80/443" ;;
+    sn_cert) F="HTTPS certificate" ;;
+    sn_public) F="Public address" ;;
+    sn_mcp) F="MCP from the Internet" ;;
+    sn_owner) F="Owner" ;;
+    sn_token) F="API token" ;;
+    sn_zone) F="Domain + sub-name" ;;
+    sn_tunnel) F="Tunnel" ;;
+    sn_waf) F="WAF rule" ;;
+    sn_config) F="Proxy config" ;;
+    sn_local) F="This machine" ;;
+    sn_remote) F="Cloudflare cleanup" ;;
+  esac
+}
+_vi() {
+  case "$1" in
+    no_home) F="Không thấy thư mục cài %s" ;;
+    refuse_bind) F="Từ chối chạy: GC_BIND=%s mở ra mạng nhưng chưa có GC_API_TOKEN trong .env." ;;
+    already_running) F="Đang chạy (pid %s)" ;;
+    started) F="Đã chạy (pid %s)" ;;
+    stopped) F="Đã dừng" ;;
+    not_running) F="Không chạy" ;;
+    st_up) F="● đang chạy · v%s · %s · chế độ %s" ;;
+    st_down) F="○ không chạy · chế độ %s" ;;
+    st_releases) F="  bản cài: %s· đang dùng %s" ;;
+    st_mcp_off) F="  Ra Internet: tắt — chỉ máy này (genchibi online --help: tên miền + HTTPS + MCP một bước)" ;;
+    st_online) F="  Ra Internet: %s (chế độ %s · genchibi online xem từng bậc)" ;;
+    st_online_wait) F="  Ra Internet (tạm — chờ tài khoản chủ): %s (chế độ %s). Đặt tại đây: genchibi password — app tự hoàn tất lên mạng" ;;
+    st_setup_admin) F="  Lần đầu: mở %s và đăng nhập admin / admin (cửa sổ mở tới %s; chỉ qua link này) — hoặc đặt tài khoản chủ tại đây: genchibi password" ;;
+    st_setup_closed) F="  Lần đầu: cửa sổ admin / admin đã đóng — mở lại bằng genchibi open (30 phút), hoặc đặt tài khoản chủ tại đây: genchibi password" ;;
+    st_setup_init) F="  Lần đầu: chưa có tài khoản chủ — genchibi password (hoặc vào Studio bằng token chủ)" ;;
+    st_setup_wizard) F="  Lần đầu: đã có tài khoản chủ — làm nốt thiết lập lần đầu trong Studio (%s): tên miền, rồi chẩn đoán MCP (kẹt: genchibi setup skip)" ;;
+    win_opened) F="Lần đầu: mở %s bằng trình duyệt trên máy này và đăng nhập admin / admin trong vòng 30 phút (tới %s) — admin / admin chỉ dùng được qua link này. Sau đó Studio bắt đặt tên đăng nhập + mật khẩu của bạn." ;;
+    win_docker) F="admin / admin không dùng được: Docker đang mở cổng ra ngoài loopback (%s) — đặt GC_BIND=127.0.0.1 trong .env (và xem docker-compose.override.yml), rồi chạy genchibi open. Hoặc đặt tài khoản chủ tại đây: genchibi password" ;;
+    win_docker_cfg) F="admin / admin không dùng được: không đọc được cấu hình Docker compose (compose config) để kiểm cổng nào đang mở — đặt tài khoản chủ tại đây: genchibi password" ;;
+    win_nokey) F="admin / admin không dùng được: không đọc được /dev/urandom để tạo khoá của link — đặt tài khoản chủ tại đây: genchibi password" ;;
+    hc_ok) F="MCP-04 ✓ lệnh trên máy chủ chạy được: %s mcp (initialize + tools/list, %s tool) — dùng đúng đường đầy đủ này trong cấu hình agent." ;;
+    hc_fail) F="MCP-04 ✗ lệnh trên máy chủ lỗi: %s mcp — %s. Kiểm: genchibi status (app đang chạy?), quyền Docker (nhóm docker / sudo), node trên PATH (native)." ;;
+    hc_nopost) F="(không gửi được kết quả lên app — app đang chạy? genchibi status)" ;;
+    win_bind) F="admin / admin không dùng được: GC_BIND=%s mở app ra mạng — đặt GC_BIND=127.0.0.1 trong .env, rồi chạy genchibi restart và genchibi open. Hoặc đặt tài khoản chủ tại đây: genchibi password" ;;
+    open_signin) F="Mở %s — đăng nhập bằng tài khoản chủ (quên mật khẩu: genchibi password)." ;;
+    rs_stage) F="tài khoản chủ đã được khởi tạo" ;;
+    rs_window) F="cửa sổ 30 phút đã đóng (genchibi open mở lại)" ;;
+    rs_window_perms) F="run/admin-window sai quyền (genchibi open ghi lại)" ;;
+    rs_online) F="máy đang lên mạng (Go online)" ;;
+    rs_legacy_env) F=".env đang mở app ra mạng (GC_PUBLIC_URL / GC_ALLOWED_HOSTS)" ;;
+    rs_edge) F="edge Caddy đang giữ cổng 80/443" ;;
+    rs_tunnel) F="tunnel Cloudflare đang bật" ;;
+    rs_docker_publish) F="Docker đang mở cổng của app ra ngoài loopback" ;;
+    rs_bind) F="GC_BIND / GC_LISTEN không phải loopback" ;;
+    hint_ssh) F="Máy chủ không có trình duyệt: trên máy của bạn chạy  ssh -L %s:localhost:%s <máy-chủ>  rồi mở link bên dưới ở đó (cùng cửa sổ 30 phút)." ;;
+    hint_admin) F="Bước tiếp: mở %s và đăng nhập admin / admin trong vòng 30 phút (tới %s; sau đó: genchibi open in link mới) — rồi đặt tên đăng nhập + mật khẩu của bạn." ;;
+    hint_noadmin) F="Bước tiếp: admin / admin không dùng được trên máy này (%s) — đặt tài khoản chủ tại đây: genchibi password, rồi đăng nhập ở http://localhost:%s" ;;
+    hint_wizard) F="Bước tiếp: mở %s, đăng nhập bằng %s và làm nốt thiết lập lần đầu (tên miền, chẩn đoán MCP)." ;;
+    hint_ready) F="Bước tiếp: mở %s và đăng nhập bằng %s." ;;
+    setup_help) F="genchibi setup                  xem trạng thái lần đầu (bước, cửa sổ admin / admin, tự kiểm MCP, agent gần nhất)\ngenchibi setup skip [lý do]     bỏ qua phần còn lại của wizard lần đầu (tên miền / chẩn đoán MCP) — khi chính phần kiểm bị lỗi; có ghi log\ngenchibi setup reset            làm lại wizard lần đầu (không bao giờ mở lại admin / admin)\ngenchibi setup check            MCP-04: chạy thật lệnh trên máy chủ (<đường đầy đủ> mcp: initialize + tools/list) và hiện kết quả trong wizard" ;;
+    setup_stage) F="Thiết lập lần đầu: %s%s" ;;
+    setup_admin_ok) F="  admin / admin: dùng được tới %s, chỉ qua %s" ;;
+    setup_admin_no) F="  admin / admin: không dùng được — %s" ;;
+    setup_selftest) F="  Tự kiểm MCP: %s (%s)" ;;
+    setup_client) F="  Agent gần nhất: %s qua %s lúc %s" ;;
+    setup_skipped) F="Đã bỏ qua wizard lần đầu (có ghi log) — Studio mở bình thường." ;;
+    setup_reset) F="Đã đặt lại wizard lần đầu (bước %s): Studio dẫn bạn đi lại từ đầu." ;;
+    setup_w_none) F="chưa chạy" ;;
+    setup_w_ok) F="đạt" ;;
+    setup_w_fail) F="lỗi" ;;
+    restored_oauth) F="Kết nối agent (OAuth) trong bản sao lưu đã bị thu hồi: cấp phép lại cho agent (Studio › Hệ thống › Kết nối agent)." ;;
+    pw_user_bad) F="Tên đăng nhập không hợp lệ: 3–32 ký tự a-z 0-9 . _ - và không phải admin — không đổi gì." ;;
+    pw_init_done) F="Đã có tài khoản chủ: tên đăng nhập %s. Đăng nhập Studio bằng tên này — Studio sẽ dẫn bạn qua thiết lập lần đầu (tên miền, chẩn đoán MCP)." ;;
+    pw_init_done_off) F="Đã đặt tài khoản chủ khi app đang dừng (tên đăng nhập %s) — có hiệu lực ở lần chạy tới (genchibi start)." ;;
+    pw_init_only) F="Tài khoản chủ đã có — không đổi mật khẩu." ;;
+    on_need_owner) F="Khởi tạo tài khoản chủ trước: mở Studio trên máy này (lần đầu: admin / admin — genchibi open) hoặc chạy genchibi password tại đây, rồi chạy lại lệnh này." ;;
+    on_wait_owner) F="  Đang ra Internet tạm, chờ tài khoản chủ: %s — chạy genchibi password tại đây là app tự hoàn tất lên mạng" ;;
+    upd_checking) F="Kiểm tra phiên bản…" ;;
+    upd_nocheck) F="Không kiểm tra được (app có đang chạy?)" ;;
+    upd_failed) F="Cập nhật thất bại; vẫn chạy bản hiện tại." ;;
+    backed_up) F="Đã sao lưu: %s" ;;
+    restore_usage) F="Dùng: genchibi restore <tệp .tar.gz trong backups/>" ;;
+    restore_ask) F="Thay dữ liệu hiện tại bằng %s? (gõ 'dong y') " ;;
+    cancelled) F="Huỷ." ;;
+    restored) F="Đã khôi phục." ;;
+    restore_note) F="Lưu ý: bản sao lưu chứa mật khẩu chủ và các phiên Studio lúc sao lưu. Khôi phục xong thì Go online TẮT trên máy này (chạy lại để lên mạng) và mọi phiên / thiết bị đã nhớ bị đăng xuất — đăng nhập bằng mật khẩu của bản sao lưu (quên: genchibi password)." ;;
+    restored_off) F="Go online đã tắt, mọi phiên / thiết bị đã bị đăng xuất (mật khẩu là mật khẩu trong bản sao lưu). Lên mạng lại: genchibi online --help" ;;
+    un_ask) F="Gỡ gen-chibi. Giữ lại dữ liệu (nhân vật, kịch bản, backup)? [C/k] " ;;
+    un_wiped) F="Đã gỡ và xoá toàn bộ dữ liệu." ;;
+    un_kept) F="Đã gỡ. Dữ liệu giữ ở %s/data và %s/backups." ;;
+    pw_ask) F="Mật khẩu chủ mới (ít nhất 12 ký tự, ẩn khi gõ): " ;;
+    pw_again) F="Nhập lại mật khẩu: " ;;
+    pw_mismatch) F="Hai lần nhập không khớp — không đổi gì." ;;
+    pw_short) F="Mật khẩu cần ít nhất 12 ký tự (gợi ý: một cụm từ dễ nhớ) — không đổi gì." ;;
+    pw_ctrl) F="Mật khẩu không được chứa ký tự điều khiển (tab, xuống dòng…) — không đổi gì." ;;
+    pw_done) F="Đã đặt mật khẩu chủ. Các phiên Studio đã bị đăng xuất (%s); đăng nhập lại bằng mật khẩu mới." ;;
+    pw_done_off) F="Đã đặt mật khẩu chủ khi app đang dừng — có hiệu lực ở lần chạy tới (genchibi start). Mọi phiên Studio đã bị đăng xuất." ;;
+    pw_fail) F="Không đặt được mật khẩu: %s" ;;
+    tok_ask) F="Dán GitHub token (Contents: Read-only, ẩn khi gõ): " ;;
+    tok_none) F="Không có token — không đổi gì." ;;
+    tok_bad) F="Token có ký tự lạ — chép lại (chỉ gồm chữ, số, _ . -)." ;;
+    tok_set) F="Đã ghi GC_GITHUB_TOKEN vào .env; khởi động lại để áp dụng…" ;;
+    tok_cleared) F="Đã xoá GC_GITHUB_TOKEN; khởi động lại…" ;;
+    bad_domain) F="Tên miền không hợp lệ: %s" ;;
+    bad_opt) F="Không hiểu tuỳ chọn %s" ;;
+    hdr_token) F="Authorization: Bearer <token — xem GC_API_TOKEN trong %s/.env>" ;;
+    hdr_token_file) F="Authorization: Bearer <token — xem %s/data/owner-token>" ;;
+    skill_usage) F="skill: claude | cursor | gemini | codex | generic" ;;
+    skill_dl_fail) F="Không tải được hướng dẫn (app có đang chạy?)" ;;
+    skill_clash) F="Đã có tệp của bạn, không ghi đè:%s" ;;
+    skill_clash2) F="→ chọn thư mục khác (--dir), hoặc gộp tay, hoặc thêm --force để ghi đè." ;;
+    skill_done) F="Đã cài hướng dẫn gen-chibi cho %s vào %s (sinh từ agent/ của bản đang chạy — cập nhật app thì chạy lại lệnh này)" ;;
+    agent_usage) F="genchibi agent connect | guide [chủ đề] | topics | tools [--format openai|gemini|mcp] | skill <hãng> [--dir thư-mục] [--force]" ;;
+    lang_now) F="CLI: %s (%s) · Mặc định của Studio: %s (%s)" ;;
+    lang_hint) F="Đổi: genchibi lang en | vi  (CLI + giao diện mặc định của bản cài)" ;;
+    lang_bad) F="Không hỗ trợ ngôn ngữ: %s — dùng en (English) hoặc vi (Tiếng Việt)." ;;
+    lang_same) F="Ngôn ngữ đã là %s (%s) — không đổi gì." ;;
+    lang_set) F="Đã đặt ngôn ngữ %s: ghi GC_LANG=%s vào .env." ;;
+    lang_live) F="Đã đổi mặc định của Studio sang %s." ;;
+    lang_restart) F="Khởi động lại app để giao diện mặc định đổi theo…" ;;
+    lang_norun) F="App đang không chạy — mặc định mới có hiệu lực ở lần chạy tới (genchibi start)." ;;
+    lang_note) F="Đây là mặc định cho CLI và cho mọi người mở Studio. Mỗi người vẫn đổi ngôn ngữ riêng trong Studio được (nút chuyển ngôn ngữ); lựa chọn đó được nhớ trong trình duyệt của họ." ;;
+    removed) F="genchibi %s đã bỏ ở v0.23 — dùng: genchibi %s" ;;
+    gc_tunnel) F="! .env còn GC_TUNNEL=%s của genchibi expose cũ (đã bỏ ở v0.23) — tunnel đó không còn được chạy. Chuyển máy này sang Go online: genchibi online migrate" ;;
+    caddy_native) F="genchibi online --caddy cần chế độ Docker: Caddy mở cổng 80/443 (dưới 1024). Chế độ native: dùng đường Cloudflare (Studio › Hệ thống › Lên mạng › Cloudflare)." ;;
+    caddy_busy) F="Cổng %s trên máy này đang bị chiếm — CHƯA bật Caddy (app vẫn chạy). Dừng dịch vụ đang giữ cổng, hoặc dùng đường Cloudflare (Studio › Hệ thống › Lên mạng › Cloudflare, không cần mở cổng)." ;;
+    caddy_old) F="Bản đang chạy chưa có edge Caddy (cần v0.21 trở lên) — chạy genchibi update trước." ;;
+    caddy_on) F="Đã bật edge Caddy: cổng 80 và 443 vào container gen-chibi-edge. Làm tiếp ở Studio › Hệ thống › Lên mạng." ;;
+    caddy_already) F="Edge Caddy đã bật từ trước — kiểm cho chắc nó đang chạy." ;;
+    caddy_off) F="Đã tắt edge Caddy: trả cổng 80/443. Chứng chỉ vẫn giữ trong %s/edge (bật lại: genchibi online --caddy)." ;;
+    caddy_not_on) F="Edge Caddy chưa bật — không có gì để tắt." ;;
+    caddy_on_flow) F="Đã bật edge Caddy: cổng 80 và 443 vào container gen-chibi-edge." ;;
+    on_help) F="genchibi online                         xem trạng thái Go online (chế độ, địa chỉ, từng bậc ✓/✗, edge)\ngenchibi online caddy <tên-miền>        đường A (beta, Docker): bản ghi A của tên miền → IP máy này; bật edge Caddy (cổng 80/443), lấy HTTPS\ngenchibi online cloudflare [<tên-miền>] đường B (beta): Cloudflare Tunnel bằng API token (hỏi ẩn; không có terminal: GC_CF_TOKEN) — chibi.example.com hoặc example.com (+ --sub tên)\ngenchibi online proxy <tên-miền>        đã có reverse proxy riêng: in đoạn cấu hình để dán, rồi kiểm từ ngoài vào\ngenchibi online quick                   link tạm *.trycloudflare.com (đổi mỗi lần khởi động)\ngenchibi online recheck [--waf-done]    kiểm lại / đi tiếp sau khi đã sửa một bậc\ngenchibi online off                     thôi ra Internet (có GC_CF_TOKEN: dọn cả tunnel / DNS / luật WAF app đã tạo)\ngenchibi online migrate                 chuyển GC_PUBLIC_URL / GC_ALLOWED_HOSTS từ .env sang Go online\ngenchibi online --caddy | --caddy-off   chỉ mở / trả cổng 80/443 (edge Caddy)\nTuỳ chọn: --yes (xác nhận đổi địa chỉ) · --overwrite-dns (thay bản ghi DNS có sẵn) · --token-stdin (đọc API token từ stdin)\nKhông bao giờ nhận API token trên dòng lệnh. Lên mạng cần tài khoản chủ (lần đầu: admin / admin trong Studio, hoặc genchibi password)." ;;
+    on_down) F="App không trả lời ở %s — chạy: genchibi start" ;;
+    on_auth) F="App từ chối token chủ (HTTP %s) — kiểm GC_API_TOKEN trong %s/.env (hoặc data/owner-token)." ;;
+    on_err) F="✗ %s (HTTP %s)" ;;
+    on_title) F="Go online · chế độ %s%s" ;;
+    on_url) F="  Địa chỉ công khai: %s" ;;
+    on_url_none) F="  Địa chỉ công khai: không có (chỉ máy này)" ;;
+    on_url_pending) F="  Địa chỉ tạm đang kiểm: %s" ;;
+    on_flow) F="  Lần chạy gần nhất: %s · %s" ;;
+    on_w_busy) F="đang chạy" ;;
+    on_w_done) F="xong" ;;
+    on_w_stopped) F="đang dừng (xem bậc ✗ / …)" ;;
+    on_w_on) F="bật" ;;
+    on_w_off) F="tắt" ;;
+    on_w_ready) F="đã kết nối" ;;
+    on_w_starting) F="đang khởi động" ;;
+    on_w_new) F="địa chỉ mới" ;;
+    on_edge) F="  Edge: Caddy %s · tunnel %s%s" ;;
+    on_legacy_note) F="  Máy này ra Internet bằng .env (GC_PUBLIC_URL / GC_ALLOWED_HOSTS, ở đây chỉ đọc) — chuyển: genchibi online migrate" ;;
+    on_hint) F="  Lệnh: genchibi online caddy <tên-miền> | cloudflare <tên-miền> | proxy <tên-miền> | quick | recheck | off   (genchibi online --help)" ;;
+    on_fix) F="      → %s" ;;
+    on_wait_caddy) F="Chờ edge Caddy khởi động…" ;;
+    on_caddy_nostart) F="Edge Caddy không lên (sau 60 giây chưa có admin socket trong edge/run) — xem: docker logs gen-chibi-edge" ;;
+    on_start) F="Go online · %s · %s — từng bậc ở dưới (Ctrl-C chỉ thôi theo dõi; app vẫn làm tiếp — genchibi online cho biết tới đâu)" ;;
+    on_done) F="✓ Đã ra Internet: %s" ;;
+    on_done_studio) F="  Studio: %s (đăng nhập bằng tên đăng nhập + mật khẩu chủ)" ;;
+    on_done_mcp) F="  MCP:    %s/mcp — claude.ai: Customize › Connectors › Add custom connector › dán vào › Connect › Authorize (Studio › Hệ thống › Kết nối agent có danh sách)" ;;
+    on_timeout) F="Đã chờ %s phút mà chưa xong — bậc vẫn giữ trạng thái; kiểm lại sau: genchibi online recheck" ;;
+    on_failed) F="✗ Dừng ở: %s. Sửa theo hướng dẫn ở trên rồi chạy: genchibi online recheck" ;;
+    on_url_change) F="Lệnh này đổi địa chỉ công khai (%s → %s): %s agent đang nối sẽ bị đăng xuất và phải nối lại." ;;
+    on_url_ask) F="Tiếp tục? [c/K] " ;;
+    on_url_stop) F="Không đổi gì. Xác nhận khi không có terminal: thêm --yes." ;;
+    on_legacy) F="Máy này ra Internet bằng .env (GC_PUBLIC_URL / GC_ALLOWED_HOSTS đặt trước v0.21). Go online không trộn hai cách: chuyển các giá trị đó trước bằng genchibi online migrate, rồi chạy lại lệnh này." ;;
+    on_migrate_old) F="Bản đang chạy chưa có bước di chuyển — cập nhật trước: genchibi update" ;;
+    on_migrated) F="Cấu hình .env đã chuyển sang Go online (sau này có thể xoá GC_PUBLIC_URL / GC_ALLOWED_HOSTS khỏi .env)." ;;
+    on_proxy_snip) F="Dán một trong hai đoạn này vào proxy của bạn — đường máy (MCP, OAuth) đi thẳng vào app, đường người có thể qua đăng nhập riêng của bạn:" ;;
+    on_off_done) F="Đã thôi ra Internet: không còn địa chỉ công khai (chỉ máy này)." ;;
+    on_off_caddy) F="Edge Caddy vẫn giữ cổng 80/443 — trả cổng: genchibi online --caddy-off" ;;
+    cf_tok_link) F="Tạo API token Cloudflare (quyền điền sẵn: Account › Cloudflare Tunnel › Edit, Zone › DNS › Edit, Zone › Zone › Read, tuỳ chọn Zone › WAF › Edit; đặt TTL ngắn):\n  %s" ;;
+    cf_tok_ask) F="API token Cloudflare (ẩn khi gõ): " ;;
+    cf_tok_none) F="Chưa có API token Cloudflare. Có terminal thì lệnh hỏi (ẩn); không có terminal thì đặt GC_CF_TOKEN trong môi trường — không bao giờ trên dòng lệnh." ;;
+    cf_tok_bad) F="API token có vẻ sai (quá ngắn hoặc có ký tự lạ) — chép lại từ dash.cloudflare.com." ;;
+    cf_tok_argv) F="Không nhận API token trên dòng lệnh (người khác đọc được trong danh sách tiến trình, và nó nằm lại trong lịch sử shell). Dán khi được hỏi, hoặc đặt GC_CF_TOKEN." ;;
+    cf_choices) F="Token thấy nhiều tên miền — chọn một:" ;;
+    cf_choice_row) F="  %s) %s" ;;
+    cf_choice_ask) F="Số: " ;;
+    cf_choice_stop) F="Chưa chọn tên miền. Chạy lại với một tên: genchibi online cloudflare <tên-miền>" ;;
+    cf_cname_ask) F="Thay các bản ghi DNS đó bằng CNAME tới tunnel? [c/K] " ;;
+    cf_cname_stop) F="Không thay gì. Chọn tên khác (genchibi online cloudflare ten-khac.%s), hoặc xác nhận trong terminal, hoặc thêm --overwrite-dns." ;;
+    cf_waf_ask) F="Bạn đã tạo luật đó trong Cloudflare chưa? [c/K] " ;;
+    cf_waf_stop) F="Tạo luật ở trên trong Cloudflare, rồi chạy: genchibi online recheck --waf-done" ;;
+    cf_retry_zone) F="Thử %s làm tên miền (tên con %s)…" ;;
+    sn_domain) F="Tên miền / DNS" ;;
+    sn_edge) F="Edge Caddy" ;;
+    sn_port) F="Cổng 80/443" ;;
+    sn_cert) F="Chứng chỉ HTTPS" ;;
+    sn_public) F="Địa chỉ công khai" ;;
+    sn_mcp) F="MCP từ Internet" ;;
+    sn_owner) F="Chủ máy" ;;
+    sn_token) F="API token" ;;
+    sn_zone) F="Tên miền + tên con" ;;
+    sn_tunnel) F="Tunnel" ;;
+    sn_waf) F="Luật WAF" ;;
+    sn_config) F="Cấu hình proxy" ;;
+    sn_local) F="Máy này" ;;
+    sn_remote) F="Dọn Cloudflare" ;;
+  esac
+}
+_t() { F=""; if [ "$UI" = vi ]; then _vi "$1"; fi; if [ -z "$F" ]; then _en "$1"; fi; if [ -z "$F" ]; then F="$1"; fi; }
+m()  { _t "$1"; shift; printf "%s$F\n" "" ${1+"$@"}; }   # "%s" + "" đứng đầu: câu bắt đầu bằng "-" không bị printf hiểu là tuỳ chọn
+mn() { _t "$1"; shift; printf "%s$F" "" ${1+"$@"}; }
+pick_ui() { case "${1:-}" in vi|vi[_.-]*|VI|VI[_.-]*|Vi) UI=vi ;; *) UI=en ;; esac; }
+lang_name() { case "$1" in vi) echo "Tiếng Việt" ;; *) echo "English" ;; esac; }
+# mặc định của Studio ghi trong data/settings.json › uiLang (một nguồn sự thật — server ghi). sed thuần: không cần node / jq, chạy được với bash 3.2
+settings_lang() { sed -n 's/.*"uiLang"[[:space:]]*:[[:space:]]*"\([A-Za-z_-]*\)".*/\1/p' data/settings.json 2>/dev/null | head -1 || true; }
+ENV_LANG="${GC_LANG:-}"   # GC_LANG=vi genchibi … (biến môi trường) thắng giá trị trong .env
+pick_ui "$ENV_LANG"
+
+HOME_DIR="${GC_HOME:-__GC_HOME__}"
+# đường TUYỆT ĐỐI của lệnh owner gõ (CNS-269): thẻ nối agent + genchibi agent connect dùng đường này — ứng dụng mở từ Dock / menu không thấy PATH của terminal.
+# Bản ngoài (~/.local/bin/genchibi) chuyển cho bản trong (current/cli/genchibi) qua GC_CLI_SELF, để đường ghi ra là đường owner thật sự gọi
+case "$0" in /*) _self="$0" ;; */*) _self="$(cd "$(dirname "$0")" 2>/dev/null && pwd)/$(basename "$0")" ;; *) _self="$(command -v "$0" 2>/dev/null || printf '%s' "$0")" ;; esac
+CLI_SELF="${GC_CLI_SELF:-$_self}"; unset _self
+[ -d "$HOME_DIR" ] || { m no_home "$HOME_DIR" >&2; exit 1; }
+# Lệnh đi theo bản cài: chuyển cho cli/genchibi của bản đang chạy, để bản cập nhật mang theo lệnh mới.
+INNER="$HOME_DIR/current/cli/genchibi"
+if [ -z "${GC_CLI_INNER:-}" ] && [ -f "$INNER" ]; then GC_CLI_INNER=1 GC_HOME="$HOME_DIR" GC_CLI_SELF="$CLI_SELF" exec bash "$INNER" ${1+"$@"}; fi
+ORIG_PWD="$PWD"   # thư mục người gọi lệnh (agent skill cài vào dự án của họ, không phải thư mục cài)
+cd "$HOME_DIR"
+# móc kiểm thử CHỈ từ shell gọi lệnh (bộ test), không bao giờ từ .env (review bảo mật 🟡7). Chỉ builtin (compgen, ${!v}): ở đây môi trường còn có thể
+# mang GC_CF_TOKEN (cf_token chưa xoá) — không được sinh tiến trình ngoài nào nhận nó
+_gctn=(); _gctv=(); for _v in $(compgen -v GC_TEST || true); do _gctn+=("$_v"); _gctv+=("${!_v}"); done
+set -a; [ -f .env ] && . ./.env; set +a
+for _v in $(compgen -v GC_TEST || true); do unset "$_v"; done
+_i=0; while [ "$_i" -lt "${#_gctn[@]}" ]; do export "${_gctn[$_i]}=${_gctv[$_i]}"; _i=$((_i + 1)); done
+unset _v _i _gctn _gctv
+# GC_LANG (biến môi trường › .env) rỗng — bản cài ≤ v0.19 nâng cấp, hoặc cài lại không chọn — thì CLI nói theo mặc định của Studio (CNS-152)
+UI_SRC="${ENV_LANG:-${GC_LANG:-}}"; [ -n "$UI_SRC" ] || UI_SRC="$(settings_lang)"
+pick_ui "$UI_SRC"
+MODE="${GC_MODE:-docker}"; PORT="${GC_PORT:-7480}"
+URL="http://127.0.0.1:$PORT"
+PIDF="$HOME_DIR/logs/launcher.pid"; LOG="$HOME_DIR/logs/gen-chibi.log"
+
+# token chủ (v0.21, CNS-195): GC_API_TOKEN trong .env → data/owner-token (server tự sinh khi .env trống). Đọc lúc gọi (server có thể vừa sinh tệp).
+# Không export, không in ra màn hình; đi qua stdin (curl -K -), không nằm trong argv → không lộ trong `ps`
+owner_token() {
+  if [ -n "${GC_API_TOKEN:-}" ]; then printf '%s' "$GC_API_TOKEN"
+  elif [ -r data/owner-token ]; then tr -d ' \r\n' < data/owner-token; fi
+}
+auth_cfg() { local t; t="$(owner_token)"; if [ -n "$t" ]; then printf 'header = "Authorization: Bearer %s"\n' "$t"; fi; }
+api() { auth_cfg | curl -fsS -K - -X "$1" -H 'X-GC-Request: 1' -H "X-GC-Lang: $UI" -H 'Content-Type: application/json' ${3:+-d "$3"} "$URL$2"; }   # X-GC-Lang: câu server trả về theo ngôn ngữ CLI
+running_native() { [ -f "$PIDF" ] && kill -0 "$(cat "$PIDF")" 2>/dev/null; }
+json() { node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const o=JSON.parse(s);const k=process.argv[1].split(".");let v=o;for(const x of k)v=v==null?v:v[x];console.log(v===undefined?"":typeof v==="object"?JSON.stringify(v):v)})' "$1" 2>/dev/null || sed -n "s/.*\"$1\": *\"\{0,1\}\([^\",}]*\).*/\1/p"; }
+
+# ---------------------------------------------------------------- docker compose: LUÔN ghép -f tường minh, KHÔNG BAO GIỜ đặt / ghi COMPOSE_FILE
+# (CNS-169: COMPOSE_FILE=a:b làm compose bỏ qua docker-compose.override.yml → mất service riêng của chủ, vd cổng đăng nhập của Ryan).
+# Thứ tự: docker-compose.yml · docker-compose.edge.yml (khi đã bật edge Caddy) · override của chủ (sau cùng, để chủ chỉnh được cả edge).
+EDGE_MARK="edge/caddy.enabled"
+compose_override() { # tệp override compose tự nạp khi không có -f (cùng thứ tự tìm của docker compose)
+  local f; for f in compose.override.yml compose.override.yaml docker-compose.override.yml docker-compose.override.yaml; do [ -f "$f" ] && { echo "$f"; return 0; }; done; return 0
+}
+compose_files() { # in các cặp "-f tệp", mỗi phần một dòng
+  local ov; ov="$(compose_override)"
+  printf '%s\n' -f docker-compose.yml
+  if [ -f "$EDGE_MARK" ] && [ -f docker-compose.edge.yml ]; then printf '%s\n' -f docker-compose.edge.yml; fi
+  if [ -n "$ov" ]; then printf '%s\n' -f "$ov"; fi
+  return 0
+}
+# docker: thẳng · qua nhóm docker (sg docker -c) · sudo docker — máy trình cài vừa cài Docker + usermod -aG docker mà phiên đăng nhập này chưa
+# nhận nhóm mới (CNS-174): mọi lệnh vẫn chạy ngay, đăng xuất / vào lại thì đi thẳng. GC_DOCKER_VIA = direct | sg | sudo (trình cài đặt);
+# trống → dò một lần: docker thẳng được → direct; user có tên trong nhóm docker (/etc/group) → sg (không hỏi mật khẩu nhóm); sudo không hỏi mật khẩu → sudo.
+DOCKER_VIA="${GC_DOCKER_VIA:-}"
+dk_pick() {
+  [ -z "$DOCKER_VIA" ] || return 0
+  DOCKER_VIA=direct
+  docker info >/dev/null 2>&1 && return 0
+  local g; g=" $(id -nG "$(id -un 2>/dev/null)" 2>/dev/null) "   # nhóm trong /etc/group (kể cả nhóm phiên này chưa nhận) — không dùng grep -q sau ống (pipefail)
+  if command -v sg >/dev/null 2>&1 && case "$g" in *" docker "*) true ;; *) false ;; esac && sg docker -c 'docker info' >/dev/null 2>&1 </dev/null; then DOCKER_VIA=sg
+  elif command -v sudo >/dev/null 2>&1 && sudo -n docker info >/dev/null 2>&1 </dev/null; then DOCKER_VIA=sudo; fi
+  return 0
+}
+dk() { # dk <đối số docker…> — stdin / stdout đi thẳng (cầu MCP stdio, mật khẩu qua stdin)
+  dk_pick
+  case "$DOCKER_VIA" in
+    sg) local q="docker" x; for x in ${1+"$@"}; do q="$q $(printf '%q' "$x")"; done; sg docker -c "$q" ;;
+    sudo) sudo docker ${1+"$@"} ;;
+    *) docker ${1+"$@"} ;;
+  esac
+}
+compose() { # compose <lệnh docker compose…> — chạy trong thư mục cài (đã cd)
+  local a=() l
+  while IFS= read -r l; do a+=("$l"); done < <(compose_files)
+  dk compose "${a[@]}" ${1+"$@"}
+}
+guard_exposure() {
+  # đóng khi nghi ngờ: mở ra ngoài máy này mà không có token thì không chạy
+  case "${GC_BIND:-127.0.0.1}" in 127.0.0.1|localhost|::1) ;; *)
+    [ -n "$(owner_token)" ] || { m refuse_bind "$GC_BIND" >&2; exit 1; } ;;
+  esac
+}
+# CLI chạy bằng root ở chế độ Docker (sudo genchibi …): tệp / thư mục nó tạo trả về cho user của container (GC_UID:GC_GID trong .env — trình cài không để 0)
+own_fix() {
+  { [ "${MODE:-}" = docker ] && [ "$(id -u)" = 0 ] && [ -n "${GC_UID:-}" ] && [ "$GC_UID" != 0 ]; } || return 0
+  local p; for p in ${1+"$@"}; do [ -e "$p" ] && chown -R "$GC_UID:${GC_GID:-$GC_UID}" "$p" 2>/dev/null; done; return 0
+}
+start() {
+  guard_exposure
+  legacy_tunnel_down
+  if [ "$MODE" = docker ]; then own_fix data run logs; sync_compose; edge_prepare; compose up -d --quiet-pull 2>&1 | grep -vE "Creating|Created|Starting|Network|Container .* (Running|Waiting)" || true
+  else
+    running_native && { m already_running "$(cat "$PIDF")"; return; }
+    mkdir -p logs
+    [ -n "${GC_EXTRA_CA:-}" ] && export NODE_EXTRA_CA_CERTS="$GC_EXTRA_CA"
+    GC_HOME="$HOME_DIR" GC_PORT="$PORT" nohup node "$HOME_DIR/launcher.js" >> "$LOG" 2>&1 &
+    echo $! > "$PIDF"; m started "$!"
+  fi
+  first_run_window start
+  host_check quiet
+}
+stop() {
+  legacy_tunnel_down
+  if [ "$MODE" = docker ]; then compose stop
+  else
+    if running_native; then kill "$(cat "$PIDF")"; rm -f "$PIDF"; m stopped; else m not_running; fi
+  fi
+}
+status() {
+  local h; h="$(curl -fsS "$URL/api/health" 2>/dev/null || true)"
+  if [ -n "$h" ]; then m st_up "$(echo "$h" | json version | sed 's/^v//')" "$URL" "$MODE"; else m st_down "$MODE"; fi
+  case "$(setup_stage)" in
+    admin) if [ -n "$(win_until)" ]; then m st_setup_admin "$(win_link)" "$(win_until)"; else m st_setup_closed; fi ;;
+    must_init) m st_setup_init ;;
+    domain|mcp) m st_setup_wizard "http://localhost:$PORT" ;;
+  esac
+  m st_releases "$(cd releases 2>/dev/null && ls | tr '\n' ' ')" "$(basename "$(readlink current)")"
+  if [ -n "$h" ]; then oapi GET /api/online; fi
+  if [ "$OCODE" = 200 ] && [ "$(jv flow.waitingOwner)" = true ] && [ -n "$(jv publicUrlPending)" ]; then m st_online_wait "$(jv publicUrlPending)" "$(jv flow.mode)"   # CNS-209: trạng thái TẠM, không phải "off" (máy v0.21 / v0.22 nâng cấp lúc đang chờ mật khẩu)
+  elif [ "$OCODE" = 200 ] && [ "$(jv mode)" != off ] && [ -n "$(jv publicUrl)" ]; then m st_online "$(jv publicUrl)" "$(jv mode)"; else m st_mcp_off; fi
+}
+update() {
+  m upd_checking
+  api POST /api/update/check >/dev/null || { m upd_nocheck; exit 1; }
+  local r; r="$(api POST /api/update/apply '{}')" || { m upd_failed; exit 1; }
+  echo "$r" | json message
+  if echo "$r" | grep -q '"restart":true'; then
+    for i in $(seq 1 60); do sleep 1; curl -fsS "$URL/api/health" >/dev/null 2>&1 && break; done
+    sleep 2
+    # compose của bản đang chạy (sau cập nhật, hoặc bản cũ nếu đã tự rollback) — app áp ở lần start tới; edge Caddy (nếu bật) nhận image mới ngay
+    if [ "$MODE" = docker ]; then sync_compose; if [ -f "$EDGE_MARK" ]; then edge_prepare; compose up -d --no-deps --quiet-pull gen-chibi-edge >/dev/null 2>&1 || true; fi; fi
+    status
+  fi
+}
+backup() {
+  # tên theo giây; trùng (hai lần sao lưu trong cùng một giây — vd `genchibi restore` tự sao lưu ngay trước khi khôi phục một bản vừa tạo) → thêm -2, -3…:
+  # không bao giờ ghi đè bản sao lưu đã có (v0.23: trước đây bản cũ bị đè và restore khôi phục nhầm chính bản an toàn của nó)
+  mkdir -p backups; local b f n=2; b="backups/thu-cong-$(date +%Y%m%d-%H%M%S)"; f="$b.tar.gz"
+  while [ -e "$f" ]; do f="$b-$n.tar.gz"; n=$((n + 1)); done
+  tar -czf "$f" data && m backed_up "$HOME_DIR/$f"
+}
+# khôi phục (CNS-202): bản sao lưu có thể của máy khác → không mang trạng thái online sang. Trước khi chạy lại: tunnel tắt (run/edge-intent.json off, xoá
+# run/tunnel.token), bỏ data/install-id (lần Go online sau dùng tên tunnel mới — không giành tunnel của máy gốc), đặt data/restore-pending.json → server
+# lúc khởi động đưa online.json về off và thu hồi mọi phiên + thiết bị (giữ mật khẩu của bản sao lưu)
+restore() {
+  local f="${1:-}"; [ -f "$f" ] || { m restore_usage; exit 1; }
+  m restore_note
+  read -r -p "$(mn restore_ask "$f")" a
+  case "$a" in "dong y"|yes) ;; *) m cancelled; exit 1 ;; esac
+  backup; stop; rm -rf data.restore && mkdir data.restore && tar -xzf "$f" -C data.restore
+  rm -rf data && mv data.restore/data data && rm -rf data.restore
+  rm -f data/install-id
+  printf '{"v":1,"at":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > data/restore-pending.json && chmod 600 data/restore-pending.json
+  mkdir -p run && chmod 700 run && rm -f run/tunnel.token
+  printf '{"tunnel":"off","online":false}\n' > run/edge-intent.json && chmod 600 run/edge-intent.json
+  own_fix data run
+  start; m restored; m restored_off; m restored_oauth
+}
+uninstall() {
+  read -r -p "$(mn un_ask)" a
+  local wipe=""
+  # câu trả lời xoá dữ liệu: k/K (tiếng Việt, "không") · n/N (tiếng Anh, "no"); mọi câu khác giữ dữ liệu
+  if [ "$UI" = vi ]; then case "$a" in k|K) wipe=1 ;; esac; else case "$a" in n|N) wipe=1 ;; esac; fi
+  stop || true
+  [ "$MODE" = docker ] && compose down || true
+  rm -f "$HOME/.local/bin/genchibi"
+  if [ -n "$wipe" ]; then cd / && rm -rf "$HOME_DIR"; m un_wiped
+  else rm -rf "$HOME_DIR/releases" "$HOME_DIR/current" "$HOME_DIR/previous" "$HOME_DIR/launcher.js" "$HOME_DIR/docker-compose.yml" "$HOME_DIR/docker-compose.edge.yml"; m un_kept "$HOME_DIR" "$HOME_DIR"; fi
+}
+mcp() {
+  # cầu stdio cho agent (Claude Code, Claude Desktop…)
+  if [ "$MODE" = docker ]; then compose exec -T app node /install/current/server/mcp-stdio.js
+  else GC_HOME="$HOME_DIR" GC_PORT="$PORT" exec node "$HOME_DIR/current/server/mcp-stdio.js"; fi   # GC_HOME: cầu đọc data/owner-token khi .env trống (CNS-197)
+}
+logs() { if [ "$MODE" = docker ]; then compose logs -f --tail 200; else tail -n 200 -f "$LOG"; fi; }
+# ---------------------------------------------------------------- lần đầu (v0.23, spec v023 §A.0 / §A.1): data/setup.json stage + cửa sổ admin / admin
+# stage do server ghi (data/setup.json); đọc bằng sed — CLI không cần node / jq. Rỗng = server chưa chạy v0.23 lần nào (bản cài mới vừa giải nén)
+setup_stage() { sed -n 's/^[[:space:]]*"stage":[[:space:]]*"\([a-z_]*\)".*/\1/p' data/setup.json 2>/dev/null | head -1 || true; }
+# giờ hết hạn của cửa sổ admin đang mở (HH:MM) — rỗng nếu không có / đã hết
+win_until() {
+  local e now; e="$(sed -n 's/.*"exp":\([0-9]*\)[0-9][0-9][0-9][,}].*/\1/p' run/admin-window 2>/dev/null | head -1)"; now="$(date +%s)"
+  [ -n "$e" ] && [ "$e" -gt "$now" ] && { date -d "@$e" '+%H:%M' 2>/dev/null || date -r "$e" '+%H:%M' 2>/dev/null; }
+  return 0
+}
+# Docker (CNS-252): app trong container không thấy IP nguồn thật (peer luôn là gateway bridge) → CLI trên host kiểm `docker compose config` (đủ -f + override
+# của chủ): MỌI cổng publish của MỌI service chỉ ở loopback (127.0.0.1 / ::1). Không đọc được → coi như không đạt (đóng khi nghi ngờ). PUBADDR = địa chỉ lạ đầu tiên
+PUBADDR=""
+compose_loopback() {
+  local out; PUBADDR=""
+  out="$(compose config --format json 2>/dev/null)" || { PUBADDR="?"; return 1; }
+  [ -n "$out" ] || { PUBADDR="?"; return 1; }
+  out="$(printf '%s\n' "$out" | jflat 2>/dev/null)" || { PUBADDR="?"; return 1; }
+  # network_mode khác mặc định (host, container:…, service:…) → container dùng mạng của host / service khác: không còn "chỉ publish loopback" (review bảo mật F2)
+  PUBADDR="$(printf '%s\n' "$out" | awk -F '\t' '$1 ~ /^services\.[^.]+\.network_mode$/ && $2 != "" && $2 != "bridge" && $2 != "default" && $2 != "null" { print "network_mode:" $2; exit }')"
+  [ -z "$PUBADDR" ] || return 1
+  PUBADDR="$(printf '%s\n' "$out" | awk -F '\t' '
+    $1 ~ /^services\.[^.]+\.ports\.[0-9]+\./ { k = $1; sub(/\.[^.]+$/, "", k); if (!(k in seen)) { seen[k] = 1; order[++n] = k } f = $1; sub(/^.*\./, "", f); v = $0; sub(/^[^\t]*\t/, "", v); a[k, f] = v }
+    END { for (j = 1; j <= n; j++) { k = order[j]; h = a[k, "host_ip"]; if (h == "" || h == "null") h = "0.0.0.0"
+      if (h != "127.0.0.1" && h != "::1" && h != "localhost") { print h ":" a[k, "published"]; exit } } }')"
+  [ -z "$PUBADDR" ]
+}
+# CỬA SỔ ADMIN (CNS-251, Q50): chỉ lệnh trên máy chủ (trình cài, genchibi start, genchibi open) mới mở — ghi run/admin-window (0600, run/ 0700), hạn 30 phút.
+# Chỉ khi máy chưa khởi tạo owner (stage admin, hoặc chưa có setup.json — bản cài mới). Docker: cổng phải chỉ publish ở loopback (compose_loopback) · native:
+# GC_BIND loopback; không đạt → KHÔNG mở, in lý do (stderr). Server tự kiểm phần còn lại (chưa lên mạng, socket, Origin / Host, header proxy) — setup.js.
+# $1 = start | open | install → 0 đã mở (WIN_UNTIL) · 2 không cần (đã khởi tạo) · 1 từ chối (đã in lý do)
+WIN_UNTIL=""
+admin_window() {
+  local st cl=false now exp key; st="$(setup_stage)"
+  case "$st" in ''|admin) ;; *) return 2 ;; esac
+  if [ "$MODE" = docker ]; then
+    if ! compose_loopback; then if [ "$PUBADDR" = "?" ]; then m win_docker_cfg >&2; else m win_docker "$PUBADDR" >&2; fi; return 1; fi
+    cl=true
+  else
+    case "${GC_BIND:-127.0.0.1}" in 127.0.0.1|localhost|::1) ;; *) m win_bind "$GC_BIND" >&2; return 1 ;; esac
+  fi
+  now="$(date +%s)"; exp=$((now + 1800))
+  # khoá một lần 128 bit (CNS-268): chỉ ai đọc được run/admin-window (0600) — tức người chạy lệnh này — có link http://localhost:<cổng>/login#k=<khoá>
+  key="$(od -An -tx1 -N16 /dev/urandom 2>/dev/null | tr -d ' \n')"
+  case "$key" in ????????????????????????????????) ;; *) m win_nokey >&2; return 1 ;; esac
+  mkdir -p run && chmod 700 run
+  ( umask 077; printf '{"v":1,"exp":%s000,"mode":"%s","composeLoopback":%s,"by":"%s","key":"%s"}\n' "$exp" "$MODE" "$cl" "$1" "$key" > run/admin-window.tmp ) || return 1
+  chmod 600 run/admin-window.tmp && mv -f run/admin-window.tmp run/admin-window
+  own_fix run
+  WIN_UNTIL="$(win_until)"
+  return 0
+}
+# link của cửa sổ đang mở: http://localhost:<cổng trên máy chủ>/login#k=<khoá> — phần # không bao giờ tới server trong URL (trang đọc rồi xoá khỏi thanh địa chỉ)
+win_link() { local k; k="$(sed -n 's/.*"key":"\([0-9a-f]\{32\}\)".*/\1/p' run/admin-window 2>/dev/null | head -1)"; [ -n "$k" ] && printf 'http://localhost:%s/login#k=%s' "$PORT" "$k"; return 0; }
+first_run_window() { local rc=0; admin_window "$1" || rc=$?; [ "$rc" != 0 ] || m win_opened "$(win_link)" "$WIN_UNTIL"; return 0; }
+# genchibi open: máy chưa khởi tạo → mở cửa sổ admin / admin (30 phút) rồi mở Studio ở link http://localhost:<cổng>/login#k=<khoá> (CNS-268).
+# KHOÁ KHÔNG BAO GIỜ VÀO ARGV (ps của user khác đọc được argv của xdg-open / trình duyệt): trình duyệt mở tệp run/open-admin.html (0600, run/ 0700) — tệp chuyển
+# sang link bằng meta refresh; argv chỉ có đường tệp. Đã khởi tạo → mở http://localhost:<cổng> như thường
+open_ui() {
+  local u="http://localhost:$PORT" rc=0 target
+  admin_window open || rc=$?
+  target="$u"
+  case "$rc" in
+    0) u="$(win_link)"; m win_opened "$u" "$WIN_UNTIL"
+       ( umask 077; printf '<!doctype html><meta charset="utf-8"><meta name="referrer" content="no-referrer"><meta http-equiv="refresh" content="0;url=%s"><title>gen-chibi</title>\n' "$u" > run/open-admin.html ) && chmod 600 run/open-admin.html && target="$HOME_DIR/run/open-admin.html" ;;
+    2) m open_signin "$u" ;;
+  esac
+  host_check quiet
+  (command -v open >/dev/null && open "$target") || (command -v xdg-open >/dev/null && xdg-open "$target") || true
+}
+# genchibi password: đặt / đặt lại mật khẩu chủ (quên mật khẩu: ai vào được máy chủ là chủ — §3.3). Hỏi ẩn hai lần (không có terminal: đọc một dòng stdin).
+# Máy chưa khởi tạo (stage admin / must_init) → đây CHÍNH là khởi tạo (tên đăng nhập mặc định owner — đổi ở Tài khoản chủ), admin / admin đóng vĩnh viễn.
+# --init-stdin (trình cài): stdin = dòng 1 tên đăng nhập, dòng 2 mật khẩu; CHỈ khởi tạo — đã có tài khoản chủ thì không đổi gì (thoát 1).
+# App đang chạy → POST /api/auth/password bằng token chủ (mật khẩu + token đi qua stdin của curl, không vào argv). App dừng → server/auth-cli.js ghi thẳng
+# data/auth.json + data/setup.json (Docker chạy trong container một lần). Không ghi tệp khi app chạy: server đang giữ auth.json trong bộ nhớ sẽ ghi đè lên.
+cfg_esc() { local s="$1"; s="${s//\\/\\\\}"; s="${s//\"/\\\"}"; printf '%s' "$s"; }   # \ và " → thoát (dùng cho chuỗi JSON rồi chuỗi cấu hình curl)
+password_cmd() {
+  local p1="" p2="" r code user="" initst="" extra=""
+  while [ $# -gt 0 ]; do case "$1" in --init-stdin) initst=1 ;; *) m bad_opt "$1" >&2; exit 2 ;; esac; shift; done
+  if [ -n "$initst" ]; then IFS= read -r user || true; IFS= read -r p1 || true
+  elif [ -t 0 ]; then
+    read -r -s -p "$(mn pw_ask)" p1; echo; read -r -s -p "$(mn pw_again)" p2; echo
+    [ "$p1" = "$p2" ] || { m pw_mismatch >&2; exit 1; }
+  else IFS= read -r p1 || true; fi
+  p1="${p1%$'\r'}"; user="$(printf '%s' "${user%$'\r'}" | tr 'A-Z' 'a-z')"
+  if [ -n "$initst" ]; then
+    case "$user" in admin|*[!a-z0-9._-]*) m pw_user_bad >&2; exit 1 ;; esac
+    [ "${#user}" -ge 3 ] && [ "${#user}" -le 32 ] || { m pw_user_bad >&2; exit 1; }
+    extra=",\"login\":\"$user\",\"initOnly\":true"
+  fi
+  case "$p1" in *[[:cntrl:]]*) m pw_ctrl >&2; exit 1 ;; esac
+  [ "${#p1}" -ge 12 ] || { m pw_short >&2; exit 1; }
+  if curl -fsS -m 5 "$URL/api/health" >/dev/null 2>&1; then
+    r="$( { auth_cfg; printf 'data = "%s"\n' "$(cfg_esc "{\"password\":\"$(cfg_esc "$p1")\"$extra}")"; } | curl -sS -K - -X POST -H 'X-GC-Request: 1' -H "X-GC-Lang: $UI" -H 'Content-Type: application/json' -w '\n%{http_code}' "$URL/api/auth/password" 2>&1)" || true
+    p1=""; code="$(printf '%s' "$r" | tail -1)"
+    if [ "$code" = 200 ]; then
+      if [ "$(printf '%s' "$r" | sed -n '1p' | json init)" = true ]; then m pw_init_done "$(printf '%s' "$r" | sed -n '1p' | json login)"; else m pw_done "$(printf '%s' "$r" | sed -n '1p' | json revoked)"; fi
+    elif [ "$code" = 409 ] && [ -n "$initst" ]; then m pw_init_only >&2; exit 1
+    else m pw_fail "$(printf '%s' "$r" | sed -n '1p' | json error)" >&2; exit 1; fi
+  else
+    local in="$p1" fl=""; [ -z "$initst" ] || { in="$user"$'\n'"$p1"; fl="--with-user --init-only"; }
+    if [ "$MODE" = docker ]; then r="$(printf '%s\n' "$in" | compose run --rm -T --no-deps app node /install/current/server/auth-cli.js password "$UI" $fl 2>&1)" || { m pw_fail "$r" >&2; exit 1; }
+    else r="$(printf '%s\n' "$in" | GC_HOME="$HOME_DIR" node "$HOME_DIR/current/server/auth-cli.js" password "$UI" $fl 2>&1)" || { m pw_fail "$r" >&2; exit 1; }; fi
+    in=""; p1=""
+    case "$r" in *" init") m pw_init_done_off "$(printf '%s' "$r" | awk '{ print $3 }')" ;; *) m pw_done_off ;; esac
+  fi
+}
+# genchibi setup [skip [lý do] | reset | hint]: thiết lập lần đầu trên MÁY CHỦ (token chủ — Studio không làm được skip / reset). hint = dòng "bước tiếp" cuối của trình cài
+# mã lý do admin / admin (server/setup.js adminReasons) → câu ngắn
+rs_text() {
+  case "$1" in
+    stage) mn rs_stage ;; window) mn rs_window ;; window-perms) mn rs_window_perms ;; online) mn rs_online ;; legacy-env) mn rs_legacy_env ;;
+    edge) mn rs_edge ;; tunnel) mn rs_tunnel ;; docker-publish) mn rs_docker_publish ;; bind) mn rs_bind ;; *) printf '%s' "$1" ;;
+  esac
+}
+setup_status() {
+  oapi GET /api/setup
+  [ "$OCODE" = 200 ] || { online_err; return 1; }
+  local st c; st="$(jv stage)"; c="$(jv skipped.reason)"
+  m setup_stage "$st" "${c:+ (skip: $c)}"
+  if [ "$st" = admin ]; then
+    if [ -z "$(jv admin.reasons.0)" ]; then m setup_admin_ok "$(win_until)" "$(win_link)"; else m setup_admin_no "$(rs_text "$(jv admin.reasons.0)")"; fi
+  fi
+  case "$(jv mcp.selfTest.ok)" in true) m setup_selftest "$(mn setup_w_ok)" "$(jv mcp.selfTest.at)" ;; false) m setup_selftest "$(mn setup_w_fail)" "$(jv mcp.selfTest.at)" ;; *) m setup_selftest "$(mn setup_w_none)" "-" ;; esac
+  [ -z "$(jv mcp.lastClient.name)" ] || m setup_client "$(jv mcp.lastClient.name)" "$(jv mcp.lastClient.channel)" "$(jv mcp.lastClient.at)"
+  return 0
+}
+setup_hint() {
+  local u="http://localhost:$PORT" st pub who=""
+  oapi GET /api/setup; [ "$OCODE" = 200 ] || return 0
+  st="$(jv stage)"; pub="$(jv online.publicUrl)"
+  case "$st" in
+    admin)
+      if [ -z "$(jv admin.reasons.0)" ]; then m hint_ssh "$PORT" "$PORT"; m hint_admin "$(win_link)" "$(win_until)"
+      else m hint_noadmin "$(rs_text "$(jv admin.reasons.0)")" "$PORT"; fi ;;
+    must_init) m hint_noadmin "$(mn rs_stage)" "$PORT" ;;
+    *) oapi GET /api/info; who="$(jv auth.user.login)"
+       if [ "$st" = done ]; then m hint_ready "${pub:-$u}" "${who:-owner}"; else m hint_wizard "${pub:-$u}" "${who:-owner}"; fi ;;
+  esac
+  return 0
+}
+# MCP-04 (CNS-269): kiểm ĐÚNG lệnh owner dán cho agent — chạy thật "<đường tuyệt đối> mcp" trên MÁY CHỦ (Docker: compose exec; native: node), initialize +
+# tools/list qua stdio, rồi gửi kết quả (token chủ) lên app: wizard hiện dòng MCP-04. Ghi run/cli-path (đường tuyệt đối) để thẻ nối agent dùng.
+# $1 = quiet (start / open: một dòng, không bao giờ làm lệnh gọi thất bại) · rỗng (genchibi setup check: in chi tiết, thoát 1 khi lỗi)
+cli_path_save() { mkdir -p run 2>/dev/null && chmod 700 run 2>/dev/null; ( umask 077; printf '%s\n' "$CLI_SELF" > run/cli-path.tmp ) 2>/dev/null && mv -f run/cli-path.tmp run/cli-path 2>/dev/null; own_fix run 2>/dev/null || true; return 0; }
+host_check() {
+  local q="${1:-}" out errf n=0 ok=false err="" line body i=0
+  cli_path_save
+  if [ -n "$q" ]; then   # start / open: chỉ khi thiết lập lần đầu chưa xong, và đợi app trả lời (vừa khởi động) — không trả lời thì bỏ qua (không ghi kết quả sai)
+    [ "$(setup_stage)" != done ] || return 0
+    until curl -fsS -m 2 "$URL/api/health" >/dev/null 2>&1; do i=$((i + 1)); [ "$i" -lt "${GC_HOSTCHECK_WAIT:-20}" ] || return 0; sleep 0.5; done
+  fi
+  errf="$(mktemp "${TMPDIR:-/tmp}/gc-hc-XXXXXX")" || return 0
+  out="$(printf '%s\n%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"gen-chibi-selftest","version":"host"}}}' '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+    | "$CLI_SELF" mcp 2>"$errf")" || true
+  line="$(printf '%s\n' "$out" | grep '"id":2' | head -1)" || true
+  n="$(printf '%s' "$line" | grep -o '"inputSchema"' | wc -l | tr -d ' ')" || true
+  if [ "${n:-0}" -gt 0 ] && printf '%s\n' "$out" | grep -q '"id":1.*"protocolVersion"'; then ok=true
+  else err="$(tail -n 1 "$errf" 2>/dev/null | tr -d '"\\' | tr -cd '[:print:]' | cut -c1-200)"; [ -n "$err" ] || err="no tools/list reply"; fi
+  rm -f "$errf"
+  body="$(printf '{"ok":%s,"tools":%s,"cmd":"%s","error":"%s"}' "$ok" "${n:-0}" "$(cfg_esc "$CLI_SELF")" "$err")"
+  oapi POST /api/setup/hostcheck "$body"
+  if [ "$ok" = true ]; then m hc_ok "$CLI_SELF" "$n"; else m hc_fail "$CLI_SELF" "$err" >&2; fi
+  [ "$OCODE" = 200 ] || [ -n "$q" ] || m hc_nopost >&2
+  [ -n "$q" ] || [ "$ok" = true ]
+}
+setup_cmd() {
+  local sub="${1:-}" reason
+  [ $# -eq 0 ] || shift
+  case "$sub" in
+    ""|status) setup_status ;;
+    skip)
+      reason="$(printf '%s' "$*" | tr -d '"\\' | tr -cd '[:print:]' | cut -c1-200)"
+      opost /api/setup/skip "{\"reason\":\"$reason\"}"
+      case "$OCODE" in 2??) m setup_skipped ;; *) online_err; return 1 ;; esac ;;
+    reset)
+      opost /api/setup/reset '{}'
+      case "$OCODE" in 2??) m setup_reset "$(jv stage)" ;; *) online_err; return 1 ;; esac ;;
+    hint) setup_hint ;;
+    check) host_check ;;
+    -h|--help|help) m setup_help ;;
+    *) m bad_opt "$sub" >&2; m setup_help >&2; return 2 ;;
+  esac
+}
+
+sync_compose() {
+  # chép tệp compose + Caddyfile gốc của bản đang chạy. KHÔNG đụng docker-compose.override.yml (của chủ),
+  # edge/conf/Caddyfile (bản sống) và edge/conf/sites.caddy (app sinh).
+  [ "$MODE" = docker ] || return 0
+  local f
+  for f in docker-compose.yml docker-compose.edge.yml; do
+    [ -f "current/$f" ] && ! cmp -s "current/$f" "$f" && cp "current/$f" "$f"
+  done
+  if [ -f current/edge/Caddyfile.base ] && ! cmp -s current/edge/Caddyfile.base edge/Caddyfile.base; then mkdir -p edge && cp current/edge/Caddyfile.base edge/Caddyfile.base; fi
+  return 0
+}
+edge_prepare() {
+  # chỉ khi đã bật edge Caddy: tạo trước các thư mục Caddy mount (edge/conf chỉ đọc, edge/run, caddy-data, caddy-config) bằng user này
+  # (Docker tự tạo sẽ mang chủ root → Caddy / app không ghi được), Caddyfile sống từ bản gốc nếu chưa có, sites.caddy rỗng nếu chưa có
+  # (Caddy dừng khi tệp import không tồn tại). Không ghi đè tệp nào đã có. Caddy KHÔNG thấy phần còn lại của edge/ hay run/ (tunnel token).
+  [ -f "$EDGE_MARK" ] || return 0
+  mkdir -p edge/conf edge/run edge/caddy-data edge/caddy-config && chmod 700 edge/conf edge/run
+  [ -f edge/conf/Caddyfile ] || { [ -f edge/Caddyfile.base ] && cp edge/Caddyfile.base edge/conf/Caddyfile; }
+  [ -f edge/conf/sites.caddy ] || : > edge/conf/sites.caddy
+  own_fix edge
+  return 0
+}
+port_busy() { # port_busy <cổng> → 0 khi có tiến trình đang nghe trên máy này
+  # ss thấy cả tiến trình chỉ nghe trên IP công khai; không có ss (macOS) / ss lỗi → thử nối 127.0.0.1 bằng /dev/tcp (bash 3.2 có).
+  # Đếm dòng bằng wc (đọc hết) — không dùng grep -q sau ống: pipefail + SIGPIPE làm kết quả sai.
+  local n=0
+  if command -v ss >/dev/null 2>&1; then n="$(ss -ltn "sport = :$1" 2>/dev/null | wc -l | tr -d ' ')"; fi
+  if [ "${n:-0}" -ge 1 ]; then [ "$n" -gt 1 ]; return; fi
+  (echo > "/dev/tcp/127.0.0.1/$1") 2>/dev/null
+}
+online_caddy() { # online_caddy [flow] — flow: gọi từ `genchibi online caddy <tên-miền>` (không bảo "làm tiếp ở Studio")
+  [ "$MODE" = docker ] || { m caddy_native >&2; exit 1; }
+  sync_compose
+  { [ -f docker-compose.edge.yml ] && [ -f edge/Caddyfile.base ]; } || { m caddy_old >&2; exit 1; }
+  if [ -f "$EDGE_MARK" ]; then m caddy_already
+  else
+    local busy=""
+    port_busy 80 && busy="80"
+    port_busy 443 && busy="${busy:+$busy, }443"
+    [ -z "$busy" ] || { m caddy_busy "$busy" >&2; exit 1; }
+    mkdir -p edge && : > "$EDGE_MARK"
+  fi
+  edge_prepare
+  compose up -d --quiet-pull 2>&1 | grep -vE "Creating|Created|Starting|Network|Container .* (Running|Waiting)" || true
+  if [ "${1:-}" = flow ]; then m caddy_on_flow; else m caddy_on; fi
+}
+online_caddy_off() {
+  [ "$MODE" = docker ] || { m caddy_native >&2; exit 1; }
+  [ -f "$EDGE_MARK" ] || { m caddy_not_on; return 0; }
+  compose rm -sf gen-chibi-edge >/dev/null 2>&1 || true   # dấu còn → compose còn tệp edge, gỡ đúng container của nó
+  rm -f "$EDGE_MARK"
+  m caddy_off "$HOME_DIR"
+}
+# ---------------------------------------------------------------- genchibi online: Go online từ dòng lệnh (v0.21 §2) — CÙNG API /api/online/* với Studio
+# Mọi lời gọi mang token chủ qua stdin của curl (-K -); thân lệnh (kể cả API token Cloudflare) cũng đi qua stdin (dòng `data = "…"` của cấu hình curl),
+# không bao giờ nằm trong argv / biến môi trường của tiến trình con / log. JSON đọc bằng awk thuần (máy Docker có thể không có node / jq).
+# Mã thoát: 0 xong · 1 lỗi / dừng ở một bậc (kể cả chưa khởi tạo owner — v0.23 bỏ mã 3 "chờ mật khẩu") · 2 sai cách dùng.
+NL='
+'
+tty_ok() { { : < /dev/tty; } 2>/dev/null; }   # có người ngồi trước terminal (kể cả curl | bash); setsid / CI thì không
+ask_yn() { # ask_yn "câu hỏi" → 0 khi trả lời có (y / c / yes / có); không terminal → không
+  local a=""; tty_ok || return 1
+  read -r -p "$1" a < /dev/tty || return 1
+  case "$a" in y|Y|yes|YES|Yes|c|C|co|có|Có) return 0 ;; *) return 1 ;; esac
+}
+jflat() { # JSON (stdin) → mỗi giá trị một dòng "đường<TAB>giá trị" (vd flow.steps.0.id), chuỗi đã bỏ thoát; \n trong chuỗi → \036, \t / \r → khoảng trắng
+  awk '
+  function ws() { while (i <= n) { c = substr(s, i, 1); if (c == " " || c == "\t" || c == "\n" || c == "\r") i++; else break } }
+  function str(   r, ch, e) {
+    i++; r = ""
+    while (i <= n) {
+      ch = substr(s, i, 1)
+      if (ch == "\"") { i++; return r }
+      if (ch == "\\") {
+        e = substr(s, i + 1, 1); i += 2
+        if (e == "u") { i += 4; r = r "?" } else if (e == "n") r = r "\036"; else if (e == "t" || e == "r" || e == "b" || e == "f") r = r " "; else r = r e
+        continue
+      }
+      if (match(substr(s, i, 512), /^[^"\\]+/)) { r = r substr(s, i, RLENGTH); i += RLENGTH } else { r = r ch; i++ }
+    }
+    bad = 1; return r
+  }
+  function val(p,   ch, k, idx) {
+    ws(); if (i > n) { bad = 1; return }
+    ch = substr(s, i, 1)
+    if (ch == "{") {
+      i++; ws()
+      if (substr(s, i, 1) == "}") { i++; print p "\t{}"; return }
+      while (i <= n) {
+        ws(); if (substr(s, i, 1) != "\"") { bad = 1; return }
+        k = str(); ws(); if (substr(s, i, 1) != ":") { bad = 1; return }
+        i++; val(p == "" ? k : p "." k); if (bad) return
+        ws(); ch = substr(s, i, 1); i++
+        if (ch == "}") return
+        if (ch != ",") { bad = 1; return }
+      }
+      bad = 1; return
+    }
+    if (ch == "[") {
+      i++; ws()
+      if (substr(s, i, 1) == "]") { i++; print p "\t[]"; return }
+      for (idx = 0; i <= n; idx++) {
+        val(p == "" ? idx : p "." idx); if (bad) return
+        ws(); ch = substr(s, i, 1); i++
+        if (ch == "]") return
+        if (ch != ",") { bad = 1; return }
+      }
+      bad = 1; return
+    }
+    if (ch == "\"") { k = str(); print p "\t" k; return }
+    if (match(substr(s, i, 64), /^[-+0-9.eEa-z]+/)) { print p "\t" substr(s, i, RLENGTH); i += RLENGTH; return }
+    bad = 1
+  }
+  { s = s $0 "\n" }
+  END { n = length(s); i = 1; bad = 0; val(""); if (bad) exit 1 }'
+}
+J=""   # bảng phẳng của phản hồi gần nhất
+jv() { printf '%s\n' "$J" | awk -F '\t' -v k="$1" '$1 == k { sub(/^[^\t]*\t/, ""); gsub(/\036/, " "); if ($0 != "null") print; exit }'; }   # null → rỗng
+jv_raw() { printf '%s\n' "$J" | awk -F '\t' -v k="$1" '$1 == k { sub(/^[^\t]*\t/, ""); gsub(/\036/, "\n"); print; exit }'; }   # giữ xuống dòng (đoạn cấu hình proxy)
+jsteps() { # các bậc của luồng: mỗi dòng "id<TAB>state<TAB>detail<TAB>fix<TAB>manual"
+  printf '%s\n' "$J" | awk -F '\t' '
+    match($1, /^flow\.steps\.[0-9]+\./) { k = substr($1, RSTART, RLENGTH); f = substr($1, RLENGTH + 1); v = $0; sub(/^[^\t]*\t/, "", v); gsub(/\036/, " ", v)
+      if (!(k in seen)) { seen[k] = 1; order[++n] = k } a[k, f] = v }
+    END { for (j = 1; j <= n; j++) { k = order[j]; d = a[k, "detail"]; x = a[k, "fix"]; if (d == "null") d = ""; if (x == "null") x = ""
+      print a[k, "id"] "\t" a[k, "state"] "\t" d "\t" x "\t" a[k, "manual"] } }'
+}
+OCODE=""; OBODY=""
+oapi() { # oapi PHƯƠNG_THỨC ĐƯỜNG [JSON] → OCODE (000 = app không trả lời), OBODY, J. Token chủ + thân lệnh đi qua stdin của curl (-K -)
+  local r
+  r="$( { auth_cfg; if [ -n "${3:-}" ]; then printf 'data = "%s"\n' "$(cfg_esc "$3")"; fi; } | curl -sS -m 30 -K - -X "$1" -H 'X-GC-Request: 1' -H "X-GC-Lang: $UI" -H 'Content-Type: application/json' -w '\n%{http_code}' "$URL$2" 2>/dev/null)" || true
+  OCODE="$(printf '%s\n' "$r" | tail -n 1)"; OBODY="$(printf '%s\n' "$r" | sed '$d')"
+  case "$OCODE" in [1-5][0-9][0-9]) ;; *) OCODE=000 ;; esac
+  J="$(printf '%s\n' "$OBODY" | jflat 2>/dev/null)" || J=""
+}
+opost() { # opost ĐƯỜNG [JSON] — 429 (trần tần suất của app) → đợi rồi gửi lại, tối đa 5 lần
+  local n=0 b="${2:-}"; [ -n "$b" ] || b='{}'
+  while :; do
+    oapi POST "$1" "$b"
+    [ "$OCODE" = 429 ] && [ $n -lt 5 ] || return 0
+    n=$((n + 1)); sleep "${GC_ONLINE_RETRY:-3}"
+  done
+}
+online_err() { # in lỗi của phản hồi gần nhất (đã theo ngôn ngữ CLI) → luôn trả 1
+  case "$OCODE" in
+    000) m on_down "$URL" >&2 ;;
+    401|403) m on_auth "$OCODE" "$HOME_DIR" >&2 ;;
+    *) m on_err "$(jv error)" "$OCODE" >&2 ;;
+  esac
+  return 1
+}
+sname() { # tên hiển thị của một bậc
+  case "$1" in
+    domain) mn sn_domain ;; edge) mn sn_edge ;; port) mn sn_port ;; cert) mn sn_cert ;; public) mn sn_public ;; mcp) mn sn_mcp ;;
+    owner) mn sn_owner ;; token) mn sn_token ;; zone) mn sn_zone ;; tunnel) mn sn_tunnel ;; waf) mn sn_waf ;; config) mn sn_config ;; local) mn sn_local ;; remote) mn sn_remote ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+srow() { # srow "id<TAB>state<TAB>detail<TAB>fix…" — một hàng của bảng bậc (✓ / ✗ / … / ·), cách sửa dưới hàng ✗
+  local id st det fix sym rest
+  id="${1%%	*}"; rest="${1#*	}"; st="${rest%%	*}"; rest="${rest#*	}"; det="${rest%%	*}"; rest="${rest#*	}"; fix="${rest%%	*}"
+  case "$st" in ok) sym="✓" ;; fail) sym="✗" ;; running) sym="…" ;; *) sym="·" ;; esac
+  printf '  %s %-24s %s\n' "$sym" "$(sname "$id")" "$det"
+  if [ "$st" = fail ] && [ -n "$fix" ]; then m on_fix "$fix"; fi
+}
+FIRST_ID=""; FIRST_ST=""; FIRST_MANUAL=""
+first_open() { # bậc làm luồng dừng (J) → FIRST_*: bậc ✗ đầu tiên; không có thì bậc đang chờ (…); không có nữa thì bậc chưa chạy (·) đầu tiên
+  # (bậc "·" đứng TRƯỚC bậc ✗ là bậc đã trả về chờ chạy lại — vd publicUrl tạm bị trả về — không phải chỗ dừng)
+  local l rest st pf="" pr="" pp=""
+  FIRST_ID=""; FIRST_ST=""; FIRST_MANUAL=""
+  while IFS= read -r l; do
+    [ -n "$l" ] || continue
+    rest="${l#*	}"; st="${rest%%	*}"
+    case "$st" in ok) ;; fail) [ -n "$pf" ] || pf="$l" ;; running) [ -n "$pr" ] || pr="$l" ;; *) [ -n "$pp" ] || pp="$l" ;; esac
+  done <<EOF
+$(jsteps)
+EOF
+  l="${pf:-${pr:-$pp}}"; [ -n "$l" ] || return 0
+  rest="${l#*	}"; FIRST_ID="${l%%	*}"; FIRST_ST="${rest%%	*}"; FIRST_MANUAL="${l##*	}"
+  return 0
+}
+# online_follow — theo dõi luồng vừa gửi: hỏi GET /api/online, in mỗi thay đổi của từng bậc. Bậc đang chờ (chứng chỉ, connector…) khi app đã trả lời xong
+# → gửi "Kiểm lại" (POST /recheck) tới khi xong hoặc hết GC_ONLINE_TIMEOUT giây (mặc định 900).
+# Trả: 0 xong · 1 lỗi · 3 chờ mật khẩu chủ · 4 CNAME có sẵn cần xác nhận · 5 WAF phải làm tay · 6 token thấy nhiều tên miền (chọn)
+online_follow() {
+  local shown="$NL" l key end idle=0
+  FIRST_ID=""
+  end=$(( $(date +%s) + ${GC_ONLINE_TIMEOUT:-900} ))
+  while :; do
+    oapi GET /api/online
+    [ "$OCODE" = 200 ] || { online_err; return 1; }
+    while IFS= read -r l; do
+      [ -n "$l" ] || continue
+      key="$(printf '%s' "$l" | cut -f1-3)"
+      case "$shown" in *"$NL$key$NL"*) ;; *) shown="$shown$key$NL"; srow "$l" ;; esac
+    done <<EOF
+$(jsteps)
+EOF
+    if [ "$(jv busy)" = true ]; then sleep "${GC_ONLINE_POLL:-2}"; continue; fi
+    [ "$(jv flow.done)" = true ] && return 0
+    if [ "$(jv flow.needs)" = urlChange ]; then   # mọi bậc ✓, chính thức hoá địa chỉ mới sẽ gỡ kết nối agent cũ (luồng không biết địa chỉ lúc bắt đầu) → hỏi như lúc bắt đầu
+      local from; from="$(jv publicUrl)"
+      m on_url_change "${from:--}" "$(jv flow.url)" "$(jv flow.revokes)"
+      if [ -n "$YES" ] || ask_yn "$(mn on_url_ask)"; then
+        opost /api/online/recheck '{"confirmUrlChange":true}'
+        case "$OCODE" in 2??) continue ;; *) online_err; return 1 ;; esac
+      fi
+      m on_url_stop >&2; return 1
+    fi
+    first_open
+    case "$FIRST_ST" in
+      fail)
+        [ "$(jv flow.needs)" = confirm ] && return 4
+        [ "$FIRST_ID" = waf ] && [ "$FIRST_MANUAL" = true ] && return 5
+        [ "$FIRST_ID" = token ] && [ -n "$(jv flow.choices.0)" ] && return 6
+        return 1 ;;
+      running) ;;
+      *) # không bậc nào ✗ / đang chờ mà luồng chưa xong (bất thường): kiểm lại một lần, không lặp (trần tần suất của app)
+        idle=$((idle + 1)); [ "$idle" -le 1 ] || { m on_failed "$(sname "${FIRST_ID:-?}")" >&2; FIRST_ID=""; return 1; } ;;
+    esac
+    [ "$(date +%s)" -lt "$end" ] || { m on_timeout "$(( ${GC_ONLINE_TIMEOUT:-900} / 60 ))" >&2; return 1; }
+    sleep "${GC_ONLINE_RETRY:-3}"
+    opost /api/online/recheck '{}'
+    case "$OCODE" in 2??) ;; *) online_err; return 1 ;; esac
+  done
+}
+YES=""; OVERWRITE=""; TOKSTDIN=""; WAFDONE=""; CFSUB=""
+online_send() { # online_send ĐƯỜNG "khoá":giá-trị,… — bắt đầu một luồng; 409 needs=urlChange → hỏi (có terminal) / --yes; needs=legacy → hướng dẫn di chuyển
+  local inner="$2" sep=""
+  [ -z "$inner" ] || sep=","
+  opost "$1" "{$inner}"
+  if [ "$OCODE" = 409 ] && [ "$(jv needs)" = urlChange ]; then
+    local to; to="$(jv to)"; case "$to" in ''|null) to="$(mn on_w_new)" ;; esac
+    m on_url_change "$(jv from)" "$to" "$(jv revokes)"
+    if [ -n "$YES" ] || ask_yn "$(mn on_url_ask)"; then opost "$1" "{$inner$sep\"confirmUrlChange\":true}"
+    else m on_url_stop >&2; return 1; fi
+  fi
+  if [ "$OCODE" = 409 ] && [ "$(jv needs)" = legacy ]; then m on_legacy >&2; return 1; fi
+  if [ "$OCODE" = 409 ] && [ "$(jv needs)" = owner ]; then m on_need_owner >&2; return 1; fi   # v0.23: chưa khởi tạo owner → không lên mạng
+  case "$OCODE" in 2??) return 0 ;; *) online_err; return 1 ;; esac
+}
+online_done() { # in kết quả sau khi luồng xong; $1 = mã của online_follow → mã thoát
+  local rc="$1" u
+  u="$(jv flow.url)"; [ -n "$u" ] || u="$(jv publicUrl)"
+  case "$rc" in
+    0)
+      if [ "$(jv flow.mode)" = off ]; then m on_off_done; [ -f "$EDGE_MARK" ] && m on_off_caddy; return 0; fi
+      m on_done "$u"; m on_done_studio "$u"; m on_done_mcp "$u"; return 0 ;;
+    1) [ -z "$FIRST_ID" ] || m on_failed "$(sname "$FIRST_ID")" >&2 ;;
+  esac
+  return "$rc"
+}
+cf_token() { # API token Cloudflare → CFTOK (biến shell, không export): --token-stdin · GC_CF_TOKEN (rồi xoá khỏi môi trường) · hỏi ẩn trên terminal
+  CFTOK=""
+  if [ -n "$TOKSTDIN" ]; then IFS= read -r CFTOK || true
+  elif [ -n "${GC_CF_TOKEN:-}" ]; then CFTOK="$GC_CF_TOKEN"
+  elif tty_ok; then
+    oapi GET /api/online; [ -z "$(jv cloudflare.tokenLink)" ] || m cf_tok_link "$(jv cloudflare.tokenLink)"
+    read -r -s -p "$(mn cf_tok_ask)" CFTOK < /dev/tty || true; printf '\n' >&2
+  fi
+  unset GC_CF_TOKEN   # tiến trình con (curl, awk…) không thừa hưởng
+  CFTOK="${CFTOK%$'\r'}"
+  [ -n "$CFTOK" ] || { m cf_tok_none >&2; return 1; }
+  case "$CFTOK" in *[!A-Za-z0-9_.-]*) m cf_tok_bad >&2; CFTOK=""; return 1 ;; esac
+  [ "${#CFTOK}" -ge 20 ] || { m cf_tok_bad >&2; CFTOK=""; return 1; }
+}
+online_status() {
+  oapi GET /api/online
+  [ "$OCODE" = 200 ] || { online_err; return 1; }
+  local md dom u pend fm
+  md="$(jv mode)"; dom="$(jv domain)"; u="$(jv publicUrl)"; pend="$(jv publicUrlPending)"
+  m on_title "$md" "${dom:+ · $dom}"
+  if [ -n "$u" ]; then m on_url "$u"; else m on_url_none; fi
+  [ -z "$pend" ] || m on_url_pending "$pend"
+  [ "$(jv flow.waitingOwner)" != true ] || m on_wait_owner "$pend"
+  fm="$(jv flow.mode)"
+  if [ -n "$fm" ]; then
+    if [ "$(jv busy)" = true ]; then m on_flow "$fm" "$(mn on_w_busy)"
+    elif [ "$(jv flow.done)" = true ]; then m on_flow "$fm" "$(mn on_w_done) $(jv flow.doneAt)"
+    else m on_flow "$fm" "$(mn on_w_stopped)"; fi
+    while IFS= read -r l; do [ -z "$l" ] || srow "$l"; done <<EOF
+$(jsteps)
+EOF
+  fi
+  local cad tun es=""
+  if [ "$(jv edge.caddyEnabled)" = true ]; then cad="$(mn on_w_on)"; else cad="$(mn on_w_off)"; fi
+  tun="$(jv edge.intent)"
+  if [ -n "$(jv edge.status.tunnel)" ] && [ "$tun" != off ]; then
+    if [ -n "$(jv edge.status.error)" ]; then es=" · $(jv edge.status.error)"
+    elif [ "$(jv edge.status.ready)" = true ]; then es=" · $(mn on_w_ready)"
+    elif [ "$(jv edge.status.running)" = true ]; then es=" · $(mn on_w_starting)"; fi
+  fi
+  m on_edge "$cad" "${tun:-off}" "$es"
+  [ "$(jv legacy.active)" = true ] && m on_legacy_note
+  m on_hint
+  return 0
+}
+online_go_caddy() { # genchibi online caddy <tên-miền>: bật edge Caddy nếu chưa (kiểm cổng 80/443, bật container) → POST /api/online/caddy → theo dõi
+  local d="$1"
+  [ "$MODE" = docker ] || { m caddy_native >&2; return 1; }
+  valid_host "$d" || { m bad_domain "$d" >&2; return 2; }
+  online_caddy flow
+  local i; for i in $(seq 1 "${GC_EDGE_WAIT:-60}"); do [ -S edge/run/caddy-admin.sock ] && break; [ "$i" = 1 ] && m on_wait_caddy; sleep 1; done
+  [ -S edge/run/caddy-admin.sock ] || { m on_caddy_nostart >&2; return 1; }
+  m on_start "caddy" "$d"
+  online_send /api/online/caddy "\"domain\":\"$d\"" || return 1
+  online_follow && a=0 || a=$?; online_done "$a"
+}
+online_go_cloudflare() { # genchibi online cloudflare [<tên-miền> | <tên-con.tên-miền>] [--sub tên] [--overwrite-dns] [--token-stdin] [--yes]
+  local d="${1:-}" zone="" sub="" alt="" rc
+  if [ -n "$d" ]; then
+    valid_host "$d" || { m bad_domain "$d" >&2; return 2; }
+    if [ -n "$CFSUB" ]; then zone="$d"; sub="$CFSUB"
+    elif [[ "${d#*.}" == *.* ]]; then zone="${d#*.}"; sub="${d%%.*}"; alt="$d"   # chibi.example.com → zone example.com, tên con chibi (không thấy zone đó → thử cả tên là zone)
+    else zone="$d"; sub="chibi"; fi
+  fi
+  cf_token || return 1
+  m on_start "cloudflare" "${sub:+$sub.}${zone:-?}"
+  while :; do
+    online_send /api/online/cloudflare "\"token\":\"$CFTOK\"${zone:+,\"zone\":\"$zone\"}${sub:+,\"sub\":\"$sub\"}" || return 1
+    online_follow && rc=0 || rc=$?
+    case "$rc" in
+      4) # CNAME / bản ghi có sẵn: không tự đè
+        if [ -n "$OVERWRITE" ] || ask_yn "$(mn cf_cname_ask)"; then
+          opost /api/online/cloudflare/confirm '{"overwriteCname":true}'
+          case "$OCODE" in 2??) ;; *) online_err; return 1 ;; esac
+          online_follow && rc=0 || rc=$?
+        else m cf_cname_stop "$zone" >&2; return 1; fi ;;
+      6) # token thấy nhiều tên miền, chưa chọn
+        local i=0 c pick=""
+        m cf_choices
+        while c="$(jv "flow.choices.$i")"; [ -n "$c" ]; do i=$((i + 1)); m cf_choice_row "$i" "$c"; done
+        if tty_ok; then read -r -p "$(mn cf_choice_ask)" pick < /dev/tty || pick=""; fi
+        case "$pick" in ''|*[!0-9]*) m cf_choice_stop >&2; return 1 ;; esac
+        zone="$(jv "flow.choices.$((pick - 1))")"; [ -n "$zone" ] || { m cf_choice_stop >&2; return 1; }
+        sub="${CFSUB:-chibi}"; YES=1; sleep 2; continue ;;
+      1)
+        if [ -n "$alt" ] && [ "$FIRST_ID" = token ]; then zone="$alt"; sub="${CFSUB:-chibi}"; alt=""; m cf_retry_zone "$zone" "$sub"; YES=1; sleep 2; continue; fi ;;
+    esac
+    break
+  done
+  [ "$rc" != 5 ] || { online_waf && rc=0 || rc=$?; }
+  CFTOK=""
+  online_done "$rc"
+}
+online_waf() { # WAF phải làm tay (token không có quyền WAF): cách sửa (biểu thức luật) đã in ở hàng ✗; có terminal → hỏi "đã làm chưa" rồi Kiểm lại
+  local rc
+  while :; do
+    if [ -n "$WAFDONE" ] || ask_yn "$(mn cf_waf_ask)"; then
+      WAFDONE=""
+      opost /api/online/recheck '{"confirmManual":"waf"}'
+      case "$OCODE" in 2??) ;; *) online_err; return 1 ;; esac
+      online_follow && rc=0 || rc=$?
+      [ "$rc" = 5 ] && continue
+      return "$rc"
+    fi
+    m cf_waf_stop >&2; return 1
+  done
+}
+online_go_proxy() {
+  local d="$1"
+  valid_host "$d" || { m bad_domain "$d" >&2; return 2; }
+  m on_start "proxy" "$d"
+  online_send /api/online/proxy "\"domain\":\"$d\"" || return 1
+  if [ -n "$(jv snippets.caddy)" ]; then
+    m on_proxy_snip; printf '\n# Caddy\n%s\n\n# nginx\n%s\n\n' "$(jv_raw snippets.caddy)" "$(jv_raw snippets.nginx)"
+  fi
+  online_follow && a=0 || a=$?; online_done "$a"
+}
+valid_host() { [[ "$1" =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,63}$ ]] && [ "${#1}" -le 253 ]; }
+online_usage() { m on_help; }
+online_cmd() {
+  local sub="${1:-}" pos="" a
+  [ $# -eq 0 ] || shift
+  case "$sub" in
+    --caddy) online_caddy; return ;;
+    --caddy-off) online_caddy_off; return ;;
+    -h|--help|help) online_usage; return 0 ;;
+    ""|status) online_status; return ;;
+  esac
+  while [ $# -gt 0 ]; do
+    a="$1"; shift
+    case "$a" in
+      --yes|-y) YES=1 ;;
+      --overwrite-dns) OVERWRITE=1 ;;
+      --token-stdin) TOKSTDIN=1 ;;
+      --waf-done) WAFDONE=1 ;;
+      --sub) CFSUB="${1:-}"; [ $# -eq 0 ] || shift
+        [[ "$CFSUB" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]] || { m bad_opt "--sub $CFSUB" >&2; return 2; } ;;
+      --token|--token=*|--api-token|--api-token=*) m cf_tok_argv >&2; return 2 ;;
+      -*) m bad_opt "$a" >&2; online_usage >&2; return 2 ;;
+      *) if [ -z "$pos" ]; then pos="$a"
+         elif [[ "$a" =~ ^[A-Za-z0-9_.-]{20,}$ ]]; then m cf_tok_argv >&2; return 2   # trông như token: từ chối, không dùng
+         else m bad_opt "$a" >&2; return 2; fi ;;
+    esac
+  done
+  case "$sub" in
+    caddy) [ -n "$pos" ] || { online_usage >&2; return 2; }; online_go_caddy "$pos" ;;
+    cloudflare|cf) online_go_cloudflare "$pos" ;;
+    proxy) [ -n "$pos" ] || { online_usage >&2; return 2; }; online_go_proxy "$pos" ;;
+    quick)
+      [ -z "$pos" ] || { m bad_opt "$pos" >&2; return 2; }
+      m on_start "quick" "*.trycloudflare.com"
+      online_send /api/online/quick "" || return 1
+      online_follow && a=0 || a=$?; online_done "$a" ;;
+    recheck)
+      opost /api/online/recheck "$([ -n "$WAFDONE" ] && printf '{"confirmManual":"waf"}' || printf '{}')"
+      case "$OCODE" in 2??) ;; *) online_err; return 1 ;; esac
+      WAFDONE=""; online_follow && a=0 || a=$?
+      [ "$a" != 5 ] || { online_waf && a=0 || a=$?; }
+      online_done "$a" ;;
+    off)
+      local body='{}'
+      if [ -n "$TOKSTDIN" ] || [ -n "${GC_CF_TOKEN:-}" ]; then cf_token || return 1; body="{\"token\":\"$CFTOK\"}"; fi   # có token → app dọn cả tunnel / DNS / WAF đã tạo ở Cloudflare
+      unset GC_CF_TOKEN
+      opost /api/online/off "$body"; CFTOK=""; body=""
+      case "$OCODE" in 2??) ;; *) online_err; return 1 ;; esac
+      online_follow && a=0 || a=$?; online_done "$a" ;;
+    migrate)
+      opost /api/online/migrate '{}'
+      if [ "$OCODE" = 404 ]; then m on_migrate_old >&2; return 1; fi
+      case "$OCODE" in 2??) m on_migrated
+        # máy còn GC_TUNNEL (genchibi expose ≤ v0.22): cấu hình đã sang Go online → dừng tunnel cũ còn sót, bỏ GC_TUNNEL / profile cũ khỏi .env (hết dòng nhắc)
+        if [ -n "${GC_TUNNEL:-}" ]; then legacy_tunnel_down; set_env GC_TUNNEL ""; GC_TUNNEL=""
+          case "${COMPOSE_PROFILES:-}" in tunnel|quick) set_env COMPOSE_PROFILES ""; COMPOSE_PROFILES="" ;; esac; fi
+        online_status ;;
+        *) online_err; return 1 ;; esac ;;
+    *) m bad_opt "$sub" >&2; online_usage >&2; return 2 ;;
+  esac
+}
+set_env() { # set_env KHOÁ GIÁ_TRỊ — sửa hoặc thêm dòng trong .env. Móc kiểm thử GC_TEST* không bao giờ vào .env (review bảo mật 🟡7): từ chối, và bỏ dòng cũ nếu có
+  local k="$1" v="$2" tmp; touch .env
+  case "$k" in GC_TEST*) return 0 ;; esac
+  tmp="$(mktemp)"
+  awk -v k="$k" -v v="$v" '/^[ \t]*(export[ \t]+)?GC_TEST/ { next } index($0, k "=") == 1 { if (!d) print k "=" v; d = 1; next } { print } END { if (!d) print k "=" v }' .env > "$tmp" && cat "$tmp" > .env
+  rm -f "$tmp"
+  export "$k=$v"
+}
+rand_hex() { openssl rand -hex "$1" 2>/dev/null || node -e "console.log(require('crypto').randomBytes($1).toString('hex'))"; }
+token_cmd() {
+  # genchibi token [giá trị|--clear]: đặt GC_GITHUB_TOKEN (repo private). Không truyền giá trị → hỏi ẩn / đọc stdin,
+  # để token không nằm trong lịch sử shell hay danh sách tiến trình.
+  local t="${1:-}" tmp
+  if [ "$t" = "--clear" ]; then t=""
+  elif [ -z "$t" ]; then
+    if [ -t 0 ]; then read -r -s -p "$(mn tok_ask)" t; echo; else read -r t || true; fi
+    [ -n "$t" ] || { m tok_none >&2; exit 1; }
+  fi
+  case "$t" in *[!A-Za-z0-9_.-]*) m tok_bad >&2; exit 1 ;; esac
+  touch .env; chmod 600 .env; tmp="$(mktemp)"
+  K=GC_GITHUB_TOKEN V="$t" awk 'BEGIN { k = ENVIRON["K"]; v = ENVIRON["V"]; d = 0 }
+    index($0, k "=") == 1 { print k "=" v; d = 1; next } { print } END { if (!d) print k "=" v }' .env > "$tmp" && cat "$tmp" > .env; rm -f "$tmp"
+  export GC_GITHUB_TOKEN="$t"
+  if [ -n "$t" ]; then m tok_set; else m tok_cleared; fi
+  if [ "$MODE" = docker ]; then start; else stop; start; fi
+}
+lang_cmd() {
+  # genchibi lang [en|vi]: không đối số → in ngôn ngữ CLI + mặc định THẬT của Studio (/api/health khi app chạy, không thì data/settings.json).
+  # Có đối số → so với CẢ HAI (không chỉ .env — CNS-153): khác thì ghi GC_LANG vào .env và đổi mặc định của Studio:
+  #   app đang chạy → PUT /api/settings { uiLang, uiLangEnv } (đánh dấu giá trị .env đã áp: lần khởi động sau không áp lại đè lựa chọn Studio về sau);
+  #   app dừng → sửa uiLang / uiLangEnv trong data/settings.json (thiếu khoá thì server tự áp GC_LANG mới ở lần chạy tới).
+  local want="${1:-}" cur real h="" run=""
+  cur="$(sed -n 's/^GC_LANG=//p' .env 2>/dev/null | tail -1)"
+  case "$cur" in en|vi) ;; *) cur="" ;; esac
+  h="$(curl -fsS -m 5 "$URL/api/health" 2>/dev/null || true)"; [ -n "$h" ] && run=1
+  if [ -n "$run" ]; then real="$(printf '%s' "$h" | sed -n 's/.*"uiLang"[[:space:]]*:[[:space:]]*"\([A-Za-z_-]*\)".*/\1/p')"; else real="$(settings_lang)"; fi
+  case "$real" in en|vi) ;; *) real="${cur:-en}" ;; esac
+  if [ -z "$want" ]; then
+    m lang_now "$(lang_name "$UI")" "$UI" "$(lang_name "$real")" "$real"; m lang_hint; return 0
+  fi
+  case "$want" in en|EN|En) want=en ;; vi|VI|Vi) want=vi ;; *) m lang_bad "$want" >&2; exit 1 ;; esac
+  UI="$want"   # từ đây nói bằng ngôn ngữ vừa chọn
+  if [ "$cur" = "$want" ] && [ "$real" = "$want" ]; then m lang_same "$(lang_name "$want")" "$want"; m lang_note; return 0; fi
+  set_env GC_LANG "$want"
+  m lang_set "$(lang_name "$want")" "$want"
+  if [ -n "$run" ]; then
+    # API không nhận (app quá cũ, lỗi mạng…) → khởi động lại: server áp GC_LANG mới khi khởi động
+    if api PUT /api/settings "{\"uiLang\":\"$want\",\"uiLangEnv\":\"$want\"}" >/dev/null 2>&1; then m lang_live "$(lang_name "$want")"; else m lang_restart; apply_env; fi
+  else
+    if [ -f data/settings.json ] && grep -q '"uiLang"[[:space:]]*:' data/settings.json; then
+      local tmp; tmp="$(mktemp)"
+      sed -e "s/\"uiLang\"\([[:space:]]*:[[:space:]]*\)\"[A-Za-z_-]*\"/\"uiLang\"\1\"$want\"/" \
+          -e "s/\"uiLangEnv\"\([[:space:]]*:[[:space:]]*\)\"[A-Za-z_-]*\"/\"uiLangEnv\"\1\"$want\"/" data/settings.json > "$tmp" && cat "$tmp" > data/settings.json
+      rm -f "$tmp"
+    fi
+    m lang_norun
+  fi
+  m lang_note
+}
+apply_env() { # khởi động lại để app nhận khoá/tên miền/ngôn ngữ mới
+  if [ "$MODE" = docker ]; then sync_compose; edge_prepare; compose up -d --quiet-pull 2>&1 | grep -vE "Creating|Created|Starting|Started|Stopping|Stopped|Removing|Removed|Recreate|Network|Container .* (Running|Waiting)" || true
+  else stop >/dev/null; start >/dev/null; fi
+}
+# ---------------------------------------------------------------- genchibi expose / link: ĐÃ BỎ ở v0.23 (bí danh từ v0.21.3; CHANGELOG v0.22.0 báo trước)
+# Không chạy gì: một dòng chỉ lệnh online tương ứng (stderr), thoát 2. Không còn nhánh cũ (expose --off dọn .env, --rotate, link có khoá).
+removed_cmd() {
+  local old="$1" a="${2:-}" new
+  if [ "$old" = link ]; then case "$a" in --check) new="online recheck" ;; *) new="online" ;; esac
+  else case "$a" in --quick) new="online quick" ;; --off) new="online off" ;; ""|-*|help) new="online --help" ;; *) new="online cloudflare $a" ;; esac; fi
+  m removed "$old${a:+ $a}" "$new" >&2
+  exit 2
+}
+# Máy còn GC_TUNNEL trong .env (tunnel do genchibi expose ≤ v0.22 tạo; profiles tunnel / quick đã bỏ khỏi docker-compose.yml): start / update / status
+# in MỘT dòng nhắc genchibi online migrate. Tunnel cũ không còn được chạy; tiến trình / container cũ còn sót thì dừng (start, stop, migrate) —
+# không để thứ mở ra Internet mà genchibi stop không quản được.
+legacy_tunnel_note() { [ -z "${GC_TUNNEL:-}" ] || m gc_tunnel "$GC_TUNNEL" >&2; return 0; }
+legacy_tunnel_down() {
+  local pf="$HOME_DIR/logs/tunnel.pid" p
+  if [ -f "$pf" ]; then
+    p="$(tr -dc 0-9 < "$pf")"
+    if [ -n "$p" ]; then case "$(ps -p "$p" -o command= 2>/dev/null)" in *cloudflared*) kill "$p" 2>/dev/null || true ;; esac; fi   # chỉ đúng cloudflared cũ (pid có thể đã bị dùng lại)
+    rm -f "$pf"
+  fi
+  if [ "$MODE" = docker ] && [ -n "${GC_TUNNEL:-}" ]; then dk rm -f gen-chibi-tunnel gen-chibi-tunnel-quick >/dev/null 2>&1 || true; fi
+  return 0
+}
+
+# genchibi agent …: bootstrap cho agent BẤT KỲ hãng nào (INT-05) — cấu hình nối từng client, hướng dẫn, schema tool, cài skill.
+# Lấy mọi thứ qua HTTP của app (chế độ Docker có thể không có Node trên máy chủ); token không bao giờ in ra màn hình.
+agent_curl() { auth_cfg | curl -fsS -K - ${1+"$@"}; }
+agent_connect() {
+  local u link hdr=""
+  u="$URL/mcp"; link=""   # link có khoá của genchibi expose cũ đã bỏ ở v0.23; Go online dùng OAuth (<địa-chỉ>/mcp)
+  # CNS-136: máy đã lên mạng → địa chỉ OAuth thật (agent tự khám phá, chủ bấm Cấp phép; phạm vi chọn ở trang Cấp phép) — không cần token trong client bên thứ ba
+  local oa=""; oapi GET /api/info; [ "$OCODE" != 200 ] || oa="$(jv mcp.oauth)"
+  # link Internet tự mang khoá (không cần token — đừng dán token toàn quyền vào client bên thứ ba); địa chỉ máy này mới cần token nếu chủ đặt
+  # v0.21: bản cài nào cũng có token chủ (.env hoặc data/owner-token) → địa chỉ máy này luôn cần header; KHÔNG in token, chỉ chỉ chỗ đọc
+  if [ -z "$link" ]; then if [ -n "${GC_API_TOKEN:-}" ]; then hdr="$(m hdr_token "$HOME_DIR")"; else hdr="$(m hdr_token_file "$HOME_DIR")"; fi; fi
+  local jh="" target="${link:-$u}" ch=""; [ -n "$hdr" ] && jh=',"headers":{"Authorization":"Bearer <token>"}' && ch=" -H 'Authorization: Bearer <token>'"
+  local cur_json='{"mcpServers":{"gen-chibi":{"url":"'"$target"'"'"$jh"'}}}' gem_json='{"mcpServers":{"gen-chibi":{"httpUrl":"'"$target"'"'"$jh"'}}}'
+  local cc_hdr=""; [ -n "$hdr" ] && cc_hdr=' --header "Authorization: Bearer <token>"'
+  # CNS-275: MỘT nguồn chữ = agentCards của Studio; CLI chép đúng THỨ TỰ: stdio trên máy này → OAuth qua Internet → (khác) HTTP + token.
+  # CNS-269: lệnh stdio là đường TUYỆT ĐỐI (ứng dụng mở từ Dock / menu không thấy PATH của terminal)
+  local cmd="$CLI_SELF" qcmd jcmd
+  case "$cmd" in *[!A-Za-z0-9_/.~+-]*) qcmd="'${cmd//\'/\'\\\'\'}'" ;; *) qcmd="$cmd" ;; esac
+  jcmd="$(cfg_esc "$cmd")"
+  local std_json='{"mcpServers":{"gen-chibi":{"command":"'"$jcmd"'","args":["mcp"]}}}'
+  if [ "$UI" = vi ]; then cat <<EOF
+Nối agent vào gen-chibi (MCP, giao thức 2025-06-18). Sau khi nối, dặn agent: "gọi start_here trước".
+Cùng thứ tự với Studio › Hệ thống › Kết nối agent: stdio trên máy này → OAuth qua Internet → (khác) HTTP + token.
+
+Địa chỉ
+  stdio          $qcmd mcp   (đường đầy đủ: ứng dụng mở từ Dock / menu không thấy PATH của terminal)
+  Qua Internet   ${oa:-chưa mở — genchibi online --help (OAuth: <địa-chỉ>/mcp)}${oa:+   (OAuth: agent tự đăng ký, bạn bấm Cấp phép; không dán token)}
+  Trên máy này   $u${hdr:+   (header: $hdr)}
+
+Claude Code      claude mcp add -s user gen-chibi -- $qcmd mcp${oa:+
+                 (qua Internet, OAuth)  claude mcp add -s user --transport http gen-chibi $oa}
+                 (hoặc HTTP + token)  claude mcp add -s user --transport http gen-chibi $target$cc_hdr
+Claude app/web   ${oa:+Customize › Connectors › Add custom connector › dán $oa › Connect › trang Cấp phép: chọn mức quyền, bấm Cấp phép}${oa:-cần máy lên mạng trước: genchibi online --help (Studio › Hệ thống › Lên mạng)}
+Mức quyền OAuth  mcp:read (chỉ xem) · mcp:write (tạo và sửa — mặc định) · mcp:owner (toàn quyền chủ máy) — đổi / thu hồi ở Studio › Hệ thống › Kết nối agent
+Cursor           ~/.cursor/mcp.json   $std_json
+                 (hoặc HTTP + token)  $cur_json
+Gemini CLI       ~/.gemini/settings.json   $std_json
+                 (hoặc HTTP + token)  $gem_json
+Codex CLI        ~/.codex/config.toml (mỗi dòng một khoá):
+                   [mcp_servers.gen-chibi]
+                   command = "$jcmd"
+                   args = ["mcp"]
+Không có MCP     curl -s $target$ch -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"start_here","arguments":{}}}'
+                 schema dạng function-calling: genchibi agent tools --format openai | gemini
+(Định dạng tệp cấu hình của từng client có thể đổi theo phiên bản client — đối chiếu tài liệu của client nếu không nhận.)
+Kiểm lệnh stdio trên máy chủ: genchibi setup check
+
+Hướng dẫn cho agent: genchibi agent guide [chủ đề]   ·   cài skill: genchibi agent skill claude | cursor | gemini | codex | generic [--dir thư-mục]
+EOF
+  else cat <<EOF
+Connect an agent to gen-chibi (MCP, protocol 2025-06-18). After connecting, tell the agent: "call start_here first".
+Same order as Studio › System › Agent connections: stdio on this machine → OAuth over the Internet → (other) HTTP + token.
+
+Address
+  stdio          $qcmd mcp   (full path: apps opened from the Dock / menu do not see the terminal PATH)
+  Internet       ${oa:-not open — genchibi online --help (OAuth: <address>/mcp)}${oa:+   (OAuth: the agent registers itself, you click Authorize; no token to paste)}
+  This machine   $u${hdr:+   (header: $hdr)}
+
+Claude Code      claude mcp add -s user gen-chibi -- $qcmd mcp${oa:+
+                 (over the Internet, OAuth)  claude mcp add -s user --transport http gen-chibi $oa}
+                 (or HTTP + token)  claude mcp add -s user --transport http gen-chibi $target$cc_hdr
+Claude app/web   ${oa:+Customize › Connectors › Add custom connector › paste $oa › Connect › Authorize page: pick the access level, click Authorize}${oa:-needs this machine online first: genchibi online --help (Studio › System › Go online)}
+OAuth access     mcp:read (view only) · mcp:write (create and edit — default) · mcp:owner (full owner access) — change / revoke in Studio › System › Agent connections
+Cursor           ~/.cursor/mcp.json   $std_json
+                 (or HTTP + token)  $cur_json
+Gemini CLI       ~/.gemini/settings.json   $std_json
+                 (or HTTP + token)  $gem_json
+Codex CLI        ~/.codex/config.toml (one key per line):
+                   [mcp_servers.gen-chibi]
+                   command = "$jcmd"
+                   args = ["mcp"]
+No MCP client    curl -s $target$ch -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"start_here","arguments":{}}}'
+                 function-calling schema: genchibi agent tools --format openai | gemini
+(Each client's config file format may change between client versions — check the client's docs if it is not picked up.)
+Check the stdio command on the server: genchibi setup check
+
+Guide for agents: genchibi agent guide [topic]   ·   install as a skill: genchibi agent skill claude | cursor | gemini | codex | generic [--dir folder]
+EOF
+  fi
+  cli_path_save
+}
+agent_cmd() {
+  local sub="${1:-connect}"; shift || true
+  case "$sub" in
+    connect) agent_connect ;;
+    guide) agent_curl "$URL/api/agent/guide?topic=${1:-guide}"; echo ;;
+    topics) agent_curl "$URL/api/agent/topics"; echo ;;
+    tools) local f=openai; [ "${1:-}" = --format ] && f="${2:-openai}"; agent_curl "$URL/api/agent/tools?format=$f"; echo ;;
+    skill)
+      local v="${1:-claude}" dir="" force=""; shift || true
+      while [ $# -gt 0 ]; do case "$1" in --dir) dir="${2:-}"; shift 2 || shift ;; --force) force=1; shift ;; *) shift ;; esac; done
+      case "$v" in claude) dir="${dir:-$HOME/.claude/skills}" ;; cursor|gemini|codex|generic) dir="${dir:-$ORIG_PWD}" ;; *) m skill_usage >&2; return 1 ;; esac
+      # giải nén vào thư mục tạm, rồi chỉ ghi đè tệp DO CHÍNH LỆNH NÀY SINH (có dấu "generated by `genchibi agent skill`");
+      # AGENTS.md / GEMINI.md / rule có sẵn của người dùng thì dừng lại (trừ khi --force)
+      local tmp; tmp="$(mktemp -d)"
+      agent_curl "$URL/api/agent/skill?vendor=$v" | tar -x -C "$tmp" || { rm -rf "$tmp"; m skill_dl_fail >&2; return 1; }
+      local f clash=""
+      while IFS= read -r f; do f="${f#./}"; if [ -e "$dir/$f" ] && ! head -c 2000 "$dir/$f" | grep -q 'generated by `genchibi agent skill`'; then clash="$clash $dir/$f"; fi; done < <(cd "$tmp" && find . -type f)
+      if [ -n "$clash" ] && [ -z "$force" ]; then rm -rf "$tmp"; m skill_clash "$clash" >&2; m skill_clash2 >&2; return 1; fi
+      mkdir -p "$dir" && cp -R "$tmp"/. "$dir"/ && rm -rf "$tmp"
+      m skill_done "$v" "$dir" ;;
+    *) m agent_usage >&2; return 1 ;;
+  esac
+}
+usage() {
+  if [ "$UI" = vi ]; then cat <<EOF
+genchibi — quản lý gen-chibi ($HOME_DIR, chế độ $MODE)
+  start | stop | restart | status   chạy, dừng, xem trạng thái
+  update                            kiểm tra và cập nhật ngay (tự rollback nếu bản mới lỗi)
+  logs                              xem log
+  backup | restore <tệp>            sao lưu / khôi phục dữ liệu
+  mcp                               cầu MCP (stdio) cho agent: claude mcp add gen-chibi -- genchibi mcp
+  online [caddy|cloudflare|proxy|quick|recheck|off]   ra Internet một bước: tên miền + HTTPS + MCP (genchibi online --help)
+  agent connect|guide|tools|skill   bootstrap cho agent mọi hãng: cấu hình nối, hướng dẫn, schema tool, cài skill
+  token [giá-trị|--clear]           đặt token GitHub (repo private) cho tự cập nhật; bỏ trống = nhập ẩn
+                                    (KHÔNG phải token chủ: token chủ là GC_API_TOKEN trong .env, hoặc data/owner-token — CLI tự đọc)
+  lang [en|vi]                      xem / đặt ngôn ngữ (CLI + giao diện mặc định của Studio)
+  open                              mở Studio trong trình duyệt (lần đầu: mở cửa sổ 30 phút cho admin / admin)
+  password                          đặt / đặt lại mật khẩu chủ (lần đầu: khởi tạo tài khoản chủ, tên đăng nhập owner); quên mật khẩu: chạy lệnh này trên máy chủ
+  setup [skip [lý do]|reset|check]  thiết lập lần đầu: xem trạng thái · bỏ qua wizard (khi chính phần kiểm lỗi) · làm lại wizard · kiểm lệnh MCP trên máy chủ
+  uninstall                         gỡ (hỏi giữ hay xoá dữ liệu)
+EOF
+  else cat <<EOF
+genchibi — manage gen-chibi ($HOME_DIR, mode $MODE)
+  start | stop | restart | status   run, stop, show status
+  update                            check and update now (automatic rollback if the new version fails)
+  logs                              show logs
+  backup | restore <file>           back up / restore data
+  mcp                               MCP bridge (stdio) for agents: claude mcp add gen-chibi -- genchibi mcp
+  online [caddy|cloudflare|proxy|quick|recheck|off]   go online in one step: domain + HTTPS + MCP (genchibi online --help)
+  agent connect|guide|tools|skill   bootstrap for agents of any vendor: connect config, guide, tool schema, skill install
+  token [value|--clear]             set the GitHub token (private repo) for auto-update; empty = hidden prompt
+                                    (NOT the owner token: that is GC_API_TOKEN in .env, or data/owner-token — the CLI reads it itself)
+  lang [en|vi]                      show / set the language (CLI + Studio default)
+  open                              open the Studio in the browser (first run: opens a 30-minute window for admin / admin)
+  password                          set / reset the owner password (first run: creates the owner account, username owner); forgot it: run this on the server
+  setup [skip [reason]|reset|check] first-run setup: show state · skip the wizard (when the check itself is broken) · run the wizard again · check the host MCP command
+  uninstall                         uninstall (asks whether to keep or delete your data)
+EOF
+  fi
+}
+
+case "${1:-help}" in
+  start) legacy_tunnel_note; start ;; stop) stop ;; restart) legacy_tunnel_note; stop; start ;; status) legacy_tunnel_note; status ;; update) legacy_tunnel_note; update ;;
+  logs) logs ;; backup) backup ;; restore) shift; restore "${1:-}" ;; uninstall) uninstall ;;
+  mcp) mcp ;; open) open_ui ;; version) status ;; password) shift; password_cmd ${1+"$@"} ;;
+  setup) shift; setup_cmd ${1+"$@"}; exit $? ;;
+  expose|link) removed_cmd "$1" "${2:-}" ;;   # bỏ ở v0.23 — thoát 2
+  online) shift; online_cmd ${1+"$@"}; exit $? ;;
+  token|github-token) shift; token_cmd "${1:-}" ;;
+  lang|language) shift; lang_cmd "${1:-}" ;;
+  agent) shift; agent_cmd ${1+"$@"} ;;
+  *) usage ;;
+esac

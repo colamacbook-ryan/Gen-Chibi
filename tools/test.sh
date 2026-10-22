@@ -33,6 +33,11 @@ gc_orphans() {
   return 0
 }
 GC_PRE_PIDS=" $(gc_orphans | awk '{ print $1 }' | tr '\n' ' ') "
+# HOME thật của người chạy bộ test: không test nào được cài / ghi lệnh genchibi hay ~/.local/lib/gen-chibi vào đó (v0.23.1: một test cài native với HOME=/root
+# ghi đè /root/.local/bin/genchibi) — chữ ký trước / sau mỗi nhóm test cài đặt / CLI
+home_sig() { ls -ldn --time-style=+%s "$HOME/.local/bin/genchibi" 2>/dev/null; [ ! -d "$HOME/.local/lib/gen-chibi" ] || find "$HOME/.local/lib/gen-chibi" -exec ls -ldn --time-style=+%s {} + 2>/dev/null; return 0; }
+GC_HOME_SIG="$(home_sig)"
+home_check() { [ "$(home_sig)" = "$GC_HOME_SIG" ] || { echo "   ✗ $1 đã ghi vào HOME thật ($HOME/.local/bin/genchibi hoặc $HOME/.local/lib/gen-chibi) — test phải dùng HOME riêng"; exit 1; }; }
 echo "1) cú pháp"
 for f in $(git ls-files '*.js' 2>/dev/null || find engine kinds server studio -name '*.js') launcher.js; do node --check "$f"; done
 bash -n install.sh; bash -n cli/genchibi; bash -n tools/package.sh; bash -n tools/test-lang.sh; bash -n tools/test-update.sh; bash -n tools/test-edge.sh; bash -n tools/test-root.sh
@@ -840,6 +845,7 @@ node tools/test-auth-owner.mjs || exit 1
 
 echo "4d) ngôn ngữ (ADR 0007): trình cài --lang / GC_LANG / câu hỏi khi có terminal · genchibi lang · trợ giúp en / vi · README + tài liệu tiếng Anh"
 bash tools/test-lang.sh || exit 1
+home_check tools/test-lang.sh
 # L-77: CI GitHub chạy bằng user thường (runner, uid 1001); test.sh chạy bằng root THẬT ở máy dev thì giả định "chỉ đúng khi là root" (chown, ghi /root…) lọt qua.
 # Root → chạy lại <script> (trình cài + CLI) bằng nobody (setpriv) từ một bản chép của cây làm việc trong /tmp (không nằm dưới thư mục 0700 nào),
 # HOME / TMPDIR riêng ngoài bản chép. Không phải root (CI) → bỏ qua; thiếu setpriv / nobody → báo rõ rồi bỏ qua.
@@ -874,23 +880,34 @@ node tools/test-ingress.mjs || exit 1
 echo "4h) genchibi online (v0.21 P4): server + launcher thật, Cloudflare API giả, cloudflared giả — token trên dòng lệnh bị từ chối · không terminal + CNAME có sẵn → dừng, không đè · chưa có tài khoản chủ → 409 needs owner (v0.23: không còn bậc mật khẩu / mã thoát 3) → genchibi password → --token-stdin → xong · đổi địa chỉ cần --yes · proxy · WAF làm tay · nhiều tên miền · off dọn Cloudflare · có terminal hỏi ẩn · token không trong argv / env / log (shim + /proc) · đột biến curl -d · link tạm · máy kế thừa"
 for P in 7841 7843 7851 7853 7855 7861 7863 7891 7895; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done
 node tools/test-online-cli.mjs || exit 1
+home_check tools/test-online-cli.mjs
 
 echo "4i) thiết lập lần đầu (v0.23 §A): máy trạng thái setup.json + bảng lối vào · admin / admin chỉ trong cửa sổ do lệnh host mở (từng lý do từ chối) · phiên admin chỉ màn khởi tạo · init nguyên tử + 4 rào CSRF · cổng stage (phiên / token Studio / cookie thiết bị; agent + /mcp không chặn) · Go online chặn khi chưa khởi tạo · wizard (tự kiểm MCP thật, nối sau, lastClient, skip / reset) · khôi phục không mở lại admin / OAuth (CNS-138) · CLI open / start / password / setup (Docker giả: compose chỉ loopback)"
 for P in 7951 7952 7953 7954 7955 7956 7957 7958 7959; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done
 node tools/test-setup.mjs || exit 1
+home_check tools/test-setup.mjs
 echo "4j) đột biến v0.23 (CNS-273): mọi rào A.5 có một đột biến trong tools/mutations/v023.json — mẫu còn khớp đúng 1 lần, có trong bảng v023.md (chạy thật: node tools/mutate.mjs --jobs 4)"
 node tools/mutate.mjs --check || exit 1
 node tools/mutate.mjs --check --data tools/mutations/v0231.json || exit 1
 
 echo "4k) mô hình root v0.23.1 (CNS-233 / CNS-257 / CNS-234 / CNS-235): máy kiểu Ryan (lệnh root cũ → tự lắp bản đã kiểm SHA, update / rollback / status / online bằng root) · container bị chiếm (canary) · override đã duyệt · khôi phục cùng máy / máy khác · doctor · root thật (setpriv thật)"
 for P in 7981 7983 7985 7987 7989; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done
+# fixture lệnh cũ phải là bản THẬT của tag (L-80 / CNS-278) — so với git khi có .git + tag (bản chép không .git: bỏ qua có báo)
+for f in tools/fixtures/old-cli/genchibi-v*; do t="${f##*genchibi-}"
+  if git rev-parse -q --verify "refs/tags/$t" >/dev/null 2>&1; then cmp -s "$f" <(git show "$t:cli/genchibi") || { echo "   ✗ $f khác git show $t:cli/genchibi — fixture lệnh cũ phải lấy nguyên văn từ tag"; exit 1; }
+  else echo "   · không có tag $t (git fetch --tags) — chưa so được $f"; fi
+done
+echo "   ✓ fixture lệnh cũ (tools/fixtures/old-cli) = git show <tag>:cli/genchibi"
 bash tools/test-root.sh || exit 1
+home_check tools/test-root.sh
 l77_rerun tools/test-root.sh
 
 echo "5) tự cập nhật"
 bash tools/test-update.sh
+home_check tools/test-update.sh
 echo "5b) edge (v0.21): compose ghép -f (không COMPOSE_FILE), sync_compose, online --caddy / --caddy-off, Caddy thật nạp lại qua unix socket"
 bash tools/test-edge.sh || exit 1
+home_check tools/test-edge.sh
 echo "4b) token GitHub (repo private)"
 node tools/test-token.js
 

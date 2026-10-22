@@ -23,9 +23,16 @@ services:
       - "80:8080"
       - "443:8443"
     volumes:
-      - ./edge/conf:/edge/conf:ro          # Caddyfile, sites.caddy, edge-secret ({file.…} placeholder) — app writes, Caddy only reads
-      - ./edge/run:/edge/run               # admin unix socket (0660)
-      - ./edge/caddy-data:/edge/caddy-data
-      - ./edge/caddy-config:/edge/caddy-config
+      # GC_EDGE_DIR (set by genchibi since v0.23.1): ~/.local/lib/gen-chibi/edge, OUTSIDE the install folder — the app can write inside these folders but can
+      # never swap a mount source for a link to another host path (the docker daemon would follow it). Unset (older genchibi) = ./edge as before.
+      - ${GC_EDGE_DIR:-./edge}/conf:/edge/conf:ro          # Caddyfile, sites.caddy, edge-secret ({file.…} placeholder) — app writes, Caddy only reads
+      - ${GC_EDGE_DIR:-./edge}/run:/edge/run               # admin unix socket (0660)
+      - ${GC_EDGE_DIR:-./edge}/caddy-data:/edge/caddy-data
+      - ${GC_EDGE_DIR:-./edge}/caddy-config:/edge/caddy-config
     depends_on: [app]
     restart: unless-stopped
+  # the app sees the same two folders at its usual paths (/install/edge/conf, /install/edge/run): its code does not change
+  app:
+    volumes:
+      - ${GC_EDGE_DIR:-./edge}/conf:/install/edge/conf
+      - ${GC_EDGE_DIR:-./edge}/run:/install/edge/run
