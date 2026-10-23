@@ -12,6 +12,8 @@
  *                                   dự án = opts.project > shot.project > dự án của bối cảnh / diễn viên; thiếu engine/sounds.js thì bảng cứng cũ (SFX_STATE / SFX_FX / SFX_ACT)
  *   GC.film.player(el, opts)     → { show(shot), play(shots, title), stop(), destroy(), setDialog(mode), dialog(), setLang(lang, accent), setProject(p), plan() }
  *                                   opts.onProgress(text), opts.onEnd(), opts.dialog = 'auto' | 'bubble' | 'caption'
+                                   opts.aspect = '9:16' → KHUNG DỌC thật (v0.23.2, Q37 b — trang xuất video): sân khấu dọc, máy quay cắt cửa sổ dọc bám người nói
+                                     (cameraV), bong bóng / phụ đề xếp lại trong khung dọc; không đặt = khung ngang 16:9 như cũ
  *                                   opts.project (chuỗi | hàm → chuỗi) / setProject(p) = dự án của tác phẩm → chọn gói âm (S6): âm tự gán + âm sự kiện (trúng đòn / đỡ / hụt / bước chân / chuyển máy)
  *                                   opts.lang / opts.accent = ngôn ngữ phim (vi | en | zh) + giọng vùng → giọng trình duyệt đúng ngôn ngữ theo vai (engine/voices.js)
  *                                   opts.voiceClip(line, asset) → Promise<clip>|clip|null: giọng thu sẵn (vd. giọng AI) cho một câu; clip = ArrayBuffer / URL / data: URI
@@ -282,6 +284,65 @@
     else if (disc >= 0) { var t1 = (-B - Math.sqrt(disc)) / (2 * A); if (t1 > 0) t = Math.min(t1, L); }
     return { px: P.x, py: P.y, tx: P.x + dx * t, ty: P.y + dy * t, len: t };
   }
+  /* ---- MÁY QUAY KHUNG DỌC 9:16 (v0.23.2, Q37 b) — thuần số, chạy cả trong Node (tools/test-video.mjs) ----
+   * Cảnh 16:9 cao bằng khung dọc → lớp máy quay rộng AX9 = (16/9)² lần khung; cửa sổ nhìn thấy rộng 1/(AX9·S) cảnh, cao 1/S; S ≥ 1, kẹp trong cảnh (không lộ mép ngoài).
+   * c = { mode 'wide'|'two'|'close', on [id người nói, id người nghe], punch, cut, actors { id: { x (0–1, chỗ đích), y (đỉnh đầu… dùng tâm đầu, 0–1), k, f (chân, 0–1) } },
+   * anchor (id giữ trong khung ở toàn cảnh khi không có người nói), prev ({ S, tx, ty } đang dùng) } → { S, tx, ty } | null (giữ khung cũ: chênh < 4% bề ngang /
+   * 2% chiều cao — không rung). Cùng đầu vào → cùng khung (tất định: ứng viên rời rạc, hoà điểm lấy ứng viên trước).
+   * CỠ (khung dọc: nhân vật LÀ khung hình): người hàng trước (k 0,8) cao 176/360 cảnh; S = 1,15 → thân người nói ~56% chiều cao khung + bong bóng ~14% ≈ 70%,
+   * đỉnh đầu ở ~40% từ trên — đủ chỗ cho bong bóng 3 dòng. Người hàng sau (k nhỏ hơn) đẩy tới cùng cỡ: S = 1,15·0,8/k, trần 1,6 (= cỡ người hàng sau k 0,62
+   * bằng người hàng trước, + chỗ cho cú đẩy máy). Hai người 1,1 · toàn cảnh 1,15 (khung dọc không chứa nổi cả nhóm hàng ngang; cùng cỡ người nói — cắt
+   * gần hết tường trống phía trên, giữ người được neo + những mặt trọn được trong khung).
+   * CHIỀU DỌC: neo đáy cửa sổ ngay dưới chân (chân + 5% cảnh mặt đất) → cắt trần / tường trống phía trên, không cắt chân.
+   * MẶT: mặt người nói (và người nghe ở cảnh hai người, anchor ở toàn cảnh) phải trọn trong khung; mặt người khác hoặc trọn trong hoặc trọn ngoài — xê cửa sổ
+   * (ứng viên: mép cửa sổ sát mép từng khuôn mặt) hoặc siết cỡ (×1,1, ×1,2, ×1,35 tới 1,6) cho tới khi không cắt mặt nào; còn cắt thì chọn khung cắt ít nhất. */
+  var AX9 = 256 / 81;
+  function frameV(c) {
+    var P = c.actors || {}, on = c.on || [], mode = c.mode, ids = Object.keys(P).filter(function (k) { return P[k] && P[k].x != null; }).sort();
+    var who = on[0] && P[on[0]] ? on[0] : null, two = mode === 'two' && who && on[1] && P[on[1]] ? on[1] : null;
+    if (mode === 'close' && !who) mode = 'wide';
+    var must = who ? [who].concat(two ? [two] : []) : mode === 'wide' && c.anchor && P[c.anchor] ? [c.anchor] : [];
+    var hw = function (id) { return 66 * (P[id].k || 0.8) / 640; };   // nửa bề ngang mặt (khung xương đầu 40–157 + 5 → −65…+62 quanh tâm 100) theo cỡ chỗ đứng
+    // vùng mặt [trái, phải] trong cảnh; người nói sắp bước nửa bước (c.nudge, phần cảnh): vùng phủ cả quãng bước — mặt không ra mép khung khi bước tới / lùi
+    var nd = c.nudge || 0, fr = function (id) { var a = P[id].x, h = hw(id), n = id === who ? nd : 0; return [Math.max(0, a - h + Math.min(0, n)), Math.min(1, a + h + Math.max(0, n))]; };
+    var kMin = function (list) { return Math.min.apply(null, list.map(function (id) { return P[id].k || 0.8; })); };
+    var S0 = mode === 'close' ? 1.15 * 0.8 / kMin([who]) : mode === 'two' ? 1.1 * 0.8 / kMin(must) : 1.15;
+    S0 = clamp(S0, 1, 1.6);
+    var ideal = mode === 'close' ? P[who].x : two ? (P[who].x + P[two].x) / 2 : ids.length ? (Math.min.apply(null, ids.map(function (k) { return P[k].x; })) + Math.max.apply(null, ids.map(function (k) { return P[k].x; }))) / 2 : 0.5;
+    var best = null;
+    [1, 1.1, 1.2, 1.35].forEach(function (m, si) {
+      var S = Math.min(1.6, S0 * m);
+      if (si && S <= S0 + 1e-9) return;
+      var half = 0.5 / (AX9 * S), e = 0.004, cand = [ideal];
+      ids.forEach(function (id) { var q = fr(id); cand.push(q[1] + half + e, q[0] + half - e, q[0] - half - e, q[1] - half + e); });   // mép cửa sổ sát mép từng mặt
+      cand.forEach(function (fx, ci) {
+        var tx = clamp(0.5 / AX9 - fx * S, 1 / AX9 - S, 0), L = -tx / S, Rr = L + 2 * half, cost = (S - S0) / S0 * 40 + Math.abs((L + Rr) / 2 - ideal) / (2 * half) * 10 + ci * 1e-6;
+        ids.forEach(function (id) {
+          var fa = fr(id), a0 = fa[0], a1 = fa[1], inF = a0 >= L - 1e-9 && a1 <= Rr + 1e-9, outF = a1 <= L + 1e-9 || a0 >= Rr - 1e-9;   // phần mặt ngoài cảnh không ai thấy
+          if (!inF && !outF) cost += 25;   // mặt bị mép khung cắt
+          if (must.indexOf(id) >= 0) { if (!inF) cost += id === must[0] ? 1000 : 200; }
+          else if (inF && mode === 'wide') cost -= 4;   // toàn cảnh: thêm người trọn mặt trong khung là tốt
+        });
+        if (!best || cost < best.cost - 1e-9) best = { cost: cost, S: S, tx: tx, L: L, Rr: Rr };
+      });
+    });
+    var S = best.S, tx = best.tx;
+    // đáy cửa sổ: chân thấp nhất của người trong khung (+5% cảnh mặt đất)
+    var feet = ids.filter(function (id) { return P[id].x + hw(id) > best.L && P[id].x - hw(id) < best.Rr; }).map(function (id) { return P[id].f != null ? P[id].f : P[id].y + 0.35; });
+    var yb = Math.min(1, (feet.length ? Math.max.apply(null, feet) : 0.92) + 0.05);
+    if (c.punch) {   // đẩy máy: phóng quanh tâm khung, vẫn neo đáy; mặt người nói vẫn trọn trong khung
+      var cx = (best.L + best.Rr) / 2, mf = must[0] ? fr(must[0]) : null;
+      S = Math.max(S, Math.min(S * 1.12, mf ? 1 / (AX9 * (mf[1] - mf[0] + 0.002)) : Infinity));   // đẩy ít hơn nếu ×1,12 làm cửa sổ hẹp hơn mặt (+ quãng bước)
+      var h2 = 0.5 / (AX9 * S);
+      if (mf) cx = clamp(cx, mf[1] - h2, mf[0] + h2);
+      tx = clamp(0.5 / AX9 - cx * S, 1 / AX9 - S, 0);
+    }
+    var ty = clamp(1 - yb * S, 1 - S, 0), p = c.prev;
+    // không rung: chênh rất nhỏ thì giữ khung cũ — NHƯNG chỉ khi khung cũ vẫn giữ trọn mặt người nói / người phải có (kể cả quãng bước tới / lùi)
+    var keepOK = p && must.every(function (id) { var q = fr(id), L0 = -p.tx / p.S, R0 = L0 + 1 / (AX9 * p.S); return q[0] >= L0 - 1e-9 && q[1] <= R0 + 1e-9; });
+    if (p && keepOK && !c.cut && Math.abs(p.S - S) < 0.005 && Math.abs(p.tx - tx) * AX9 < 0.04 && Math.abs(p.ty - ty) < 0.02) return null;
+    return { S: S, tx: tx, ty: ty };
+  }
   function solveLayout(c) {
     var W = c.W, H = c.H, m = c.m, cap = c.kind === 'caption', heads = c.heads || [], bodies = c.bodies || [], decor = c.decor || [], mouth = c.mouth, S = null, best = null;
     heads.forEach(function (h) { if (h.id === c.who) S = h; });
@@ -292,7 +353,7 @@
       var add = function (x0, y0, pref, tag) { cs.push([clamp(x0, m, W - m - w), clamp(y0, m, H - m - h), pref, tag]); };
       if (cap) {
         // phụ đề: dải dưới khung (giữa → sát trái / phải), lùi lên từng nấc nếu đầu người chiếm dải; cuối cùng mới tới dải trên
-        var bot = H - 0.045 * H - h, step = 0.055 * H;
+        var bot = H - (c.bottom || 0.045) * H - h, step = 0.055 * H;   // c.bottom: lề dưới (phần khung) — khung dọc chừa chỗ cho giao diện TikTok / Shorts
         // i18n-ignore-start(tên ứng viên chỗ đặt lời thoại — mã gỡ lỗi, không hiện cho người xem)
         for (j = 0; j < 7; j++) { y = bot - j * step; add((W - w) / 2, y, j * 1.2, 'dưới'); add(m, y, j * 1.2 + 2, 'dưới-trái'); add(W - m - w, y, j * 1.2 + 2, 'dưới-phải'); }
         add((W - w) / 2, m, 16, 'trên'); add(m, m, 17, 'trên-trái'); add(W - m - w, m, 17, 'trên-phải');
@@ -403,6 +464,10 @@
     '.gcp-title b{font-size:max(20px,4cqw);letter-spacing:-.01em}',
     '.gcp-title span{font-size:max(11px,1.3cqw);opacity:.65;letter-spacing:.18em;text-transform:uppercase}',
     '.gcp-empty{position:absolute;inset:0;display:grid;place-items:center;color:#8e897f;font:13px system-ui,sans-serif;padding:16px;text-align:center}',
+    // KHUNG DỌC 9:16 (v0.23.2, Q37 b — opts.aspect '9:16'): lớp máy quay giữ cảnh 16:9 cao bằng khung → rộng (16/9)² ≈ 316% bề ngang khung; máy quay cắt
+    // một cửa sổ dọc bám người nói. Chữ lời thoại / thẻ tiêu đề theo bề ngang khung dọc (3,4cqw ở 1080 px ≈ cỡ chữ của bản ngang 1920 px)
+    '.gcp.gcp-v{aspect-ratio:9/16}.gcp-v .gcp-cam{right:auto;width:316.0494%}',
+    '.gcp-v .gcp-bub,.gcp-v .gcp-cap{font-size:max(13px,3.4cqw)}.gcp-v .gcp-title b{font-size:max(20px,7cqw)}.gcp-v .gcp-title span{font-size:max(11px,2.4cqw)}',
     '@media (prefers-reduced-motion:reduce){.gcp-cam{transition:none}.gcp-shk.shake,.gcp-bub.shout.on{animation:none}.gcp-bub,.gcp-cap,.gcp-bub.on,.gcp-cap.on{transform:none;transition:opacity .08s linear}}'
   ].join('\n');
   function injectCSS() {
@@ -557,15 +622,17 @@
     GC.render.injectCSS(); injectCSS();
     var R = GC.render, A = GC.audio || null, insts = {}, els = {}, cast = {}, pos = {}, run = 0, timers = [], cam = null, ov = null, shk = null, flash = null, bub = null, plan = null, camState = null, acting = null;
     var dialog = DIALOGS.indexOf(opts.dialog) >= 0 ? opts.dialog : 'auto', lastSpot = null, fontsOk = false, fontsReady = warmFonts().then(function () { fontsOk = true; });
+    // khung dọc 9:16 (Q37 b): AX = bề ngang lớp máy quay / bề ngang khung = (16/9)² (CSS .gcp-v .gcp-cam). Khung ngang: AX = 1, mọi phép tính như cũ
+    var V = opts.aspect === '9:16', AX = V ? AX9 : 1, vLast = null;
     var lang = opts.lang, accent = opts.accent, clips = new Map();   // ngôn ngữ phim · giọng thu sẵn của phân cảnh đang diễn (khoá clipKey → Promise)
     var progress = function (t) { if (opts.onProgress) opts.onProgress(t); };
     var ro = typeof ResizeObserver === 'function' ? new ResizeObserver(function () { if (bub) bub.layout(false); }) : null;
     if (ro) ro.observe(box);
     function clearBox() {
       Object.keys(insts).forEach(function (k) { insts[k].destroy(); });
-      insts = {}; els = {}; cast = {}; pos = {}; bub = null; camState = null; lastSpot = null;
+      insts = {}; els = {}; cast = {}; pos = {}; bub = null; camState = null; lastSpot = null; vLast = null;
       while (box.firstChild) box.removeChild(box.firstChild);
-      box.className = 'gcp';
+      box.className = V ? 'gcp gcp-v' : 'gcp';
     }
     // vị trí theo toạ độ cảnh (x 0–640, chỗ đứng quyết định y và cỡ); x ngoài khung = ngoài sân khấu
     function spotAt(spot, x) { var sp = GC.SCENE.spots[spot] || GC.SCENE.spots.center; return { x: x == null ? sp.x : x, y: sp.y, k: sp.k, spot: spot }; }
@@ -653,7 +720,8 @@
 
     /* ---- máy quay: toàn cảnh / hai người / cận người nói — một transform; kẹp để không lộ mép ngoài cảnh ---- */
     function headOf(id) { var p = pos[id]; return p ? { x: p.x / GC.SCENE.W, y: (p.y - 128 * p.k) / GC.SCENE.H, k: p.k } : { x: 0.5, y: 0.5, k: 0.8 }; }
-    function camera(mode, on, punch, cut) {
+    function camera(mode, on, punch, cut, nudge) {
+      if (V) return cameraV(mode, on, punch, cut, nudge);
       var S = 1, fx = 0.5, fy = 0.5, cy = 0.5;
       if (mode === 'close' && on && on[0]) { var h = headOf(on[0]); S = 1.7 * 0.8 / h.k; fx = h.x; fy = h.y; cy = 0.44; }
       else if (mode === 'two' && on && on.length > 1) {
@@ -663,14 +731,33 @@
       if (punch) S *= 1.12;
       // toàn cảnh: zoom (nếu có punch) quanh tâm khung, không lệch về góc trái trên
       var tx = mode === 'wide' ? (1 - S) / 2 : Math.max(1 - S, Math.min(0, 0.5 - fx * S)), ty = mode === 'wide' ? (1 - S) / 2 : Math.max(1 - S, Math.min(0, cy - fy * S));
+      aim(S, tx, ty, cut);
+    }
+    function aim(S, tx, ty, cut) {
       camState = { S: S, tx: tx, ty: ty };
       cam.classList.toggle('cut', !!cut);
       cam.style.transform = 'translate(' + (tx * 100).toFixed(3) + '%,' + (ty * 100).toFixed(3) + '%) scale(' + S.toFixed(4) + ')';
       if (cut) { void cam.offsetWidth; cam.classList.remove('cut'); }
       if (bub) bub.layout(false);
     }
-    // điểm cảnh (0–1) → điểm màn hình (0–1) theo máy quay hiện tại
-    function toScreen(x, y) { var c = camState || { S: 1, tx: 0, ty: 0 }; return { x: x * c.S + c.tx, y: y * c.S + c.ty }; }
+    // khung dọc: x đích của diễn viên (0–1) — còn ngoài sân (sắp ra sân) thì lấy chỗ đứng đích; khung tính ở frameV (thuần số)
+    function xOf(id) {
+      var p = pos[id]; if (!p) return null;
+      var x = p.x;
+      if (x < 0 || x > GC.SCENE.W) { var c = plan && plan.cast.filter(function (q) { return q.id === id; })[0]; x = c ? spotAt(c.home).x : clamp(x, 0, GC.SCENE.W); }   // còn ngoài sân (sắp ra sân): lấy chỗ đứng đích
+      return x / GC.SCENE.W;
+    }
+    function cameraV(mode, on, punch, cut, nudge) {
+      var who = on && on[0] && pos[on[0]] ? on[0] : null, anchor = null, A9 = {};
+      Object.keys(pos).forEach(function (id) { var h = headOf(id); A9[id] = { x: xOf(id), y: h.y, k: h.k, f: pos[id].y / GC.SCENE.H }; });
+      // nhóm rộng hơn khung dọc: giữ người nói gần nhất (đầu phân cảnh: người nói câu đầu) — không để khung rơi vào khoảng trống giữa hai người
+      if (who) vLast = who;
+      else if (mode === 'wide') { var fl = plan && plan.beats.filter(function (q) { return q.type === 'line' && pos[q.actor]; })[0]; anchor = vLast && pos[vLast] ? vLast : fl ? fl.actor : null; }
+      var f = frameV({ mode: mode, on: on, punch: punch, cut: cut, actors: A9, anchor: anchor, prev: camState, nudge: who && nudge ? nudge / GC.SCENE.W : 0 });
+      if (f) aim(f.S, f.tx, f.ty, cut);
+    }
+    // điểm cảnh (0–1) → điểm màn hình (0–1) theo máy quay hiện tại (khung dọc: lớp máy quay rộng AX lần khung)
+    function toScreen(x, y) { var c = camState || { S: 1, tx: 0, ty: 0 }; return { x: (x * c.S + c.tx) * AX, y: y * c.S + c.ty }; }
 
     /* ---- diễn viên: quay mặt, đi lại, cử chỉ, nhép miệng ---- */
     function act(id, st, dir) { if (insts[id]) insts[id].setState(st, dir && Object.keys(dir).length ? dir : undefined); }
@@ -732,9 +819,9 @@
       function setMode(m) { mode = m; b.className = (m === 'caption' ? 'gcp-cap ' : 'gcp-bub ') + line.bubble + (on ? ' on' : ''); b.setAttribute('data-mode', m); }
       // các cỡ thử (rộng nhất ≤ 38% khung với bong bóng, 80% với phụ đề → hẹp dần): đo chiều cao thật của chữ đã xuống dòng
       function sizes(W) {
-        var cap = mode === 'caption', maxW = (cap ? 0.8 : 0.38) * W, em = parseFloat(getComputedStyle(b).fontSize) || 16;
+        var cap = mode === 'caption', maxW = (cap ? (V ? 0.9 : 0.8) : (V ? 0.74 : 0.38)) * W, em = parseFloat(getComputedStyle(b).fontSize) || 16;
         b.style.width = 'max-content';
-        var nw = b.offsetWidth, minW = Math.min(maxW, Math.max((cap ? 0.3 : 0.16) * W, nm.offsetWidth + em * 3.8)), w1 = Math.min(maxW, Math.max(nw, minW)), list = [w1];
+        var nw = b.offsetWidth, minW = Math.min(maxW, Math.max((cap ? (V ? 0.6 : 0.3) : (V ? 0.34 : 0.16)) * W, nm.offsetWidth + em * 3.8)), w1 = Math.min(maxW, Math.max(nw, minW)), list = [w1];
         if (nw > minW * 1.3) [0.78, 0.6].forEach(function (f) { var w = Math.max(minW, Math.round(w1 * f)); if (list.every(function (x) { return Math.abs(x - w) > W * 0.03; })) list.push(w); });
         return { em: em, list: list.map(function (w) { b.style.width = w + 'px'; return { w: w, h: b.offsetHeight }; }) };
       }
@@ -745,7 +832,9 @@
         var S = project(rig, W, H, line.actor, line.nudge), got = null;
         function ask(kind) {
           var z = sizes(W);
-          return { z: z, r: GC.film.solveLayout({ kind: kind, W: W, H: H, m: 0.025 * W, who: line.actor, mouth: S.mouth, heads: S.heads, bodies: S.bodies, decor: S.decor, sizes: z.list, prev: lastSpot }) };
+          var lay = { kind: kind, W: W, H: H, m: (V ? 0.04 : 0.025) * W, who: line.actor, mouth: S.mouth, heads: S.heads, bodies: S.bodies, decor: S.decor, sizes: z.list, prev: lastSpot };
+          if (V) lay.bottom = 0.14;   // khung dọc: phụ đề trên vùng nút / chú thích của TikTok / Shorts
+          return { z: z, r: GC.film.solveLayout(lay) };
         }
         if (dialog !== 'caption') { setMode('bubble'); got = ask('bubble'); if (dialog === 'auto' && !(got.r && got.r.clean)) got = null; }
         if (!got) { setMode('caption'); got = ask('caption'); }
@@ -756,7 +845,7 @@
         if (mode === 'bubble') {
           var T = res.tail;
           b.style.setProperty('--ox', (clamp((T.px - res.x0) / res.w, 0, 1) * 100).toFixed(1) + '%'); b.style.setProperty('--oy', (clamp((T.py - res.y0) / res.h, 0, 1) * 100).toFixed(1) + '%');
-          drawBubble(svg, line.bubble, res.w, res.h, { x: T.tx - res.x0, y: T.ty - res.y0 }, { em: got.z.em, sw: Math.max(2, W * 0.0023) });
+          drawBubble(svg, line.bubble, res.w, res.h, { x: T.tx - res.x0, y: T.ty - res.y0 }, { em: got.z.em, sw: Math.max(2, (V ? H : W) * 0.0023) });
         }
         b.setAttribute('data-tail', res.tail && mode === 'bubble' ? [res.tail.px, res.tail.py, res.tail.tx, res.tail.ty].map(Math.round).join(',') : '');
         lastSpot = { id: line.actor, cx: (res.x0 + res.x1) / 2, cy: (res.y0 + res.y1) / 2 };
@@ -950,7 +1039,7 @@
         if (line.move) { camera('wide'); go = wait(300, r).then(function () { sfx('whoosh', { gain: 0.35, pan: panOf(line.actor) }); return walk(line.actor, line.move.to, line.move.gait, r); }); }
         if (line.type === 'act') { progress((plan.shotTitle || '') + ' · ' + _lo(GC.choreo && GC.choreo.ACTIONS[line.action], line.label)); lastCam = 'two'; return go.then(function () { return perform(line, r); }).then(next); }
         return go.then(function () {
-          camera(line.camera, line.camOn, line.punch);
+          camera(line.camera, line.camOn, line.punch, false, line.nudge);   // khung dọc: chừa chỗ cho nửa bước tới / lùi của người nói (mặt không ra mép khung)
           if (line.camera !== 'wide' && line.camera !== lastCam) sfx(evSfx('cut', 'whoosh'), { gain: 0.18 });
           lastCam = line.camera;
           return wait(line.camera === 'wide' ? 150 : 420, r);
@@ -1007,5 +1096,5 @@
     };
   }
 
-  GC.film = { moodOf: moodOf, clipKey: clipKey, lines: lines, readiness: readiness, issues: issues, still: still, spots: spots, actors: actors, scene: scene, direct: direct, player: player, injectCSS: injectCSS, solveLayout: solveLayout, chipColor: chipColor, contrast: contrast, dialogModes: DIALOGS.slice() };
+  GC.film = { moodOf: moodOf, clipKey: clipKey, lines: lines, readiness: readiness, issues: issues, still: still, spots: spots, actors: actors, scene: scene, direct: direct, player: player, injectCSS: injectCSS, solveLayout: solveLayout, frameV: frameV, chipColor: chipColor, contrast: contrast, dialogModes: DIALOGS.slice() };
 })(window.GenChibi);

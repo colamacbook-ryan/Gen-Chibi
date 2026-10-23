@@ -1936,35 +1936,21 @@
   // pre (tuỳ chọn) = kết quả filmVoices đã hỏi (hộp "thiếu giọng AI" ở Sân khấu final) — khỏi hỏi lại.
   // → Promise<{ srcs, data, film, ui, dict, have, total }>   (phần gom asset chạy NGAY lúc gọi, như trước; phần giọng AI chờ filmVoices)
   function filmPayload(W, pre) {
-    var L = workLang(W), chars = [], scenes = [];
+    var L = workLang(W), chars = [], scenes = [], P = window.GCVPayload;
+    if (!P) return Promise.reject(new Error(_t('Không tải được {f}', { f: 'studio/video/payload.js' })));
     W.shots.forEach(function (s) { chars = chars.concat(GC.film.actors(s)); var sc = GC.film.scene(s); if (sc) scenes.push(sc); });
     var data = bundleOf(chars, [], scenes);
     // gói động tác có hành động phim dùng tới (đòn của bộ chủ đề) — đòn của khung đã nằm trong mã bộ phát
-    var used = {}; W.shots.forEach(function (s) { ((s.event && s.event.steps) || []).forEach(function (st) { if (st.action) used[st.action] = 1; }); });
-    data.motionPacks = GC.choreo ? GC.choreo.packs().filter(function (p) { return Object.keys(p.actions).some(function (k) { return used[k]; }); })
-      .map(function (p) { var o = clone(p); ['pack', 'key', 'version', 'savedAt', 'note'].forEach(function (k) { delete o[k]; }); return o; }) : [];
+    var motionPacks = GC.choreo ? P.motionPacks(W, GC.choreo.packs()) : [];
     // gói âm phim dùng (v0.18): gói của dự án tác phẩm + gói gọi tên trong step.sfx / sự kiện của gói động tác đi theo — mở file:// vẫn nghe đúng; bộ chuẩn gen.am nằm sẵn trong engine/sounds.js
-    data.soundPacks = filmSoundPacks(W, data.motionPacks); data.project = W.project || '';
+    var soundPacks = filmSoundPacks(W, motionPacks);
     var srcs = filmSrcs();
     if (srcs.indexOf('engine/player.js') < 0) return Promise.reject(new Error(_t('Thiếu engine/player.js')));
     // kèm các clip giọng AI ĐÃ có của từng câu (hỏi "dry": không đọc mới, không tốn lượt) — phim mở bằng file:// vẫn có giọng AI, không gọi mạng
     return (pre ? Promise.resolve(pre) : filmVoices(W, L)).then(function (vo) {
-      var pick = function (o, keys) { var r = {}; keys.forEach(function (k) { if (o[k] !== undefined) r[k] = o[k]; }); return r; };
-      // motionPacks phải giữ lại ở đây: dựng lại `data` mà bỏ nó thì bộ phát không nạp gói nào và phim mất các chương dùng đòn của gói
-      var out = { parts: data.parts, motionPacks: data.motionPacks, soundPacks: data.soundPacks, project: data.project, characters: data.characters.map(function (a) {
-          // giọng chốt sẵn lúc xuất (nhân vật chưa lưu giọng thì lấy giọng Studio đang dùng — không xuất persona; vai giọng luôn chốt, vì phim không có persona để đoán lại)
-          var o = pick(a, ['id', 'pack', 'name', 'version', 'look', 'expressions', 'kind', 'voice', 'role']);
-          if (GC.audio) { var vv = GC.audio.voiceOf(a, L); o.voice = Object.assign({}, o.voice || vv); if (!o.voice.role && vv.role) o.voice.role = vv.role; }
-          return o;
-        }),
-        items: data.items.map(function (x) { return pick(x, ['id', 'name', 'type', 'rarity', 'equip']); }),
-        scenes: data.scenes.map(function (x) { return pick(x, ['id', 'name', 'layers', 'deco', 'palette', 'time', 'weather', 'spots']); }),
-        lang: L.lang, accent: L.accent, voices: vo.voices, voiceTotal: vo.total };   // ngôn ngữ phim + clip giọng AI theo khoá GC.film.clipKey + tổng số câu (nhãn "Giọng AI 19/31")
-      var film = { title: W.title, logline: W.logline || '', dialog: StagePref.get().dialog, shots: W.shots.map(function (s) { return { id: s.id, title: s.title, description: s.description || '', scene: s.scene, cast: s.cast, event: s.event }; }) };
-      // NGÔN NGỮ (ADR 0007): chữ của trình phát theo ngôn ngữ giao diện LÚC XUẤT — chữ engine/player.js dịch lúc chạy bằng engine/i18n.js + bảng player / engine
-      // (dict) nhúng kèm. Lời thoại, tên phim = nội dung người dùng: giữ nguyên. Video dùng CÙNG luật (CNS-224).
-      var UI = I18N.lang();
-      return { srcs: srcs, data: out, film: film, ui: UI, dict: Lang.playerDict(UI), have: vo.have, total: vo.total };
+      // phần chọn khoá / chốt giọng / dựng film: studio/video/payload.js — CÙNG hàm job CI dùng (CNS-246)
+      return P.build({ W: W, data: data, motionPacks: motionPacks, soundPacks: soundPacks, voiceOf: GC.audio ? function (a) { return GC.audio.voiceOf(a, L); } : null,
+        lang: L, vo: vo, dialog: StagePref.get().dialog, srcs: srcs, ui: I18N.lang(), dict: Lang.playerDict(I18N.lang()) });
     });
   }
   // pre (tuỳ chọn) = kết quả filmVoices đã hỏi (hộp "thiếu giọng AI" ở Sân khấu final) — khỏi hỏi lại
@@ -2004,11 +1990,22 @@
   var Vid = {
     job: null,     // { wid, title, phase 'run'|'done'|'error', prog, marks, frames, files, dir, base, fh, hidden, t0, opts, url, coverUrl, err }
     paint: null,   // hàm vẽ lại của trang tác phẩm đang mở (null khi không mở)
-    pref: function () {
-      var o = {}; try { o = JSON.parse(localStorage.getItem('gc-video-opts') || '{}') || {}; } catch (e) { /* hỏng: dùng mặc định */ }
-      return { aspect: o.aspect === '9:16' ? '9:16' : '16:9', quality: o.quality === '720p' ? '720p' : '1080p', container: o.container === 'mp4' || o.container === 'webm' ? o.container : '' };
+    // cấu hình xuất của TÁC PHẨM (v0.23.2, CNS-250): work.video trên server (cổng saveWorkChecked kiểm, đi theo gói dự án / sao lưu). Bản cũ chỉ nhớ ở
+    // localStorage 'gc-video-opts' (chung cho mọi tác phẩm): tác phẩm chưa có work.video thì dùng nó MỘT lần — lưu vào tác phẩm rồi gỡ khoá cũ (migrate).
+    norm: function (o) { o = o || {}; return { aspect: o.aspect === '9:16' ? '9:16' : '16:9', quality: o.quality === '720p' ? '720p' : '1080p', container: o.container === 'mp4' || o.container === 'webm' ? o.container : '' }; },
+    legacy: function () { var o = null; try { o = JSON.parse(localStorage.getItem('gc-video-opts') || 'null'); } catch (e) { /* hỏng: bỏ qua */ } return o && typeof o === 'object' ? o : null; },
+    pref: function (W) { return Vid.norm(W && W.video && typeof W.video === 'object' ? W.video : Vid.legacy()); },
+    // → Promise; W nhận work.video mới (người gọi giữ tham chiếu W). Lỗi lưu: báo, lựa chọn vẫn dùng cho lượt này
+    savePref: function (W, o) {
+      var v = Vid.norm(o);
+      if (!W || !W.id) return Promise.resolve();
+      return Store.api('POST', 'api/works', { id: W.id, video: v }).then(function (w) { W.video = w && w.video || v; }, function (e) { toast(_t('Chưa lưu được cấu hình xuất video vào tác phẩm: {error}', { error: e.message })); });
     },
-    savePref: function (o) { try { localStorage.setItem('gc-video-opts', JSON.stringify({ aspect: o.aspect, quality: o.quality, container: o.container || '' })); } catch (e) { /* bộ nhớ đầy: bỏ qua */ } },
+    migrate: function (W) {
+      var old = Vid.legacy();
+      if (!W || (W.video && typeof W.video === 'object') || !old) return;
+      Vid.savePref(W, old).then(function () { if (W.video) { try { localStorage.removeItem('gc-video-opts'); } catch (e) { /* bỏ qua */ } } });
+    },
     redraw: function () { if (Vid.paint) Vid.paint(); }
   };
   var VFMT = { mp4: 'MP4 (H.264 + AAC)', webm: 'WebM (VP9 + Opus)' };
@@ -2955,7 +2952,7 @@
     function probeVideo() {
       if (!window.GCVideo || !GCVideo.probe) { vcap = { ok: false, reason: _t('Không mở được trang xuất video — cập nhật gen-chibi hoặc mở Studio đúng địa chỉ máy chủ.') }; paintVideoBtn(); return; }
       videoWhy.textContent = _t('Đang kiểm tra trình duyệt…');
-      GCVideo.probe(Vid.pref()).then(function (r) { vcap = r; if (alive) paintVideoBtn(); }, function (e) { vcap = { ok: false, reason: e.message }; if (alive) paintVideoBtn(); });
+      GCVideo.probe(Vid.pref(W)).then(function (r) { vcap = r; if (alive) paintVideoBtn(); }, function (e) { vcap = { ok: false, reason: e.message }; if (alive) paintVideoBtn(); });
     }
     function paintVideoBtn() {
       var ok = !!(vcap && vcap.ok);
@@ -2965,7 +2962,7 @@
       videoWhy.className = 'note' + (vcap && !ok ? ' warn' : '');
     }
     function openVideo(w0, vo) {
-      var p = Vid.pref();
+      var p = Vid.pref(w0); Vid.migrate(w0);
       vs = { wid: w0.id, vo: vo || null, aspect: p.aspect, quality: p.quality, container: p.container, probe: null, estSec: null, voReady: !!vo };
       if (!vo) filmVoices(w0, workLang(w0)).then(function (v) { if (vs && vs.wid === w0.id) { vs.vo = v; vs.voReady = true; paintVideo(); } });
       filmSecEstimate(w0).then(function (sec) { if (vs && vs.wid === w0.id) { vs.estSec = sec; paintVideo(); } });
@@ -3001,17 +2998,17 @@
     function paintVideoOpts(body) {
       var o = vs, pr = o.probe, kv = h('div', { class: 'kv vidkv' });
       kv.appendChild(h('label', { text: _t('Khung hình') }));
-      kv.appendChild(h('div', { class: 'row' }, segOf(_t('Khung hình'), o.aspect, [['16:9', _t('Ngang 16:9')], ['9:16', _t('Dọc 9:16 — phim ngang đặt giữa')]], function (v) { o.aspect = v; Vid.savePref(o); reprobe(); }),
-        h('span', { class: 'note', text: o.aspect === '9:16' ? _t('cho TikTok / Shorts: phim 16:9 đặt giữa khung dọc, tên phim ở trên — nhân vật nhỏ hơn bản ngang') : _t('YouTube, máy tính, TV') })));
+      kv.appendChild(h('div', { class: 'row' }, segOf(_t('Khung hình'), o.aspect, [['16:9', _t('Ngang 16:9')], ['9:16', _t('Dọc 9:16')]], function (v) { o.aspect = v; Vid.savePref(W, o); reprobe(); }),
+        h('span', { class: 'note', text: o.aspect === '9:16' ? _t('cho TikTok / Shorts: khung dọc thật — máy quay tự bám người đang nói, bong bóng xếp lại cho vừa khung') : _t('YouTube, máy tính, TV') })));
       kv.appendChild(h('label', { text: _t('Chất lượng') }));
-      kv.appendChild(h('div', { class: 'row' }, segOf(_t('Chất lượng'), o.quality, [['1080p', '1080p'], ['720p', '720p']], function (v) { o.quality = v; Vid.savePref(o); reprobe(); }),
+      kv.appendChild(h('div', { class: 'row' }, segOf(_t('Chất lượng'), o.quality, [['1080p', '1080p'], ['720p', '720p']], function (v) { o.quality = v; Vid.savePref(W, o); reprobe(); }),
         h('span', { class: 'mono note', text: (o.aspect === '9:16' ? (o.quality === '720p' ? '720×1280' : '1080×1920') : (o.quality === '720p' ? '1280×720' : '1920×1080')) + ' · 30 fps' })));
       kv.appendChild(h('label', { text: _t('Định dạng') }));
       if (!pr) kv.appendChild(h('span', { class: 'note', text: _t('Đang dò trình duyệt…') }));
       else if (!pr.ok) kv.appendChild(h('span', { class: 'note warn', text: pr.reason }));
       else {
         var fr = h('div', { class: 'row' });
-        if (pr.formats.length > 1) fr.appendChild(segOf(_t('Định dạng'), pr.format.container, pr.formats.map(function (k) { return [k, VFMT[k]]; }), function (v) { o.container = v; Vid.savePref(o); reprobe(); }));
+        if (pr.formats.length > 1) fr.appendChild(segOf(_t('Định dạng'), pr.format.container, pr.formats.map(function (k) { return [k, VFMT[k]]; }), function (v) { o.container = v; Vid.savePref(W, o); reprobe(); }));
         else fr.appendChild(h('span', { class: 'chip info', 'data-fmt': pr.format.container, text: VFMT[pr.format.container] }));
         fr.appendChild(h('span', { class: 'note', text: pr.formats.length > 1 ? _t('dò thật trên trình duyệt này') : pr.format.container === 'webm' ? _t('trình duyệt này không mã hoá được MP4 — YouTube và TikTok vẫn nhận WebM') : _t('dò thật trên trình duyệt này') }));
         kv.appendChild(fr);
