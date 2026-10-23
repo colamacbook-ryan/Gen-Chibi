@@ -1,0 +1,4 @@
+services:
+  login:
+    label_file: @INSTALL@/.env
+    image: example/login

@@ -145,9 +145,7 @@ printf 'docker %s\n' "$(cd -P "$C" && pwd)" > "$TD/installs"
 approve_real() { HOME="$EH" GC_TEST=1 GC_HOME="$1" GC_CLI_INNER=1 GC_LANG=en PATH="$W/fakebin:$PATH" bash "$ROOT/cli/genchibi" override approve --yes > "$W/approve.out" 2>&1 || bad "override approve $1: $(tail -3 "$W/approve.out" | tr '\n' ' ')"; }
 approve_real "$C"
 gc() { HOME="$EH" GC_TEST=1 GC_HOME="$C" GC_CLI_INNER=1 GC_LANG=en PATH="$W/fakebin:$PATH" bash "$ROOT/cli/genchibi" ${1+"$@"}; }
-FS3="-f $TR/docker-compose.yml -f $TR/docker-compose.edge.yml -f $TI/override.yml --project-directory $C --env-file $TI/compose.env"
 FS3U="-f $TI/effective.yml --project-directory $C --env-file $TI/compose.env"   # dựng container: đúng dạng chuẩn đã phân giải + kiểm
-FS3N="-f $TR/docker-compose.yml -f $TI/override.yml --project-directory $C --env-file $TI/compose.env"
 : > "$W/docker.log"
 (echo > /dev/tcp/127.0.0.1/80) 2>/dev/null && P80=1 || P80=""
 (echo > /dev/tcp/127.0.0.1/443) 2>/dev/null && P443=1 || P443=""
@@ -157,12 +155,13 @@ if [ -z "$P80$P443" ]; then
     && ok "cổng 80/443 rảnh → bật: dấu edge/caddy.enabled, compose up -d bằng dạng chuẩn đã phân giải từ base + edge (đã kiểm) + override (đã duyệt)" || bad "online --caddy ($rc): $out | $(cat "$W/docker.log")"
   [ -d "$TI/edge/run" ] && [ -f "$TI/edge/conf/sites.caddy" ] && [ -f "$TI/edge/conf/Caddyfile" ] && [ ! -L "$TI/edge/run" ] && ok "chuẩn bị nguồn mount edge (~/.local/lib/gen-chibi/i/<bản cài>/edge: conf/Caddyfile, conf/sites.caddy, run/) trước khi compose up" || bad "thiếu tệp / thư mục edge sau online --caddy: $(ls -la "$TI/edge" 2>&1 | tr '\n' ' ')"
   : > "$W/docker.log"; gc stop >/dev/null 2>&1 || true
-  grep -qF "compose $FS3 stop" "$W/docker.log" && ok "genchibi stop dùng cùng bộ -f (gồm edge)" || bad "stop: $(cat "$W/docker.log")"
+  grep -qF "compose $FS3U stop" "$W/docker.log" && grep -q 'gen-chibi-edge:' "$TI/effective.yml" && ok "genchibi stop dùng cùng dạng chuẩn đã kiểm (gồm edge), không -f override thô (vòng 8)" || bad "stop: $(cat "$W/docker.log")"
   : > "$W/docker.log"; out="$(gc online --caddy-off 2>&1)" || true
-  grep -qF "compose $FS3 rm -sf gen-chibi-edge" "$W/docker.log" && [ ! -f "$C/edge/caddy.enabled" ] && [ -d "$TI/edge/caddy-data" ] \
+  grep -qF "compose $FS3U rm -sf gen-chibi-edge" "$W/docker.log" && [ ! -f "$C/edge/caddy.enabled" ] && [ -d "$TI/edge/caddy-data" ] \
     && ok "--caddy-off: gỡ đúng container gen-chibi-edge, bỏ dấu, giữ dữ liệu edge (chứng chỉ)" || bad "--caddy-off: $out | $(cat "$W/docker.log")"
   : > "$W/docker.log"; gc stop >/dev/null 2>&1 || true
-  grep -qF "compose $FS3N stop" "$W/docker.log" && ok "sau khi tắt: stop không còn tệp edge" || bad "stop sau khi tắt: $(cat "$W/docker.log")"
+  grep -qF "compose $FS3U stop" "$W/docker.log" && ! grep -q 'gen-chibi-edge:' "$TI/effective.yml" && ! grep -qF -- "-f $TI/override.yml" "$W/docker.log" \
+    && ok "sau khi tắt: stop phân giải lại — dạng chuẩn không còn edge; không lệnh nào -f override thô" || bad "stop sau khi tắt: $(cat "$W/docker.log")"
   # genchibi online caddy <tên-miền> (v0.21 P4): bật edge nếu chưa → chờ admin socket của Caddy → mới gọi API (app không chạy ở đây → báo rõ)
   : > "$W/docker.log"; out="$(GC_EDGE_WAIT=1 gc online caddy chibi.example.com 2>&1)" && rc=0 || rc=$?
   [ $rc = 1 ] && [ -f "$C/edge/caddy.enabled" ] && grep -q 'effective.yml .*up -d' "$W/docker.log" && grep -q 'gen-chibi-edge:' "$TI/effective.yml" && grep -q 'did not start' <<< "$out" && ! grep -q 'Go online · caddy' <<< "$out" \

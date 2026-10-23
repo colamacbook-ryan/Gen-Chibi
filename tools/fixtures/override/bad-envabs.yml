@@ -1,0 +1,4 @@
+services:
+  login:
+    env_file: @INSTALL@/.env
+    image: example/login

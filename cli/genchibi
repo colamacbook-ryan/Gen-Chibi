@@ -272,6 +272,18 @@ _en() {
     ov_bad_key) F="  - \"%s:\" (makes Docker read files of the install folder or gives the container the Docker API — not allowed in an approved override)" ;;
     ov_bad_src) F="  - %s: %s (a path in the install folder, relative, a link, a \".\" / \"..\" part, or a parent folder that does not exist — use a named volume or an absolute path outside the install folder)" ;;
     ov_bad_sock) F="  - %s: %s (the Docker socket, or a folder above it — the container would control Docker, i.e. root on this machine)" ;;
+    ov_bad_own) F="  - %s: %s (%s — the app could swap it for a link later. Bind sources must be owned by root, or an account that is not the app's, and not writable by the app)" ;;
+    ov_own_uid) F="%s belongs to the app's account (uid %s)" ;;
+    ov_own_gid) F="%s belongs to the app's group (gid %s)" ;;
+    ov_own_ww) F="%s can be changed by other accounts (group / world-writable, no sticky bit)" ;;
+    ov_bad_raw) F="  - line %s: %s (extends / include / binary tags / escapes / TAG directives can pull in another file or hide a key — not allowed in an approved override; write those services directly)" ;;
+    ov_adds) F="What the override adds, as Docker Compose resolves it:" ;;
+    ov_add_line) F="  + %s" ;;
+    ov_add_more) F="  … and %s more lines" ;;
+    ov_chg_head) F="Lines of the resolved result that are new since approval:" ;;
+    ov_chg_line) F="  %s" ;;
+    ov_warn_sys) F="  ! source: %s — a system folder mounted writable: approve only if you meant it (prefer read-only, :ro)" ;;
+    ov_rejudge) F="The approved override no longer passes the checks on this machine (a path changed since approval, e.g. replaced by a link):" ;;
     ov_warn) F="  ! %s — powerful setting: approve only if you meant it" ;;
     ov_rm) F="  · removes: %s" ;;
     ov_rm_more) F="  · … and %s more removed lines" ;;
@@ -555,6 +567,18 @@ _vi() {
     ov_bad_key) F="  - \"%s:\" (khiến Docker đọc tệp của thư mục cài hoặc cho container API của Docker — override đã duyệt không cho phép)" ;;
     ov_bad_src) F="  - %s: %s (đường trong thư mục cài, tương đối, liên kết, có \".\" / \"..\", hoặc thư mục cha không có — dùng volume có tên hoặc đường tuyệt đối ngoài thư mục cài)" ;;
     ov_bad_sock) F="  - %s: %s (socket Docker, hoặc thư mục phía trên nó — container sẽ điều khiển Docker, tức root trên máy này)" ;;
+    ov_bad_own) F="  - %s: %s (%s — app có thể tráo nó thành liên kết về sau. Nguồn bind phải thuộc root, hoặc một tài khoản không phải của app, và app không ghi được)" ;;
+    ov_own_uid) F="%s thuộc tài khoản của app (uid %s)" ;;
+    ov_own_gid) F="%s thuộc nhóm của app (gid %s)" ;;
+    ov_own_ww) F="%s bị tài khoản khác đổi được (nhóm / mọi người ghi được, không có bit t)" ;;
+    ov_bad_raw) F="  - dòng %s: %s (extends / include / tag binary / chuỗi thoát / chỉ thị TAG có thể kéo tệp khác vào hoặc giấu một khoá — override đã duyệt không cho phép; viết thẳng các service đó)" ;;
+    ov_adds) F="Override thêm những gì, theo Docker Compose phân giải:" ;;
+    ov_add_line) F="  + %s" ;;
+    ov_add_more) F="  … và %s dòng nữa" ;;
+    ov_chg_head) F="Các dòng mới trong kết quả phân giải so với lúc duyệt:" ;;
+    ov_chg_line) F="  %s" ;;
+    ov_warn_sys) F="  ! source: %s — thư mục hệ thống mount cho ghi: chỉ duyệt nếu bạn chủ ý (nên chỉ đọc, :ro)" ;;
+    ov_rejudge) F="Override đã duyệt không còn qua được phần kiểm trên máy này (một đường đã đổi từ lúc duyệt, vd bị thay bằng liên kết):" ;;
     ov_warn) F="  ! %s — thiết lập mạnh: chỉ duyệt nếu bạn chủ ý" ;;
     ov_rm) F="  · bỏ: %s" ;;
     ov_rm_more) F="  · … và %s dòng bị bỏ khác" ;;
@@ -811,13 +835,13 @@ compose_override() { # tệp override compose tự nạp khi không có -f (cùn
 compose_files() { # in các cặp "-f tệp", mỗi phần một dòng
   local ov d
   if [ -n "${TRUST:-}" ]; then   # root (CNS-257): tệp từ gói đã kiểm + override root đã duyệt; đường tương đối vẫn tính từ thư mục cài; .env đã lọc
-    # dựng container (up) với override đã duyệt → chạy ĐÚNG dạng chuẩn vừa phân giải + kiểm (override_gate → ov_state ghi $TI/effective.yml)
-    if [ -n "${CF_EFF:-}" ] && file_safe "$TI/override.yml" && file_safe "$TI/effective.yml"; then
+    # có override đã duyệt → LUÔN đúng dạng chuẩn đã phân giải + kiểm ($TI/effective.yml — lệnh tạo container: override_gate vừa ghi lại nó), không bao giờ
+    # tệp override thô (vòng 8, 🔴B). Đã duyệt mà chưa có dạng chuẩn (chỉ lệnh không tạo container tới được đây) → chỉ tệp đã kiểm
+    if file_safe "$TI/override.yml" && file_safe "$TI/effective.yml"; then
       printf '%s\n' -f "$TI/effective.yml" --project-directory "$HOME_DIR" --env-file "$TI/compose.env"; return 0
     fi
     # tệp edge cũ (≤ v0.23.0) mount ./edge/* của thư mục cài — container tráo được bằng symlink → không bao giờ dùng (F1) — base_files từ chối
     base_files || return 1
-    if file_safe "$TI/override.yml"; then printf '%s\n' -f "$TI/override.yml"; fi
     printf '%s\n' --project-directory "$HOME_DIR" --env-file "$TI/compose.env"
     return 0
   fi
@@ -855,9 +879,15 @@ compose() { # compose <lệnh docker compose…> — chạy trong thư mục cà
     [ -n "$(trust_files)" ] || trust_sync   # chưa có tệp đã kiểm nào (vd genchibi mcp ngay sau khi cài lại) → tải một lần
     if [ -z "$(trust_files)" ]; then compose_fallback ${1+"$@"}; return; fi
     compose_env || { m uid0_refuse "$HOME_DIR" >&2; return 1; }
-    [ "${1:-}" != up ] || override_gate || return 1   # rào cuối: không bao giờ dựng container khi override chưa được quyết
+    # rào cuối (vòng 8, 🔴B): MỌI lệnh compose có thể tạo / tạo lại container (up, run, create, scale, watch… và mọi lệnh lạ) phân giải + kiểm override
+    # NGAY LÚC NÀY; chỉ các lệnh chỉ đụng container có sẵn (dừng / xem / exec) bỏ qua — và cả chúng cũng chỉ thấy dạng chuẩn đã kiểm, không tệp thô
+    case "${1:-}" in
+      stop|down|logs|exec|rm|ps|kill|restart|start|top|port|images|pause|unpause|config|ls|version|events|wait|stats)
+        # không tạo container: làm mới dạng chuẩn nếu override còn qua kiểm (vd vừa tắt edge); không qua → giữ bản đã kiểm gần nhất, không chặn dừng / xem
+        if file_safe "$TI/override.yml"; then OV_DONE=""; ov_state >/dev/null 2>&1 || true; fi ;;
+      *) override_gate || return 1 ;; esac
     if [ "${1:-}" = up ] && [ -f "$EDGE_MARK" ]; then edge_prepare_trust || return 1; fi   # nguồn mount edge kiểm NGAY trước up (F1)
-    if [ "${1:-}" = up ]; then fl="$(CF_EFF=1 compose_files)" || return 1; else fl="$(compose_files)" || return 1; fi
+    fl="$(compose_files)" || return 1
     if [ -z "$TRUST_FLOOR_SAID" ] && [ -n "$(cur_tag)" ] && ! floor_ok "$(cur_tag)"; then TRUST_FLOOR_SAID=1; m trust_floor "$(cur_tag)" "$(basename "$(trust_files)")" "$TRUST_MIN" >&2; fi
     while IFS= read -r l; do a+=("$l"); done <<< "$fl"
     ( cd "$TD/run" && dk compose "${a[@]}" ${1+"$@"} )
@@ -1166,6 +1196,83 @@ ov_sock() { # đường là socket Docker hoặc thư mục phía trên nó (/ �
   case "$v$r" in *docker.sock*) return 0 ;; esac
   return 1
 }
+# ov_own_ok ĐƯỜNG (vòng 8, 🔴A): đường + MỌI thư mục cha (theo chữ lẫn theo đường thật) không thuộc user / nhóm của app và không bị tài khoản khác ghi
+# (nhóm / mọi người ghi được mà không có bit t) — app không tráo được nó thành liên kết giữa lúc kiểm và lúc Docker mount. OV_OWN_WHY = lý do khi trả 1
+OV_OWN_WHY=""
+ov_stat() { stat -c '%u %g %a' -- "$1" 2>/dev/null || stat -f '%u %g %Mp%Lp' -- "$1" 2>/dev/null; }   # uid gid mode (GNU · BSD/macOS)
+ov_own_ok() {
+  local v="$1" p q u g a
+  q="$(cd -P "$(dirname "$v")" 2>/dev/null && pwd)" || return 1
+  for p in "$v" "${q%/}/$(basename "$v")"; do
+    while :; do
+      if [ -e "$p" ] || [ -L "$p" ]; then
+        u=""; g=""; a=""; read -r u g a <<< "$(ov_stat "$p")" || true
+        case "$u$g$a" in ""|*[!0-9]*) OV_OWN_WHY="$(mn ov_own_ww "$p")"; return 1 ;; esac   # không đọc được chủ / quyền → đóng khi nghi ngờ
+        [ "$u" != "$APP_UID" ] || { OV_OWN_WHY="$(mn ov_own_uid "$p" "$u")"; return 1; }
+        [ "$g" != "$APP_GID" ] || [ "$g" = 0 ] || { OV_OWN_WHY="$(mn ov_own_gid "$p" "$g")"; return 1; }   # nhóm 0 ghi được: luật dưới bắt
+        # quyền của chính liên kết không có nghĩa (thay nó cần quyền ghi thư mục cha — được kiểm ở vòng sau)
+        if [ ! -L "$p" ] && (( (8#$a & 8#022) != 0 && (8#$a & 8#1000) == 0 )); then OV_OWN_WHY="$(mn ov_own_ww "$p")"; return 1; fi
+      fi
+      [ "$p" != / ] && [ -n "$p" ] || break
+      p="$(dirname "$p")"
+    done
+  done
+  return 0
+}
+# ov_rawscan TỆP (vòng 8, 🟠C): extends / include trỏ tới đường TUYỆT ĐỐI được compose chép thẳng vào dạng chuẩn (khoá biến mất, hộp cát vẫn đọc được tệp);
+# compose cũ (2.38 — runner CI) còn chép cả env_file / label_file vào environment / labels BẤT CHẤP --no-env-resolution (khoá biến mất)
+# → quét chữ thô của override: từ extends / include / env_file / label_file ở bất kỳ đâu, tag binary, chuỗi thoát \x \u \U, \ cuối dòng, chỉ thị %, tag !<…> (có thể dựng / giấu khoá).
+# Đóng khi nghi ngờ: trùng chữ trong giá trị cũng bị từ chối. In lỗi, trả 1
+# Vòng 9: go-yaml coi CR lẻ, NEL (U+0085), LS / PS (U+2028 / U+2029) là ngắt dòng; "\" + ngắt dòng trong chuỗi nháy kép NỐI hai nửa (? "inc\<LS>lude") và
+# chỉ khoá tường minh "? " mới được nhiều dòng → từ chối: "\" + CR / byte ≥ 0x80, các byte NEL / LS / PS ở bất kỳ đâu, dòng khoá tường minh "? "
+ov_rawscan() {
+  local n=0 l bad="" ls=$'\xe2\x80\xa8' ps=$'\xe2\x80\xa9' nel=$'\xc2\x85'
+  while IFS= read -r l || [ -n "$l" ]; do
+    n=$((n + 1))
+    if printf '%s\n' "$l" | LC_ALL=C grep -qiwE 'extends|include|env_file|label_file|binary' \
+      || printf '%s\n' "$l" | LC_ALL=C grep -qE '\\[xuU]|\\.?$|^%|!<' \
+      || printf '%s\n' "$l" | LC_ALL=C grep -qE '(^|[[:space:],{[])\?([[:space:]]|$)' \
+      || printf '%s\n' "$l" | LC_ALL=C grep -qE $'\\\\[\r\x80-\xff]' \
+      || printf '%s\n' "$l" | LC_ALL=C grep -qF -e "$ls" -e "$ps" -e "$nel"; then
+      bad=1; m ov_bad_raw "$n" "$(printf '%s' "${l#"${l%%[! ]*}"}" | san | cut -c1-120)"
+    fi
+  done < "$1"
+  [ -z "$bad" ]
+}
+# ov_canon TỆP (vòng 8, 🟡D): mỗi dòng dạng chuẩn của compose (thụt 2 dấu cách, một khoá một dòng) → "đường-khoá<TAB>dòng". Cùng chữ ở hai service / hai
+# danh sách là hai dòng KHÁC nhau → so multiset không còn nhầm "dời" một bind sang service khác là không đổi. Dòng tiếp của một giá trị (khối |-, chuỗi dài
+# bị gập) mang đường "<khoá>|" và giữ chữ — vẫn bị kiểm như một dòng (đóng khi nghi ngờ). Mục danh sách: "[]" (không đánh số: chèn mục không làm dời các dòng khác)
+ov_canon() {
+  LC_ALL=C awk '
+    function kof(x,   i) {   # khoá của "k: v" / "k:" (k có nháy hoặc không); "" nếu không phải dòng khoá
+      if (match(x, /^"([^"\\]|\\.)*"/) || match(x, /^\047([^\047]|\047\047)*\047/)) { i = RLENGTH; x2 = substr(x, i + 1); if (x2 ~ /^:( |$)/) { vv = substr(x2, 3); return substr(x, 1, i) } return "" }
+      i = index(x, ": "); if (i > 1) { vv = substr(x, i + 2); return substr(x, 1, i - 1) }
+      if (x ~ /^[^ ]+:$/) { vv = ""; return substr(x, 1, length(x) - 1) }
+      return ""
+    }
+    function pth(   i, r) { r = ""; for (i = 1; i <= d; i++) r = r (k[i] == "[]" ? "[]" : (r == "" ? "" : ".") k[i]); return r }
+    BEGIN { d = 0; ci = -1 }
+    {
+      if ($0 == "") { if (ci >= 0) print cp "|\t"; next }
+      n = match($0, /[^ ]/) - 1; x = substr($0, n + 1)
+      if (ci >= 0 && n > ci) { print cp "|\t" x; next }
+      ci = -1
+      while (d > 0 && ind[d] >= n) d--
+      if (x == "-" || substr(x, 1, 2) == "- ") {
+        p = pth() "[]"; d++; ind[d] = n; k[d] = "[]"; r = substr(x, 3)
+        key = kof(r)
+        print p "\t" x
+        if (key == "") { ci = n; cp = p }
+        else if (vv == "") { d++; ind[d] = n + 2; k[d] = key }
+        else { ci = n + 2; cp = p "." key }
+        next
+      }
+      key = kof(x); p = pth()
+      print p "\t" x
+      if (key == "") { ci = n; cp = p; next }
+      if (vv == "") { d++; ind[d] = n; k[d] = key } else { ci = n; cp = (p == "" ? "" : p ".") key }
+    }' "$1"
+}
 # base_files: các "-f tệp" đã kiểm (không override), mỗi phần một dòng
 base_files() {
   local d; d="$(trust_files)"; [ -n "$d" ] || return 1
@@ -1175,13 +1282,44 @@ base_files() {
     printf '%s\n' -f "$d/docker-compose.edge.yml"
   fi
 }
-# ov_resolve RA [OVERRIDE] [THƯ_MỤC_DỰ_ÁN] [ENV]: docker compose config (dạng chuẩn) — --no-env-resolution giữ env_file là một khoá (không đọc tệp đó vào)
+# ov_resolve RA [OVERRIDE] [THƯ_MỤC_DỰ_ÁN] [ENV]: docker compose config (dạng chuẩn) — --no-env-resolution giữ env_file là một khoá (compose mới; compose
+# 2.38 vẫn đọc tệp vào và bỏ khoá → ov_rawscan chặn env_file / label_file theo chữ thô, mọi phiên bản)
 ov_resolve() {
   local out="$1" ov="${2:-}" pd="${3:-$HOME_DIR}" ef="${4:-$TI/compose.env}" a=() l bl
   bl="$(base_files)" || return 1
   while IFS= read -r l; do a+=("$l"); done <<< "$bl"
   [ -z "$ov" ] || a+=(-f "$ov")
-  ( cd "$TD/run" && dk compose "${a[@]}" --project-directory "$pd" --env-file "$ef" config --no-env-resolution ) > "$out" 2> "$out.err"
+  if [ -n "${IS_ROOT:-}" ] && ov_can_hide; then
+    # vòng 9 (cấu trúc, không theo chữ): root phân giải trong mount namespace riêng, thư mục cài bị phủ tmpfs RỖNG chỉ đọc → include / extends / env_file
+    # / label_file trỏ vào thư mục cài (đường tuyệt đối, liên kết, cách viết nào cũng vậy) đều lỗi "không có tệp" → từ chối. Tệp đã kiểm + bản chép override ở $TD
+    ( cd "$TD/run" && unshare -m --propagation private -- sh -c 'for d in "$1" "$2"; do mount -t tmpfs -o ro,mode=000,size=4k gc-empty "$d" || exit 97; done; shift 2; exec docker ${1+"$@"}' \
+        sh "$HOME_PHYS" "$HOME_DIR" compose "${a[@]}" --project-directory "$pd" --env-file "$ef" config --no-env-resolution ) > "$out" 2> "$out.err"
+  else
+    ( cd "$TD/run" && dk compose "${a[@]}" --project-directory "$pd" --env-file "$ef" config --no-env-resolution ) > "$out" 2> "$out.err"
+  fi
+}
+# ov_can_hide: mount namespace + tmpfs làm được không (root thật, có unshare) — thử một lần: phủ $TD/run trong namespace riêng. Không → chỉ còn quét chữ (ov_rawscan)
+OV_CANHIDE=""
+ov_can_hide() {
+  [ -n "$OV_CANHIDE" ] || { OV_CANHIDE=n; command -v unshare >/dev/null 2>&1 && unshare -m --propagation private -- sh -c 'mount -t tmpfs -o ro,size=4k gc-probe "$1"' sh "$TD/run" >/dev/null 2>&1 && OV_CANHIDE=y; }
+  [ "$OV_CANHIDE" = y ]
+}
+# ov_sysrw M D: nguồn bind override thêm (dòng "+ … source:" của D) nằm dưới thư mục hệ thống mà mục đó không read_only → in (cảnh báo, vẫn duyệt được)
+ov_sysrw() {
+  LC_ALL=C awk -v D="$2" '
+    BEGIN { while ((getline l < D) > 0) if (l ~ /^\+/ && l ~ /\tsource: /) { sub(/^.*\tsource: /, "", l); add[l] = 1 } }
+    function flush() { if (src != "" && !ro && (src in add) && src ~ /^\/(etc|root|proc|sys|boot|run|var\/lib\/docker)(\/|$)/) print src; src = ""; ro = 0 }
+    /^ *- / { flush() }
+    /^ *(- )?source: / { x = $0; sub(/^ *(- )?source: /, "", x); src = x }
+    /^ *(- )?read_only: true$/ { ro = 1 }
+    END { flush() }' "$1" | sort -u
+}
+# ov_show_add D: các dòng "+" (đường khoá + dòng), tối đa 40 — chủ thấy override thêm gì vào kết quả thật
+ov_show_add() {
+  local n l; n="$(grep -c '^+' "$1" 2>/dev/null || true)"; [ "${n:-0}" -gt 0 ] || return 0
+  m ov_adds
+  grep '^+' "$1" | head -n 40 | while IFS= read -r l; do l="${l#+}"; m ov_add_line "$(printf '%s %s' "${l%%$'\t'*}" "${l#*$'\t'}" | san | cut -c1-160)"; done
+  [ "$n" -le 40 ] || m ov_add_more "$((n - 40))"
 }
 OV_EFF=""; OV_ERR=""
 # ov_effect OVERRIDE ENV → in tác động (+dòng / −dòng, đã sắp); OV_EFF = tệp M (dạng chuẩn đầy đủ, để chạy). Lỗi phân giải → 1, OV_ERR = dòng lỗi của compose
@@ -1199,17 +1337,19 @@ ov_effect() {
     OV_ERR="$(cat "$bf.err" "$mf.err" 2>/dev/null | san | grep -v '^$' | head -n 3 | tr '\n' ' ')"
     rm -f "$bf" "$bf.err" "$mf" "$mf.err"; return $rc
   fi
-  LC_ALL=C sort "$bf" > "$bf.s"; LC_ALL=C sort "$mf" > "$mf.s"
+  ov_canon "$bf" | LC_ALL=C sort > "$bf.s"; ov_canon "$mf" | LC_ALL=C sort > "$mf.s"   # so theo dòng CÓ đường khoá (vòng 8)
   { LC_ALL=C comm -13 "$bf.s" "$mf.s" | sed 's/^/+/'; LC_ALL=C comm -23 "$bf.s" "$mf.s" | sed 's/^/-/'; }
   rm -f "$bf" "$bf.err" "$bf.s" "$mf.s" "$mf.err"; OV_EFF="$mf"
 }
 # ov_judge TỆP_TÁC_ĐỘNG → in lỗi (✗, từ chối) / cảnh báo (!) / dòng bị bỏ (·); trả 1 nếu có lỗi. Chỉ dòng "+" bị kiểm (thứ override thêm / đổi)
 ov_judge() {
-  local line l t key val bad="" nrm=0
+  local line l t key val bad="" nrm=0 kp
   while IFS= read -r line; do
-    l="${line#?}"; t="${l#"${l%%[! ]*}"}"; t="${t#- }"
+    # dòng = dấu (+ / −) · đường khoá · TAB · dòng dạng chuẩn (ov_canon)
+    l="${line#?}"; kp="${l%%$'\t'*}"; case "$l" in *$'\t'*) l="${l#*$'\t'}" ;; esac
+    t="${l#"${l%%[! ]*}"}"; t="${t#- }"
     key="${t%%:*}"; val=""; case "$t" in *": "*) val="${t#*: }" ;; esac
-    case "$line" in -*) nrm=$((nrm + 1)); [ "$nrm" -gt 15 ] || m ov_rm "$(printf '%s' "$t" | san)"; continue ;; esac
+    case "$line" in -*) nrm=$((nrm + 1)); [ "$nrm" -gt 15 ] || m ov_rm "$(printf '%s %s' "$kp" "$t" | san)"; continue ;; esac
     case "$key" in
       build|env_file|extends|include|develop|use_api_socket|provider|volumes_from|dockerfile|additional_contexts|label_file)
         bad=1; m ov_bad_key "$key"; continue ;;
@@ -1223,12 +1363,14 @@ ov_judge() {
         case "$val" in
           */*|.*|~*)
             if ov_sock "$val"; then bad=1; m ov_bad_sock "$key" "$(printf '%s' "$val" | san)"
-            elif ! ov_abs_ok "$val"; then bad=1; m ov_bad_src "$key" "$(printf '%s' "$val" | san)"; fi ;;
+            elif ! ov_abs_ok "$val"; then bad=1; m ov_bad_src "$key" "$(printf '%s' "$val" | san)"
+            elif ! ov_own_ok "$val"; then bad=1; m ov_bad_own "$key" "$(printf '%s' "$val" | san)" "$(printf '%s' "$OV_OWN_WHY" | san)"; fi ;;
           *) [[ "$val" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] || { bad=1; m ov_bad_src "$key" "$(printf '%s' "$val" | san)"; } ;;
         esac ;;
       privileged) [ "$val" != true ] || m ov_warn "$(printf '%s' "$t" | san)" ;;
       pid|ipc|network_mode|userns_mode|uts|cgroup) case "$val" in host|*host*) m ov_warn "$(printf '%s' "$t" | san)" ;; esac ;;
-      cap_add|devices|security_opt|user|sysctls) m ov_warn "$(printf '%s' "$t" | san)" ;;
+      cap_add|devices|security_opt|user|sysctls|device_cgroup_rules|group_add|runtime) m ov_warn "$(printf '%s' "$t" | san)" ;;
+      propagation) case "$val" in rshared|shared|rslave|slave) m ov_warn "$(printf '%s' "$t" | san)" ;; esac ;;   # mount lan ngược / xuôi giữa container và máy
     esac
   done < "$1"
   [ "$nrm" -le 15 ] || m ov_rm_more "$((nrm - 15))"
@@ -1239,11 +1381,11 @@ ov_vars() { local k bad=""; while IFS= read -r k; do case "$k" in COMPOSE_*|DOCK
 gc_cmd() { if [ -n "$IS_ROOT" ]; then printf 'sudo %s' "${CLI_SELF:-$TD/genchibi}"; else printf '%s' "${CLI_SELF:-genchibi}"; fi; }   # lệnh chạy lại được (đường tuyệt đối — sudo secure_path không có ~/.local/bin, CNS-285)
 # ov_state → 0: không có override / đúng bản đã duyệt (bytes + giá trị biến + tác động sau phân giải, $TI/effective.yml vừa ghi) / đúng bản đã chọn bỏ
 # · 1: chưa duyệt, đã đổi, đã xoá (OV_GONE), tác động đổi (OV_CHG), không có docker compose (OV_NOCOMPOSE). Kết quả nhớ trong một lệnh (OV_DONE)
-OV_DONE=""; OV_RC=1; OV_CHG=""; OV_NOCOMPOSE=""
+OV_DONE=""; OV_RC=1; OV_CHG=""; OV_NOCOMPOSE=""; OV_JMSG=""; OV_CHGTXT=""
 ov_state() {
   [ -z "$OV_DONE" ] || return "$OV_RC"
   OV_DONE=1; OV_RC=1
-  OV_F="$(compose_override)"; OV_GONE=""; OV_CHG=""; OV_NOCOMPOSE=""
+  OV_F="$(compose_override)"; OV_GONE=""; OV_CHG=""; OV_NOCOMPOSE=""; OV_JMSG=""; OV_CHGTXT=""
   if [ -z "$OV_F" ]; then
     # chủ xoá override trong thư mục cài mà còn bản đã duyệt → phải quyết lại (không lặng lẽ dựng lại service cũ — CNS-286)
     if file_safe "$TI/override.yml"; then OV_GONE=1; return 1; fi
@@ -1257,8 +1399,14 @@ ov_state() {
   compose_env || return 1
   e="$(mktemp "$TD/run/ove-XXXXXX")" || return 1
   if ! ov_effect "$TI/override.yml" "$TI/compose.env" > "$e"; then OV_CHG=1; rm -f "$e"; return 1; fi
-  if [ "$(sha256_of "$e")" != "$(sha256_of "$TI/override.effect")" ]; then OV_CHG=1; rm -f "$e" "$OV_EFF"; return 1; fi
-  rm -f "$e"; chmod 600 "$OV_EFF"; mv -f "$OV_EFF" "$TI/effective.yml"
+  if [ "$(sha256_of "$e")" != "$(sha256_of "$TI/override.effect")" ]; then
+    OV_CHG=1; OV_CHGTXT="$(LC_ALL=C comm -13 <(LC_ALL=C sort "$TI/override.effect") <(LC_ALL=C sort "$e") | head -n 40 | tr '\t' ' ' | san | cut -c1-160)" || OV_CHGTXT=""
+    rm -f "$e" "$OV_EFF"; return 1
+  fi
+  # vòng 8 (🔴A): chữ giống hệt lúc duyệt KHÔNG có nghĩa đường trên máy còn như cũ (compose giữ nguyên chữ của đường bind) → kiểm lại ĐỦ mỗi lần dùng:
+  # quét chữ thô + ov_judge (tuyệt đối, ngoài thư mục cài, không liên kết, socket, chủ / quyền) trên kết quả vừa phân giải
+  if ! { ov_rawscan "$TI/override.yml" && ov_judge "$e"; } > "$e.j" 2>&1; then OV_JMSG="$(grep '^  - ' "$e.j" || true)"; rm -f "$e" "$e.j" "$OV_EFF"; return 1; fi
+  rm -f "$e" "$e.j"; chmod 600 "$OV_EFF"; mv -f "$OV_EFF" "$TI/effective.yml"
   OV_RC=0; return 0
 }
 ov_print() { rd "$1" | san | head -n 60; }   # nội dung override cho người đọc: bỏ ký tự điều khiển (terminal), tối đa 60 dòng
@@ -1274,6 +1422,8 @@ override_gate() { # TRUST: override chưa duyệt / đã đổi / đã xoá → 
   if [ -n "$OV_GONE" ]; then { m ov_gone "$TI/override.yml" "$(gc_cmd)"; } >&2; return 1; fi
   { m ov_block "$HOME_DIR/$OV_F"; ov_print "$OV_F"; echo; ov_keys_note "$OV_F"; ov_vals_note
     [ -z "$OV_NOCOMPOSE" ] || m ov_nocompose; [ -z "$OV_CHG" ] || m ov_effect_changed
+    [ -z "$OV_CHGTXT" ] || { m ov_chg_head; printf '%s\n' "$OV_CHGTXT" | while IFS= read -r l; do m ov_chg_line "$l"; done; }
+    [ -z "$OV_JMSG" ] || { m ov_rejudge; printf '%s\n' "$OV_JMSG"; }
     m ov_block_fix "$(gc_cmd)" "$(gc_cmd)" "$HOME_DIR/$OV_F"; } >&2
   return 1
 }
@@ -1291,7 +1441,7 @@ override_cmd() {
     status)
       if ! ov_state; then
         if [ -n "$OV_GONE" ]; then m ov_gone "$TI/override.yml" "$(gc_cmd)"; else m ov_block_short "$HOME_DIR/$OV_F" "$(gc_cmd)" "$(gc_cmd)"; ov_vals_note
-          [ -z "$OV_NOCOMPOSE" ] || m ov_nocompose; [ -z "$OV_CHG" ] || m ov_effect_changed; fi; return 1
+          [ -z "$OV_NOCOMPOSE" ] || m ov_nocompose; [ -z "$OV_CHG" ] || m ov_effect_changed; [ -z "$OV_JMSG" ] || { m ov_rejudge; printf '%s\n' "$OV_JMSG"; }; fi; return 1
       elif [ -z "$f" ]; then m ov_none
       elif file_safe "$TI/override.yml"; then m ov_same "$HOME_DIR/$f" "$TI/override.yml"; ov_keys_note "$f"
       else m ov_skipped "$HOME_DIR/$f" "$(gc_cmd)"; fi ;;
@@ -1305,13 +1455,16 @@ override_cmd() {
       ov_env "$tmp" > "$tmp.env"
       # compose.env ứng viên: như compose.env nhưng với giá trị vừa chụp
       CE_SNAP="$tmp.env" CE_OUT="$tmp.ce" CE_FORCE=1 compose_env || { rm -f "$tmp" "$tmp.env"; return 1; }
-      local rc=0; ov_effect "$tmp" "$tmp.ce" > "$tmp.eff" || rc=$?
+      local rc=0 rw=0; ov_rawscan "$tmp" > "$tmp.raw" || rw=1   # chữ thô trước: vẫn báo khi compose không phân giải được (vd thư mục cài bị phủ)
+      ov_effect "$tmp" "$tmp.ce" > "$tmp.eff" || rc=$?
       if [ $rc != 0 ]; then
-        { m ov_bad "$HOME_DIR/$f"; if [ $rc = 2 ]; then m ov_sandbox "$OV_ERR"; else m ov_resolve_fail "$OV_ERR"; fi; ov_vars "$tmp" || true; } >&2
-        rm -f "$tmp" "$tmp.env" "$tmp.ce" "$tmp.eff"; return 1
+        { m ov_bad "$HOME_DIR/$f"; cat "$tmp.raw"; if [ $rc = 2 ]; then m ov_sandbox "$OV_ERR"; else m ov_resolve_fail "$OV_ERR"; fi; ov_vars "$tmp" || true; } >&2
+        rm -f "$tmp" "$tmp.env" "$tmp.ce" "$tmp.eff" "$tmp.raw"; return 1
       fi
-      local j=0 v=0; ov_judge "$tmp.eff" > "$tmp.bad" || j=1; ov_vars "$tmp" >> "$tmp.bad" || v=1
+      local j=$rw v=0; ov_judge "$tmp.eff" > "$tmp.bad" || j=1; cat "$tmp.raw" >> "$tmp.bad"; rm -f "$tmp.raw"; ov_vars "$tmp" >> "$tmp.bad" || v=1
+      ov_sysrw "$OV_EFF" "$tmp.eff" | while IFS= read -r l; do m ov_warn_sys "$(printf '%s' "$l" | san)"; done >> "$tmp.bad"
       if [ $j = 1 ] || [ $v = 1 ]; then { m ov_bad "$HOME_DIR/$f"; cat "$tmp.bad"; } >&2; rm -f "$tmp" "$tmp.env" "$tmp.ce" "$tmp.eff" "$tmp.bad" "$OV_EFF"; return 1; fi
+      ov_show_add "$tmp.eff"
       if [ -s "$tmp.bad" ]; then m ov_effect_show; cat "$tmp.bad"; fi; rm -f "$tmp.bad"
       if [ -n "$y" ] || ask_yn "$(mn ov_ask)"; then
         chmod 600 "$tmp" "$tmp.env" "$tmp.eff" "$OV_EFF"

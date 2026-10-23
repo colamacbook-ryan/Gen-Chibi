@@ -1,36 +1,51 @@
 bad-apisock.yml	"use_api_socket:"
+bad-bin.yml	line 3: !!binary ZXh0ZW5kcw==: {file: 
 bad-c1.yml	"build:"
 bad-c2.yml	"build:"
 bad-c3.yml	"build:"
-bad-c4.yml	source: @INSTALL@/data (
-bad-c5.yml	source: @INSTALL@/my dir (
-bad-c6.yml	source: @INSTALL@/data (
+bad-c4.yml	source: @INSTALL@/data (a path in the install folder
+bad-c5.yml	source: @INSTALL@/my dir (a path in the install folder
+bad-c6.yml	source: @INSTALL@/data (a path in the install folder
 bad-c7.yml	Docker Compose could not resolve it
-bad-c8.yml	source: @INSTALL@/a=b (
+bad-c8.yml	source: @INSTALL@/a=b (a path in the install folder
 bad-c9.yml	"build:"
-bad-cdrive.yml	source: C:/data (
-bad-compact.yml	source: @INSTALL@/data (
+bad-cdrive.yml	source: C:/data (a path in the install folder
+bad-compact.yml	source: @INSTALL@/data (a path in the install folder
 bad-complex.yml	"build:"
-bad-cont.yml	source: /srv /..@INSTALL@/data (
-bad-cont2.yml	source: /etc - /..@INSTALL@/data (
-bad-cont3.yml	source: /etc - /..@INSTALL@/data (
+bad-cont.yml	source: /srv /..@INSTALL@/data (a path in the install folder
+bad-cont2.yml	source: /etc - /..@INSTALL@/data (a path in the install folder
+bad-cont3.yml	source: /etc - /..@INSTALL@/data (a path in the install folder
 bad-cr.yml	"build:"
 bad-cr2.yml	"build:"
-bad-dash.yml	source: @INSTALL@/data (
-bad-defvar.yml	source: @INSTALL@/data (
+bad-crkey.yml	line 4: ? "inc\
+bad-crval.yml	line 3: image: "example/\login" (
+bad-dash.yml	source: @INSTALL@/data (a path in the install folder
+bad-defvar.yml	source: @INSTALL@/data (a path in the install folder
 bad-develop.yml	"develop:"
-bad-device.yml	device: ./x (
-bad-devrel.yml	source: ./dev (
-bad-dotdot.yml	source: /nonexist/..
-bad-include.yml	it reads files relative to the install folder
-bad-nested-src.yml	source: @INSTALL@/data (
-bad-nested-type.yml	source: @INSTALL@/data (
+bad-device.yml	device: ./x (a path in the install folder
+bad-devrel.yml	source: ./dev (a path in the install folder
+bad-dotdot.yml	source: /nonexist/..@INSTALL@/data (a path in the install folder
+bad-envabs.yml	line 3: env_file: 
+bad-eolesc.yml	line 3: image: "example/\ (
+bad-esc.yml	line 3: "\x65xtends": (
+bad-extabs.yml	line 3: extends: (
+bad-incabs.yml	line 1: include: (
+bad-include.yml	line 1: include: (
+bad-labelabs.yml	line 3: label_file: 
+bad-lskey.yml	line 4: ? "inc\
+bad-lsraw.yml	line 5: A: "x
+bad-move.yml	source: @INSTALL@ (a path
+bad-nested-src.yml	source: @INSTALL@/data (a path in the install folder
+bad-nested-type.yml	source: @INSTALL@/data (a path in the install folder
 bad-nonascii.yml	"build:"
 bad-provider.yml	"provider:"
+bad-qkey.yml	line 3: ? image (
 bad-root.yml	source: / (the Docker socket
 bad-sock.yml	source: /var/run/docker.sock (the Docker socket
 bad-sockenv.yml	DOCKER_HOST: unix:///var/run/docker.sock (the Docker socket
 bad-tab.yml	"build:"
 bad-var.yml	Docker Compose could not resolve it
+bad-verbatim.yml	line 3: image: !<tag:yaml.org,2002:str> example/login (
 bad-volfrom.yml	"volumes_from:"
-bad-xext.yml	source: @INSTALL@/data (
+bad-xext.yml	source: @INSTALL@/data (a path in the install folder
+bad-yamldir.yml	line 1: %YAML 1.1 (

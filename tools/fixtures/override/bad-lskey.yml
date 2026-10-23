@@ -1,0 +1,5 @@
+services:
+  login:
+    image: example/login
+? "inc\ lude"
+: - @INSTALL@/inc.yml
