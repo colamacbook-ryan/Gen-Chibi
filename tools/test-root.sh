@@ -389,14 +389,18 @@ check $? "override approve từ chối (đỏ, từng dòng): bind tương đố
 # vòng 5 (bảo mật 🟠): bộ kiểm override là DANH SÁCH CHO PHÉP cú pháp — mọi đường vòng reviewer chứng minh (tools/fixtures/override/bad-c1…c9) + flow / anchor /
 # tag / khối chữ / --- / tab / chú thích che / device tương đối / biến trong nguồn đều bị từ chối, có số dòng; bản duyệt cũ giữ nguyên
 : > "$W/ov-syn.log"
-for f in "$ROOT"/tools/fixtures/override/bad-*.yml; do
-  ( cd "$I" && as_container sh -c 'cat > docker-compose.override.yml' ) < "$f"; rootcli override approve --yes
-  echo "$(basename "$f") rc=$RC $(echo "$OUT" | grep -c 'Cannot approve') $(echo "$OUT" | grep -cE '^  - line [0-9]+: ')" >> "$W/ov-syn.log"
+IPH="$(cd -P "$I" && pwd)"
+for f in "$ROOT"/tools/fixtures/override/bad-*.yml; do   # @INSTALL@ = đường thật của thư mục cài (đường vòng ../ vào thư mục cài)
+  sed "s|@INSTALL@|$IPH|g" "$f" | ( cd "$I" && as_container sh -c 'cat > docker-compose.override.yml' ); rootcli override approve --yes
+  # từ chối đúng LÝ DO (tools/fixtures/override/expect.txt): mỗi lớp kiểm có ca riêng — lớp khác bắt thay thì vẫn là lỗi (lớp đó mù)
+  ex="$(awk -F'\t' -v n="$(basename "$f")" '$1 == n { print $2 }' "$ROOT/tools/fixtures/override/expect.txt")"; ex="${ex//@INSTALL@/$IPH}"
+  ew=0; [ -n "$ex" ] && echo "$OUT" | grep -qF -- "  - $ex" && ew=1
+  echo "$(basename "$f") rc=$RC $(echo "$OUT" | grep -c 'Cannot approve') $ew" >> "$W/ov-syn.log"
 done
 printf 'services:\n  login:\n    image: example/login\n    volumes:\n      - %s/data:/x\n' "$(cd -P "$I" && pwd)" > "$W/ov-inst.yml"   # bind tuyệt đối VÀO thư mục cài (đường thật)
 ( cd "$I" && as_container sh -c 'cat > docker-compose.override.yml' ) < "$W/ov-inst.yml"; rootcli override approve --yes; echo "inst-abs rc=$RC $(echo "$OUT" | grep -c 'Cannot approve') $(echo "$OUT" | grep -cE '^  - line [0-9]+: ')" >> "$W/ov-syn.log"
-! grep -vE ' rc=1 1 [1-9][0-9]*$' "$W/ov-syn.log" | grep -q . && [ "$(wc -l < "$W/ov-syn.log")" -ge 20 ] && grep -q 'HASH' "$TI/override.yml"
-check $? "override approve (danh sách cho phép cú pháp): mọi đường vòng (flow {…}/[…], khoá có nháy, anchor/merge, extends {file}, bind có khoảng trắng / '=' / tương đối / vào thư mục cài, type: bind + source tên, khối chữ, tag, ?, ---, tab, chú thích che, device tương đối, biến) → từ chối có số dòng; bản duyệt cũ giữ nguyên" "$(tr '\n' ' ' < "$W/ov-syn.log")"
+! grep -vE ' rc=1 1 [1-9][0-9]*$' "$W/ov-syn.log" | grep -q . && [ "$(wc -l < "$W/ov-syn.log")" -ge 30 ] && grep -q 'HASH' "$TI/override.yml"
+check $? "override approve (danh sách cho phép cú pháp): mọi đường vòng (flow {…}/[…], khoá có nháy, anchor/merge, extends {file}, bind có khoảng trắng / '=' / tương đối / vào thư mục cài / /không-có/../<thư mục cài>, type: bind + source tên, khối chữ, tag, ?, ---, tab, CR, non-ASCII, dòng nối, '-' trơn, develop, chú thích che, device tương đối, biến, \${X:-./data}) → từ chối có số dòng; bản duyệt cũ giữ nguyên" "$(tr '\n' ' ' < "$W/ov-syn.log")"
 ( cd "$I" && as_container sh -c 'cat > docker-compose.override.yml' ) < "$ROOT/tools/fixtures/override/ok-block.yml"; rootcli override approve --yes; OKO="$OUT"; OKR=$RC
 [ $OKR = 0 ] && cmp -s "$TI/override.yml" "$ROOT/tools/fixtures/override/ok-block.yml"
 check $? "override YAML khối thường (biến \${…}, volume có tên, bind tuyệt đối ngoài thư mục cài, type: volume, nháy ở giá trị, chú thích) → duyệt được" "rc $OKR: $OKO"
@@ -409,6 +413,10 @@ PR1=$?
 [ $PR1 = 0 ] && [ $RC = 1 ] && echo "$OUT" | grep -q 'Values changed in .env since approval: GC_PUBLIC_URL' && [ "$(grep -c 'sub=up' "$FS/compose.log")" = "$NUP" ]
 check $? "override dùng \${GC_PUBLIC_URL} (khoá genchibi cũng đọc): giá trị được chụp; .env đổi → start dừng, hỏi lại. \${GC_PORT} (genchibi tự tính) không chụp" "$PA · rc $RC: $OUT"
 ( cd "$I" && as_container sh -c 'sed -i "/^GC_PUBLIC_URL=/d" .env' )
+printf "GC_UID='0'\nGC_EDGE_DIR='/'\n" >> "$TI/override.env"; rootcli stop
+[ "$(grep -c '^GC_UID=' "$FS/last-compose.env")" = 1 ] && grep -qx "GC_UID='$AUID'" "$FS/last-compose.env" && [ "$(grep -c '^GC_EDGE_DIR=' "$FS/last-compose.env")" = 1 ] && ! grep -qx "GC_EDGE_DIR='/'" "$FS/last-compose.env"
+check $? "bản chụp override.env có khoá genchibi tự tính (GC_UID / GC_EDGE_DIR — bị sửa hoặc cũ) → compose.env bỏ chúng: mỗi khoá đúng một lần, giá trị của genchibi" "$(grep -E '^GC_(UID|EDGE_DIR)=' "$FS/last-compose.env" | tr '\n' ' ')"
+sed -i "/^GC_UID=/d; /^GC_EDGE_DIR=/d" "$TI/override.env"
 ( cd "$I" && as_container sh -c 'cat > docker-compose.override.yml' ) < "$W/ov.keep"; rootcli override approve --yes
 ( cd "$I" && as_container sh -c 'printf "      MORE: \${OTHER_SECRET}\n" >> docker-compose.override.yml' ); rootcli start
 [ $RC = 1 ] && echo "$OUT" | grep -q 'OTHER_SECRET'

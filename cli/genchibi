@@ -269,7 +269,7 @@ _en() {
     mode_guess) F="! .env says GC_MODE=native, but this install has no mode record and genchibi cannot rule out Docker — treating it as a Docker install. If it really runs with Node, run the install command again with --native (it records the mode)." ;;
     td_root_owned) F="! This install was set up with sudo: root keeps its approvals and edge folders. Use sudo %s so both stay the same." ;;
     ov_bad) F="✗ Cannot approve %s — it would make Docker read files the app can change:" ;;
-    ov_bad_syn) F="  - line %s: %s — only plain block YAML is accepted in an approved override (one key per line; no { } [ ], & * <<, ? ! | >, quoted keys, ---, tabs, or a comment after a quoted value)" ;;
+    ov_bad_syn) F="  - line %s: %s — only plain block YAML is accepted in an approved override (one key per line as key: / key: value / - value / - key: value, no continuation lines; plain ASCII only, no CR / tabs; no { } [ ], & * <<, ? ! | >, quoted keys, ---, or a comment after a quoted value)" ;;
     ov_bad_key) F="  - line %s: \"%s:\" (reads a file — not supported in an approved override; move it to an image or an absolute path outside the install folder)" ;;
     ov_bad_src) F="  - line %s: %s (a folder of the install folder, a relative path, a link, a variable, quotes or spaces — use a named volume or an absolute path outside the install folder)" ;;
     ov_bad_var) F="  - variable %s (COMPOSE_* / DOCKER_* change how Docker itself runs — not allowed)" ;;
@@ -544,7 +544,7 @@ _vi() {
     mode_guess) F="! .env ghi GC_MODE=native, nhưng bản cài này chưa có bản ghi chế độ và genchibi không loại trừ được Docker — coi là bản cài Docker. Nếu nó thật sự chạy bằng Node, chạy lại lệnh cài với --native (lệnh cài ghi chế độ)." ;;
     td_root_owned) F="! Bản cài này được cài bằng sudo: root giữ bản duyệt và thư mục edge. Dùng sudo %s để hai bên không lệch nhau." ;;
     ov_bad) F="✗ Không duyệt được %s — nó sẽ khiến Docker đọc tệp mà app đổi được:" ;;
-    ov_bad_syn) F="  - dòng %s: %s — override đã duyệt chỉ nhận YAML khối thường (mỗi dòng một khoá; không { } [ ], & * <<, ? ! | >, khoá có nháy, ---, tab, hay chú thích sau giá trị có nháy)" ;;
+    ov_bad_syn) F="  - dòng %s: %s — override đã duyệt chỉ nhận YAML khối thường (mỗi dòng đúng một dạng khoá: / khoá: giá trị / - giá trị / - khoá: giá trị, không dòng nối; chỉ ASCII in được, không CR / tab; không { } [ ], & * <<, ? ! | >, khoá có nháy, ---, hay chú thích sau giá trị có nháy)" ;;
     ov_bad_key) F="  - dòng %s: \"%s:\" (đọc một tệp — override đã duyệt không hỗ trợ; chuyển vào image hoặc đường tuyệt đối ngoài thư mục cài)" ;;
     ov_bad_src) F="  - dòng %s: %s (thư mục trong thư mục cài, đường tương đối, liên kết, biến, nháy hay khoảng trắng — dùng volume có tên hoặc đường tuyệt đối ngoài thư mục cài)" ;;
     ov_bad_var) F="  - biến %s (COMPOSE_* / DOCKER_* đổi cách chính Docker chạy — không cho phép)" ;;
@@ -1080,7 +1080,10 @@ $ENV_RAW
 EOF_ENV
   # biến .env mà override ĐÃ DUYỆT dùng (CNS-281 / CNS-294): GIÁ TRỊ chụp lúc duyệt ($TI/override.env) — không đọc .env sống (container ghi được);
   # .env đổi giá trị → ov_state báo đổi, hỏi lại
-  if file_safe "$TI/override.env" && file_safe "$TI/override.yml"; then out="$out$(cat "$TI/override.env")"; [ -z "$(cat "$TI/override.env")" ] || out="$out"$'\n'; fi
+  if file_safe "$TI/override.env" && file_safe "$TI/override.yml"; then
+    local oe; oe="$(grep -vE "^($(printf '%s' "$OV_GEN" | tr ' ' '|'))=" "$TI/override.env" || true)"   # khoá genchibi tự tính không bao giờ lấy từ bản chụp
+    [ -z "$oe" ] || out="$out$oe"$'\n'
+  fi
   out="${out}GC_EDGE_DIR='$EDGE_DIR'"$'\n'   # nguồn bind mount của edge NGOÀI thư mục cài (F1)
   case "$bind" in ::1) ;; *) [[ "$bind" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || bind=127.0.0.1 ;; esac
   out="${out}GC_UID='$APP_UID'"$'\n'"GC_GID='$APP_GID'"$'\n'"GC_PORT='$PORT'"$'\n'"GC_BIND='$bind'"$'\n'
@@ -1121,15 +1124,22 @@ ov_abs_ok() { # đường tuyệt đối ngoài thư mục cài (cả HOME_DIR l
   local v="$1" k
   case "$v" in /*) ;; *) return 1 ;; esac
   case "$v" in *'$'*|*' '*|*'"'*|*"'"*) return 1 ;; esac
+  # thành phần . / .. / rỗng (//) → từ chối: daemon tự giải ../ — /không-có/../<thư mục cài>/data qua được phép so chuỗi mà vẫn trỏ vào thư mục cài
+  case "$v/" in *//*|*/./*|*/../*) return 1 ;; esac
   case "$v/" in "$HOME_PHYS"/*|"$HOME_DIR"/*) return 1 ;; esac
   [ ! -L "$v" ] || return 1
-  k="$(cd -P "$(dirname "$v")" 2>/dev/null && pwd)" || k=""
+  # thư mục cha PHẢI có (cd -P được) — đóng khi nghi ngờ; so đường thật cha + tên với thư mục cài
+  k="$(cd -P "$(dirname "$v")" 2>/dev/null && pwd)" || return 1
+  case "$k/$(basename "$v")/" in "$HOME_PHYS"/*|"$HOME_DIR"/*) return 1 ;; esac
   case "$k/" in "$HOME_PHYS"/*|"$HOME_DIR"/*) return 1 ;; esac
   if [ -d "$v" ]; then k="$(cd -P "$v" 2>/dev/null && pwd)" || k=""; case "$k/" in "$HOME_PHYS"/*|"$HOME_DIR"/*) return 1 ;; esac; fi
   return 0
 }
 ov_check() {
   local f="$1" kind ln val bad="" k
+  # mọi byte phải là ASCII in được (+ xuống dòng): CR (YAML coi là xuống dòng — "build:\r  context: ." qua mặt bộ quét theo dòng), NUL, BOM, điều khiển, non-ASCII
+  while IFS=: read -r ln _; do bad=1; m ov_bad_syn "$ln" "byte"; done < <(LC_ALL=C grep -nav '^[ -~]*$' "$f" || true)
+  [ -z "$bad" ] || return 1
   while IFS=$'\t' read -r kind ln val; do
     case "$kind" in
       X) bad=1; m ov_bad_syn "$ln" "$val" ;;
@@ -1145,7 +1155,6 @@ ov_check() {
     {
       raw = $0
       if (raw ~ /^[ ]*$/ || raw ~ /^[ ]*#/) next
-      if (raw ~ /\t/) { printf "X\t%d\ttab\n", NR; next }
       if (raw ~ /^%/) { printf "X\t%d\t%%\n", NR; next }
       l = raw; sub(/[ \t]+$/, "", l)
       if (l ~ /^(---|\.\.\.)([ \t]|$)/) { printf "X\t%d\t---\n", NR; next }
@@ -1160,12 +1169,23 @@ ov_check() {
       if (l ~ /:[ ]+[|>][-+0-9]*$/ || l ~ /^[ ]*-[ ]+[|>][-+0-9]*$/) { printf "X\t%d\t| >\n", NR; next }
       if (l ~ /^[ ]*(-[ ]+)?["\047][^"\047]*["\047][ ]*:/) { printf "X\t%d\t\"key\":\n", NR; next }
       n = ind(l); body = substr(l, n + 1)
+      # mỗi dòng PHẢI là đúng một dạng: "khoá:" · "khoá: giá trị" · "- giá trị" · "- khoá:" · "- khoá: giá trị" (khoá [A-Za-z0-9_.-]+). Dòng thụt sâu hơn sau
+      # một dòng đã có giá trị (khoá: giá trị / - giá trị) = dòng NỐI của chuỗi nhiều dòng → compose thấy giá trị khác thứ đã kiểm → từ chối
+      if (body ~ /^[A-Za-z0-9_.-]+:$/) form = "open"
+      else if (body ~ /^[A-Za-z0-9_.-]+: +[^ ]/) form = "kv"
+      else if (body ~ /^- +[A-Za-z0-9_.-]+:$/) form = "iopen"
+      else if (body ~ /^- +[A-Za-z0-9_.-]+: +[^ ]/) form = "ikv"
+      else if (body ~ /^- +[^ ]/) form = "iv"
+      else { printf "X\t%d\tline\n", NR; pform = ""; next }
+      if ((pform == "kv" || pform == "iv") && n > pind) { printf "X\t%d\tcontinuation\n", NR; next }
+      if (pform == "ikv" && n > pci) { printf "X\t%d\tcontinuation\n", NR; next }
+      pform = form; pind = n; if (form == "ikv" || form == "iopen") { match(body, /^- +/); pci = n + RLENGTH }
       # rời khối volumes khi thụt lùi về bằng / ít hơn dòng "volumes:"
       if (invol && n <= vind) { endItem(); invol = 0 }
       key = ""; isitem = 0; rest = body
       if (rest ~ /^-[ ]/ || rest == "-") { isitem = 1; rest = substr(rest, 2); sub(/^[ ]+/, "", rest) }
       if (match(rest, /^[A-Za-z0-9_.-]+[ ]*:([ ]|$)/)) { key = rest; sub(/[ ]*:.*/, "", key); val = rest; sub(/^[^:]*:[ ]*/, "", val) }
-      if (key ~ /^(build|env_file|extends|include|configs|secrets|file|dockerfile|additional_contexts|label_file)$/) { printf "K\t%d\t%s\n", NR, key; next }
+      if (key ~ /^(build|env_file|extends|include|configs|secrets|file|dockerfile|additional_contexts|label_file|develop)$/) { printf "K\t%d\t%s\n", NR, key; next }
       if (key == "device") { v = val; if (v != "") printf "S\t%d\t%s\n", NR, v }
       if (invol) {
         if (isitem && n + 0 > vind) {

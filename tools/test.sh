@@ -28,9 +28,9 @@ gc_orphans() {
     c="$(readlink "$d/cwd" 2>/dev/null)" || continue
     # cả tiến trình của bản chép đột biến / L-77 (/tmp/gc-mut-*, /tmp/gc-l77-*) theo cwd, và mọi app test (GC_HOME dưới /tmp/gc-*) — launcher native sót khi stop đi nhầm đường
     case "$c/" in "$ROOT"/*|/tmp/gc-mut-*|/tmp/gc-l77-*) ;; *)
-      e="$(tr '\0' '\n' < "$d/environ" 2>/dev/null | sed -n 's/^GC_HOME=//p' | head -n 1)" || e=""
+      e="$( { tr '\0' '\n' < "$d/environ"; } 2>/dev/null | sed -n 's/^GC_HOME=//p' | head -n 1)" || e=""   # tiến trình có thể vừa thoát: im lặng, vẫn kiểm
       case "$e" in /tmp/gc-*) ;; *) continue ;; esac ;; esac
-    n="$(tr '\0' ' ' < "$d/cmdline" 2>/dev/null | cut -c1-160)" || continue
+    n="$( { tr '\0' ' ' < "$d/cmdline"; } 2>/dev/null | cut -c1-160)" || continue
     case "$(basename "${n%% *}" 2>/dev/null)" in caddy*|node|nodejs|cloudflared*|chrome|chromium*|headless_shell) printf '%s %s\n' "$p" "$n" ;; esac   # theo TÊN tệp chạy, không theo đường repo
   done
   return 0
@@ -80,6 +80,11 @@ echo "   ✓ không có method trùng tên trong class (server)"
 LINT="$(for f in tools/test-*.sh; do awk -v F="$f" '/^[[:space:]]*$/ { next } { if ($0 ~ /^[[:space:]]*check \$\?/ && (prev ~ /^[[:space:]]*(check |#)/ || prev ~ /^[[:space:]]*(\}|fi|done)[[:space:]]*$/)) print F ":" NR; prev = $0 }' "$f"; done)"
 [ -z "$LINT" ] || { echo "   ✗ check \$? không đứng ngay sau điều kiện của nó: $LINT"; exit 1; }
 echo "   ✓ mọi check \$? trong tools/test-*.sh đứng ngay sau điều kiện của nó"
+# lint: MỌI lần chạy genchibi trong test có HOME tường minh (cùng dòng hoặc 3 dòng trên — env của lời gọi) — không bao giờ HOME thật của người chạy bộ test
+LH="$(for f in tools/test-*.sh tools/test-*.mjs tools/test-*.js; do awk -f tools/lint-home.awk "$f"; done)"
+[ -z "$LH" ] || { echo "   ✗ chạy genchibi không có HOME tường minh:"; printf '%s\n' "$LH" | sed 's/^/     /'; exit 1; }
+LHS="$(printf 'x=1\nbash "$ROOT/cli/genchibi" status\n' | awk -f tools/lint-home.awk)"; [ -n "$LHS" ] || { echo "   ✗ lint HOME mù (không bắt được ca mẫu)"; exit 1; }
+echo "   ✓ mọi lần chạy genchibi trong tools/test-* có HOME tường minh (lint tự kiểm bằng ca mẫu)"
 echo "1b) ngôn ngữ (ADR 0007): i18n lõi (t / placeholder / số nhiều / fallback / langOf / tr) · bảng locales/en hợp lệ · độ phủ bản dịch"
 node tools/test-i18n.mjs || exit 1
 home_check tools/test-i18n.mjs

@@ -72,6 +72,13 @@ if [ -n "$HAVE_COMPOSE" ]; then
   mvis="$(mounts_ok edge-mut.yml)"
   [ "$mvis" != ok ] && grep -q 'thấy edge/tunnel.token' <<< "$mvis" && ok "đột biến (mount cả ./edge) → kiểm mount ĐỎ: $mvis" || bad "đột biến không bị bắt: $mvis"
   rm -f "$I/edge-mut.yml" "$I/edge/tunnel.token"
+  # vòng 6: mỗi fixture override "xấu" phải là thứ compose THẬT chấp nhận (đường vòng thật, không phải lỗi cú pháp) — genchibi override approve từ chối chúng (test-root)
+  OP="$W/ovproj"; mkdir -p "$OP/data"; : > "$OP/.env"; : > "$OP/login.env"; printf 'services:\n  a:\n    image: z\n' > "$OP/x.yml"; : > "$W/ov-compose.log"
+  for f in "$ROOT"/tools/fixtures/override/*.yml; do
+    sed "s|@INSTALL@|$OP|g" "$f" > "$W/ov-cur.yml"
+    ( cd "$OP" && docker compose -f "$ROOT/docker-compose.yml" -f "$W/ov-cur.yml" --project-directory "$OP" config --no-interpolate >/dev/null 2>&1 ) || echo "$(basename "$f")" >> "$W/ov-compose.log"
+  done
+  [ ! -s "$W/ov-compose.log" ] && ok "docker compose config THẬT chấp nhận mọi tools/fixtures/override/*.yml (mỗi fixture bad-* là đường vòng thật, không phải lỗi cú pháp)" || bad "compose không nhận: $(tr '\n' ' ' < "$W/ov-compose.log")"
   # F1 (v0.23.1): genchibi đặt GC_EDGE_DIR (ngoài thư mục cài) → MỌI nguồn mount edge nằm ở đó; app thấy edge/conf + edge/run qua cùng nguồn đó (sites.caddy, socket admin)
   ED="$W/trusted-edge"; mkdir -p "$ED"
   esrc="$(cd "$I"; GC_EDGE_DIR="$ED" docker compose -f docker-compose.yml -f docker-compose.edge.yml config --format json 2>/dev/null | ED="$ED" node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{

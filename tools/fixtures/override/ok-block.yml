@@ -1,7 +1,7 @@
-# override của chủ
+# owner override
 services:
   login:
-    image: example/login:2   # bản mới
+    image: example/login:2   # new version
     restart: unless-stopped
     environment:
       HASH: ${LOGIN_SECRET}
@@ -12,7 +12,7 @@ services:
       - "127.0.0.1:8081:80"
     volumes:
       - logindata:/data
-      - /srv/login/conf:/conf:ro
+      - /etc/ssl/certs:/certs:ro
       - /data
       - type: volume
         source: cache

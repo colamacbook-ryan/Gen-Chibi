@@ -1,0 +1,8 @@
+services:
+  login:
+    image: example/login
+    volumes:
+      - source: /etc
+          - /..@INSTALL@/data
+        target: /x
+        type: bind

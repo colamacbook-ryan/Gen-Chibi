@@ -473,8 +473,8 @@
    "id": "K01",
    "guard": "CNS-281 / CNS-294: override đã duyệt nhận đúng biến .env nó dùng (giá trị chụp lúc duyệt)",
    "file": "cli/genchibi",
-   "find": "  if file_safe \"$TI/override.env\" && file_safe \"$TI/override.yml\"; then out=",
-   "replace": "  if false; then out=",
+   "find": "  if file_safe \"$TI/override.env\" && file_safe \"$TI/override.yml\"; then\n    local oe;",
+   "replace": "  if false; then\n    local oe;",
    "test": [
     "bash",
     "tools/test-root.sh"
@@ -713,7 +713,7 @@
    "id": "V02",
    "guard": "approve từ chối khoá đọc tệp (build, env_file…)",
    "file": "cli/genchibi",
-   "find": "if (key ~ /^(build|env_file|extends|include|configs|secrets|file|dockerfile|additional_contexts|label_file)$/)",
+   "find": "if (key ~ /^(build|env_file|extends|include|configs|secrets|file|dockerfile|additional_contexts|label_file|develop)$/)",
    "replace": "if (key ~ /^(xbuild|xenv_file)$/)",
    "test": [
     "bash",
@@ -1059,18 +1059,6 @@
    "expect": "mọi đường vòng"
   },
   {
-   "id": "Y09",
-   "guard": "override: từ chối tab",
-   "file": "cli/genchibi",
-   "find": "      if (raw ~ /\\t/) {",
-   "replace": "      if (0) {",
-   "test": [
-    "bash",
-    "tools/test-root.sh"
-   ],
-   "expect": "mọi đường vòng"
-  },
-  {
    "id": "Y10",
    "guard": "override: chú thích sau giá trị có nháy → từ chối (không để che {…})",
    "file": "cli/genchibi",
@@ -1201,6 +1189,90 @@
     "tools/test-agent-zero.mjs"
    ],
    "expect": "đích trong thư mục cài"
+  },
+  {
+   "id": "Z11",
+   "guard": "🔴 vòng 6: đường bind có ../ hay thư mục cha không có → từ chối (không so chuỗi fail-open)",
+   "file": "cli/genchibi",
+   "find": "  case \"$v/\" in *//*|*/./*|*/../*) return 1 ;; esac\n  case \"$v/\" in \"$HOME_PHYS\"/*|\"$HOME_DIR\"/*) return 1 ;; esac\n  [ ! -L \"$v\" ] || return 1\n  # thư mục cha PHẢI có (cd -P được) — đóng khi nghi ngờ; so đường thật cha + tên với thư mục cài\n  k=\"$(cd -P \"$(dirname \"$v\")\" 2>/dev/null && pwd)\" || return 1\n  case \"$k/$(basename \"$v\")/\" in \"$HOME_PHYS\"/*|\"$HOME_DIR\"/*) return 1 ;; esac",
+   "replace": "  case \"$v/\" in \"$HOME_PHYS\"/*|\"$HOME_DIR\"/*) return 1 ;; esac\n  [ ! -L \"$v\" ] || return 1\n  k=\"$(cd -P \"$(dirname \"$v\")\" 2>/dev/null && pwd)\" || k=\"\"",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "mọi đường vòng"
+  },
+  {
+   "id": "Z12",
+   "guard": "🔴 vòng 6: byte ngoài ASCII in được (CR lẻ, non-ASCII…) → từ chối",
+   "file": "cli/genchibi",
+   "find": "done < <(LC_ALL=C grep -nav '^[ -~]*$' \"$f\" || true)",
+   "replace": "done < <(true)",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "mọi đường vòng"
+  },
+  {
+   "id": "Z13",
+   "guard": "🟠 vòng 6: dòng không đúng một dạng cho phép → từ chối",
+   "file": "cli/genchibi",
+   "find": "      else { printf \"X\\t%d\\tline\\n\", NR; pform = \"\"; next }",
+   "replace": "      else { pform = \"\"; next }",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "mọi đường vòng"
+  },
+  {
+   "id": "Z14",
+   "guard": "🟠 vòng 6: dòng nối sau khoá: giá trị / - giá trị → từ chối",
+   "file": "cli/genchibi",
+   "find": "      if ((pform == \"kv\" || pform == \"iv\") && n > pind) {",
+   "replace": "      if (0) {",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "mọi đường vòng"
+  },
+  {
+   "id": "Z15",
+   "guard": "🟠 vòng 6: dòng nối sau - khoá: giá trị → từ chối",
+   "file": "cli/genchibi",
+   "find": "      if (pform == \"ikv\" && n > pci) {",
+   "replace": "      if (0) {",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "mọi đường vòng"
+  },
+  {
+   "id": "Z16",
+   "guard": "vòng 6: khoá develop (compose watch đọc tệp thư mục cài) → từ chối",
+   "file": "cli/genchibi",
+   "find": "label_file|develop)$/) { printf",
+   "replace": "label_file)$/) { printf",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "mọi đường vòng"
+  },
+  {
+   "id": "Z17",
+   "guard": "🟡 vòng 6: compose.env bỏ khoá genchibi tự tính khỏi bản chụp override.env",
+   "file": "cli/genchibi",
+   "find": "    local oe; oe=\"$(grep -vE \"^($(printf '%s' \"$OV_GEN\" | tr ' ' '|'))=\" \"$TI/override.env\" || true)\"",
+   "replace": "    local oe; oe=\"$(cat \"$TI/override.env\")\"",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "bản chụp override.env có khoá genchibi tự tính"
   }
  ]
 }

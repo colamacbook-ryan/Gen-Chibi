@@ -1,0 +1,6 @@
+services:
+  login:
+    image: example/login
+    volumes:
+      -
+        ./data:/x

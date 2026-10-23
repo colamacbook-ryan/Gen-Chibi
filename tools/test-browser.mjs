@@ -2118,7 +2118,7 @@ if (want('voice')) {
     await q.click(EXP); await q.waitForSelector(BOX);
     dx = await dlOf(() => q.click(BOX + ' button:text-is("Lồng tiếng rồi xuất")'));
     if (Object.keys(dx.voices).length !== 6 || dx.voiceTotal !== 15) throw new Error('hết lượt giữa chừng: phải xuất 6/15 câu có giọng: ' + Object.keys(dx.voices).length + '/' + dx.voiceTotal);
-    await q.waitForFunction(() => /Hết lượt hôm nay — thử lại lúc \d{2}:\d{2}(?: \d{2}\/\d{2})? · đã lồng 6\/15 câu/.test(document.body.textContent), null, { timeout: 5000 });
+    await q.waitForFunction(() => /Hết lượt hôm nay — thử lại lúc \d{2}:\d{2}(?: \d{2}[\/-]\d{2})? · đã lồng 6\/15 câu/.test(document.body.textContent), null, { timeout: 5000 });
     // bấm Dừng lồng tiếng giữa chừng: KHÔNG xuất (người dùng đổi ý)
     await resetDub(); M.delay = 150;
     await q.click(EXP); await q.waitForSelector(BOX);
@@ -2389,7 +2389,7 @@ if (want('voice')) {
     M.designs = {}; M.designCalls.length = 0; M.designDelay = 0; M.designBudget = 1;
     await openRg('vi|nam'); await poll(async () => /^giọng vùng có ở 0\/3/.test(await regionLine()), 'đếm 0/3 trước khi thử 429');
     await startRg(3);
-    await q.waitForFunction(() => /Hết lượt hôm nay — thử lại lúc \d{2}:\d{2}(?: \d{2}\/\d{2})? · đã thiết kế 1\/3 vai/.test(document.body.textContent), null, { timeout: 15000 });
+    await q.waitForFunction(() => /Hết lượt hôm nay — thử lại lúc \d{2}:\d{2}(?: \d{2}[\/-]\d{2})? · đã thiết kế 1\/3 vai/.test(document.body.textContent), null, { timeout: 15000 });
     await q.waitForTimeout(500);
     if (M.designCalls.length !== 2) throw new Error('phải dừng ngay sau 429 (2 lời gọi: 1 xong + 1 bị 429), thấy ' + M.designCalls.length + ': ' + JSON.stringify(M.designCalls.map(c => c.role)));
     if (!/^giọng vùng có ở 1\/3/.test(await regionLine()) || !(await toasts(q)).some(t => /^Hết lượt hôm nay — thử lại lúc/.test(t) && /Đã thiết kế 1\/3 vai/.test(t))) throw new Error('sau 429: đếm 1/3 + toast hết lượt: ' + await regionLine() + ' · ' + JSON.stringify(await toasts(q)));

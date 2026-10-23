@@ -1,0 +1,8 @@
+services:
+  login:
+    image: example/login
+    develop:
+      watch:
+        - path: ./
+          action: sync
+          target: /x

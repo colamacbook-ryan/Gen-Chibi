@@ -1,0 +1,8 @@
+services:
+  login:
+    image: example/login
+    volumes:
+      - type: bind
+        source: /srv
+          /..@INSTALL@/data
+        target: /x

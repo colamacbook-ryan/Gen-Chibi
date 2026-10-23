@@ -1,0 +1,5 @@
+services:
+  login:
+    image: example/login
+    volumes:
+      - ${X:-./data}:/x
