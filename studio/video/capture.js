@@ -439,7 +439,7 @@
     // vòng khung hình
     var st = { bgHit: 0, bgDraw: 0, maxBg: 0, topHit: 0, topDraw: 0, maxTop: 0, sliceHit: 0, sliceDraw: 0, frames: 0, warmFrames: 0, advance: 0, snap: 0, decode: 0, maxDraw: 0, maxSnap: 0, maxTiny: 0, tiny: 0, raster: 0, encode: 0, svgBytes: 0, maxFrameMs: 0, heapPeak: 0 };
     var cues = [], open = new Map(), firstDialogFrame = -1, dialogRun = 0, cover = null, coverAt = -1, texts = new Set(), shotMarks = [], lastPlan = null;
-    var frames = o.frames || 0, mem = performance.memory, vfacts = { frames: 0, out: 0, lost: 0, ex: [] };
+    var frames = o.frames || 0, mem = performance.memory, vfacts = { frames: 0, out: 0, lost: 0, spk: 0, spkCut: 0, faces: 0, faceCut: 0, allFaces: 0, allCut: 0, ex: [] };
     for (var i = 0; ; i++) {
       if (cancelled) throw fail('cancelled', 'cancelled');
       if (errBox.e) throw fail('encode', String(errBox.e && errBox.e.message || errBox.e));
@@ -462,11 +462,29 @@
       dialogRun = vis.length ? dialogRun + 1 : 0;
       if (o.debug) texts.add(box.textContent.replace(/\s+/g, ' ').trim());
       // khung dọc (chỉ test — o.debug): bong bóng / phụ đề đang hiện phải nằm TRỌN trong khung; người đang nói phải ở trong khung (Q37 b)
+      // mọi khung (cả lúc chuyển máy, đi lại, màn đấu): bao nhiêu lần một khuôn mặt bị mép khung cắt — chỉ đo, không chặn
+      if (o.debug && vertical) {
+        var bxa = box.getBoundingClientRect(), bga = box.querySelector('.gcp-cam>img.bg'), cra = bga ? bga.getBoundingClientRect() : bxa, aa = box.querySelectorAll('.gcp-actor');
+        for (var q3 = 0; q3 < aa.length; q3++) {
+          var r3 = aa[q3].getBoundingClientRect(), g0 = Math.max(cra.left, r3.left + r3.width * 59 / 248), g1 = Math.min(cra.right, r3.left + r3.width * 186 / 248);
+          if (g1 <= g0) continue;
+          vfacts.allFaces++; if (!(g0 >= bxa.left - 1 && g1 <= bxa.right + 1) && !(g1 <= bxa.left + 1 || g0 >= bxa.right - 1)) vfacts.allCut++;
+        }
+      }
       if (o.debug && vertical && vis.length) {
         var bxr = box.getBoundingClientRect(), bubs = box.querySelectorAll('.gcp-bub.on, .gcp-cap.on'), spk = box.querySelector('.gcp-actor.speaking');
         vfacts.frames++;
         for (var q = 0; q < bubs.length; q++) { var br = bubs[q].getBoundingClientRect(); if (br.left < bxr.left - 2 || br.right > bxr.right + 2 || br.top < bxr.top - 2 || br.bottom > bxr.bottom + 2) { vfacts.out++; if (vfacts.ex.length < 5) vfacts.ex.push([i, Math.round(br.left - bxr.left), Math.round(br.top - bxr.top), Math.round(br.width), Math.round(br.height)]); } }
         if (spk) { var sr = spk.getBoundingClientRect(), scx = (sr.left + sr.right) / 2; if (scx < bxr.left || scx > bxr.right) { vfacts.lost++; if (vfacts.ex.length < 5) vfacts.ex.push([i, 'speaker', Math.round(scx - bxr.left)]); } }
+        // mặt (khung xương đầu 35–162 trên hộp diễn viên x −24, rộng 248, phần nằm trong cảnh): trọn trong / trọn ngoài / bị mép khung cắt — mặt người nói không bao giờ bị cắt
+        var bgEl = box.querySelector('.gcp-cam>img.bg'), cr = bgEl ? bgEl.getBoundingClientRect() : bxr, acts = box.querySelectorAll('.gcp-actor');
+        for (var q2 = 0; q2 < acts.length; q2++) {
+          var ar = acts[q2].getBoundingClientRect(), f0 = Math.max(cr.left, ar.left + ar.width * 59 / 248), f1 = Math.min(cr.right, ar.left + ar.width * 186 / 248);
+          if (f1 <= f0) continue;
+          var inF = f0 >= bxr.left - 1 && f1 <= bxr.right + 1, outF = f1 <= bxr.left + 1 || f0 >= bxr.right - 1;
+          if (acts[q2] === spk) { vfacts.spk++; if (!inF) { vfacts.spkCut++; if (vfacts.ex.length < 5) vfacts.ex.push([i, 'speaker-face', Math.round(f0 - bxr.left), Math.round(f1 - bxr.left), (box.querySelector('.gcp-cam') || {}).style.transform, Array.prototype.map.call(acts, function (x) { return [x === spk ? 'S' : '', x.style.left, x.style.top, x.style.width]; })]); } }
+          else { vfacts.faces++; if (!inF && !outF) vfacts.faceCut++; }   // mọi lần một người khác có mặt trên sân khấu: bao nhiêu lần bị mép cắt
+        }
       }
       if (!dry) {
         await VC.yieldReal();   // bộ phát (advance) và chụp ở hai tác vụ khác nhau
