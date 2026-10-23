@@ -3810,13 +3810,20 @@ if (want('video') || want('video-ui')) {
           pngs[m.frame] = { w: b.width, h: b.height, hash: h, dark: dark / (top.length / 4), sy: m.sy }; } });
         out.push({ fmt: r.format, frames: r.frames, dry: r.dry.frames, vf: r.vfacts, pngs });
       }
+      // mặt bị cắt ở các bộ mẫu: Fun Office các phân cảnh còn lại + Tam Quốc phân cảnh 1 (720p, chỉ lượt dò + dựng, không ảnh)
+      for (const [wid, shots] of [['fo-first-day', [1, 2, 3]], ['tq-vuon-dao-xich-bich', [0]]]) {
+        const W2 = await (await fetch('api/works/' + wid)).json(), r = await GCVideo.exportWork(W2, { quality: '720p', aspect: '9:16', shots, debug: true });
+        out.push({ wid, frames: r.frames, dry: r.dry.frames, vf: r.vfacts });
+      }
       return out;
     });
-    { const [a, b] = V916, pa = Object.values(a.pngs);
+    { const [a, b] = V916, pa = Object.values(a.pngs), all = [a].concat(V916.slice(2));
+      const T = all.reduce((t, x) => ({ fr: t.fr + x.vf.frames, spk: t.spk + x.vf.spk, spkCut: t.spkCut + x.vf.spkCut, faces: t.faces + x.vf.faces, faceCut: t.faceCut + x.vf.faceCut, allFaces: t.allFaces + x.vf.allFaces, allCut: t.allCut + x.vf.allCut, out: t.out + x.vf.out, lost: t.lost + x.vf.lost }), { fr: 0, spk: 0, spkCut: 0, faces: 0, faceCut: 0, allFaces: 0, allCut: 0, out: 0, lost: 0 });
+      if (V916.slice(2).some(x => x.frames !== x.dry) || T.spkCut || T.out || T.lost || !(T.spk > 300)) throw new Error('9:16 bộ mẫu: mặt người nói bị cắt / bong bóng ra ngoài / lượt dựng ≠ lượt dò: ' + JSON.stringify(V916.slice(2).map(x => [x.wid, x.frames, x.dry, x.vf]).concat([T])));
       if (a.fmt.width !== 720 || a.fmt.height !== 1280 || pa.length !== 2 || pa.some(x => x.w !== 720 || x.h !== 1280 || x.sy !== 0 || x.dark > 0.2)) throw new Error('9:16: khung phải là sân khấu dọc 720×1280, không dải đen: ' + JSON.stringify(a.pngs));
       if (!(a.vf.frames > 200) || a.vf.out || a.vf.lost) throw new Error('9:16: bong bóng / phụ đề ra ngoài khung hoặc mất người nói: ' + JSON.stringify(a.vf));
       if (a.frames !== a.dry || b.frames !== a.frames || JSON.stringify(a.pngs) !== JSON.stringify(b.pngs)) throw new Error('9:16 không tất định: ' + JSON.stringify([a.frames, a.dry, b.frames, a.pngs, b.pngs]));
-      console.log('  ✓ 9:16 thật (Q37 b): sân khấu dọc 720×1280, không dải đen · ' + a.vf.frames + ' khung có lời thoại: bong bóng / phụ đề trọn trong khung, người nói luôn trong khung · hai lượt cùng đầu vào → ' + a.frames + ' khung, khung 120 / 300 giống hệt từng pixel'); }
+      console.log('  ✓ 9:16 thật (Q37 b): sân khấu dọc 720×1280, không dải đen · hai lượt cùng đầu vào → ' + a.frames + ' khung, khung 120 / 300 giống hệt từng pixel · bộ mẫu (Fun Office 4 phân cảnh + Tam Quốc phân cảnh 1): ' + T.fr + ' khung có lời thoại — bong bóng / phụ đề trọn trong khung, mặt người nói trọn trong khung ' + T.spk + '/' + T.spk + ' · mặt người khác bị mép khung cắt ' + (T.faces ? (T.faceCut / T.faces * 100).toFixed(1) : '0') + '% (' + T.faceCut + '/' + T.faces + ' lần xuất hiện) · mọi khung (cả lúc lia máy / đi lại / đấu): ' + (T.allFaces ? (T.allCut / T.allFaces * 100).toFixed(1) : '0') + '% (' + T.allCut + '/' + T.allFaces + ')'); }
 
     // ---- 3) không rò bản vá sang Studio; Studio vẫn phát phim thời gian thực đúng
     const nat1 = await natives();

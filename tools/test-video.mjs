@@ -460,50 +460,70 @@ console.log('   — máy quay khung dọc 9:16 (GC.film.frameV + bố cục ph�
 {
   const b0 = bad, GC = require(path.join(ROOT, 'server/engine-node.js')).loadEngine(ROOT), F = GC.film && GC.film.frameV, AX = 256 / 81;
   if (no(typeof F !== 'function', 'GC.film.frameV phải có (engine/player.js)')) {
-    const sp = k => { const s = GC.SCENE.spots[k]; return { x: s.x / GC.SCENE.W, y: (s.y - 128 * s.k) / GC.SCENE.H, k: s.k }; };
+    const sp = k => { const s = GC.SCENE.spots[k]; return { x: s.x / GC.SCENE.W, y: (s.y - 128 * s.k) / GC.SCENE.H, k: s.k, f: s.y / GC.SCENE.H }; };
     const scr = (f, a) => (a.x * f.S + f.tx) * AX;   // x màn hình (0–1) của diễn viên theo khung
     const inClamp = f => f.S >= 1 - 1e-9 && f.tx <= 1e-9 && f.tx >= 1 / AX - f.S - 1e-9 && f.ty <= 1e-9 && f.ty >= 1 - f.S - 1e-9;
-    const P2 = { a: sp('left'), b: sp('right') };
-    // cận: người nói ở GIỮA khung (không kẹp) hoặc trong khung (kẹp ở mép cảnh); người đứng sau được đẩy tới
-    const c1 = F({ mode: 'close', on: ['a'], actors: P2 }), c2 = F({ mode: 'close', on: ['b'], actors: P2 }), c3 = F({ mode: 'close', on: ['m'], actors: { m: sp('center') } }), c4 = F({ mode: 'close', on: ['k'], actors: { k: sp('back') } });
-    no(Math.abs(scr(c3, sp('center')) - 0.5) > 1e-6 || Math.abs(c3.S - 1) > 1e-9, 'cận người giữa cảnh: giữa khung, S = 1 — có ' + JSON.stringify(c3));
-    no(!(scr(c1, P2.a) > 0.3 && scr(c1, P2.a) < 0.7) || !(scr(c2, P2.b) > 0.3 && scr(c2, P2.b) < 0.7), 'cận người đứng mép trái / phải: vẫn ở giữa khung ±20% — ' + [scr(c1, P2.a), scr(c2, P2.b)]);
-    no(!(c4.S > 1.2 && c4.S <= 1.3), 'cận người đứng sau (k 0,62): đẩy tới ≤ 1,3× — có ' + c4.S);
-    // hai người cách xa (trái ↔ phải, rộng hơn khung dọc): người NÓI luôn trong khung
-    const t1 = F({ mode: 'two', on: ['a', 'b'], actors: P2 }), t2 = F({ mode: 'two', on: ['b', 'a'], actors: P2 });
-    no(!(scr(t1, P2.a) > 0.05 && scr(t1, P2.a) < 0.95) || !(scr(t2, P2.b) > 0.05 && scr(t2, P2.b) < 0.95), 'hai người cách xa: người nói phải trong khung — ' + [scr(t1, P2.a), scr(t2, P2.b)]);
+    // mặt (khung xương đầu 40–157 + 5, theo cỡ chỗ đứng) so với cửa sổ: 'in' trọn trong · 'out' trọn ngoài · 'cut' bị mép cắt — CÙNG định nghĩa với frameV
+    const face = (f, a) => { const L = -f.tx / f.S, R = L + 1 / (AX * f.S), h = 66 * a.k / 640, a0 = Math.max(0, a.x - h), a1 = Math.min(1, a.x + h); return a0 >= L - 1e-9 && a1 <= R + 1e-9 ? 'in' : a1 <= L + 1e-9 || a0 >= R - 1e-9 ? 'out' : 'cut'; };
+    const hgt = (f, a) => ((a.f - (a.f * 360 - (228 - 18) * a.k) / 360) * f.S);   // phần chiều cao khung của thân người (đỉnh mũ ~ khung xương y 18 → chân)
+    const P2 = { a: sp('left'), b: sp('right') }, P3 = { a: sp('midLeft'), m: sp('center'), c: sp('midRight') };
+    // CỠ: cận người hàng trước → S 1,15, thân ~55% chiều cao khung, đỉnh đầu ≥ 30% từ trên (chỗ cho bong bóng), đáy khung ngay dưới chân; hàng sau đẩy tới cùng cỡ (≤ 1,6)
+    const c3 = F({ mode: 'close', on: ['m'], actors: { m: sp('center') } }), c4 = F({ mode: 'close', on: ['k'], actors: { k: sp('back') } });
+    const top3 = (sp('center').f * 360 - (228 - 18) * 0.8) / 360 * c3.S + c3.ty, feet3 = sp('center').f * c3.S + c3.ty;
+    no(Math.abs(scr(c3, sp('center')) - 0.5) > 1e-6 || Math.abs(c3.S - 1.15) > 1e-9 || !(hgt(c3, sp('center')) > 0.5 && hgt(c3, sp('center')) < 0.62) || !(top3 > 0.3 && top3 < 0.45) || !(feet3 > 0.9 && feet3 < 0.97),
+      'cận người giữa cảnh: giữa khung, S 1,15, thân ' + (hgt(c3, sp('center')) * 100).toFixed(0) + '% chiều cao, đỉnh đầu ' + (top3 * 100).toFixed(0) + '%, chân ' + (feet3 * 100).toFixed(0) + '% — ' + JSON.stringify(c3));
+    no(!(c4.S > 1.4 && c4.S <= 1.6) || Math.abs(hgt(c4, sp('back')) - hgt(c3, sp('center'))) > 0.03, 'cận người hàng sau (k 0,62): đẩy tới cùng cỡ người hàng trước (≤ 1,6) — S ' + c4.S);
+    // MẶT: người nói trọn mặt; người khác trọn trong / trọn ngoài khi xếp được
+    const c1 = F({ mode: 'close', on: ['a'], actors: P2 }), t1 = F({ mode: 'two', on: ['a', 'b'], actors: P2 }), t2 = F({ mode: 'two', on: ['b', 'a'], actors: P2 });
+    no(face(c1, P2.a) !== 'in' || face(c1, P2.b) === 'cut' || face(t1, P2.a) !== 'in' || face(t1, P2.b) === 'cut' || face(t2, P2.b) !== 'in' || face(t2, P2.a) === 'cut', 'hai người cách xa: mặt người nói trọn trong khung, người kia trọn ngoài (không cắt mặt)');
     const t3 = F({ mode: 'two', on: ['a', 'm'], actors: { a: sp('midLeft'), m: sp('center') } });
-    no(!(scr(t3, sp('midLeft')) > 0 && scr(t3, sp('midLeft')) < 1 && scr(t3, sp('center')) > 0 && scr(t3, sp('center')) < 1), 'hai người đứng gần (giữa trái + giữa): cả hai trong khung');
-    // toàn cảnh: nhóm rộng hơn khung → anchor (người nói gần nhất / câu đầu) trong khung; không có anchor thì giữa nhóm
+    no(face(t3, sp('midLeft')) !== 'in' || face(t3, sp('center')) === 'cut', 'hai người đứng gần (giữa trái + giữa): người nói trọn mặt, người nghe không bị cắt mặt');
+    const n1 = F({ mode: 'close', on: ['a'], actors: P3 });
+    no(face(n1, P3.a) !== 'in' || face(n1, P3.m) === 'cut' || face(n1, P3.c) === 'cut', 'cận người đứng cạnh người khác (giữa trái, giữa, giữa phải): xê cửa sổ để không cắt mặt người bên cạnh');
+    // toàn cảnh: S 1,08 (cắt bớt tường trống trên), anchor trọn mặt; không anchor thì giữa nhóm
     const w1 = F({ mode: 'wide', actors: P2, anchor: 'a' }), w2 = F({ mode: 'wide', actors: P2, anchor: 'b' }), w0 = F({ mode: 'wide', actors: P2 });
-    no(!(scr(w1, P2.a) > 0.05 && scr(w1, P2.a) < 0.95) || !(scr(w2, P2.b) > 0.05 && scr(w2, P2.b) < 0.95), 'toàn cảnh nhóm rộng: anchor phải trong khung — ' + [scr(w1, P2.a), scr(w2, P2.b)]);
-    no(Math.abs((0.5 * w0.S - w0.tx * 0) - 0.5) > 1 || Math.abs(-w0.tx - (0.5 - 0.5 / AX)) > 1e-9 || w0.ty !== 0, 'toàn cảnh không anchor: giữa nhóm, hết chiều cao — ' + JSON.stringify(w0));
-    // đẩy máy (punch) ×1,12 · kẹp trong cảnh ở 2000 đầu vào ngẫu nhiên (seed cố định) · tất định
-    no(Math.abs(F({ mode: 'close', on: ['m'], actors: { m: sp('center') }, punch: true }).S - 1.12) > 1e-9, 'punch: S × 1,12');
-    const rr = rnd(9), modes = ['wide', 'two', 'close'], keys = Object.keys(GC.SCENE.spots); let outClamp = 0, lost = 0, nondet = 0;
+    no(face(w1, P2.a) !== 'in' || face(w2, P2.b) !== 'in' || face(w1, P2.b) === 'cut' || face(w2, P2.a) === 'cut', 'toàn cảnh nhóm rộng: anchor trọn mặt, người kia không bị cắt mặt');
+    no(Math.abs(w0.S - 1.08) > 1e-9 || !(w0.ty < 0), 'toàn cảnh: S 1,08 neo đáy (cắt tường trống phía trên) — ' + JSON.stringify(w0));
+    // người nói sắp bước nửa bước (nudge): vùng mặt phủ cả quãng bước — sau khi bước vẫn trọn trong khung
+    { const nu = F({ mode: 'close', on: ['m'], actors: { m: sp('center') }, nudge: 44 / 640 }), moved = Object.assign(sp('center'), { x: sp('center').x + 44 / 640 });
+      no(face(nu, sp('center')) !== 'in' || face(nu, moved) !== 'in', 'người nói bước tới 44 đơn vị (giận dữ): mặt trọn trong khung trước và sau khi bước'); }
+    // đẩy máy khi người nói hét (punch) lúc khung đã siết sát mặt + nửa bước lùi: đẩy ít hơn, không cắt mặt (Fun Office phân cảnh 4, Barry hét ở mép trái)
+    { const A = { b: Object.assign(sp('left'), {}), n: sp('midLeft'), r: sp('midRight') }, nd = -36 / 640, f = F({ mode: 'close', on: ['b'], actors: A, punch: true, nudge: nd });
+      no(face(f, A.b) !== 'in' || face(f, Object.assign({}, A.b, { x: A.b.x + nd })) !== 'in' || !(f.S > 1.15), 'punch sát mặt + nửa bước lùi: mặt người nói vẫn trọn trong khung (S ' + f.S + ')'); }
+    // đẩy máy (punch) ×1,12 · 2000 đầu vào ngẫu nhiên (seed cố định): kẹp trong cảnh, mặt người nói / anchor KHÔNG BAO GIỜ bị cắt, tất định; đo tỉ lệ cắt mặt người khác
+    no(Math.abs(F({ mode: 'close', on: ['m'], actors: { m: sp('center') }, punch: true }).S - 1.15 * 1.12) > 1e-9, 'punch: S × 1,12');
+    const rr = rnd(9), modes = ['wide', 'two', 'close'], keys = Object.keys(GC.SCENE.spots); let outClamp = 0, lost = 0, nondet = 0, nFace = 0, nCut = 0, nFr = 0, frCut = 0;
     for (let i = 0; i < 2000; i++) {
       const A = {}, ids = ['p', 'q', 'r'].slice(0, 1 + Math.floor(rr() * 3)); ids.forEach(id => { const s = sp(keys[Math.floor(rr() * keys.length)]); A[id] = Object.assign(s, { x: Math.min(1, Math.max(0, s.x + (rr() - 0.5) * 0.3)) }); });
-      const c = { mode: modes[Math.floor(rr() * 3)], on: rr() < 0.8 ? ids.slice().sort(() => 0).slice(0, 2) : null, punch: rr() < 0.2, actors: A, anchor: ids[0] };
+      const c = { mode: modes[Math.floor(rr() * 3)], on: rr() < 0.8 ? ids.slice(0, 2) : null, punch: rr() < 0.2, actors: A, anchor: ids[0] };
       const f = F(c), g = F(JSON.parse(JSON.stringify(c)));
       if (!inClamp(f)) outClamp++;
       if (JSON.stringify(f) !== JSON.stringify(g)) nondet++;
       const who = c.on && c.on[0] || (c.mode === 'wide' ? c.anchor : null);
-      if (who && !(scr(f, A[who]) > 0.02 && scr(f, A[who]) < 0.98)) lost++;
+      if (who && face(f, A[who]) !== 'in') lost++;
+      if (c.punch) continue;   // đẩy máy khi trúng đòn (~0,26 s): chỉ kiểm mặt người nói, không tính tỉ lệ
+      let any = false; ids.forEach(id => { if (id === who) return; nFace++; if (face(f, A[id]) === 'cut') { nCut++; any = true; } }); nFr++; if (any) frCut++;
     }
     no(outClamp, 'kẹp trong cảnh (S ≥ 1, không lộ mép): ' + outClamp + '/2000 khung lọt ra');
-    no(lost, 'người nói / anchor trong khung: ' + lost + '/2000 khung để mất người nói');
+    no(lost, 'mặt người nói / anchor trọn trong khung: ' + lost + '/2000 khung cắt mặt người nói');
     no(nondet, 'tất định: ' + nondet + '/2000 khung khác nhau với cùng đầu vào');
+    no(nCut / nFace > 0.3, 'mặt người khác bị cắt ≤ 30% (vị trí ngẫu nhiên ±0,15 cảnh — dày hơn phim thật, nhiều chỗ không tránh được; số thật đo trên bộ mẫu ở test-browser): ' + nCut + '/' + nFace);
+    console.log('   · ' + nFr + ' khung ngẫu nhiên (không tính cú đẩy máy): mặt người khác bị mép khung cắt ' + (nCut / nFace * 100).toFixed(1) + '% (' + nCut + '/' + nFace + ') · khung có ít nhất một mặt bị cắt ' + (frCut / nFr * 100).toFixed(1) + '%');
     // không rung: chênh nhỏ (diễn viên nhích 1% cảnh) → giữ khung cũ (null); chênh lớn / cắt cảnh → khung mới
     const base = F({ mode: 'close', on: ['m'], actors: { m: sp('center') } }), nudge = x => ({ m: Object.assign(sp('center'), { x: sp('center').x + x }) });
     no(F({ mode: 'close', on: ['m'], actors: nudge(0.01), prev: base }) !== null, 'không rung: lệch 1% cảnh phải giữ khung cũ');
     no(F({ mode: 'close', on: ['m'], actors: nudge(0.08), prev: base }) === null, 'lệch 8% cảnh phải lia máy theo');
     no(F({ mode: 'close', on: ['m'], actors: nudge(0.01), prev: base, cut: true }) === null, 'cắt cảnh (cut) luôn đặt khung mới');
+    // khung cũ chỉ lệch ~5 đơn vị cảnh (dưới ngưỡng không rung) nhưng cắt mặt người nói sau nửa bước lùi 44 → KHÔNG giữ khung cũ
+    { const pc = sp('center'), nd = -44 / 640, fz = F({ mode: 'close', on: ['m'], actors: { m: pc }, nudge: nd }), old = { S: fz.S, tx: fz.tx - 5 / 640 * fz.S, ty: fz.ty }, back = Object.assign({}, pc, { x: pc.x + nd });
+      const nw = F({ mode: 'close', on: ['m'], actors: { m: pc }, prev: old, nudge: nd });
+      no(face(old, back) !== 'cut' || nw === null || face(nw, back) !== 'in' || face(nw, pc) !== 'in', 'không rung nhưng không giữ khung cũ nếu nó cắt mặt người nói sau nửa bước lùi'); }
     // phụ đề khung dọc: lề dưới c.bottom (chừa giao diện TikTok / Shorts) — không đặt thì như bản ngang (4,5%)
     const capArgs = b => ({ kind: 'caption', W: 1080, H: 1920, m: 43, who: 'a', mouth: { x: 540, y: 900 }, heads: [], bodies: [], decor: [], sizes: [{ w: 900, h: 160 }], bottom: b });
     const cv = GC.film.solveLayout(capArgs(0.14)), ch = GC.film.solveLayout(capArgs(undefined));
     no(!(cv.y1 <= 1920 * 0.86 + 0.5 && cv.y1 >= 1920 * 0.86 - 1), 'phụ đề khung dọc: đáy ở 86% chiều cao, có ' + cv.y1);
     no(Math.abs(ch.y1 - 1920 * 0.955) > 1, 'phụ đề không đặt bottom: đáy ở 95,5% như cũ, có ' + ch.y1);
-    if (bad === b0) ok('máy quay dọc: cận người nói giữa khung (đứng sau → ≤ 1,3×) · hai người / toàn cảnh rộng hơn khung → người nói / anchor luôn trong khung · 2000 khung ngẫu nhiên: kẹp trong cảnh, không mất người nói, tất định · không rung (lệch 1% giữ khung, 8% lia) · phụ đề dọc chừa 14% đáy');
+    if (bad === b0) ok('máy quay dọc: cận người nói giữa khung, S 1,15 (thân ~55% chiều cao, neo đáy dưới chân; hàng sau ≤ 1,6) · mặt người nói luôn trọn trong khung, người bên cạnh trọn trong / trọn ngoài · 2000 khung ngẫu nhiên: kẹp trong cảnh, không cắt mặt người nói, tất định · không rung (lệch 1% giữ khung, 8% lia) · phụ đề dọc chừa 14% đáy');
   }
 }
 
