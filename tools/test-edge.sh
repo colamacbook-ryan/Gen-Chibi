@@ -21,7 +21,9 @@ mode() { node -e 'console.log((require("fs").statSync(process.argv[1]).mode & 0o
 # các hàm compose của CLI, chạy trong thư mục cài giả (CLI thật cd vào thư mục cài rồi mới gọi)
 CLI_FUNCS="$(sed -n -e '/^EDGE_MARK=/p' -e '/^DOCKER_VIA=/p' -e '/^as_app() {/,/^}/p' -e '/^rd() {/p' -e '/^aw() {/p' -e '/^dk_pick() {/,/^}/p' -e '/^dk() {/,/^}/p' -e '/^compose_override() {/,/^}/p' -e '/^compose_files() {/,/^}/p' -e '/^compose() {/,/^}/p' -e '/^own_fix() {/,/^}/p' \
   -e '/^sync_compose() {/,/^}/p' -e '/^edge_prepare() {/,/^}/p' -e '/^port_busy() {/,/^}/p' "$ROOT/cli/genchibi")"
-HAVE_COMPOSE=""; docker compose version >/dev/null 2>&1 && HAVE_COMPOSE=1
+# docker THẬT (đường tuyệt đối, lấy trước khi có PATH giả nào): chứng minh fixture bằng compose thật không bao giờ đi qua docker giả của mục 3
+REAL_DOCKER="$(command -v docker 2>/dev/null || true)"
+HAVE_COMPOSE=""; [ -n "$REAL_DOCKER" ] && "$REAL_DOCKER" compose version >/dev/null 2>&1 && HAVE_COMPOSE=1
 
 # thư mục cài kiểu máy Ryan: override có login + caddy (giữ 80/443), .env có COMPOSE_PROFILES
 mkinst() {
@@ -73,10 +75,10 @@ if [ -n "$HAVE_COMPOSE" ]; then
   [ "$mvis" != ok ] && grep -q 'thấy edge/tunnel.token' <<< "$mvis" && ok "đột biến (mount cả ./edge) → kiểm mount ĐỎ: $mvis" || bad "đột biến không bị bắt: $mvis"
   rm -f "$I/edge-mut.yml" "$I/edge/tunnel.token"
   # vòng 6: mỗi fixture override "xấu" phải là thứ compose THẬT chấp nhận (đường vòng thật, không phải lỗi cú pháp) — genchibi override approve từ chối chúng (test-root)
-  OP="$W/ovproj"; mkdir -p "$OP/data"; : > "$OP/.env"; : > "$OP/login.env"; printf 'services:\n  a:\n    image: z\n' > "$OP/x.yml"; : > "$W/ov-compose.log"
+  OP="$W/ovproj"; mkdir -p "$OP/data"; : > "$OP/.env"; : > "$OP/login.env"; printf 'services:\n  a:\n    image: z\n' > "$OP/x.yml"; printf 'services:\n  inc:\n    image: z\n' > "$OP/inc.yml"; : > "$W/ov-compose.log"
   for f in "$ROOT"/tools/fixtures/override/*.yml; do
     sed "s|@INSTALL@|$OP|g" "$f" > "$W/ov-cur.yml"
-    ( cd "$OP" && docker compose -f "$ROOT/docker-compose.yml" -f "$W/ov-cur.yml" --project-directory "$OP" config --no-interpolate >/dev/null 2>&1 ) || echo "$(basename "$f")" >> "$W/ov-compose.log"
+    ( cd "$OP" && "$REAL_DOCKER" compose -f "$ROOT/docker-compose.yml" -f "$W/ov-cur.yml" --project-directory "$OP" config --no-interpolate >/dev/null 2>&1 ) || echo "$(basename "$f")" >> "$W/ov-compose.log"
   done
   [ ! -s "$W/ov-compose.log" ] && ok "docker compose config THẬT chấp nhận mọi tools/fixtures/override/*.yml (mỗi fixture bad-* là đường vòng thật, không phải lỗi cú pháp)" || bad "compose không nhận: $(tr '\n' ' ' < "$W/ov-compose.log")"
   # F1 (v0.23.1): genchibi đặt GC_EDGE_DIR (ngoài thư mục cài) → MỌI nguồn mount edge nằm ở đó; app thấy edge/conf + edge/run qua cùng nguồn đó (sites.caddy, socket admin)
@@ -128,27 +130,31 @@ e1="$(erun 1 /t/i/x/edge/conf)"; e2="$(erun "" /install-cu/edge/conf)"; e3="$(er
 
 echo "3) genchibi online --caddy / --caddy-off (docker giả, ghi lại lệnh)"
 C="$W/cli"; mkinst "$C"; mkdir -p "$W/fakebin"
-printf '#!/bin/sh\necho "$*" >> "%s/docker.log"\nexit 0\n' "$W" > "$W/fakebin/docker"; chmod +x "$W/fakebin/docker"
+# docker giả ghi lại lệnh; riêng "compose … config --no-env-resolution" (genchibi phân giải override, vòng 7) → docker THẬT (đường tuyệt đối), chỉ đọc tệp
+printf '#!/bin/sh\ncase " $* " in *" config --no-env-resolution "*) exec "%s" "$@" ;; esac\necho "$*" >> "%s/docker.log"\nexit 0\n' "$REAL_DOCKER" "$W" > "$W/fakebin/docker"; chmod +x "$W/fakebin/docker"
 # v0.23.1: bản cài Docker (mọi uid) dùng tệp đã kiểm ở ~/.local/lib/gen-chibi — HOME riêng, dựng sẵn như trình cài (rel/<bản>, installs) + override đã duyệt
 # (như `genchibi override approve`). Root: thư mục cài thuộc nobody (container không bao giờ chạy root), genchibi hạ quyền khi đụng tệp trong đó
 EH="$W/ehome"; TD="$EH/.local/lib/gen-chibi"; TR="$TD/rel/v0.0.0"; mkdir -p "$TR" "$TD/run"; chmod 700 "$TD"
 cp "$ROOT/docker-compose.yml" "$ROOT/docker-compose.edge.yml" "$TR/"; cp "$ROOT/edge/Caddyfile.base" "$TR/"
 # trạng thái RIÊNG của mỗi bản cài: $TD/i/<sha256(đường thật)[:16]> — override đã duyệt (như `genchibi override approve`, không biến .env), compose.env, edge
 ti() { printf '%s/i/%s' "$TD" "$(printf '%s' "$(cd -P "$1" && pwd)" | sha256sum | cut -c1-16)"; }
-approve_as_cli() { local t; t="$(ti "$1")"; mkdir -p "$t"; chmod 700 "$TD/i" "$t"; cp "$1/docker-compose.override.yml" "$t/override.yml"; : > "$t/override.env"; }
-approve_as_cli "$C"; TI="$(ti "$C")"
+TI="$(ti "$C")"
 printf 'docker %s\n' "$(cd -P "$C" && pwd)" > "$TD/installs"
 [ "$(id -u)" != 0 ] || chown -R 65534:65534 "$C"
+# duyệt override bằng CHÍNH genchibi (docker compose thật phân giải + kiểm) — như chủ chạy `genchibi override approve --yes`
+approve_real() { HOME="$EH" GC_TEST=1 GC_HOME="$1" GC_CLI_INNER=1 GC_LANG=en PATH="$W/fakebin:$PATH" bash "$ROOT/cli/genchibi" override approve --yes > "$W/approve.out" 2>&1 || bad "override approve $1: $(tail -3 "$W/approve.out" | tr '\n' ' ')"; }
+approve_real "$C"
 gc() { HOME="$EH" GC_TEST=1 GC_HOME="$C" GC_CLI_INNER=1 GC_LANG=en PATH="$W/fakebin:$PATH" bash "$ROOT/cli/genchibi" ${1+"$@"}; }
 FS3="-f $TR/docker-compose.yml -f $TR/docker-compose.edge.yml -f $TI/override.yml --project-directory $C --env-file $TI/compose.env"
+FS3U="-f $TI/effective.yml --project-directory $C --env-file $TI/compose.env"   # dựng container: đúng dạng chuẩn đã phân giải + kiểm
 FS3N="-f $TR/docker-compose.yml -f $TI/override.yml --project-directory $C --env-file $TI/compose.env"
 : > "$W/docker.log"
 (echo > /dev/tcp/127.0.0.1/80) 2>/dev/null && P80=1 || P80=""
 (echo > /dev/tcp/127.0.0.1/443) 2>/dev/null && P443=1 || P443=""
 if [ -z "$P80$P443" ]; then
   out="$(gc online --caddy 2>&1)" && rc=0 || rc=$?
-  [ $rc = 0 ] && [ -f "$C/edge/caddy.enabled" ] && grep -qF "compose $FS3 up -d" "$W/docker.log" \
-    && ok "cổng 80/443 rảnh → bật: dấu edge/caddy.enabled, compose -f base -f edge (đã kiểm) -f override (đã duyệt) up -d" || bad "online --caddy ($rc): $out | $(cat "$W/docker.log")"
+  [ $rc = 0 ] && [ -f "$C/edge/caddy.enabled" ] && grep -qF "compose $FS3U up -d" "$W/docker.log" && grep -q 'gen-chibi-edge:' "$TI/effective.yml" && grep -q 'example/login' "$TI/effective.yml" \
+    && ok "cổng 80/443 rảnh → bật: dấu edge/caddy.enabled, compose up -d bằng dạng chuẩn đã phân giải từ base + edge (đã kiểm) + override (đã duyệt)" || bad "online --caddy ($rc): $out | $(cat "$W/docker.log")"
   [ -d "$TI/edge/run" ] && [ -f "$TI/edge/conf/sites.caddy" ] && [ -f "$TI/edge/conf/Caddyfile" ] && [ ! -L "$TI/edge/run" ] && ok "chuẩn bị nguồn mount edge (~/.local/lib/gen-chibi/i/<bản cài>/edge: conf/Caddyfile, conf/sites.caddy, run/) trước khi compose up" || bad "thiếu tệp / thư mục edge sau online --caddy: $(ls -la "$TI/edge" 2>&1 | tr '\n' ' ')"
   : > "$W/docker.log"; gc stop >/dev/null 2>&1 || true
   grep -qF "compose $FS3 stop" "$W/docker.log" && ok "genchibi stop dùng cùng bộ -f (gồm edge)" || bad "stop: $(cat "$W/docker.log")"
@@ -159,7 +165,7 @@ if [ -z "$P80$P443" ]; then
   grep -qF "compose $FS3N stop" "$W/docker.log" && ok "sau khi tắt: stop không còn tệp edge" || bad "stop sau khi tắt: $(cat "$W/docker.log")"
   # genchibi online caddy <tên-miền> (v0.21 P4): bật edge nếu chưa → chờ admin socket của Caddy → mới gọi API (app không chạy ở đây → báo rõ)
   : > "$W/docker.log"; out="$(GC_EDGE_WAIT=1 gc online caddy chibi.example.com 2>&1)" && rc=0 || rc=$?
-  [ $rc = 1 ] && [ -f "$C/edge/caddy.enabled" ] && grep -q 'docker-compose.edge.yml .*up -d' "$W/docker.log" && grep -q 'did not start' <<< "$out" && ! grep -q 'Go online · caddy' <<< "$out" \
+  [ $rc = 1 ] && [ -f "$C/edge/caddy.enabled" ] && grep -q 'effective.yml .*up -d' "$W/docker.log" && grep -q 'gen-chibi-edge:' "$TI/effective.yml" && grep -q 'did not start' <<< "$out" && ! grep -q 'Go online · caddy' <<< "$out" \
     && ok "online caddy <tên-miền>: tự bật edge (compose -f … edge … up -d); Caddy không lên → dừng trước khi gọi API" || bad "online caddy (không socket) ($rc): $out | $(cat "$W/docker.log")"
   node -e 'require("net").createServer().listen(process.argv[1])' "$TI/edge/run/caddy-admin.sock" & LPIDS="$!"   # socket ở nguồn mount edge/run (ngoài thư mục cài)
   for i in $(seq 1 20); do [ -S "$TI/edge/run/caddy-admin.sock" ] && break; sleep 0.1; done
@@ -198,7 +204,7 @@ out="$(gc expose --help 2>&1)" && rc=0 || rc=$?
 # v0.23 B11: máy Docker còn GC_TUNNEL + COMPOSE_PROFILES=tunnel (genchibi expose cũ) — docker-compose.yml không còn service tunnel / tunnel-quick
 grep -qE '^  tunnel(-quick)?:|profiles:' "$ROOT/docker-compose.yml" && bad "docker-compose.yml còn service / profile tunnel cũ" || ok "docker-compose.yml không còn service tunnel / tunnel-quick (profiles tunnel / quick đã bỏ)"
 DL="$W/dleg"; mkinst "$DL"; printf 'GC_TUNNEL=named\nGC_PUBLIC_URL=https://old.example.com\nCOMPOSE_PROFILES=tunnel\n' >> "$DL/.env"; : > "$W/docker.log"
-printf 'docker %s\n' "$(cd -P "$DL" && pwd)" >> "$TD/installs"; approve_as_cli "$DL"; [ "$(id -u)" != 0 ] || chown -R 65534:65534 "$DL"
+printf 'docker %s\n' "$(cd -P "$DL" && pwd)" >> "$TD/installs"; [ "$(id -u)" != 0 ] || chown -R 65534:65534 "$DL"; approve_real "$DL"
 out="$(HOME="$EH" GC_TEST=1 GC_HOME="$DL" GC_CLI_INNER=1 GC_LANG=en PATH="$W/fakebin:$PATH" bash "$ROOT/cli/genchibi" start 2>&1)" && rc=0 || rc=$?
 nn="$(grep -c '^! .env still has GC_TUNNEL=named from the old genchibi expose (removed in v0.23) — that tunnel is no longer started. Move this machine to Go online: genchibi online migrate$' <<< "$out" || true)"
 [ $rc = 0 ] && [ "$nn" = 1 ] && grep -q '^rm -f gen-chibi-tunnel gen-chibi-tunnel-quick$' "$W/docker.log" && grep -q 'compose .*up -d' "$W/docker.log" && ! grep -q 'profile' "$W/docker.log" \

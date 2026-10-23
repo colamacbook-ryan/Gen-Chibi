@@ -1,0 +1,9 @@
+services:
+  app:
+    volumes:
+      - type: bind
+        source: ./data
+        target: /x
+        volume:
+          labels:
+            source: /etc

@@ -1,29 +1,36 @@
-bad-anchor.yml	line 3: & *
-bad-block.yml	line 4: | >
-bad-c1.yml	line 3: "build:"
-bad-c2.yml	line 2: { }
-bad-c3.yml	line 3: "key":
-bad-c4.yml	line 3: { }
-bad-c5.yml	line 4: "./my dir:/x" (
-bad-c6.yml	line 5: data (
-bad-c7.yml	line 3: { }
-bad-c8.yml	line 4: ./a=b:/x (
-bad-c9.yml	line 5: <<
-bad-complex.yml	line 3: ? 
-bad-cont.yml	line 7: line
-bad-cont2.yml	line 7: continuation
-bad-cont3.yml	line 6: continuation
-bad-cr.yml	line 1: byte
-bad-cr2.yml	line 3: byte
-bad-dash.yml	line 5: line
-bad-defvar.yml	line 5: ${X:-./data}:/x (
-bad-develop.yml	line 4: "develop:"
-bad-device.yml	line 5: ./x (
-bad-doc.yml	line 1: ---
-bad-dotdot.yml	line 5: /nonexist/..
-bad-merge.yml	line 3: <<
-bad-nonascii.yml	line 3: byte
-bad-qcomment.yml	line 3: # 
-bad-tab.yml	line 3: byte
-bad-tag.yml	line 3: ! 
-bad-var.yml	line 5: ${DATA_DIR}:/x (
+bad-apisock.yml	"use_api_socket:"
+bad-c1.yml	"build:"
+bad-c2.yml	"build:"
+bad-c3.yml	"build:"
+bad-c4.yml	source: @INSTALL@/data (
+bad-c5.yml	source: @INSTALL@/my dir (
+bad-c6.yml	source: @INSTALL@/data (
+bad-c7.yml	Docker Compose could not resolve it
+bad-c8.yml	source: @INSTALL@/a=b (
+bad-c9.yml	"build:"
+bad-cdrive.yml	source: C:/data (
+bad-compact.yml	source: @INSTALL@/data (
+bad-complex.yml	"build:"
+bad-cont.yml	source: /srv /..@INSTALL@/data (
+bad-cont2.yml	source: /etc - /..@INSTALL@/data (
+bad-cont3.yml	source: /etc - /..@INSTALL@/data (
+bad-cr.yml	"build:"
+bad-cr2.yml	"build:"
+bad-dash.yml	source: @INSTALL@/data (
+bad-defvar.yml	source: @INSTALL@/data (
+bad-develop.yml	"develop:"
+bad-device.yml	device: ./x (
+bad-devrel.yml	source: ./dev (
+bad-dotdot.yml	source: /nonexist/..
+bad-include.yml	it reads files relative to the install folder
+bad-nested-src.yml	source: @INSTALL@/data (
+bad-nested-type.yml	source: @INSTALL@/data (
+bad-nonascii.yml	"build:"
+bad-provider.yml	"provider:"
+bad-root.yml	source: / (the Docker socket
+bad-sock.yml	source: /var/run/docker.sock (the Docker socket
+bad-sockenv.yml	DOCKER_HOST: unix:///var/run/docker.sock (the Docker socket
+bad-tab.yml	"build:"
+bad-var.yml	Docker Compose could not resolve it
+bad-volfrom.yml	"volumes_from:"
+bad-xext.yml	source: @INSTALL@/data (

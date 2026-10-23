@@ -41,8 +41,8 @@
    "id": "R04",
    "guard": "compose: tệp từ gói đã kiểm, không từ thư mục cài",
    "file": "cli/genchibi",
-   "find": "printf '%s\\n' -f \"$d/docker-compose.yml\"\n    if [ -f \"$EDGE_MARK\" ] && [ -f \"$d/docker-compose.edge.yml\" ]",
-   "replace": "printf '%s\\n' -f \"$HOME_DIR/docker-compose.yml\"\n    if [ -f \"$EDGE_MARK\" ] && [ -f \"$d/docker-compose.edge.yml\" ]",
+   "find": "printf '%s\\n' -f \"$d/docker-compose.yml\"\n  if [ -f \"$EDGE_MARK\" ]",
+   "replace": "printf '%s\\n' -f \"$HOME_DIR/docker-compose.yml\"\n  if [ -f \"$EDGE_MARK\" ]",
    "test": [
     "bash",
     "tools/test-root.sh"
@@ -59,7 +59,7 @@
     "bash",
     "tools/test-root.sh"
    ],
-   "expect": "override approve --yes rồi genchibi start (root)"
+   "expect": "compose chỉ nhận tệp đã kiểm"
   },
   {
    "id": "R06",
@@ -245,8 +245,8 @@
    "id": "G02",
    "guard": "override đổi sau khi duyệt → lại dừng",
    "file": "cli/genchibi",
-   "find": "if file_safe \"$TI/override.yml\" && [ \"$(sha256_of \"$TI/override.yml\")\" = \"$h\" ] && file_safe \"$TI/override.env\"",
-   "replace": "if file_safe \"$TI/override.yml\" && file_safe \"$TI/override.env\"",
+   "find": "file_safe \"$TI/override.yml\" && [ \"$(sha256_of \"$TI/override.yml\")\" = \"$h\" ] && file_safe \"$TI/override.env\"",
+   "replace": "file_safe \"$TI/override.yml\" && file_safe \"$TI/override.env\"",
    "test": [
     "bash",
     "tools/test-root.sh"
@@ -257,8 +257,8 @@
    "id": "G03",
    "guard": "override off chỉ cho đúng nội dung đã chọn",
    "file": "cli/genchibi",
-   "find": "if file_safe \"$TI/override.off\" && [ \"$(head -n 1 \"$TI/override.off\")\" = \"$h\" ]; then return 0; fi",
-   "replace": "if file_safe \"$TI/override.off\"; then return 0; fi",
+   "find": "if file_safe \"$TI/override.off\" && [ \"$(head -n 1 \"$TI/override.off\")\" = \"$h\" ]; then OV_RC=0; return 0; fi",
+   "replace": "if file_safe \"$TI/override.off\"; then OV_RC=0; return 0; fi",
    "test": [
     "bash",
     "tools/test-root.sh"
@@ -473,8 +473,8 @@
    "id": "K01",
    "guard": "CNS-281 / CNS-294: override đã duyệt nhận đúng biến .env nó dùng (giá trị chụp lúc duyệt)",
    "file": "cli/genchibi",
-   "find": "  if file_safe \"$TI/override.env\" && file_safe \"$TI/override.yml\"; then\n    local oe;",
-   "replace": "  if false; then\n    local oe;",
+   "find": "  if file_safe \"$snap\" && { [ -n \"${CE_FORCE:-}\" ] || file_safe \"$TI/override.yml\"; }; then",
+   "replace": "  if false; then",
    "test": [
     "bash",
     "tools/test-root.sh"
@@ -701,37 +701,13 @@
    "id": "V01",
    "guard": "CNS-294: giá trị biến đổi trong .env → hỏi lại",
    "file": "cli/genchibi",
-   "find": " \\\n    && [ \"$(ov_env \"$TI/override.yml\" | sha256_of)\" = \"$(sha256_of \"$TI/override.env\")\" ]",
+   "find": "  [ \"$(ov_env \"$TI/override.yml\" | sha256_of)\" = \"$(sha256_of \"$TI/override.env\")\" ] || return 1\n",
    "replace": "",
    "test": [
     "bash",
     "tools/test-root.sh"
    ],
    "expect": "giá trị biến của override đổi"
-  },
-  {
-   "id": "V02",
-   "guard": "approve từ chối khoá đọc tệp (build, env_file…)",
-   "file": "cli/genchibi",
-   "find": "if (key ~ /^(build|env_file|extends|include|configs|secrets|file|dockerfile|additional_contexts|label_file|develop)$/)",
-   "replace": "if (key ~ /^(xbuild|xenv_file)$/)",
-   "test": [
-    "bash",
-    "tools/test-root.sh"
-   ],
-   "expect": "mọi đường vòng"
-  },
-  {
-   "id": "V03",
-   "guard": "approve: nguồn bind tuyệt đối phải ngoài thư mục cài, không liên kết, không $ / khoảng trắng",
-   "file": "cli/genchibi",
-   "find": "      S) ov_abs_ok \"$val\" || { bad=1; m ov_bad_src \"$ln\" \"$val\"; } ;;",
-   "replace": "      S) : ;;",
-   "test": [
-    "bash",
-    "tools/test-root.sh"
-   ],
-   "expect": "mọi đường vòng"
   },
   {
    "id": "V04",
@@ -749,8 +725,8 @@
    "id": "V05",
    "guard": "approve từ chối giá trị có ' (không lặng lẽ bỏ)",
    "file": "cli/genchibi",
-   "find": " || [ -n \"$OV_QK\" ]; then\n        { m ov_bad",
-   "replace": "; then\n        { m ov_bad",
+   "find": "for k in $OV_QK; do bad=1; m ov_bad_quote \"$k\"; done",
+   "replace": "for k in $OV_QK; do m ov_bad_quote \"$k\"; done",
    "test": [
     "bash",
     "tools/test-root.sh"
@@ -963,150 +939,6 @@
    "expect": "home_check mù"
   },
   {
-   "id": "Y01",
-   "guard": "override: từ chối flow { } [ ] (c2, c4, c7)",
-   "file": "cli/genchibi",
-   "find": "      if (t ~ /[{}\\[\\]]/) {",
-   "replace": "      if (0) {",
-   "test": [
-    "bash",
-    "tools/test-root.sh"
-   ],
-   "expect": "mọi đường vòng"
-  },
-  {
-   "id": "Y02",
-   "guard": "override: từ chối khoá có nháy (c3)",
-   "file": "cli/genchibi",
-   "find": "      if (l ~ /^[ ]*(-[ ]+)?[\"\\047][^\"\\047]*[\"\\047][ ]*:/) {",
-   "replace": "      if (0) {",
-   "test": [
-    "bash",
-    "tools/test-root.sh"
-   ],
-   "expect": "mọi đường vòng"
-  },
-  {
-   "id": "Y03",
-   "guard": "override: từ chối anchor / alias & *",
-   "file": "cli/genchibi",
-   "find": "      if (l ~ /(^|[ :-])[&*][^ &*]/ || l ~ /(^|[ :-])[&*]$/) {",
-   "replace": "      if (0) {",
-   "test": [
-    "bash",
-    "tools/test-root.sh"
-   ],
-   "expect": "mọi đường vòng"
-  },
-  {
-   "id": "Y04",
-   "guard": "override: từ chối merge <<",
-   "file": "cli/genchibi",
-   "find": "      if (l ~ /<</) {",
-   "replace": "      if (0) {",
-   "test": [
-    "bash",
-    "tools/test-root.sh"
-   ],
-   "expect": "mọi đường vòng"
-  },
-  {
-   "id": "Y05",
-   "guard": "override: từ chối khoá phức ?",
-   "file": "cli/genchibi",
-   "find": "      if (l ~ /^[ ]*(-[ ]+)?\\?([ ]|$)/) {",
-   "replace": "      if (0) {",
-   "test": [
-    "bash",
-    "tools/test-root.sh"
-   ],
-   "expect": "mọi đường vòng"
-  },
-  {
-   "id": "Y06",
-   "guard": "override: từ chối tag !",
-   "file": "cli/genchibi",
-   "find": "      if (l ~ /(^|[ :-])!/) {",
-   "replace": "      if (0) {",
-   "test": [
-    "bash",
-    "tools/test-root.sh"
-   ],
-   "expect": "mọi đường vòng"
-  },
-  {
-   "id": "Y07",
-   "guard": "override: từ chối khối chữ | >",
-   "file": "cli/genchibi",
-   "find": "      if (l ~ /:[ ]+[|>][-+0-9]*$/ || l ~ /^[ ]*-[ ]+[|>][-+0-9]*$/) {",
-   "replace": "      if (0) {",
-   "test": [
-    "bash",
-    "tools/test-root.sh"
-   ],
-   "expect": "mọi đường vòng"
-  },
-  {
-   "id": "Y08",
-   "guard": "override: từ chối --- / ...",
-   "file": "cli/genchibi",
-   "find": "      if (l ~ /^(---|\\.\\.\\.)([ \\t]|$)/) {",
-   "replace": "      if (0) {",
-   "test": [
-    "bash",
-    "tools/test-root.sh"
-   ],
-   "expect": "mọi đường vòng"
-  },
-  {
-   "id": "Y10",
-   "guard": "override: chú thích sau giá trị có nháy → từ chối (không để che {…})",
-   "file": "cli/genchibi",
-   "find": "if (pre ~ /[\"\\047]/) { printf \"X\\t%d\\t#\\n\", NR; next }",
-   "replace": "if (0) { next }",
-   "test": [
-    "bash",
-    "tools/test-root.sh"
-   ],
-   "expect": "mọi đường vòng"
-  },
-  {
-   "id": "Y11",
-   "guard": "override: mục volumes ngắn phải là volume có tên hoặc đường tuyệt đối (c8)",
-   "file": "cli/genchibi",
-   "find": "            else if (v !~ /^[A-Za-z0-9][A-Za-z0-9_.-]*:[^ ]+$/) printf \"V\\t%d\\t%s\\n\", NR, v",
-   "replace": "            else if (0) printf \"V\\t%d\\t%s\\n\", NR, v",
-   "test": [
-    "bash",
-    "tools/test-root.sh"
-   ],
-   "expect": "mọi đường vòng"
-  },
-  {
-   "id": "Y12",
-   "guard": "override: type: bind + source tên → từ chối (c6)",
-   "file": "cli/genchibi",
-   "find": "    function endItem() { if (itemLine && isrc != \"\" && itype != \"volume\") {",
-   "replace": "    function endItem() { if (0) {",
-   "test": [
-    "bash",
-    "tools/test-root.sh"
-   ],
-   "expect": "mọi đường vòng"
-  },
-  {
-   "id": "Y13",
-   "guard": "override: device: phải tuyệt đối ngoài thư mục cài",
-   "file": "cli/genchibi",
-   "find": "      if (key == \"device\") { v = val; if (v != \"\") printf \"S\\t%d\\t%s\\n\", NR, v }",
-   "replace": "      if (0) { }",
-   "test": [
-    "bash",
-    "tools/test-root.sh"
-   ],
-   "expect": "mọi đường vòng"
-  },
-  {
    "id": "Y14",
    "guard": "🟡 vòng 5: chụp cả biến trong danh sách khoá genchibi (GC_PUBLIC_URL…), chỉ trừ khoá genchibi tự tính",
    "file": "cli/genchibi",
@@ -1203,76 +1035,124 @@
    "expect": "mọi đường vòng"
   },
   {
-   "id": "Z12",
-   "guard": "🔴 vòng 6: byte ngoài ASCII in được (CR lẻ, non-ASCII…) → từ chối",
-   "file": "cli/genchibi",
-   "find": "done < <(LC_ALL=C grep -nav '^[ -~]*$' \"$f\" || true)",
-   "replace": "done < <(true)",
-   "test": [
-    "bash",
-    "tools/test-root.sh"
-   ],
-   "expect": "mọi đường vòng"
-  },
-  {
-   "id": "Z13",
-   "guard": "🟠 vòng 6: dòng không đúng một dạng cho phép → từ chối",
-   "file": "cli/genchibi",
-   "find": "      else { printf \"X\\t%d\\tline\\n\", NR; pform = \"\"; next }",
-   "replace": "      else { pform = \"\"; next }",
-   "test": [
-    "bash",
-    "tools/test-root.sh"
-   ],
-   "expect": "mọi đường vòng"
-  },
-  {
-   "id": "Z14",
-   "guard": "🟠 vòng 6: dòng nối sau khoá: giá trị / - giá trị → từ chối",
-   "file": "cli/genchibi",
-   "find": "      if ((pform == \"kv\" || pform == \"iv\") && n > pind) {",
-   "replace": "      if (0) {",
-   "test": [
-    "bash",
-    "tools/test-root.sh"
-   ],
-   "expect": "mọi đường vòng"
-  },
-  {
-   "id": "Z15",
-   "guard": "🟠 vòng 6: dòng nối sau - khoá: giá trị → từ chối",
-   "file": "cli/genchibi",
-   "find": "      if (pform == \"ikv\" && n > pci) {",
-   "replace": "      if (0) {",
-   "test": [
-    "bash",
-    "tools/test-root.sh"
-   ],
-   "expect": "mọi đường vòng"
-  },
-  {
-   "id": "Z16",
-   "guard": "vòng 6: khoá develop (compose watch đọc tệp thư mục cài) → từ chối",
-   "file": "cli/genchibi",
-   "find": "label_file|develop)$/) { printf",
-   "replace": "label_file)$/) { printf",
-   "test": [
-    "bash",
-    "tools/test-root.sh"
-   ],
-   "expect": "mọi đường vòng"
-  },
-  {
    "id": "Z17",
    "guard": "🟡 vòng 6: compose.env bỏ khoá genchibi tự tính khỏi bản chụp override.env",
    "file": "cli/genchibi",
-   "find": "    local oe; oe=\"$(grep -vE \"^($(printf '%s' \"$OV_GEN\" | tr ' ' '|'))=\" \"$TI/override.env\" || true)\"",
-   "replace": "    local oe; oe=\"$(cat \"$TI/override.env\")\"",
+   "find": "    local oe; oe=\"$(grep -vE \"^($(printf '%s' \"$OV_GEN\" | tr ' ' '|'))=\" \"$snap\" || true)\"",
+   "replace": "    local oe; oe=\"$(cat \"$snap\")\"",
    "test": [
     "bash",
     "tools/test-root.sh"
    ],
    "expect": "bản chụp override.env có khoá genchibi tự tính"
+  },
+  {
+   "id": "Q01",
+   "guard": "🔴 vòng 7: khoá đọc tệp / API Docker trong dạng chuẩn (build, env_file, develop, use_api_socket, provider, volumes_from…) → từ chối",
+   "file": "cli/genchibi",
+   "find": "      build|env_file|extends|include|develop|use_api_socket|provider|volumes_from|dockerfile|additional_contexts|label_file)",
+   "replace": "      xbuild)",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "từ chối đúng lý do"
+  },
+  {
+   "id": "Q02",
+   "guard": "🔴 vòng 7: nguồn bind / device / devices không tuyệt đối hoặc trong thư mục cài → từ chối",
+   "file": "cli/genchibi",
+   "find": "            elif ! ov_abs_ok \"$val\"; then bad=1; m ov_bad_src",
+   "replace": "            elif false; then bad=1; m ov_bad_src",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "từ chối đúng lý do"
+  },
+  {
+   "id": "Q03",
+   "guard": "🔴 vòng 7: socket Docker (hoặc thư mục phía trên) → từ chối",
+   "file": "cli/genchibi",
+   "find": "            if ov_sock \"$val\"; then bad=1; m ov_bad_sock",
+   "replace": "            if false; then bad=1; m ov_bad_sock",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "từ chối đúng lý do"
+  },
+  {
+   "id": "Q04",
+   "guard": "🔴 vòng 7: chuỗi chứa docker.sock ở bất kỳ khoá nào → từ chối",
+   "file": "cli/genchibi",
+   "find": "    case \"$t\" in *docker.sock*) bad=1; m ov_bad_sock \"$key\"",
+   "replace": "    case \"$t\" in *docker.sockXX*) bad=1; m ov_bad_sock \"$key\"",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "từ chối đúng lý do"
+  },
+  {
+   "id": "Q05",
+   "guard": "🔴 vòng 7: thăm dò hộp cát (thư mục dự án rỗng) — đọc tệp tương đối của thư mục cài (include…) → từ chối",
+   "file": "cli/genchibi",
+   "find": "    ov_resolve \"$mf.sb\" \"$1\" \"$sbx\" \"$2\" || { rc=2;",
+   "replace": "    true || { rc=2;",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "từ chối đúng lý do"
+  },
+  {
+   "id": "Q07",
+   "guard": "🔴 vòng 7: tác động phân giải khác bản đã duyệt → hỏi lại",
+   "file": "cli/genchibi",
+   "find": "  if [ \"$(sha256_of \"$e\")\" != \"$(sha256_of \"$TI/override.effect\")\" ]; then OV_CHG=1;",
+   "replace": "  if false; then OV_CHG=1;",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "kết quả phân giải của override khác bản đã duyệt"
+  },
+  {
+   "id": "Q08",
+   "guard": "🔴 vòng 7: dựng container bằng ĐÚNG dạng chuẩn đã kiểm (effective.yml), không override thô",
+   "file": "cli/genchibi",
+   "find": "    if [ -n \"${CF_EFF:-}\" ] && file_safe \"$TI/override.yml\" && file_safe \"$TI/effective.yml\"; then",
+   "replace": "    if false; then",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "start với override đã duyệt → docker compose -f"
+  },
+  {
+   "id": "Q09",
+   "guard": "🟠 vòng 7: không có docker compose → không duyệt",
+   "file": "cli/genchibi",
+   "find": "      dk compose version >/dev/null 2>&1 || { m ov_nocompose >&2; return 1; }   # không có",
+   "replace": "      true || { m ov_nocompose >&2; return 1; }   # không có",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "không có docker compose → override approve từ chối"
+  },
+  {
+   "id": "Q10",
+   "guard": "🟠 vòng 7: cảnh báo privileged / host / cap_add khi duyệt",
+   "file": "cli/genchibi",
+   "find": "      privileged) [ \"$val\" != true ] || m ov_warn",
+   "replace": "      privileged) true || m ov_warn",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "cảnh báo từng dòng (!)"
   }
  ]
 }

@@ -20,16 +20,19 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 # tiến trình con mồ côi (bước cuối): caddy / node / cloudflared / chromium có thư mục làm việc trong cây repo mà còn sống sau cả bộ = test quên dọn
 # (vd test-edge.sh trước đây kill subshell, caddy sống tiếp). Chỉ Linux (/proc). Tiến trình đã có TRƯỚC khi bộ chạy (server dev của bạn) không tính
+# Dấu của LẦN CHẠY này (v0.23.1): nhiều bộ test chạy song song trên cùng máy (worktree khác, bản chép đột biến) dùng chung không gian PID —
+# chỉ tính tiến trình của chính lần chạy: cwd trong cây repo này, hoặc mang GENCHIBI_TEST_RUN=<dấu này> trong /proc/<pid>/environ (con cháu thừa hưởng).
+# Không tiền tố GC_ (test lọc GC_* khỏi env của server). Luôn tạo dấu mới — test.sh lồng (mutate.mjs) không được nhận tiến trình của lần chạy anh em.
+GENCHIBI_TEST_RUN="$$.$(od -An -N8 -tx8 /dev/urandom | tr -d ' \n')"; export GENCHIBI_TEST_RUN
 gc_orphans() {
   [ -d /proc/self ] || return 0
-  local d p c n e
+  local d p c n
   for d in /proc/[0-9]*; do
     p="${d#/proc/}"; [ "$p" != "$$" ] || continue
     c="$(readlink "$d/cwd" 2>/dev/null)" || continue
-    # cả tiến trình của bản chép đột biến / L-77 (/tmp/gc-mut-*, /tmp/gc-l77-*) theo cwd, và mọi app test (GC_HOME dưới /tmp/gc-*) — launcher native sót khi stop đi nhầm đường
-    case "$c/" in "$ROOT"/*|/tmp/gc-mut-*|/tmp/gc-l77-*) ;; *)
-      e="$( { tr '\0' '\n' < "$d/environ"; } 2>/dev/null | sed -n 's/^GC_HOME=//p' | head -n 1)" || e=""   # tiến trình có thể vừa thoát: im lặng, vẫn kiểm
-      case "$e" in /tmp/gc-*) ;; *) continue ;; esac ;; esac
+    # tiến trình của lần chạy KHÁC (worktree khác, /tmp/gc-* của bộ khác) không bao giờ tính — và không bao giờ bị kill
+    case "$c/" in "$ROOT"/*) ;; *)
+      { tr '\0' '\n' < "$d/environ"; } 2>/dev/null | grep -qxF "GENCHIBI_TEST_RUN=$GENCHIBI_TEST_RUN" || continue ;; esac   # tiến trình có thể vừa thoát: im lặng
     n="$( { tr '\0' ' ' < "$d/cmdline"; } 2>/dev/null | cut -c1-160)" || continue
     case "$(basename "${n%% *}" 2>/dev/null)" in caddy*|node|nodejs|cloudflared*|chrome|chromium*|headless_shell) printf '%s %s\n' "$p" "$n" ;; esac   # theo TÊN tệp chạy, không theo đường repo
   done
@@ -901,7 +904,7 @@ l77_rerun() { # l77_rerun tools/<script>.sh
   tar -C "$ROOT" --exclude=./.git --exclude=./dist -cf - . | tar -C "$L77/repo" -xf -
   chown -R "$(id -u nobody):$(id -g nobody)" "$L77"; chmod 755 "$L77"
   if setpriv --reuid="$(id -u nobody)" --regid="$(id -g nobody)" --clear-groups --reset-env -- \
-       env HOME="$L77/home" TMPDIR="$L77/tmp" PATH="$PATH" SHELL=/bin/bash LANG=C.UTF-8 bash "$L77/repo/$1" > "$L77/out.txt" 2>&1; then
+       env HOME="$L77/home" TMPDIR="$L77/tmp" PATH="$PATH" GENCHIBI_TEST_RUN="$GENCHIBI_TEST_RUN" SHELL=/bin/bash LANG=C.UTF-8 bash "$L77/repo/$1" > "$L77/out.txt" 2>&1; then
     echo "   ✓ L-77: $1 chạy lại bằng nobody (uid $(id -u nobody), như runner CI không root): $(grep -c '^   ✓' "$L77/out.txt") ✓"
     l77_clean
   else
