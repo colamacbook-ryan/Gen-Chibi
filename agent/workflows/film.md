@@ -45,14 +45,17 @@
 - `restore_work_version` with `{ "work", "version" }` brings an older version back — **only when the owner asks**. It never loses anything:
   the current state is kept as a version first and the restored content becomes a NEW version (restore again to undo).
   It restores the content (title, logline, script, shots, project, dialogue language / accent, chosen voices); the owner's review stays,
-  and an Approved shot whose content changes goes back to Draft. Read-only connections (`mcp:read`) get `[FORBIDDEN]`.
+  and an Approved shot whose content changes goes back to Draft. The old shots pass today's gates like `save_shot` (characters, scene, actions
+  must still exist; script and sound rules for the restored project) — otherwise `[VALIDATION_FAILED]` at `shots[i].<field>` and nothing changes.
+  Read-only connections (`mcp:read`) get `[FORBIDDEN]`.
 
 ## Hand the film over (storyboard, HTML film)
 - `get_storyboard` with `{ "work" }` → the same SVG as Studio › Create › Publish › Storyboard (a still of each shot + description + first lines),
   as an `image/svg+xml` resource — save it as `<work>-storyboard.svg`.
 - `export_film_html` with `{ "work" }` → the same single `.html` file as Studio › Create › Publish › Film (HTML): player + engine + the assets the
   work uses, plays offline in any browser. It embeds only the AI voice clips the owner already dubbed (nothing is spent); `voices: false` leaves them out.
-  Save the `text/html` resource under the returned `file` name. Optional: `lang` (`en` | `vi`, the player's buttons), `dialog` (`auto` | `bubble` | `caption`).
+  Save the `text/html` resource under the returned `file` name. Clips that would push the file over the size limit are left out (`voicesDropped`);
+  read-only connections always get the film without AI clips. Optional: `lang` (`en` | `vi`, the player's buttons), `dialog` (`auto` | `bubble` | `caption`).
   Only ready shots play — check `preview_shot` first.
 
 ## Owner's review notes (read them before fixing a film)

@@ -163,11 +163,15 @@ class Store {
     return rec;
   }
   // phiên bản CŨ của tác phẩm (versions/works~<id>/<n>.json, saveWork ghi trước mỗi lần lưu) — mới nhất trước; bản đang dùng là works/<id>.json
-  workVersions(id) {
+  // số phiên bản cũ có trên đĩa, mới nhất trước — CHỈ từ tên tệp (không đọc nội dung)
+  workVersionNumbers(id) {
     if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(String(id))) return [];
-    const dir = path.join(this.verDir, 'works~' + id);
-    let files = []; try { files = fs.readdirSync(dir).filter(f => /^[1-9][0-9]{0,8}\.json$/.test(f)); } catch (e) { return []; }
-    return files.map(f => this.workVersion(id, +f.slice(0, -5))).filter(Boolean).sort((a, b) => b.version - a.version);
+    let files = []; try { files = fs.readdirSync(path.join(this.verDir, 'works~' + id)).filter(f => /^[1-9][0-9]{0,8}\.json$/.test(f)); } catch (e) { return []; }
+    return files.map(f => +f.slice(0, -5)).sort((a, b) => b - a);
+  }
+  // nội dung các phiên bản cũ: sắp theo SỐ trong tên tệp, chỉ đọc `limit` bản mới nhất (lịch sử dài không làm chậm list_work_versions)
+  workVersions(id, limit) {
+    return this.workVersionNumbers(id).slice(0, limit > 0 ? limit : 200).map(n => this.workVersion(id, n)).filter(Boolean);
   }
   workVersion(id, n) {
     if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(String(id)) || !Number.isInteger(n) || n < 1) return null;

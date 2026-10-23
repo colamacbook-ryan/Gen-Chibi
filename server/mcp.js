@@ -122,10 +122,10 @@ const TOOLS = [
   { name: 'get_event', title: 'Get a standalone script', description: 'The full JSON of one standalone script saved with save_event (id from list_events): { id, author, savedAt, event: { title, steps } }.', inputSchema: obj({ id: { type: 'string', description: 'script id (list_events)' } }, ['id']), annotations: { readOnlyHint: true } },
   // phiên bản tác phẩm + khôi phục KHÔNG phá (CNS-047): bản hiện tại luôn được giữ thành một phiên bản trước khi khôi phục
   { name: 'list_work_versions', title: 'Work versions (history)', description: 'The saved versions of a work, newest first: version, savedAt, title, number of shots, shot titles, current (true for the version in use). Every save_work / save_shot / restore keeps the previous state as a version. Bring one back with restore_work_version.', inputSchema: obj({ work: { type: 'string', description: 'work id (list_works)' } }, ['work']), annotations: { readOnlyHint: true } },
-  { name: 'restore_work_version', title: 'Restore a work version', description: 'Brings back an older version of a work (version from list_work_versions) — only when the owner asks. Non-destructive: the current state is kept as a version first and the restored content is saved as a NEW version (nothing is lost; restore again to undo). Restores the content: title, logline, script, shots, theme project, dialogue language / accent, chosen AI voices. The owner\'s review (status + notes) and pending proposals stay as they are now; a shot marked Approved whose content changes goes back to Draft (as after any edit).', inputSchema: obj({ work: { type: 'string', description: 'work id (list_works)' }, version: { type: 'integer', minimum: 1, description: 'version number (list_work_versions)' } }, ['work', 'version']) },
+  { name: 'restore_work_version', title: 'Restore a work version', description: 'Brings back an older version of a work (version from list_work_versions) — only when the owner asks. Non-destructive: the current state is kept as a version first and the restored content is saved as a NEW version (nothing is lost; restore again to undo). Restores the content: title, logline, script, shots, theme project, dialogue language / accent, chosen AI voices. The owner\'s review (status + notes) and pending proposals stay as they are now; a shot marked Approved whose content changes goes back to Draft (as after any edit). The old shots go through today\'s gates like save_shot (cast / scene / actions must still exist, script + sound rules S1–S7 for the restored project): any failure → [VALIDATION_FAILED] with shots[i].<field>, nothing restored.', inputSchema: obj({ work: { type: 'string', description: 'work id (list_works)' }, version: { type: 'integer', minimum: 1, description: 'version number (list_work_versions)' } }, ['work', 'version']) },
   // storyboard + phim HTML: CÙNG tệp với Studio › Tạo tác › Xuất bản (studio/film-html.js — một nguồn)
   { name: 'get_storyboard', title: 'Storyboard of a work', description: 'The storyboard of a work, the same file as Studio › Create › Publish › Storyboard: one SVG (title, logline, a 2-column grid: still of each shot + description + the first lines of dialogue). Returned as an image/svg+xml resource — save it as <work>-storyboard.svg. lang = language of the few interface words in it (en | vi; default: the machine\'s interface language).', inputSchema: obj({ work: { type: 'string', description: 'work id (list_works)' }, lang: { type: 'string', enum: ['en', 'vi'] } }, ['work']), annotations: { readOnlyHint: true } },
-  { name: 'export_film_html', title: 'Export the film (HTML)', description: 'The film of a work as ONE standalone .html file, the same file as Studio › Create › Publish › Film (HTML): player + engine + the assets, motion packs and sound packs the work uses; opens offline in any browser, no install. Shots that are not ready (preview_shot) are skipped by the player. AI voices: embeds only the clips the owner has ALREADY dubbed (no new requests, nothing spent); other lines use the browser voice / blip. Returned as a text/html resource (save it as the given file name). lang = language of the player buttons (en | vi; default: the machine\'s interface language) · dialog = auto | bubble | caption (default auto) · voices = false leaves the AI clips out (smaller file). If the file would exceed ' + FILM_MAX_MB + ' MB with clips, it comes without them (said in the result); over the limit without clips → [BAD_REQUEST].', inputSchema: obj({ work: { type: 'string', description: 'work id (list_works)' }, lang: { type: 'string', enum: ['en', 'vi'] }, dialog: { type: 'string', enum: ['auto', 'bubble', 'caption'] }, voices: { type: 'boolean' } }, ['work']), annotations: { readOnlyHint: true } },
+  { name: 'export_film_html', title: 'Export the film (HTML)', description: 'The film of a work as ONE standalone .html file, the same file as Studio › Create › Publish › Film (HTML): player + engine + the assets, motion packs and sound packs the work uses; opens offline in any browser, no install. Shots that are not ready (preview_shot) are skipped by the player. AI voices: embeds only the clips the owner has ALREADY dubbed (no new requests, nothing spent); other lines use the browser voice / blip. Returned as a text/html resource (save it as the given file name). lang = language of the player buttons (en | vi; default: the machine\'s interface language) · dialog = auto | bubble | caption (default auto) · voices = false leaves the AI clips out (smaller file). Clips that would push the file over ' + FILM_MAX_MB + ' MB are left out (voicesDropped in the result); over the limit without clips → [BAD_REQUEST]. Read-only connections (mcp:read) always get the film without AI clips.', inputSchema: obj({ work: { type: 'string', description: 'work id (list_works)' }, lang: { type: 'string', enum: ['en', 'vi'] }, dialog: { type: 'string', enum: ['auto', 'bubble', 'caption'] }, voices: { type: 'boolean' } }, ['work']), annotations: { readOnlyHint: true } },
   { name: 'get_app_version', title: 'App version', description: 'The running version, the latest version on GitHub Releases, release notes, the version you can roll back to and the update history. check=false to skip asking GitHub.', inputSchema: obj({ check: { type: 'boolean', description: 'ask GitHub for the latest version (default true)' } }), annotations: { readOnlyHint: true, openWorldHint: true } },
   { name: 'update_app', title: 'Update the app', description: 'Downloads the latest version from GitHub Releases (SHA-256 checked, data backed up), then restarts. If the new version fails, the launcher rolls back by itself. The connection drops for a few seconds; call get_app_version after ~15 seconds to confirm. force=true also applies a version that was skipped because it failed last time.', inputSchema: obj({ force: { type: 'boolean' } }), annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: true } },
   { name: 'rollback_app', title: 'Roll back to the previous version', description: 'Runs the previously installed version again (data is backed up before switching). Needs confirm = "ROLLBACK".', inputSchema: obj({ confirm: { type: 'string', enum: ['ROLLBACK'] } }, ['confirm']), annotations: { destructiveHint: true } }
@@ -673,7 +673,8 @@ class MCP {
           { type: 'resource', resource: { uri: 'genchibi://work/' + r.work + '/' + r.file, mimeType: 'image/svg+xml', text: r.svg } }], structuredContent: { work: r.work, title: r.title, shots: r.shots, file: r.file, lang: r.lang, chars: r.svg.length } };
       }
       case 'export_film_html': {
-        let r; try { r = this.filmHTML(String(args.work || ''), args); } catch (e) { return toolError(e); }
+        // kết nối chỉ đọc (mcp:read) KHÔNG nhận clip giọng AI (trước v0.23.2 clip chỉ tới được qua tool ghi / tốn lượt) — luôn như voices: false
+        let r; try { r = this.filmHTML(String(args.work || ''), ctx && ctx.readOnly ? Object.assign({}, args, { voices: false }) : args); } catch (e) { return toolError(e); }
         const meta = { work: r.work, title: r.title, file: r.file, bytes: r.bytes, lang: r.lang, dialog: r.dialog, shots: r.shots, ready: r.ready, aiVoices: { have: r.have, total: r.total }, voicesDropped: r.dropped };
         return { content: [{ type: 'text', text: 'Film "' + r.title + '" — one standalone HTML file (' + Math.round(r.bytes / 1024) + ' KB, ' + r.ready + '/' + r.shots + ' shots ready, AI voice ' + r.have + '/' + r.total + ' lines' + (r.dropped ? '; AI clips left out: over ' + this.filmMaxMB + ' MB' : '') + '), the same file as Studio › Create › Publish › Film (HTML). Save the resource as ' + r.file + ' and open it in any browser.\n' + JSON.stringify(meta) },
           { type: 'resource', resource: { uri: 'genchibi://work/' + r.work + '/' + r.file, mimeType: 'text/html', text: r.html } }], structuredContent: meta };
@@ -919,7 +920,7 @@ class MCP {
     // tác phẩm đã có (CNS-047): giao phim / storyboard ra file, xem lịch sử; khôi phục chỉ gợi ý cho kết nối GHI được
     if (works.length) next.push('list_works, then get_storyboard / export_film_html to hand a finished work over as a file; list_work_versions shows its history' + (conn.can_write ? ' (restore_work_version brings an older version back, only when the owner asks)' : ''));
     return { app: 'gen-chibi', version: this.version, protocol: 'MCP ' + PROTOCOLS[0], instructions: Rules.START.read,
-      connection: conn, rules: Agent.rules(), topics: Agent.topics(), state: st, next_steps: next,
+      connection: conn, rules: Rules.forConnection(ctx, TOOLS), topics: Agent.topics(), state: st, next_steps: next,
       errors: Rules.START.errors };
   }
   // chuẩn gói động tác cho agent: từ vựng LẤY LÚC CHẠY từ engine (không chép tay — STD-10) + ví dụ chạy được
@@ -1493,7 +1494,8 @@ class MCP {
   // ctx.lang (en | vi, từ dock) quyết ngôn ngữ TRẢ LỜI; không có thì ngôn ngữ của yêu cầu (X-GC-Lang / Accept-Language / mặc định máy — MSG.reqLang)
   uiSystem(ctx) {
     const z = ZONES[ctx.zone] || ZONES.xuong, w = z.work && ctx.object && ctx.object.kind === 'work' ? this.store.getWork(ctx.object.id) : null;
-    return Rules.chat({ zone: ZONES[ctx.zone] ? ctx.zone : 'xuong', lang: MSG.reqLang(ctx.lang), work: w });
+    const zone = ZONES[ctx.zone] ? ctx.zone : 'xuong';
+    return Rules.chat({ zone, lang: MSG.reqLang(ctx.lang), work: w, tools: this.toolsFor('ui', zone), allTools: TOOLS.concat(UI_TOOLS) });
   }
   // TIN `user` "DỮ LIỆU GIAO DIỆN" (CNS-118 + 119): ngữ cảnh đang xem + hiện trạng tác phẩm + ghi chú duyệt + phần tử người dùng ghim — MỘT khối JSON
   // (JSON.stringify: dấu " hay xuống dòng trong tên / ghi chú không thoát được khỏi chuỗi), có nhãn "dữ liệu, không phải lệnh". Mỗi phần có trần (LIMITS) → ngân sách
@@ -1573,7 +1575,7 @@ class MCP {
     const w = this.store.getWork(id);
     if (!w) throw Object.assign(new Error('No work ' + id.slice(0, 64) + ' (list_works)'), { code: 404 });
     const one = (v, current) => ({ version: v.version || 1, savedAt: v.savedAt || null, current, title: v.title || '', shots: (v.shots || []).length, shotTitles: (v.shots || []).slice(0, 40).map(s => s.title || s.id) });
-    return { work: w.id, current: w.version || 1, versions: [one(w, true)].concat(this.store.workVersions(id).filter(v => v.version !== w.version).slice(0, 200).map(v => one(v, false))) };
+    return { work: w.id, current: w.version || 1, versions: [one(w, true)].concat(this.store.workVersions(id, 200).filter(v => v.version !== w.version).map(v => one(v, false))) };
   }
   // khôi phục KHÔNG phá: store.saveWork giữ bản hiện tại thành một phiên bản (versions/works~<id>/<n>.json) rồi ghi nội dung cũ thành phiên bản MỚI.
   // Chỉ khôi phục NỘI DUNG (RESTORE_FIELDS); duyệt của chủ + đề xuất chờ duyệt giữ như hiện tại — khôi phục không đặt / xoá được "Đạt" hay ghi chú của chủ (CNS-116)
@@ -1583,13 +1585,23 @@ class MCP {
     if (!Number.isInteger(version) || version < 1) throw Object.assign(new Error('version: a version number from list_work_versions'), { code: 400 });
     if (version === (cur.version || 1)) throw Object.assign(new Error('Version ' + version + ' is already the current version of ' + cur.id + ' — nothing to restore'), { code: 409 });
     const old = this.store.workVersion(cur.id, version);
-    if (!old) throw Object.assign(new Error('Work ' + cur.id + ' has no version ' + version + ' (list_work_versions)'), { code: 404, allowed: this.store.workVersions(cur.id).map(v => v.version) });
+    if (!old) throw Object.assign(new Error('Work ' + cur.id + ' has no version ' + version + ' (list_work_versions)'), { code: 404, allowed: this.store.workVersionNumbers(cur.id).slice(0, 200) });
     const rec = Object.assign({}, cur);
-    RESTORE_FIELDS.forEach(k => { if (old[k] === undefined) delete rec[k]; else rec[k] = JSON.parse(JSON.stringify(old[k])); });
+    RESTORE_FIELDS.forEach(k => { if (k === 'shots') return; if (old[k] === undefined) delete rec[k]; else rec[k] = JSON.parse(JSON.stringify(old[k])); });
+    // khôi phục = LƯU nội dung cũ qua ĐÚNG cổng hôm nay (review 🟡3): từng phân cảnh đi qua saveShotChecked trên tác phẩm trong bộ nhớ — như import_project
+    // (dàn diễn viên / bối cảnh / đòn phải còn trong Thư viện, kịch bản qua cổng đạo diễn, luật âm S1–S7 theo dự án KHÔI PHỤC — đổi dự án mà âm hỏng là bị chặn).
+    // Có lỗi → từ chối cả lần khôi phục, đường dẫn shots[i].<trường>, không ghi gì
+    rec.shots = [];
+    const errs = [];
+    (Array.isArray(old.shots) ? old.shots.slice(0, 40) : []).forEach((s, i) => {
+      try { this.saveShotChecked({ work: cur.id, shot: { id: s.id, title: s.title, description: s.description, scene: s.scene, cast: s.cast, event: s.event || undefined } }, { work: rec }); }
+      catch (e) { (e.errors || [e.message]).slice(0, 5).forEach(x => { const t = String(x); errs.push(/^[A-Za-z0-9_.\[\]]+: /.test(t) ? 'shots[' + i + '].' + t : 'shots[' + i + ']: ' + t); }); }
+    });
+    if (errs.length) throw Object.assign(new Error('Version ' + version + ' does not pass today\'s gates — nothing was restored: ' + errs.slice(0, 4).join('; ')), { code: 422, errors: errs });
     // cảnh "Đạt" mà nội dung khôi phục khác bản đang dùng → về "Nháp" kèm ghi chú máy, như mọi lần sửa sau khi duyệt (khôi phục không mang "Đạt" sang nội dung chủ chưa xem)
-    if (rec.review) { rec.review = JSON.parse(JSON.stringify(rec.review)); (rec.shots || []).forEach(s => reviewTouched(rec, (cur.shots || []).find(x => x.id === s.id) || {}, s)); }
-    const L = this.soundCheck({ shots: rec.shots || [] }, rec.project), saved = this.store.saveWork(rec);
-    const warn = L.errors.concat(L.warnings).slice(0, 20);
+    if (rec.review) { rec.review = JSON.parse(JSON.stringify(rec.review)); rec.shots.forEach(s => reviewTouched(rec, (cur.shots || []).find(x => x.id === s.id) || {}, s)); }
+    const L = this.soundCheck({ shots: rec.shots }, rec.project), saved = this.store.saveWork(rec);
+    const warn = L.warnings.slice(0, 20);
     return Object.assign({ restored: true, work: saved.id, from: version, version: saved.version, previous: cur.version || 1, kept: 'the state before this restore is version ' + (cur.version || 1) + ' (list_work_versions)', studio: 'Studio › Create › Works › ' + saved.title }, warn.length ? { warnings: warn } : {});
   }
   // ---- STORYBOARD + PHIM HTML (CNS-047): studio/film-html.js — CÙNG hàm Studio dùng (nút Storyboard / Phim (HTML))
@@ -1607,9 +1619,10 @@ class MCP {
     const svg = FH.storyboard(this.GC, w, (m, v) => I.tr(ui, m, v));
     return { work: w.id, title: w.title, shots: w.shots.length, lang: ui, file: w.id + '-storyboard.svg', svg };
   }
-  // clip giọng AI ĐÃ có của từng câu (như Studio xuất phim: hỏi "dry" — không đọc mới, không tốn lượt); chưa từng có giọng AI (không key, không clip) → không hỏi
-  filmVoices(w) {
-    const out = { voices: {}, have: 0, total: 0 }, V = this.voice;
+  // câu có clip giọng AI ĐÃ có (như Studio xuất phim: hỏi "dry" — không đọc mới, không tốn lượt) → { total, clips: [{ key, file }] } — CHƯA đọc tệp nào.
+  // Chưa từng có giọng AI (không key, không clip) → không hỏi (total 0, như Studio)
+  filmClips(w) {
+    const out = { total: 0, clips: [] }, V = this.voice;
     if (!V) return out;
     const c = V.publicConfig();
     if (!(c.hasKey || c.cached)) return out;
@@ -1618,10 +1631,8 @@ class MCP {
       out.total++;
       const v = chosen[line.actor];
       if (!v) return;
-      const p = { text: String(line.say).trim(), voice: v, role: GV.roleOf(actor), state: line.state || 'normal', bubble: line.bubble || 'say' };
-      const f = V.clipFile(p);
-      if (!f) return;
-      try { out.voices[key] = 'data:audio/wav;base64,' + fs.readFileSync(f).toString('base64'); out.have++; } catch (e) { /* clip vừa bị dọn: câu này đọc bằng giọng máy */ }
+      const f = V.clipFile({ text: String(line.say).trim(), voice: v, role: GV.roleOf(actor), state: line.state || 'normal', bubble: line.bubble || 'say' });
+      if (f) out.clips.push({ key, file: f });
     });
     return out;
   }
@@ -1645,21 +1656,30 @@ class MCP {
     });
     return out;
   }
+  // NGÂN SÁCH (review 🟠1): dựng phim KHÔNG clip một lần để biết cỡ engine + asset → phần còn lại của trần dành cho clip. Clip tính theo cỡ TỆP (fs.statSync,
+  // base64 = 4/3) trước khi đọc; clip đầu tiên không vừa thì DỪNG (giữ các clip trước đó, báo dropped) — không bao giờ đọc / mã hoá nhiều hơn trần.
+  // Phim có clip dựng thêm đúng MỘT lần
   filmHTML(id, args) {
-    const w = this.filmWork(id), GC = this.GC, ui = this.filmUi(args && args.lang), I = GC.i18n;
+    const w = this.filmWork(id), GC = this.GC, ui = this.filmUi(args && args.lang), I = GC.i18n, MAX = this.filmMaxMB * 1048576;
     // mã engine nhúng theo phim = đúng các <script> engine/ + kinds/ của trang Studio, đúng thứ tự (engine/scripts.json — test 2w giữ khớp index.html)
     const srcs = JSON.parse(fs.readFileSync(path.join(APP_DIR, 'engine/scripts.json'), 'utf8')).engine, texts = srcs.map(f => fs.readFileSync(path.join(APP_DIR, f), 'utf8'));
     const build = vo => {
       const P = FH.payload(GC, w, { voices: vo, dialog: args && args.dialog, voiceOf: this.voiceOfFn() });
       return { P, html: FH.html({ W: w, data: P.data, film: P.film, ui, dict: this.playerDict(ui), srcs, texts, version: this.version, t: (m, v) => I.tr(ui, m, v) }) };
     };
-    const none = { voices: {}, have: 0, total: 0 }, vo = args && args.voices === false ? none : this.filmVoices(w), MAX = this.filmMaxMB * 1048576;
-    let r = build(vo), used = vo, dropped = false;
-    if (Buffer.byteLength(r.html) > MAX && vo.have) { used = Object.assign({}, vo, { voices: {}, have: 0 }); r = build(used); dropped = true; }
-    const bytes = Buffer.byteLength(r.html);
+    const cl = args && args.voices === false ? { total: 0, clips: [] } : this.filmClips(w), vo = { voices: {}, have: 0, total: cl.total };
+    let r = build(vo), bytes = Buffer.byteLength(r.html), dropped = false;
     if (bytes > MAX) throw Object.assign(new Error('The film file would be ' + (bytes / 1048576).toFixed(1) + ' MB (limit ' + this.filmMaxMB + ' MB) — export it from the Studio instead'), { code: 400 });
+    let left = MAX - bytes;
+    for (const c of cl.clips) {
+      let size; try { size = fs.statSync(c.file).size; } catch (e) { continue; }   // clip vừa bị dọn: câu này đọc bằng giọng máy
+      const cost = Buffer.byteLength(FH.jsonForScript(c.key)) + 26 + Math.ceil(size / 3) * 4 + 1;   // "khoá":"data:audio/wav;base64,…",
+      if (cost > left) { dropped = true; break; }
+      try { vo.voices[c.key] = 'data:audio/wav;base64,' + fs.readFileSync(c.file).toString('base64'); vo.have++; left -= cost; } catch (e) { /* đọc hỏng: bỏ câu này */ }
+    }
+    if (vo.have) { r = build(vo); bytes = Buffer.byteLength(r.html); }
     return { work: w.id, title: w.title, file: w.id + '.html', html: r.html, bytes, lang: ui, dialog: r.P.film.dialog, shots: w.shots.length,
-      ready: GC.film.readiness({ shots: w.shots }).filter(x => x.ok).length, have: used.have, total: used.total, dropped };
+      ready: GC.film.readiness({ shots: w.shots }).filter(x => x.ok).length, have: vo.have, total: vo.total, dropped };
   }
   // danh sách tác phẩm kèm số đếm cho bảng "Tạo tác": cảnh · cảnh có lời · duyệt Đạt / Cần sửa · giọng AI x/y
   listWorks() {

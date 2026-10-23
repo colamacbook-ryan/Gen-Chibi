@@ -14,9 +14,9 @@ const MSG = require('./i18n-msg');
 const SURFACES = {
   mcp: { reader: 'external agent, any vendor, over MCP', parts: ['product', 'route', 'golden'],
     readOnly: 'mcp:read: route says the connection is read-only; golden rules that name a write tool are left out (tools/list hides those tools too)' },
-  start_here: { reader: 'any agent, first call', parts: ['golden (all — v0.23.0 behaviour)', 'read', 'errors', 'connection note'] },
+  start_here: { reader: 'any agent, first call', parts: ['golden (same filter as mcp: read-only → no write tools)', 'read', 'errors', 'connection note'] },
   chat: { reader: 'the owner\'s own LLM in the Studio dock (any model)', parts: ['chat base', 'reply language', 'zone role', 'anchor syntax', 'data rule', 'open work (Create area)', 'product', 'route', 'golden'],
-    note: 'tools = the zone\'s set (mcp.toolsFor); no system / paid-voice tools; the owner approves on the spot' }
+    note: 'tools = the zone\'s set (mcp.toolsFor); golden rules that name a write tool outside the zone (rollback_app, save_shot in the Library…) are left out; no system / paid-voice tools; the owner approves on the spot' }
 };
 
 const PRODUCT = 'gen-chibi is a factory of chibi assets made from code: characters, items, scenes, motion packs (poses + animated actions), sound packs (cartoon sound effects) and films. You write JSON; the system checks it (gates), renders and stores it.';
@@ -26,11 +26,18 @@ function route(readOnly) {
     ? 'FIRST call start_here (current state, golden rules, topics). This connection is READ-ONLY: list, get, render and preview — say what you would change and ask the owner to raise the scope; do not retry after [FORBIDDEN]. get_guide explains each job: ' + topics + '.'
     : 'FIRST call start_here (current state, golden rules, topics). Then call get_guide with the topic of your job: ' + topics + '. Each guide is a numbered procedure with a runnable JSON example.';
 }
-// luật vàng (agent/GUIDE.md §3). writeTools: tên tool GHI — kết nối chỉ đọc không được nghe về chúng (bỏ luật nhắc tới tool ghi / save_*)
+// luật vàng (agent/GUIDE.md §3). opts = { allowed: tên tool người đọc GỌI ĐƯỢC, writeTools: tên tool GHI } → bỏ luật nhắc tới tool ghi NGOÀI bộ được gọi
+// (kết nối chỉ đọc: mọi tool ghi; dock: tool ghi ngoài khu — vd. rollback_app, save_shot ở Thư viện). save_* (cả họ) chỉ giữ khi có ít nhất một save_ được gọi
 function golden(opts) {
-  const all = Agent.rules(), wt = opts && opts.readOnly ? (opts.writeTools || []) : null;
-  if (!wt) return all;
-  return all.filter(r => !/\bsave_\*/.test(r) && !wt.some(n => new RegExp('\\b' + n + '\\b').test(r)));
+  const all = Agent.rules();
+  if (!opts || !opts.allowed) return all;
+  const ok = new Set(opts.allowed), anySave = [...ok].some(n => /^save_/.test(n)), off = (opts.writeTools || []).filter(n => !ok.has(n));
+  return all.filter(r => (anySave || !/\bsave_\*/.test(r)) && !off.some(n => new RegExp('\\b' + n + '\\b').test(r)));
+}
+// luật vàng theo KẾT NỐI MCP (initialize + start_here dùng chung): chỉ đọc → chỉ được gọi tool readOnlyHint
+function forConnection(ctx, tools) {
+  if (!(ctx && ctx.readOnly)) return golden();
+  return golden({ allowed: (tools || []).filter(t => t.annotations && t.annotations.readOnlyHint === true).map(t => t.name), writeTools: writeToolsOf(tools) });
 }
 const numbered = list => list.map((r, i) => (i + 1) + '. ' + r).join('\n');
 // tool GHI = không tự khai readOnlyHint (cùng định nghĩa với cổng mcp:read của callTool)
@@ -39,7 +46,7 @@ const writeToolsOf = tools => (tools || []).filter(t => !(t.annotations && t.ann
 // ---- bề mặt mcp: instructions của initialize. ctx = kênh (scopeCtx / link / token), tools = TOOLS của mcp.js
 function mcp(ctx, tools) {
   const ro = !!(ctx && ctx.readOnly);
-  return [PRODUCT, route(ro), 'GOLDEN RULES (MUST):', numbered(golden({ readOnly: ro, writeTools: writeToolsOf(tools) }))].join('\n');
+  return [PRODUCT, route(ro), 'GOLDEN RULES (MUST):', numbered(forConnection(ctx, tools))].join('\n');
 }
 
 // ---- bề mặt start_here
@@ -48,7 +55,7 @@ const START = {
   errors: 'Failed calls start with [CODE] (VALIDATION_FAILED, NOT_FOUND, CONFLICT, FORBIDDEN, BAD_REQUEST, UNAVAILABLE, INTERNAL) and carry structuredContent.error.details[].path.'
 };
 const CONNECTION_NOTE = {
-  read: 'Read-only connection (mcp:read): only tools marked readOnlyHint work; anything that saves returns [FORBIDDEN]. To create or edit, ask the owner to raise the scope (Studio › System › Agent connections) — do not retry writes.',
+  read: 'Read-only connection (mcp:read): only tools marked readOnlyHint work; anything that saves returns [FORBIDDEN]; export_film_html comes without AI voice clips. To create or edit, ask the owner to raise the scope (Studio › System › Agent connections) — do not retry writes.',
   oauthWrite: 'OAuth mcp:write: create / edit inside a project; no update / rollback, no paid AI voices, no removing sound packs — those need the owner (mcp:owner, Studio or genchibi).',
   link: 'Keyed link: like mcp:write (project-scoped saves); update only, no rollback / force.',
   studio: 'Studio AI dock: the owner approves edits on the spot.',
@@ -117,12 +124,13 @@ const ROLES = {
     "ROLE: general assistant on the System page (AI settings, Updates) — answer how to use gen-chibi (start_here / get_guide), point to the right area; asset creation works as for the Workshop staff."]
 };
 
-// chỉ dẫn hệ thống của dock: o = { zone, lang (en | vi — ngôn ngữ trả lời), work (tác phẩm đang mở ở khu Tạo tác, hoặc null) }
+// chỉ dẫn hệ thống của dock: o = { zone, lang (en | vi — ngôn ngữ trả lời), work (tác phẩm đang mở ở khu Tạo tác, hoặc null),
+//   tools (bộ tool của khu — lọc luật vàng), allTools (mọi tool, để biết tool nào là tool ghi) }
 function chat(o) {
   const lines = [UI_BASE.join('\n'), replyRule(o.lang), (ROLES[o.zone] || ROLES.xuong).join('\n'), ANCHOR_SYNTAX.join('\n'), DATA_RULE.join('\n')];
   if (o.work) lines.push(workInstructions(o.work));
-  lines.push(PRODUCT, route(false), 'GOLDEN RULES (MUST):', numbered(golden()));
+  lines.push(PRODUCT, route(false), 'GOLDEN RULES (MUST):', numbered(golden(o.tools ? { allowed: o.tools.map(t => t.name), writeTools: writeToolsOf(o.allTools || o.tools) } : null)));
   return lines.join('\n');
 }
 
-module.exports = { SURFACES, PRODUCT, ROLES, DATA_HEAD, START, CONNECTION_NOTE, route, golden, writeToolsOf, mcp, chat, workInstructions, replyRule };
+module.exports = { SURFACES, PRODUCT, ROLES, DATA_HEAD, START, CONNECTION_NOTE, route, golden, forConnection, writeToolsOf, mcp, chat, workInstructions, replyRule };

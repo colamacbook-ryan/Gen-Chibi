@@ -56,14 +56,18 @@ const Rules = require(path.join(ROOT, 'server/rules.js'));
     for (const [k, ctx] of Object.entries(chans)) {
       const ins = (await m.handle({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} }, ctx)).result.instructions, sh = m.startHere(ctx);
       ok(ins === Rules.mcp(ctx, TOOLS), 'initialize (' + k + '): instructions phải đúng Rules.mcp — có chữ ngoài nguồn');
-      ok(JSON.stringify(sh.rules) === JSON.stringify(Rules.golden()) && sh.instructions === Rules.START.read && sh.errors === Rules.START.errors && Object.values(Rules.CONNECTION_NOTE).includes(sh.connection.note), 'start_here (' + k + '): luật / lời dặn / ghi chú kênh phải lấy từ rules.js');
+      ok(JSON.stringify(sh.rules) === JSON.stringify(Rules.forConnection(ctx, TOOLS)) && sh.instructions === Rules.START.read && sh.errors === Rules.START.errors && Object.values(Rules.CONNECTION_NOTE).includes(sh.connection.note), 'start_here (' + k + '): luật / lời dặn / ghi chú kênh phải lấy từ rules.js');
       if (ctx.readOnly) ok(!writeTools.some(n => ins.includes(n)) && !/save_/.test(ins), 'kết nối chỉ đọc không được nghe về tool ghi: ' + writeTools.filter(n => ins.includes(n)).join(', '));
+      if (ctx.readOnly) { const sr = sh.rules.join('\n'); ok(sh.rules.length >= 5 && !writeTools.some(n => sr.includes(n)) && !/save_/.test(sr), 'start_here (mcp:read): luật vàng lọc như initialize — không nhắc tool ghi: ' + writeTools.filter(n => sr.includes(n)).join(', ')); }
       else ok(Rules.golden().every(r => ins.includes(r)), 'initialize (' + k + '): thiếu luật vàng');
     }
     for (const z of Object.keys(MM.ZONES)) for (const lang of ['en', 'vi']) {
       const ctx = MM.cleanContext({ zone: z, lang, object: { kind: 'work', id: 'phim-luat' } }), w = MM.ZONES[z].work ? m.store.getWork('phim-luat') : null;
-      ok(m.uiSystem(ctx) === Rules.chat({ zone: z, lang, work: w }), 'AI chatroom (' + z + '/' + lang + '): chỉ dẫn hệ thống phải đúng Rules.chat');
-      ok(Rules.golden().every(r => m.uiSystem(ctx).includes(r)), 'AI chatroom (' + z + '): LLM của chủ phải nhận đủ luật vàng');
+      const zt = m.toolsFor('ui', z), sys = m.uiSystem(ctx), zn = zt.map(t => t.name), wAll = Rules.writeToolsOf(TOOLS.concat(MM.UI_TOOLS));
+      ok(sys === Rules.chat({ zone: z, lang, work: w, tools: zt, allTools: TOOLS.concat(MM.UI_TOOLS) }), 'AI chatroom (' + z + '/' + lang + '): chỉ dẫn hệ thống phải đúng Rules.chat');
+      // luật vàng lọc theo bộ tool của khu: không luật nào nhắc tool ghi ngoài khu (Tạo tác không nghe về rollback_app / xoá cảnh qua luật 9); vẫn đủ phần lớn luật, vừa ngân sách
+      const got = Agent.rules().filter(r => sys.includes(r)), off = wAll.filter(n => !zn.includes(n) && got.some(r => new RegExp('\\b' + n + '\\b').test(r)));
+      ok(!off.length && got.length >= 8 && !/rollback_app/.test(sys) && sys.length <= MM.LIMITS.llm / 2, 'AI chatroom (' + z + '): luật vàng phải lọc theo bộ tool của khu — nhắc tool ngoài khu: ' + off.join(', ') + ' · ' + got.length + ' luật · ' + sys.length + ' ký tự');
     }
     ok(/DIALOGUE LANGUAGE of the film: Cantonese/.test(m.uiSystem(MM.cleanContext({ zone: 'tao-tac', object: { kind: 'work', id: 'phim-luat' } }))) && MM.workInstructions === Rules.workInstructions && MM.INSTRUCTIONS === Rules.mcp({}, TOOLS), 'khu Tạo tác: luật tác phẩm (ngôn ngữ lời thoại) từ rules.js; INSTRUCTIONS xuất ra = Rules.mcp');
   } finally { fs.rmSync(RT, { recursive: true, force: true }); }
@@ -197,8 +201,35 @@ console.log('   ✓ chỉ bằng hướng dẫn + ví dụ nguyên văn: dự á
     ok(!f2.isError && f2.structuredContent.voicesDropped === true && f2.structuredContent.aiVoices.have === 0 && f2.structuredContent.bytes < f0.bytes + 64, 'quá trần cỡ phim → bỏ clip giọng AI, nói rõ trong kết quả');
     const m3 = new MM.MCP({ engine: m.GC, store: m.store, version: 'film', uiLang: () => 'en', filmMaxMB: 0.1 }), f3 = await m3.callTool('export_film_html', { work: W }, {});
     ok(f3.isError && f3.structuredContent.error.code === 'BAD_REQUEST', 'quá trần cả khi không clip → [BAD_REQUEST]');
+    // review 🟡4: kết nối chỉ đọc không bao giờ nhận clip giọng AI (kể cả khi xin voices: true)
+    const fr = await m.callTool('export_film_html', { work: W, voices: true }, MM.scopeCtx('mcp:read'));
+    ok(!fr.isError && fr.structuredContent.aiVoices.have === 0 && !/data:audio\/wav/.test(fr.content[1].resource.text), 'mcp:read: export_film_html luôn KHÔNG có clip giọng AI');
+    // review 🟠1: ngân sách clip theo CỠ TỆP trước khi đọc — 3 clip nhỏ đầu vừa trần, các clip sau là tệp thưa 64 MB: dừng ở clip đầu không vừa, giữ 3 clip, không đọc tệp lớn
+    { let n = 0; const small = path.join(RT, 'small.wav'), huge = path.join(RT, 'huge.wav'); fs.writeFileSync(small, Buffer.alloc(50 * 1024, 3));
+      const fd = fs.openSync(huge, 'w'); fs.ftruncateSync(fd, 64 * 1048576); fs.closeSync(fd);
+      const mv = new MM.MCP({ engine: m.GC, store: m.store, version: 'film', uiLang: () => 'en', voice: { publicConfig: () => ({ hasKey: true }), clipFile: () => (n++ < 3 ? small : huge) } });
+      const rss0 = process.memoryUsage().rss, t0 = Date.now(), fv = await mv.callTool('export_film_html', { work: W }, {}), dt = Date.now() - t0, grow = process.memoryUsage().rss - rss0;
+      ok(!fv.isError && fv.structuredContent.aiVoices.have === 3 && fv.structuredContent.voicesDropped === true && fv.structuredContent.bytes <= 16 * 1048576 && /AI clips left out/.test(fv.content[0].text) && dt < 5000 && grow < 200 * 1048576,
+        'clip giọng AI: tính theo cỡ tệp, dừng khi vượt trần, giữ phần vừa (have ' + (fv.structuredContent && fv.structuredContent.aiVoices && fv.structuredContent.aiVoices.have) + ', ' + dt + ' ms, rss +' + Math.round(grow / 1048576) + ' MB)'); }
+    // review 🟡3: khôi phục đi qua đúng cổng của save_shot — bản cũ có diễn viên không còn / âm lạ → VALIDATION_FAILED ở shots[i].…, không ghi gì
+    { const vNow = m.store.getWork(W).version, vf = path.join(RT, 'versions', 'works~' + W, '1.json'), v1 = JSON.parse(fs.readFileSync(vf, 'utf8')), src = m.store.getWork(W);
+      v1.shots = JSON.parse(JSON.stringify(src.shots)); v1.shots[0].cast = v1.shots[0].cast.concat(['khong-co-ai']);
+      const ev = v1.shots[1].event; ev.steps[0] = Object.assign({}, ev.steps[0], { sfx: ['bonkk'] });
+      fs.writeFileSync(vf, JSON.stringify(v1));
+      const rb = await m.callTool('restore_work_version', { work: W, version: 1 }, {}), d = rb.structuredContent && rb.structuredContent.error;
+      ok(rb.isError && d.code === 'VALIDATION_FAILED' && d.details.some(x => x.path === 'shots[0].cast') && d.details.some(x => /^shots\[1\]\.event/.test(x.path || '')) && m.store.getWork(W).version === vNow,
+        'restore_work_version: phân cảnh cũ qua cổng save_shot (diễn viên không còn, âm lạ) → VALIDATION_FAILED shots[i].…, không ghi: ' + rb.content[0].text.slice(0, 300)); }
+    // review 🟡2: lịch sử dài — chỉ đọc 200 bản mới nhất, sắp theo SỐ (10 > 9), danh sách "allowed" lấy từ tên tệp
+    { const S2 = new Store(path.join(RT, 'nhieu')), dir = path.join(RT, 'nhieu', 'versions', 'works~dai'); fs.mkdirSync(dir, { recursive: true });
+      for (let i = 1; i <= 250; i++) fs.writeFileSync(path.join(dir, i + '.json'), JSON.stringify({ id: 'dai', title: 'v' + i, version: i, shots: [] }));
+      S2.saveWork({ id: 'dai', title: 'hiện tại', shots: [] });
+      let reads = 0; const orig = S2.workVersion.bind(S2); S2.workVersion = (id, n) => { reads++; return orig(id, n); };
+      const mm = new MM.MCP({ engine: m.GC, store: S2, version: 'v', uiLang: () => 'en' }), lv = (await mm.callTool('list_work_versions', { work: 'dai' }, {})).structuredContent;
+      ok(reads <= 200 && lv.versions.length === 201 && lv.versions[1].version === 250 && lv.versions[200].version === 51, 'list_work_versions: chỉ đọc 200 bản mới nhất theo số (đọc ' + reads + ' tệp, bản cũ nhất hiện ' + (lv.versions[200] && lv.versions[200].version) + ')');
+      reads = 0; const nf = await mm.callTool('restore_work_version', { work: 'dai', version: 999 }, {});
+      ok(nf.isError && nf.structuredContent.error.code === 'NOT_FOUND' && reads <= 1 && nf.structuredContent.error.allowed[0] === 250, 'bản không có: allowed lấy từ tên tệp (không đọc nội dung)'); }
   } finally { fs.rmSync(RT, { recursive: true, force: true }); }
-  console.log('   ✓ rào: mcp:read không khôi phục được (xem / xuất được) · khôi phục không mang "Đạt" sang nội dung khác · phim nhúng clip giọng AI đã lồng, quá trần thì bỏ clip, quá trần hẳn → BAD_REQUEST');
+  console.log('   ✓ rào: mcp:read không khôi phục được (xem / xuất được, phim không clip AI) · khôi phục qua cổng save_shot (shots[i].…) · lịch sử chỉ đọc 200 bản mới nhất · clip AI tính theo cỡ tệp, dừng khi vượt trần · khôi phục không mang "Đạt" sang nội dung khác · phim nhúng clip giọng AI đã lồng, quá trần thì bỏ clip, quá trần hẳn → BAD_REQUEST');
 }
 
 // ---------- 3. hợp đồng lỗi: mã ổn định + path + gợi ý; tự sửa theo path rồi qua
