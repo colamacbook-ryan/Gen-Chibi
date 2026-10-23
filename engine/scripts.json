@@ -25,6 +25,7 @@
   "studio": [
     "studio/gif.js",
     "studio/dock.js",
+    "studio/video/payload.js",
     "studio/video/client.js",
     "studio/app.js"
   ],

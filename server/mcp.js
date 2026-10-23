@@ -66,6 +66,20 @@ function cleanVoices(v) {
   });
   return out;
 }
+// cấu hình xuất video của tác phẩm (v0.23.2, CNS-250): work.video = { aspect, quality, container } — Studio nhớ lựa chọn của bảng Xuất video theo TÁC PHẨM
+// (đi theo gói dự án / sao lưu). Khoá lạ / giá trị lạ → lỗi kèm đường dẫn (không lặng lẽ bỏ); null → xoá (về mặc định). → bản sạch | null (xoá)
+const VIDEO_OPTS = { aspect: ['16:9', '9:16'], quality: ['1080p', '720p'], container: ['', 'mp4', 'webm'] };
+function cleanVideo(v, errs) {
+  if (v === null) return null;
+  if (!v || typeof v !== 'object' || Array.isArray(v)) { errs.push('video: ' + tr(VI, 'đối tượng gồm aspect, quality, container')); return undefined; }
+  const out = {};
+  Object.keys(v).forEach(k => {
+    if (!Object.prototype.hasOwnProperty.call(VIDEO_OPTS, k)) { errs.push('video.' + String(k).slice(0, 40) + ': ' + tr(VI, 'khoá lạ — chỉ có aspect, quality, container')); return; }
+    if (VIDEO_OPTS[k].indexOf(v[k]) < 0) { errs.push('video.' + k + ': ' + VIDEO_OPTS[k].map(x => x || '""').join(' | ')); return; }
+    out[k] = v[k];
+  });
+  return out;
+}
 function obj(props, required) { return { type: 'object', properties: props, required: required || [], additionalProperties: false }; }
 const TOOLS = [
   { name: 'start_here', title: 'START HERE — call first', description: 'CALL THIS FIRST in every session. Returns the app version, what already exists (projects, characters, items, scenes, motion packs, sound packs, works, samples), the golden rules, the guide topics and suggested next steps. Then call get_guide with the topic of your job.', inputSchema: obj({}), annotations: { readOnlyHint: true } },
@@ -1232,9 +1246,9 @@ class MCP {
         this.saveMotionPackChecked(Object.assign(strip(m), { project: ex && !ex.project ? '' : pid }), note);
       }));
       works.forEach(w => step('works', w.id, () => {
-        // lang / accent / voices (giọng đã chốt của dàn) đi theo gói — L-61 (CNS-083)
+        // lang / accent / voices (giọng đã chốt của dàn) / video (cấu hình xuất video, CNS-250) đi theo gói — L-61 (CNS-083)
         const rec = this.saveWorkChecked(Object.assign({ id: String(w.id || ''), title: w.title, project: pid, logline: w.logline || '', script: w.script || '' },
-          w.lang !== undefined ? { lang: w.lang } : {}, w.accent !== undefined ? { accent: w.accent } : {}, w.voices !== undefined ? { voices: w.voices } : {}), { keepLang: true });   // gói không có lang = tiếng Việt (trước v0.20): không gán mặc định mới
+          w.lang !== undefined ? { lang: w.lang } : {}, w.accent !== undefined ? { accent: w.accent } : {}, w.voices !== undefined ? { voices: w.voices } : {}, w.video !== undefined && w.video !== null ? { video: w.video } : {}), { keepLang: true });   // gói không có lang = tiếng Việt (trước v0.20): không gán mặc định mới
         const cur = S.getWork(rec.id), oldShots = {};
         (cur.shots || []).forEach(x => { oldShots[x.id] = x; });
         const mem = Object.assign(cur, { shots: [], chat: [] });   // nhập = thay trọn phân cảnh; lịch sử chat cũ không còn khớp → bỏ
@@ -1326,6 +1340,7 @@ class MCP {
       if (GV.accent(L, args.accent) === args.accent) w.accent = args.accent; else errs.push('accent: ' + tr(VI, 'giọng vùng của {lang} — {accents}', { lang: L, accents: GV.LANGS[L].accents.map(a => a[0]).join(' | ') }));
     }
     if (args.voices !== undefined) w.voices = cleanVoices(args.voices);   // giọng AI đã chốt của dàn (do cast ghi; gói dự án mang theo)
+    if (args.video !== undefined) { const vd = cleanVideo(args.video, errs); if (vd === null) delete w.video; else if (vd) w.video = vd; }   // cấu hình xuất video (CNS-250)
     // duyệt từng cảnh (v0.18): trạng thái + ghi chú — cổng riêng (cleanReview): chặn khoá lạ, kẹp độ dài, id + giờ do server đặt
     if (args.review !== undefined) { const rv = cleanReview(args.review, w, errs, opts); if (rv === undefined) delete w.review; else if (!errs.length || errs.every(x => !/^review/.test(x))) w.review = rv; }
     // luật ghép âm S1–S7 trên MỌI phân cảnh theo dự án (mới) của tác phẩm — đổi dự án thì âm của gói dự án cũ thành S6; lỗi → từ chối, cảnh báo → trả kèm

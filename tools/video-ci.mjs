@@ -1,7 +1,7 @@
 // Job CI xuất video (CNS-215 / CNS-216): Chrome CÓ SẴN của runner (windows-latest / macos-latest) xuất 1 phân cảnh Fun Office bằng WebCodecs THẬT,
 // lưu tệp, kiểm cấu trúc bằng tools/media-inspect.js (+ ffprobe nếu có). Không npm, không Playwright: CDP qua WebSocket có sẵn của Node 22 (tools/cdp.mjs).
 //   node tools/video-ci.mjs [--require-mp4] [--hidden] [--quality 720p|1080p] [--frame 16x9|9x16] [--out <thư mục>]
-//     --quality / --frame  chất lượng + khung hình (9x16 = phim ngang đặt giữa khung dọc, Q37 a) — kiểm cỡ khung của TỆP ra (CNS-239)
+//     --quality / --frame  chất lượng + khung hình (9x16 = khung dọc thật, máy quay bám người nói — Q37 b) — kiểm cỡ khung của TỆP ra (CNS-239)
 //     --require-mp4  TRƯỢT nếu trình duyệt không ra được MP4 avc1 + mp4a (job Windows / macOS — nhánh ưu tiên 1 phải chạy thật)
 //     --require-ffmpeg  TRƯỢT nếu máy không có ffmpeg / ffprobe (job CI cài sẵn) — phép đo lệch tiếng / hình THẬT cần giải mã
 //     --hidden       trong lúc xuất mở một tab khác lên trước → trang xuất ở tab NỀN (bị bóp timer) vẫn phải xong (CNS-221)
@@ -20,6 +20,7 @@ const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const { inspectMp4, inspectWebm, decodeAudio, measureMarks } = require(path.join(ROOT, 'tools/media-inspect.js'));
 const { sync } = require(path.join(ROOT, 'studio/video/mux.js'));
+const PAYLOAD = require(path.join(ROOT, 'studio/video/payload.js'));   // MỘT bộ dựng payload với Studio (CNS-246)
 const HDR = require(path.join(ROOT, 'server/headers.js'));
 const argv = process.argv.slice(2), flag = f => argv.includes(f), val = (f, d) => { const i = argv.indexOf(f); return i >= 0 ? argv[i + 1] : d; };
 const REQUIRE_MP4 = flag('--require-mp4'), REQUIRE_FF = flag('--require-ffmpeg'), HIDDEN = flag('--hidden'), QUALITY = val('--quality', '720p'), FRAME = val('--frame', '16x9');
@@ -30,22 +31,18 @@ fs.mkdirSync(OUT, { recursive: true });
 const fails = [];
 const check = (cond, msg) => { if (!cond) { fails.push(msg); console.log('   ✗ ' + msg); } return cond; };
 
-/* ---------------------------------------------------------------- payload: Fun Office như filmPayload của Studio (ui en, chữ trình phát nhúng kèm) */
+/* ---------------------------------------------------------------- payload: Fun Office qua CÙNG bộ dựng với filmPayload của Studio (studio/video/payload.js — CNS-246)
+ * Chỉ phần "gom" khác Studio: asset lấy thẳng từ gói mẫu (Studio gom từ Thư viện), mã engine từ engine/scripts.json (= thẻ script của Studio, test-scripts),
+ * chữ trình phát en từ locales/en, không clip giọng AI. Chốt giọng theo GC.audio (cần trình duyệt) không có ở Node → giữ giọng của nhân vật. */
 function payload() {
   const B = JSON.parse(fs.readFileSync(path.join(ROOT, 'studio/mau/fun-office.json'), 'utf8')), W = B.works[0];
-  const idx = fs.readFileSync(path.join(ROOT, 'studio/index.html'), 'utf8');
-  const srcs = [...idx.matchAll(/<script src="([^"]+)"/g)].map(m => m[1]).filter(s => /^(engine|kinds)\//.test(s));   // như filmSrcs() của Studio
-  const pick = (o, ks) => Object.fromEntries(ks.filter(k => o[k] !== undefined).map(k => [k, o[k]]));
+  const srcs = JSON.parse(fs.readFileSync(path.join(ROOT, 'engine/scripts.json'), 'utf8')).engine;   // như filmSrcs() của Studio (một nguồn, CNS-054)
   const dict = {};
   for (const f of ['engine', 'engine-data', 'player']) { const p = path.join(ROOT, 'locales/en', f + '.json'); if (fs.existsSync(p)) for (const [k, v] of Object.entries(JSON.parse(fs.readFileSync(p, 'utf8')))) if (k.slice(0, 2) !== '//') dict[k] = v; }
-  return {
-    srcs, ui: 'en', dict, have: 0, total: 0,
-    data: { parts: B.parts || [], motionPacks: [], soundPacks: [], project: B.project.id,
-      characters: B.characters.map(a => Object.assign(pick(a, ['id', 'name', 'version', 'look', 'expressions', 'kind', 'voice', 'role']), { pack: 'local.my' })),
-      items: (B.items || []).map(x => pick(x, ['id', 'name', 'type', 'rarity', 'equip'])), scenes: (B.scenes || []).map(x => pick(x, ['id', 'name', 'layers', 'deco', 'palette', 'time', 'weather', 'spots'])),
-      lang: W.lang || 'en', accent: 'us', voices: {}, voiceTotal: 0 },
-    film: { title: W.title, logline: W.logline || '', dialog: 'auto', shots: W.shots.map(s => ({ id: s.id, title: s.title, description: s.description || '', scene: s.scene, cast: s.cast, event: s.event })) }
-  };
+  return PAYLOAD.build({ W: Object.assign({}, W, { project: B.project.id }),
+    data: { parts: B.parts || [], items: B.items || [], scenes: B.scenes || [], characters: B.characters.map(a => Object.assign({}, a, { pack: 'local.my' })) },
+    motionPacks: PAYLOAD.motionPacks(W, B.motionPacks || []), soundPacks: [], voiceOf: null,
+    lang: { lang: W.lang || 'en', accent: 'us' }, vo: { voices: {}, have: 0, total: 0 }, dialog: 'auto', srcs, ui: 'en', dict });
 }
 
 // mẫu dấu tiếng (nhiễu trắng tất định 2048 mẫu, im lặng 0,2 s hai bên) dập vào PCM phim ở trang xuất: đầu phim + gần cuối → đo lệch tiếng / hình trên tệp THẬT

@@ -355,7 +355,13 @@ else {
   { const cli = fs.readFileSync(path.join(ROOT, 'studio/video/client.js'), 'utf8'), host = fs.readFileSync(path.join(ROOT, 'tools/fixtures/video-ci/host.js'), 'utf8'), vci = fs.readFileSync(path.join(ROOT, 'tools/video-ci.mjs'), 'utf8');
     no(!/_t\('Xuất video lỗi: \{x\}', \{ x: code \}\)/.test(cli) || !/e\.detail = String\(extra\)/.test(cli) || !/window\.__ci\.detail = e && e\.detail/.test(host) || !/st\.detail \? ' — chi tiết: ' \+ st\.detail/.test(vci),
       'lỗi kỹ thuật: Studio hiện mã, e.detail giữ chi tiết, video-ci in chi tiết'); }
-  no(/cloneNode\(/.test(cap) || !/function frameShell\(W, H\) \{\s*if \(!PRE \|\| PRE\.w !== W/.test(cap) || !/var BANDS = /.test(cap), 'chụp khung: không cloneNode, đầu data: URL (CSS + phông) đóng sẵn một lần, raster theo dải');
+  // cloneNode chỉ được dùng NÔNG (cloneNode(false): thẻ mở của lớp rung / máy quay cho từng mảnh) — không nhân bản cả sân khấu
+  no(/cloneNode\((?!false\))/.test(cap) || !/function frameShell\(W, H, font\) \{\s*var k = font === false \? 'n' : 'f', P = PRE\[k\];\s*if \(!P \|\| P\.w !== W/.test(cap) || !/var BANDS = /.test(cap), 'chụp khung: không cloneNode sâu, đầu data: URL (CSS ± phông) đóng sẵn một lần, raster theo dải');
+  // B5 (CNS-248) chụp theo lớp: phông sau ở canvas đệm (vẽ lại chỉ khi máy quay đổi khung), lớp sân khấu từng mảnh KHÔNG nhúng phông chữ (dùng lại mảnh không đổi),
+  // lớp trên (lời thoại) raster lại chỉ khi đổi; lớp trên có mix-blend-mode → một tài liệu như cũ; o.layers = false chỉ để đo đối chứng
+  no(!/LAYERED = o\.layers !== false/.test(cap) || !/if \(BG && BG\.el === \(R0 && R0\.el\) && BG\.key === key\) \{ st\.bgHit\+\+; return BG\.cv; \}/.test(cap) || !/if \(TOP && TOP\.body === body\) \{ st\.topHit\+\+; return TOP\.cv; \}/.test(cap)
+    || !/if \(prev && prev\.s === sl\.s\) \{ st\.sliceHit\+\+;/.test(cap) || !/decodeOne\(sl\.s, false\)/.test(cap) || /getComputedStyle\(cs\[i\]\)/.test(cap) || !/if \(topS\.indexOf\('mix-blend-mode'\) >= 0\) split = false/.test(cap) || !/s\.id !== 'gc-fonts'/.test(cap),
+    'chụp theo lớp (B5): phông sau đệm theo khung máy quay · mảnh sân khấu không phông chữ, dùng lại mảnh không đổi · lớp trên chỉ dựng lại khi đổi · mix-blend-mode → một tài liệu');
   const vc = fs.readFileSync(path.join(ROOT, 'studio/video/vclock.js'), 'utf8');
   no(/(^|\/)engine\//.test(path.relative(ROOT, path.join(ROOT, 'studio/video/vclock.js'))), 'vclock không nằm trong engine/');
   no(!/window\.parent/.test(cap) || !/e\.origin !== ORIGIN \|\| e\.source !== PARENT/.test(cap), 'trang xuất kiểm origin + source của tin nhắn');
@@ -447,6 +453,109 @@ else {
     no(pg.indexOf('gc-video-export') < 0, 'server trả đúng trang xuất video');
     if (bad === b0) ok('server: CHỈ studio/video-export.html nhận X-Frame-Options SAMEORIGIN + CSP frame-ancestors \'self\'; ' + (cases.length - 2) + ' loại phản hồi khác (Studio, đăng nhập, js, css, json, mẫu, API, 404, đường lách) giữ DENY; đường dẫn không chuẩn (// · /./ · /../) → 404; HTML nào cũng có CSP');
   } finally { srv.kill(); }
+}
+
+/* ---------------------------------------------------------------- KHUNG DỌC 9:16 thật (v0.23.2, Q37 b): máy quay dọc GC.film.frameV (thuần số, cùng hàm bộ phát dùng) */
+console.log('   — máy quay khung dọc 9:16 (GC.film.frameV + bố cục phụ đề khung dọc)');
+{
+  const b0 = bad, GC = require(path.join(ROOT, 'server/engine-node.js')).loadEngine(ROOT), F = GC.film && GC.film.frameV, AX = 256 / 81;
+  if (no(typeof F !== 'function', 'GC.film.frameV phải có (engine/player.js)')) {
+    const sp = k => { const s = GC.SCENE.spots[k]; return { x: s.x / GC.SCENE.W, y: (s.y - 128 * s.k) / GC.SCENE.H, k: s.k }; };
+    const scr = (f, a) => (a.x * f.S + f.tx) * AX;   // x màn hình (0–1) của diễn viên theo khung
+    const inClamp = f => f.S >= 1 - 1e-9 && f.tx <= 1e-9 && f.tx >= 1 / AX - f.S - 1e-9 && f.ty <= 1e-9 && f.ty >= 1 - f.S - 1e-9;
+    const P2 = { a: sp('left'), b: sp('right') };
+    // cận: người nói ở GIỮA khung (không kẹp) hoặc trong khung (kẹp ở mép cảnh); người đứng sau được đẩy tới
+    const c1 = F({ mode: 'close', on: ['a'], actors: P2 }), c2 = F({ mode: 'close', on: ['b'], actors: P2 }), c3 = F({ mode: 'close', on: ['m'], actors: { m: sp('center') } }), c4 = F({ mode: 'close', on: ['k'], actors: { k: sp('back') } });
+    no(Math.abs(scr(c3, sp('center')) - 0.5) > 1e-6 || Math.abs(c3.S - 1) > 1e-9, 'cận người giữa cảnh: giữa khung, S = 1 — có ' + JSON.stringify(c3));
+    no(!(scr(c1, P2.a) > 0.3 && scr(c1, P2.a) < 0.7) || !(scr(c2, P2.b) > 0.3 && scr(c2, P2.b) < 0.7), 'cận người đứng mép trái / phải: vẫn ở giữa khung ±20% — ' + [scr(c1, P2.a), scr(c2, P2.b)]);
+    no(!(c4.S > 1.2 && c4.S <= 1.3), 'cận người đứng sau (k 0,62): đẩy tới ≤ 1,3× — có ' + c4.S);
+    // hai người cách xa (trái ↔ phải, rộng hơn khung dọc): người NÓI luôn trong khung
+    const t1 = F({ mode: 'two', on: ['a', 'b'], actors: P2 }), t2 = F({ mode: 'two', on: ['b', 'a'], actors: P2 });
+    no(!(scr(t1, P2.a) > 0.05 && scr(t1, P2.a) < 0.95) || !(scr(t2, P2.b) > 0.05 && scr(t2, P2.b) < 0.95), 'hai người cách xa: người nói phải trong khung — ' + [scr(t1, P2.a), scr(t2, P2.b)]);
+    const t3 = F({ mode: 'two', on: ['a', 'm'], actors: { a: sp('midLeft'), m: sp('center') } });
+    no(!(scr(t3, sp('midLeft')) > 0 && scr(t3, sp('midLeft')) < 1 && scr(t3, sp('center')) > 0 && scr(t3, sp('center')) < 1), 'hai người đứng gần (giữa trái + giữa): cả hai trong khung');
+    // toàn cảnh: nhóm rộng hơn khung → anchor (người nói gần nhất / câu đầu) trong khung; không có anchor thì giữa nhóm
+    const w1 = F({ mode: 'wide', actors: P2, anchor: 'a' }), w2 = F({ mode: 'wide', actors: P2, anchor: 'b' }), w0 = F({ mode: 'wide', actors: P2 });
+    no(!(scr(w1, P2.a) > 0.05 && scr(w1, P2.a) < 0.95) || !(scr(w2, P2.b) > 0.05 && scr(w2, P2.b) < 0.95), 'toàn cảnh nhóm rộng: anchor phải trong khung — ' + [scr(w1, P2.a), scr(w2, P2.b)]);
+    no(Math.abs((0.5 * w0.S - w0.tx * 0) - 0.5) > 1 || Math.abs(-w0.tx - (0.5 - 0.5 / AX)) > 1e-9 || w0.ty !== 0, 'toàn cảnh không anchor: giữa nhóm, hết chiều cao — ' + JSON.stringify(w0));
+    // đẩy máy (punch) ×1,12 · kẹp trong cảnh ở 2000 đầu vào ngẫu nhiên (seed cố định) · tất định
+    no(Math.abs(F({ mode: 'close', on: ['m'], actors: { m: sp('center') }, punch: true }).S - 1.12) > 1e-9, 'punch: S × 1,12');
+    const rr = rnd(9), modes = ['wide', 'two', 'close'], keys = Object.keys(GC.SCENE.spots); let outClamp = 0, lost = 0, nondet = 0;
+    for (let i = 0; i < 2000; i++) {
+      const A = {}, ids = ['p', 'q', 'r'].slice(0, 1 + Math.floor(rr() * 3)); ids.forEach(id => { const s = sp(keys[Math.floor(rr() * keys.length)]); A[id] = Object.assign(s, { x: Math.min(1, Math.max(0, s.x + (rr() - 0.5) * 0.3)) }); });
+      const c = { mode: modes[Math.floor(rr() * 3)], on: rr() < 0.8 ? ids.slice().sort(() => 0).slice(0, 2) : null, punch: rr() < 0.2, actors: A, anchor: ids[0] };
+      const f = F(c), g = F(JSON.parse(JSON.stringify(c)));
+      if (!inClamp(f)) outClamp++;
+      if (JSON.stringify(f) !== JSON.stringify(g)) nondet++;
+      const who = c.on && c.on[0] || (c.mode === 'wide' ? c.anchor : null);
+      if (who && !(scr(f, A[who]) > 0.02 && scr(f, A[who]) < 0.98)) lost++;
+    }
+    no(outClamp, 'kẹp trong cảnh (S ≥ 1, không lộ mép): ' + outClamp + '/2000 khung lọt ra');
+    no(lost, 'người nói / anchor trong khung: ' + lost + '/2000 khung để mất người nói');
+    no(nondet, 'tất định: ' + nondet + '/2000 khung khác nhau với cùng đầu vào');
+    // không rung: chênh nhỏ (diễn viên nhích 1% cảnh) → giữ khung cũ (null); chênh lớn / cắt cảnh → khung mới
+    const base = F({ mode: 'close', on: ['m'], actors: { m: sp('center') } }), nudge = x => ({ m: Object.assign(sp('center'), { x: sp('center').x + x }) });
+    no(F({ mode: 'close', on: ['m'], actors: nudge(0.01), prev: base }) !== null, 'không rung: lệch 1% cảnh phải giữ khung cũ');
+    no(F({ mode: 'close', on: ['m'], actors: nudge(0.08), prev: base }) === null, 'lệch 8% cảnh phải lia máy theo');
+    no(F({ mode: 'close', on: ['m'], actors: nudge(0.01), prev: base, cut: true }) === null, 'cắt cảnh (cut) luôn đặt khung mới');
+    // phụ đề khung dọc: lề dưới c.bottom (chừa giao diện TikTok / Shorts) — không đặt thì như bản ngang (4,5%)
+    const capArgs = b => ({ kind: 'caption', W: 1080, H: 1920, m: 43, who: 'a', mouth: { x: 540, y: 900 }, heads: [], bodies: [], decor: [], sizes: [{ w: 900, h: 160 }], bottom: b });
+    const cv = GC.film.solveLayout(capArgs(0.14)), ch = GC.film.solveLayout(capArgs(undefined));
+    no(!(cv.y1 <= 1920 * 0.86 + 0.5 && cv.y1 >= 1920 * 0.86 - 1), 'phụ đề khung dọc: đáy ở 86% chiều cao, có ' + cv.y1);
+    no(Math.abs(ch.y1 - 1920 * 0.955) > 1, 'phụ đề không đặt bottom: đáy ở 95,5% như cũ, có ' + ch.y1);
+    if (bad === b0) ok('máy quay dọc: cận người nói giữa khung (đứng sau → ≤ 1,3×) · hai người / toàn cảnh rộng hơn khung → người nói / anchor luôn trong khung · 2000 khung ngẫu nhiên: kẹp trong cảnh, không mất người nói, tất định · không rung (lệch 1% giữ khung, 8% lia) · phụ đề dọc chừa 14% đáy');
+  }
+}
+
+/* ---------------------------------------------------------------- cấu hình xuất video lưu trên TÁC PHẨM: work.video (v0.23.2, CNS-250) */
+console.log('   — work.video: cổng kiểm, xoá, gói dự án / nhập lại');
+{
+  const b0 = bad, { MCP } = require(path.join(ROOT, 'server/mcp.js')), { Store } = require(path.join(ROOT, 'server/store.js'));
+  const GC = require(path.join(ROOT, 'server/engine-node.js')).loadEngine(ROOT), dir = fs.mkdtempSync(path.join(TMP, 'wv-'));
+  const m = new MCP({ engine: GC, store: new Store(dir), version: 't', system: {} });
+  const imp = m.importProject(JSON.parse(fs.readFileSync(path.join(ROOT, 'studio/mau/fun-office.json'), 'utf8')), {});
+  no(imp.errors.length, 'nhập Fun Office: ' + JSON.stringify(imp.errors));
+  const wid = 'fo-first-day', err = a => { try { m.saveWorkChecked(Object.assign({ id: wid }, a)); return null; } catch (e) { return e; } };
+  no(err({ video: { aspect: '9:16', quality: '720p', container: 'webm' } }), 'lưu work.video hợp lệ');
+  no(JSON.stringify(m.store.getWork(wid).video) !== '{"aspect":"9:16","quality":"720p","container":"webm"}', 'work.video lưu đúng: ' + JSON.stringify(m.store.getWork(wid).video));
+  no(JSON.stringify(m.workView(m.store.getWork(wid)).video) !== JSON.stringify(m.store.getWork(wid).video), 'workView (GET /api/works/<id>) trả work.video');
+  for (const [v, path0] of [[{ aspect: '4:3' }, 'video.aspect'], [{ quality: '4k' }, 'video.quality'], [{ container: 'avi' }, 'video.container'], [{ fps: 60 }, 'video.fps'], ['9:16', 'video'], [[1], 'video']]) {
+    const e = err({ video: v });
+    no(!e || e.code !== 422 || !(e.errors || []).some(x => x.startsWith(path0 + ':')), 'work.video sai (' + JSON.stringify(v) + ') → 422 kèm đường dẫn ' + path0 + ', có ' + (e && JSON.stringify(e.errors)));
+  }
+  no(JSON.stringify(m.store.getWork(wid).video) !== '{"aspect":"9:16","quality":"720p","container":"webm"}', 'lần lưu bị từ chối không đổi work.video');
+  // gói dự án (xuất / sao lưu theo dự án) mang work.video; nhập vào máy khác giữ nguyên
+  const bundle = m.exportProject(m.store.getWork(wid).project), bw = (bundle.works || []).find(w => w.id === wid);
+  no(!bw || JSON.stringify(bw.video) !== '{"aspect":"9:16","quality":"720p","container":"webm"}', 'gói dự án mang work.video: ' + JSON.stringify(bw && bw.video));
+  const m2 = new MCP({ engine: GC, store: new Store(fs.mkdtempSync(path.join(TMP, 'wv2-'))), version: 't', system: {} }), imp2 = m2.importProject(bundle, { overwrite: true });
+  no(imp2.errors.length || JSON.stringify((m2.store.getWork(wid) || {}).video) !== '{"aspect":"9:16","quality":"720p","container":"webm"}', 'nhập gói: work.video giữ nguyên — ' + JSON.stringify([imp2.errors, (m2.store.getWork(wid) || {}).video]));
+  const bad2 = JSON.parse(JSON.stringify(bundle)); bad2.works.find(w => w.id === wid).video = { aspect: 'sideways' };
+  const imp3 = new MCP({ engine: GC, store: new Store(fs.mkdtempSync(path.join(TMP, 'wv3-'))), version: 't', system: {} }).importProject(bad2, { overwrite: true });
+  no(!imp3.errors.some(x => x.kind === 'works' && /video\.aspect/.test(x.error)), 'gói có work.video sai → lỗi nhập kèm video.aspect: ' + JSON.stringify(imp3.errors));
+  no(err({ video: null }) || m.store.getWork(wid).video !== undefined, 'video: null → xoá (về mặc định)');
+  // Studio: đọc work.video trước; localStorage cũ chỉ là hạt giống MỘT lần (migrate rồi gỡ); POST qua cổng; không còn ghi localStorage
+  const app = fs.readFileSync(path.join(ROOT, 'studio/app.js'), 'utf8');
+  no(!/pref: function \(W\) \{ return Vid\.norm\(W && W\.video/.test(app) || !/localStorage\.removeItem\('gc-video-opts'\)/.test(app) || /localStorage\.setItem\('gc-video-opts'/.test(app) || !/Store\.api\('POST', 'api\/works', \{ id: W\.id, video: v \}\)/.test(app),
+    'Studio: cấu hình xuất đọc từ work.video, localStorage cũ chỉ migrate một lần rồi gỡ, lưu qua POST /api/works (không ghi localStorage nữa)');
+  if (bad === b0) ok('work.video: lưu / đọc qua cổng saveWorkChecked · giá trị / khoá lạ → 422 kèm đường dẫn (không đổi dữ liệu) · null → xoá · gói dự án mang theo, nhập lại giữ nguyên, gói sai báo lỗi · Studio migrate localStorage một lần');
+}
+
+/* ---------------------------------------------------------------- MỘT bộ dựng payload cho Studio + job CI (CNS-246) */
+{
+  const b0 = bad, PL = require(path.join(ROOT, 'studio/video/payload.js')), app = fs.readFileSync(path.join(ROOT, 'studio/app.js'), 'utf8'), vci = fs.readFileSync(path.join(ROOT, 'tools/video-ci.mjs'), 'utf8');
+  const fp = app.slice(app.indexOf('function filmPayload('), app.indexOf('function exportFilm('));
+  no(!/P\.build\(\{/.test(fp) || !/P\.motionPacks\(W, /.test(fp) || /pick\(a, \[/.test(fp), 'filmPayload của Studio dựng payload bằng GCVPayload.build / motionPacks (không chọn khoá tại chỗ)');
+  no(!/require\(path\.join\(ROOT, 'studio\/video\/payload\.js'\)\)/.test(vci) || !/PAYLOAD\.build\(\{/.test(vci) || /\bpick\(a, \[|const pick = /.test(vci) || /matchAll\(\/<script src=/.test(vci), 'tools/video-ci.mjs dùng CÙNG bộ dựng (studio/video/payload.js) + engine/scripts.json — không còn payload chép tay');
+  // hành vi: khoá được chọn, giọng chốt (có voiceOf), gói động tác chỉ khi phim dùng đòn của gói (bỏ khoá kho)
+  const W = { title: 'T', logline: 'L', project: 'p1', shots: [{ id: 's1', title: 'A', scene: 'sc', cast: ['a'], event: { steps: [{ actor: 'a', say: 'hi', action: 'slash9' }] }, extra: 1 }] };
+  const r = PL.build({ W, data: { parts: [], items: [{ id: 'i', name: 'I', type: 't', secret: 1 }], scenes: [{ id: 'sc', name: 'S', layers: {}, key: 'local.my/sc' }], characters: [{ id: 'a', pack: 'local.my', name: 'A', look: {}, savedAt: 'x', persona: 'p' }] },
+    motionPacks: PL.motionPacks(W, [{ id: 'm1', actions: { slash9: {} }, pack: 'local.my', key: 'k', version: 3, note: 'n' }, { id: 'm2', actions: { other: {} } }]), soundPacks: [],
+    voiceOf: () => ({ id: 'v1', role: 'hero' }), lang: { lang: 'en', accent: 'us' }, vo: { voices: { k: 'clip' }, have: 1, total: 2 }, dialog: 'bubble', srcs: ['engine/player.js'], ui: 'en', dict: {} });
+  no(JSON.stringify(r.data.characters) !== '[{"id":"a","pack":"local.my","name":"A","look":{},"voice":{"id":"v1","role":"hero"}}]', 'nhân vật: chỉ khoá phim cần + giọng chốt — ' + JSON.stringify(r.data.characters));
+  no(JSON.stringify(r.data.items) !== '[{"id":"i","name":"I","type":"t"}]' || JSON.stringify(r.data.scenes) !== '[{"id":"sc","name":"S","layers":{}}]', 'đồ / cảnh: chỉ khoá phim cần');
+  no(JSON.stringify(r.data.motionPacks) !== '[{"id":"m1","actions":{"slash9":{}}}]', 'gói động tác: chỉ gói có đòn phim dùng, bỏ khoá kho — ' + JSON.stringify(r.data.motionPacks));
+  no(r.film.dialog !== 'bubble' || r.film.shots[0].extra !== undefined || r.film.shots[0].description !== '' || r.data.project !== 'p1' || r.data.voiceTotal !== 2 || r.have !== 1 || r.total !== 2, 'film / dự án / đếm giọng AI');
+  if (bad === b0) ok('một bộ dựng payload (studio/video/payload.js) cho phim HTML, video của Studio và job CI (CNS-246): chọn khoá, chốt giọng, gói động tác theo đòn dùng tới');
 }
 
 process.exit(bad ? 1 : 0);
