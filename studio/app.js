@@ -432,7 +432,7 @@
     ['fab', N_('Khung chuẩn'), N_('quy cách · kiểm (Gen Labs giữ)'), [['khung', N_('Bộ khung chuẩn')], ['library', N_('Kho linh kiện & phông')], ['poses', N_('Khung tư thế & hoạt động')], ['states', N_('Khung biểu cảm & chuyển động')], ['gates', N_('Cổng kiểm & hiệu năng')]], 'khung'],
     ['lib', N_('Thư viện'), N_('theo dự án chủ đề · lấy về dùng'), [['projects', N_('Dự án chủ đề')], ['lib-characters', N_('Nhân vật')], ['lib-items', N_('Vật phẩm')], ['lib-scenes', N_('Bối cảnh')], ['lib-motions', N_('Động tác')], ['lib-sounds', N_('Âm thanh')], ['lib-voices', N_('Giọng')]]],
     ['make', N_('Tạo tác'), N_('làm phim / truyện với AI'), [['works', N_('Tác phẩm')]]],
-    ['sys', N_('Hệ thống'), '', [['ai', N_('Cài đặt AI')], ['connect', N_('Kết nối agent')], ['online', N_('Lên mạng')], ['account', N_('Tài khoản chủ')], ['update', N_('Cập nhật')], ['lang', N_('Ngôn ngữ')]]]
+    ['sys', N_('Hệ thống'), '', [['ai', N_('Cài đặt AI')], ['connect', N_('Kết nối agent')], ['live', N_('Sân khấu Live')], ['online', N_('Lên mạng')], ['account', N_('Tài khoản chủ')], ['update', N_('Cập nhật')], ['lang', N_('Ngôn ngữ')]]]
   ];
   var PAGE_ALIAS = { character: 'characters', export: 'lib-characters', workshop: 'create' };   // workshop = trang chat cũ → nay là dock Trợ lý AI (mở dock rồi về trang chủ của khu)
   // BA ỨNG DỤNG ĐỘC LẬP (Ryan 2026-10-18): mỗi lớp một địa chỉ, một menu, một màu — không lẫn nhau.
@@ -6218,6 +6218,12 @@
     if (e) out.push(h('pre', { class: 'code olexpr', 'data-user-content': '', text: e[0] }), h('div', { class: 'row', style: 'margin-top:4px' }, h('button', { class: 'btn sm', type: 'button', onclick: function () { copyText(e[0], _t('biểu thức')); } }, _t('Chép biểu thức'))));
     return out;
   }
+  // Sân khấu sống (INT-21): nhân vật diễn từng bước thật của agent — studio/live.js
+  PAGES.live = function () {
+    crumbs([{ t: _t('Sân khấu Live') }]);
+    if (!window.GCLive) { $('view').appendChild(h('div', { class: 'panel empty', text: _t('Thiếu studio/live.js') })); return; }
+    window.GCLive.mount($('view'), { h: h, clear: clear, toast: toast, onLeave: onLeave, mode: Store.mode, api: function (m, u, b) { return Store.api(m, u, b); }, headers: function () { return Store.headers(); } });
+  };
   PAGES.online = function () { crumbs([{ t: _t('Lên mạng') }]); onlineView($('view'), {}); };
   // Go online ở HAI nơi, MỘT bộ mã (CNS-261 — không có bản chép thứ hai): trang Hệ thống › Lên mạng và wizard lần đầu bước 2 (v0.23 §A.3).
   // opts.embed: vẽ trong khung của wizard — không đụng thanh tiêu đề / nút của trang; opts.onRender(v): báo wizard sau mỗi lần vẽ (luồng xong → wizard đi tiếp)

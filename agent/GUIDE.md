@@ -123,7 +123,7 @@ in the language of the user / project (rule 6).
 | `animation` | export an action as sprite / frames / timeline | `list_actions` → `render_action` |
 | `film` | a work with shots, dialogue and fights | `save_work` → `get_director_schema` → `validate_event` → `save_shot` → `preview_shot` |
 | `project-bundle` | backup, move, sell a themed set | `export_project`, `import_project`, `list_samples`, `install_sample` |
-| `system` | version, update, rollback | `get_app_version`, `update_app`, `rollback_app` |
+| `system` | version, update, rollback, Live stage | `get_app_version`, `update_app`, `rollback_app`, `live_event` |
 
 ## 5. Error codes
 

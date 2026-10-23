@@ -5,6 +5,7 @@ Nguồn và license của mọi asset và phụ thuộc đi kèm sản phẩm.
 | Thành phần | Nguồn | License |
 |---|---|---|
 | Toàn bộ hình vẽ nhân vật, linh kiện, hiệu ứng (`kinds/`) | Vẽ bằng code, Gen Labs | © 2026 Gen Labs — All rights reserved |
+| Sân khấu sống (`engine/live.js`, `kinds/character/gen.live.js`): phông văn phòng, túi đeo, 9 đạo cụ (kính lúp, cờ lê, ly cà phê, điện thoại, sổ, búa, bình chữa cháy, vịt cao su, sách), động tác; phiên mẫu `kinds/live/demo-session.jsonl` (viết tay) | Vẽ bằng code, Gen Labs — không ảnh / âm bên thứ ba | © 2026 Gen Labs — All rights reserved |
 | Engine, Studio, server, launcher, installer | Gen Labs | © 2026 Gen Labs — All rights reserved |
 | Âm thanh hiệu ứng: bộ chuẩn `gen.am` (`engine/sounds.js`) + gói âm chủ đề (`kinds/sound/*.json`) — công thức tổng hợp Web Audio dạng dữ liệu (`gen-chibi.sound/1`), không có tệp mẫu âm thanh nào; gói âm của bộ mẫu Tam Quốc (`tq-am`) là bộ mẫu của Gen Labs (xem, thử, làm phim; được đăng phim / video làm từ bộ mẫu kèm dòng ghi công "Made with gen-chibi · Gen Labs"; không bán lại, không phân phối lại tệp hay asset của bộ mẫu — chặn bán theo nội dung); phim HTML xuất ra nhúng gói âm của dự án; tệp WAV dựng lại từ công thức bằng `GC.audio.renderWav` (không có mẫu thu nào bên thứ ba) | Gen Labs (tổng hợp bằng code) | © 2026 Gen Labs — All rights reserved |
 | Image Docker `node:22-alpine` (chỉ dùng lúc chạy, không phân phối lại) | Docker Official Images | MIT (Node.js) và license các gói Alpine |

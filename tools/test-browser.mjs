@@ -91,7 +91,7 @@ const ONLY = process.env.GC_ONLY || '';
 // v0.23 (B6, CNS-032): CI chạy bộ này theo NHÓM song song (ma trận trong .github/workflows/browser.yml) — GC_ONLY nhận một nhóm hoặc danh sách
 // "a,b". Nhóm "core" = các khối không tên (Studio, Thư viện, phim, biên đạo…). Mọi khối của bộ đều thuộc đúng một nhóm (test.sh 2v kiểm ma trận CI
 // phủ đủ nhóm). Tên nhóm sai → thoát 2 (không lặng lẽ chạy 0 kiểm).
-const GROUPS = ['core', 'auth', 'bubble', 'lib', 'voice', 'dock', 'oauth', 'online', 'i18n', 'setup', 'video', 'video-ui'];
+const GROUPS = ['core', 'auth', 'bubble', 'lib', 'voice', 'dock', 'oauth', 'online', 'i18n', 'setup', 'video', 'video-ui', 'live'];
 const ONLY_SET = ONLY ? ONLY.split(',').map(x => x.trim()).filter(Boolean) : [];
 { const bad = ONLY_SET.filter(g => !GROUPS.includes(g)); if (bad.length) { console.error('GC_ONLY: nhóm không có: ' + bad.join(', ') + ' — có: ' + GROUPS.join(', ')); process.exit(2); } }
 const want = g => !ONLY_SET.length || ONLY_SET.includes(g);
@@ -4145,6 +4145,107 @@ if (want('video') || want('video-ui')) {
     console.log('  ✓ nhóm xuất video xong trong ' + ((Date.now() - T0) / 1000).toFixed(0) + ' s');
   } catch (e) { fail = 1; console.log('  ✗ xuất video:', e && e.stack || e); }
   finally { await b20.close(); srv20.kill(); }
+}
+// SÂN KHẤU SỐNG (INT-21): mở trang Live → phát lại phiên mẫu (tại chỗ) + phát qua server (SSE) → bảng sự kiện hiện, nhân vật đi qua các khu,
+// đạo cụ ra / về túi; đo ngân sách (L-42): long task ≤ 50 ms, khung ~60 fps; chụp ≥ 12 khung (GC_LIVE_SHOTS=<thư mục>: lưu ảnh + tờ ghép + WebM dựng offline bằng GenMux)
+if (want('live')) {
+  const LHOME = mkdtempSync(path.join(tmpdir(), 'gc-live-b-'));
+  const srvL = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: LHOME, GC_PORT: '7670', GC_NO_AUTOCHECK: '1', HOME: LHOME }, stdio: 'ignore' }));
+  for (let i = 0; i < 100; i++) { try { if ((await fetch('http://127.0.0.1:7670/api/health')).ok) break; } catch (e) { /* chưa lên */ } await new Promise(r => setTimeout(r, 100)); }
+  const OUT = process.env.GC_LIVE_SHOTS || '';
+  if (OUT) fs.mkdirSync(OUT, { recursive: true });
+  const bL = await pw.chromium.launch();
+  try {
+    const ctx = await bL.newContext({ viewport: { width: 1440, height: 900 } });
+    const pg = await ctx.newPage(), errsL = [];
+    pg.on('pageerror', e => errsL.push(String(e))); pg.on('console', m => { if (m.type() === 'error' && !/Content Security Policy|favicon/.test(m.text())) errsL.push(m.text()); });
+    await pg.addInitScript(() => { try { localStorage.setItem('gc-route-xuong', JSON.stringify({ page: 'live' })); } catch (e) { /* bỏ */ } });
+    await pg.goto('http://localhost:7670/xuong');
+    await pg.waitForSelector('#liveStage', { timeout: 20000 });
+    const navOk = await pg.evaluate(() => [...document.querySelectorAll('.nav-item')].some(b => b.getAttribute('aria-current') === 'page' && /Sân khấu Live/.test(b.textContent)));
+    await pg.waitForSelector('#liveConn.ok', { timeout: 10000 });
+    const snippet = await pg.textContent('#liveSnippet');
+    if (!navOk || !/live-hook\.mjs/.test(snippet) || !/"PreToolUse"/.test(snippet) || !/GC_LIVE_TOKEN=gcl_/.test(snippet)) throw new Error('trang Live: mục menu / đoạn settings.json chưa đúng');
+    console.log('  ✓ Live: mục "Sân khấu Live" trong menu Hệ thống · SSE nối (Đang nghe) · bảng "Kết nối Claude Code" có đoạn settings.json 9 hook + token live');
+    // đo hiệu năng: long task + khoảng cách khung (rAF) suốt lúc phát lại
+    await pg.evaluate(() => {
+      window.__lt = []; window.__fr = []; let last = 0;
+      window.__shots = [];
+      try { new PerformanceObserver(l => l.getEntries().forEach(e => window.__lt.push([e.startTime, e.duration]))).observe({ type: 'longtask', buffered: false }); } catch (e) { window.__lt = null; }
+      (function tick(t) { if (last) window.__fr.push(t - last); last = t; if (window.__fr.length < 100000) requestAnimationFrame(tick); })();
+    });
+    await pg.selectOption('#liveSpeed', '2');
+    await pg.click('#liveReplay');
+    const shots = [], N = 16, t0 = Date.now();
+    for (let k = 0; k < N; k++) {
+      await pg.waitForTimeout(2800);
+      await pg.evaluate(() => window.__shots.push([performance.now(), 0]));
+      const buf = await pg.locator('#liveStageBox').screenshot();
+      await pg.evaluate(() => { const s = window.__shots[window.__shots.length - 1]; s[1] = performance.now(); });
+      shots.push(buf); if (OUT) fs.writeFileSync(path.join(OUT, 'frame-' + String(k + 1).padStart(2, '0') + '.png'), buf);
+    }
+    const st = await pg.evaluate(() => { const L = window.__gcLive, D = L.director; return { rows: document.querySelectorAll('#liveRows tr').length, kinds: [...new Set([...document.querySelectorAll('#liveRows tr')].map(r => r.dataset.kind))], zones: Object.keys(L.stats.zones), clips: Object.keys(L.stats.clips), worst: L.stats.worst, slow: L.stats.slow, frames: L.stats.frames,
+      takes: D.steps.filter(s => s.type === 'takeOut').map(s => s.propOut), puts: D.steps.filter(s => s.type === 'putBack').length, labels: [...document.querySelectorAll('#liveRows td:last-child')].map(td => td.textContent).join('|') }; });
+    const need = ['shelf', 'desk', 'lab', 'door'];
+    if (st.rows < 30 || need.some(z => !st.zones.includes(z)) || st.takes.length < 4 || st.puts < 3) throw new Error('phát lại: ' + JSON.stringify(st).slice(0, 600));
+    console.log('  ✓ Live phát lại phiên mẫu ×2: ' + st.rows + ' dòng sự kiện (' + st.kinds.length + ' loại) · nhân vật dừng ở ' + st.zones.join(', ') + ' · ' + st.clips.length + ' clip · lấy đồ từ túi: ' + st.takes.join(', ') + ' · ' + shots.length + ' khung chụp');
+    // hết phiên mẫu: chờ diễn nốt (phát hành, chờ người) rồi đo
+    await pg.waitForTimeout(Math.max(0, 60000 - (Date.now() - t0)));
+    // long task do CHÍNH bộ test gây ra (chụp màn hình — trình duyệt dựng khung để chụp) không tính; còn lại là của trang
+    const st2 = await pg.evaluate(() => ({ zones: Object.keys(window.__gcLive.stats.zones), all: window.__lt, lt: window.__lt && window.__lt.filter(([a, d]) => !window.__shots.some(([s0, s1]) => a + d >= s0 - 5 && a <= s1 + 5)).map(x => x[1]), fr: window.__fr.slice(30) }));
+    if (!['rocket', 'coffee'].some(z => st2.zones.includes(z))) throw new Error('chưa tới bệ phóng / góc cà phê: ' + st2.zones);
+    const fr = st2.fr.slice().sort((a, b) => a - b), p50 = fr[Math.floor(fr.length / 2)], p95 = fr[Math.floor(fr.length * 0.95)], ltMax = st2.lt ? Math.max(0, ...st2.lt) : -1;
+    const perf = { cpus: (await import('os')).cpus().length, frames: fr.length, p50: +p50.toFixed(1), p95: +p95.toFixed(1), fps: +(1000 / p50).toFixed(1), longTasks: st2.lt ? st2.lt.length : 'n/a', longestTask: ltMax, harnessLongTasks: st2.all ? st2.all.length - st2.lt.length : 0, harnessLongest: st2.all && st2.all.length ? Math.round(Math.max(...st2.all.map(x => x[1]))) : 0, worstPaint: +st.worst.toFixed(2) };
+    if (OUT) fs.writeFileSync(path.join(OUT, 'perf.json'), JSON.stringify(perf, null, 1));
+    if (ltMax > 50 || p95 > 34) throw new Error('ngân sách L-42: ' + JSON.stringify(perf));
+    console.log('  ✓ Live ngân sách (L-42): ' + perf.frames + ' khung, p50 ' + perf.p50 + ' ms (' + perf.fps + ' fps), p95 ' + perf.p95 + ' ms · long task: ' + perf.longTasks + ' (dài nhất ' + Math.round(perf.longestTask) + ' ms) · vẽ một khung tối đa ' + perf.worstPaint + ' ms · ' + perf.cpus + ' CPU');
+    // đường server thật: tools/live-replay.mjs (token live như hooks) → SSE → bảng (ID không có tiền tố D)
+    const info = await (await fetch('http://127.0.0.1:7670/api/live/info')).json();
+    const rp = spawn(process.execPath, [path.join(ROOT, 'tools/live-replay.mjs'), '--speed', '20', '--url', 'http://127.0.0.1:7670'], { env: { ...process.env, GC_LIVE_TOKEN: info.token, HOME: LHOME }, stdio: 'ignore' });
+    const rc = await new Promise(r => rp.on('exit', r));
+    await pg.waitForFunction(() => document.querySelectorAll('#liveRows tr:not([data-id^="D"])').length >= 40, null, { timeout: 15000 });
+    const leak = await pg.evaluate(() => /\/|@|sk-|gcl_/.test([...document.querySelectorAll('#liveRows td:last-child')].map(td => td.textContent).join('') + (document.querySelector('.lv-bubble text') || {}).textContent));
+    if (rc !== 0 || leak) throw new Error('replay qua server rc=' + rc + ' leak=' + leak);
+    console.log('  ✓ Live qua server: tools/live-replay.mjs (token live) → POST /api/live/event → SSE → bảng sự kiện (≥ 40 dòng) · bong bóng / nhãn không có đường dẫn / email / token');
+    // âm thanh mặc định tắt, bật được
+    const snd = await pg.evaluate(() => { const b = document.getElementById('liveSound'), a = b.getAttribute('aria-pressed'); b.click(); const c = b.getAttribute('aria-pressed'); b.click(); return a + '>' + c; });
+    if (snd !== 'false>true') throw new Error('nút âm thanh: ' + snd);
+    console.log('  ✓ Live âm thanh: mặc định tắt, nút bật / tắt');
+    if (OUT) {
+      // tờ ghép ≥ 12 khung (4 cột)
+      const cs = await ctx.newPage();
+      await cs.setContent('<html><body style="margin:0;background:#222;display:grid;grid-template-columns:repeat(4,480px);gap:6px;padding:6px;width:max-content">' + shots.map((b, i) => '<div style="position:relative"><img style="width:480px;display:block" src="data:image/png;base64,' + b.toString('base64') + '"><span style="position:absolute;left:6px;top:4px;color:#fff;background:#0008;font:12px sans-serif;padding:1px 5px">' + (i + 1) + '</span></div>').join('') + '</body></html>');
+      await cs.screenshot({ path: path.join(OUT, 'contact-sheet.png'), fullPage: true }); await cs.close();
+      // WebM dựng offline (tất định) từ phiên mẫu: engine/live.js svg(t) → canvas → VideoEncoder VP9 → GenMux.webm (bộ ghép của đường xuất video)
+      await pg.addScriptTag({ url: '/studio/video/mux.js' });
+      const webm = await pg.evaluate(async () => {
+        const GC = window.GenChibi, LV = GC.live, txt = await (await fetch('kinds/live/demo-session.jsonl')).text(), list = LV.parseJSONL(txt), D = LV.director(), S = LV.stage(null, D);
+        const W = 960, H = 540, FPS = 24, SPEED = 3, END = list[list.length - 1].at + 22, cv = new OffscreenCanvas(W, H), g = cv.getContext('2d', { alpha: false }), chunks = [];
+        const img = {}, imageOf = h => img[h.tint] || (img[h.tint] = GC.render.imageURL(LV.agentAsset(h.tint), 'work', { noShadow: true }));
+        const enc = new VideoEncoder({ output: c => { const b = new Uint8Array(c.byteLength); c.copyTo(b); chunks.push({ data: b, ts: c.timestamp, key: c.type === 'key' }); }, error: e => { throw e; } });
+        enc.configure({ codec: 'vp09.00.31.08', width: W, height: H, bitrate: 3e6, framerate: FPS });
+        let i = 0, n = 0;
+        for (let f = 0; f * SPEED / FPS <= END; f++) {
+          const t = f * SPEED / FPS;
+          while (i < list.length && list[i].at <= t) { D.push(list[i].ev, t); i++; }
+          D.advance(t);
+          const im = new Image(); im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(S.svg(t, { tr: GC.i18n.t, imageOf }));
+          await im.decode(); g.drawImage(im, 0, 0, W, H);
+          const vf = new VideoFrame(cv, { timestamp: Math.round(f * 1e6 / FPS) }); enc.encode(vf, { keyFrame: f % 48 === 0 }); vf.close(); n++;
+          if (enc.encodeQueueSize > 4) await new Promise(r => setTimeout(r, 0));
+        }
+        await enc.flush();
+        const bytes = window.GenMux.webm({ video: { codec: 'vp09', width: W, height: H, fps: FPS, chunks } });
+        let s = ''; for (let k = 0; k < bytes.length; k += 32768) s += String.fromCharCode.apply(null, bytes.subarray(k, k + 32768));
+        return { b64: btoa(s), frames: n, sec: n / FPS };
+      });
+      fs.writeFileSync(path.join(OUT, 'live-demo.webm'), Buffer.from(webm.b64, 'base64'));
+      console.log('  ✓ Live bằng chứng: ' + shots.length + ' khung + contact-sheet.png + live-demo.webm (' + webm.frames + ' khung VP9, ' + webm.sec.toFixed(1) + ' s, tua ×3, GenMux) → ' + OUT);
+    }
+    if (errsL.length) throw new Error('lỗi trang: ' + errsL.slice(0, 3).join(' | '));
+    await ctx.close();
+  } catch (e) { fail = 1; console.log('  ✗ Live:', e && e.stack || e); }
+  finally { await bL.close(); srvL.kill(); }
 }
 // CSP: bộ test vừa đi khắp Studio (mọi khu, dock, xuất phim, âm thanh, Lên mạng…) — không được có vi phạm nào
 { const v = [...new Set(CSP_VIOL)];

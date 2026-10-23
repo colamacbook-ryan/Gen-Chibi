@@ -132,6 +132,7 @@ const TOOLS = [
   { name: 'list_samples', title: 'Bundled samples', description: 'The sample projects bundled with the install (Fun office, the Three Kingdoms theme set…): id, name, version, installed or not, update available or not.', inputSchema: obj({}), annotations: { readOnlyHint: true } },
   { name: 'install_sample', title: 'Install / update a sample', description: 'Imports a bundled sample into the Library through the normal import gate. overwrite = true updates an installed sample (your edits become older versions). Samples are for viewing, trying and making films — not for sale.', inputSchema: obj({ id: { type: 'string' }, overwrite: { type: 'boolean' } }, ['id']) },
   { name: 'list_events', title: 'Standalone scripts', description: 'Standalone scripts saved with save_event (waiting for the owner to turn them into shots in the Studio).', inputSchema: obj({}), annotations: { readOnlyHint: true } },
+  { name: 'live_event', title: 'Report a live work step (Live stage)', description: 'Tells the owner\'s Live stage what you are doing RIGHT NOW so the chibi character acts it out (Studio › System › Live). Call it at each real step: kind = session_start | prompt | think | read | search | edit | write | run | test_run | test_pass | test_fail | delegate_start | delegate_end | wait_user | error | limit | release | idle | stop. label = a SHORT summary in plain words (≤ 48 characters, e.g. "Reading the setup guide") — never file contents, paths, commands, URLs, emails or secrets: the server strips them anyway. Fire-and-forget; rate-limited (≈ 10 / s).', inputSchema: obj({ kind: { type: 'string', enum: ['session_start', 'prompt', 'think', 'read', 'search', 'edit', 'write', 'run', 'test_run', 'test_pass', 'test_fail', 'delegate_start', 'delegate_end', 'wait_user', 'error', 'limit', 'release', 'idle', 'stop'] }, label: { type: 'string', description: 'short plain-words summary (optional)' }, tool: { type: 'string', description: 'your tool name for this step (optional, ≤ 24 chars)' } }, ['kind']), annotations: { readOnlyHint: false, idempotentHint: false, destructiveHint: false } },
   { name: 'get_app_version', title: 'App version', description: 'The running version, the latest version on GitHub Releases, release notes, the version you can roll back to and the update history. check=false to skip asking GitHub.', inputSchema: obj({ check: { type: 'boolean', description: 'ask GitHub for the latest version (default true)' } }), annotations: { readOnlyHint: true, openWorldHint: true } },
   { name: 'update_app', title: 'Update the app', description: 'Downloads the latest version from GitHub Releases (SHA-256 checked, data backed up), then restarts. If the new version fails, the launcher rolls back by itself. The connection drops for a few seconds; call get_app_version after ~15 seconds to confirm. force=true also applies a version that was skipped because it failed last time.', inputSchema: obj({ force: { type: 'boolean' } }), annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: true } },
   { name: 'rollback_app', title: 'Roll back to the previous version', description: 'Runs the previously installed version again (data is backed up before switching). Needs confirm = "ROLLBACK".', inputSchema: obj({ confirm: { type: 'string', enum: ['ROLLBACK'] } }, ['confirm']), annotations: { destructiveHint: true } }
@@ -267,7 +268,8 @@ const ownEn = (GC, x, s) => GC.isGenLabs(x) ? MSG.en(s) : s;
 class MCP {
   // system (tuỳ chọn): { updater, restartSoon } — để agent tự kiểm và cập nhật phiên bản; smokeMs: hạn chót dựng thử gói động tác (test hạ xuống)
   // uiLang (tuỳ chọn): hàm trả NGÔN NGỮ MẶC ĐỊNH CỦA MÁY (main.js: settings().uiLang) — lời thoại mặc định của tác phẩm agent tạo qua MCP (newWorkLang). Thiếu → 'en' (ADR 0007)
-  constructor({ engine, store, version, system, smokeMs, voice, uiLang }) {
+  constructor({ engine, store, version, system, smokeMs, voice, uiLang, live }) {
+    this.live = live || null;   // server/live.js (Sân khấu sống) — chỉ có ở bản chạy server
     this.voice = voice || null;   // server/voice.js (giọng AI) — chỉ có ở bản chạy server
     this.uiLang = typeof uiLang === 'function' ? uiLang : () => uiLang;
     this.GC = engine;
@@ -661,6 +663,11 @@ class MCP {
       }
       case 'list_events': return json(this.store.listEvents().map(e => ({ id: e.id, title: e.title, author: e.author, savedAt: e.savedAt, steps: (e.event && e.event.steps || e.steps || []).length })));
       case 'get_app_version': case 'update_app': case 'rollback_app': return this.appTool(name, args, ctx || {});
+      case 'live_event': {
+        if (!this.live) return toolError('The Live stage is not available in this process.', { code: 'NOT_FOUND' });
+        const r = this.live.accept({ kind: args.kind, label: args.label, tool: args.tool, agent: 'mcp' }, 'mcp');
+        return r.error ? toolError(MSG.en(r.error), { code: r.code === 429 ? 'UNAVAILABLE' : 'BAD_REQUEST' }) : json({ ok: true, id: r.ev.id, kind: r.ev.kind, label: r.ev.label });
+      }
       case 'get_part_spec': return json(this.partSpec(args.slot));
       case 'list_projects': { this.sync(); return json(this.projects().map(p => p.description === UNREG ? Object.assign({}, p, { description: MSG.en(UNREG) }) : p)); }   // mô tả người dùng viết giữ nguyên (CNS-158)
       case 'list_works': return json(this.listWorks());

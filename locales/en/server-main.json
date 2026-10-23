@@ -56,5 +56,7 @@
  "Token chủ hợp lệ ({source}) — cầu stdio và agent dùng token này": "Owner token valid ({source}) — the stdio bridge and agents use this token",
  "Cầu stdio của app (chạy trong app) trả lời: initialize + tools/list ({n} tool) — lệnh trên máy chủ: xem MCP-04": "App's stdio bridge (inside the app) answers: initialize + tools/list ({n} tools) — the host command: see MCP-04",
  "Cầu stdio của app (chạy trong app) không chạy được ({error})": "App's stdio bridge (inside the app) does not run ({error})",
- "chỉ lệnh genchibi setup check trên máy chủ (token của bản cài) gửi được kết quả này": "only genchibi setup check on the server (install token) can send this result"
+ "chỉ lệnh genchibi setup check trên máy chủ (token của bản cài) gửi được kết quả này": "only genchibi setup check on the server (install token) can send this result",
+ "cần Content-Type: application/json": "Content-Type must be application/json",
+ "dữ liệu gửi lên quá lớn (tối đa 4 KB)": "request body too large (max 4 KB)"
 }

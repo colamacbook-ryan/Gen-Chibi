@@ -12,7 +12,9 @@
     "engine/choreo.js",
     "kinds/character/gen.core.js",
     "kinds/khung/gen.khung.js",
-    "kinds/character/gen.choreo.js"
+    "kinds/character/gen.choreo.js",
+    "kinds/character/gen.live.js",
+    "engine/live.js"
   ],
   "dom": [
     "engine/render.js",
@@ -27,6 +29,7 @@
     "studio/dock.js",
     "studio/video/payload.js",
     "studio/video/client.js",
+    "studio/live.js",
     "studio/app.js"
   ],
   "workers": [

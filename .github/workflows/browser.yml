@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [core, auth, bubble, lib, voice, dock, oauth, online, i18n, setup, video]
+        group: [core, auth, bubble, lib, voice, dock, oauth, online, i18n, setup, video, live]
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:

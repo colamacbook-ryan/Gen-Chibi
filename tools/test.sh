@@ -6,6 +6,7 @@
 #   1c) CI chạy test trình duyệt: Playwright ghim bản, ma trận phủ đủ nhóm GC_ONLY (tools/test-ci-config.mjs) · 1d) danh sách mã engine một nguồn engine/scripts.json (tools/test-scripts.mjs)
 #   2j2) luật id của bộ khung: đòn khung không trùng activity / state, id cũ là bí danh + chuyển dữ liệu (tools/test-frame-ids.mjs)
 #   2o) xuất video v0.22 (tools/test-video.mjs): muxer MP4 / WebM, đồng hồ ảo, header trang xuất — phần trình duyệt: GC_ONLY=video node tools/test-browser.mjs
+#   2p) Sân khấu sống (tools/test-live.mjs) — phần trình duyệt: GC_ONLY=live node tools/test-browser.mjs
 #   3) MCP: bắt tay, danh sách tool, tạo nhân vật / linh kiện / item / cảnh, chặn dữ liệu xấu
 #   4) tự cập nhật end-to-end (tools/test-update.sh) + edge: launcher giám sát cloudflared, compose ghép -f, Caddy (tools/test-edge.sh)
 #   4c) OAuth cho MCP từ xa (tools/test-oauth.mjs)
@@ -754,6 +755,11 @@ echo "2o) xuất video (v0.22): bộ ghép MP4 (ftyp → moov → mdat, không e
 (echo > /dev/tcp/127.0.0.1/7697) 2>/dev/null && { echo "Cổng 7697 đang bị chiếm"; exit 1; }
 node tools/test-video.mjs || exit 1
 home_check tools/test-video.mjs
+echo "2p) Sân khấu sống (INT-21): làm sạch nhãn (đường dẫn / lệnh / token / email / chuỗi dài) · đạo diễn không dịch chuyển tức thời (2000 dãy ngẫu nhiên) · đạo cụ chỉ ra / về túi · gộp loạt · leo thang · tất định · không giật tư thế · hooks luôn thoát 0, không gửi nội dung · token live chỉ mở POST /api/live/event · trần tần suất · SSE · MCP live_event — phần trình duyệt: GC_ONLY=live node tools/test-browser.mjs"
+(echo > /dev/tcp/127.0.0.1/7764) 2>/dev/null && { echo "Cổng 7764 đang bị chiếm"; exit 1; }
+node tools/test-live.mjs || exit 1
+home_check tools/test-live.mjs
+
 echo "3) MCP (server không đặt GC_API_TOKEN = bản cài v0.20 nâng cấp: owner-token tự sinh, cầu stdio tự đọc — CNS-197)"
 H="$(mktemp -d)"; PORT=7495
 (echo > /dev/tcp/127.0.0.1/$PORT) 2>/dev/null && { echo "Cổng $PORT đang bị chiếm"; exit 1; }
@@ -807,10 +813,10 @@ const L = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n")
 const by = id => L.find(r => r.id === id);
 const ok = (c, m) => { if (!c) { console.log("   ✗", m); process.exit(1); } };
 ok(by(1).result.protocolVersion === "2025-06-18", "bắt tay");
-ok(by(2).result.tools.length === 53, "53 tool");
+ok(by(2).result.tools.length === 54, "54 tool");
 ok(!by(3).result.isError && JSON.parse(by(3).result.content[0].text).saved, "lưu nhân vật hợp lệ");
 ok(by(4).result.isError, "chặn linh kiện lạ");
-console.log("   ✓ MCP: bắt tay, 53 tool, lưu hợp lệ, chặn linh kiện lạ");
+console.log("   ✓ MCP: bắt tay, 54 tool, lưu hợp lệ, chặn linh kiện lạ");
 const spec = JSON.parse(by(5).result.content[0].text);
 ok(spec.slots[0].slot === "hat" && spec.example && spec.views.q45, "get_part_spec có khung + ví dụ");
 ok(!by(6).result.isError && /<svg/.test(by(6).result.content[1].resource.text), "preview_part trả bàn soát SVG");

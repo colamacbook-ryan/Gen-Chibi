@@ -140,7 +140,7 @@ const sect = async f => { try { await f(); } catch (e) { if (!process.env.GC_KEE
   // ---------- 3. MCP: 53 tool, 7 tool âm thanh (danh sách · chuẩn · gói · kiểm · lưu · gỡ · chấm luật), lưu bền, nạp lại, rào khi bỏ âm đang gọi
   await sect(async () => {
     const dir = tmpDir(), { GC, S, store, m } = fresh(dir), call = (t, a) => m.callTool(t, a);
-    no(TOOLS.length !== 53 || ['list_sounds', 'get_sound_spec', 'get_sound_pack', 'validate_sound_pack', 'save_sound_pack', 'delete_sound_pack', 'lint_sound_track'].some(t => !TOOLS.some(x => x.name === t && x.description.length > 150 && /sound/i.test(x.description))), 'MCP: 53 tool, 7 tool âm thanh có mô tả rõ (tiếng Anh — CNS-067)');
+    no(TOOLS.length !== 54 || ['list_sounds', 'get_sound_spec', 'get_sound_pack', 'validate_sound_pack', 'save_sound_pack', 'delete_sound_pack', 'lint_sound_track'].some(t => !TOOLS.some(x => x.name === t && x.description.length > 150 && /sound/i.test(x.description))), 'MCP: 54 tool, 7 tool âm thanh có mô tả rõ (tiếng Anh — CNS-067)');
     no(TOOLS.filter(t => /sound|lint/.test(t.name)).some(t => t.inputSchema.type !== 'object' || t.inputSchema.additionalProperties !== false), 'inputSchema của tool âm thanh phải là object đóng');
     // list_sounds
     let r = J(await call('list_sounds', {}));

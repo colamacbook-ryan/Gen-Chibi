@@ -18,6 +18,7 @@ const { OnlineConfig } = require('./online-config');      // v0.21: data/online.
 const { consentPage, errorPage } = require('./oauth-page');
 const { Store, KEY, CHAT_KINDS, readJSON, writeJSON } = require('./store');
 const { loadEngine } = require('./engine-node');
+const { LiveHub } = require('./live');   // Sân khấu sống (INT-21): sự kiện agent → làm sạch → SSE
 const L10N = require('./i18n');   // ngôn ngữ (ADR 0007): langOf(req) + tr(lang, msgid) — builder sau dịch câu server qua đây
 const VI = (msgid, vars) => L10N.tr('vi', msgid, vars);   // câu tiếng Việt dựng từ MẪU (msgid có {x}): localize() khớp ngược sang ngôn ngữ người gọi; công cụ quét thấy msgid
 const MSG = require('./i18n-msg');   // câu ghép động (khớp ngược mẫu {x}) + ngôn ngữ của yêu cầu đang chạy (AsyncLocalStorage) — v0.20
@@ -124,7 +125,10 @@ setInterval(() => auth.tick(), 60000).unref();   // phiên hết hạn (cả phi
 function requireOwner(req, res) { return auth.requireOwner(req, res, { send }); }
 const ai = new AI({ dataDir: DATA, secrets, engine });
 const voice = new Voice({ dataDir: DATA, secrets });   // giọng AI (Google Gemini TTS) — dùng chung kho bí mật với AI đạo diễn
-const mcp = new MCP({ engine, store, version: VERSION, system: { updater, restartSoon }, voice, uiLang: () => settings().uiLang });   // uiLang: lời thoại mặc định của tác phẩm agent tạo qua MCP (/mcp luôn 'en' ở tầng HTTP) — CNS-151
+const live = new LiveHub({ dir: DATA, engine, log });
+// đường bộ chuyển hooks trong đoạn settings.json: bản cài có releases/ → <cài>/current (không đổi sau mỗi lần cập nhật); chạy từ mã nguồn → chính APP
+const LIVE_APP = path.basename(path.dirname(APP)) === 'releases' ? path.join(HOME, 'current') : APP;
+const mcp = new MCP({ engine, store, version: VERSION, system: { updater, restartSoon }, voice, live, uiLang: () => settings().uiLang });   // uiLang: lời thoại mặc định của tác phẩm agent tạo qua MCP (/mcp luôn 'en' ở tầng HTTP) — CNS-151
 // OAuth 2.1 cho MCP từ xa (v0.19): mọi URL dựng từ publicUrl — đọc LÚC CHẠY từ online-config (v0.21: data/online.json; .env GC_PUBLIC_URL kế thừa).
 // Thiếu hoặc không phải gốc (có đường dẫn) thì OAuth tắt, /mcp vẫn 401 như cũ. publicUrl đang bật TẠM thì không gỡ kết nối của địa chỉ cũ (trả về còn dùng)
 const oauth = new OAuth({ dir: DATA, publicUrl: () => online.publicUrl(), pruneOk: () => !online.pending(), warn: log, accessTtl: process.env.GC_OAUTH_ACCESS_TTL, redirects: String(process.env.GC_OAUTH_REDIRECTS || '').split(',').map(x => x.trim()).filter(Boolean) });
@@ -223,6 +227,19 @@ function serveStatic(req, res, urlPath) {
   if (!file.startsWith(APP + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return fail(res, 404, 'không tìm thấy');
   // mọi trang .html khác (nếu có) cũng mang CSP của Studio — không trang HTML nào của máy chủ đi ra mà thiếu CSP
   send(res, 200, fs.readFileSync(file), MIME[path.extname(file)] || 'application/octet-stream', /\.html$/i.test(file) ? STUDIO_HEADERS : undefined);
+}
+
+/* ---------------------------------------------------------------- sân khấu sống */
+// POST /api/live/event: JSON nhỏ (≤ 4 KB), Content-Type JSON + X-GC-Request (chống CSRF như mọi lệnh), trần tần suất theo kênh — nhãn KHÔNG vào log
+async function liveEvent(req, res, who) {
+  if (req.headers['x-gc-request'] !== '1') return fail(res, 403, 'thiếu header X-GC-Request');
+  if (who !== 'live' && !originOK(req)) return fail(res, 403, originMsg(req));
+  if (!/^application\/json\b/i.test(String(req.headers['content-type'] || ''))) return fail(res, 415, 'cần Content-Type: application/json');
+  if (+req.headers['content-length'] > 4096) { res.setHeader('Connection', 'close'); return fail(res, 413, 'dữ liệu gửi lên quá lớn (tối đa 4 KB)'); }
+  let b; try { b = await body(req, 4096); } catch (e) { return fail(res, e.code || 400, e.message); }
+  const r = live.accept(b, who);
+  if (r.error) return send(res, r.code, { error: r.error }, null, r.retry ? { 'Retry-After': String(r.retry) } : undefined);
+  return send(res, 202, { ok: true, id: r.ev.id, kind: r.ev.kind });
 }
 
 /* ---------------------------------------------------------------- định tuyến */
@@ -424,6 +441,8 @@ async function route(req, res) {
     // agent cũ nối không token (bản cài v0.20) nhận 401 KÈM lối đi (CNS-197): genchibi mcp (stdio tự đọc token) hoặc genchibi agent connect
     else if (!owner) return send(res, 401, { error: oauth.enabled ? VI('cần token của bản cài hoặc kết nối OAuth (xem WWW-Authenticate)') : 'cần token của bản cài', hint: 'gen-chibi now always requires the owner token: on the server run `genchibi agent connect` for the connection settings (Authorization: Bearer <token>), or use `genchibi mcp` (stdio, reads the token itself)' }, null, oauth.enabled ? { 'WWW-Authenticate': 'Bearer resource_metadata="' + oauth.metaUrl + '"' } : undefined);
   }
+  // Sân khấu sống: token live của bản cài (hooks Claude Code) CHỈ mở đúng POST /api/live/event — không đọc được gì, không qua được đường nào khác
+  if (p === '/api/live/event' && m === 'POST' && live.tokenOk(req)) return liveEvent(req, res, 'live');
   if (p.startsWith('/api/') && p !== '/api/health' && !p.startsWith('/api/auth/')) {
     const who = auth.ownerOf(req);
     if (!who && auth.adminOf(req)) return send(res, 403, { error: 'phiên admin chỉ dùng để khởi tạo tài khoản chủ', gate: 'init', stage: setup.stage });
@@ -479,6 +498,11 @@ async function route(req, res) {
   if (p.startsWith('/api/auth/')) return auth.handle(req, res, p, m, { send, body });
   if (p === '/api/setup' || p.startsWith('/api/setup/')) return setupRoute(req, res, p, m);   // thiết lập lần đầu (v0.23 §A.3) — S / T (đã qua cổng /api)
   if (p === '/api/info') { const pub = online.publicUrl(); return send(res, 200, { version: VERSION, repo: REPO, home: HOME, port: PORT, settings: settings(), uiLang: settings().uiLang, lang: langOf(req), auth: auth.view(req), setup: setup.view(), mcp: { http: '/mcp', stdio: 'genchibi mcp', cli: cliPath(), link: pub && MCP_KEY ? pub + '/mcp/' + MCP_KEY : null, oauth: oauth.enabled ? oauth.resource : null } }); }
+  // ---- Sân khấu sống (INT-21): S / T (đã qua cổng /api). Token live xử lý trước cổng (chỉ POST /api/live/event)
+  if (p === '/api/live/event' && m === 'POST') return liveEvent(req, res, 'owner');
+  if (p === '/api/live/stream' && m === 'GET') { const since = +(req.headers['last-event-id'] || url.searchParams.get('since') || 0); return live.stream(req, res, Number.isFinite(since) ? since : 0); }
+  if (p === '/api/live/info' && m === 'GET') { const u = 'http://127.0.0.1:' + HOST_PORT; return send(res, 200, { url: u, token: live.token(), settings: live.hookSnippet(LIVE_APP, u), recent: live.recent(0).slice(-50) }); }
+  if (p === '/api/live/token' && m === 'POST') { live.rotate(); log('[live] owner rotated the live token'); return send(res, 200, { token: live.token(), settings: live.hookSnippet(LIVE_APP, 'http://127.0.0.1:' + HOST_PORT) }); }
   if (p === '/api/online' || p.startsWith('/api/online/')) return goOnline.route(req, res, p, m, { send, body, lang: langOf(req) });   // Go online (v0.21): S / T (đã qua cổng /api ở trên) — server/online.js
   if (p === '/api/settings' && m === 'PUT') {
     const b = await body(req);
