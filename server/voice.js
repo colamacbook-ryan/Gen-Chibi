@@ -331,15 +331,18 @@ class Voice {
     return job;
   }
   // câu này đã có clip chưa? (không gọi Google, không ném lỗi, không tốn lượt) — dùng đếm "giọng AI x/y" ở danh sách tác phẩm; cùng khoá clip với line()
-  has({ text, voice, role, state, bubble }) {
+  has(p) { return !!this.clipFile(p); }
+  // tệp clip ĐÃ có của một câu (cùng khoá với line()) hoặc null — không gọi Google, không ném lỗi. MCP export_film_html nhúng clip này (như Studio xuất phim)
+  clipFile({ text, voice, role, state, bubble }) {
     try {
       const t = cleanText(text);
-      if (!t || t.length > 240) return false;
+      if (!t || t.length > 240) return null;
       const vid = this.validVoice(voice, { skipBad: true });
-      if (!vid) return false;
+      if (!vid) return null;
       const R = hasOwn(GV.ROLES, role) ? GV.ROLES[role] : null, style = [R ? R.style : '', tagsOf(state, bubble)].filter(Boolean).join(', ');
-      return fs.existsSync(this.clipPath(this.idOf(t, vid, style)));
-    } catch { return false; }
+      const f = this.clipPath(this.idOf(t, vid, style));
+      return f && fs.existsSync(f) ? f : null;
+    } catch { return null; }
   }
   seconds(file) { try { const w = wavInfo(fs.readFileSync(file)); return w ? +(w.data.length / (w.rate * 2)).toFixed(2) : null; } catch { return null; } }
   async render(t, voice, style, id, file) {

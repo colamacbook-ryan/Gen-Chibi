@@ -12,7 +12,7 @@ import path from 'path';
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 export const VI_RE = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ]/;
 // mã giao diện: chữ người dùng nhìn thấy phải đi qua _t()
-const UI_FILES = ['studio/app.js', 'studio/dock.js', 'engine/player.js', 'studio/video/client.js'];
+const UI_FILES = ['studio/app.js', 'studio/dock.js', 'engine/player.js', 'studio/video/client.js', 'studio/film-html.js'];
 const UI_HTML = ['studio/index.html'];
 // nơi tìm msgid đang dùng (a) và nơi một khoá còn "sống" (b)
 const SRC_DIRS = ['studio', 'engine', 'kinds', 'server'];

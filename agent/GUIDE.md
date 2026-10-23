@@ -100,7 +100,7 @@ in the language of the user / project (rule 6).
    (script errors point at `steps[i].field`). A passing `validate_*` returns `{ "ok": true, … }`.
    Fix exactly the fields named in `details[].path`, then validate again. Stop after 3 failed
    attempts on the same item and report to the owner what still fails.
-8. **Samples are not yours.** Projects marked as a Gen Labs sample (e.g. Tam Quốc) may be viewed,
+8. **Samples are not yours.** Projects marked as a Gen Labs sample (e.g. the Three Kingdoms theme set) may be viewed,
    tried and filmed — films / videos made from the sample may be posted with the credit line "Made with gen-chibi · Gen Labs"; no resale, no redistribution of the sample's files or assets — never copy their parts / motion packs / sound packs into something sold.
 9. **Nothing is deleted by agents.** There is no tool that deletes an asset. Saving over an existing id
    (`overwrite: true`, or `save_*` on the same id) creates a NEW version — the old one stays in history.
@@ -121,7 +121,7 @@ in the language of the user / project (rule 6).
 | `motion-pack` | new poses, clips, actions | `get_motion_spec` → `validate_motion_pack` → `save_motion_pack` → `render_action` |
 | `sound` | pick / mix sound effects into a film, or author a sound pack | `list_sounds` → `get_sound_spec` → `get_sound_pack` → `validate_sound_pack` → `save_sound_pack` → `lint_sound_track` |
 | `animation` | export an action as sprite / frames / timeline | `list_actions` → `render_action` |
-| `film` | a work with shots, dialogue and fights | `save_work` → `get_director_schema` → `validate_event` → `save_shot` → `preview_shot` |
+| `film` | a work with shots, dialogue and fights; versions; storyboard + HTML film | `save_work` → `get_director_schema` → `validate_event` → `save_shot` → `preview_shot` → `get_storyboard` / `export_film_html` (history: `list_work_versions`, `restore_work_version`) |
 | `project-bundle` | backup, move, sell a themed set | `export_project`, `import_project`, `list_samples`, `install_sample` |
 | `system` | version, update, rollback | `get_app_version`, `update_app`, `rollback_app` |
 

@@ -162,6 +162,19 @@ class Store {
     writeJSON(file, rec);
     return rec;
   }
+  // phiên bản CŨ của tác phẩm (versions/works~<id>/<n>.json, saveWork ghi trước mỗi lần lưu) — mới nhất trước; bản đang dùng là works/<id>.json
+  workVersions(id) {
+    if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(String(id))) return [];
+    const dir = path.join(this.verDir, 'works~' + id);
+    let files = []; try { files = fs.readdirSync(dir).filter(f => /^[1-9][0-9]{0,8}\.json$/.test(f)); } catch (e) { return []; }
+    return files.map(f => this.workVersion(id, +f.slice(0, -5))).filter(Boolean).sort((a, b) => b.version - a.version);
+  }
+  workVersion(id, n) {
+    if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(String(id)) || !Number.isInteger(n) || n < 1) return null;
+    const w = readJSON(path.join(this.verDir, 'works~' + id, n + '.json'), null);
+    if (w && this.workMigrate) this.workMigrate(w);
+    return w && w.id === id ? w : null;
+  }
   // luồng hội thoại của trợ lý AI (dock cột phải) theo ĐỐI TƯỢNG: tác phẩm / asset / dự án / khu — data/chats/<loại>-<id>.json.
   // Có trần số tin + kích thước: luồng dài mãi không phình đĩa và không phình lời gọi LLM. id asset "pack/id" đổi "/" thành "~" (như tên tệp asset).
   chatFile(kind, id) {
