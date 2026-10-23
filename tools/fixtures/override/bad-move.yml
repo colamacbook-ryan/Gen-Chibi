@@ -1,0 +1,7 @@
+services:
+  app:
+    volumes: !override []
+  login:
+    image: example/login
+    volumes:
+      - ./:/install

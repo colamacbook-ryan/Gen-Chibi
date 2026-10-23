@@ -60,9 +60,22 @@ python3 -m http.server $FPORT --bind 127.0.0.1 --directory "$FEED" >/dev/null 2>
 # test chạy bằng root thật: setpriv / chown THẬT (hạ quyền thật, đổi chủ thật) — chỉ ghi lại lệnh; user thường: setpriv / chown không làm được → chỉ ghi lại (L-77)
 # docker compose THẬT (chỉ để PHÂN GIẢI — "config --no-env-resolution"): genchibi dùng chính compose làm bộ đọc YAML của override (vòng 7). Không có → dừng
 REAL_DOCKER="$(command -v docker || true)"; export REAL_DOCKER
+echo "   · docker compose (thật, chỉ phân giải): $("$REAL_DOCKER" compose version 2>&1 | head -n 1)"   # CI: phiên bản khác máy dev → cách compose đọc tệp khác (vòng 8)
 [ -n "$REAL_DOCKER" ] && "$REAL_DOCKER" compose version >/dev/null 2>&1 || { echo "   ✗ cần docker compose (CLI, không cần daemon) để kiểm override — cài plugin Docker Compose"; exit 1; }
+# stat giả (vòng 8, chủ / quyền của nguồn bind): FAKE_STAT_AS="<đường>|<uid>|<gid>" → chính đường đó, mọi thứ dưới nó và mọi thư mục cha của nó báo uid / gid này
+# (quyền thật) — để user thường (CI) có được một thư mục "của root"; không đặt → stat thật
+REAL_STAT="$(command -v stat)"; export REAL_STAT
 RSETPRIV=""; RCHOWN=""; if [ -n "$REALROOT" ]; then RSETPRIV="$(command -v setpriv || true)"; RCHOWN="$(command -v chown)"; fi
 export FAKE_SETPRIV="$RSETPRIV" FAKE_CHOWN="$RCHOWN"
+cat > "$FK/stat" <<'EOF'
+#!/bin/bash
+eval "p=\${$#}"
+if [ -n "${FAKE_STAT_AS:-}" ]; then IFS='|' read -r pre u g <<< "$FAKE_STAT_AS"
+  case "$p/" in "$pre"/*) ;; *) case "$pre/" in "${p%/}"/*) ;; *) exec "$REAL_STAT" "$@" ;; esac ;; esac
+  a="$("$REAL_STAT" -c %a -- "$p")" || exit 1; printf '%s %s %s\n' "$u" "$g" "$a"; exit 0
+fi
+exec "$REAL_STAT" "$@"
+EOF
 cat > "$FK/id" <<'EOF'
 #!/bin/bash
 case "$*" in
@@ -164,6 +177,8 @@ I="$W/inst"; H="$W/roothome"; mkdir -p "$I/releases/v0.1.0" "$I/data" "$I/backup
 tar -xzf "$FEED/v0.1.0/gen-chibi-v0.1.0.tar.gz" -C "$I/releases/v0.1.0" --strip-components=1
 ln -s releases/v0.1.0 "$I/current"; cp "$I/current/launcher.js" "$I/launcher.js"; cp "$I/current/docker-compose.yml" "$I/docker-compose.yml"
 TOK="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+# GC_UID / GC_GID kiểu máy cũ của Ryan (1001) — genchibi phải bỏ qua và dùng chủ thư mục cài. Runner CI chạy bằng uid 1001 → lấy số khác để phân biệt được
+EUIDV=1001; [ "$AUID" != 1001 ] && [ "$AGID" != 1001 ] || EUIDV=1234
 cat > "$I/.env" <<EOF
 # gen-chibi — generated at install time. Do not share this file.
 GC_MODE=docker
@@ -171,8 +186,8 @@ GC_PORT=$PORT
 GC_BIND=127.0.0.1
 GC_MASTER_KEY=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
 GC_AUTO_UPDATE=1
-GC_UID=1001
-GC_GID=1001
+GC_UID=$EUIDV
+GC_GID=$EUIDV
 GC_REPO=colamacbook-ryan/Gen-Chibi
 GC_LANG=en
 GC_GITHUB_TOKEN=
@@ -261,7 +276,7 @@ UPL="$(grep 'sub=up' "$FS/compose.log" | tail -1)"; c1=0; c2=0; c3=0; c4=0; c5=0
 echo "$UPL" | grep -q "cwd=$TD/run pd=$I ef=$TI/compose.env files= $TI/effective.yml$" || c1=1
 grep -q "^pd=$I files= $TD/rel/v0.1.0/docker-compose.yml $TI/override.yml$" "$FS/resolve.log" && grep -q 'example/login' "$TI/effective.yml" || c2=1
 waitver $PORT 0.1.0 || c3=1; [ "$(canaries)" = 0 ] || c4=1
-grep -qx "GC_UID='$AUID'" "$FS/last-compose-up.env" && grep -qx "GC_PORT='$PORT'" "$FS/last-compose-up.env" && ! grep -q 'GC_UID=.1001' "$FS/last-compose-up.env" || c5=1
+grep -qx "GC_UID='$AUID'" "$FS/last-compose-up.env" && grep -qx "GC_PORT='$PORT'" "$FS/last-compose-up.env" && ! grep -q "GC_UID=.$EUIDV" "$FS/last-compose-up.env" || c5=1
 [ "$c1$c2$c3$c4$c5" = 00000 ]
 check $? "override approve --yes rồi genchibi start (root): genchibi phân giải bằng docker compose (-f <tệp đã kiểm của v0.1.0> -f <override đã duyệt>, thư mục cài) rồi dựng bằng ĐÚNG dạng chuẩn đó (-f effective.yml --project-directory <thư mục cài> --env-file <bản đã lọc>, trong ~/.local/lib/gen-chibi/run); GC_UID = chủ thư mục cài; không chạy current/cli/genchibi" "điều kiện (lệnh up · phân giải · app lên · canary · env) = $c1$c2$c3$c4$c5 · up: $UPL · resolve: $(tail -2 "$FS/resolve.log" 2>/dev/null | tr '\n' ' ') · health $(health $PORT) · $OUT"
 grep -q -- "--reuid=$AUID --regid=$AGID --clear-groups -- env -i" "$FS/setpriv.log" && ! grep -q -- '--reuid=0' "$FS/setpriv.log"
@@ -339,7 +354,7 @@ rootcli override off --yes   # root chọn chạy KHÔNG có override độc (gh
 for cmd in status start restart backup "lang en" "setup hint" doctor "online" "agent connect"; do rootcli $cmd; echo "$cmd → $RC" >> "$W/evil-runs.log"; done
 [ "$(canaries)" = 0 ] && [ ! -e "$FS/canary-compose" ]
 check $? "status / start / restart / backup / lang / setup hint / doctor / online / agent connect bằng root với .env có \$(…), \`…\`, PATH, BASH_ENV, LD_PRELOAD, chèn cấu hình curl; current/ + releases/*/cli/genchibi, override, docker-compose.yml, owner-token đều độc → KHÔNG một tệp canary nào" "$(ls "$W" "$FS" | grep canary | tr '\n' ' ') · $(cat "$W/evil-runs.log" | tr '\n' ' ')"
-! grep -E 'sub=(up|config|stop)' "$FS/compose.log" | grep -vq "files= \($W/[^ ]*/\.local/lib/gen-chibi/rel/v0\.1\.[01]/docker-compose.yml\( $TI/override.yml\)\{0,1\}\|$TI/effective.yml\)$" && grep 'sub=up' "$FS/compose.log" | tail -1 | grep -q "docker-compose.yml$" && grep -qx "GC_UID='$AUID'" "$FS/last-compose.env" && ! grep -q "GC_UID='0'" "$FS/last-compose.env" && ! grep -q DOCKER_HOST "$FS/last-compose.env" && ! grep -q PATH "$FS/last-compose.env" && ! grep -q '^\[sg\]' "$FS/docker.log"
+! grep -E 'sub=(up|config|stop)' "$FS/compose.log" | grep -vq "files= \($W/[^ ]*/\.local/lib/gen-chibi/rel/v0\.1\.[01]/docker-compose.yml\|$TI/effective.yml\)$" && grep 'sub=up' "$FS/compose.log" | tail -1 | grep -q "docker-compose.yml$" && grep -qx "GC_UID='$AUID'" "$FS/last-compose.env" && ! grep -q "GC_UID='0'" "$FS/last-compose.env" && ! grep -q DOCKER_HOST "$FS/last-compose.env" && ! grep -q PATH "$FS/last-compose.env" && ! grep -q '^\[sg\]' "$FS/docker.log"
 check $? "compose chỉ nhận tệp đã kiểm (không override / docker-compose.yml của thư mục cài); .env GC_UID=0 không làm container chạy root (GC_UID = chủ thư mục cài); DOCKER_HOST / PATH / GC_DOCKER_VIA của .env không tới docker" "$(grep -E 'sub=(up|config|stop)' "$FS/compose.log" | tail -2) · $(cat "$FS/last-compose.env" | cut -c1-40 | tr '\n' ' ')"
 grep -q "GC_LANG='\$(touch $W/canary-env1)'" "$FS/last-compose.env" || grep -q "GC_LANG='en'" "$FS/last-compose.env"
 check $? ".env là dữ liệu: giá trị \$(…) đi nguyên văn trong nháy đơn (compose không mở rộng), không bao giờ được chạy" "$(grep GC_LANG "$FS/last-compose.env")"
@@ -415,7 +430,7 @@ for f in "$ROOT"/tools/fixtures/override/bad-*.yml; do   # @INSTALL@ = đường
 done
 printf 'services:\n  login:\n    image: example/login\n    volumes:\n      - %s/data:/x\n' "$(cd -P "$I" && pwd)" > "$W/ov-inst.yml"   # bind tuyệt đối VÀO thư mục cài (đường thật)
 ( cd "$I" && as_container sh -c 'cat > docker-compose.override.yml' ) < "$W/ov-inst.yml"; rootcli override approve --yes; echo "inst-abs rc=$RC $(echo "$OUT" | grep -c 'Cannot approve') $(echo "$OUT" | grep -c '^  - ' | sed 's/^[1-9][0-9]*$/1/')" >> "$W/ov-syn.log"
-! grep -vE ' rc=1 1 [1-9][0-9]*$' "$W/ov-syn.log" | grep -q . && [ "$(wc -l < "$W/ov-syn.log")" -ge 36 ] && grep -q 'HASH' "$TI/override.yml"
+! grep -vE ' rc=1 1 [1-9][0-9]*$' "$W/ov-syn.log" | grep -q . && [ "$(wc -l < "$W/ov-syn.log")" -ge 45 ] && grep -q 'HASH' "$TI/override.yml"
 check $? "override approve (docker compose phân giải, kiểm dạng chuẩn): mọi đường vòng (flow, khoá có nháy, danh sách gọn, type / source lồng, x-*, extends file, include, build / env_file / develop / use_api_socket / provider / volumes_from, bind tương đối / vào thư mục cài / /không-có/.. / C:/ / /, socket Docker, devices tương đối, device tương đối, CR, \${X:-./data}) → từ chối đúng lý do; bản duyệt cũ giữ nguyên" "$(tr '\n' ' ' < "$W/ov-syn.log")"
 ( cd "$I" && as_container rm -f inc.yml )
 # YAML bất kỳ mà compose đọc được và không với ra ngoài: flow, chú thích tiếng Việt, CRLF, anchor / merge, tag, khối chữ, --- → DUYỆT được (chủ không phải viết lại)
@@ -435,6 +450,45 @@ check $? "override privileged / network_mode host / cap_add → cảnh báo từ
 NUP="$(grep -c 'sub=up' "$FS/compose.log")"; rootcli start
 grep 'sub=up' "$FS/compose.log" | tail -1 | grep -q "files= $TI/effective.yml$" && grep -q 'privileged: true' "$TI/effective.yml"
 check $? "start với override đã duyệt → docker compose -f ~/.local/lib/gen-chibi/i/<bản cài>/effective.yml (dạng chuẩn compose đã phân giải + kiểm), không -f override thô" "rc $RC: $(grep 'sub=up' "$FS/compose.log" | tail -1)"
+# vòng 8 (🔴B): lệnh compose TẠO container ngoài up — genchibi password khi app dừng (compose run) — cũng qua rào override và chỉ thấy dạng chuẩn đã kiểm
+cp "$TI/override.yml" "$W/ov-priv.keep"; rootcli stop; printf 'mat-khau-rat-dai-12345\n' > "$W/pw.txt"
+RC_STDIN="$W/pw.txt" rootcli password; PWO="$OUT"; PWR=$RC; PWL="$(grep 'sub=run' "$FS/compose.log" | tail -1)"
+( cd "$I" && as_container sh -c 'printf "  extra:\n    image: example/extra\n" >> docker-compose.override.yml' ); NR="$(grep -c 'sub=run' "$FS/compose.log")"
+RC_STDIN="$W/pw.txt" rootcli password; P2O="$OUT"; P2R=$RC
+[ $PWR = 0 ] && echo "$PWL" | grep -q "files= $TI/effective.yml$" && [ $P2R = 1 ] && [ "$(grep -c 'sub=run' "$FS/compose.log")" = "$NR" ] && echo "$P2O" | grep -q 'Stopped before touching any container'
+check $? "genchibi password khi app dừng (compose run — tạo container): override đã duyệt → -f effective.yml; override đổi sau khi duyệt → DỪNG trước compose run" "rc $PWR: $PWO · $PWL · rc $P2R: $P2O"
+# một đường tới docker compose (kiểm tĩnh): mọi lời gọi trong cli/genchibi là compose() (rào tạo container + chỉ dạng chuẩn), trừ phân giải override và compose version
+BYP="$(sed 's/[[:space:]]#[[:space:]].*$//' "$ROOT/cli/genchibi" | grep -nE '(^|[^A-Za-z0-9_-])(dk|docker|sudo docker) +(compose|run|create|container)([^A-Za-z0-9_-]|$)' | grep -vE '^[0-9]+:[[:space:]]*#|^[0-9]+:    [a-z0-9_]+\) F="' \
+  | grep -vF -e 'dk compose "${a[@]}" ${1+"$@"}' -e 'dk compose "${a[@]}" --project-directory "$pd" --env-file "$ef" config --no-env-resolution' -e 'dk compose version >/dev/null' || true)"
+CBODY="$(sed -n '/^compose() {/,/^}/p' "$ROOT/cli/genchibi")"
+[ -z "$BYP" ] && [ "$(grep -cF 'dk compose "${a[@]}" ${1+"$@"}' "$ROOT/cli/genchibi")" = 2 ] && [ "$(printf '%s\n' "$CBODY" | grep -cF 'dk compose "${a[@]}" ${1+"$@"}')" = 2 ] \
+  && printf '%s\n' "$CBODY" | grep -q '\*) override_gate || return 1' && ! grep -q "files=.* $TI/override.yml" "$FS/compose.log"
+check $? "một đường tới docker compose: mọi lời gọi của cli/genchibi qua compose() (rào override cho mọi lệnh có thể tạo container), trừ phân giải (config --no-env-resolution) và compose version; compose.log không lần nào -f override thô" "$BYP"
+# vòng 8 (🔴A): nguồn bind mà app tráo được → từ chối lúc duyệt: thuộc user của app · thuộc nhóm của app · thư mục cha bị người khác ghi (không bit t)
+ovown() { printf 'services:\n  login:\n    image: example/login\n    volumes:\n      - %s:/x\n' "$1" | ( cd "$I" && as_container sh -c 'cat > docker-compose.override.yml' ); RC_ENV="${2:-}" rootcli override approve --yes; }
+mkdir -p "$W/own-app" "$W/own-grp" "$W/own-ww/d"; own_app "$W/own-app"; chmod 755 "$W/own-grp" "$W/own-ww/d"; chmod 777 "$W/own-ww"
+ovown "$W/own-app/d"; OU="$OUT"; OUR=$RC
+ovown "$W/own-grp" "FAKE_STAT_AS=$W/own-grp|0|$AGID"; OG="$OUT"; OGR=$RC
+ovown "$W/own-ww/d" "FAKE_STAT_AS=$W/own-ww/d|0|0"; OW="$OUT"; OWR=$RC
+[ $OUR = 1 ] && echo "$OU" | grep -qF "  - source: $W/own-app/d ($W/own-app belongs to the app's account (uid $AUID)" \
+  && [ $OGR = 1 ] && echo "$OG" | grep -qF "  - source: $W/own-grp ($W/own-grp belongs to the app's group (gid $AGID)" \
+  && [ $OWR = 1 ] && echo "$OW" | grep -qF "  - source: $W/own-ww/d ($W/own-ww can be changed by other accounts" && cmp -s "$TI/override.yml" "$W/ov-priv.keep"
+check $? "nguồn bind thuộc user của app / thuộc nhóm của app / dưới thư mục ai cũng ghi được (không bit t) → override approve từ chối, nói rõ thành phần nào; bản duyệt cũ giữ nguyên" "rc $OUR: $OU · rc $OGR: $OG · rc $OWR: $OW"
+# …thư mục cha có bit t (như /tmp), mọi thứ của root → duyệt được, start chạy. Rồi app (hay ai đó) thay nguồn bằng liên kết: chữ override + kết quả phân giải
+# KHÔNG đổi (compose giữ nguyên chữ của đường) → start vẫn phải kiểm lại đủ trên máy và DỪNG
+chmod 1777 "$W/own-ww"; ovown "$W/own-ww/d" "FAKE_STAT_AS=$W/own-ww/d|0|0"; SA="$OUT"; SAR=$RC
+RC_ENV="FAKE_STAT_AS=$W/own-ww/d|0|0" rootcli start; SS="$OUT"; SSR=$RC
+rmdir "$W/own-ww/d"; ln -s /etc "$W/own-ww/d"; NUP="$(grep -c 'sub=up' "$FS/compose.log")"
+RC_ENV="FAKE_STAT_AS=$W/own-ww/d|0|0" rootcli start; SW="$OUT"; SWR=$RC
+[ $SAR = 0 ] && [ $SSR = 0 ] && [ $SWR = 1 ] && [ "$(grep -c 'sub=up' "$FS/compose.log")" = "$NUP" ] && echo "$SW" | grep -q 'no longer passes the checks on this machine' \
+  && echo "$SW" | grep -qF "  - source: $W/own-ww/d (a path in the install folder, relative, a link"
+check $? "override duyệt với thư mục thật (cha có bit t) → start chạy; nguồn bị thay bằng liên kết (/etc) sau khi duyệt — chữ + kết quả phân giải y nguyên → start kiểm lại, DỪNG, nói rõ dòng nào" "rc $SAR: $SA · rc $SSR · rc $SWR: $SW"
+rm -f "$W/own-ww/d"
+# 🔵 propagation chia sẻ mount (rshared / shared / rslave / slave) → cảnh báo, vẫn duyệt được
+printf 'services:\n  login:\n    image: example/login\n    volumes:\n      - type: bind\n        source: /etc/ssl/certs\n        target: /certs\n        bind:\n          propagation: rshared\n' | ( cd "$I" && as_container sh -c 'cat > docker-compose.override.yml' ); rootcli override approve --yes
+[ $RC = 0 ] && echo "$OUT" | grep -q '^  ! propagation: rshared — powerful setting'
+check $? "override bind propagation: rshared → cảnh báo (!), vẫn duyệt được" "rc $RC: $OUT"
+( cd "$I" && as_container sh -c 'cat > docker-compose.override.yml' ) < "$W/ov-priv.keep"; rootcli override approve --yes; rootcli start
 # tác động phân giải khác bản đã duyệt (vd tệp gốc đổi) → không dựng, hỏi lại
 printf '+x: y\n' >> "$TI/override.effect"; NUP="$(grep -c 'sub=up' "$FS/compose.log")"; rootcli start; EC="$OUT"; ECR=$RC
 [ $ECR = 1 ] && echo "$EC" | grep -q 'has changed since approval' && [ "$(grep -c 'sub=up' "$FS/compose.log")" = "$NUP" ]

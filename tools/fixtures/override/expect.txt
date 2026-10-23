@@ -1,4 +1,5 @@
 bad-apisock.yml	"use_api_socket:"
+bad-bin.yml	line 3: ? !!binary ZXh0ZW5kcw== (
 bad-c1.yml	"build:"
 bad-c2.yml	"build:"
 bad-c3.yml	"build:"
@@ -22,7 +23,14 @@ bad-develop.yml	"develop:"
 bad-device.yml	device: ./x (
 bad-devrel.yml	source: ./dev (
 bad-dotdot.yml	source: /nonexist/..
+bad-envabs.yml	line 3: env_file: 
+bad-eolesc.yml	line 3: image: "example/\ (
+bad-esc.yml	line 3: "\x65xtends": (
+bad-extabs.yml	line 3: extends: (
+bad-incabs.yml	line 1: include: (
 bad-include.yml	it reads files relative to the install folder
+bad-labelabs.yml	line 3: label_file: 
+bad-move.yml	source: @INSTALL@ (a path
 bad-nested-src.yml	source: @INSTALL@/data (
 bad-nested-type.yml	source: @INSTALL@/data (
 bad-nonascii.yml	"build:"
@@ -32,5 +40,7 @@ bad-sock.yml	source: /var/run/docker.sock (the Docker socket
 bad-sockenv.yml	DOCKER_HOST: unix:///var/run/docker.sock (the Docker socket
 bad-tab.yml	"build:"
 bad-var.yml	Docker Compose could not resolve it
+bad-verbatim.yml	line 3: image: !<tag:yaml.org,2002:str> example/login (
 bad-volfrom.yml	"volumes_from:"
 bad-xext.yml	source: @INSTALL@/data (
+bad-yamldir.yml	line 1: %YAML 1.1 (

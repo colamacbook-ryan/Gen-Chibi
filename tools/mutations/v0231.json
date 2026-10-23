@@ -53,8 +53,8 @@
    "id": "R05",
    "guard": "override: root chỉ dùng bản đã duyệt",
    "file": "cli/genchibi",
-   "find": "    if file_safe \"$TI/override.yml\"; then printf '%s\\n' -f \"$TI/override.yml\"; fi\n",
-   "replace": "    ov=\"$(compose_override)\"; [ -z \"$ov\" ] || printf '%s\\n' -f \"$HOME_DIR/$ov\"\n",
+   "find": "    base_files || return 1\n    printf '%s\\n' --project-directory",
+   "replace": "    base_files || return 1\n    ov=\"$(compose_override)\"; [ -z \"$ov\" ] || printf '%s\\n' -f \"$HOME_DIR/$ov\"\n    printf '%s\\n' --project-directory",
    "test": [
     "bash",
     "tools/test-root.sh"
@@ -1122,7 +1122,7 @@
    "id": "Q08",
    "guard": "🔴 vòng 7: dựng container bằng ĐÚNG dạng chuẩn đã kiểm (effective.yml), không override thô",
    "file": "cli/genchibi",
-   "find": "    if [ -n \"${CF_EFF:-}\" ] && file_safe \"$TI/override.yml\" && file_safe \"$TI/effective.yml\"; then",
+   "find": "    if file_safe \"$TI/override.yml\" && file_safe \"$TI/effective.yml\"; then",
    "replace": "    if false; then",
    "test": [
     "bash",
@@ -1153,6 +1153,210 @@
     "tools/test-root.sh"
    ],
    "expect": "cảnh báo từng dòng (!)"
+  },
+  {
+   "id": "Q11",
+   "guard": "🟠 vòng 8 C: chữ thô có extends (đường tuyệt đối — compose chép thẳng vào, khoá biến mất) → từ chối",
+   "file": "cli/genchibi",
+   "find": "LC_ALL=C grep -qiwE 'extends|include|env_file|label_file|binary'",
+   "replace": "LC_ALL=C grep -qiwE 'include|env_file|label_file|binary'",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "từ chối đúng lý do"
+  },
+  {
+   "id": "Q12",
+   "guard": "🟠 vòng 8 C: chữ thô có include (đường tuyệt đối) → từ chối",
+   "file": "cli/genchibi",
+   "find": "LC_ALL=C grep -qiwE 'extends|include|env_file|label_file|binary'",
+   "replace": "LC_ALL=C grep -qiwE 'extends|env_file|label_file|binary'",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "từ chối đúng lý do"
+  },
+  {
+   "id": "Q13",
+   "guard": "🟠 vòng 8 C: tag !!binary (khoá extends viết bằng base64) → từ chối",
+   "file": "cli/genchibi",
+   "find": "LC_ALL=C grep -qiwE 'extends|include|env_file|label_file|binary'",
+   "replace": "LC_ALL=C grep -qiwE 'extends|include|env_file|label_file'",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "từ chối đúng lý do"
+  },
+  {
+   "id": "Q14",
+   "guard": "🟠 vòng 8 C: chuỗi thoát \\x / \\u / \\U (khoá \"\\x65xtends\") → từ chối",
+   "file": "cli/genchibi",
+   "find": "LC_ALL=C grep -qE '\\\\[xuU]|",
+   "replace": "LC_ALL=C grep -qE 'QQQ|",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "từ chối đúng lý do"
+  },
+  {
+   "id": "Q15",
+   "guard": "🟠 vòng 8 C: \\ cuối dòng (nối chuỗi có nháy kép) → từ chối",
+   "file": "cli/genchibi",
+   "find": "|\\\\.?$|^%|!<' ;",
+   "replace": "|^%|!<' ;",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "từ chối đúng lý do"
+  },
+  {
+   "id": "Q16",
+   "guard": "🟠 vòng 8 C: chỉ thị YAML (%TAG / %YAML) → từ chối",
+   "file": "cli/genchibi",
+   "find": "|^%|!<' ;",
+   "replace": "|!<' ;",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "từ chối đúng lý do"
+  },
+  {
+   "id": "Q17",
+   "guard": "🟠 vòng 8 C: tag nguyên văn !<…> (tag:…:bin%61ry) → từ chối",
+   "file": "cli/genchibi",
+   "find": "|^%|!<' ;",
+   "replace": "|^%' ;",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "từ chối đúng lý do"
+  },
+  {
+   "id": "Q18",
+   "guard": "🟡 vòng 8 D: so dòng CÓ đường khoá (dời bind ./ sang service khác bằng !override không còn là \"không đổi\")",
+   "file": "cli/genchibi",
+   "find": "  ov_canon \"$bf\" | LC_ALL=C sort > \"$bf.s\"; ov_canon \"$mf\" | LC_ALL=C sort > \"$mf.s\"",
+   "replace": "  LC_ALL=C sort \"$bf\" > \"$bf.s\"; LC_ALL=C sort \"$mf\" > \"$mf.s\"",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "từ chối đúng lý do"
+  },
+  {
+   "id": "Q19",
+   "guard": "🔴 vòng 8 A: mỗi lần dùng override kiểm lại đủ (liên kết / socket / chủ) trên kết quả vừa phân giải",
+   "file": "cli/genchibi",
+   "find": "  if ! { ov_rawscan \"$TI/override.yml\" && ov_judge \"$e\"; } > \"$e.j\" 2>&1; then",
+   "replace": "  if false; then",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "nguồn bị thay bằng liên kết"
+  },
+  {
+   "id": "Q20",
+   "guard": "🔴 vòng 8 A: nguồn bind (hay thư mục cha) thuộc user của app → từ chối",
+   "file": "cli/genchibi",
+   "find": "        [ \"$u\" != \"$APP_UID\" ] || {",
+   "replace": "        true || {",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "thuộc user của app"
+  },
+  {
+   "id": "Q21",
+   "guard": "🔴 vòng 8 A: nguồn bind (hay thư mục cha) thuộc nhóm của app → từ chối",
+   "file": "cli/genchibi",
+   "find": "        [ \"$g\" != \"$APP_GID\" ] || [ \"$g\" = 0 ] || {",
+   "replace": "        true || {",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "thuộc user của app"
+  },
+  {
+   "id": "Q22",
+   "guard": "🔴 vòng 8 A: thư mục cha ai cũng ghi được (không bit t) → từ chối",
+   "file": "cli/genchibi",
+   "find": "        if [ ! -L \"$p\" ] && (( (8#$a & 8#022) != 0",
+   "replace": "        if false && (( (8#$a & 8#022) != 0",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "thuộc user của app"
+  },
+  {
+   "id": "Q23",
+   "guard": "🔴 vòng 8 B: mọi lệnh compose có thể tạo container (run, create…) qua rào override, không riêng up",
+   "file": "cli/genchibi",
+   "find": "      *) override_gate || return 1 ;; esac",
+   "replace": "      up) override_gate || return 1 ;; esac",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "genchibi password khi app dừng"
+  },
+  {
+   "id": "Q24",
+   "guard": "🔴 vòng 8 B: không lời gọi docker compose nào ngoài compose() (kiểm tĩnh)",
+   "file": "cli/genchibi",
+   "find": "compose run --rm -T --no-deps app node",
+   "replace": "dk compose run --rm -T --no-deps app node",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "một đường tới docker compose"
+  },
+  {
+   "id": "Q25",
+   "guard": "🔵 vòng 8: cảnh báo bind propagation rshared / shared / rslave / slave",
+   "file": "cli/genchibi",
+   "find": "      propagation) case \"$val\" in rshared|shared|rslave|slave) m ov_warn",
+   "replace": "      propagation) case \"$val\" in xx) m ov_warn",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "propagation: rshared → cảnh báo"
+  },
+  {
+   "id": "Q26",
+   "guard": "🔴 vòng 8: chữ thô có env_file (compose 2.38 chép tệp vào environment bất chấp --no-env-resolution, khoá biến mất) → từ chối",
+   "file": "cli/genchibi",
+   "find": "LC_ALL=C grep -qiwE 'extends|include|env_file|label_file|binary'",
+   "replace": "LC_ALL=C grep -qiwE 'extends|include|label_file|binary'",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "từ chối đúng lý do"
+  },
+  {
+   "id": "Q27",
+   "guard": "🔴 vòng 8: chữ thô có label_file (compose 2.38 chép tệp vào labels, khoá biến mất) → từ chối",
+   "file": "cli/genchibi",
+   "find": "LC_ALL=C grep -qiwE 'extends|include|env_file|label_file|binary'",
+   "replace": "LC_ALL=C grep -qiwE 'extends|include|env_file|binary'",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "từ chối đúng lý do"
   }
  ]
 }

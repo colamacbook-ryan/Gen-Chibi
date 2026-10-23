@@ -1,0 +1,5 @@
+services:
+  login:
+    "\x65xtends":
+      file: @INSTALL@/inc.yml
+      service: inc

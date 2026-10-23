@@ -1,0 +1,5 @@
+services:
+  login:
+    extends:
+      file: @INSTALL@/inc.yml
+      service: inc

@@ -1,0 +1,5 @@
+%YAML 1.1
+---
+services:
+  login:
+    image: example/login
