@@ -10,6 +10,9 @@
 //   GC_LIVE_URL   địa chỉ app (mặc định http://127.0.0.1:7480)
 //   GC_LIVE_TOKEN token live của bản cài (Studio › Hệ thống › Live › Kết nối Claude Code) — chỉ mở POST /api/live/event
 // Dùng như thư viện (test): import { classify } from './live-hook.mjs'
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import http from 'http';
 import https from 'https';
 
@@ -110,7 +113,9 @@ function post(url, token, ev, ms) {
 async function main() {
   const dbg = process.env.GC_LIVE_DEBUG === '1', say = m => { if (dbg) process.stderr.write('[live-hook] ' + m + '\n'); };
   try {
-    const token = process.env.GC_LIVE_TOKEN || '';
+    // token: tệp live-token (0600) cạnh chính tệp này — genchibi live hook ghi; GC_LIVE_TOKEN chỉ còn cho thử tay / test (lộ qua /proc/*/cmdline)
+    let token = process.env.GC_LIVE_TOKEN || '';
+    if (!token) { try { token = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'live-token'), 'utf8').trim(); } catch (e) { say('no live-token file'); } }
     if (!/^gcl_[A-Za-z0-9_-]{32,}$/.test(token)) { say('no GC_LIVE_TOKEN'); return; }
     const raw = await readStdin(250);
     let h = null; try { h = JSON.parse(raw); } catch (e) { say('stdin is not JSON'); return; }
@@ -119,7 +124,9 @@ async function main() {
     say(ev.kind + (ok ? ' sent' : ' not delivered'));
   } catch (e) { say(String(e && e.message || e)); }
 }
-if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/').replace(/^.*\/tools\//, '/tools/'))) {
+// chạy trực tiếp (không phải import trong test): so ĐƯỜNG THẬT — đúng cả khi đường có dấu cách / ký tự mã hoá % / đi qua symlink (macOS /Users/John Smith)
+function isMain() { try { return !!process.argv[1] && fs.realpathSync(fileURLToPath(import.meta.url)) === fs.realpathSync(process.argv[1]); } catch (e) { return false; } }
+if (isMain()) {
   process.on('uncaughtException', () => process.exit(0)); process.on('unhandledRejection', () => process.exit(0));
   main().finally(() => process.exit(0));
 }

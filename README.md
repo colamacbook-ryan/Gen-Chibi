@@ -219,7 +219,7 @@ genchibi live hook                                          # or just print the 
 
 The hook script is a copy kept outside the install folder (Docker installs take it from the SHA-256-verified
 release), it never blocks Claude Code and sends only the kind of step — never prompts, file contents, paths,
-commands or results. The live token in the snippet can only send Live events. Other agents call the MCP tool
+commands or results. The live token (kept in a 0600 file next to the hook, never on a command line) can only send Live events. Other agents call the MCP tool
 `live_event`. Details: [docs/LIVE.md](docs/LIVE.md).
 
 ## Core AI (LLM API)

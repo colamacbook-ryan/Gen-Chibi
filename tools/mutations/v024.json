@@ -65,7 +65,7 @@
    "id": "L06",
    "guard": "--install-into sao lưu bản cũ",
    "file": "cli/genchibi",
-   "find": "fs.copyFileSync(file, bak, fs.constants.COPYFILE_EXCL); fs.chmodSync(bak, st.mode & 0o777);",
+   "find": "fs.writeFileSync(bak, buf, { flag: \"wx\", mode }); fs.chmodSync(bak, mode);",
    "replace": "",
    "test": [
     "node",
@@ -89,8 +89,8 @@
    "id": "L08",
    "guard": "live hook không in token chủ",
    "file": "cli/genchibi",
-   "find": "cmd=\"GC_LIVE_URL=$(shq \"$URL\") GC_LIVE_TOKEN=$tok",
-   "replace": "cmd=\"GC_LIVE_URL=$(shq \"$URL\") GC_API_TOKEN=$(owner_token) GC_LIVE_TOKEN=$tok",
+   "find": "  cmd=\"GC_LIVE_URL=$(shq \"$URL\") $(shq \"$nb\") $(shq \"$dest\")\"",
+   "replace": "  cmd=\"GC_LIVE_URL=$(shq \"$URL\") GC_API_TOKEN=$(owner_token) $(shq \"$nb\") $(shq \"$dest\")\"",
    "test": [
     "node",
     "tools/test-live.mjs"
@@ -180,6 +180,102 @@
     "tools/test-live.mjs"
    ],
    "expect": "máy quay"
+  },
+  {
+   "id": "L16",
+   "guard": "root --install-into chỉ vào chỗ của chính root",
+   "file": "cli/genchibi",
+   "find": "  if [ -n \"$IS_ROOT\" ] && ! path_safe \"$anc\"; then",
+   "replace": "  if false && ! path_safe \"$anc\"; then",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "root --install-into"
+  },
+  {
+   "id": "L17",
+   "guard": "hook tự tìm ra mình đúng cả khi đường có dấu cách / symlink",
+   "file": "tools/live-hook.mjs",
+   "find": "function isMain() { try { return !!process.argv[1] && fs.realpathSync(fileURLToPath(import.meta.url)) === fs.realpathSync(process.argv[1]); } catch (e) { return false; } }",
+   "replace": "function isMain() { return !!process.argv[1] && import.meta.url.endsWith(process.argv[1]); }",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "tệp hook đã chép tự đọc token"
+  },
+  {
+   "id": "L18",
+   "guard": "hook đọc token ở tệp 0600 cạnh nó",
+   "file": "tools/live-hook.mjs",
+   "find": "    if (!token) { try {",
+   "replace": "    if (false) { try {",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "tệp hook đã chép tự đọc token"
+  },
+  {
+   "id": "L19",
+   "guard": "Studio không phát dòng lệnh hook do app soạn",
+   "file": "server/main.js",
+   "find": "command: LIVE_CMD, docker: IN_DOCKER,",
+   "replace": "command: LIVE_CMD, docker: IN_DOCKER, settings: { hooks: { Stop: [{ hooks: [{ type: 'command', command: 'GC_LIVE_URL=x GC_LIVE_TOKEN=' + live.token() + ' node x/live-hook.mjs' }] }] } },",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "chỉ trả token + LỆNH CLI"
+  },
+  {
+   "id": "L20",
+   "guard": "token live không nằm trên dòng lệnh hook",
+   "file": "cli/genchibi",
+   "find": "  cmd=\"GC_LIVE_URL=$(shq \"$URL\") $(shq \"$nb\") $(shq \"$dest\")\"",
+   "replace": "  cmd=\"GC_LIVE_URL=$(shq \"$URL\") GC_LIVE_TOKEN=$tok $(shq \"$nb\") $(shq \"$dest\")\"",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "KHÔNG có token"
+  },
+  {
+   "id": "L21",
+   "guard": "trần tần suất riêng theo token live",
+   "file": "server/live.js",
+   "find": "const w = this.gate(who === 'live' ? this.tokKey : who || 'owner');",
+   "replace": "const w = this.gate(who || 'owner');",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "trần tần suất riêng theo token"
+  },
+  {
+   "id": "L22",
+   "guard": "SSE đóng khi mất quyền",
+   "file": "server/live.js",
+   "find": "try { if (c.alive && !c.alive()) {",
+   "replace": "try { if (false) {",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "SSE đóng khi mất quyền"
+  },
+  {
+   "id": "L23",
+   "guard": "lỗi của node khi ghi settings.json không bị nuốt",
+   "file": "cli/genchibi",
+   "find": "' \"$into\" ) 2>&1)\" || true",
+   "replace": "' \"$into\" ) 2>/dev/null)\" || true",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "không nuốt"
   }
  ]
 }

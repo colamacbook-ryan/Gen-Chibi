@@ -125,7 +125,8 @@ setInterval(() => auth.tick(), 60000).unref();   // phiên hết hạn (cả phi
 function requireOwner(req, res) { return auth.requireOwner(req, res, { send }); }
 const ai = new AI({ dataDir: DATA, secrets, engine });
 const voice = new Voice({ dataDir: DATA, secrets });   // giọng AI (Google Gemini TTS) — dùng chung kho bí mật với AI đạo diễn
-const live = new LiveHub({ dir: DATA, engine, log });
+const LIVE_CMD = 'genchibi live hook --install-into ~/.claude/settings.json';   // Studio chỉ chỉ lệnh CLI (tệp hook đã kiểm + token ghi tệp 0600) — không bao giờ một dòng lệnh do app soạn
+const live = new LiveHub({ dir: DATA, engine, log, pingMs: TESTING ? +process.env.GC_LIVE_PING_MS || 0 : 0 });
 const mcp = new MCP({ engine, store, version: VERSION, system: { updater, restartSoon }, voice, live, uiLang: () => settings().uiLang });   // uiLang: lời thoại mặc định của tác phẩm agent tạo qua MCP (/mcp luôn 'en' ở tầng HTTP) — CNS-151
 // OAuth 2.1 cho MCP từ xa (v0.19): mọi URL dựng từ publicUrl — đọc LÚC CHẠY từ online-config (v0.21: data/online.json; .env GC_PUBLIC_URL kế thừa).
 // Thiếu hoặc không phải gốc (có đường dẫn) thì OAuth tắt, /mcp vẫn 401 như cũ. publicUrl đang bật TẠM thì không gỡ kết nối của địa chỉ cũ (trả về còn dùng)
@@ -498,9 +499,9 @@ async function route(req, res) {
   if (p === '/api/info') { const pub = online.publicUrl(); return send(res, 200, { version: VERSION, repo: REPO, home: HOME, port: PORT, settings: settings(), uiLang: settings().uiLang, lang: langOf(req), auth: auth.view(req), setup: setup.view(), mcp: { http: '/mcp', stdio: 'genchibi mcp', cli: cliPath(), link: pub && MCP_KEY ? pub + '/mcp/' + MCP_KEY : null, oauth: oauth.enabled ? oauth.resource : null } }); }
   // ---- Sân khấu sống (INT-21): S / T (đã qua cổng /api). Token live xử lý trước cổng (chỉ POST /api/live/event)
   if (p === '/api/live/event' && m === 'POST') return liveEvent(req, res, 'owner');
-  if (p === '/api/live/stream' && m === 'GET') { const since = +(req.headers['last-event-id'] || url.searchParams.get('since') || 0); return live.stream(req, res, Number.isFinite(since) ? since : 0); }
-  if (p === '/api/live/info' && m === 'GET') { const u = 'http://127.0.0.1:' + HOST_PORT; return send(res, 200, { url: u, token: live.token(), settings: live.hookSnippet(u), recent: live.recent(0).slice(-50) }); }
-  if (p === '/api/live/token' && m === 'POST') { live.rotate(); log('[live] owner rotated the live token'); return send(res, 200, { token: live.token(), settings: live.hookSnippet('http://127.0.0.1:' + HOST_PORT) }); }
+  if (p === '/api/live/stream' && m === 'GET') { const since = +(req.headers['last-event-id'] || url.searchParams.get('since') || 0); return live.stream(req, res, Number.isFinite(since) ? since : 0, () => !!auth.ownerOf(req)); }
+  if (p === '/api/live/info' && m === 'GET') return send(res, 200, { url: 'http://127.0.0.1:' + HOST_PORT, token: live.token(), command: LIVE_CMD, docker: IN_DOCKER, recent: live.recent(0).slice(-50) });
+  if (p === '/api/live/token' && m === 'POST') { live.rotate(); log('[live] owner rotated the live token'); return send(res, 200, { token: live.token(), command: LIVE_CMD }); }
   if (p === '/api/online' || p.startsWith('/api/online/')) return goOnline.route(req, res, p, m, { send, body, lang: langOf(req) });   // Go online (v0.21): S / T (đã qua cổng /api ở trên) — server/online.js
   if (p === '/api/settings' && m === 'PUT') {
     const b = await body(req);

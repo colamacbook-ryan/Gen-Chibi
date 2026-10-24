@@ -320,7 +320,7 @@ const { classify } = await import(HOOK);
 {
   const PORT = +(process.env.GC_LIVE_TEST_PORT || 7764), HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'gc-live-')); tmp.push(HOME);
   const OWNER = 'owner-live-' + Math.random().toString(36).slice(2) + 'x'.repeat(20), BASE = 'http://127.0.0.1:' + PORT;
-  const srv = spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: Object.assign({}, process.env, { GC_HOME: HOME, GC_PORT: String(PORT), GC_NO_AUTOCHECK: '1', GC_API_TOKEN: OWNER, HOME: HOME }), stdio: ['ignore', 'pipe', 'pipe'] });
+  const srv = spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: Object.assign({}, process.env, { GC_HOME: HOME, GC_PORT: String(PORT), GC_NO_AUTOCHECK: '1', GC_API_TOKEN: OWNER, GC_TEST: '1', GC_LIVE_PING_MS: '300', HOME: HOME }), stdio: ['ignore', 'pipe', 'pipe'] });
   kids.push(srv); let log = ''; srv.stdout.on('data', d => log += d); srv.stderr.on('data', d => log += d);
   for (let i = 0; i < 100; i++) { try { if ((await fetch(BASE + '/api/health')).ok) break; } catch (e) { /* chưa lên */ } await new Promise(r => setTimeout(r, 100)); }
   const J = { 'Content-Type': 'application/json', 'X-GC-Request': '1' };
@@ -328,10 +328,12 @@ const { classify } = await import(HOOK);
   const own = { Authorization: 'Bearer ' + OWNER };
   const info = await (await fetch(BASE + '/api/live/info', { headers: own })).json(), LT = info.token;
   const st = fs.statSync(path.join(HOME, 'data', 'live-token'));
-  ok(/^gcl_[A-Za-z0-9_-]{32,}$/.test(LT) && (st.mode & 0o777) === 0o600 && info.settings.hooks.PreToolUse[0].hooks[0].command.includes(LT) && info.settings.hooks.PreToolUse[0].hooks[0].command.includes('live-hook.mjs') && JSON.stringify(Object.keys(info.settings.hooks)) === JSON.stringify(L.HOOK_EVENTS),
-    'token live: data/live-token 0600 · /api/live/info (chủ) trả token + đoạn settings.json cho ' + L.HOOK_EVENTS.length + ' hook của Claude Code');
+  const infoTxt = JSON.stringify(info), studioSrc = fs.readFileSync(path.join(ROOT, 'studio/live.js'), 'utf8');
+  ok(/^gcl_[A-Za-z0-9_-]{32,}$/.test(LT) && (st.mode & 0o777) === 0o600 && info.command === 'genchibi live hook --install-into ~/.claude/settings.json' && !('settings' in info) && !/GC_LIVE|live-hook\.mjs|"hooks"/.test(infoTxt)
+    && !/v\.settings|v\.command|r\.settings|r\.command/.test(studioSrc) && /var LIVE_CMD = 'genchibi live hook --install-into ~\/\.claude\/settings\.json';/.test(studioSrc),
+    'token live: data/live-token 0600 · /api/live/info (chủ) chỉ trả token + LỆNH CLI — không một dòng lệnh hook nào do app soạn (container bản Docker không được quyết định lệnh chạy trên máy chủ); Studio hiện lệnh là hằng của chính nó', infoTxt.slice(0, 300));
   const sse = await fetch(BASE + '/api/live/stream', { headers: own }), rd = sse.body.getReader(), dec = new TextDecoder(); let got = '';
-  const pump = (async () => { for (;;) { const x = await rd.read().catch(() => ({ done: true })); if (x.done) return; got += dec.decode(x.value); } })();
+  let ownEnded = false; const pump = (async () => { for (;;) { const x = await rd.read().catch(() => ({ done: true })); if (x.done) { ownEnded = true; return; } got += dec.decode(x.value); } })();
   const codes = {};
   codes.none = (await post({ kind: 'read' })).status;
   codes.live = (await post({ kind: 'read', label: 'Reading /etc/shadow with sk-ant-api03-AAAABBBBCCCCDDDDEEEE and ryan@x.io' }, { Authorization: 'Bearer ' + LT })).status;
@@ -370,10 +372,30 @@ const { classify } = await import(HOOK);
   // đổi token: token cũ hết hiệu lực
   const rot = await (await fetch(BASE + '/api/live/token', { method: 'POST', headers: Object.assign({}, J, own) })).json();
   const oldS = (await post({ kind: 'read' }, { Authorization: 'Bearer ' + LT })).status, newS = (await post({ kind: 'edit' }, { Authorization: 'Bearer ' + rot.token })).status;
-  ok(rot.token !== LT && oldS === 401 && (newS === 202 || newS === 429) && fs.readFileSync(path.join(HOME, 'data', 'live-token'), 'utf8').trim() === rot.token, 'đổi token live: token cũ 401, token mới dùng được, tệp ghi token mới');
+  ok(rot.token !== LT && oldS === 401 && newS === 202 && fs.readFileSync(path.join(HOME, 'data', 'live-token'), 'utf8').trim() === rot.token, 'đổi token live: token cũ 401, token mới dùng được, tệp ghi token mới');
   // phát lại phiên mẫu qua đúng đường HTTP (như hooks)
   await new Promise(r => setTimeout(r, 6500));   // bình token của kênh hook hồi đầy (60 / 10 mỗi giây)
-  const rp = spawnSync(process.execPath, [path.join(ROOT, 'tools/live-replay.mjs'), '--speed', '25', '--url', BASE], { env: Object.assign({}, process.env, { GC_LIVE_TOKEN: rot.token, HOME }), encoding: 'utf8', timeout: 30000 });
+  // trần tần suất RIÊNG theo token: token bị lộ dùng cạn bình → đổi token, token mới có bình mới ngay (không bị token cũ làm nghẹt)
+  await Promise.all(Array.from({ length: 90 }, () => post({ kind: 'read' }, { Authorization: 'Bearer ' + rot.token })));
+  const rot2 = await (await fetch(BASE + '/api/live/token', { method: 'POST', headers: Object.assign({}, J, own) })).json();
+  const fresh = await Promise.all(Array.from({ length: 30 }, () => post({ kind: 'read' }, { Authorization: 'Bearer ' + rot2.token })));
+  ok(fresh.every(r => r.status === 202), 'trần tần suất riêng theo token live: token cũ dùng cạn bình (90 lần dồn dập) → đổi token → 30 sự kiện của token mới đều 202', fresh.map(r => r.status).join(','));
+  // SSE đóng khi mất quyền: phiên Studio đăng xuất → luồng của phiên đó đóng trong ≤ 1 nhịp; luồng của token chủ vẫn mở
+  {
+    const PW = 'mat khau live ' + Math.random().toString(36).slice(2);
+    await fetch(BASE + '/api/auth/password', { method: 'POST', headers: Object.assign({}, J, own), body: JSON.stringify({ password: PW }) });
+    await fetch(BASE + '/api/setup/skip', { method: 'POST', headers: Object.assign({}, J, own), body: JSON.stringify({ reason: 'test-live' }) });
+    const lr = await fetch(BASE + '/api/auth/login', { method: 'POST', headers: J, body: JSON.stringify({ username: 'owner', password: PW }) });
+    const cookie = lr.headers.getSetCookie().map(c => c.split(';')[0]).join('; ');
+    const s2 = await fetch(BASE + '/api/live/stream', { headers: { cookie } }), r2 = s2.body.getReader(); let ended = false;
+    const p2 = (async () => { for (;;) { const x = await r2.read().catch(() => ({ done: true })); if (x.done) { ended = true; return; } } })();
+    await new Promise(r => setTimeout(r, 700)); const before = ended;
+    const lo = await fetch(BASE + '/api/auth/logout', { method: 'POST', headers: Object.assign({ cookie }, J) });
+    for (let k = 0; k < 30 && !ended; k++) await new Promise(r => setTimeout(r, 100));
+    ok(lr.status === 200 && s2.status === 200 && !before && lo.ok && ended && !ownEnded, 'SSE đóng khi mất quyền: phiên Studio đăng xuất → luồng của phiên đó đóng ở nhịp kế (≤ 1 s) · luồng của token chủ vẫn mở', 'login ' + lr.status + ' stream ' + s2.status + ' logout ' + lo.status + ' ended ' + ended + ' own ' + ownEnded);
+    try { await r2.cancel(); } catch (e) { /* đã đóng */ } await p2;
+  }
+  const rp = spawnSync(process.execPath, [path.join(ROOT, 'tools/live-replay.mjs'), '--speed', '25', '--url', BASE], { env: Object.assign({}, process.env, { GC_LIVE_TOKEN: rot2.token, HOME }), encoding: 'utf8', timeout: 30000 });
   const nDemo = L.parseJSONL(fs.readFileSync(path.join(ROOT, 'kinds/live/demo-session.jsonl'), 'utf8')).length;
   ok(rp.status === 0 && new RegExp('replayed ' + nDemo + '/' + nDemo).test(rp.stdout) && nDemo >= 40, 'tools/live-replay.mjs: phát lại ' + nDemo + ' sự kiện của phiên mẫu (prompt → đọc / tìm → sửa → test đỏ ×4 → giao việc → test xanh → phát hành → chờ) ×25 qua HTTP', rp.stdout + rp.stderr);
   // phiên mẫu đi hết các khu trên sân khấu
@@ -405,16 +427,23 @@ const { classify } = await import(HOOK);
   const cmds = snip ? Object.values(snip.hooks).flatMap(g => g.flatMap(x => x.hooks.map(h => h.command))) : [];
   const allOut = j.out + pr.out;
   ok(noTok.code !== 0 && badTok.code !== 0 && /live-token/.test(noTok.out) && usage.code === 2, 'genchibi live hook: chưa có token live / token sai dạng (ký tự lạ) → từ chối, chỉ chỗ lấy · lệnh con lạ → 2', noTok.out.slice(0, 200) + ' | ' + badTok.out.slice(0, 200));
-  ok(snip && JSON.stringify(Object.keys(snip.hooks)) === JSON.stringify(L.HOOK_EVENTS) && cmds.length === L.HOOK_EVENTS.length && cmds.every(c => c.split(LT).length === 2 && c.includes(fs.realpathSync(TD) + '/live-hook.mjs') || c.includes(TD + '/live-hook.mjs')) && cmds.every(c => /^GC_LIVE_URL='http:\/\/127\.0\.0\.1:7765' GC_LIVE_TOKEN=gcl_T+ '\/[^']+\/node' '[^']+live-hook\.mjs'$/.test(c)),
-    'genchibi live hook --json: ' + L.HOOK_EVENTS.length + ' hook đúng danh sách của engine · lệnh = URL app + token live (đúng một lần) + node tuyệt đối + bản hook chép ở ~/.local/lib/gen-chibi', j.out.slice(0, 400));
-  ok(![OWN, MK, GH, 'ownerSECRET', 'masterKEY', 'SECRETgithub'].some(x => allOut.includes(x)) && allOut.split(LT).length - 1 === 2 * L.HOOK_EVENTS.length, 'genchibi live hook: không in token chủ / khoá chủ / token GitHub — chỉ token live, đúng chỗ của nó (mỗi lệnh hook một lần)');
+  ok(snip && JSON.stringify(Object.keys(snip.hooks)) === JSON.stringify(L.HOOK_EVENTS) && cmds.length === L.HOOK_EVENTS.length && cmds.every(c => !c.includes('gcl_') && (c.includes(fs.realpathSync(TD) + '/live-hook.mjs') || c.includes(TD + '/live-hook.mjs'))) && cmds.every(c => /^GC_LIVE_URL='http:\/\/127\.0\.0\.1:7765' '\/[^']+\/node' '[^']+live-hook\.mjs'$/.test(c)),
+    'genchibi live hook --json: ' + L.HOOK_EVENTS.length + ' hook đúng danh sách của engine · lệnh = URL app + node tuyệt đối + bản hook chép ở ~/.local/lib/gen-chibi — KHÔNG có token (không lộ qua /proc/*/cmdline)', j.out.slice(0, 400));
+  const tokFile = path.join(TD, 'live-token'), tst = fs.existsSync(tokFile) ? fs.statSync(tokFile) : null;
+  ok(![OWN, MK, GH, 'ownerSECRET', 'masterKEY', 'SECRETgithub', LT].some(x => allOut.includes(x)) && tst && (tst.mode & 0o777) === 0o600 && fs.readFileSync(tokFile, 'utf8').trim() === LT && allOut.includes(tokFile), 'genchibi live hook: không in token chủ / khoá chủ / token GitHub, cả token live — token live ghi ở tệp 0600 cạnh tệp hook (lệnh chỉ nêu đường tệp)');
   ok(st && (st.mode & 0o777) === 0o600 && fs.readFileSync(hookFile, 'utf8') === fs.readFileSync(path.join(ROOT, 'tools/live-hook.mjs'), 'utf8') && !fs.realpathSync(hookFile).startsWith(fs.realpathSync(CH) + '/') && !fs.readdirSync(TD).some(f => /^live-hook\.[A-Za-z0-9]{6}$/.test(f)),
     'bản hook chép ra ngoài thư mục cài (0600, đúng nội dung của gói, không sót tệp tạm) — Claude Code không bao giờ chạy mã trong thư mục cài');
-  // cùng dạng với đoạn Studio (server/live.js) — khác đúng ở lệnh (đường tuyệt đối)
-  const { LiveHub } = require(path.join(ROOT, 'server/live.js')), HD = fs.mkdtempSync(path.join(B, 'hub-')), hub = new LiveHub({ dir: HD, engine: GC });
-  const sv = hub.hookSnippet('http://127.0.0.1:7765'); hub.close();
-  const shape = o => JSON.stringify(o, (k, v) => k === 'command' ? 'CMD' : v);
-  ok(snip && shape(sv) === shape(snip) && sv.hooks.Stop[0].hooks[0].command.includes('$HOME/.local/lib/gen-chibi/live-hook.mjs'), 'đoạn settings.json của Studio = đoạn của genchibi live hook (cùng hook / matcher / timeout; Studio dùng $HOME, CLI in đường tuyệt đối)');
+  // tệp hook chạy THẬT từ chỗ đã chép (không env token): đọc token ở tệp cạnh nó · đường có dấu cách + đi qua symlink (macOS /Users/John Smith) vẫn chạy
+  {
+    const got = []; const fake = http.createServer((req, res) => { let b = ''; req.on('data', c => b += c); req.on('end', () => { got.push({ b, auth: req.headers.authorization }); res.writeHead(202); res.end('{}'); }); });
+    await new Promise(r => fake.listen(0, '127.0.0.1', r));
+    const SP = path.join(B, 'John Smith %20 dir'); fs.mkdirSync(SP); fs.copyFileSync(hookFile, path.join(SP, 'live-hook.mjs')); fs.copyFileSync(tokFile, path.join(SP, 'live-token'));
+    const LNK = path.join(B, 'via-link'); fs.symlinkSync(SP, LNK);
+    const runH = file => new Promise(res => { const c = spawn(process.execPath, [file], { env: { PATH: process.env.PATH, HOME: UH, GC_LIVE_URL: 'http://127.0.0.1:' + fake.address().port }, stdio: ['pipe', 'ignore', 'ignore'] }); kids.push(c); c.on('exit', res); c.stdin.end(JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Read', tool_input: { file_path: '/x' } })); });
+    const c1 = await runH(hookFile), c2 = await runH(path.join(SP, 'live-hook.mjs')), c3 = await runH(path.join(LNK, 'live-hook.mjs'));
+    fake.close();
+    ok(c1 === 0 && c2 === 0 && c3 === 0 && got.length === 3 && got.every(g => g.auth === 'Bearer ' + LT && JSON.parse(g.b).kind === 'read'), 'tệp hook đã chép tự đọc token ở tệp cạnh nó (không env) và gửi được — cả khi đường có dấu cách / "%20" và khi gọi qua symlink (' + got.length + '/3)');
+  }
   // --install-into: tệp mới · ghép giữ khoá + hook người dùng · chạy lại không nhân đôi · sao lưu · từ chối symlink / không phải JSON / mảng / thư mục / trong thư mục cài
   const CC = path.join(UH, '.claude'), SF = path.join(CC, 'settings.json');
   const n1 = cli(['live', 'hook', '--install-into', '~/.claude/settings.json']);
@@ -437,6 +466,15 @@ const { classify } = await import(HOOK);
   const HK = path.join(B, 'hk.json'); fs.writeFileSync(HK, '{"hooks": []}'); const r6 = cli(['live', 'hook', '--install-into', HK]);
   ok([r1, r2, r3, r4, r5, r6].every(r => r.code !== 0) && fs.readFileSync(SF, 'utf8') === keep && fs.lstatSync(LNK).isSymbolicLink() && fs.readFileSync(NJ, 'utf8') === '{ not json' && fs.readFileSync(AR, 'utf8') === '[1,2]' && !fs.existsSync(path.join(CH, 'settings.json')) && fs.readFileSync(HK, 'utf8') === '{"hooks": []}',
     '--install-into từ chối (không đổi gì): symlink · không phải JSON · JSON là mảng · thư mục · nằm trong thư mục cài · hooks không phải object', [r1, r2, r3, r4, r5, r6].map(r => r.code + ':' + r.out.trim().slice(0, 60)).join(' | '));
+  // lỗi của node không bị nuốt: tên tệp dài tới mức tệp tạm vượt giới hạn → báo đúng lý do (ENAMETOOLONG), không ghi gì
+  const LONG = path.join(B, 'x'.repeat(240) + '.json'); const r7 = cli(['live', 'hook', '--install-into', LONG]);
+  ok(r7.code !== 0 && /ENAMETOOLONG/.test(r7.out) && !fs.existsSync(LONG), '--install-into: lỗi của node (vd ENAMETOOLONG) hiện đúng lý do, không nuốt (2>&1, không 2>/dev/null)', r7.out.slice(0, 300));
+  // root (sudo) ghi vào nhà người khác / chỗ người khác ghi được → từ chối, bảo chạy không sudo (không mkdir theo symlink của user, không tệp thuộc root trong nhà user)
+  if (process.getuid && process.getuid() === 0) {
+    const OTHER = path.join(B, 'nha-nguoi-khac'); fs.mkdirSync(OTHER); fs.chmodSync(OTHER, 0o777);
+    const r8 = cli(['live', 'hook', '--install-into', path.join(OTHER, '.claude/settings.json')]);
+    ok(r8.code !== 0 && /without sudo/.test(r8.out) && !fs.existsSync(path.join(OTHER, '.claude')), 'root --install-into vào thư mục người khác ghi được → từ chối ("run … without sudo"), không tạo thư mục nào', r8.out.slice(0, 300));
+  }
   // Docker (TRUST): tệp hook CHỈ lấy từ gói phát hành đã kiểm — trust_fetch giữ tools/live-hook.mjs (test-root.sh chạy luồng thật)
   const CLI = fs.readFileSync(path.join(ROOT, 'cli/genchibi'), 'utf8');
   ok(/cp "\$w\/x\/tools\/live-hook\.mjs" "\$w\/rel\/live-hook\.mjs"/.test(CLI) && /src="\$\{tf:\+\$tf\/live-hook\.mjs\}"/.test(CLI) && /mkdir -p "\$STAGE\/\$NAME\/tools"/.test(fs.readFileSync(path.join(ROOT, 'tools/package.sh'), 'utf8')) && new RegExp('^LIVE_EVENTS="' + L.HOOK_EVENTS.join(' ') + '"$', 'm').test(CLI),

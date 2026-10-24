@@ -217,8 +217,8 @@ genchibi live hook                                          # hoặc chỉ in đ
 ```
 
 Tệp hook là bản chép nằm ngoài thư mục cài (bản Docker lấy từ gói phát hành đã kiểm SHA-256), không bao giờ làm
-Claude Code chờ và chỉ gửi loại việc — không prompt, nội dung tệp, đường dẫn, lệnh hay kết quả. Token live trong đoạn
-cấu hình chỉ gửi được sự kiện Live. Agent khác gọi tool MCP `live_event`. Chi tiết: [docs/LIVE.md](docs/LIVE.md).
+Claude Code chờ và chỉ gửi loại việc — không prompt, nội dung tệp, đường dẫn, lệnh hay kết quả. Token live (nằm trong tệp 0600 cạnh tệp hook, không bao giờ trên dòng lệnh)
+chỉ gửi được sự kiện Live. Agent khác gọi tool MCP `live_event`. Chi tiết: [docs/LIVE.md](docs/LIVE.md).
 
 ## Core AI (LLM API)
 

@@ -307,9 +307,12 @@ check $? "genchibi status (root): đang chạy v0.1.0" "rc $RC: $OUT"
 LT="$(cat "$I/data/live-token" 2>/dev/null)"; rootcli live hook --json; LJ="$OUT"
 [ $RC = 0 ] && [ -f "$TD/rel/v0.1.0/live-hook.mjs" ] && cmp -s "$TD/live-hook.mjs" "$ROOT/tools/live-hook.mjs" && cmp -s "$TD/rel/v0.1.0/live-hook.mjs" "$ROOT/tools/live-hook.mjs" \
   && [ "$(stat -c %a "$TD/live-hook.mjs" 2>/dev/null || stat -f %Lp "$TD/live-hook.mjs")" = 600 ] && [ -O "$TD/live-hook.mjs" ] && [ -n "$LT" ] \
-  && printf '%s' "$LJ" | grep -qF "'$TD/live-hook.mjs'" && printf '%s' "$LJ" | grep -qF "GC_LIVE_TOKEN=$LT " && ! printf '%s' "$LJ" | grep -q "CANARY\|$I/" \
+  && printf '%s' "$LJ" | grep -qF "'$TD/live-hook.mjs'" && [ "$(cat "$TD/live-token" 2>/dev/null)" = "$LT" ] && ! printf '%s' "$LJ" | grep -qF "$LT" && ! printf '%s' "$LJ" | grep -q "CANARY\|$I/" \
   && ! printf '%s' "$LJ" | grep -qF "$(cat "$I/data/owner-token" 2>/dev/null || echo NO-OWNER-TOKEN-FILE)"
-check $? "genchibi live hook (root, Docker): tệp hook lấy từ gói đã kiểm (\$TD/rel/v0.1.0), chép ra \$TD 0600 thuộc root — bản giả container ghi vào releases/ không được dùng; in token live, không in token chủ / đường trong thư mục cài" "rc $RC: $(printf '%s' "$LJ" | head -c 600)"
+check $? "genchibi live hook (root, Docker): tệp hook lấy từ gói đã kiểm (\$TD/rel/v0.1.0), chép ra \$TD 0600 thuộc root — bản giả container ghi vào releases/ không được dùng; token live ở \$TD/live-token (không trên dòng lệnh), không in token chủ / đường trong thư mục cài" "rc $RC: $(printf '%s' "$LJ" | head -c 600)"
+Uo="$W/uother"; mkdir -p "$Uo"; chmod 777 "$Uo"; rootcli live hook --install-into "$Uo/.claude/settings.json"
+[ $RC != 0 ] && printf '%s' "$OUT" | grep -q 'without sudo' && [ ! -e "$Uo/.claude" ]
+check $? "genchibi live hook --install-into (root) vào thư mục người khác / ai cũng ghi được → từ chối, bảo chạy không sudo bằng user đó; không tạo gì" "rc $RC: $OUT"
 if [ -n "$REALROOT" ]; then
   printf 'gcl_ROOTSECRETROOTSECRETROOTSECRET00000\n' > "$H/live-secret"; chmod 600 "$H/live-secret"
   ( cd "$I" && as_container sh -c 'mv data/live-token data/live-token.real && ln -s "$1" data/live-token' sh "$H/live-secret" ); rootcli live hook --json; LJ2="$OUT"; LR2=$RC

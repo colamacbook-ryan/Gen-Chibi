@@ -1,7 +1,8 @@
 // gen-chibi — Sân khấu sống (Agent Live Stage, INT-21): nhận sự kiện của agent → làm sạch → phát qua SSE cho Studio.
 // © 2026 Gen Labs — All rights reserved.
 //   POST /api/live/event   quyền chủ (S / T) HOẶC token live của bản cài (data/live-token, chỉ mở đúng đường này — hooks của Claude Code dùng)
-//   GET  /api/live/stream  SSE (chỉ chủ) · GET /api/live/info (token live + đoạn cấu hình hooks) · POST /api/live/token (đổi token live)
+//   GET  /api/live/stream  SSE (chỉ chủ; quyền kiểm lại mỗi nhịp) · GET /api/live/info (token live + lệnh genchibi live hook) · POST /api/live/token (đổi token)
+//   Studio KHÔNG phát dòng lệnh hook dạng JSON: container (bản Docker) không được quyết định lệnh chạy trên máy chủ — chỉ lệnh CLI đã kiểm (v0.23.1)
 //   MCP: tool live_event (agent không phải Claude Code) → cùng accept()
 // Riêng tư: nhãn đi qua engine/live.js redact() (không đường dẫn / lệnh / bí mật / email / chuỗi dài); server không ghi nhãn vào log, không lưu đĩa.
 'use strict';
@@ -15,12 +16,15 @@ const RATE = { cap: 60, perSec: 10 };          // mỗi kênh: dồn tối đa 6
 function safeEq(a, b) { const x = Buffer.from(String(a)), y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); }
 
 class LiveHub {
-  constructor({ dir, engine, log, now }) {
+  constructor({ dir, engine, log, now, pingMs }) {
     this.dir = dir; this.L = engine.live; this.log = log || (() => {}); this.now = now || Date.now;
     this.file = path.join(dir, 'live-token');
     this.ring = []; this.seq = 0; this.clients = new Set(); this.buckets = new Map();
     this.tok = this.loadToken();
-    this.beat = setInterval(() => this.clients.forEach(c => { try { c.write(': ping\n\n'); } catch (e) { /* đã đóng */ } }), 15000);
+    // nhịp giữ kết nối + KIỂM LẠI QUYỀN: phiên đã đăng xuất / bị thu hồi → đóng luồng (người xem không nghe tiếp sau khi mất quyền)
+    this.beat = setInterval(() => this.clients.forEach(c => {
+      try { if (c.alive && !c.alive()) { this.clients.delete(c); c.res.end(); return; } c.res.write(': ping\n\n'); } catch (e) { this.clients.delete(c); }
+    }), pingMs > 0 ? pingMs : 15000);
     this.beat.unref();
   }
   loadToken() {
@@ -31,7 +35,7 @@ class LiveHub {
     const t = 'gcl_' + crypto.randomBytes(24).toString('base64url');
     fs.writeFileSync(this.file, t + '\n', { mode: 0o600 });
     try { fs.chmodSync(this.file, 0o600); } catch (e) { /* hệ tệp không hỗ trợ */ }
-    this.tok = t;
+    this.tok = t; this.tokKey = 'live:' + crypto.createHash('sha256').update(t).digest('hex').slice(0, 12);   // trần tần suất RIÊNG theo token (đổi token = bình mới)
     return t;
   }
   token() { return this.tok; }
@@ -53,37 +57,30 @@ class LiveHub {
   }
   // sự kiện thô (không tin) → { ev } (đã làm sạch, có id + ts) | { error, code, retry }
   accept(raw, who) {
-    const w = this.gate(who || 'owner');
+    const w = this.gate(who === 'live' ? this.tokKey : who || 'owner');
     if (w) return { error: 'too many live events — slow down', code: 429, retry: w };
     const now = this.now(), c = this.L.cleanEvent(raw, now);
     if (!c.ev) return { error: c.error, code: 400 };
     const ev = Object.assign({ id: ++this.seq, ts: now, via: who === 'live' ? 'hook' : who === 'mcp' ? 'mcp' : 'owner' }, c.ev);
     this.ring.push(ev); if (this.ring.length > RING) this.ring.shift();
     const frame = 'id: ' + ev.id + '\nevent: live\ndata: ' + JSON.stringify(ev) + '\n\n';
-    this.clients.forEach(res => { try { res.write(frame); } catch (e) { /* đã đóng */ } });
+    this.clients.forEach(c => { try { c.res.write(frame); } catch (e) { /* đã đóng */ } });
     return { ev };
   }
   recent(since) { return this.ring.filter(e => e.id > (since || 0)); }
   // SSE: gửi bù sự kiện sau since (Last-Event-ID / ?since=), rồi phát tiếp. Tối đa 8 người xem cùng lúc
-  stream(req, res, since) {
+  // alive(): quyền của người xem còn không (main.js: auth.ownerOf(req)) — kiểm ở mỗi nhịp
+  stream(req, res, since, alive) {
     if (this.clients.size >= CLIENTS_MAX) { res.writeHead(429, { 'Content-Type': 'application/json; charset=utf-8', 'Retry-After': '5' }); return res.end(JSON.stringify({ error: 'too many live viewers (max ' + CLIENTS_MAX + ')' })); }
     res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no', 'X-Content-Type-Options': 'nosniff', Connection: 'keep-alive' });
     res.write('retry: 2000\n\n');
     this.recent(since).forEach(ev => res.write('id: ' + ev.id + '\nevent: live\ndata: ' + JSON.stringify(ev) + '\n\n'));
-    this.clients.add(res);
-    const done = () => this.clients.delete(res);
+    const c = { res, alive };
+    this.clients.add(c);
+    const done = () => this.clients.delete(c);
     req.on('close', done); res.on('close', done); res.on('error', done);
   }
-  // đoạn cấu hình cho ~/.claude/settings.json — CÙNG dạng với `genchibi live hook` (cli/genchibi live_cmd; test-live so hai bên): app KHÔNG ghi vào ~/.claude.
-  // Tệp hook chạy trên máy chủ, ở bản chép của genchibi ($HOME/.local/lib/gen-chibi/live-hook.mjs — shell của hook tự mở $HOME); lệnh CLI in đường tuyệt đối
-  hookSnippet(url) {
-    const q = x => "'" + String(x).replace(/'/g, "'\\''") + "'";   // trích dẫn shell
-    const cmd = 'GC_LIVE_URL=' + q(url) + ' GC_LIVE_TOKEN=' + this.tok + ' node "$HOME/.local/lib/gen-chibi/live-hook.mjs"';
-    const hooks = {};
-    this.L.HOOK_EVENTS.forEach(e => { const g = { hooks: [{ type: 'command', command: cmd, timeout: 2 }] }; hooks[e] = [/^(Pre|Post)ToolUse/.test(e) ? Object.assign({ matcher: '*' }, g) : g]; });
-    return { hooks };
-  }
-  close() { clearInterval(this.beat); this.clients.forEach(r => { try { r.end(); } catch (e) { /* bỏ qua */ } }); this.clients.clear(); }
+  close() { clearInterval(this.beat); this.clients.forEach(c => { try { c.res.end(); } catch (e) { /* bỏ qua */ } }); this.clients.clear(); }
 }
 
 module.exports = { LiveHub, RATE, CLIENTS_MAX };

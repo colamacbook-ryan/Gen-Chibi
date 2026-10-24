@@ -138,20 +138,19 @@
     right.appendChild(conn);
     if (B.mode !== 'server') conn.appendChild(h('div', { class: 'pad note', text: _t('Kết nối agent chỉ có ở bản cài trên máy. Bản xem thử vẫn phát lại được phiên mẫu.') }));
     else B.api('GET', 'api/live/info').then(renderConn).catch(function (e) { conn.appendChild(h('div', { class: 'pad note', text: e.message })); });
+    // CHỈ lệnh CLI (hằng của Studio, không lấy từ server): app / container không được soạn dòng lệnh sẽ chạy trên máy chủ (v0.23.1) — CLI dùng tệp hook đã kiểm
+    var LIVE_CMD = 'genchibi live hook --install-into ~/.claude/settings.json';
     function renderConn(v) {
       while (conn.childNodes.length > 1) conn.removeChild(conn.lastChild);
       var shown = false, tok = h('code', { class: 'mono', id: 'liveToken', text: v.token.slice(0, 8) + '…' });
-      var snippet = JSON.stringify(v.settings, null, 2);
-      var pre = h('pre', { class: 'mono', id: 'liveSnippet', style: 'max-height:180px;overflow:auto;font-size:11px;background:var(--sunken);padding:8px;border-radius:4px;white-space:pre-wrap;word-break:break-all', text: snippet });
       conn.appendChild(h('div', { class: 'pad stack' },
         h('div', { class: 'note', text: _t('Trên máy chạy Claude Code, chạy lệnh dưới: genchibi chép tệp hook đã kiểm ra ngoài thư mục cài rồi ghép hooks vào cấu hình của Claude Code (có sao lưu). gen-chibi không tự sửa cấu hình nào khi bạn chưa chạy lệnh.') }),
-        h('pre', { class: 'mono', id: 'liveCmd', style: 'font-size:12px;background:var(--sunken);padding:8px;border-radius:4px;white-space:pre-wrap', text: 'genchibi live hook --install-into ~/.claude/settings.json' }),
-        h('div', { class: 'note', text: _t('Hoặc dán tay đoạn dưới (genchibi live hook in đúng đường tuyệt đối của máy bạn). Token live chỉ gửi được sự kiện Live — không đọc được gì.') }),
+        h('pre', { class: 'mono', id: 'liveCmd', style: 'font-size:12px;background:var(--sunken);padding:8px;border-radius:4px;white-space:pre-wrap', text: LIVE_CMD }),
+        h('div', { class: 'row' }, h('button', { class: 'btn sm', type: 'button', id: 'liveCopy', onclick: function () { (navigator.clipboard ? navigator.clipboard.writeText(LIVE_CMD) : Promise.reject(new Error('clipboard'))).then(function () { toast(_t('Đã chép')); }, function () { toast(_t('Không chép được — chọn chữ rồi chép tay.')); }); } }, _t('Chép lệnh'))),
+        h('div', { class: 'note', text: _t('Chỉ in đoạn cấu hình để tự dán: genchibi live hook. Token live chỉ gửi được sự kiện Live — không đọc được gì; đổi token thì chạy lại lệnh.') }),
         h('div', { class: 'row' }, h('span', { class: 'note', text: _t('Token live') }), tok,
           h('button', { class: 'btn sm', type: 'button', onclick: function () { shown = !shown; tok.textContent = shown ? v.token : v.token.slice(0, 8) + '…'; } }, _t('Hiện / ẩn')),
-          h('button', { class: 'btn sm', type: 'button', id: 'liveRotate', onclick: function () { B.api('POST', 'api/live/token', {}).then(function (r) { renderConn({ token: r.token, settings: r.settings }); toast(_t('Đã đổi token live — dán lại đoạn cấu hình mới.')); }).catch(function (e) { toast(e.message); }); } }, _t('Đổi token'))),
-        pre,
-        h('div', { class: 'row' }, h('button', { class: 'btn sm', type: 'button', id: 'liveCopy', onclick: function () { (navigator.clipboard ? navigator.clipboard.writeText(snippet) : Promise.reject(new Error('clipboard'))).then(function () { toast(_t('Đã chép')); }, function () { toast(_t('Không chép được — chọn chữ rồi chép tay.')); }); } }, _t('Chép đoạn cấu hình'))),
+          h('button', { class: 'btn sm', type: 'button', id: 'liveRotate', onclick: function () { B.api('POST', 'api/live/token', {}).then(function (r) { renderConn({ token: r.token }); toast(_t('Đã đổi token live — chạy lại lệnh genchibi live hook.')); }).catch(function (e) { toast(e.message); }); } }, _t('Đổi token'))),
         h('div', { class: 'note', text: _t('Agent khác (không phải Claude Code): gọi tool MCP live_event ở mỗi bước.') })));
     }
 

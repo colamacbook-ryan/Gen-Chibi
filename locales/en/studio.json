@@ -2124,15 +2124,14 @@
  "Kết nối agent chỉ có ở bản cài trên máy. Bản xem thử vẫn phát lại được phiên mẫu.": "Connecting an agent needs the installed app. The preview can still replay the demo session.",
  "Token live": "Live token",
  "Hiện / ẩn": "Show / hide",
- "Đã đổi token live — dán lại đoạn cấu hình mới.": "Live token rotated — paste the new settings snippet.",
  "Đổi token": "Rotate token",
  "Đã chép": "Copied",
  "Không chép được — chọn chữ rồi chép tay.": "Could not copy — select the text and copy it by hand.",
- "Chép đoạn cấu hình": "Copy settings snippet",
  "Agent khác (không phải Claude Code): gọi tool MCP live_event ở mỗi bước.": "Other agents (not Claude Code): call the MCP tool live_event at each step.",
  "Đang nghe": "Listening",
  "Mất kết nối — thử lại…": "Disconnected — retrying…",
  "Phát lại {n} sự kiện mẫu": "Replaying {n} demo events",
  "Trên máy chạy Claude Code, chạy lệnh dưới: genchibi chép tệp hook đã kiểm ra ngoài thư mục cài rồi ghép hooks vào cấu hình của Claude Code (có sao lưu). gen-chibi không tự sửa cấu hình nào khi bạn chưa chạy lệnh.": "On the machine where Claude Code runs, run the command below: genchibi copies the verified hook script out of the install folder and merges the hooks into Claude Code's settings (with a backup). gen-chibi never edits any settings until you run it.",
- "Hoặc dán tay đoạn dưới (genchibi live hook in đúng đường tuyệt đối của máy bạn). Token live chỉ gửi được sự kiện Live — không đọc được gì.": "Or paste the snippet below by hand (genchibi live hook prints the exact absolute paths for your machine). The live token can only send Live events — it cannot read anything."
+ "Chỉ in đoạn cấu hình để tự dán: genchibi live hook. Token live chỉ gửi được sự kiện Live — không đọc được gì; đổi token thì chạy lại lệnh.": "To only print the snippet and paste it yourself: genchibi live hook. The live token can only send Live events — it cannot read anything; after rotating it, run the command again.",
+ "Đã đổi token live — chạy lại lệnh genchibi live hook.": "Live token rotated — run genchibi live hook again."
 }

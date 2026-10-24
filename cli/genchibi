@@ -310,7 +310,7 @@ _en() {
     live_nonode) F="! Node.js is not in PATH on this machine: Claude Code hooks run the script with node — install Node 18+ where Claude Code runs." ;;
     live_root) F="! You ran this as root: the hook script is in %s, which only root can read — if Claude Code runs as another user, run genchibi live hook as that user." ;;
     live_head) F="Claude Code → gen-chibi Live stage. Paste into ~/.claude/settings.json (or a project's .claude/settings.local.json), or let genchibi merge it: genchibi live hook --install-into ~/.claude/settings.json" ;;
-    live_foot) F="Hook script: %s (a copy kept outside the install folder; Docker installs take it from the SHA-256-verified release) · app: %s · the live token above can only send Live events (rotate: Studio › System › Live stage)." ;;
+    live_foot) F="Hook script: %s (a copy kept outside the install folder; Docker installs take it from the SHA-256-verified release) · app: %s · live token: %s (0600, read by the hook, never on its command line; it can only send Live events — after rotating it in the Studio, run this again)." ;;
     live_in_bad) F="Not writing %s: %s" ;;
     live_in_ok) F="✓ Live hooks merged into %s (backup: %s). Restart Claude Code to load them." ;;
     live_in_new) F="✓ Live hooks written to %s. Restart Claude Code to load them." ;;
@@ -621,7 +621,7 @@ _vi() {
     live_nonode) F="! Máy này không có Node.js trong PATH: hooks của Claude Code chạy tệp bằng node — cài Node 18+ ở máy chạy Claude Code." ;;
     live_root) F="! Bạn chạy bằng root: tệp hook nằm trong %s, chỉ root đọc được — nếu Claude Code chạy bằng user khác, chạy genchibi live hook bằng user đó." ;;
     live_head) F="Claude Code → Sân khấu Live của gen-chibi. Dán vào ~/.claude/settings.json (hoặc .claude/settings.local.json của dự án), hoặc để genchibi tự ghép: genchibi live hook --install-into ~/.claude/settings.json" ;;
-    live_foot) F="Tệp hook: %s (bản chép nằm ngoài thư mục cài; bản Docker lấy từ gói phát hành đã kiểm SHA-256) · app: %s · token live ở trên chỉ gửi được sự kiện Live (đổi: Studio › Hệ thống › Sân khấu Live)." ;;
+    live_foot) F="Tệp hook: %s (bản chép nằm ngoài thư mục cài; bản Docker lấy từ gói phát hành đã kiểm SHA-256) · app: %s · token live: %s (0600, hook tự đọc, không nằm trên dòng lệnh; chỉ gửi được sự kiện Live — đổi token ở Studio thì chạy lại lệnh này)." ;;
     live_in_bad) F="Không ghi %s: %s" ;;
     live_in_ok) F="✓ Đã ghép hooks Live vào %s (bản sao lưu: %s). Khởi động lại Claude Code để nạp." ;;
     live_in_new) F="✓ Đã ghi hooks Live vào %s. Khởi động lại Claude Code để nạp." ;;
@@ -2762,11 +2762,14 @@ live_cmd() {
   case "$tok" in gcl_*) ;; *) tok="" ;; esac
   case "$tok" in *[!A-Za-z0-9_-]*) tok="" ;; esac
   [ "${#tok}" -ge 36 ] || { m live_notoken "$HOME_DIR" >&2; return 1; }
+  # token live → tệp 0600 CẠNH tệp hook (hook tự đọc): không nằm trong lệnh → không lộ qua /proc/*/cmdline của shell chạy hook
+  tmp="$(mktemp "$TD/live-token.XXXXXX")" || { m td_unsafe "$TD" >&2; return 1; }
+  printf '%s\n' "$tok" > "$tmp" && chmod 600 "$tmp" && mv -f -- "$tmp" "$TD/live-token"
   # 3) lệnh hook: node TUYỆT ĐỐI (ứng dụng mở từ Dock / menu không thấy PATH của terminal) + tệp đã chép + địa chỉ app trên máy này
   local nb; nb="$(command -v node 2>/dev/null)" || nb=""
   [ -n "$nb" ] || { m live_nonode >&2; nb=node; }
   local cmd jcmd ev js="" sep=""
-  cmd="GC_LIVE_URL=$(shq "$URL") GC_LIVE_TOKEN=$tok $(shq "$nb") $(shq "$dest")"; jcmd="$(cfg_esc "$cmd")"
+  cmd="GC_LIVE_URL=$(shq "$URL") $(shq "$nb") $(shq "$dest")"; jcmd="$(cfg_esc "$cmd")"
   for ev in $LIVE_EVENTS; do
     case "$ev" in PreToolUse|PostToolUse|PostToolUseFailure) js="$js$sep"'    "'"$ev"'": [{ "matcher": "*", "hooks": [{ "type": "command", "command": "'"$jcmd"'", "timeout": 2 }] }]' ;;
       *) js="$js$sep"'    "'"$ev"'": [{ "hooks": [{ "type": "command", "command": "'"$jcmd"'", "timeout": 2 }] }]' ;; esac
@@ -2776,43 +2779,49 @@ live_cmd() {
   [ -z "$IS_ROOT" ] || m live_root "$TD" >&2
   case "$mode" in
     json) printf '%s\n' "$js"; return 0 ;;
-    print) m live_head; printf '\n%s\n\n' "$js"; m live_foot "$dest" "$URL"; return 0 ;;
+    print) m live_head; printf '\n%s\n\n' "$js"; m live_foot "$dest" "$URL" "$TD/live-token"; return 0 ;;
   esac
   # 4) --install-into: ghép vào settings.json của Claude Code (cần node — chính hook cũng cần)
   [ "$nb" != node ] || { m live_in_bad "$into" "node" >&2; return 1; }
   case "$into" in /*) ;; "~/"*) into="$HOME/${into#\~/}" ;; *) into="$ORIG_PWD/$into" ;; esac
-  local dp; dp="$(dirname "$into")"
+  local dp anc; dp="$(dirname "$into")"; anc="$dp"
+  while [ ! -e "$anc" ] && [ ! -L "$anc" ]; do anc="$(dirname "$anc")"; done
+  # root (sudo): chỉ ghi vào chỗ của CHÍNH root (mọi thư mục trên đường thuộc root / không ai khác ghi được, không symlink) — nhà của user khác:
+  # tệp sẽ thuộc root và hook trỏ vào /root/.local (user không chạy được), lại mở đường tráo symlink → từ chối, bảo chạy không sudo bằng user đó
+  if [ -n "$IS_ROOT" ] && ! path_safe "$anc"; then m live_in_bad "$into" "not root's own folder — run genchibi live hook without sudo, as the user who runs Claude Code" >&2; return 1; fi
   [ -d "$dp" ] || ( umask 077; mkdir -p "$dp" ) || { m live_in_bad "$into" "folder" >&2; return 1; }
   dp="$(cd -P "$dp" && pwd)"
   case "$dp/" in "$HOME_PHYS"/*) m live_in_bad "$into" "inside the install folder" >&2; return 1 ;; esac
   if [ -L "$into" ]; then m live_in_bad "$into" "symlink" >&2; return 1; fi
   if [ -e "$into" ] && [ ! -f "$into" ]; then m live_in_bad "$into" "not a regular file" >&2; return 1; fi
+  # một lần mở O_NOFOLLOW → fstat → đọc từ chính fd; sao lưu ghi từ bộ đệm (wx, quyền gốc); tệp mới ghi tạm (wx) rồi rename — không đọc / chép qua đường dẫn lần hai
   local res; res="$(printf '%s' "$js" | ( cd / && "$nb" -e '
-const fs = require("fs"), path = require("path"), file = process.argv[1], add = JSON.parse(require("fs").readFileSync(0, "utf8")).hooks;
+const fs = require("fs"), path = require("path"), C = fs.constants, file = process.argv[1], add = JSON.parse(fs.readFileSync(0, "utf8")).hooks;
 const out = m => { process.stdout.write(m); process.exit(m.startsWith("ok") ? 0 : 3); };
-let cur = {}, had = false, st = null;
-try { st = fs.lstatSync(file); } catch (e) { if (e.code !== "ENOENT") out("bad read"); }
-if (st) { if (st.isSymbolicLink() || !st.isFile()) out("bad symlink"); had = true; const raw = fs.readFileSync(file, "utf8");
+let cur = {}, had = false, mode = 0o600, buf = null, fd = -1;
+try { fd = fs.openSync(file, C.O_RDONLY | C.O_NOFOLLOW | (C.O_NONBLOCK || 0)); } catch (e) { if (e.code === "ELOOP") out("bad symlink"); if (e.code !== "ENOENT") out("bad " + e.code); }
+if (fd >= 0) { const st = fs.fstatSync(fd); if (!st.isFile()) out("bad not a regular file"); had = true; mode = st.mode & 0o777; buf = fs.readFileSync(fd); fs.closeSync(fd);
+  const raw = buf.toString("utf8");
   if (raw.trim()) { try { cur = JSON.parse(raw); } catch (e) { out("bad not JSON"); } }
   if (!cur || typeof cur !== "object" || Array.isArray(cur)) out("bad not a JSON object");
   if (cur.hooks !== undefined && (!cur.hooks || typeof cur.hooks !== "object" || Array.isArray(cur.hooks))) out("bad hooks is not an object"); }
-const mine = h => h && typeof h.command === "string" && /live-hook\.mjs/.test(h.command) && /GC_LIVE_TOKEN=/.test(h.command);
+const mine = h => h && typeof h.command === "string" && /live-hook\.mjs/.test(h.command) && /GC_LIVE_(URL|TOKEN)=/.test(h.command);
 const hooks = Object.assign({}, cur.hooks || {});
 Object.keys(hooks).forEach(ev => { if (!Array.isArray(hooks[ev])) return; hooks[ev] = hooks[ev].map(g => g && Array.isArray(g.hooks) ? Object.assign({}, g, { hooks: g.hooks.filter(h => !mine(h)) }) : g).filter(g => !(g && Array.isArray(g.hooks) && !g.hooks.length)); if (!hooks[ev].length) delete hooks[ev]; });
 Object.keys(add).forEach(ev => { hooks[ev] = (Array.isArray(hooks[ev]) ? hooks[ev] : []).concat(add[ev]); });
 const next = JSON.stringify(Object.assign({}, cur, { hooks }), null, 2) + "\n", dir = path.dirname(file), base = path.basename(file);
 let bak = "";
-if (had) { const t = new Date().toISOString().replace(/[:.]/g, "-"); bak = path.join(dir, base + ".bak-" + t); fs.copyFileSync(file, bak, fs.constants.COPYFILE_EXCL); fs.chmodSync(bak, st.mode & 0o777); }
+if (had) { bak = path.join(dir, base + ".bak-" + new Date().toISOString().replace(/[:.]/g, "-")); fs.writeFileSync(bak, buf, { flag: "wx", mode }); fs.chmodSync(bak, mode); }
 const tmp = path.join(dir, "." + base + ".gc-" + process.pid + "-" + Date.now());
-const fd = fs.openSync(tmp, "wx", had ? st.mode & 0o777 : 0o600); fs.writeSync(fd, next); fs.fsyncSync(fd); fs.closeSync(fd);
-try { const s2 = fs.lstatSync(file); if (s2.isSymbolicLink()) { fs.unlinkSync(tmp); out("bad symlink"); } } catch (e) { /* vẫn chưa có tệp */ }
+const wfd = fs.openSync(tmp, "wx", mode); fs.writeSync(wfd, next); fs.fchmodSync(wfd, mode); fs.fsyncSync(wfd); fs.closeSync(wfd);
 fs.renameSync(tmp, file);
 out("ok " + bak);
-' "$into" ) 2>/dev/null)" || true
+' "$into" ) 2>&1)" || true
   case "$res" in
     "ok ") m live_in_new "$into" ;;
     ok\ *) m live_in_ok "$into" "${res#ok }" ;;
-    *) m live_in_bad "$into" "${res#bad }" >&2; return 1 ;;
+    bad\ *) m live_in_bad "$into" "${res#bad }" >&2; return 1 ;;
+    *) m live_in_bad "$into" "$(printf '%s' "$res" | grep -m1 -E 'Error|E[A-Z]+:' || printf '%s' "$res" | tail -n 1)" >&2; return 1 ;;   # lỗi của node: nói lý do, không nuốt
   esac
 }
 

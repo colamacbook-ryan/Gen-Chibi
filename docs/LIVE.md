@@ -57,10 +57,16 @@ genchibi live hook                                          # print the snippet 
 - `--install-into` refuses symlinks, folders, files that are not a JSON object, a `hooks` that is not an object and
   any path inside the install folder; it keeps your keys and your own hooks, and running it again replaces the Live
   hooks instead of adding them twice. Without `--install-into` nothing is written.
-- The printed snippet contains the live token and nothing else secret (no owner token, no keys). After rotating the
-  token in the Studio, run the command again.
+- The snippet contains no secret: the live token is written to `~/.local/lib/gen-chibi/live-token` (0600) next to the
+  hook script, which reads it — it never appears on a command line (`/proc/*/cmdline`). After rotating the token in the
+  Studio, run the command again. The live token has its own rate-limit bucket (a rotated token starts fresh).
+- Run as root (sudo), `--install-into` only writes into root's own folders; for another user's home it refuses and
+  asks you to run it without sudo as that user. The file is opened once with `O_NOFOLLOW`, the backup is written from
+  that same read, and the new file is written to a temporary file and renamed. Node errors are shown, not hidden.
 
-The Studio panel shows the same snippet (with `$HOME/.local/lib/gen-chibi/live-hook.mjs`, expanded by the hook's shell).
+The Studio panel shows **only the CLI command** (a constant of the Studio page, not something the server sends): an
+app running in a container must never decide a command line that runs on the host.
+The live SSE stream re-checks the viewer's access every ping; logging out closes it.
 
 The adapter never blocks the agent: stdin read ≤ 250 ms, POST ≤ 300 ms, always exits 0, prints nothing on stdout
 (`GC_LIVE_DEBUG=1` → reasons on stderr). Hook payload shapes were checked against **Claude Code 2.1.310** with a real
