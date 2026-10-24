@@ -230,7 +230,8 @@ claps a clapperboard, puts its props away, changes its hat badge and walks to th
 
 **Invitation (v0.24.1):** an agent connected over MCP can call `live_setup` to get a plan and one command that puts
 the Live stage on its own machine. Golden rule: it must **ask its user first** and never run it silently. The command
-downloads the hook from this version's official GitHub release and checks its SHA-256 before writing anything; the app
+downloads the hook from this version's official GitHub release and checks its SHA-256 before writing anything — and it
+may download only from exactly `https://github.com/colamacbook-ryan/Gen-Chibi/releases/download/v<version>/` (any other URL: refuse and tell your user); the app
 only supplies a per-agent live token (listed in the Live page, with Revoke) and its address.
 
 ## Core AI (LLM API)

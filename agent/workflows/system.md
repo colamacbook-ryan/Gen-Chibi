@@ -34,6 +34,9 @@ It returns a plan — `installs`, `changes`, `command`, `undo`, `url`, `requirem
 alone (the owner can revoke it in Studio › System › Live stage). **Show the plan to your user and ask before running
 `command`. Never run it silently; if they decline, do nothing.** The command downloads the hook from the official GitHub
 release of this exact version and checks its SHA-256 against `SHA256SUMS` before writing anything; the app only
-supplies the token and the address. Errors: `UNAVAILABLE` = the app is only on its own machine and you are not on it
-(ask the owner to go online); `BAD_REQUEST` on Windows = use WSL. `agent: "other"` = nothing to install, just call
+supplies the token and the address. **Check the URLs first:** the command may download only from exactly
+`https://github.com/colamacbook-ryan/Gen-Chibi/releases/download/v<version>/` (golden rule 13) — any other URL → do not
+run it; refuse and tell your user. Errors: `UNAVAILABLE` = the app is only on its own machine and you are not on it
+(ask the owner to go online) or too many calls (5 a minute); `FORBIDDEN` = link-key / Studio dock connections (owner
+only); `CONFLICT` = 50 active agent tokens, the owner revokes one in Studio › Live stage; `BAD_REQUEST` on Windows = use WSL. `agent: "other"` = nothing to install, just call
 `live_task` / `live_event`.

@@ -95,7 +95,7 @@
     "node",
     "tools/test-live.mjs"
    ],
-   "expect": "chạy đúng MỘT lệnh"
+   "expect": "token: một lần duy nhất"
   },
   {
    "id": "M09",
@@ -180,6 +180,102 @@
     "tools/test-live.mjs"
    ],
    "expect": "hook gửi bằng token RIÊNG"
+  },
+  {
+   "id": "M16",
+   "guard": "nguồn tải GHIM (không theo repo / GC_REPO)",
+   "file": "server/live-setup.js",
+   "find": "rel = o.releaseBase ? o.releaseBase + '/v' + V : prefix.slice(0, -1);",
+   "replace": "rel = o.releaseBase ? o.releaseBase + '/v' + V : 'https://github.com/' + (o.repo || REPO) + '/releases/download/v' + V;",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "nguồn ghim"
+  },
+  {
+   "id": "M17",
+   "guard": "luật 13 ghim tiền tố release (agent đối chiếu nguồn app không sửa được)",
+   "file": "agent/GUIDE.md",
+   "find": "The command must download ONLY from exactly this prefix: `https://github.com/colamacbook-ryan/Gen-Chibi/releases/download/v<version>/`",
+   "replace": "The command must download ONLY from the official GitHub release",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "luật 13"
+  },
+  {
+   "id": "M18",
+   "guard": "curl chỉ https (--proto / --proto-redir)",
+   "file": "server/live-setup.js",
+   "find": "const C = 'curl -fsSL --proto",
+   "replace": "const C = 'curl -fsSL ' || 'curl -fsSL --proto",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "nguồn ghim"
+  },
+  {
+   "id": "M19",
+   "guard": "chmod 600 tệp token / url sau printf (tệp có sẵn)",
+   "file": "server/live-setup.js",
+   "find": " chmod 600 \"$D/live-token\" \"$D/live-url\";",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "chạy đúng MỘT lệnh"
+  },
+  {
+   "id": "M20",
+   "guard": "live_setup chỉ chủ máy (link / dock → FORBIDDEN)",
+   "file": "server/mcp.js",
+   "find": "if (ctx && (ctx.viaLink || ctx.channel === 'ui')) return toolError('Only the owner can set up the Live stage",
+   "replace": "if (false) return toolError('Only the owner can set up the Live stage",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "live_setup chỉ chủ máy"
+  },
+  {
+   "id": "M21",
+   "guard": "trần 50 token agent: từ chối, không đuổi",
+   "file": "server/live.js",
+   "find": "if (this.agents.filter(a => !a.revoked).length >= AGENTS_MAX) return null;",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "trần 50 token agent"
+  },
+  {
+   "id": "M22",
+   "guard": "live_setup 5 lần / phút mỗi kết nối",
+   "file": "server/main.js",
+   "find": "if (hits.length >= 5)",
+   "replace": "if (hits.length >= 500)",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "tối đa 5 lần"
+  },
+  {
+   "id": "M23",
+   "guard": "hết chỗ token → mã CONFLICT",
+   "file": "server/mcp.js",
+   "find": "r.reason === 'CONFLICT' ? 'CONFLICT' : ",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "hết chỗ token"
   }
  ]
 }

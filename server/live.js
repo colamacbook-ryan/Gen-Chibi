@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const RING = 300, CLIENTS_MAX = 8;
+const RING = 300, CLIENTS_MAX = 8, AGENTS_MAX = 50;
 const RATE = { cap: 60, perSec: 10 };          // mỗi kênh: dồn tối đa 60 sự kiện, hồi 10 / giây (Claude Code đọc 20 tệp trong 2 s vẫn lọt)
 
 function sha(t) { return crypto.createHash('sha256').update(String(t)).digest('hex'); }
@@ -38,11 +38,13 @@ class LiveHub {
   // ---- token RIÊNG cho từng agent (live_setup): chỉ lưu băm SHA-256; liệt kê / thu hồi ở Studio › Sân khấu Live; mỗi token một bình tần suất
   loadAgents() { try { const j = JSON.parse(fs.readFileSync(this.agentsFile, 'utf8')); return Array.isArray(j) ? j.filter(a => a && /^[a-f0-9]{16}$/.test(a.id) && /^[a-f0-9]{64}$/.test(a.hash)) : []; } catch (e) { return []; } }
   saveAgents() { const tmp = this.agentsFile + '.tmp-' + process.pid; fs.writeFileSync(tmp, JSON.stringify(this.agents, null, 1), { mode: 0o600 }); fs.renameSync(tmp, this.agentsFile); }
+  // trần 50 token đang dùng: đầy thì TỪ CHỐI (null) — không tự đuổi token của agent khác; sổ token đã thu hồi giữ 50 mục cuối
   createAgent(name) {
+    if (this.agents.filter(a => !a.revoked).length >= AGENTS_MAX) return null;
     const t = 'gcl_' + crypto.randomBytes(32).toString('base64url'), id = crypto.randomBytes(8).toString('hex');
     const nm = String(name || 'agent').replace(/[^\p{L}\p{N} ._-]/gu, '').trim().slice(0, 40) || 'agent';
     this.agents.push({ id, name: nm, hash: sha(t), created: new Date(this.now()).toISOString(), last: null, revoked: false });
-    this.agents = this.agents.filter(a => !a.revoked).slice(-50).concat(this.agents.filter(a => a.revoked).slice(-50));   // trần 50 đang dùng + 50 đã thu hồi (sổ)
+    this.agents = this.agents.filter(a => !a.revoked).concat(this.agents.filter(a => a.revoked).slice(-AGENTS_MAX));
     this.saveAgents();
     return { id, token: t, name: nm };
   }
@@ -115,4 +117,4 @@ class LiveHub {
   close() { clearInterval(this.beat); if (this.flushT) { clearTimeout(this.flushT); this.flushT = null; try { this.saveAgents(); } catch (e) { /* bỏ qua */ } } this.clients.forEach(c => { try { c.res.end(); } catch (e) { /* bỏ qua */ } }); this.clients.clear(); }
 }
 
-module.exports = { LiveHub, RATE, CLIENTS_MAX };
+module.exports = { LiveHub, RATE, CLIENTS_MAX, AGENTS_MAX };

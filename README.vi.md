@@ -227,7 +227,8 @@ một việc khác việc đang làm, nó gọi `live_task` trước (`code`, `d
 
 **Lời mời (v0.24.1):** agent nối qua MCP gọi được `live_setup` để nhận kế hoạch và MỘT lệnh dựng Sân khấu Live trên máy
 của nó. Luật vàng: agent phải **hỏi người dùng trước**, không bao giờ chạy lén. Lệnh tải tệp hook từ bản phát hành GitHub
-chính thức của đúng phiên bản này và kiểm SHA-256 trước khi ghi; app chỉ cấp token live riêng cho agent đó (liệt kê ở
+chính thức của đúng phiên bản này và kiểm SHA-256 trước khi ghi — và chỉ được tải từ đúng tiền tố
+`https://github.com/colamacbook-ryan/Gen-Chibi/releases/download/v<version>/` (URL khác: từ chối và báo người dùng); app chỉ cấp token live riêng cho agent đó (liệt kê ở
 trang Live, có nút Thu hồi) và địa chỉ của app.
 
 ## Core AI (LLM API)

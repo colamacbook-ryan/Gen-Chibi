@@ -129,12 +129,18 @@ const LIVE_CMD = 'genchibi live hook --install-into ~/.claude/settings.json';   
 const live = new LiveHub({ dir: DATA, engine, log, pingMs: TESTING ? +process.env.GC_LIVE_PING_MS || 0 : 0 });
 // live_setup (INT-21 g): kế hoạch cố định + token riêng của agent; địa chỉ = publicUrl (đang online) hoặc 127.0.0.1 khi agent gọi từ CHÍNH máy này
 const LiveSetup = require('./live-setup');
+const setupHits = new Map();
 function liveSetup(args, ctx) {
-  const o = { version: VERSION, repo: REPO, publicUrl: online.publicUrl() || '', port: HOST_PORT, local: !!ctx.local, os: args.os, agent: args.agent,
+  const o = { version: VERSION, publicUrl: online.publicUrl() || '', port: HOST_PORT, local: !!ctx.local, os: args.os, agent: args.agent,
     releaseBase: TESTING && process.env.GC_TEST_RELEASE_BASE ? process.env.GC_TEST_RELEASE_BASE : '' };
+  // nhẹ tay: tối đa 5 lần / phút cho mỗi kết nối (ctx.conn: token chủ + IP, hoặc client OAuth)
+  const key = String(ctx.conn || 'owner'), t = Date.now(), hits = (setupHits.get(key) || []).filter(x => t - x < 60000);
+  if (hits.length >= 5) { setupHits.set(key, hits); return { ok: false, reason: 'RATE', why: 'live_setup was called too often — wait ' + Math.ceil((60000 - (t - hits[0])) / 1000) + ' s' }; }
+  hits.push(t); setupHits.set(key, hits); if (setupHits.size > 200) setupHits.delete(setupHits.keys().next().value);
   const pre = LiveSetup.plan(Object.assign({ token: 'gcl_' + 'x'.repeat(43) }, o));
   if (!pre.ok || !pre.install) return pre;
   const a = live.createAgent(typeof args.name === 'string' ? args.name : 'agent');
+  if (!a) return { ok: false, reason: 'CONFLICT', why: 'there are already 50 active agent live tokens — ask the owner to revoke one in Studio › System › Live stage, then call live_setup again' };
   log('[live] issued a live token for agent "' + a.name + '" (live_setup)');
   return Object.assign(LiveSetup.plan(Object.assign({ token: a.token }, o)), { tokenId: a.id, tokenName: a.name });
 }
@@ -489,7 +495,7 @@ async function route(req, res) {
     if (!oauthGrant && !originOK(req)) return fail(res, 403, 'Origin không được phép');
     if (!/^application\/json\b/i.test(String(req.headers['content-type'] || ''))) return fail(res, 415, 'MCP cần Content-Type: application/json');
     const msg = await body(req, 2 * 1024 * 1024);
-    mcpCtx = Object.assign({}, mcpCtx, { local: mcpLocal && !oauthGrant });
+    mcpCtx = Object.assign({}, mcpCtx, { local: mcpLocal && !oauthGrant, conn: oauthGrant ? 'oauth:' + ((oauthGrant.client && oauthGrant.client.id) || '') : 'owner:' + clientIp(req.headers, req.socket.remoteAddress, ipHeader()) });
     mcpSeen(msg, req, viaLink, oauthGrant);   // wizard bước 3 "kiểm thật": agent nào vừa gọi MCP (tên, lúc, kênh)
     if (Array.isArray(msg)) {
       if (msg.length > 20) return fail(res, 413, 'MCP: một lô JSON-RPC tối đa 20 lời gọi');   // lô lớn × lời gọi nặng = chặn server lâu (CNS-061)

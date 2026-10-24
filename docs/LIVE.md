@@ -109,11 +109,18 @@ invitation (`live`) on connections that can write. Declining changes nothing.
 - It returns a plan: what is installed and where (`~/.local/lib/gen-chibi-live/`: `live-hook.mjs`, `live-token`,
   `live-url`), the settings it changes (`~/.claude/settings.json`, backup kept), **one** command, how to undo, the address
   events go to and what is sent (only step kinds).
+- **Pinned source.** The command must download only from exactly `https://github.com/colamacbook-ryan/Gen-Chibi/releases/download/v<version>/`
+  (fixed in the code — `GC_REPO` does not change it — and written into golden rule 13, which the agent has from its
+  gen-chibi skill installed from the verified release). A compromised app could return the same command shape pointing
+  at another repository whose `SHA256SUMS` matches its own tarball, so the agent / user must check the prefix against
+  that independent copy: any other URL → refuse and tell the user. `curl` runs with `--proto '=https' --proto-redir '=https'`.
+- Owner only: link-key connections and the Studio AI dock get `FORBIDDEN`. At most 5 calls a minute per connection, and
+  at most 50 active agent tokens (then `CONFLICT`: revoke one in Studio › Live stage — nothing is evicted).
 - The command downloads the release tarball of **this exact version** from the official GitHub release, checks it against
   that release's `SHA256SUMS` and only then extracts `tools/live-hook.mjs` — the app never serves code to the agent's
   machine (no `curl | sh`). Only two things come from the app, both format-checked: the token (`gcl_` + 43 chars) and the
   address (a plain `https://` origin, or `http://127.0.0.1:<port>`). The token is written by the shell's `printf` builtin
-  into a 0600 file — it is never an argument of any process; the installed hook commands contain no token.
+  into a 0600 file (`chmod 600` again afterwards, in case the file already existed) — it is never an argument of any process; the installed hook commands contain no token.
 - Address: the owner's public URL when gen-chibi is online. Otherwise only `http://127.0.0.1` works, so a connection that
   does not come from the same machine gets `[UNAVAILABLE]` with the requirement ("put gen-chibi online or run the agent on
   this machine") and **no token is issued**. Windows → run Claude Code in WSL. `agent: other` → nothing to install, call

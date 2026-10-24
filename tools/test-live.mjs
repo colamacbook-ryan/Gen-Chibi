@@ -482,20 +482,39 @@ const { classify } = await import(HOOK);
     'token agent: live-agents.json 0600 chỉ lưu băm SHA-256 · mỗi token một bình (A cạn, B vẫn qua) · thu hồi → không còn nhận (kể cả sau khởi động lại) · danh sách không lộ băm');
 }
 
+{
+  // trần 50 token agent đang dùng: đầy → từ chối (null), KHÔNG đuổi token cũ; thu hồi một cái thì cấp lại được
+  const { LiveHub, AGENTS_MAX } = require(path.join(ROOT, 'server/live.js'));
+  const HD = fs.mkdtempSync(path.join(os.tmpdir(), 'gc-live-cap-')); tmp.push(HD);
+  const H = new LiveHub({ dir: HD, engine: GC }); clearInterval(H.beat);
+  const toks = Array.from({ length: AGENTS_MAX }, (_, i) => H.createAgent('a' + i)), over = H.createAgent('extra');
+  const req = t => ({ headers: { authorization: 'Bearer ' + t } }), allOk = toks.every(a => a && H.tokenWho(req(a.token)) === 'agent:' + a.id);
+  H.revokeAgent(toks[0].id); const again = H.createAgent('after revoke');
+  ok(AGENTS_MAX === 50 && allOk && over === null && again && toks.slice(1).every(a => H.tokenWho(req(a.token))), 'trần ' + AGENTS_MAX + ' token agent: đầy → từ chối (không đuổi token của agent khác) · thu hồi một cái → cấp được');
+}
+
 /* ------------------------------------------------------------------ 4c. live_setup (v0.24.1, INT-21 g "Đề nghị, có hỏi chủ") */
 {
   const LS = require(path.join(ROOT, 'server/live-setup.js')), Rules = require(path.join(ROOT, 'server/rules.js')), Agent = require(path.join(ROOT, 'server/agent.js'));
   const { MCP, TOOLS, scopeCtx } = require(path.join(ROOT, 'server/mcp.js')), { Store } = require(path.join(ROOT, 'server/store.js'));
-  const TK = 'gcl_' + 'A'.repeat(43), base = { version: '1.2.3', repo: 'colamacbook-ryan/gen-chibi', port: 7600, token: TK };
+  const TK = 'gcl_' + 'A'.repeat(43), base = { version: '1.2.3', port: 7600, token: TK };
+  const PFX = 'https://github.com/colamacbook-ryan/Gen-Chibi/releases/download/v1.2.3/', PFX_RULE = 'https://github.com/colamacbook-ryan/Gen-Chibi/releases/download/v<version>/';
   const p = LS.plan(Object.assign({ publicUrl: 'https://chibi.example.com' }, base));
   const cmd = p.command || '';
   const iSha = cmd.indexOf('[ "$W" = "$G" ]'), iTar = cmd.indexOf('tar -xzf'), iCp = cmd.indexOf('cp "$T'), iTok = cmd.indexOf('live-token'), iInst = cmd.indexOf('--install-claude');
-  ok(p.ok && p.install && p.url === 'https://chibi.example.com' && cmd.includes('R=https://github.com/colamacbook-ryan/gen-chibi/releases/download/v1.2.3;') && /gen-chibi-v\$V\.tar\.gz/.test(cmd) && /\$R\/SHA256SUMS/.test(cmd)
+  ok(p.ok && p.install && p.url === 'https://chibi.example.com' && cmd.includes("'" + PFX + "gen-chibi-v1.2.3.tar.gz'") && cmd.includes("'" + PFX + "SHA256SUMS'")
     && iSha > 0 && iSha < iTar && iTar < iCp && iCp < iTok && iTok < iInst && !/\|\s*(ba)?sh\b/.test(cmd) && !/chibi\.example\.com\/[^'"]*\.(m?js|sh)/.test(cmd),
     'live_setup: lệnh tải live-hook.mjs từ release GitHub ĐÚNG phiên bản, kiểm SHA-256 theo SHA256SUMS TRƯỚC khi giải nén / ghi · không curl | sh, không tải mã từ app');
+  // nguồn GHIM: mọi URL trong lệnh bắt đầu bằng đúng tiền tố cố định (GC_REPO / tham số repo không đổi được) · curl chỉ https (cả khi chuyển hướng)
+  const urls = cmd.match(/https?:\/\/[^'" ;]+/g) || [], evilRepo = LS.plan(Object.assign({ publicUrl: 'https://a.example', repo: 'evil/gen-chibi' }, base));
+  const mainSrc = fs.readFileSync(path.join(ROOT, 'server/main.js'), 'utf8'), lsFn = (mainSrc.match(/function liveSetup\([\s\S]*?\n}\n/) || [''])[0];
+  ok(urls.filter(u => u !== p.url).length === 2 && urls.filter(u => u !== p.url).every(u => u.startsWith(PFX)) && evilRepo.command.includes(PFX) && !/evil/.test(evilRepo.command)
+    && lsFn && !/REPO|GC_REPO/.test(lsFn) && LS.prefixOf('1.2.3') === PFX && new RegExp("GC_REPO \\|\\| '" + LS.REPO + "'").test(mainSrc)
+    && (cmd.match(/curl -fsSL --proto '=https' --proto-redir '=https' /g) || []).length === 2 && p.source === PFX && p.verify.includes(PFX) && /refuse and tell your user/.test(p.verify),
+    'nguồn ghim: mọi URL tải đều bắt đầu bằng ' + PFX + ' (hằng trong mã, GC_REPO không đổi được; cùng chữ hoa Gen-Chibi với bộ cập nhật) · curl --proto =https --proto-redir =https · kế hoạch dặn "URL khác → từ chối, báo người dùng"', urls.join(' '));
   // token chỉ xuất hiện đúng 1 lần, trong printf (builtin của shell) ghi vào live-token — không bao giờ là đối số của tiến trình (curl / node / hook)
   const tokAt = cmd.split(TK).length - 1, tokCtx = cmd.slice(cmd.indexOf(TK) - 30, cmd.indexOf(TK) + TK.length + 30);
-  ok(tokAt === 1 && /printf '%s\\n' 'gcl_A+' > "\$D\/live-token"/.test(tokCtx) && /umask 077/.test(cmd) && !/node[^;]*gcl_/.test(cmd) && !/curl[^;]*gcl_/.test(cmd),
+  ok(tokAt === 1 && /printf '%s\\n' 'gcl_A+' > "\$D\/live-token"/.test(tokCtx) && /umask 077/.test(cmd) && cmd.indexOf('chmod 600 "$D/live-token" "$D/live-url"') > cmd.indexOf('> "$D/live-url"') && !/node[^;]*gcl_/.test(cmd) && !/curl[^;]*gcl_/.test(cmd),
     'token: một lần duy nhất, qua printf (builtin) vào $D/live-token với umask 077 — không nằm trong argv của curl / node', tokCtx);
   ok(['ok', 'install', 'url', 'version', 'ask', 'installs', 'changes', 'command', 'undo', 'requirement', 'sends'].every(k => k in p) && p.ask === Rules.LIVE.ask && /ASK YOUR USER/.test(p.ask) && /--uninstall-claude/.test(p.undo),
     'live_setup trả kế hoạch đủ: cài gì / ở đâu · ĐỔI gì · MỘT lệnh · cách gỡ · gửi tới đâu · câu "ASK YOUR USER"');
@@ -504,10 +523,10 @@ const { classify } = await import(HOOK);
   const win = LS.plan(Object.assign({ publicUrl: 'https://a.example', os: 'windows' }, base)), oth = LS.plan(Object.assign({ publicUrl: 'https://a.example', agent: 'other' }, base));
   const bos = LS.plan(Object.assign({ os: 'beos' }, base)), badUrl = LS.plan(Object.assign({ publicUrl: 'https://a.example/x\'; rm -rf ~; \'' }, base));
   const badTok = LS.plan(Object.assign({}, base, { publicUrl: 'https://a.example', token: "gcl_x'; touch /tmp/pwn; '" })), badVer = LS.plan(Object.assign({}, base, { publicUrl: 'https://a.example', version: '1.2.3; id' }));
-  const badRel = LS.plan(Object.assign({}, base, { publicUrl: 'https://a.example', releaseBase: 'https://evil.example/x' }));
+  const badRel = LS.plan(Object.assign({}, base, { publicUrl: 'https://a.example', releaseBase: 'https://evil.example/x' })), ghRel = LS.plan(Object.assign({}, base, { publicUrl: 'https://a.example', releaseBase: 'https://github.com/evil/gen-chibi/releases/download' }));
   ok(!nr.ok && nr.reason === 'NOT_REACHABLE' && /genchibi online/.test(nr.why) && loc.ok && loc.url === 'http://127.0.0.1:7600' && /same machine/.test(loc.requirement)
     && !win.ok && win.reason === 'UNSUPPORTED_OS' && /WSL/.test(win.why) && oth.ok && oth.install === false && !JSON.stringify(oth).includes('gcl_') && !bos.ok && bos.reason === 'BAD_OS'
-    && !badUrl.ok && !badTok.ok && !badVer.ok && !badRel.ok,
+    && !badUrl.ok && !badTok.ok && !badVer.ok && !badRel.ok && !ghRel.ok,
     'từ chối có lý do: chỉ localhost + agent khác máy → NOT_REACHABLE (nêu điều kiện) · cùng máy → http://127.0.0.1 · windows → WSL · agent khác → không cài, không token · URL / token / phiên bản / nguồn release sai dạng → không sinh lệnh');
   // MCP: mcp:read FORBIDDEN · lỗi có mã · start_here mời (chỉ khi được ghi) · luật 13 trên mọi bề mặt
   const MH = fs.mkdtempSync(path.join(os.tmpdir(), 'gc-live-setup-')); tmp.push(MH);
@@ -515,6 +534,12 @@ const { classify } = await import(HOOK);
   const M = new MCP({ engine: GC, store: new Store(MH), version: 't', live: { accept: () => ({ ev: { id: 1 } }) }, liveSetup: stub });
   const call = (args, ctx) => M.handle({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'live_setup', arguments: args } }, ctx);
   const ro = await call({}, scopeCtx('mcp:read')), far = await call({}, {}), near = await call({}, { local: true });
+  const n0 = calls, lk = await call({}, { viaLink: true, local: true }), wr = await call({}, scopeCtx('mcp:write')), dock = await call({}, { channel: 'ui', local: true });
+  ok([lk, wr, dock].every(x => x.result.isError && /FORBIDDEN/.test(x.result.content[0].text)) && calls === n0,
+    'live_setup chỉ chủ máy: link có khoá · OAuth mcp:write (kênh link) · AI trong dock Studio → FORBIDDEN, không cấp token', [lk, wr, dock].map(x => x.result.content[0].text.slice(0, 60)).join(' | '));
+  const M2 = new MCP({ engine: GC, store: new Store(MH), version: 't', live: { accept: () => ({ ev: { id: 1 } }) }, liveSetup: () => ({ ok: false, reason: 'CONFLICT', why: 'there are already 50 active agent live tokens — revoke one' }) });
+  const cf = await M2.handle({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'live_setup', arguments: {} } }, { local: true });
+  ok(cf.result.isError && /\[CONFLICT\]/.test(cf.result.content[0].text), 'live_setup: hết chỗ token → [CONFLICT]', cf.result.content[0].text.slice(0, 100));
   const sh = JSON.parse((await M.handle({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'start_here', arguments: {} } }, {})).result.content[0].text);
   const shRo = JSON.parse((await M.handle({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'start_here', arguments: {} } }, scopeCtx('mcp:read'))).result.content[0].text);
   ok(ro.result.isError && /FORBIDDEN/.test(ro.result.content[0].text) && calls === 2 && far.result.isError && /UNAVAILABLE/.test(far.result.content[0].text) && !near.result.isError && JSON.parse(near.result.content[0].text).command
@@ -522,8 +547,9 @@ const { classify } = await import(HOOK);
     'MCP live_setup: kết nối mcp:read → FORBIDDEN (không chạm tới kế hoạch) · khác máy không public → [UNAVAILABLE] · cùng máy → kế hoạch có lệnh', ro.result.content[0].text.slice(0, 120));
   const R13 = /Live stage: invite, never install silently/;
   const skill = Agent.wrapper('claude').find(f => f.path === 'gen-chibi/SKILL.md').content;
-  ok(sh.live === Rules.START.live && /ASK YOUR USER/.test(sh.live) && !shRo.live && R13.test(Rules.mcp({}, TOOLS)) && R13.test(JSON.stringify(sh)) && R13.test(skill) && Agent.rules().some(r => R13.test(r) && /live_setup/.test(r) && /ask/i.test(r)),
-    'luật 13 (mời, hỏi chủ, không cài lén) có ở initialize · start_here · skill — sinh từ agent/GUIDE.md §3 · start_here mời Live (kết nối chỉ đọc thì không)');
+  ok(sh.live === Rules.START.live && /ASK YOUR USER/.test(sh.live) && !shRo.live && R13.test(Rules.mcp({}, TOOLS)) && R13.test(JSON.stringify(sh)) && R13.test(skill) && Agent.rules().some(r => R13.test(r) && /live_setup/.test(r) && /ask/i.test(r))
+    && [Rules.mcp({}, TOOLS), JSON.stringify(sh), skill, Rules.LIVE.ask].every(x => x.includes(PFX_RULE)) && Agent.rules().some(r => R13.test(r) && r.includes(PFX_RULE) && /refuse and tell your user/.test(r)),
+    'luật 13 (mời, hỏi chủ, không cài lén, GHIM tiền tố ' + PFX_RULE + ' — URL khác thì từ chối) có ở initialize · start_here · skill — sinh từ agent/GUIDE.md §3 · start_here mời Live (kết nối chỉ đọc thì không)');
 }
 
 /* ------------------------------------------------------------------ 4d. live_setup đầu-cuối: release giả (đúng gói của tools/package.sh) → chạy đúng lệnh trong HOME riêng → hook gửi bằng token agent → thu hồi */
@@ -554,7 +580,7 @@ const { classify } = await import(HOOK);
   ok(far.isError && /UNAVAILABLE/.test(far.content[0].text) && /online/.test(far.content[0].text) && nAg0 === 0, 'HTTP: agent khác máy + app chỉ localhost → [UNAVAILABLE] nêu điều kiện, không cấp token', far.content[0].text.slice(0, 160));
   const r = await mcpCall({ name: 'ryan laptop', os: 'linux', agent: 'claude-code' }), P = r.isError ? {} : JSON.parse(r.content[0].text);
   const UH = path.join(B, 'home'), D = path.join(UH, '.local/lib/gen-chibi-live'), SET = path.join(UH, '.claude/settings.json');
-  fs.mkdirSync(path.join(UH, '.claude'), { recursive: true }); fs.writeFileSync(SET, JSON.stringify({ model: 'x', hooks: { Stop: [{ hooks: [{ type: 'command', command: 'echo mine' }] }] } }));
+  fs.mkdirSync(path.join(UH, '.claude'), { recursive: true }); fs.mkdirSync(D, { recursive: true }); fs.writeFileSync(path.join(D, 'live-token'), 'old\n', { mode: 0o644 }); fs.chmodSync(path.join(D, 'live-token'), 0o644); fs.writeFileSync(SET, JSON.stringify({ model: 'x', hooks: { Stop: [{ hooks: [{ type: 'command', command: 'echo mine' }] }] } }));
   // bất đồng bộ: release giả chạy CÙNG tiến trình test (spawnSync sẽ chặn nó → treo)
   const sh = (c, home) => new Promise(res => { const k = spawn('bash', ['-c', c], { env: { PATH: process.env.PATH, HOME: home, LANG: 'C.UTF-8' }, stdio: ['ignore', 'pipe', 'pipe'] }); kids.push(k); let o = '', e = ''; k.stdout.on('data', d => o += d); k.stderr.on('data', d => e += d);
     const t = setTimeout(() => k.kill(), 60000); k.on('exit', st => { clearTimeout(t); res({ status: st, stdout: o, stderr: e }); }); });
@@ -571,6 +597,13 @@ const { classify } = await import(HOOK);
     && fs.readFileSync(path.join(D, 'live-url'), 'utf8').trim() === BASE && P.url === BASE && liveCmds.length >= 5 && cmds.includes('echo mine') && S.model === 'x' && !cmds.some(c => c.includes('gcl_'))
     && fs.readdirSync(path.join(UH, '.claude')).some(f => /^settings\.json\.bak-/.test(f)),
     'chạy đúng MỘT lệnh: live-hook.mjs = bản của release (SHA đã kiểm) · thư mục 0700, token / url 0600 · settings.json ghép (giữ model + hook cũ, có bản sao lưu) · lệnh hook không chứa token', (run.stderr || '').slice(0, 400));
+  ok(/--proto '=http' --proto-redir '=http'/.test(P.command || ''), 'base thử (GC_TEST) dùng http — curl vẫn khoá giao thức (--proto =http)');
+  // nhẹ tay: 5 lần / phút cho mỗi kết nối (lần thứ 6 → UNAVAILABLE, không cấp token)
+  const nBefore = (await agents()).length, extra = [];
+  for (let i = 0; i < 5; i++) extra.push(await mcpCall({ name: 'spam ' + i, agent: 'other' }));
+  const nAfter = (await agents()).length;
+  ok(extra.slice(0, 4).every(x => !x.isError) && extra[4].isError && /UNAVAILABLE/.test(extra[4].content[0].text) && /too often/.test(extra[4].content[0].text) && nAfter === nBefore,
+    'live_setup: tối đa 5 lần / phút mỗi kết nối — lần thứ 6 → [UNAVAILABLE] "too often"', extra.map(x => x.isError ? x.content[0].text.slice(0, 60) : 'ok').join(' | '));
   // hook (đúng lệnh trong settings) gửi bằng token agent → Studio thấy "lần cuối"
   const fire = () => new Promise(res => { const c = spawn('bash', ['-c', liveCmds[0] || 'true'], { env: { PATH: process.env.PATH, HOME: UH }, stdio: ['pipe', 'ignore', 'ignore'] }); kids.push(c); c.on('exit', res); c.stdin.end(JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Read', tool_input: { file_path: '/x' } })); });
   await fire(); const a1 = (await agents()).find(a => a.name === 'ryan laptop');
