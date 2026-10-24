@@ -85,6 +85,17 @@ The adapter never blocks the agent: stdin read ≤ 250 ms, POST ≤ 300 ms, alwa
 | Stop · Notification (permission / question) · Notification idle | `wait_user` · `wait_user` · `idle` (`limit` when it is about a usage limit) |
 | PreCompact | `limit` |
 
+## Task switch (`live_task`)
+
+Golden rule 12 (agent/GUIDE.md §3 — the single list `server/rules.js` turns into the MCP `initialize` instructions,
+`start_here`, the Studio chatroom where the tool is available, and the agent skill): when an agent starts a task that
+differs from the current one it calls `live_task { task, title? }` first. Tasks: code · debug · test · research · read ·
+write · design · plan · review · release · chat · other. The title (≤ 60 characters) passes the label rule and is shown
+only in the event table. Also accepted as `POST /api/live/event { kind: "task", task, title }` (live token). Same task
+again → `{ same: true }`, nothing is broadcast. The beat: put every prop away → take the clapperboard out of the satchel →
+clap (the hat badge changes; bubble "New task: Debugging") → put it back → walk empty-handed to the task's corner.
+Claude Code hooks cannot know the task type: Claude Code gets the rule through the skill / MCP instructions.
+
 ## Bubbles: plain words only
 
 The bubble text always comes from a fixed phrase table chosen by (kind, tool group, helper group, escalation

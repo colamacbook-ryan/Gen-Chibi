@@ -109,6 +109,10 @@ in the language of the user / project (rule 6).
 10. **Budgets**: ≤ 8 actors per shot, ≤ 12 steps per event, ≤ 3 sfx per step, ≤ 10 props per scene, ≤ 60 Web Audio nodes per sound.
 11. **Sound is mixed, not sprinkled.** Leave `sfx` empty on most steps (the player auto-assigns sounds); a hand-placed `sfx` follows the
     mixing rules S1–S7 (topic `sound`) — `save_shot` / `save_work` reject errors and `lint_sound_track` shows all issues.
+12. **Flip the task switch.** When you start a task that differs from the current one, call `live_task` FIRST
+    (`task` = code | debug | test | research | read | write | design | plan | review | release | chat | other, plus a short
+    `title` in plain words — no file names, paths, commands or secrets). Same task again: do not call it. The owner's
+    Live stage shows the switch; `live_event` reports the steps inside the task.
 
 ## 4. Topics (call `get_guide` with the topic id)
 
@@ -123,7 +127,7 @@ in the language of the user / project (rule 6).
 | `animation` | export an action as sprite / frames / timeline | `list_actions` → `render_action` |
 | `film` | a work with shots, dialogue and fights; versions; storyboard + HTML film | `save_work` → `get_director_schema` → `validate_event` → `save_shot` → `preview_shot` → `get_storyboard` / `export_film_html` (history: `list_work_versions`, `restore_work_version`) |
 | `project-bundle` | backup, move, sell a themed set | `export_project`, `import_project`, `list_samples`, `install_sample` |
-| `system` | version, update, rollback, Live stage | `get_app_version`, `update_app`, `rollback_app`, `live_event` |
+| `system` | version, update, rollback, Live stage | `get_app_version`, `update_app`, `rollback_app`, `live_event`, `live_task` |
 
 ## 5. Error codes
 

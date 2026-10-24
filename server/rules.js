@@ -136,6 +136,8 @@ function chat(o) {
 // ---- tool live_event (Sân khấu sống, INT-21): chữ dặn agent về nhãn — server lọc lại bằng engine/live.js redact() dù agent làm sai
 const LIVE = {
   tool: 'Tells the owner\'s Live stage what you are doing RIGHT NOW so the chibi character acts it out (Studio › System › Live stage). Call it at each real step: kind = session_start | prompt | think | read | search | edit | write | run | test_run | test_pass | test_fail | delegate_start | delegate_end | wait_user | error | limit | release | idle | stop. Fire-and-forget, rate-limited (about 10 per second; UNAVAILABLE = slow down). Never let it slow your real work.',
+  task: 'Flips the TASK SWITCH on the owner\'s Live stage: call it FIRST whenever you start a task that differs from the current one (golden rule) — task = code | debug | test | research | read | write | design | plan | review | release | chat | other, plus a short plain-words title. The character puts its props away, claps a clapperboard, changes its hat badge and walks to the task\'s corner; the Studio shows "Working on: …". Calling it again with the same task does nothing.',
+  title: 'optional SHORT plain-words title of the task (at most 60 characters, e.g. "Fix the date bug") — never file names, paths, commands or secrets: the server strips them; shown only in the event table',
   label: 'optional SHORT plain-words summary (at most 48 characters, e.g. "Reading the setup guide") — never file contents, paths, commands, URLs, emails or secrets: the server strips them and shows its own caption'
 };
 

@@ -238,7 +238,7 @@ async function liveEvent(req, res, who) {
   let b; try { b = await body(req, 4096); } catch (e) { return fail(res, e.code || 400, e.message); }
   const r = live.accept(b, who);
   if (r.error) return send(res, r.code, { error: r.error }, null, r.retry ? { 'Retry-After': String(r.retry) } : undefined);
-  return send(res, 202, { ok: true, id: r.ev.id, kind: r.ev.kind });
+  return send(res, 202, r.same ? { ok: true, same: true } : { ok: true, id: r.ev.id, kind: r.ev.kind });
 }
 
 /* ---------------------------------------------------------------- định tuyến */

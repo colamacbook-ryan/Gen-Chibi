@@ -17,3 +17,12 @@ Agents that are not Claude Code (Claude Code uses hooks — no tool calls needed
 - `label`: optional, ≤ 48 characters of plain words. **Never** file contents, paths, commands, URLs, emails or secrets —
   the server strips them anyway and falls back to a default caption.
 - Fire-and-forget, about 10 events per second at most (`UNAVAILABLE` = slow down). Do not let it slow your real work.
+
+## Task switch (`live_task`)
+
+Golden rule: when you start a task that differs from the current one, call `live_task` first —
+`{ "task": "debug", "title": "Fix the date bug" }`. Tasks: `code` · `debug` · `test` · `research` · `read` · `write` ·
+`design` · `plan` · `review` · `release` · `chat` · `other`. The title is ≤ 60 characters of plain words (cleaned like
+labels; shown only in the event table). Calling it again with the same task does nothing. The stage plays a "new task"
+beat (clapperboard, the character puts its props away, changes its hat badge and walks to the task's corner) and the
+Studio shows "Working on: …".

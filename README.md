@@ -222,6 +222,12 @@ release), it never blocks Claude Code and sends only the kind of step — never 
 commands or results. The live token (kept in a 0600 file next to the hook, never on a command line) can only send Live events. Other agents call the MCP tool
 `live_event`. Details: [docs/LIVE.md](docs/LIVE.md).
 
+**Task switch** (golden rule for every agent, shipped in the MCP instructions, `start_here` and the agent skill): when
+an agent starts a task that differs from the current one it calls `live_task` first (`code`, `debug`, `test`,
+`research`, `read`, `write`, `design`, `plan`, `review`, `release`, `chat`, `other` + a short title). The character
+claps a clapperboard, puts its props away, changes its hat badge and walks to that task's corner; the Studio shows
+"Working on: …" and tags the following events with the task. The same task again does nothing.
+
 ## Core AI (LLM API)
 
 Studio › System › AI settings: choose OpenRouter, DeepSeek, MiniMax or a custom OpenAI-compatible endpoint, paste the API key (encrypted with AES-256-GCM on the machine, never sent back to the browser). "Test model" runs a trial script and scores it: valid JSON, number of fixes needed, latency, tokens.

@@ -18,7 +18,7 @@ if (!token) { console.error('set GC_LIVE_TOKEN (Studio › System › Live) or G
 let sent = 0, bad = 0;
 for (const e of lines) {
   await new Promise(r => setTimeout(r, Math.max(0, (+e.dt || 0) * 1000 / speed)));
-  const body = { kind: e.kind }; if (e.label) body.label = e.label; if (e.tool) body.tool = e.tool;
+  const body = { kind: e.kind }; ['label', 'tool', 'task', 'title', 'sub'].forEach(k => { if (e[k]) body[k] = e[k]; });
   try {
     const r = await fetch(new URL('/api/live/event', url), { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1', Authorization: 'Bearer ' + token }, body: JSON.stringify(body) });
     if (r.status === 202) sent++; else { bad++; console.error(e.kind + ': HTTP ' + r.status); }

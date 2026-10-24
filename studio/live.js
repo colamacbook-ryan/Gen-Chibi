@@ -11,8 +11,8 @@
   var _t = GC.i18n.t, N_ = GC.i18n.N;
   var KIND_LABEL = { session_start: N_('Bắt đầu phiên'), prompt: N_('Tin nhắn của bạn'), think: N_('Suy nghĩ'), read: N_('Đọc'), search: N_('Tìm kiếm'), edit: N_('Sửa'), write: N_('Viết tệp'),
     run: N_('Chạy lệnh'), test_run: N_('Chạy test'), test_pass: N_('Test xanh'), test_fail: N_('Test đỏ'), delegate_start: N_('Giao việc'), delegate_end: N_('Trợ lý xong'),
-    wait_user: N_('Chờ bạn'), error: N_('Lỗi'), limit: N_('Giới hạn'), release: N_('Phát hành'), idle: N_('Nghỉ'), stop: N_('Kết thúc') };
-  var KIND_CHIP = { test_pass: 'ok', test_fail: 'bad', error: 'bad', limit: 'warn', wait_user: 'warn', release: 'ok', delegate_start: 'info', delegate_end: 'info', prompt: 'info' };
+    wait_user: N_('Chờ bạn'), error: N_('Lỗi'), limit: N_('Giới hạn'), release: N_('Phát hành'), idle: N_('Nghỉ'), stop: N_('Kết thúc'), task: N_('Đổi việc') };
+  var KIND_CHIP = { test_pass: 'ok', test_fail: 'bad', error: 'bad', limit: 'warn', wait_user: 'warn', release: 'ok', delegate_start: 'info', delegate_end: 'info', prompt: 'info', task: 'warn' };
   function el(tag, attrs) { var e = document.createElementNS(NS, tag); for (var k in attrs || {}) e.setAttribute(k, attrs[k]); return e; }
   function hhmmss(ms) { var d = new Date(ms), p = function (n) { return (n < 10 ? '0' : '') + n; }; return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()); }
 
@@ -21,24 +21,42 @@
     opts = opts || {};
     var S = LV.stage(null, D), svg = el('svg', { viewBox: '0 0 ' + LV.W + ' ' + LV.H, class: 'lv-stage', id: 'liveStage', role: 'img' });
     svg.setAttribute('aria-label', _t('Sân khấu sống'));
-    var bg = el('g'), dyn = el('g', { class: 'lv-dyn' }), helpers = el('g', { class: 'lv-helpers' }), shadow = el('ellipse', { ry: f(8 * LV.K), rx: f(44 * LV.K), fill: 'rgba(20,24,22,.22)' }), actor = el('g', { class: 'lv-actor' }), bub = el('g', { class: 'lv-bubble' });
+    var bg = el('g'), books = el('g'), booksSig = null, dyn = el('g', { class: 'lv-dyn' }), helpers = el('g', { class: 'lv-helpers' }), shadow = el('ellipse', { ry: f(8 * LV.K), rx: f(44 * LV.K), fill: 'rgba(20,24,22,.22)' }), actor = el('g', { class: 'lv-actor' }), bub = el('g', { class: 'lv-bubble' });
     bg.innerHTML = LV.backdropSVG();   // phông tĩnh do engine vẽ (không dữ liệu người dùng)
+    // L-42: máy quay di chuyển cả thế giới mỗi khung → phông vector vẽ lại mỗi khung. Raster phông MỘT lần (2×) rồi dùng ảnh: vẽ một ảnh rẻ hơn hàng trăm nét
+    (function () {
+      var im = new Image();
+      im.onload = function () {
+        try {
+          var cv = document.createElement('canvas'); cv.width = LV.W * 2; cv.height = LV.H * 2;
+          cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
+          var pic = el('image', { x: 0, y: 0, width: LV.W, height: LV.H, preserveAspectRatio: 'none' }); pic.setAttribute('href', cv.toDataURL('image/png'));
+          while (bg.firstChild) bg.removeChild(bg.firstChild); bg.appendChild(pic);
+        } catch (e) { /* trình duyệt chặn canvas: giữ phông vector */ }
+      };
+      im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + LV.W + ' ' + LV.H + '" width="' + LV.W * 2 + '" height="' + LV.H * 2 + '">' + LV.backdropSVG() + '</svg>');
+    })();
     var cam = el('g', { class: 'lv-cam' });   // máy quay: một transform cho cả thế giới (engine/live.js camAt — tất định)
     svg.appendChild(el('rect', { width: LV.W, height: LV.H, fill: '#e9dcc4' })); svg.appendChild(cam);
-    cam.appendChild(bg); cam.appendChild(dyn); cam.appendChild(helpers); cam.appendChild(shadow); cam.appendChild(actor); cam.appendChild(bub);
-    var groups = {}, sat = el('g'), prop = el('g');
+    cam.appendChild(bg); cam.appendChild(books); cam.appendChild(dyn); cam.appendChild(helpers); cam.appendChild(shadow); cam.appendChild(actor); cam.appendChild(bub);
+    var groups = {}, sat = el('g'), prop = el('g'), badge = el('g'), badgeSig = null;
     GC.RIG.layers.forEach(function (l) {
       var g = el('g'); actor.appendChild(g); groups[l[0]] = g;
       if (l[0] === 'body') actor.appendChild(sat);
       if (l[0] === 'heldR') actor.appendChild(prop);
+      if (l[0] === 'hat') actor.appendChild(badge);
     });
     var bRect = el('rect', { rx: 20, height: 46, fill: '#fff', stroke: '#2b211d', 'stroke-width': 3 }), bTail = el('path', { fill: '#fff', stroke: '#2b211d', 'stroke-width': 3, 'stroke-linejoin': 'round' }), bText = el('text', { 'text-anchor': 'middle', 'font-size': 23, 'font-weight': 600, fill: '#2b211d', 'font-family': 'system-ui, sans-serif' });
     bub.appendChild(bRect); bub.appendChild(bTail); bub.appendChild(bText);
     box.appendChild(svg);
     var sig = null, satSig = null, propSig = null, dynSig = null, bubSig = null, hEls = {}, imgCache = {}, lastS = null, lastU = 0;
     function f(v) { return (Math.round(v * 10) / 10).toString(); }
+    // trợ lý = hình VECTOR tĩnh (chuỗi SVG của engine, dựng sẵn lúc rảnh) — không ảnh <image> (rasterize ảnh SVG lần đầu = long task trên máy 2 CPU)
+    // nhóm trợ lý dựng SẴN lúc rảnh (ẩn) — lúc trợ lý bước vào chỉ bỏ ẩn + đặt transform, không phân tích SVG giữa khung
+    var pool = {};
+    function makeHelper(tint) { var g = el('g', { visibility: 'hidden' }); g.tint = tint; g.appendChild(el('ellipse', { cx: 0, cy: 2, rx: 40, ry: 7, fill: 'rgba(20,24,22,.18)' })); var body = el('g', { transform: 'translate(-100 -228)' }); body.innerHTML = helperImg({ tint: tint }); g.appendChild(body); helpers.appendChild(g); return g; }   // hình do engine vẽ (không dữ liệu người dùng)
     function helperImg(h) {
-      if (!imgCache[h.tint]) imgCache[h.tint] = GC.render ? GC.render.imageURL(LV.agentAsset(h.tint), 'work', { noShadow: true }) : '';
+      if (!imgCache[h.tint]) imgCache[h.tint] = GC.svgBody(LV.agentAsset(h.tint), 'work', { noShadow: true });
       return imgCache[h.tint];
     }
     function paint(t) {
@@ -53,20 +71,24 @@
       sat.setAttribute('transform', chain.body);
       if (F.prop !== propSig) { propSig = F.prop; prop.innerHTML = F.prop ? LV.PROP_ART[F.prop] || '' : ''; }
       prop.setAttribute('transform', chain.handR);
+      if (F.task !== badgeSig) { badgeSig = F.task; badge.innerHTML = F.task ? LV.badgeArt(F.task) : ''; }   // dấu việc: SVG do engine vẽ từ bảng cố định
+      badge.setAttribute('transform', chain.head);
+      if (opts.onTask) opts.onTask(F.task);
       actor.setAttribute('transform', 'translate(' + f(F.x - 100 * LV.K) + ' ' + f(F.y - 228 * LV.K) + ') scale(' + LV.K + ')');
       shadow.setAttribute('cx', f(F.x)); shadow.setAttribute('cy', LV.GROUND + 2);
       // phần động của các khu: đổi tối đa 15 lần / giây (màn hình, lửa, tên lửa…)
-      var w = F.world, ds = JSON.stringify(w) + '|' + Math.floor(t * 15);
-      if (ds !== dynSig) { dynSig = ds; dyn.innerHTML = LV.dynamicSVG(w, t); }
-      // trợ lý: tầng ảnh (một <image> dựng sẵn) + tầng thở (một transform mỗi khung) — ≤ 8
+      var w = F.world, ds = w.desk + w.lab + w.door.toFixed(2) + w.rocket.toFixed(2) + w.fire.toFixed(2) + w.foam.toFixed(2) + (LV.animated(w) ? '|' + Math.floor(t * 15) : '');
+      if (ds !== dynSig) { dynSig = ds; dyn.innerHTML = LV.dynamicSVG(w, t, true); }
+      if (w.bookOut !== booksSig) { booksSig = w.bookOut; books.innerHTML = LV.booksSVG(w.bookOut); }
+      // trợ lý: tầng ảnh (hình tĩnh dựng một lần) + tầng thở (một transform mỗi khung) — ≤ 8
       var seen = {};
       F.helpers.forEach(function (h) {
         seen[h.id] = 1;
         var g = hEls[h.id];
-        if (!g) { g = hEls[h.id] = el('g', { 'data-helper': h.id }); var im = el('image', { x: -124, y: -246, width: 248, height: 258 }); im.setAttribute('href', helperImg(h)); g.appendChild(el('ellipse', { cx: 0, cy: 2, rx: 40, ry: 7, fill: 'rgba(20,24,22,.18)' })); g.appendChild(im); helpers.appendChild(g); }
+        if (!g) { g = hEls[h.id] = pool[h.tint] && !pool[h.tint].used ? pool[h.tint] : makeHelper(h.tint); g.used = true; g.setAttribute('data-helper', h.id); g.removeAttribute('visibility'); }
         g.setAttribute('transform', S.helperTf(h, t));
       });
-      Object.keys(hEls).forEach(function (id) { if (!seen[id]) { hEls[id].remove(); delete hEls[id]; } });
+      Object.keys(hEls).forEach(function (id) { if (!seen[id]) { var g0 = hEls[id]; g0.used = false; g0.setAttribute('visibility', 'hidden'); if (pool[g0.tint] !== g0) g0.remove(); delete hEls[id]; } });
       // bong bóng: câu tóm tắt (nhãn đã làm sạch của agent, hoặc câu mặc định theo loại — dịch theo ngôn ngữ giao diện)
       var txt = LV.bubbleText(F.bubble, _t);
       var bs = txt + '|' + Math.round(F.x);
@@ -92,6 +114,13 @@
       tl.events.forEach(function (e) { if (e.sfx && e.t > lastU && e.t <= u) [].concat(e.sfx).forEach(function (n) { try { A.sfx(n, { gain: (e.gain != null ? e.gain : 0.6) * 0.7 }); } catch (x) { /* âm lạ: bỏ */ } }); });
       lastU = u;
     }
+    // ảnh trợ lý dựng TRƯỚC lúc rảnh (requestIdleCallback, mỗi lần một màu, giải mã sẵn) — không dựng / giải mã giữa khung khi trợ lý bước vào (L-42)
+    (function warmFaces(i) { var ric = window.requestIdleCallback || function (f) { return setTimeout(f, 50); }; ric(function () { if (svg.isConnected && S.warm(i)) warmFaces(i + 1); }); })(0);   // lớp vẽ 18 cảm xúc × 3 góc: dựng lúc rảnh
+    (function warm(i) {
+      if (i >= LV.HELPERS_MAX) return;
+      var ric = window.requestIdleCallback || function (f) { return setTimeout(f, 200); };
+      ric(function () { if (!svg.isConnected) return; if (!pool[i]) pool[i] = makeHelper(i); warm(i + 1); });
+    })(0);
     return { svg: svg, paint: paint, stage: S };
   }
 
@@ -113,25 +142,31 @@
     var speedSel = h('select', { id: 'liveSpeed', 'aria-label': _t('Tốc độ phát lại') }, [1, 2, 4].map(function (x) { return h('option', { value: String(x), selected: x === 2 ? true : null }, '×' + x); }));
     var replayBtn = h('button', { class: 'btn sm primary', id: 'liveReplay', type: 'button', onclick: replay }, _t('Phát lại phiên mẫu'));
     var nowLbl = h('span', { class: 'note', id: 'liveNow', style: 'margin-left:auto;white-space:nowrap' });
-    left.appendChild(h('div', { class: 'row' }, status, replayBtn, speedSel, soundBtn, nowLbl));
+    var taskChip = h('span', { class: 'chip info', id: 'liveTask', hidden: true });   // "Đang làm: …" — theo dấu việc trên mũ (đổi ở nhịp clap)
+    var shownTask = null;
+    function onTask(tk) { if (tk === shownTask) return; shownTask = tk; taskChip.hidden = !tk; taskChip.textContent = tk ? _t('Đang làm: {task}', { task: _t(LV.TASK_LABEL[tk]) }) : ''; }
+    left.appendChild(h('div', { class: 'row' }, status, taskChip, replayBtn, speedSel, soundBtn, nowLbl));
     left.appendChild(stageBox);
     left.appendChild(h('div', { class: 'note', text: _t('Mỗi bước thật của agent (đọc, tìm, sửa, chạy test, giao việc, chờ bạn…) điều khiển nhân vật. Bong bóng chỉ tóm tắt việc đang làm — không bao giờ hiện nội dung tệp, lệnh hay bí mật.') }));
-    var P = Player(stageBox, D, { sound: function () { return soundOn; } });
+    var P = Player(stageBox, D, { sound: function () { return soundOn; }, onTask: onTask });
 
     // ---- bảng sự kiện (Data Console)
     var tbody = h('tbody', { id: 'liveRows' }), count = 0;
     right.appendChild(h('div', { class: 'panel', id: 'liveEvents' }, h('h3', null, _t('Sự kiện'), h('span', { class: 'r note', id: 'liveCount', text: '0' })),
-      h('div', { style: 'max-height:360px;overflow:auto' }, h('table', { class: 'grid' }, h('thead', null, h('tr', null, h('th', null, 'ID'), h('th', null, _t('Giờ')), h('th', null, _t('Loại')), h('th', null, _t('Nhãn')))), tbody))));
+      h('div', { style: 'max-height:360px;overflow:auto' }, h('table', { class: 'grid' }, h('thead', null, h('tr', null, h('th', null, 'ID'), h('th', null, _t('Giờ')), h('th', null, _t('Loại')), h('th', null, _t('Việc')), h('th', null, _t('Nhãn')))), tbody))));
+    var tableTask = null;   // việc hiện hành theo dòng sự kiện: mỗi sự kiện sau một lần đổi việc được gắn việc đó
     function row(ev, local) {
       count++; document.getElementById('liveCount').textContent = String(count);
-      var tr = h('tr', { 'data-kind': ev.kind, 'data-id': String(ev.id) },
+      if (ev.kind === 'task' && LV.TASK_LABEL[ev.task]) tableTask = ev.task;
+      var tr = h('tr', { 'data-kind': ev.kind, 'data-id': String(ev.id), 'data-task': tableTask || '' },
         h('td', { class: 'id', text: (local ? 'D' : '') + ev.id }), h('td', { class: 'nw mono', text: hhmmss(ev.ts || Date.now()) }),
         h('td', { class: 'nw' }, h('span', { class: 'chip ' + (KIND_CHIP[ev.kind] || ''), text: _t(KIND_LABEL[ev.kind] || ev.kind) })),
-        h('td', { text: ev.label || '' }));
+        h('td', { class: 'nw', text: tableTask ? _t(LV.TASK_LABEL[tableTask]) : '' }),
+        h('td', { text: ev.kind === 'task' ? ev.title || '' : ev.label || '' }));
       tbody.insertBefore(tr, tbody.firstChild);
       while (tbody.childNodes.length > 200) tbody.removeChild(tbody.lastChild);
     }
-    function feed(ev, local) { D.push({ id: (local ? 'D' : '') + ev.id, kind: ev.kind, label: ev.label, tool: ev.tool, sub: ev.sub }, now()); row(ev, local); }
+    function feed(ev, local) { D.push({ id: (local ? 'D' : '') + ev.id, kind: ev.kind, label: ev.label, tool: ev.tool, sub: ev.sub, task: ev.task }, now()); row(ev, local); }
 
     // ---- kết nối Claude Code (token live + đoạn settings.json) — chỉ bản cài có server
     var conn = h('div', { class: 'panel', id: 'liveConnect' }, h('h3', null, _t('Kết nối Claude Code')));

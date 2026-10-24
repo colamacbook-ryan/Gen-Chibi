@@ -17,8 +17,8 @@
    "id": "L02",
    "guard": "bong bóng chỉ là câu của bảng (không nhãn agent)",
    "file": "engine/live.js",
-   "find": "function bubbleOf(kind, level, a) { return { id: phrase(",
-   "replace": "function bubbleOf(kind, level, a) { return { id: a && a.label ? a.label : phrase(",
+   "find": "return { id: phrase(kind, a && a.tool, a && a.sub, level), n:",
+   "replace": "return { id: a && a.label ? a.label : phrase(kind, a && a.tool, a && a.sub, level), n:",
    "test": [
     "node",
     "tools/test-live.mjs"
@@ -276,6 +276,78 @@
     "tools/test-live.mjs"
    ],
    "expect": "không nuốt"
+  },
+  {
+   "id": "L24",
+   "guard": "cùng việc = không làm gì (không lặp nhịp)",
+   "file": "engine/live.js",
+   "find": "if (TASKS.indexOf(e.task) < 0 || e.task === D.taskReq) {",
+   "replace": "if (TASKS.indexOf(e.task) < 0) {",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "nhịp \"việc mới\""
+  },
+  {
+   "id": "L25",
+   "guard": "nhịp việc mới: cất hết đồ trước, đi tay không về khu",
+   "file": "engine/live.js",
+   "find": "I.push({ type: 'stow', keep: null }, { type: 'take', prop: 'clapper' }, a.mainI, { type: 'stow', keep: null }, { type: 'walk',",
+   "replace": "I.push({ type: 'take', prop: 'clapper' }, a.mainI, { type: 'walk',",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "nhịp \"việc mới\""
+  },
+  {
+   "id": "L26",
+   "guard": "quy tắc vàng live_task có trên mọi bề mặt",
+   "file": "agent/GUIDE.md",
+   "find": "When you start a task that differs from the current one, call `live_task` FIRST",
+   "replace": "When you start a new task you may report it",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "quy tắc \"đổi việc"
+  },
+  {
+   "id": "L27",
+   "guard": "live_task là tool ghi (mcp:read không gọi được)",
+   "file": "server/mcp.js",
+   "find": "['task']), annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false } },",
+   "replace": "['task']), annotations: { readOnlyHint: true, idempotentHint: true, destructiveHint: false } },",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "mcp:read"
+  },
+  {
+   "id": "L28",
+   "guard": "tiêu đề việc qua luật làm sạch",
+   "file": "engine/live.js",
+   "find": "ev.title = redact(raw.title || '', TITLE_MAX);",
+   "replace": "ev.title = String(raw.title || '').slice(0, TITLE_MAX);",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "tiêu đề qua cùng luật làm sạch"
+  },
+  {
+   "id": "L29",
+   "guard": "server: cùng việc không phát lại",
+   "file": "server/live.js",
+   "find": "if (c.ev.task === this.lastTask) return { same: true }; ",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "gửi lại cùng việc → same"
   }
  ]
 }

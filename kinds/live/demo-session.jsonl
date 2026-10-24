@@ -2,6 +2,7 @@
 # Mỗi dòng: { kind, tool?, label?, dt } — dt = giây sau sự kiện trước. Nhãn là câu tóm tắt ngắn (không đường dẫn / lệnh / nội dung). © 2026 Gen Labs — All rights reserved.
 {"kind":"session_start","dt":0.2}
 {"kind":"prompt","dt":1.6}
+{"kind":"task","task":"debug","title":"Fix the date format bug","dt":0.8}
 {"kind":"think","tool":"TodoWrite","dt":2.8}
 {"kind":"search","tool":"Grep","dt":1.6}
 {"kind":"search","tool":"Glob","dt":0.3}
@@ -20,6 +21,7 @@
 {"kind":"edit","tool":"Edit","dt":1.1}
 {"kind":"test_run","tool":"Bash","dt":3.5}
 {"kind":"test_fail","tool":"Bash","dt":3.4}
+{"kind":"task","task":"debug","title":"Fix the date format bug","dt":0.3}
 {"kind":"read","tool":"Read","dt":2.2}
 {"kind":"edit","tool":"Edit","dt":3.0}
 {"kind":"test_run","tool":"Bash","dt":3.2}
@@ -39,6 +41,7 @@
 {"kind":"edit","tool":"Edit","dt":3.0}
 {"kind":"test_run","tool":"Bash","dt":3.0}
 {"kind":"test_pass","tool":"Bash","dt":3.2}
+{"kind":"task","task":"release","title":"Ship the fix","dt":1.2}
 {"kind":"run","tool":"Bash","dt":3.0}
 {"kind":"release","tool":"Bash","dt":3.2}
 {"kind":"wait_user","dt":5.5}

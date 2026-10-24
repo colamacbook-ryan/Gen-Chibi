@@ -309,6 +309,11 @@ bằng lời thường theo ngôn ngữ của bạn — không bao giờ nội d
 của bạn. Đổi token live (nút trong bảng) thì chạy lại lệnh. **Agent khác** gọi tool MCP `live_event`. **Phát lại phiên
 mẫu** chiếu một phiên lập trình đã ghi.
 
+**Công tắc việc.** Agent theo một luật vàng: bắt đầu việc khác việc đang làm thì gọi tool MCP `live_task` (loại việc +
+tiêu đề ngắn). Nhân vật lục túi lấy bảng clapper đập một cái, cất hết đồ, đổi dấu trên mũ rồi đi về góc của việc đó;
+"Đang làm: …" hiện trên sân khấu và bảng sự kiện gắn việc cho từng sự kiện. Claude Code học luật này qua skill gen-chibi /
+chỉ dẫn MCP.
+
 ## Câu hỏi thường gặp
 - **AI tự tạo asset có cần duyệt không?** Không — lưu dạng **nháp** trong dự án của tác phẩm và dùng ngay. Chỉ khi muốn đưa vào gói bán bạn mới bấm **Phát hành**.
 - **Phim HTML gửi đi có lộ engine không?** Bộ phát nằm trong tệp phim với giấy phép **chỉ để xem phim đó**. Muốn chia sẻ mà không kèm bộ phát thì dùng **Xuất video** (v0.22); bản SaaS sau này còn có trình phát do Gen Labs lưu trữ.

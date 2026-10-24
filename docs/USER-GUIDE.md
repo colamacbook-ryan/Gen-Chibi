@@ -313,6 +313,11 @@ then restart Claude Code. Without `--install-into` the command only prints the s
 settings by itself. Rotating the live token (button in the panel) means running the command again.
 **Other agents** call the MCP tool `live_event`. **Replay demo** plays a recorded coding session.
 
+**Task switch.** Agents follow a golden rule: when they start a task that differs from the current one they call the MCP
+tool `live_task` (task type + short title). The character claps a clapperboard taken from its satchel, puts everything
+away, changes the badge on its hat and walks to the task's corner; "Working on: …" appears above the stage and the
+event table tags each event with the task. Claude Code learns the rule from the gen-chibi skill / MCP instructions.
+
 ## Frequently asked questions
 - **Do assets the AI creates need approval?** No — they are saved as **drafts** in the work's project and usable right away. Only when you want them in a sale bundle do you click **Publish**.
 - **Does a shared HTML film expose the engine?** The player sits in the film file under a licence **for viewing that film only**. To share without the player, use **Export video** (v0.22); a future SaaS edition will also offer a player hosted by Gen Labs.

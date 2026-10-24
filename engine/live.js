@@ -20,7 +20,19 @@
 
   /* ------------------------------------------------------------ 1. SỰ KIỆN + LÀM SẠCH */
   var KINDS = ['session_start', 'prompt', 'think', 'read', 'search', 'edit', 'write', 'run', 'test_run', 'test_pass', 'test_fail',
-    'delegate_start', 'delegate_end', 'wait_user', 'error', 'limit', 'release', 'idle', 'stop'];
+    'delegate_start', 'delegate_end', 'wait_user', 'error', 'limit', 'release', 'idle', 'stop', 'task'];
+  // CÔNG TẮC VIỆC (live_task): agent bật khi bắt đầu một việc KHÁC việc đang làm. Bộ cố định — tên người đọc / câu "Việc mới" / khu nhà / dấu trên mũ
+  var TASKS = ['code', 'debug', 'test', 'research', 'read', 'write', 'design', 'plan', 'review', 'release', 'chat', 'other'];
+  var TITLE_MAX = 60;
+  var TASK_LABEL = { code: N_('Viết code'), debug: N_('Sửa lỗi'), test: N_('Kiểm thử'), research: N_('Tìm hiểu'), read: N_('Đọc tài liệu'), write: N_('Viết bài'), design: N_('Thiết kế'),
+    plan: N_('Lập kế hoạch'), review: N_('Soát lại'), release: N_('Ra bản mới'), chat: N_('Trò chuyện'), other: N_('Việc khác') };
+  var TASK_NEW = { code: N_('Việc mới: Viết code'), debug: N_('Việc mới: Sửa lỗi'), test: N_('Việc mới: Kiểm thử'), research: N_('Việc mới: Tìm hiểu'), read: N_('Việc mới: Đọc tài liệu'),
+    write: N_('Việc mới: Viết bài'), design: N_('Việc mới: Thiết kế'), plan: N_('Việc mới: Lập kế hoạch'), review: N_('Việc mới: Soát lại'), release: N_('Việc mới: Phát hành'),
+    chat: N_('Việc mới: Trò chuyện'), other: N_('Việc mới: Việc khác') };
+  var TASK_HOME = { code: 'desk', debug: 'lab', test: 'lab', research: 'shelf', read: 'shelf', write: 'desk', design: 'desk', plan: 'center', review: 'shelf', release: 'rocket', chat: 'coffee', other: 'center' };
+  // dấu trên mũ: màu + ký hiệu (chữ ASCII — không phụ thuộc phông emoji)
+  var TASK_BADGE = { code: ['#3b6fb6', '</>'], debug: ['#e23b2e', '!'], test: ['#4FB57A', 'OK'], research: ['#8C86E0', '?'], read: ['#2BB3A3', 'Aa'], write: ['#E0A43A', '~'],
+    design: ['#D9708F', '*'], plan: ['#7a4b2a', '#'], review: ['#5B9BD5', '=='], release: ['#ff8a1f', '^'], chat: ['#B97BD0', '..'], other: ['#8e959c', '+'] };
   var LABEL_MAX = 48;
   // hook của Claude Code được nối (một nguồn: server/live.js đoạn cấu hình + cli/genchibi LIVE_EVENTS — test-live so hai bên)
   var HOOK_EVENTS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'Notification', 'Stop', 'SubagentStart', 'SubagentStop', 'PreCompact', 'SessionEnd'];
@@ -44,7 +56,8 @@
     error: [N_('Ối! Có lỗi'), N_('Lại lỗi nữa…')],
     limit: [N_('Hết sức rồi… (chạm giới hạn)')],
     release: [N_('Phát hành! 3… 2… 1…')],
-    stop: [N_('Xong phiên. Chào nhé!')]
+    stop: [N_('Xong phiên. Chào nhé!')],
+    task: [N_('Việc mới!')]
   };
   // NHÃN NGƯỜI ĐỌC (bong bóng): câu tả việc bằng lời thường, CHỌN từ bảng theo (loại, nhóm công cụ, loại trợ lý) — không bao giờ in tên công cụ,
   // tên loại trợ lý hay nhãn / nội dung agent gửi (nhãn đã làm sạch chỉ hiện ở bảng sự kiện). msgid → Studio dịch theo ngôn ngữ giao diện
@@ -65,7 +78,7 @@
     if (lv === 0 && own(TOOL_PHRASE, kind) && typeof tool === 'string' && own(TOOL_PHRASE[kind], tool)) return TOOL_PHRASE[kind][tool];
     return L[lv];
   }
-  function phraseIds() { var o = {}; Object.keys(SUMMARY).forEach(function (k) { SUMMARY[k].forEach(function (x) { o[x] = 1; }); }); Object.keys(TOOL_PHRASE).forEach(function (k) { Object.keys(TOOL_PHRASE[k]).forEach(function (t) { o[TOOL_PHRASE[k][t]] = 1; }); }); Object.keys(SUB_PHRASE).forEach(function (k) { o[SUB_PHRASE[k]] = 1; }); o[WAKE] = 1; return Object.keys(o); }
+  function phraseIds() { var o = {}; Object.keys(SUMMARY).forEach(function (k) { SUMMARY[k].forEach(function (x) { o[x] = 1; }); }); Object.keys(TOOL_PHRASE).forEach(function (k) { Object.keys(TOOL_PHRASE[k]).forEach(function (t) { o[TOOL_PHRASE[k][t]] = 1; }); }); Object.keys(SUB_PHRASE).forEach(function (k) { o[SUB_PHRASE[k]] = 1; }); o[WAKE] = 1; Object.keys(TASK_NEW).forEach(function (k) { o[TASK_NEW[k]] = 1; }); return Object.keys(o); }
   var WAKE = N_('Hả?! Có việc!');
 
   // LUẬT LÀM SẠCH NHÃN (redact) — nhãn chỉ để tóm tắt việc đang làm, KHÔNG BAO GIỜ là nội dung tệp / lệnh / bí mật:
@@ -98,7 +111,7 @@
     return w;
   }
   function cut(s, n) { var a = Array.from(s); return a.length > n ? a.slice(0, n - 1).join('').replace(/\s+$/, '') + '…' : s; }
-  function redact(label) {
+  function redact(label, max) {
     if (typeof label !== 'string') return '';
     var s = label.slice(0, 2000).normalize ? label.slice(0, 2000).normalize('NFC') : label.slice(0, 2000);
     s = s.replace(/[\u0000-\u001F\u007F-\u009F\u2028\u2029]/g, ' ');                           // R1
@@ -107,7 +120,7 @@
     out = out.replace(/[^\p{L}\p{M}\p{N} .,!?'’:…()-]/gu, '');                                 // R5
     out = out.replace(/\s+/g, ' ').replace(/^[\s.,:;-]+/, '').trim();
     if (!/[\p{L}\p{N}]/u.test(out)) return '';
-    return cut(out, LABEL_MAX);                                                                // R6
+    return cut(out, max > 0 ? max : LABEL_MAX);                                                // R6
   }
   function cleanTool(t) { return typeof t === 'string' ? t.replace(/[^A-Za-z0-9_.-]/g, '').replace(/^[^A-Za-z]+/, '').slice(0, 24) : ''; }
   // sự kiện từ ngoài (không tin) → { ev } hoặc { error }. Chỉ giữ khoá đã biết; giờ do SERVER đặt (ts), at của client chỉ giữ khi hợp lý
@@ -115,8 +128,11 @@
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { error: N_('sự kiện phải là object JSON') };
     if (typeof raw.kind !== 'string' || KINDS.indexOf(raw.kind) < 0) return { error: N_('kind không hợp lệ — một trong: {list}', { list: KINDS.join(', ') }) };
     if (raw.label !== undefined && typeof raw.label !== 'string') return { error: N_('label phải là chuỗi') };
+    if (raw.kind === 'task' && TASKS.indexOf(raw.task) < 0) return { error: N_('task không hợp lệ — một trong: {list}', { list: TASKS.join(', ') }) };
+    if (raw.title !== undefined && typeof raw.title !== 'string') return { error: N_('title phải là chuỗi') };
     var ev = { kind: raw.kind, label: redact(raw.label || ''), tool: cleanTool(raw.tool), agent: redact(typeof raw.agent === 'string' ? raw.agent.slice(0, 40) : '').slice(0, 24), sub: SUBS.indexOf(raw.sub) >= 0 ? raw.sub : '' };
     if (typeof raw.at === 'number' && isFinite(raw.at) && now && Math.abs(raw.at - now) < 864e5) ev.at = Math.round(raw.at);
+    if (raw.kind === 'task') { ev.task = raw.task; ev.title = redact(raw.title || '', TITLE_MAX); }
     return { ev: ev };
   }
 
@@ -143,6 +159,7 @@
     hammer: { src: 'bag', label: N_('Búa') },
     extinguisher: { src: 'bag', label: N_('Bình chữa cháy') },
     duck: { src: 'bag', label: N_('Vịt cao su') },
+    clapper: { src: 'bag', label: N_('Bảng clapper') },
     book: { src: 'shelf', label: N_('Sách (từ giá)') }
   };
   var BAG = Object.keys(PROPS).filter(function (k) { return PROPS[k].src === 'bag'; });
@@ -153,7 +170,7 @@
   var CLS = { read: 'shelf', search: 'shelf', edit: 'desk', write: 'desk', run: 'desk', test_run: 'lab', idle: 'rest', wait_user: 'rest' };
   var PRIO = { idle: 0, wait_user: 0, think: 1, read: 2, search: 2, edit: 2.5, write: 2.5, run: 2.5 };   // còn lại: 3 — sửa / chạy lệnh là việc chính của agent: không bị bỏ khi sân khấu chạy chậm hơn agent
   var MERGE = { shelf: 1, desk: 1, rest: 1, think: 1, prompt: 1 };   // lớp được gộp (test / giao việc / lỗi: mỗi lần một nhịp riêng — leo thang đếm từng lần)
-  var CRITICAL = { error: 1, test_fail: 1, test_pass: 1, release: 1, wait_user: 1, prompt: 1, limit: 1, delegate_start: 1, delegate_end: 1, session_start: 1, stop: 1, test_run: 1 };
+  var CRITICAL = { task: 1, error: 1, test_fail: 1, test_pass: 1, release: 1, wait_user: 1, prompt: 1, limit: 1, delegate_start: 1, delegate_end: 1, session_start: 1, stop: 1, test_run: 1 };
   function critical(kind) { return own(CRITICAL, kind); }
   function prio(kind) { return own(PRIO, kind) ? PRIO[kind] : 3; }
   function clsOf(kind) { return own(CLS, kind) ? CLS[kind] : kind; }
@@ -172,7 +189,7 @@
 
     function zoneAt(x) { var best = null, bd = 1e9; Object.keys(ZONES).forEach(function (z) { var d = Math.abs(ZONES[z].x - x); if (d < bd) { bd = d; best = z; } }); return bd < 24 ? best : null; }
     // bong bóng: câu của bảng (phrase) + bộ đếm sự kiện đã gộp (n) — không bao giờ nhãn / tên công cụ của agent
-    function bubbleOf(kind, level, a) { return { id: phrase(kind, a && a.tool, a && a.sub, level), n: a && a.count > 1 ? a.count : 0 }; }
+    function bubbleOf(kind, level, a) { if (kind === 'task' && a && own(TASK_NEW, a.task)) return { id: TASK_NEW[a.task], n: 0 }; return { id: phrase(kind, a && a.tool, a && a.sub, level), n: a && a.count > 1 ? a.count : 0 }; }
     function emit(s) {
       s.i = seq++;
       s.x0 = st.x; s.propIn = st.prop;
@@ -182,7 +199,7 @@
       if (s.dir == null) s.dir = st.dir;
       s.propSwitch = s.t0 + (s.t1 - s.t0) * (PROP_AT[s.clip] || 0.5);
       D.steps.push(s);
-      if (D.steps.length > D.keep) D.steps.splice(0, D.steps.length - D.keep);
+      if (D.steps.length > D.keep) D.steps.splice(0, D.steps.length - D.keep).forEach(function (x) { if (x.taskMark) D.trimTask = x.taskMark; });
       cur = s;
       return s;
     }
@@ -197,7 +214,14 @@
     }
     // ---- hoạt động → ý định (intent). Ý định được mở thành bước LÚC bắt đầu (từ trạng thái lúc đó) → không bao giờ nhảy cóc
     function plan(q, t) {
-      var kind = q.kind, count = q.count, I = [], lvl = 0, a = { kind: kind, cls: clsOf(kind), count: count, label: q.label, tool: q.tool, sub: q.sub, evs: q.evs, t0: t, prio: prio(kind), level: 0, intents: I, summary: q.summary || 0 };
+      var kind = q.kind, count = q.count, I = [], lvl = 0, a = { kind: kind, cls: clsOf(kind), count: count, label: q.label, tool: q.tool, sub: q.sub, task: q.task, evs: q.evs, t0: t, prio: prio(kind), level: 0, intents: I, summary: q.summary || 0 };
+      if (kind === 'task') {
+        // CÔNG TẮC VIỆC: cất HẾT đồ → lục túi lấy bảng clapper → clap (đổi dấu trên mũ) → cất bảng → đi về khu nhà của việc → đứng vào việc
+        a.mainI = { type: 'perform', clip: 'lvClap', emo: 'vow', dwell: 1.4, main: true, dir: 0, taskMark: q.task, need: 'clapper' };
+        I.push({ type: 'stow', keep: null }, { type: 'take', prop: 'clapper' }, a.mainI, { type: 'stow', keep: null }, { type: 'walk', zone: TASK_HOME[q.task] || 'center' },
+          { type: 'perform', clip: ZONES[TASK_HOME[q.task] || 'center'].dir ? 'lvIdleSide' : 'lvIdle', emo: 'work', dwell: 0.8, dir: ZONES[TASK_HOME[q.task] || 'center'].dir });
+        return a;
+      }
       var need = null, zone = null, emo = 'work', clip = 'lvIdle', dwell = MIN_DWELL + 0.3, extra = {};
       switch (kind) {
         case 'session_start': zone = 'center'; clip = 'lvWave'; emo = 'proud'; dwell = 1.6; break;
@@ -274,7 +298,8 @@
       var dir = I.dir == null ? st.dir : I.dir;
       var s = emit({ type: 'perform', t0: t, t1: t + (I.main || !hurry ? I.dwell : Math.max(0.8, I.dwell * 0.7)), clip: I.clip, fast: I.fast || act.level >= 1, emo: I.emo, dir: dir, act: act.kind, level: act.level, main: !!I.main, seat: !!I.seat,
         bubble: I.main ? bubbleOf(act.kind, act.level, act) : act.level >= 1 || act.kind === 'test_fail' ? bubbleOf(act.kind, act.level, null) : null, world: I.world || null, count: act.count });
-      if (I.main) { act.performed = t; s.evs = act.evs; }   // sự kiện do nhịp này diễn (cùng mảng với hoạt động — sự kiện gộp sau vẫn ghi vào)
+      if (I.main) { act.performed = t; s.evs = act.evs; }
+      if (I.taskMark) { s.taskMark = I.taskMark; st.task = I.taskMark; }   // dấu việc trên mũ đổi ở nhịp clap   // sự kiện do nhịp này diễn (cùng mảng với hoạt động — sự kiện gộp sau vẫn ghi vào)
       if (I.helper === 1) spawnHelper(t + 0.6, act.label);
       if (I.helper === -1) releaseHelper(t);
       return s;
@@ -302,8 +327,12 @@
     };
     // ---- hàng đợi: gộp cùng lớp, trần 5 mục (bỏ mục ưu tiên thấp cũ nhất)
     D.push = function (ev, at) {
-      var e = { id: ev.id != null ? ev.id : ++evSeq, kind: ev.kind, label: ev.label || '', tool: ev.tool || '', sub: ev.sub || '', at: at };
+      var e = { id: ev.id != null ? ev.id : ++evSeq, kind: ev.kind, label: ev.label || '', tool: ev.tool || '', sub: ev.sub || '', task: ev.task || '', at: at };
       D.log.push({ id: e.id, kind: e.kind, at: at, step: null, merged: false });
+      if (e.kind === 'task') {   // cùng việc với việc đang / sắp làm → không làm gì (không lặp nhịp "việc mới")
+        if (TASKS.indexOf(e.task) < 0 || e.task === D.taskReq) { D.log[D.log.length - 1].merged = true; D.log[D.log.length - 1].noop = true; return; }
+        D.taskReq = e.task;
+      }
       if (D.log.length > D.keep * 2) D.log.splice(0, D.log.length - D.keep * 2);
       // đang làm đúng lớp này (và đã vào phần diễn chính) → gộp vào: thêm thời gian, tăng bậc hài
       if (act && !D.queue.length && act.cls === clsOf(e.kind) && MERGE[act.cls] && !act.done && (!critical(e.kind) || act.kind === e.kind)) {
@@ -316,7 +345,7 @@
       if (last && last.cls === c2 && MERGE[c2] && (last.kind === e.kind || ((c2 === 'shelf' || c2 === 'desk' || c2 === 'rest') && !critical(e.kind) && !critical(last.kind)))) {
         last.count++; last.evs.push(e.id); if (e.kind === 'run') last.kind = 'run'; D.log[D.log.length - 1].merged = true; return;
       }
-      D.queue.push({ kind: e.kind, cls: clsOf(e.kind), count: 1, label: e.label, tool: e.tool, sub: e.sub, evs: [e.id], at: at, prio: prio(e.kind) });
+      D.queue.push({ kind: e.kind, cls: clsOf(e.kind), count: 1, label: e.label, tool: e.tool, sub: e.sub, task: e.task, evs: [e.id], at: at, prio: prio(e.kind) });
       // DIỄN TÓM TẮT khi agent nhanh hơn sân khấu: hàng đợi dài → gộp hai việc THƯỜNG (đọc / tìm / sửa / chạy / nghĩ) gần nhau thành một nhịp có bộ đếm;
       // việc QUAN TRỌNG (lỗi, test đỏ / xanh, phát hành, chờ bạn, giao việc…) không bao giờ bị bỏ hay gộp — hàng đợi dài ra thì sân khấu tăng tốc (hurry)
       while (D.queue.length > 5) {
@@ -330,7 +359,7 @@
       }
       // trần cứng: quá 12 việc quan trọng dồn lại → gộp hai việc LIỀN NHAU cùng loại (vẫn diễn, bộ đếm ghi đủ) — không bao giờ bỏ
       for (var qi = D.queue.length - 1; D.queue.length > 12 && qi > 0; qi--) {
-        if (D.queue[qi].kind === D.queue[qi - 1].kind) { D.queue[qi - 1].count += D.queue[qi].count; D.queue[qi - 1].evs = D.queue[qi - 1].evs.concat(D.queue[qi].evs); D.queue.splice(qi, 1); }
+        if (D.queue[qi].kind === D.queue[qi - 1].kind && D.queue[qi].kind !== 'task') { D.queue[qi - 1].count += D.queue[qi].count; D.queue[qi - 1].evs = D.queue[qi - 1].evs.concat(D.queue[qi].evs); D.queue.splice(qi, 1); }
       }
     };
     function startNext(t) {
@@ -372,6 +401,7 @@
     function cutAt(s, t) {
       var q = D.queue[0];
       if (!q) return null;
+      if (act && act.kind === 'task' && q.kind !== 'task') return null;   // nhịp "việc mới" diễn trọn (cất đồ → clap → đi về khu) — chỉ việc mới khác cắt được nó
       var wake = s.clip === 'lvNap' || s.clip === 'lvSlump' || s.clip === 'lvSitDown';
       if (s.type === 'walk') return (act && act.prio < q.prio && act.prio < 2 && !critical(act.kind)) || s.act === 'hold' ? t : null;   // đổi hướng giữa đường: đi tiếp từ chỗ đang đứng (việc quan trọng thì đi cho tới nơi)
       if (s.type !== 'perform') return null;                                                   // lấy / cất đồ: làm cho xong
@@ -434,6 +464,7 @@
       return s.x0 + (s.x1 - s.x0) * u;
     };
     D.activity = function () { return act; };
+    D.taskAt = function (t) { for (var i = D.steps.length - 1; i >= 0; i--) if (D.steps[i].taskMark && D.steps[i].t0 <= t) return D.steps[i].taskMark; return D.trimTask || null; };
     return D;
   }
   var HELPER_SPOTS = [700, 860, 420, 1010, 760, 470, 930, 240];
@@ -468,8 +499,11 @@
     hammer: '<rect x="125" y="150" width="6" height="52" rx="2" fill="#a0683c"' + S + '/><rect x="112" y="138" width="32" height="15" rx="3" fill="#8e959c"' + S + '/>',
     extinguisher: '<rect x="114" y="150" width="28" height="56" rx="10" fill="#e23b2e"' + S + '/><rect x="122" y="140" width="12" height="12" fill="#3d3d48"' + S + '/><path d="M134,144 Q154,140 158,128" fill="none" stroke="' + INK + '" stroke-width="3.4"/><rect x="118" y="168" width="20" height="10" fill="#fff" opacity="0.85"/>',
     duck: '<ellipse cx="128" cy="186" rx="15" ry="11" fill="#ffd23f"' + S + '/><circle cx="121" cy="170" r="9" fill="#ffd23f"' + S + '/><path d="M112,170 L105,172 L112,175 Z" fill="#ff8a1f"' + Sw(1.4) + '/><circle cx="119" cy="168" r="1.6" fill="' + INK + '"/>',
+    clapper: '<rect x="106" y="168" width="44" height="30" rx="2" fill="#2f3440"' + S + '/><path d="M106,160 L150,154 L151,163 L107,169 Z" fill="#f2f2f2"' + S + '/><path d="M114,159 L119,166 M124,158 L129,165 M134,156 L139,163 M144,155 L148,161" stroke="' + INK + '" stroke-width="3"/><path d="M112,178 L144,178 M112,186 L138,186" stroke="#f2f2f2" stroke-width="2"/>',
     book: '<rect x="108" y="168" width="40" height="30" rx="2" fill="#c0392b"' + S + '/><rect x="111" y="171" width="34" height="24" fill="#fff7e6"/><path d="M128,171 L128,195" stroke="' + INK + '" stroke-width="1.4"/><path d="M114,177 L125,177 M114,182 L125,182 M131,177 L142,177 M131,182 L142,182" stroke="#b9a98f" stroke-width="1"/>'
   };
+  // dấu việc trên mũ (công tắc việc): tròn màu + ký hiệu
+  function badgeArt(task) { var b = TASK_BADGE[task]; if (!b) return ''; return '<g class="lv-badge"><circle cx="100" cy="74" r="11" fill="' + b[0] + '" stroke="' + INK + '" stroke-width="2.4"/><text x="100" y="78.5" text-anchor="middle" font-family="system-ui, sans-serif" font-size="' + (b[1].length > 2 ? 8 : 11) + '" font-weight="800" fill="#fff">' + esc(b[1]) + '</text></g>'; }
   // túi đeo chéo: dây qua thân (khớp body), túi ở hông phải; mở nắp khi lục / cất
   function satchelArt(view, open, lvl) {
     var side = /90$/.test(view), back = view === 'back';
@@ -532,14 +566,20 @@
     return ws;
   }
   function propHeld(s, t) { if (!s) return null; if (s.type === 'takeOut') return t >= s.propSwitch ? s.propOut : s.propIn; if (s.type === 'putBack') return t >= s.propSwitch ? null : s.propIn; return s.propIn; }
-  function dynamicSVG(ws, t) {
+  // sách trên giá: chỉ đổi khi một cuốn được lấy / trả (Studio vẽ riêng, không dựng lại mỗi nhịp)
+  function booksSVG(out) {
     var s = '';
-    // sách: 4 tầng × 8 cuốn, cuốn số 10 vắng khi đang cầm
     for (var r = 0; r < 4; r++) for (var b = 0; b < 8; b++) {
-      var n = r * 8 + b; if (ws.bookOut && n === 10) continue;
+      var n = r * 8 + b; if (out && n === 10) continue;
       var hgt = 58 + (n * 37 % 22), x = 246 + b * 21.5;
       s += '<rect x="' + f1(x) + '" y="' + (296 + r * 96 - hgt) + '" width="18" height="' + hgt + '" fill="' + bookColors(n) + '" stroke="' + INK + '" stroke-width="1.5"/>';
     }
+    return s;
+  }
+  // phần động có hoạt ảnh không? (không thì Studio khỏi dựng lại theo nhịp thời gian)
+  function animated(ws) { return ws.desk !== 'off' || ws.lab === 'running' || ws.lab === 'fail' || ws.lab === 'fire' || ws.fire > 0 || ws.foam > 0 || ws.rocket > 0; }
+  function dynamicSVG(ws, t, noBooks) {
+    var s = noBooks ? '' : booksSVG(ws.bookOut);
     // màn hình máy tính
     if (ws.desk === 'code') { s += '<rect x="437" y="367" width="82" height="64" fill="#1b2b3a"/>'; for (var l = 0; l < 6; l++) { var w2 = 20 + ((l * 13 + Math.floor(t * 6)) % 7) * 7; s += '<rect x="' + (443 + (l % 3) * 6) + '" y="' + (373 + l * 9) + '" width="' + w2 + '" height="4" fill="' + ['#8fd3ff', '#ffd23f', '#4FB57A'][l % 3] + '"/>'; } }
     else if (ws.desk === 'term') { s += '<rect x="437" y="367" width="82" height="64" fill="#111"/>'; for (var l2 = 0; l2 < 5; l2++) s += '<rect x="443" y="' + (373 + l2 * 10) + '" width="' + (16 + ((l2 * 29) % 40)) + '" height="4" fill="#4FB57A"/>'; if (Math.floor(t * 2) % 2) s += '<rect x="443" y="423" width="7" height="5" fill="#4FB57A"/>'; }
@@ -574,7 +614,7 @@
   var BLEND = 0.22;
   function stage(asset, D, o) {
     o = o || {};
-    var C = GC.choreo, A = asset || agentAsset(), cache = {}, order = [], bl = o.blend != null ? o.blend : BLEND;
+    var C = GC.choreo, A = asset || agentAsset(), cache = {}, order = [], bl = o.blend != null ? o.blend : BLEND, faces = {};   // faces: lớp vẽ đã dựng (theo góc nhìn + nét mặt) DÙNG CHUNG mọi bước — không dựng lại mỗi bước (L-42)
     function faceOf(emo) { var s = GC.LIB.states[emo] || GC.LIB.states.normal; return { eyes: s.eyes, brows: s.brows, mouth: s.mouth, fx: (s.fx || []).slice(0, 3) }; }
     function tlOf(s) {
       var key = s.i + ':' + (s.t1 - s.t0).toFixed(3);
@@ -582,9 +622,19 @@
       var dur = Math.max(0.3, Math.min(170, s.t1 - s.t0)), dir = s.dir === 0 ? 1 : s.dir || 1;
       var step = { clip: s.clip, dur: dur, fast: !!s.fast, run: !!s.run, back: !!s.back, dir: dir, face: faceOf(s.emo || 'normal') };
       var tl = C.build(A, { steps: [step], x0: 0, dir: dir, scale: K, ground: GROUND, world: W });
+      tl.actors[0].cache = faces; tl.cache = faces;
       cache[key] = tl; order.push(key);
-      while (order.length > 24) delete cache[order.shift()];
+      while (order.length > 6) delete cache[order.shift()];   // chỉ giữ vài bước gần nhất: mỗi dòng thời gian ~300 KB — ít rác cũ → GC ngắn (L-42)
       return tl;
+    }
+    // dựng sẵn lớp vẽ (góc nhìn × nét mặt của 18 cảm xúc) vào bộ nhớ chung — Studio gọi từng phần lúc rảnh; cùng khoá với choreo.finalAt
+    var WARM_VIEWS = ['front', 'left90', 'right90'], WARM_STATES = Object.keys(GC.LIB.states);
+    function warm(i) {
+      if (i >= WARM_VIEWS.length * WARM_STATES.length) return false;
+      var fc = faceOf(WARM_STATES[i % WARM_STATES.length]), dirn = { view: WARM_VIEWS[Math.floor(i / WARM_STATES.length)], motion: 'rest', hide: [] };
+      if (fc.eyes) dirn.eyes = fc.eyes; if (fc.brows) dirn.brows = fc.brows; if (fc.mouth) dirn.mouth = fc.mouth; if (fc.fx && fc.fx.length) dirn.fx = fc.fx;
+      var sig = JSON.stringify(dirn); if (!faces[sig]) { var c = GC.compose(A, 'normal', dirn); c.sig = sig; faces[sig] = c; }
+      return true;
     }
     function poseLerp(P, Q, w) {
       var o2 = {};
@@ -630,7 +680,7 @@
       for (var i = D.steps.indexOf(s); i >= 0 && i > D.steps.indexOf(s) - 6; i--) { var q = D.steps[i]; if (q.bubble && t - q.t0 < 3.2) { bub = { id: q.bubble.id, n: q.bubble.n || 0, t0: q.t0, kind: q.act, level: q.level || 0 }; break; } }
       var helpers = [];
       D.helpers.forEach(function (h) { var a = D.helperAt(h, t); if (a) helpers.push(a); });
-      return { t: t, step: s, pose: pose, layers: layers, view: view, sig: sig, x: x, y: GROUND - seatLift, K: K, prop: held, bagOpen: bagOpen, bagLevel: s.bagLevel || 0, bubble: bub, helpers: helpers, world: worldState(D, t), emo: s.emo, cam: camAt(t) };
+      return { t: t, step: s, pose: pose, layers: layers, view: view, sig: sig, x: x, y: GROUND - seatLift, K: K, prop: held, bagOpen: bagOpen, bagLevel: s.bagLevel || 0, bubble: bub, helpers: helpers, world: worldState(D, t), emo: s.emo, cam: camAt(t), task: D.taskAt(t) };
     }
     // diễn viên → chuỗi SVG (lớp vẽ của engine + túi đeo sau lớp thân + đạo cụ trước bàn tay phải)
     function actorSVG(F) {
@@ -639,6 +689,7 @@
         if (F.layers[l[0]]) out += '<g transform="' + chain[l[1]] + '">' + F.layers[l[0]] + '</g>';
         if (l[0] === 'body') out += '<g transform="' + chain.body + '">' + satchelArt(F.view, F.bagOpen, F.bagLevel) + '</g>';
         if (l[0] === 'heldR' && F.prop && PROP_ART[F.prop]) out += '<g transform="' + chain.handR + '">' + PROP_ART[F.prop] + '</g>';
+        if (l[0] === 'hat' && F.task) out += '<g transform="' + chain.head + '">' + badgeArt(F.task) + '</g>';
       });
       return '<g transform="translate(' + f1(F.x - 100 * K) + ' ' + f1(F.y - 228 * K) + ') scale(' + K + ')">' + out + '</g>';
     }
@@ -673,7 +724,7 @@
         backdropSVG() + dynamicSVG(F.world, t) + F.helpers.map(function (h) { return helperSVG(h, t, opt.imageOf); }).join('') +
         '<ellipse cx="' + f1(F.x) + '" cy="' + (GROUND + 2) + '" rx="' + f1(44 * K) + '" ry="' + f1(8 * K) + '" fill="rgba(20,24,22,.22)"/>' + actorSVG(F) + bubbleSVG(F, tx) + '</g></svg>';
     }
-    return { sample: sample, svg: svg, actorSVG: actorSVG, helperSVG: helperSVG, helperTf: helperTf, bubbleSVG: bubbleSVG, camAt: camAt, camTf: camTf, asset: A, tlOf: tlOf };
+    return { sample: sample, svg: svg, warm: warm, actorSVG: actorSVG, helperSVG: helperSVG, helperTf: helperTf, bubbleSVG: bubbleSVG, camAt: camAt, camTf: camTf, asset: A, tlOf: tlOf };
   }
 
   // ---- dòng sự kiện ghi sẵn (JSONL: { kind, label?, tool?, dt } — dt = giây sau sự kiện trước) → [{ ev, at }]
@@ -690,8 +741,8 @@
   }
 
   GC.live = {
-    KINDS: KINDS, HOOK_EVENTS: HOOK_EVENTS, SUMMARY: SUMMARY, SUBS: SUBS, CRITICAL: CRITICAL, phrase: phrase, phraseIds: phraseIds, bubbleText: bubbleText, ZONES: ZONES, PROPS: PROPS, BAG: BAG, SPEED: SPEED, MIN_DWELL: MIN_DWELL, MAX_DWELL: MAX_DWELL, HELPERS_MAX: HELPERS_MAX, W: W, H: H, GROUND: GROUND, K: K, LABEL_MAX: LABEL_MAX,
+    KINDS: KINDS, TASKS: TASKS, TASK_LABEL: TASK_LABEL, TASK_NEW: TASK_NEW, TASK_HOME: TASK_HOME, TASK_BADGE: TASK_BADGE, TITLE_MAX: TITLE_MAX, badgeArt: badgeArt, HOOK_EVENTS: HOOK_EVENTS, SUMMARY: SUMMARY, SUBS: SUBS, CRITICAL: CRITICAL, phrase: phrase, phraseIds: phraseIds, bubbleText: bubbleText, ZONES: ZONES, PROPS: PROPS, BAG: BAG, SPEED: SPEED, MIN_DWELL: MIN_DWELL, MAX_DWELL: MAX_DWELL, HELPERS_MAX: HELPERS_MAX, W: W, H: H, GROUND: GROUND, K: K, LABEL_MAX: LABEL_MAX,
     redact: redact, cleanEvent: cleanEvent, director: director, stage: stage, agentAsset: agentAsset, parseJSONL: parseJSONL,
-    backdropSVG: backdropSVG, dynamicSVG: dynamicSVG, worldState: worldState, propHeld: propHeld, PROP_ART: PROP_ART, satchelArt: satchelArt
+    backdropSVG: backdropSVG, dynamicSVG: dynamicSVG, booksSVG: booksSVG, animated: animated, worldState: worldState, propHeld: propHeld, PROP_ART: PROP_ART, satchelArt: satchelArt
   };
 })(typeof window !== 'undefined' ? window.GenChibi : globalThis.GenChibi);

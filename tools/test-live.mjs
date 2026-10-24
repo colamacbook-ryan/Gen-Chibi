@@ -65,8 +65,8 @@ for (const sg of ['SIGINT', 'SIGTERM']) process.on(sg, () => process.exit(130));
   ok(!leaks.length, 'redact: 3000 nhãn trộn ngẫu nhiên — không mảnh nguy hiểm nào còn, không nhãn nào > 48 ký tự', leaks.slice(0, 5).join(' | '));
   const ce = L.cleanEvent;
   ok(ce({ kind: 'nope' }).error && ce(null).error && ce([]).error && ce({ kind: 'read', label: 5 }).error && ce({ kind: 'read' }).ev && !('extra' in ce({ kind: 'read', extra: 'x' }).ev)
-    && ce({ kind: 'read', tool: '../../etc' }).ev.tool === 'etc' && ce({ kind: 'read', tool: 'a'.repeat(99) }).ev.tool.length === 24 && L.KINDS.length === 19,
-    'cleanEvent: kind ngoài 19 loại / không phải object / label không phải chuỗi → lỗi · khoá lạ bị bỏ · tool chỉ [A-Za-z0-9_.-] ≤ 24');
+    && ce({ kind: 'read', tool: '../../etc' }).ev.tool === 'etc' && ce({ kind: 'read', tool: 'a'.repeat(99) }).ev.tool.length === 24 && L.KINDS.length === 20,
+    'cleanEvent: kind ngoài 20 loại / không phải object / label không phải chuỗi → lỗi · khoá lạ bị bỏ · tool chỉ [A-Za-z0-9_.-] ≤ 24');
 }
 
 /* ------------------------------------------------------------------ 2. đạo diễn */
@@ -218,11 +218,12 @@ function checkSteps(D) {
   let lost = [], critMiss = [], nEv = 0, maxQ = 0, sumOk = 0;
   for (let seed = 1; seed <= 300; seed++) {
     const r = rng(seed * 7919), D = L.director(), evs = []; let t = 0;
-    for (let i = 0; i < 120; i++) { t += r() < 0.8 ? 0.02 + r() * 0.15 : r() * 2; const kind = r() < 0.75 ? ['read', 'search', 'edit', 'run', 'think', 'write'][Math.floor(r() * 6)] : L.KINDS[Math.floor(r() * L.KINDS.length)]; evs.push({ id: 'e' + i, kind, at: t }); }
+    for (let i = 0; i < 120; i++) { t += r() < 0.8 ? 0.02 + r() * 0.15 : r() * 2; const kind = r() < 0.75 ? ['read', 'search', 'edit', 'run', 'think', 'write'][Math.floor(r() * 6)] : L.KINDS[Math.floor(r() * L.KINDS.length)]; evs.push({ id: 'e' + i, kind, at: t, task: L.TASKS[Math.floor(r() * L.TASKS.length)] }); }
     let i = 0; const end = t + 120;
-    for (let u = 0; u <= end; u += 0.1) { while (i < evs.length && evs[i].at <= u) { D.push({ id: evs[i].id, kind: evs[i].kind }, u); i++; } D.advance(u); maxQ = Math.max(maxQ, D.queue.length); }
+    for (let u = 0; u <= end; u += 0.1) { while (i < evs.length && evs[i].at <= u) { D.push({ id: evs[i].id, kind: evs[i].kind, task: evs[i].task }, u); i++; } D.advance(u); maxQ = Math.max(maxQ, D.queue.length); }
     const owner = new Map(); D.steps.filter(s => s.main && s.evs).forEach(s => s.evs.forEach(id => { if (!owner.has(id)) owner.set(id, s); }));
-    evs.forEach(e => { nEv++; const s = owner.get(e.id); if (!s) lost.push(seed + ':' + e.id + ':' + e.kind); else if (L.CRITICAL[e.kind] && s.act !== e.kind) critMiss.push(seed + ':' + e.kind + '→' + s.act); });
+    const noop = new Set(D.log.filter(x => x.noop).map(x => x.id));
+    evs.forEach(e => { nEv++; if (noop.has(e.id)) return; const s = owner.get(e.id); if (!s) lost.push(seed + ':' + e.id + ':' + e.kind); else if (L.CRITICAL[e.kind] && s.act !== e.kind) critMiss.push(seed + ':' + e.kind + '→' + s.act); });
     if (D.steps.some(s => s.main && s.bubble && s.bubble.n > 1)) sumOk++;
   }
   ok(!lost.length && !critMiss.length && sumOk > 250, 'diễn tóm tắt: 300 loạt × 120 sự kiện dồn dập (' + nEv + ' sự kiện) — không sự kiện nào mất (gộp vào một nhịp có bộ đếm ×N ở ' + sumOk + ' loạt) · việc quan trọng luôn diễn đúng loại của nó (hàng đợi dài nhất ' + maxQ + ')', lost.slice(0, 5).concat(critMiss.slice(0, 5)).join(' | '));
@@ -239,6 +240,29 @@ function checkSteps(D) {
   for (let t = 0; t < end; t += 1 / 60) { const c = S.camAt(t); if (prev) { jump = Math.max(jump, Math.abs(c.x - prev.x), Math.abs(c.y - prev.y)); zj = Math.max(zj, Math.abs(c.z - prev.z)); } if (c.x - L.W / 2 / c.z < -0.01 || c.x + L.W / 2 / c.z > L.W + 0.01 || c.y - L.H / 2 / c.z < -0.01 || c.y + L.H / 2 / c.z > L.H + 0.01) out++; zs.add(Math.round(c.z * 10)); prev = c; }
   const same = [3.3, 17.7, 41.2].every(t => JSON.stringify(S.camAt(t)) === JSON.stringify(L.stage(null, D).camAt(t)));
   ok(jump <= 20 && zj <= 0.03 && !out && same && zs.size >= 3, 'máy quay: tất định · êm (≤ 20 đv / khung; lệch lớn nhất ' + jump.toFixed(1) + ' đv, zoom ' + zj.toFixed(3) + ' / khung) · không lộ ngoài sân khấu · ' + zs.size + ' mức zoom (đi xa lùi, làm việc tiến gần, phóng tên lửa rộng)');
+}
+{
+  // CÔNG TẮC VIỆC (live_task): bộ việc cố định · tiêu đề làm sạch (≤ 60) · cùng việc = không làm gì · nhịp đúng thứ tự (cất hết đồ → clapper từ túi → clap đổi dấu → cất → đi về khu của việc)
+  const ce = L.cleanEvent, tt = ce({ kind: 'task', task: 'debug', title: 'Fix /etc/passwd bug with sk-ant-api03-AAAABBBBCCCCDDDDEEEE in ryan@x.io and a very long tail of many many words here' }).ev;
+  ok(ce({ kind: 'task', task: 'hack' }).error && ce({ kind: 'task' }).error && ce({ kind: 'task', task: 'code', title: 5 }).error && L.TASKS.length === 12 && tt.task === 'debug' && !/etc|passwd|sk-ant|ryan|@/.test(tt.title) && Array.from(tt.title).length <= 60 && /^Fix bug with/.test(tt.title),
+    'live_task: 12 việc cố định (task lạ / thiếu → lỗi) · tiêu đề qua cùng luật làm sạch, ≤ 60 ký tự ("' + tt.title + '")');
+  const D = L.director(); let t = 0;
+  const seqT = [['read', 0], ['task', 0.5, 'debug'], ['task', 0.7, 'debug'], ['edit', 1], ['task', 9, 'debug'], ['task', 14, 'release'], ['test_run', 15], ['task', 30, 'chat']];
+  let i = 0; for (; t < 60; t += 1 / 30) { while (i < seqT.length && seqT[i][1] <= t) { D.push({ kind: seqT[i][0], task: seqT[i][2] }, t); i++; } D.advance(t); }
+  const claps = D.steps.filter(s => s.clip === 'lvClap'), noops = D.log.filter(x => x.noop).length;
+  const order = claps.map(c => { const k = D.steps.indexOf(c), pre = D.steps[k - 1], post = D.steps.slice(k + 1, k + 4), walk = post.find(s => s.type === 'walk');
+    return pre.type === 'takeOut' && pre.propOut === 'clapper' && pre.propIn === null && pre.clip === 'lvRummage' && c.taskMark && post[0].type === 'putBack' && post[0].propIn === 'clapper' && (!walk || (walk.propIn === null && walk.zone === L.TASK_HOME[c.taskMark])); });
+  ok(claps.length === 3 && claps.map(c => c.taskMark).join(',') === 'debug,release,chat' && noops === 2 && order.every(Boolean) && D.taskAt(59) === 'chat' && D.taskAt(claps[1].t0 - 0.01) === 'debug',
+    'nhịp "việc mới": 3 lần đổi việc → 3 nhịp (debug, release, chat); 2 lần gửi lại cùng việc = không làm gì · thứ tự: cất hết đồ → lục túi lấy clapper → clap (đổi dấu trên mũ) → cất → đi tay không về khu của việc', claps.map(c => c.taskMark).join(',') + ' noop ' + noops + ' order ' + order.join(','));
+  const S = L.stage(null, D), F = S.sample(claps[1].t0 + 0.6), sv = S.svg(claps[1].t0 + 0.6, { tr: x => x });
+  ok(F.task === 'release' && /lv-badge/.test(sv) && L.bubbleText(F.bubble) === L.TASK_NEW.release, 'dấu việc trên mũ đổi ở nhịp clap · bong bóng "' + L.TASK_NEW.release + '" (câu của bảng, không tiêu đề agent)');
+  // quy tắc vàng một nguồn: GUIDE.md §3 → rules.js → initialize / start_here / chatroom (khi có tool) / skill
+  const Rules = require(path.join(ROOT, 'server/rules.js')), { TOOLS, scopeCtx } = require(path.join(ROOT, 'server/mcp.js')), Agent = require(path.join(ROOT, 'server/agent.js'));
+  const RULE = Rules.golden().find(r => /live_task/.test(r)) || '';
+  const skTxt = JSON.stringify(Agent.wrapper('claude'));
+  ok(/differs from the current one/.test(RULE) && Rules.mcp({}, TOOLS).includes(RULE) && Rules.forConnection({}, TOOLS).includes(RULE) && !Rules.mcp(scopeCtx('mcp:read'), TOOLS).includes('live_task')
+    && skTxt.includes('live_task') && skTxt.includes('Flip the task switch') && TOOLS.some(x => x.name === 'live_task' && x.annotations.readOnlyHint === false && x.description === Rules.LIVE.task),
+    'quy tắc "đổi việc → gọi live_task trước": một nguồn (GUIDE.md §3 qua rules.js) → MCP initialize + start_here + skill Claude; kết nối chỉ đọc không nghe (live_task là tool ghi) · mô tả tool từ rules.js');
 }
 /* ------------------------------------------------------------------ 3. bộ chuyển hooks */
 const HOOK = path.join(ROOT, 'tools/live-hook.mjs');
@@ -358,6 +382,17 @@ const { classify } = await import(HOOK);
   const mres = JSON.parse(mr.result.content[0].text);
   const mbad = await (await fetch(BASE + '/mcp', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, own), body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'live_event', arguments: { kind: 'hack' } } }) })).json();
   ok(mres.ok && mres.kind === 'search' && !/secret|plan|TODO in ~/.test(mres.label) && mbad.result.isError, 'MCP live_event: sự kiện vào cùng đường (nhãn đã làm sạch: "' + mres.label + '") · kind lạ → lỗi có mã');
+  // live_task qua MCP (ghi: mcp:read không gọi được) + qua token live (POST kind task) · cùng việc = không phát lại
+  {
+    const call = async (args, hdr) => (await (await fetch(BASE + '/mcp', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, hdr || own), body: JSON.stringify({ jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name: 'live_task', arguments: args } }) })).json()).result;
+    const a1 = JSON.parse((await call({ task: 'research', title: 'Look into ~/.ssh/id_rsa options' })).content[0].text), a2 = JSON.parse((await call({ task: 'research', title: 'again' })).content[0].text), a3 = await call({ task: 'nope' });
+    const pt = await post({ kind: 'task', task: 'code', title: 'Write the parser' }, { Authorization: 'Bearer ' + LT });
+    const { MCP, scopeCtx } = require(path.join(ROOT, 'server/mcp.js')), { Store } = require(path.join(ROOT, 'server/store.js'));
+    const MH = fs.mkdtempSync(path.join(os.tmpdir(), 'gc-live-mcp-')); tmp.push(MH);
+    const ro = await new MCP({ engine: GC, store: new Store(MH), version: 't', live: { accept: () => ({ ev: { id: 1, task: 'code', title: '' } }) } }).handle({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'live_task', arguments: { task: 'code' } } }, scopeCtx('mcp:read'));
+    ok(a1.ok && a1.task === 'research' && !/ssh|id_rsa|~/.test(a1.title) && a2.same === true && a3.isError && pt.status === 202 && ro.result && ro.result.isError && /FORBIDDEN/.test(ro.result.content[0].text),
+      'live_task: MCP (tiêu đề làm sạch "' + a1.title + '") · gửi lại cùng việc → same, không phát · task lạ → lỗi · token live gửi được kind task · kết nối mcp:read → FORBIDDEN', JSON.stringify([a1, a2, ro.result && ro.result.content[0].text.slice(0, 80)]));
+  }
   // trần tần suất: dồn 60, hồi 10 / s → bắn 90 liên tục phải có 429 + Retry-After
   let n429 = 0, retry = null;
   const burst = await Promise.all(Array.from({ length: 90 }, () => post({ kind: 'read' }, { Authorization: 'Bearer ' + LT })));

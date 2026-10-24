@@ -197,6 +197,12 @@
     var d = Math.max(0.8, st.dur || 1.4);
     return { dur: d, keys: cyc([mix(C.POSES.fWave, { wR: 0, armR: { rot: -24 }, foreR: { rot: 6 } }), mix(C.POSES.fWave2, { wR: 0, armR: { rot: -24 }, foreR: { rot: 6 } })], 0.22, d), events: [[0.1, { sfx: 'chime', gain: 0.3 }]] };
   } });
+  // CÔNG TẮC VIỆC: giơ bảng clapper lên, đập "cạch" hai lần (chuyển cảnh = việc mới)
+  clip('lvClap', { label: 'Đập bảng clapper', view: 'front', make: function (st) {
+    var d = Math.max(1, st.dur || 1.4), up = mix(C.POSES.lvShow, { armR: { rot: -120 }, foreR: { rot: -40 } }), hit = mix(C.POSES.lvShow, { armR: { rot: -100 }, foreR: { rot: -10 }, head: { rot: 4 } });
+    return { dur: d, keys: [[0, 'lvHold'], [0.3, up, 'back'], [0.45, hit, 'snap'], [0.62, up, 'out'], [0.77, hit, 'snap'], [d, 'lvHold', 'io']],
+      events: [[0.45, { sfx: 'tick', gain: 0.6 }], [0.77, { sfx: 'tick', gain: 0.7 }], [0.8, { sfx: 'ta-da', gain: 0.3 }]] };
+  } });
   clip('lvStartle', { label: 'Giật nảy mình', view: 'front', make: function (st) {
     var d = Math.max(0.7, st.dur || 0.9);
     return { dur: d, keys: [[0, 'lvF'], [0.1, 'lvSquash', 'out'], [0.26, mix(C.POSES.lvJump, { root: { y: -40 } }), 'up', { ez: { 'root.y': 'up' } }], [0.5, 'lvSquash', 'down', { ez: { 'root.y': 'down' } }], [d, 'lvF', 'io']],

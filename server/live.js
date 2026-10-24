@@ -61,6 +61,7 @@ class LiveHub {
     if (w) return { error: 'too many live events — slow down', code: 429, retry: w };
     const now = this.now(), c = this.L.cleanEvent(raw, now);
     if (!c.ev) return { error: c.error, code: 400 };
+    if (c.ev.kind === 'task') { if (c.ev.task === this.lastTask) return { same: true }; this.lastTask = c.ev.task; }   // cùng việc → không làm gì (không lặp nhịp "việc mới")
     const ev = Object.assign({ id: ++this.seq, ts: now, via: who === 'live' ? 'hook' : who === 'mcp' ? 'mcp' : 'owner' }, c.ev);
     this.ring.push(ev); if (this.ring.length > RING) this.ring.shift();
     const frame = 'id: ' + ev.id + '\nevent: live\ndata: ' + JSON.stringify(ev) + '\n\n';

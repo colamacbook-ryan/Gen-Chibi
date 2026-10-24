@@ -2133,5 +2133,8 @@
  "Phát lại {n} sự kiện mẫu": "Replaying {n} demo events",
  "Trên máy chạy Claude Code, chạy lệnh dưới: genchibi chép tệp hook đã kiểm ra ngoài thư mục cài rồi ghép hooks vào cấu hình của Claude Code (có sao lưu). gen-chibi không tự sửa cấu hình nào khi bạn chưa chạy lệnh.": "On the machine where Claude Code runs, run the command below: genchibi copies the verified hook script out of the install folder and merges the hooks into Claude Code's settings (with a backup). gen-chibi never edits any settings until you run it.",
  "Chỉ in đoạn cấu hình để tự dán: genchibi live hook. Token live chỉ gửi được sự kiện Live — không đọc được gì; đổi token thì chạy lại lệnh.": "To only print the snippet and paste it yourself: genchibi live hook. The live token can only send Live events — it cannot read anything; after rotating it, run the command again.",
- "Đã đổi token live — chạy lại lệnh genchibi live hook.": "Live token rotated — run genchibi live hook again."
+ "Đã đổi token live — chạy lại lệnh genchibi live hook.": "Live token rotated — run genchibi live hook again.",
+ "Đổi việc": "Task switch",
+ "Đang làm: {task}": "Working on: {task}",
+ "Việc": "Task"
 }

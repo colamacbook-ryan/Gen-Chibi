@@ -220,6 +220,11 @@ Tệp hook là bản chép nằm ngoài thư mục cài (bản Docker lấy từ
 Claude Code chờ và chỉ gửi loại việc — không prompt, nội dung tệp, đường dẫn, lệnh hay kết quả. Token live (nằm trong tệp 0600 cạnh tệp hook, không bao giờ trên dòng lệnh)
 chỉ gửi được sự kiện Live. Agent khác gọi tool MCP `live_event`. Chi tiết: [docs/LIVE.md](docs/LIVE.md).
 
+**Công tắc việc** (luật vàng cho mọi agent, có trong chỉ dẫn MCP, `start_here` và skill của agent): khi agent bắt đầu
+một việc khác việc đang làm, nó gọi `live_task` trước (`code`, `debug`, `test`, `research`, `read`, `write`, `design`,
+`plan`, `review`, `release`, `chat`, `other` + tiêu đề ngắn). Nhân vật đập bảng clapper, cất hết đồ, đổi dấu trên mũ rồi
+đi về góc của việc đó; Studio hiện "Đang làm: …" và gắn việc cho các sự kiện sau. Gửi lại cùng việc thì không có gì xảy ra.
+
 ## Core AI (LLM API)
 
 Studio › Cài đặt AI: chọn OpenRouter, DeepSeek, MiniMax hoặc địa chỉ tuỳ chỉnh chuẩn OpenAI, dán API key (mã hoá AES-256-GCM trên máy, không bao giờ trả về trình duyệt). "Kiểm tra model" chạy một kịch bản thử và chấm: JSON đúng chuẩn, số lần phải sửa, độ trễ, token.
