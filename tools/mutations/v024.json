@@ -1,0 +1,185 @@
+{
+ "_": "gen-chibi v0.24 — đột biến cho Sân khấu Live (INT-21): làm sạch nhãn, nhãn người đọc, hook không gửi nội dung / luôn thoát 0, diễn tóm tắt giữ việc quan trọng, genchibi live hook (--install-into, không in bí mật, Docker chỉ dùng gói đã kiểm), token live, đạo diễn, máy quay. Chạy: node tools/mutate.mjs --data tools/mutations/v024.json [--jobs N --wrap \"bash netns.sh\"] [ID…]; kiểm nhanh: --check. © 2026 Gen Labs — All rights reserved.",
+ "mutations": [
+  {
+   "id": "L01",
+   "guard": "nhãn: lệnh ở giữa câu (CMD_ANY) bị bỏ cả nhãn",
+   "file": "engine/live.js",
+   "find": "if (CMD_RE.test(s) || CMD_ANY.test(s) || META_RE.test(s)) return '';",
+   "replace": "if (CMD_RE.test(s) || META_RE.test(s)) return '';",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "redact: 3000 nhãn"
+  },
+  {
+   "id": "L02",
+   "guard": "bong bóng chỉ là câu của bảng (không nhãn agent)",
+   "file": "engine/live.js",
+   "find": "function bubbleOf(kind, level, a) { return { id: phrase(",
+   "replace": "function bubbleOf(kind, level, a) { return { id: a && a.label ? a.label : phrase(",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "nhãn người đọc"
+  },
+  {
+   "id": "L03",
+   "guard": "hook không gửi nội dung (đường dẫn tệp)",
+   "file": "tools/live-hook.mjs",
+   "find": "      if (k === 'delegate') return null;   // SubagentStart",
+   "replace": "      if (h.tool_input && h.tool_input.file_path) return Object.assign(out(k), { label: h.tool_input.file_path });\n      if (k === 'delegate') return null;   // SubagentStart",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "hooks: sự kiện chỉ có kind"
+  },
+  {
+   "id": "L04",
+   "guard": "hook luôn thoát 0",
+   "file": "tools/live-hook.mjs",
+   "find": "  main().finally(() => process.exit(0));",
+   "replace": "  main().finally(() => process.exit(process.env.GC_LIVE_URL ? 0 : 3));",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "đều thoát 0"
+  },
+  {
+   "id": "L05",
+   "guard": "diễn tóm tắt không gộp / bỏ việc quan trọng",
+   "file": "engine/live.js",
+   "find": "if (!critical(q.kind)) idx.push(i);",
+   "replace": "idx.push(i);",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "diễn tóm tắt"
+  },
+  {
+   "id": "L06",
+   "guard": "--install-into sao lưu bản cũ",
+   "file": "cli/genchibi",
+   "find": "fs.copyFileSync(file, bak, fs.constants.COPYFILE_EXCL); fs.chmodSync(bak, st.mode & 0o777);",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "sao lưu bản cũ"
+  },
+  {
+   "id": "L07",
+   "guard": "--install-into từ chối tệp không phải JSON",
+   "file": "cli/genchibi",
+   "find": "try { cur = JSON.parse(raw); } catch (e) { out(\"bad not JSON\"); }",
+   "replace": "try { cur = JSON.parse(raw); } catch (e) { cur = {}; }",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "--install-into từ chối"
+  },
+  {
+   "id": "L08",
+   "guard": "live hook không in token chủ",
+   "file": "cli/genchibi",
+   "find": "cmd=\"GC_LIVE_URL=$(shq \"$URL\") GC_LIVE_TOKEN=$tok",
+   "replace": "cmd=\"GC_LIVE_URL=$(shq \"$URL\") GC_API_TOKEN=$(owner_token) GC_LIVE_TOKEN=$tok",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "không in token chủ"
+  },
+  {
+   "id": "L09",
+   "guard": "Docker: hook chỉ từ gói đã kiểm",
+   "file": "cli/genchibi",
+   "find": "tf=\"$(trust_files)\"; src=\"${tf:+$tf/live-hook.mjs}\"",
+   "replace": "tf=\"$(trust_files)\"; src=\"$HOME_DIR/current/tools/live-hook.mjs\"",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "Docker: gói phát hành"
+  },
+  {
+   "id": "L10",
+   "guard": "token live chỉ mở POST /api/live/event",
+   "file": "server/main.js",
+   "find": "if (p === '/api/live/event' && m === 'POST' && live.tokenOk(req)) return liveEvent(req, res, 'live');",
+   "replace": "if (p.startsWith('/api/live/') && live.tokenOk(req)) return liveEvent(req, res, 'live');",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "token live CHỈ mở"
+  },
+  {
+   "id": "L11",
+   "guard": "đổi kế hoạch giữa đường: đi tiếp từ chỗ đang đứng",
+   "file": "engine/live.js",
+   "find": "if (s.type === 'walk') { s.x1 = s.x0 + (s.x1 - s.x0) * (t - s.t0) / Math.max(1e-6, s.t1 - s.t0); }",
+   "replace": "if (s.type === 'walk') { /* đột biến */ }",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "đạo diễn: 2000 dãy"
+  },
+  {
+   "id": "L12",
+   "guard": "đồ của túi chỉ ra bằng lục túi",
+   "file": "engine/live.js",
+   "find": "return emit({ type: 'takeOut', t0: t, t1: t + (hurry ? 0.9 : 1.3), clip: 'lvRummage',",
+   "replace": "return emit({ type: 'takeOut', t0: t, t1: t + (hurry ? 0.9 : 1.3), clip: 'lvShelf',",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "đạo diễn: 2000 dãy"
+  },
+  {
+   "id": "L13",
+   "guard": "trộn tư thế ở chỗ nối bước",
+   "file": "engine/live.js",
+   "find": "var BLEND = 0.22;",
+   "replace": "var BLEND = 0;",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "không giật tư thế"
+  },
+  {
+   "id": "L14",
+   "guard": "trần tần suất theo kênh",
+   "file": "server/live.js",
+   "find": "const RATE = { cap: 60, perSec: 10 };",
+   "replace": "const RATE = { cap: 1e9, perSec: 1e9 };",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "trần tần suất"
+  },
+  {
+   "id": "L15",
+   "guard": "máy quay tất định / êm",
+   "file": "engine/live.js",
+   "find": "var n = 12, sx = 0, sz = 0;",
+   "replace": "var n = 1, sx = 0, sz = 0;",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "máy quay"
+  }
+ ]
+}

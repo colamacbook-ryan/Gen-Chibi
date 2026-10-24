@@ -1,4 +1,4 @@
-# Live stage (Agent Live Stage) — spike
+# Live stage (Agent Live Stage) — v0.24
 
 © 2026 Gen Labs — All rights reserved.
 
@@ -42,41 +42,50 @@ rule is a second fence for other agents. Labels are not written to the server lo
 
 ## Connect Claude Code
 
-Studio › System › Live stage › *Connect Claude Code* shows the snippet with your token. It looks like this
-(gen-chibi never edits `~/.claude` itself — paste it into `~/.claude/settings.json` or a project's
-`.claude/settings.local.json`):
+On the machine where Claude Code runs:
 
-```json
-{
-  "hooks": {
-    "SessionStart":     [{ "hooks": [{ "type": "command", "command": "GC_LIVE_URL=http://127.0.0.1:7480 GC_LIVE_TOKEN=gcl_… node /path/to/gen-chibi/tools/live-hook.mjs", "timeout": 2 }] }],
-    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "…same…", "timeout": 2 }] }],
-    "PreToolUse":       [{ "matcher": "*", "hooks": [{ "type": "command", "command": "…same…", "timeout": 2 }] }],
-    "PostToolUse":      [{ "matcher": "*", "hooks": [{ "type": "command", "command": "…same…", "timeout": 2 }] }],
-    "Notification":     [{ "hooks": [{ "type": "command", "command": "…same…", "timeout": 2 }] }],
-    "Stop":             [{ "hooks": [{ "type": "command", "command": "…same…", "timeout": 2 }] }],
-    "SubagentStop":     [{ "hooks": [{ "type": "command", "command": "…same…", "timeout": 2 }] }],
-    "PreCompact":       [{ "hooks": [{ "type": "command", "command": "…same…", "timeout": 2 }] }],
-    "SessionEnd":       [{ "hooks": [{ "type": "command", "command": "…same…", "timeout": 2 }] }]
-  }
-}
+```bash
+genchibi live hook --install-into ~/.claude/settings.json   # merge (backup settings.json.bak-<time>), atomic write
+genchibi live hook                                          # print the snippet only (--json: just the JSON)
 ```
 
+- The hook script is copied to `~/.local/lib/gen-chibi/live-hook.mjs` (0600). Docker installs copy it **only** from
+  the SHA-256-verified release package (`$TD/rel/<version>/live-hook.mjs`, kept by the same verification as the
+  compose files — v0.23.1 trust rules); native installs copy it from `current/`. Claude Code never runs code from the
+  install folder.
+- The command uses the absolute path of `node` (apps opened from the Dock do not see the terminal PATH).
+- `--install-into` refuses symlinks, folders, files that are not a JSON object, a `hooks` that is not an object and
+  any path inside the install folder; it keeps your keys and your own hooks, and running it again replaces the Live
+  hooks instead of adding them twice. Without `--install-into` nothing is written.
+- The printed snippet contains the live token and nothing else secret (no owner token, no keys). After rotating the
+  token in the Studio, run the command again.
+
+The Studio panel shows the same snippet (with `$HOME/.local/lib/gen-chibi/live-hook.mjs`, expanded by the hook's shell).
+
 The adapter never blocks the agent: stdin read ≤ 250 ms, POST ≤ 300 ms, always exits 0, prints nothing on stdout
-(`GC_LIVE_DEBUG=1` → reasons on stderr).
+(`GC_LIVE_DEBUG=1` → reasons on stderr). Hook payload shapes were checked against **Claude Code 2.1.310** with a real
+`claude -p` session (local fake API, no cost); the recorded payloads are in `tools/fixtures/live/` and replayed by the tests.
 
 | Claude Code hook | Event |
 |---|---|
 | SessionStart / SessionEnd | `session_start` / `stop` |
-| UserPromptSubmit | `prompt` (the prompt text is never sent) |
-| PreToolUse Read · Grep / Glob / LS / WebSearch / WebFetch · Edit / MultiEdit · Write | `read` · `search` · `edit` · `write` |
-| PreToolUse Bash | `test_run` if the command looks like a test (npm test, pytest, go test, test.sh…), `release` for git push / gh release / npm publish, else `run` |
-| PostToolUse Bash (test) | `test_pass` / `test_fail` (decided locally from the result; the result is not sent) |
-| PostToolUse with an error | `error` |
-| PreToolUse Task / Agent · SubagentStop | `delegate_start` (label = sub-agent type) · `delegate_end` |
-| TodoWrite / plan mode | `think` |
-| Stop · Notification | `wait_user` (`limit` when the notification is about a usage limit) |
+| UserPromptSubmit | `prompt` (the prompt is never sent; background-task notifications injected by Claude Code are ignored) |
+| PreToolUse Read / Skill · Grep / Glob / WebSearch / WebFetch / ToolSearch · Edit / NotebookEdit · Write | `read` · `search` · `edit` · `write` |
+| PreToolUse Bash | `test_run` if the command looks like a test, `release` for git push / gh release / npm publish, else `run` |
+| PostToolUse / PostToolUseFailure Bash (test) | `test_pass` / `test_fail` (decided locally; the output is not sent) |
+| PostToolUseFailure (other) · interrupted by you | `error` · `wait_user` |
+| SubagentStart · SubagentStop | `delegate_start` (+ a fixed group: explore / plan / review / test / general / other — not the real name) · `delegate_end` |
+| TodoWrite / plan mode | `think` (the notebook comes out) |
+| Stop · Notification (permission / question) · Notification idle | `wait_user` · `wait_user` · `idle` (`limit` when it is about a usage limit) |
 | PreCompact | `limit` |
+
+## Bubbles: plain words only
+
+The bubble text always comes from a fixed phrase table chosen by (kind, tool group, helper group, escalation
+level) and translated to the UI language — e.g. "Digging through the code", "Looking it up online", "Sending a helper
+to scout", "FIRE! Where's the extinguisher!". It never shows tool names, helper type names, labels sent by agents
+or any content. Agent labels (cleaned by the rule above) appear only in the event table. A counter `×N` shows how
+many events one action stands for.
 
 ## The director (engine/live.js, DOM-free, deterministic)
 
@@ -85,7 +94,10 @@ Each event becomes a plan: put away what is in hand → walk to the zone → (ru
 stands); bursts of the same class coalesce (20 reads in 2 s = one long, increasingly frantic search at the shelf);
 minimum dwell 1.2 s for every main action; long waits escalate (coffee → watch → yawn → nap on the sofa); repeated
 test failures escalate (facepalm → hammer → rubber duck → screen on fire + extinguisher); when the agent is faster
-than the stage, old low-priority steps are skipped and hands move faster.
+than the stage, quick steps are folded into one action with a counter ("summary acting"): no event is lost, and
+errors, test results, releases, waiting for you, prompts, limits and delegation always get their own beat of their
+own kind; hands move faster while the queue is long. A gentle deterministic camera follows the character (closer
+while it works, wider on long walks and for the rocket launch).
 
 Replay a recorded session: `GC_LIVE_TOKEN=gcl_… node tools/live-replay.mjs [file.jsonl] --speed 2`
 (default file `kinds/live/demo-session.jsonl`; `--dry` prints the schedule).

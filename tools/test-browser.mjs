@@ -4180,8 +4180,9 @@ if (want('live')) {
     const navOk = await pg.evaluate(() => [...document.querySelectorAll('.nav-item')].some(b => b.getAttribute('aria-current') === 'page' && /Sân khấu Live/.test(b.textContent)));
     await pg.waitForSelector('#liveConn.ok', { timeout: 10000 });
     const snippet = await pg.textContent('#liveSnippet');
-    if (!navOk || !/live-hook\.mjs/.test(snippet) || !/"PreToolUse"/.test(snippet) || !/GC_LIVE_TOKEN=gcl_/.test(snippet)) throw new Error('trang Live: mục menu / đoạn settings.json chưa đúng');
-    console.log('  ✓ Live: mục "Sân khấu Live" trong menu Hệ thống · SSE nối (Đang nghe) · bảng "Kết nối Claude Code" có đoạn settings.json 9 hook + token live');
+    const cmdTxt = await pg.textContent('#liveCmd');
+    if (!navOk || !/live-hook\.mjs/.test(snippet) || !/"PreToolUse"/.test(snippet) || !/GC_LIVE_TOKEN=gcl_/.test(snippet) || cmdTxt.trim() !== 'genchibi live hook --install-into ~/.claude/settings.json') throw new Error('trang Live: mục menu / lệnh / đoạn settings.json chưa đúng');
+    console.log('  ✓ Live: mục "Sân khấu Live" trong menu Hệ thống · SSE nối (Đang nghe) · bảng "Kết nối Claude Code": lệnh genchibi live hook --install-into + đoạn settings.json + token live');
     // đo hiệu năng: long task + khoảng cách khung (rAF) suốt lúc phát lại
     await pg.evaluate(() => {
       window.__lt = []; window.__fr = []; let last = 0;
@@ -4219,7 +4220,8 @@ if (want('live')) {
     const rp = spawn(process.execPath, [path.join(ROOT, 'tools/live-replay.mjs'), '--speed', '20', '--url', 'http://127.0.0.1:7670'], { env: { ...process.env, GC_LIVE_TOKEN: info.token, HOME: LHOME }, stdio: 'ignore' });
     const rc = await new Promise(r => rp.on('exit', r));
     await pg.waitForFunction(() => document.querySelectorAll('#liveRows tr:not([data-id^="D"])').length >= 40, null, { timeout: 15000 });
-    const leak = await pg.evaluate(() => /\/|@|sk-|gcl_/.test([...document.querySelectorAll('#liveRows td:last-child')].map(td => td.textContent).join('') + (document.querySelector('.lv-bubble text') || {}).textContent));
+    const leak = await pg.evaluate(() => /\/|@|sk-|gcl_/.test([...document.querySelectorAll('#liveRows td:last-child')].map(td => td.textContent).join('') + (document.querySelector('.lv-bubble text') || {}).textContent)
+      || window.__gcLive.director.steps.some(s => s.bubble && /\b(Read|Grep|Glob|Bash|Edit|Write|Agent|Task|Explore|TodoWrite|WebFetch|WebSearch)\b/.test(window.GenChibi.live.bubbleText(s.bubble, window.GenChibi.i18n.t))));
     if (rc !== 0 || leak) throw new Error('replay qua server rc=' + rc + ' leak=' + leak);
     console.log('  ✓ Live qua server: tools/live-replay.mjs (token live) → POST /api/live/event → SSE → bảng sự kiện (≥ 40 dòng) · bong bóng / nhãn không có đường dẫn / email / token');
     // âm thanh mặc định tắt, bật được

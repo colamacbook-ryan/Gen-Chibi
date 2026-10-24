@@ -175,13 +175,71 @@ function checkSteps(D) {
   ok(on.p95 < 12 && off.p95 > on.p95 * 1.8, 'không giật tư thế ở chỗ nối bước: p95 bước nhảy điểm mốc / khung = ' + on.p95.toFixed(1) + ' đơn vị khung (tắt trộn: ' + off.p95.toFixed(1) + ' — rào có tác dụng, ' + on.n + ' mẫu)');
   // vẽ được trong Node: một khung SVG hoàn chỉnh có túi đeo + đạo cụ + bong bóng (dịch được)
   const S = L.stage(null, D), tk = D.steps.find(s => s.type === 'takeOut' && s.propOut !== 'book');
-  const sv = tk ? S.svg(tk.t1 - 0.05, { tr: x => 'EN:' + x }) : '';
-  ok(tk && /<svg[^>]+viewBox="0 0 1280 720"/.test(sv) && sv.includes('#a36a3c') && sv.includes(L.PROP_ART[tk.propOut].slice(0, 40)) && /EN:/.test(sv) && sv.length < 400000, 'khung SVG (Node): sân khấu + túi đeo + ' + (tk && tk.propOut) + ' trong tay + bong bóng qua hàm dịch (' + Math.round(sv.length / 1024) + ' KB)');
+  const sv = tk ? S.svg(tk.t1 - 0.05, { tr: x => 'EN:' + x }) : '', mb = D.steps.find(s => s.main && s.bubble), sb = mb ? S.svg(mb.t0 + 0.5, { tr: x => 'EN:' + x }) : '';
+  ok(tk && /<svg[^>]+viewBox="0 0 1280 720"/.test(sv) && sv.includes('#a36a3c') && sv.includes(L.PROP_ART[tk.propOut].slice(0, 40)) && /EN:/.test(sb) && sv.length < 400000, 'khung SVG (Node): sân khấu + túi đeo + ' + (tk && tk.propOut) + ' trong tay + bong bóng qua hàm dịch (' + Math.round(sv.length / 1024) + ' KB)');
   // ngân sách: lấy mẫu một khung < 2 ms trung bình (Node)
   const t0 = process.hrtime.bigint(); let n = 0; for (let t = 0; t < 60; t += 1 / 60) { S.sample(t); n++; } const ms = Number(process.hrtime.bigint() - t0) / 1e6 / n;
   ok(ms < 2, 'ngân sách: sample() trung bình ' + ms.toFixed(3) + ' ms / khung (Node, gồm dựng clip theo bước)');
 }
 
+
+{
+  // NHÃN NGƯỜI ĐỌC: bong bóng chỉ là câu của bảng (+ "×N") — không bao giờ tên công cụ / loại trợ lý / nhãn hay nội dung agent gửi
+  const EN = JSON.parse(fs.readFileSync(path.join(ROOT, 'locales/en/engine.json'), 'utf8')), IDS = new Set(L.phraseIds());
+  const TOOLS = ['Read', 'Grep', 'Glob', 'LS', 'Bash', 'Edit', 'MultiEdit', 'Write', 'Agent', 'Task', 'Explore', 'TodoWrite', 'WebFetch', 'WebSearch', 'ToolSearch', 'Skill', 'NotebookEdit', 'NotebookRead', 'mcp', 'ExitPlanMode', 'general-purpose'];
+  const TOOL_RE = new RegExp('\\b(' + TOOLS.map(x => x.replace(/[-]/g, '\\-')).join('|') + ')\\b'), SENT = 'ZZLBL';
+  const bad = [];
+  let r = 3;
+  for (let i = 0; i < 4000; i++) {
+    r = (r * 1103515245 + 12345) % 2147483648;
+    const kind = L.KINDS[r % L.KINDS.length], tool = [...TOOLS, 'x' + SENT, '', '__proto__', 'constructor'][(r >> 5) % (TOOLS.length + 4)], sub = [...L.SUBS, 'Explore', SENT, ''][(r >> 9) % (L.SUBS.length + 3)], lv = (r >> 13) % 5;
+    const id = L.phrase(kind, tool, sub, lv), en = EN[id];
+    if (!IDS.has(id)) bad.push('lạ: ' + id);
+    if (!en) bad.push('thiếu bản en: ' + id);
+    [id, en || ''].forEach(x => { if (TOOL_RE.test(x) || x.includes(SENT)) bad.push(kind + '/' + tool + '/' + sub + ' → ' + x); });
+  }
+  // qua cả đạo diễn: sự kiện mang nhãn + tên tool + loại trợ lý → mọi bong bóng (cả bộ đếm) sạch
+  const D = L.director(); let t = 0;
+  for (let i = 0; i < 300; i++) { t += 0.05 + (i % 7) * 0.4; D.push({ kind: L.KINDS[i % L.KINDS.length], label: 'Explore the ' + SENT + ' Grep thing', tool: TOOLS[i % TOOLS.length], sub: L.SUBS[i % L.SUBS.length] }, t); D.advance(t); }
+  for (let k = 0; k < 400; k++) { t += 0.25; D.advance(t); }
+  const texts = D.steps.filter(s => s.bubble).map(s => L.bubbleText(s.bubble, x => EN[x] || x) + ' | ' + L.bubbleText(s.bubble));
+  texts.forEach(x => { if (TOOL_RE.test(x.replace(/×\d+/g, '')) || x.includes(SENT)) bad.push('bong bóng: ' + x); });
+  ok(!bad.length && texts.length > 50, 'nhãn người đọc: 4000 tổ hợp (loại × công cụ × loại trợ lý × bậc) + ' + texts.length + ' bong bóng qua đạo diễn — chỉ câu của bảng (có bản en), không tên công cụ / loại trợ lý / nhãn agent', [...new Set(bad)].slice(0, 6).join(' | '));
+  // câu theo công cụ: Grep / WebSearch / TodoWrite / trợ lý trinh sát ra câu riêng (người đọc hiểu đang làm gì)
+  ok(L.phrase('search', 'WebSearch', '', 0) !== L.phrase('search', 'Grep', '', 0) && L.phrase('delegate_start', '', 'explore', 0) !== L.phrase('delegate_start', '', 'other', 0) && L.phrase('think', 'TodoWrite', '', 0) !== L.phrase('think', '', '', 0),
+    'nhãn theo nhóm công cụ: tìm trong code ≠ tra cứu mạng · trợ lý trinh sát ≠ trợ lý chung · lên kế hoạch ≠ suy nghĩ');
+  // lên kế hoạch → sổ tay từ túi (lấy, viết, cất)
+  const P = run([{ kind: 'think', at: 0 }], 10, 1 / 30);
+  const Q = L.director(); Q.push({ kind: 'think', tool: 'TodoWrite' }, 0); for (let u = 0; u < 12; u += 1 / 30) Q.advance(u);
+  ok(!P.steps.some(s => s.propOut === 'notebook') && Q.steps.some(s => s.type === 'takeOut' && s.propOut === 'notebook') && Q.steps.some(s => s.clip === 'lvNote' && s.propIn === 'notebook') && Q.steps.some(s => s.type === 'putBack' && s.propIn === 'notebook'), 'lên kế hoạch (TodoWrite / plan) → lục túi lấy sổ tay, ghi, cất lại; suy nghĩ thường thì chống cằm');
+}
+{
+  // DIỄN TÓM TẮT: agent nhanh hơn sân khấu — không sự kiện nào mất; việc quan trọng (lỗi, test đỏ / xanh, phát hành, chờ bạn…) luôn có nhịp riêng đúng loại
+  let lost = [], critMiss = [], nEv = 0, maxQ = 0, sumOk = 0;
+  for (let seed = 1; seed <= 300; seed++) {
+    const r = rng(seed * 7919), D = L.director(), evs = []; let t = 0;
+    for (let i = 0; i < 120; i++) { t += r() < 0.8 ? 0.02 + r() * 0.15 : r() * 2; const kind = r() < 0.75 ? ['read', 'search', 'edit', 'run', 'think', 'write'][Math.floor(r() * 6)] : L.KINDS[Math.floor(r() * L.KINDS.length)]; evs.push({ id: 'e' + i, kind, at: t }); }
+    let i = 0; const end = t + 120;
+    for (let u = 0; u <= end; u += 0.1) { while (i < evs.length && evs[i].at <= u) { D.push({ id: evs[i].id, kind: evs[i].kind }, u); i++; } D.advance(u); maxQ = Math.max(maxQ, D.queue.length); }
+    const owner = new Map(); D.steps.filter(s => s.main && s.evs).forEach(s => s.evs.forEach(id => { if (!owner.has(id)) owner.set(id, s); }));
+    evs.forEach(e => { nEv++; const s = owner.get(e.id); if (!s) lost.push(seed + ':' + e.id + ':' + e.kind); else if (L.CRITICAL[e.kind] && s.act !== e.kind) critMiss.push(seed + ':' + e.kind + '→' + s.act); });
+    if (D.steps.some(s => s.main && s.bubble && s.bubble.n > 1)) sumOk++;
+  }
+  ok(!lost.length && !critMiss.length && sumOk > 250, 'diễn tóm tắt: 300 loạt × 120 sự kiện dồn dập (' + nEv + ' sự kiện) — không sự kiện nào mất (gộp vào một nhịp có bộ đếm ×N ở ' + sumOk + ' loạt) · việc quan trọng luôn diễn đúng loại của nó (hàng đợi dài nhất ' + maxQ + ')', lost.slice(0, 5).concat(critMiss.slice(0, 5)).join(' | '));
+  // rào có tác dụng: bỏ bớt việc quan trọng (giả lập bản cũ: hàng đợi chỉ giữ 5 mục, bỏ cũ nhất) thì phép kiểm phải bắt được
+  const D2 = L.director(); for (let k = 0; k < 20; k++) D2.push({ id: 'f' + k, kind: 'test_fail' }, 0.01 * k); D2.queue.splice(0, D2.queue.length - 5);
+  for (let u = 0; u < 200; u += 0.25) D2.advance(u);
+  const has = new Set(); D2.steps.filter(s => s.main && s.evs).forEach(s => s.evs.forEach(id => has.add(id)));
+  ok(has.size < 20, 'kiểm tra không mù: một hàng đợi bị cắt còn 5 mục làm mất ' + (20 - has.size) + ' / 20 lần test đỏ — phép kiểm trên bắt được');
+}
+{
+  // MÁY QUAY: tất định, êm (≤ 14 đơn vị và ≤ 0,03 zoom mỗi khung 60 fps), không lộ ngoài sân khấu; đứng làm việc thì tiến gần, đi xa thì lùi
+  const D = run(randomSeq(77).concat([{ kind: 'release', at: 60 }, { kind: 'wait_user', at: 70 }]), 40, 1 / 30), S = L.stage(null, D), end = D.steps[D.steps.length - 1].t1;
+  let jump = 0, zj = 0, out = 0, prev = null, zs = new Set();
+  for (let t = 0; t < end; t += 1 / 60) { const c = S.camAt(t); if (prev) { jump = Math.max(jump, Math.abs(c.x - prev.x), Math.abs(c.y - prev.y)); zj = Math.max(zj, Math.abs(c.z - prev.z)); } if (c.x - L.W / 2 / c.z < -0.01 || c.x + L.W / 2 / c.z > L.W + 0.01 || c.y - L.H / 2 / c.z < -0.01 || c.y + L.H / 2 / c.z > L.H + 0.01) out++; zs.add(Math.round(c.z * 10)); prev = c; }
+  const same = [3.3, 17.7, 41.2].every(t => JSON.stringify(S.camAt(t)) === JSON.stringify(L.stage(null, D).camAt(t)));
+  ok(jump <= 20 && zj <= 0.03 && !out && same && zs.size >= 3, 'máy quay: tất định · êm (≤ 20 đv / khung; lệch lớn nhất ' + jump.toFixed(1) + ' đv, zoom ' + zj.toFixed(3) + ' / khung) · không lộ ngoài sân khấu · ' + zs.size + ' mức zoom (đi xa lùi, làm việc tiến gần, phóng tên lửa rộng)');
+}
 /* ------------------------------------------------------------------ 3. bộ chuyển hooks */
 const HOOK = path.join(ROOT, 'tools/live-hook.mjs');
 const { classify } = await import(HOOK);
@@ -202,7 +260,13 @@ const { classify } = await import(HOOK);
     [H('PostToolUse', { tool_name: 'Bash', tool_input: { command: 'pytest -q' }, tool_response: { stdout: '12 passed ' + SENT, stderr: '' } }), 'test_pass'],
     [H('PostToolUse', { tool_name: 'Bash', tool_input: { command: 'make' }, tool_response: { stdout: '', stderr: 'Error: ' + SENT, interrupted: false, exit_code: 2 } }), 'error'],
     [H('PostToolUse', { tool_name: 'Read', tool_response: { content: SENT } }), null],
-    [H('PreToolUse', { tool_name: 'Task', tool_input: { subagent_type: 'Explore', description: SENT, prompt: SENT } }), 'delegate_start'],
+    [H('PreToolUse', { tool_name: 'Task', tool_input: { subagent_type: 'Explore', description: SENT, prompt: SENT } }), null],
+    [H('SubagentStart', { agent_id: SENT, agent_type: 'Explore' }), 'delegate_start'],
+    [H('PostToolUseFailure', { tool_name: 'Bash', tool_input: { command: 'npm test' }, error: SENT, is_interrupt: false }), 'test_fail'],
+    [H('PostToolUseFailure', { tool_name: 'Edit', tool_input: { file_path: SENT }, error: SENT, is_interrupt: true }), 'wait_user'],
+    [H('UserPromptSubmit', { prompt: '<task-notification>\n<task-id>' + SENT + '</task-id>' }), null],
+    [H('Notification', { message: SENT, notification_type: 'idle_prompt' }), 'idle'],
+    [H('Notification', { message: SENT, notification_type: 'auth_success' }), null],
     [H('SubagentStop', {}), 'delegate_end'],
     [H('Stop', { stop_hook_active: false }), 'wait_user'],
     [H('Notification', { message: 'Claude needs your permission ' + SENT }), 'wait_user'],
@@ -216,7 +280,14 @@ const { classify } = await import(HOOK);
   const wrong = T.filter(([h, k]) => (classify(h) || { kind: null }).kind !== k).map(([h, k]) => h.hook_event_name + '/' + (h.tool_name || '') + ' → ' + JSON.stringify(classify(h)) + ' (cần ' + k + ')');
   const leaky = T.map(([h]) => JSON.stringify(classify(h) || {})).filter(s => s.includes(SENT) || /hunter2|\/etc|\/home|\/srv/.test(s));
   ok(!wrong.length, 'hooks → sự kiện: ' + T.length + ' ca (Read / Grep / Glob / Edit / Write / Bash · test · phát hành · lỗi · Task / SubagentStop · Stop / Notification / PreCompact / Session*)', wrong.join(' | '));
-  ok(!leaky.length && classify(T[14][0]).label === 'Explore', 'hooks: sự kiện chỉ có kind + tên tool + "claude-code" (+ loại trợ lý) — không prompt / đường dẫn / lệnh / kết quả tool nào', leaky.join(' | '));
+  const sa = classify(T.find(([h]) => h.hook_event_name === 'SubagentStart')[0]);
+  ok(!leaky.length && sa.sub === 'explore' && !('label' in sa), 'hooks: sự kiện chỉ có kind + tên tool + "claude-code" (+ NHÓM trợ lý: explore / plan / review / test / general / other — không gửi tên thật) — không prompt / đường dẫn / lệnh / kết quả tool nào', leaky.join(' | '));
+  // DẠNG JSON THẬT: phiên claude -p thật (Claude Code 2.1.310, API giả cục bộ) ghi ở tools/fixtures/live — chuỗi sự kiện phải đúng như app nhận được hôm ghi
+  const REAL = fs.readFileSync(path.join(ROOT, 'tools/fixtures/live/claude-code-2.1.310.jsonl'), 'utf8').split('\n').filter(l => l && l[0] !== '#').map(l => JSON.parse(l));
+  const got = REAL.map(h => classify(h)).filter(Boolean), seqK = got.map(e => e.kind + (e.sub ? '[' + e.sub + ']' : '')).join(' → ');
+  const WANT = 'session_start → prompt → read → search → delegate_start[explore] → test_run → delegate_end → test_fail → edit → test_run → test_pass → wait_user → stop';
+  const realLeak = got.map(e => JSON.stringify(e)).filter(x => /add|proj|home|calc|Find where|toolu|Explore/.test(x));
+  ok(seqK === WANT && !realLeak.length, 'hooks với payload THẬT của Claude Code 2.1.310 (' + REAL.length + ' hook: SessionStart · UserPromptSubmit · Pre/PostToolUse · PostToolUseFailure · SubagentStart/Stop · Stop · SessionEnd; thông báo trợ lý nền bị bỏ): ' + seqK, seqK + ' | ' + realLeak.join(' '));
   // chạy thật như Claude Code gọi: server giả ghi lại thân, kiểm mã thoát + thời gian + không rò nội dung
   const bodies = []; let hang = false;
   const fake = http.createServer((req, res) => { let b = ''; req.on('data', c => b += c); req.on('end', () => { bodies.push({ b, auth: req.headers.authorization, xr: req.headers['x-gc-request'] }); if (hang) return; res.writeHead(202); res.end('{}'); }); });
@@ -240,8 +311,8 @@ const { classify } = await import(HOOK);
   const worst = Math.max(...all.map(r => r.ms));
   ok(worst < 1500 && slow.ms < 1500, 'live-hook.mjs không chặn agent: lâu nhất ' + worst + ' ms (server treo: ' + slow.ms + ' ms; trần đọc stdin 250 ms + gửi 300 ms + khởi động Node)');
   const sent = bodies.map(x => x.b), leak = sent.filter(b => b.includes(SENT) || /hunter2|\/etc\/|\/home\//.test(b) || b.length > 200);
-  ok(sent.length >= T.length - 1 && !leak.length && bodies.every(x => x.auth === 'Bearer ' + TOK && x.xr === '1') && sent.every(b => Object.keys(JSON.parse(b)).every(k => ['kind', 'tool', 'agent', 'at', 'label'].includes(k))),
-    'live-hook.mjs gửi ' + sent.length + ' sự kiện thật: chỉ { kind, tool, agent, at, label? }, ≤ 200 byte, Bearer + X-GC-Request — không mảnh nội dung nào (prompt, đường dẫn, lệnh, kết quả)', leak.slice(0, 3).join(' | '));
+  ok(sent.length >= T.length - 6 && !leak.length && bodies.every(x => x.auth === 'Bearer ' + TOK && x.xr === '1') && sent.every(b => Object.keys(JSON.parse(b)).every(k => ['kind', 'tool', 'agent', 'at', 'sub'].includes(k))),
+    'live-hook.mjs gửi ' + sent.length + ' sự kiện thật: chỉ { kind, tool, agent, at, sub? }, ≤ 200 byte, Bearer + X-GC-Request — không mảnh nội dung nào (prompt, đường dẫn, lệnh, kết quả)', leak.slice(0, 3).join(' | '));
   fake.close();
 }
 
@@ -257,8 +328,8 @@ const { classify } = await import(HOOK);
   const own = { Authorization: 'Bearer ' + OWNER };
   const info = await (await fetch(BASE + '/api/live/info', { headers: own })).json(), LT = info.token;
   const st = fs.statSync(path.join(HOME, 'data', 'live-token'));
-  ok(/^gcl_[A-Za-z0-9_-]{32,}$/.test(LT) && (st.mode & 0o777) === 0o600 && info.settings.hooks.PreToolUse[0].hooks[0].command.includes(LT) && info.settings.hooks.PreToolUse[0].hooks[0].command.includes('live-hook.mjs') && Object.keys(info.settings.hooks).length === 9,
-    'token live: data/live-token 0600 · /api/live/info (chủ) trả token + đoạn settings.json cho 9 hook của Claude Code');
+  ok(/^gcl_[A-Za-z0-9_-]{32,}$/.test(LT) && (st.mode & 0o777) === 0o600 && info.settings.hooks.PreToolUse[0].hooks[0].command.includes(LT) && info.settings.hooks.PreToolUse[0].hooks[0].command.includes('live-hook.mjs') && JSON.stringify(Object.keys(info.settings.hooks)) === JSON.stringify(L.HOOK_EVENTS),
+    'token live: data/live-token 0600 · /api/live/info (chủ) trả token + đoạn settings.json cho ' + L.HOOK_EVENTS.length + ' hook của Claude Code');
   const sse = await fetch(BASE + '/api/live/stream', { headers: own }), rd = sse.body.getReader(), dec = new TextDecoder(); let got = '';
   const pump = (async () => { for (;;) { const x = await rd.read().catch(() => ({ done: true })); if (x.done) return; got += dec.decode(x.value); } })();
   const codes = {};
@@ -311,6 +382,65 @@ const { classify } = await import(HOOK);
   ok(['shelf', 'desk', 'lab', 'door', 'rocket', 'coffee', 'sofa'].every(z => zones.has(z)) && props.size >= 6 && !checkSteps(DD).length, 'phiên mẫu: đi qua ' + zones.size + ' khu (' + [...zones].join(', ') + ') · lấy ' + props.size + ' loại đồ (' + [...props].join(', ') + ')');
   try { await rd.cancel(); } catch (e) { /* bỏ */ } await pump;
   srv.kill(); await new Promise(r => srv.once('exit', r));
+}
+
+/* ------------------------------------------------------------------ 5. genchibi live hook (CLI thật, bản cài native giả, HOME riêng) */
+{
+  const B = fs.mkdtempSync(path.join(os.tmpdir(), 'gc-live-cli-')); tmp.push(B);
+  const CH = path.join(B, 'install'), UH = path.join(B, 'home'), TD = path.join(UH, '.local/lib/gen-chibi');
+  fs.mkdirSync(path.join(CH, 'data'), { recursive: true }); fs.mkdirSync(TD, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(path.join(TD, 'installs'), 'native ' + fs.realpathSync(CH) + '\n', { mode: 0o600 });
+  const OWN = 'ownerSECRETtoken' + 'q'.repeat(30), MK = 'masterKEYsecret' + 'm'.repeat(30), GH = 'ghp_SECRETgithub' + 'g'.repeat(24);
+  fs.writeFileSync(path.join(CH, '.env'), 'GC_MODE=native\nGC_PORT=7765\nGC_API_TOKEN=' + OWN + '\nGC_MASTER_KEY=' + MK + '\nGC_GITHUB_TOKEN=' + GH + '\n');
+  fs.writeFileSync(path.join(CH, 'data/owner-token'), OWN + '\n');
+  fs.symlinkSync(ROOT, path.join(CH, 'current'));
+  const LT = 'gcl_' + 'T'.repeat(40);
+  const cli = (args, opt) => { const r = spawnSync('bash', [path.join(ROOT, 'cli/genchibi')].concat(args), { cwd: (opt && opt.cwd) || UH, encoding: 'utf8', env: { PATH: process.env.PATH, GC_HOME: CH, GC_CLI_INNER: '1', HOME: UH, LANG: 'C.UTF-8' }, timeout: 30000 }); return { code: r.status, out: (r.stdout || '') + (r.stderr || ''), stdout: r.stdout || '' }; };
+  const noTok = cli(['live', 'hook', '--json']);
+  fs.writeFileSync(path.join(CH, 'data/live-token'), 'gcl_bad"token;rm -rf\n'); const badTok = cli(['live', 'hook', '--json']);
+  fs.writeFileSync(path.join(CH, 'data/live-token'), LT + '\n');
+  const j = cli(['live', 'hook', '--json']), pr = cli(['live', 'hook']), usage = cli(['live', 'nope']);
+  let snip = null; try { snip = JSON.parse(j.stdout); } catch (e) { /* hỏng */ }
+  const hookFile = path.join(TD, 'live-hook.mjs'), st = fs.existsSync(hookFile) ? fs.statSync(hookFile) : null;
+  const cmds = snip ? Object.values(snip.hooks).flatMap(g => g.flatMap(x => x.hooks.map(h => h.command))) : [];
+  const allOut = j.out + pr.out;
+  ok(noTok.code !== 0 && badTok.code !== 0 && /live-token/.test(noTok.out) && usage.code === 2, 'genchibi live hook: chưa có token live / token sai dạng (ký tự lạ) → từ chối, chỉ chỗ lấy · lệnh con lạ → 2', noTok.out.slice(0, 200) + ' | ' + badTok.out.slice(0, 200));
+  ok(snip && JSON.stringify(Object.keys(snip.hooks)) === JSON.stringify(L.HOOK_EVENTS) && cmds.length === L.HOOK_EVENTS.length && cmds.every(c => c.split(LT).length === 2 && c.includes(fs.realpathSync(TD) + '/live-hook.mjs') || c.includes(TD + '/live-hook.mjs')) && cmds.every(c => /^GC_LIVE_URL='http:\/\/127\.0\.0\.1:7765' GC_LIVE_TOKEN=gcl_T+ '\/[^']+\/node' '[^']+live-hook\.mjs'$/.test(c)),
+    'genchibi live hook --json: ' + L.HOOK_EVENTS.length + ' hook đúng danh sách của engine · lệnh = URL app + token live (đúng một lần) + node tuyệt đối + bản hook chép ở ~/.local/lib/gen-chibi', j.out.slice(0, 400));
+  ok(![OWN, MK, GH, 'ownerSECRET', 'masterKEY', 'SECRETgithub'].some(x => allOut.includes(x)) && allOut.split(LT).length - 1 === 2 * L.HOOK_EVENTS.length, 'genchibi live hook: không in token chủ / khoá chủ / token GitHub — chỉ token live, đúng chỗ của nó (mỗi lệnh hook một lần)');
+  ok(st && (st.mode & 0o777) === 0o600 && fs.readFileSync(hookFile, 'utf8') === fs.readFileSync(path.join(ROOT, 'tools/live-hook.mjs'), 'utf8') && !fs.realpathSync(hookFile).startsWith(fs.realpathSync(CH) + '/') && !fs.readdirSync(TD).some(f => /^live-hook\.[A-Za-z0-9]{6}$/.test(f)),
+    'bản hook chép ra ngoài thư mục cài (0600, đúng nội dung của gói, không sót tệp tạm) — Claude Code không bao giờ chạy mã trong thư mục cài');
+  // cùng dạng với đoạn Studio (server/live.js) — khác đúng ở lệnh (đường tuyệt đối)
+  const { LiveHub } = require(path.join(ROOT, 'server/live.js')), HD = fs.mkdtempSync(path.join(B, 'hub-')), hub = new LiveHub({ dir: HD, engine: GC });
+  const sv = hub.hookSnippet('http://127.0.0.1:7765'); hub.close();
+  const shape = o => JSON.stringify(o, (k, v) => k === 'command' ? 'CMD' : v);
+  ok(snip && shape(sv) === shape(snip) && sv.hooks.Stop[0].hooks[0].command.includes('$HOME/.local/lib/gen-chibi/live-hook.mjs'), 'đoạn settings.json của Studio = đoạn của genchibi live hook (cùng hook / matcher / timeout; Studio dùng $HOME, CLI in đường tuyệt đối)');
+  // --install-into: tệp mới · ghép giữ khoá + hook người dùng · chạy lại không nhân đôi · sao lưu · từ chối symlink / không phải JSON / mảng / thư mục / trong thư mục cài
+  const CC = path.join(UH, '.claude'), SF = path.join(CC, 'settings.json');
+  const n1 = cli(['live', 'hook', '--install-into', '~/.claude/settings.json']);
+  const m1 = JSON.parse(fs.readFileSync(SF, 'utf8')), mode1 = fs.statSync(SF).mode & 0o777;
+  const USER = { model: 'opus', permissions: { allow: ['Bash(ls:*)'] }, hooks: { Stop: [{ hooks: [{ type: 'command', command: 'say done' }] }], PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'my-guard.sh' }] }] } };
+  fs.writeFileSync(SF, JSON.stringify(USER, null, 2)); fs.chmodSync(SF, 0o640);
+  const n2 = cli(['live', 'hook', '--install-into', SF]), n3 = cli(['live', 'hook', '--install-into', SF]);
+  const m3 = JSON.parse(fs.readFileSync(SF, 'utf8')), baks = fs.readdirSync(CC).filter(f => f.startsWith('settings.json.bak-'));
+  const ours = ev => (m3.hooks[ev] || []).flatMap(g => g.hooks).filter(h => /live-hook\.mjs/.test(h.command)).length;
+  ok(n1.code === 0 && mode1 === 0o600 && Object.keys(m1.hooks).length === L.HOOK_EVENTS.length, '--install-into tệp chưa có → ghi mới (0600), đủ ' + L.HOOK_EVENTS.length + ' hook', n1.out.slice(0, 300));
+  ok(n2.code === 0 && n3.code === 0 && m3.model === 'opus' && m3.permissions.allow[0] === 'Bash(ls:*)' && m3.hooks.Stop.some(g => g.hooks.some(h => h.command === 'say done')) && m3.hooks.PreToolUse.some(g => g.matcher === 'Bash' && g.hooks[0].command === 'my-guard.sh') && L.HOOK_EVENTS.every(e => ours(e) === 1) && (fs.statSync(SF).mode & 0o777) === 0o640,
+    '--install-into tệp có sẵn: giữ mọi khoá + hook của bạn, thêm hook Live; chạy lại thay chứ không nhân đôi (mỗi hook đúng 1) · giữ quyền tệp', JSON.stringify(m3).slice(0, 300));
+  ok(baks.length === 2 && JSON.parse(fs.readFileSync(path.join(CC, baks.sort()[0]), 'utf8')).model === 'opus' && !fs.readdirSync(CC).some(f => /\.gc-/.test(f)), 'sao lưu bản cũ trước mỗi lần ghi (' + baks.length + ' bản), ghi nguyên tử (không sót tệp tạm)');
+  const keep = fs.readFileSync(SF, 'utf8');
+  const LNK = path.join(B, 'link.json'); fs.symlinkSync(SF, LNK); const r1 = cli(['live', 'hook', '--install-into', LNK]);
+  const NJ = path.join(B, 'bad.json'); fs.writeFileSync(NJ, '{ not json'); const r2 = cli(['live', 'hook', '--install-into', NJ]);
+  const AR = path.join(B, 'arr.json'); fs.writeFileSync(AR, '[1,2]'); const r3 = cli(['live', 'hook', '--install-into', AR]);
+  const DR = path.join(B, 'dir.json'); fs.mkdirSync(DR); const r4 = cli(['live', 'hook', '--install-into', DR]);
+  const r5 = cli(['live', 'hook', '--install-into', path.join(CH, 'settings.json')]);
+  const HK = path.join(B, 'hk.json'); fs.writeFileSync(HK, '{"hooks": []}'); const r6 = cli(['live', 'hook', '--install-into', HK]);
+  ok([r1, r2, r3, r4, r5, r6].every(r => r.code !== 0) && fs.readFileSync(SF, 'utf8') === keep && fs.lstatSync(LNK).isSymbolicLink() && fs.readFileSync(NJ, 'utf8') === '{ not json' && fs.readFileSync(AR, 'utf8') === '[1,2]' && !fs.existsSync(path.join(CH, 'settings.json')) && fs.readFileSync(HK, 'utf8') === '{"hooks": []}',
+    '--install-into từ chối (không đổi gì): symlink · không phải JSON · JSON là mảng · thư mục · nằm trong thư mục cài · hooks không phải object', [r1, r2, r3, r4, r5, r6].map(r => r.code + ':' + r.out.trim().slice(0, 60)).join(' | '));
+  // Docker (TRUST): tệp hook CHỈ lấy từ gói phát hành đã kiểm — trust_fetch giữ tools/live-hook.mjs (test-root.sh chạy luồng thật)
+  const CLI = fs.readFileSync(path.join(ROOT, 'cli/genchibi'), 'utf8');
+  ok(/cp "\$w\/x\/tools\/live-hook\.mjs" "\$w\/rel\/live-hook\.mjs"/.test(CLI) && /src="\$\{tf:\+\$tf\/live-hook\.mjs\}"/.test(CLI) && /mkdir -p "\$STAGE\/\$NAME\/tools"/.test(fs.readFileSync(path.join(ROOT, 'tools/package.sh'), 'utf8')) && new RegExp('^LIVE_EVENTS="' + L.HOOK_EVENTS.join(' ') + '"$', 'm').test(CLI),
+    'Docker: gói phát hành mang tools/live-hook.mjs · trust_fetch giữ nó trong $TD/rel/<bản> (đã kiểm SHA-256) · genchibi live hook chỉ chép từ đó · LIVE_EVENTS của CLI = HOOK_EVENTS của engine');
 }
 console.log(bad ? '   ✗ test-live: có lỗi' : '   ✓ test-live: đạt');
 process.exit(bad);

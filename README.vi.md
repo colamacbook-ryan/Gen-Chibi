@@ -203,6 +203,23 @@ Tunnel hoặc proxy riêng, mạng LAN: dùng `genchibi online proxy <tên-miề
 ### Agent tự cập nhật app
 Tool MCP `get_app_version` (bản đang chạy, bản mới nhất trên GitHub, ghi chú), `update_app` (tải bản mới, kiểm SHA-256, sao lưu, khởi động lại; bản mới lỗi thì tự quay về bản cũ), `rollback_app` (cần `confirm: "ROLLBACK"`).
 
+## Sân khấu Live: xem agent làm việc (v0.24)
+
+Một nhân vật chibi diễn từng bước thật của agent AI trong lúc bạn chat với nó: đi tới giá sách để đọc, tới bàn để
+gõ phím, tới phòng test để chạy test (và lục túi lấy bình chữa cháy khi test đỏ mãi), gọi trợ lý vào qua cửa, nhấp cà
+phê khi chờ bạn và ngủ gật nếu bạn để lâu. Studio › Hệ thống › **Sân khấu Live**. Âm thanh tắt cho tới khi bạn bật.
+
+Nối Claude Code — trên máy chạy Claude Code:
+
+```bash
+genchibi live hook --install-into ~/.claude/settings.json   # ghép hooks (có sao lưu); khởi động lại Claude Code
+genchibi live hook                                          # hoặc chỉ in đoạn cấu hình để bạn tự dán
+```
+
+Tệp hook là bản chép nằm ngoài thư mục cài (bản Docker lấy từ gói phát hành đã kiểm SHA-256), không bao giờ làm
+Claude Code chờ và chỉ gửi loại việc — không prompt, nội dung tệp, đường dẫn, lệnh hay kết quả. Token live trong đoạn
+cấu hình chỉ gửi được sự kiện Live. Agent khác gọi tool MCP `live_event`. Chi tiết: [docs/LIVE.md](docs/LIVE.md).
+
 ## Core AI (LLM API)
 
 Studio › Cài đặt AI: chọn OpenRouter, DeepSeek, MiniMax hoặc địa chỉ tuỳ chỉnh chuẩn OpenAI, dán API key (mã hoá AES-256-GCM trên máy, không bao giờ trả về trình duyệt). "Kiểm tra model" chạy một kịch bản thử và chấm: JSON đúng chuẩn, số lần phải sửa, độ trễ, token.

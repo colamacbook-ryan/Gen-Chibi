@@ -2,9 +2,9 @@
 // gen-chibi — bộ chuyển hooks của Claude Code → Sân khấu sống (INT-21). Node thuần, không phụ thuộc.
 // © 2026 Gen Labs — All rights reserved.
 //
-// Claude Code gọi lệnh này ở mỗi hook (SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Notification, Stop, SubagentStop, PreCompact,
-// SessionEnd), JSON của hook đi vào stdin. Bộ chuyển chỉ PHÂN LOẠI cục bộ (tên tool, lệnh trông như test / phát hành, có lỗi không) rồi gửi
-// MỘT sự kiện { kind, tool, agent, at } tới app — KHÔNG BAO GIỜ gửi nội dung: không prompt, không đường dẫn, không lệnh, không kết quả tool.
+// Claude Code gọi lệnh này ở mỗi hook (SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, Notification, Stop, SubagentStart,
+// SubagentStop, PreCompact, SessionEnd — dạng JSON đối chiếu với Claude Code 2.1.310), JSON của hook đi vào stdin. Bộ chuyển chỉ PHÂN LOẠI cục bộ (tên tool, lệnh trông như test / phát hành, có lỗi không) rồi gửi
+// MỘT sự kiện { kind, tool, agent, at, sub? } tới app — KHÔNG BAO GIỜ gửi nội dung: không prompt, không đường dẫn, không lệnh, không kết quả tool.
 // Không bao giờ chặn hay làm hỏng agent: đọc stdin tối đa 250 ms, gửi tối đa 300 ms, luôn thoát 0, không in gì ra stdout
 // (stdout của vài hook được Claude Code chèn vào ngữ cảnh), lỗi chỉ ghi stderr khi GC_LIVE_DEBUG=1.
 //   GC_LIVE_URL   địa chỉ app (mặc định http://127.0.0.1:7480)
@@ -19,7 +19,7 @@ const FAIL_RE = /(\b[1-9]\d*\s+(failed|failing|failures?|errors?)\b|\bFAIL(ED)?\
 const PASS_RE = /(\b0\s+(failed|failures)\b|\ball\s+tests?\s+passed\b|\b\d+\s+passed\b|✓|\bok\b|\bPASS\b)/i;
 
 function toolKind(name) {
-  if (/^(Read|NotebookRead)$/.test(name)) return 'read';
+  if (/^(Read|NotebookRead|Skill)$/.test(name)) return 'read';
   if (/^(Grep|Glob|LS|WebSearch|WebFetch|ToolSearch)$/.test(name)) return 'search';
   if (/^(Edit|MultiEdit|NotebookEdit)$/.test(name)) return 'edit';
   if (name === 'Write') return 'write';
@@ -28,6 +28,17 @@ function toolKind(name) {
   if (/^(TodoWrite|ExitPlanMode|EnterPlanMode)$/.test(name)) return 'think';
   if (/^mcp__/.test(name)) return 'run';
   return 'think';
+}
+// loại trợ lý (agent_type / subagent_type của Claude Code) → nhóm cố định; tên thật KHÔNG gửi đi (sân khấu nói bằng lời thường theo nhóm)
+function subOf(t) {
+  t = typeof t === 'string' ? t : '';
+  if (!t) return 'general';
+  if (/explor|search|scout|find/i.test(t)) return 'explore';
+  if (/plan|architect|design/i.test(t)) return 'plan';
+  if (/review|audit|check|critic|cortex/i.test(t)) return 'review';
+  if (/test|qa|verif/i.test(t)) return 'test';
+  if (/general/i.test(t)) return 'general';
+  return 'other';
 }
 function cmdOf(h) { const c = h && h.tool_input && h.tool_input.command; return typeof c === 'string' ? c : ''; }
 function failed(h) {
@@ -48,19 +59,26 @@ export function classify(h) {
   const out = k => k ? { kind: k, tool: tool || undefined, agent: 'claude-code', at: Date.now() } : null;
   switch (ev) {
     case 'SessionStart': return out('session_start');
-    case 'UserPromptSubmit': return out('prompt');
+    case 'UserPromptSubmit': return /^\s*<task-notification>/.test(String(h.prompt || '')) ? null : out('prompt');   // thông báo trợ lý chạy nền xong (Claude Code tự chèn) — không phải tin của bạn
     case 'Stop': return out('wait_user');
-    case 'Notification': return out(/limit|quota|usage/i.test(String(h.message || '')) ? 'limit' : 'wait_user');   // chỉ phân loại, không gửi câu
+    case 'Notification': {   // notification_type (Claude Code 2.x): permission_prompt · idle_prompt · elicitation_dialog · auth_success — chỉ phân loại, không gửi câu
+      const nt = String(h.notification_type || '');
+      if (nt === 'auth_success') return null;
+      if (/limit|quota|usage/i.test(String(h.message || ''))) return out('limit');
+      return out(nt === 'idle_prompt' ? 'idle' : 'wait_user');
+    }
+    case 'SubagentStart': { const e = out('delegate_start'); e.sub = subOf(h.agent_type); return e; }
     case 'SubagentStop': return out('delegate_end');
     case 'PreCompact': return out('limit');
     case 'SessionEnd': return out('stop');
     case 'PreToolUse': {
       const k = toolKind(h.tool_name || '');
-      if (k === 'delegate') { const ty = h.tool_input && typeof h.tool_input.subagent_type === 'string' && /^[A-Za-z][A-Za-z0-9 _-]{0,23}$/.test(h.tool_input.subagent_type) ? h.tool_input.subagent_type : ''; const e = out('delegate_start'); if (ty) e.label = ty; return e; }
+      if (k === 'delegate') return null;   // SubagentStart báo trợ lý vào việc (kèm loại) — không đếm hai lần
       if (k === 'run') { const c = cmdOf(h); return out(RELEASE_RE.test(c) ? 'release' : TEST_RE.test(c) ? 'test_run' : 'run'); }
       return out(k);
     }
     case 'PostToolUse': case 'PostToolUseFailure': {
+      if (ev === 'PostToolUseFailure' && h.is_interrupt === true) return out('wait_user');   // bạn bấm dừng: agent đứng chờ bạn
       const k = toolKind(h.tool_name || ''), bad = ev === 'PostToolUseFailure' || failed(h);
       if (k === 'run' && TEST_RE.test(cmdOf(h))) return out(bad ? 'test_fail' : 'test_pass');
       if (k === 'delegate') return null;   // SubagentStop báo xong việc (không đếm hai lần)

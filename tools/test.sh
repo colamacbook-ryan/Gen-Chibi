@@ -944,6 +944,7 @@ home_check tools/test-setup.mjs
 echo "4j) đột biến v0.23 (CNS-273): mọi rào A.5 có một đột biến trong tools/mutations/v023.json — mẫu còn khớp đúng 1 lần, có trong bảng v023.md (chạy thật: node tools/mutate.mjs --jobs 4)"
 node tools/mutate.mjs --check || exit 1
 node tools/mutate.mjs --check --data tools/mutations/v0231.json || exit 1
+node tools/mutate.mjs --check --data tools/mutations/v024.json || exit 1   # v0.24 Sân khấu Live (chạy thật: --data tools/mutations/v024.json --jobs 3)
 
 echo "4k) mô hình root v0.23.1 (CNS-233 / CNS-257 / CNS-234 / CNS-235): máy kiểu Ryan (lệnh root cũ → tự lắp bản đã kiểm SHA, update / rollback / status / online bằng root) · container bị chiếm (canary) · override đã duyệt · khôi phục cùng máy / máy khác · doctor · root thật (setpriv thật)"
 for P in 7981 7983 7985 7987 7989; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done

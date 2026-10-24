@@ -41,7 +41,7 @@ as_container() { if [ -n "$REALROOT" ]; then setpriv --reuid="$AUID" --regid="$A
 echo "   dựng bản phát hành thử (gói + SHA256SUMS thật)…"
 build() { # build <ver> → $FEED/v<ver>/gen-chibi-v<ver>.tar.gz + SHA256SUMS
   local src="$W/src"; mkdir -p "$src"
-  tar -C "$ROOT" --exclude=./.git --exclude=./dist -cf - VERSION CHANGELOG.md LICENSE README.md launcher.js install.sh docker-compose.yml docker-compose.edge.yml edge server engine kinds studio locales cli agent tools/package.sh | tar -C "$src" -xf -
+  tar -C "$ROOT" --exclude=./.git --exclude=./dist -cf - VERSION CHANGELOG.md LICENSE README.md launcher.js install.sh docker-compose.yml docker-compose.edge.yml edge server engine kinds studio locales cli agent tools/live-hook.mjs tools/live-replay.mjs tools/package.sh | tar -C "$src" -xf -
   echo "$1" > "$src/VERSION"
   bash "$src/tools/package.sh" "$FEED/v$1" >/dev/null
   case "$src" in "$W"/src) rm -rf -- "$src" ;; esac
@@ -301,6 +301,22 @@ check $? "mọi đọc / ghi trong thư mục cài qua setpriv --reuid=<user th�
 rootcli status
 [ $RC = 0 ] && echo "$OUT" | grep -q '● running · v0.1.0' && echo "$OUT" | grep -q 'installed: v0.1.0'
 check $? "genchibi status (root): đang chạy v0.1.0" "rc $RC: $OUT"
+# v0.24 Sân khấu Live: genchibi live hook (root, Docker/TRUST) — tệp hook CHỈ từ gói đã kiểm ($TD/rel/<bản>/live-hook.mjs), chép ra $TD (0600);
+# container ghi bản giả vào releases/ (thư mục cài) → không bao giờ được dùng; token live đọc bằng user của thư mục cài; không in token chủ
+( cd "$I" && as_container sh -c 'mkdir -p releases/v0.1.0/tools && printf "// CANARY\n" > releases/v0.1.0/tools/live-hook.mjs' )
+LT="$(cat "$I/data/live-token" 2>/dev/null)"; rootcli live hook --json; LJ="$OUT"
+[ $RC = 0 ] && [ -f "$TD/rel/v0.1.0/live-hook.mjs" ] && cmp -s "$TD/live-hook.mjs" "$ROOT/tools/live-hook.mjs" && cmp -s "$TD/rel/v0.1.0/live-hook.mjs" "$ROOT/tools/live-hook.mjs" \
+  && [ "$(stat -c %a "$TD/live-hook.mjs" 2>/dev/null || stat -f %Lp "$TD/live-hook.mjs")" = 600 ] && [ -O "$TD/live-hook.mjs" ] && [ -n "$LT" ] \
+  && printf '%s' "$LJ" | grep -qF "'$TD/live-hook.mjs'" && printf '%s' "$LJ" | grep -qF "GC_LIVE_TOKEN=$LT " && ! printf '%s' "$LJ" | grep -q "CANARY\|$I/" \
+  && ! printf '%s' "$LJ" | grep -qF "$(cat "$I/data/owner-token" 2>/dev/null || echo NO-OWNER-TOKEN-FILE)"
+check $? "genchibi live hook (root, Docker): tệp hook lấy từ gói đã kiểm (\$TD/rel/v0.1.0), chép ra \$TD 0600 thuộc root — bản giả container ghi vào releases/ không được dùng; in token live, không in token chủ / đường trong thư mục cài" "rc $RC: $(printf '%s' "$LJ" | head -c 600)"
+if [ -n "$REALROOT" ]; then
+  printf 'gcl_ROOTSECRETROOTSECRETROOTSECRET00000\n' > "$H/live-secret"; chmod 600 "$H/live-secret"
+  ( cd "$I" && as_container sh -c 'mv data/live-token data/live-token.real && ln -s "$1" data/live-token' sh "$H/live-secret" ); rootcli live hook --json; LJ2="$OUT"; LR2=$RC
+  ( cd "$I" && as_container sh -c 'rm -f data/live-token && mv data/live-token.real data/live-token' )
+  [ $LR2 != 0 ] && ! printf '%s' "$LJ2" | grep -q ROOTSECRET
+  check $? "genchibi live hook (root): data/live-token là symlink tới tệp chỉ root đọc được → không đọc xuyên (đọc bằng user của thư mục cài), từ chối" "rc $LR2: $LJ2"
+fi
 
 feed 0.1.1
 # container sửa override sau khi duyệt (máy kiểu Ryan): update bằng root → DỪNG, container / phiên bản giữ nguyên; duyệt lại → update chạy

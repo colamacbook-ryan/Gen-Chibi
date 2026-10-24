@@ -288,6 +288,31 @@ your-domain {
 - **Cloudflare + rate limiting:** the app rate-limits registrations / failed attempts by client IP. By default it only reads the last entry of `X-Forwarded-For` (and only when the connection to the app comes from loopback or a private network). Behind Cloudflare, add `GC_CLIENT_IP_HEADER=cf-connecting-ip` to `.env` (or `x-real-ip`) so the app sees the client's real IP instead of the proxy's.
 - **Adding your own services to Docker** (Caddy, a login page…): put them in `docker-compose.override.yml` next to `docker-compose.yml`. Docker Compose merges the two files, and `genchibi update` never touches the override file.
 
+## 7. Live stage — watch an agent work
+
+Studio › System › **Live stage** shows an office stage with one character. Every real step of your agent drives it:
+
+| The agent… | The character… |
+|---|---|
+| reads / searches | walks to the bookshelf, takes a book or the magnifier out of its satchel |
+| edits / writes / runs a command | walks to the desk and types (Enter! on commands) |
+| runs tests | pulls the lever in the test lab and watches the progress bar |
+| fails tests again and again | facepalm → hammer → rubber duck → screen on fire + fire extinguisher |
+| passes tests / releases | jumps for joy / presses the launch button, the rocket takes off |
+| delegates to a helper | calls on the phone at the door, a helper walks in; leaves when done |
+| waits for you | sips coffee → checks the watch → yawns → naps on the sofa (wakes up when you answer) |
+| plans | writes in the notebook from its satchel |
+
+Props always come out of the satchel and go back in. When the agent is faster than the stage, quick steps are
+folded into one action with a counter (×N); errors, test results, releases and "waiting for you" always get their
+own beat. The bubble says what is happening in plain words in your language — never file contents, commands,
+tool names or secrets.
+
+**Connect Claude Code** (on the machine where Claude Code runs): `genchibi live hook --install-into ~/.claude/settings.json`,
+then restart Claude Code. Without `--install-into` the command only prints the snippet; gen-chibi never edits your
+settings by itself. Rotating the live token (button in the panel) means running the command again.
+**Other agents** call the MCP tool `live_event`. **Replay demo** plays a recorded coding session.
+
 ## Frequently asked questions
 - **Do assets the AI creates need approval?** No — they are saved as **drafts** in the work's project and usable right away. Only when you want them in a sale bundle do you click **Publish**.
 - **Does a shared HTML film expose the engine?** The player sits in the film file under a licence **for viewing that film only**. To share without the player, use **Export video** (v0.22); a future SaaS edition will also offer a player hosted by Gen Labs.

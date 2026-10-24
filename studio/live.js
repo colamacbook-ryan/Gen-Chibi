@@ -23,7 +23,9 @@
     svg.setAttribute('aria-label', _t('Sân khấu sống'));
     var bg = el('g'), dyn = el('g', { class: 'lv-dyn' }), helpers = el('g', { class: 'lv-helpers' }), shadow = el('ellipse', { ry: f(8 * LV.K), rx: f(44 * LV.K), fill: 'rgba(20,24,22,.22)' }), actor = el('g', { class: 'lv-actor' }), bub = el('g', { class: 'lv-bubble' });
     bg.innerHTML = LV.backdropSVG();   // phông tĩnh do engine vẽ (không dữ liệu người dùng)
-    svg.appendChild(bg); svg.appendChild(dyn); svg.appendChild(helpers); svg.appendChild(shadow); svg.appendChild(actor); svg.appendChild(bub);
+    var cam = el('g', { class: 'lv-cam' });   // máy quay: một transform cho cả thế giới (engine/live.js camAt — tất định)
+    svg.appendChild(el('rect', { width: LV.W, height: LV.H, fill: '#e9dcc4' })); svg.appendChild(cam);
+    cam.appendChild(bg); cam.appendChild(dyn); cam.appendChild(helpers); cam.appendChild(shadow); cam.appendChild(actor); cam.appendChild(bub);
     var groups = {}, sat = el('g'), prop = el('g');
     GC.RIG.layers.forEach(function (l) {
       var g = el('g'); actor.appendChild(g); groups[l[0]] = g;
@@ -42,6 +44,7 @@
     function paint(t) {
       var F = S.sample(t);
       if (!F) return null;
+      cam.setAttribute('transform', S.camTf(F.cam));
       if (F.sig !== sig) { sig = F.sig; GC.RIG.layers.forEach(function (l) { groups[l[0]].innerHTML = F.layers[l[0]] || ''; }); }
       var chain = GC.chainTransforms(F.pose);
       GC.RIG.layers.forEach(function (l) { groups[l[0]].setAttribute('transform', chain[l[1]]); });
@@ -61,12 +64,11 @@
         seen[h.id] = 1;
         var g = hEls[h.id];
         if (!g) { g = hEls[h.id] = el('g', { 'data-helper': h.id }); var im = el('image', { x: -124, y: -246, width: 248, height: 258 }); im.setAttribute('href', helperImg(h)); g.appendChild(el('ellipse', { cx: 0, cy: 2, rx: 40, ry: 7, fill: 'rgba(20,24,22,.18)' })); g.appendChild(im); helpers.appendChild(g); }
-        var k = 0.62, bob = h.walking ? Math.abs(Math.sin(t * 9 + h.id)) * 5 : Math.sin(t * 2.2 + h.id) * 1.2, sy = h.walking ? 1 : 1 + Math.sin(t * 2.2 + h.id) * 0.012;
-        g.setAttribute('transform', 'translate(' + f(h.x) + ' ' + f(LV.GROUND - 34 - bob) + ') scale(' + (h.dir < 0 ? -k : k) + ' ' + (k * sy).toFixed(4) + ')');
+        g.setAttribute('transform', S.helperTf(h, t));
       });
       Object.keys(hEls).forEach(function (id) { if (!seen[id]) { hEls[id].remove(); delete hEls[id]; } });
       // bong bóng: câu tóm tắt (nhãn đã làm sạch của agent, hoặc câu mặc định theo loại — dịch theo ngôn ngữ giao diện)
-      var txt = F.bubble ? (F.bubble.text || _t(F.bubble.id)) : '';
+      var txt = LV.bubbleText(F.bubble, _t);
       var bs = txt + '|' + Math.round(F.x);
       if (bs !== bubSig) {
         bubSig = bs;
@@ -129,7 +131,7 @@
       tbody.insertBefore(tr, tbody.firstChild);
       while (tbody.childNodes.length > 200) tbody.removeChild(tbody.lastChild);
     }
-    function feed(ev, local) { D.push({ id: (local ? 'D' : '') + ev.id, kind: ev.kind, label: ev.label }, now()); row(ev, local); }
+    function feed(ev, local) { D.push({ id: (local ? 'D' : '') + ev.id, kind: ev.kind, label: ev.label, tool: ev.tool, sub: ev.sub }, now()); row(ev, local); }
 
     // ---- kết nối Claude Code (token live + đoạn settings.json) — chỉ bản cài có server
     var conn = h('div', { class: 'panel', id: 'liveConnect' }, h('h3', null, _t('Kết nối Claude Code')));
@@ -142,7 +144,9 @@
       var snippet = JSON.stringify(v.settings, null, 2);
       var pre = h('pre', { class: 'mono', id: 'liveSnippet', style: 'max-height:180px;overflow:auto;font-size:11px;background:var(--sunken);padding:8px;border-radius:4px;white-space:pre-wrap;word-break:break-all', text: snippet });
       conn.appendChild(h('div', { class: 'pad stack' },
-        h('div', { class: 'note', text: _t('Dán đoạn dưới vào ~/.claude/settings.json (hoặc .claude/settings.local.json của dự án). gen-chibi không tự sửa cấu hình của Claude Code. Token này chỉ gửi được sự kiện Live — không đọc được gì.') }),
+        h('div', { class: 'note', text: _t('Trên máy chạy Claude Code, chạy lệnh dưới: genchibi chép tệp hook đã kiểm ra ngoài thư mục cài rồi ghép hooks vào cấu hình của Claude Code (có sao lưu). gen-chibi không tự sửa cấu hình nào khi bạn chưa chạy lệnh.') }),
+        h('pre', { class: 'mono', id: 'liveCmd', style: 'font-size:12px;background:var(--sunken);padding:8px;border-radius:4px;white-space:pre-wrap', text: 'genchibi live hook --install-into ~/.claude/settings.json' }),
+        h('div', { class: 'note', text: _t('Hoặc dán tay đoạn dưới (genchibi live hook in đúng đường tuyệt đối của máy bạn). Token live chỉ gửi được sự kiện Live — không đọc được gì.') }),
         h('div', { class: 'row' }, h('span', { class: 'note', text: _t('Token live') }), tok,
           h('button', { class: 'btn sm', type: 'button', onclick: function () { shown = !shown; tok.textContent = shown ? v.token : v.token.slice(0, 8) + '…'; } }, _t('Hiện / ẩn')),
           h('button', { class: 'btn sm', type: 'button', id: 'liveRotate', onclick: function () { B.api('POST', 'api/live/token', {}).then(function (r) { renderConn({ token: r.token, settings: r.settings }); toast(_t('Đã đổi token live — dán lại đoạn cấu hình mới.')); }).catch(function (e) { toast(e.message); }); } }, _t('Đổi token'))),

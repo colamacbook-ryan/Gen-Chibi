@@ -74,13 +74,13 @@ class LiveHub {
     const done = () => this.clients.delete(res);
     req.on('close', done); res.on('close', done); res.on('error', done);
   }
-  // đoạn cấu hình cho ~/.claude/settings.json (chủ tự dán — app KHÔNG ghi vào ~/.claude)
-  hookSnippet(appDir, url) {
-    const q = x => "'" + String(x).replace(/'/g, "'\\''") + "'";   // trích dẫn shell (đường cài có dấu cách vẫn đúng)
-    const cmd = 'GC_LIVE_URL=' + q(url) + ' GC_LIVE_TOKEN=' + this.tok + ' node ' + q(path.join(appDir, 'tools', 'live-hook.mjs'));
-    const one = { hooks: [{ type: 'command', command: cmd, timeout: 2 }] };
-    const evs = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Notification', 'Stop', 'SubagentStop', 'PreCompact', 'SessionEnd'];
-    const hooks = {}; evs.forEach(e => { hooks[e] = [e === 'PreToolUse' || e === 'PostToolUse' ? Object.assign({ matcher: '*' }, one) : one]; });
+  // đoạn cấu hình cho ~/.claude/settings.json — CÙNG dạng với `genchibi live hook` (cli/genchibi live_cmd; test-live so hai bên): app KHÔNG ghi vào ~/.claude.
+  // Tệp hook chạy trên máy chủ, ở bản chép của genchibi ($HOME/.local/lib/gen-chibi/live-hook.mjs — shell của hook tự mở $HOME); lệnh CLI in đường tuyệt đối
+  hookSnippet(url) {
+    const q = x => "'" + String(x).replace(/'/g, "'\\''") + "'";   // trích dẫn shell
+    const cmd = 'GC_LIVE_URL=' + q(url) + ' GC_LIVE_TOKEN=' + this.tok + ' node "$HOME/.local/lib/gen-chibi/live-hook.mjs"';
+    const hooks = {};
+    this.L.HOOK_EVENTS.forEach(e => { const g = { hooks: [{ type: 'command', command: cmd, timeout: 2 }] }; hooks[e] = [/^(Pre|Post)ToolUse/.test(e) ? Object.assign({ matcher: '*' }, g) : g]; });
     return { hooks };
   }
   close() { clearInterval(this.beat); this.clients.forEach(r => { try { r.end(); } catch (e) { /* bỏ qua */ } }); this.clients.clear(); }

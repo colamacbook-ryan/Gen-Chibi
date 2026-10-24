@@ -285,6 +285,30 @@ tên-miền {
 - **Cloudflare + giới hạn tốc độ:** app giới hạn đăng ký / thử sai theo IP khách. Mặc định chỉ đọc mục cuối của `X-Forwarded-For` (và chỉ khi kết nối tới app đến từ loopback hoặc mạng riêng). Đứng sau Cloudflare thì thêm `GC_CLIENT_IP_HEADER=cf-connecting-ip` vào `.env` (hoặc `x-real-ip`) để app thấy IP thật của khách thay vì IP của proxy.
 - **Tự thêm service vào Docker** (Caddy, trang đăng nhập…): ghi vào `docker-compose.override.yml` cạnh `docker-compose.yml`. Docker Compose tự gộp hai file, còn `genchibi update` không bao giờ đụng tới file override.
 
+## 7. Sân khấu Live — xem agent làm việc
+
+Studio › Hệ thống › **Sân khấu Live** là một sân khấu văn phòng có một nhân vật. Mỗi bước thật của agent điều khiển nó:
+
+| Agent… | Nhân vật… |
+|---|---|
+| đọc / tìm | đi tới giá sách, lấy sách hoặc lục túi lấy kính lúp |
+| sửa / viết tệp / chạy lệnh | đi tới bàn gõ phím (đập Enter khi chạy lệnh) |
+| chạy test | kéo cần ở phòng test, nhìn thanh tiến độ |
+| test đỏ liên tiếp | úp mặt → búa → vịt cao su → màn hình cháy + bình chữa cháy |
+| test xanh / phát hành | nhảy cẫng / bấm nút, tên lửa bay |
+| giao việc cho trợ lý | gọi điện ở cửa, trợ lý đi vào; xong thì đi ra |
+| chờ bạn | nhấp cà phê → xem đồng hồ → ngáp → ngủ gật trên sofa (bạn trả lời thì giật mình dậy) |
+| lên kế hoạch | ghi vào sổ tay lấy từ túi |
+
+Đồ nghề luôn lấy ra từ túi đeo và cất lại vào túi. Khi agent nhanh hơn sân khấu, các bước nhỏ được gộp thành một
+động tác có bộ đếm (×N); lỗi, kết quả test, phát hành và "chờ bạn" luôn có nhịp riêng. Bong bóng nói việc đang làm
+bằng lời thường theo ngôn ngữ của bạn — không bao giờ nội dung tệp, lệnh, tên công cụ hay bí mật.
+
+**Nối Claude Code** (trên máy chạy Claude Code): `genchibi live hook --install-into ~/.claude/settings.json`, rồi khởi
+động lại Claude Code. Không có `--install-into` thì lệnh chỉ in đoạn cấu hình; gen-chibi không bao giờ tự sửa cấu hình
+của bạn. Đổi token live (nút trong bảng) thì chạy lại lệnh. **Agent khác** gọi tool MCP `live_event`. **Phát lại phiên
+mẫu** chiếu một phiên lập trình đã ghi.
+
 ## Câu hỏi thường gặp
 - **AI tự tạo asset có cần duyệt không?** Không — lưu dạng **nháp** trong dự án của tác phẩm và dùng ngay. Chỉ khi muốn đưa vào gói bán bạn mới bấm **Phát hành**.
 - **Phim HTML gửi đi có lộ engine không?** Bộ phát nằm trong tệp phim với giấy phép **chỉ để xem phim đó**. Muốn chia sẻ mà không kèm bộ phát thì dùng **Xuất video** (v0.22); bản SaaS sau này còn có trình phát do Gen Labs lưu trữ.

@@ -304,6 +304,16 @@ _en() {
     dr_edge_owner) F="Edge Caddy folder %s belongs to uid %s, not the install folder's user %s — fix: %s" ;;
     dr_mig_busy) F="uid %s still has running processes (someone may be logged in as that user) — nothing moved. If that is a person, keep the install as it is; otherwise stop those processes and run genchibi doctor --migrate again." ;;
     skill_in_install) F="Not writing the guide into %s: it is inside the install folder (the app can change it). Run the command from your project folder, or use --dir." ;;
+    live_usage) F="Usage: genchibi live hook [--print | --json | --install-into <settings.json>]   (Claude Code hooks for the Live stage)" ;;
+    live_nohook) F="No verified Live hook script for release %s yet (%s) — update the app to v0.24 or later (genchibi update), then run this again." ;;
+    live_notoken) F="The app has no live token yet (%s/data/live-token) — start the app (v0.24 or later) and open Studio › System › Live stage once." ;;
+    live_nonode) F="! Node.js is not in PATH on this machine: Claude Code hooks run the script with node — install Node 18+ where Claude Code runs." ;;
+    live_root) F="! You ran this as root: the hook script is in %s, which only root can read — if Claude Code runs as another user, run genchibi live hook as that user." ;;
+    live_head) F="Claude Code → gen-chibi Live stage. Paste into ~/.claude/settings.json (or a project's .claude/settings.local.json), or let genchibi merge it: genchibi live hook --install-into ~/.claude/settings.json" ;;
+    live_foot) F="Hook script: %s (a copy kept outside the install folder; Docker installs take it from the SHA-256-verified release) · app: %s · the live token above can only send Live events (rotate: Studio › System › Live stage)." ;;
+    live_in_bad) F="Not writing %s: %s" ;;
+    live_in_ok) F="✓ Live hooks merged into %s (backup: %s). Restart Claude Code to load them." ;;
+    live_in_new) F="✓ Live hooks written to %s. Restart Claude Code to load them." ;;
     skill_bad) F="The downloaded guide is not a plain archive (links or special files) — nothing written." ;;
     dr_stub_old) F="%s is an old genchibi command that runs the install folder's copy (the app can write it) — run genchibi once as that file's owner, or reinstall" ;;
     dr_uid_unknown) F="The containers run as uid %s (%s). If that is not the owner's account (old root install without sudo), move it: %s doctor --migrate" ;;
@@ -605,6 +615,16 @@ _vi() {
     dr_edge_owner) F="Thư mục edge Caddy %s thuộc uid %s, không phải user của thư mục cài %s — cách sửa: %s" ;;
     dr_mig_busy) F="uid %s còn tiến trình đang chạy (có thể có người đăng nhập bằng user đó) — chưa chuyển gì. Nếu đó là một người thật thì giữ nguyên bản cài; nếu không, dừng các tiến trình đó rồi chạy lại genchibi doctor --migrate." ;;
     skill_in_install) F="Không ghi hướng dẫn vào %s: nó nằm trong thư mục cài (app đổi được). Chạy lệnh từ thư mục dự án của bạn, hoặc dùng --dir." ;;
+    live_usage) F="Cách dùng: genchibi live hook [--print | --json | --install-into <settings.json>]   (hooks của Claude Code cho Sân khấu Live)" ;;
+    live_nohook) F="Chưa có tệp hook Live đã kiểm của bản %s (%s) — cập nhật app lên v0.24 trở lên (genchibi update) rồi chạy lại." ;;
+    live_notoken) F="App chưa có token live (%s/data/live-token) — khởi động app (v0.24 trở lên) và mở Studio › Hệ thống › Sân khấu Live một lần." ;;
+    live_nonode) F="! Máy này không có Node.js trong PATH: hooks của Claude Code chạy tệp bằng node — cài Node 18+ ở máy chạy Claude Code." ;;
+    live_root) F="! Bạn chạy bằng root: tệp hook nằm trong %s, chỉ root đọc được — nếu Claude Code chạy bằng user khác, chạy genchibi live hook bằng user đó." ;;
+    live_head) F="Claude Code → Sân khấu Live của gen-chibi. Dán vào ~/.claude/settings.json (hoặc .claude/settings.local.json của dự án), hoặc để genchibi tự ghép: genchibi live hook --install-into ~/.claude/settings.json" ;;
+    live_foot) F="Tệp hook: %s (bản chép nằm ngoài thư mục cài; bản Docker lấy từ gói phát hành đã kiểm SHA-256) · app: %s · token live ở trên chỉ gửi được sự kiện Live (đổi: Studio › Hệ thống › Sân khấu Live)." ;;
+    live_in_bad) F="Không ghi %s: %s" ;;
+    live_in_ok) F="✓ Đã ghép hooks Live vào %s (bản sao lưu: %s). Khởi động lại Claude Code để nạp." ;;
+    live_in_new) F="✓ Đã ghi hooks Live vào %s. Khởi động lại Claude Code để nạp." ;;
     skill_bad) F="Gói hướng dẫn tải về không phải lưu trữ thường (có liên kết hoặc tệp đặc biệt) — chưa ghi gì." ;;
     dr_stub_old) F="%s là lệnh genchibi cũ, chạy bản trong thư mục cài (app ghi được) — chạy genchibi một lần bằng chủ của tệp đó, hoặc cài lại" ;;
     dr_uid_unknown) F="Container chạy bằng uid %s (%s). Nếu đó không phải tài khoản của chủ (bản cài root cũ không sudo), chuyển: %s doctor --migrate" ;;
@@ -926,7 +946,7 @@ compose_fallback() {
   esac
 }
 # ---------------------------------------------------------------- tệp đã kiểm của root ($TD, v0.23.1 — CNS-233 / CNS-257)
-# $TD/rel/<bản>/  docker-compose.yml · docker-compose.edge.yml · Caddyfile.base · genchibi · VERSION · SHA256 — lấy từ GÓI PHÁT HÀNH root tự tải + kiểm SHA-256
+# $TD/rel/<bản>/  docker-compose.yml · docker-compose.edge.yml · Caddyfile.base · genchibi · live-hook.mjs (v0.24) · VERSION · SHA256 — lấy từ GÓI PHÁT HÀNH root tự tải + kiểm SHA-256
 #                 (cùng SHA256SUMS mà trình cài / app kiểm), không bao giờ từ releases/ (container ghi được)
 # $TD/genchibi    lệnh root mới nhất đã kiểm (chỉ tiến: không bao giờ thay bằng bản cũ hơn, hay bản chưa có mô hình root này)
 # $TD/override.yml  override compose root đã duyệt (genchibi override approve) · $TD/repo  repo phát hành (trình cài ghi; .env GC_REPO không được tin)
@@ -1034,6 +1054,7 @@ trust_fetch() {
     [ ! -f "$w/x/docker-compose.edge.yml" ] || cp "$w/x/docker-compose.edge.yml" "$w/rel/"
     [ ! -f "$w/x/edge/Caddyfile.base" ] || cp "$w/x/edge/Caddyfile.base" "$w/rel/Caddyfile.base"
     [ ! -f "$w/x/cli/genchibi" ] || cp "$w/x/cli/genchibi" "$w/rel/genchibi"
+    [ ! -f "$w/x/tools/live-hook.mjs" ] || cp "$w/x/tools/live-hook.mjs" "$w/rel/live-hook.mjs"   # hook Live của Claude Code (v0.24) chạy trên máy chủ: chỉ từ gói đã kiểm
     printf '%s\n' "$tag" > "$w/rel/VERSION"; printf '%s\n' "$got" > "$w/rel/SHA256"
     chmod 700 "$w/rel"
     case "$TD/rel/$tag" in "$TD"/rel/v*) rm -rf -- "${TD:?}/rel/$tag" ;; esac
@@ -2678,6 +2699,7 @@ genchibi — quản lý gen-chibi ($HOME_DIR, chế độ $MODE)
   mcp                               cầu MCP (stdio) cho agent: claude mcp add gen-chibi -- genchibi mcp
   online [caddy|cloudflare|proxy|quick|recheck|off]   ra Internet một bước: tên miền + HTTPS + MCP (genchibi online --help)
   agent connect|guide|tools|skill   bootstrap cho agent mọi hãng: cấu hình nối, hướng dẫn, schema tool, cài skill
+  live hook [--install-into <tệp>]   hooks của Claude Code cho Sân khấu Live: in đoạn settings.json (bản hook đã kiểm + token live), hoặc ghép vào tệp
   token [giá-trị|--clear]           đặt token GitHub (repo private) cho tự cập nhật; bỏ trống = nhập ẩn
                                     (KHÔNG phải token chủ: token chủ là GC_API_TOKEN trong .env, hoặc data/owner-token — CLI tự đọc)
   lang [en|vi]                      xem / đặt ngôn ngữ (CLI + giao diện mặc định của Studio)
@@ -2698,6 +2720,7 @@ genchibi — manage gen-chibi ($HOME_DIR, mode $MODE)
   mcp                               MCP bridge (stdio) for agents: claude mcp add gen-chibi -- genchibi mcp
   online [caddy|cloudflare|proxy|quick|recheck|off]   go online in one step: domain + HTTPS + MCP (genchibi online --help)
   agent connect|guide|tools|skill   bootstrap for agents of any vendor: connect config, guide, tool schema, skill install
+  live hook [--install-into <file>]  Claude Code hooks for the Live stage: print the settings.json snippet (verified hook copy + live token), or merge it
   token [value|--clear]             set the GitHub token (private repo) for auto-update; empty = hidden prompt
                                     (NOT the owner token: that is GC_API_TOKEN in .env, or data/owner-token — the CLI reads it itself)
   lang [en|vi]                      show / set the language (CLI + Studio default)
@@ -2707,6 +2730,90 @@ genchibi — manage gen-chibi ($HOME_DIR, mode $MODE)
   uninstall                         uninstall (asks whether to keep or delete your data)
 EOF
   fi
+}
+
+# genchibi live hook (v0.24, INT-21): hooks của Claude Code cho Sân khấu Live. Tệp hook chạy trên MÁY CHỦ (cả bản Docker) → luôn là bản CHÉP ở $TD:
+#   TRUST (Docker): từ gói phát hành đã kiểm SHA-256 ($TD/rel/<bản>/live-hook.mjs — trust_fetch giữ lại) · native: từ current/ (đọc như dữ liệu, cùng
+#   user với app). Không bao giờ in đường trong thư mục cài làm lệnh. Token live (data/live-token, chỉ mở POST /api/live/event) đọc như dữ liệu, kiểm dạng.
+#   Không tự sửa cấu hình nào khi không có --install-into; --install-into: từ chối symlink / không phải tệp / không phải JSON object / trong thư mục cài,
+#   sao lưu bản cũ, ghi nguyên tử (tệp tạm cùng thư mục + rename), chỉ thay các hook Live cũ của chính genchibi.
+LIVE_EVENTS="SessionStart UserPromptSubmit PreToolUse PostToolUse PostToolUseFailure Notification Stop SubagentStart SubagentStop PreCompact SessionEnd"
+shq() { printf "'%s'" "${1//\'/\'\\\'\'}"; }
+live_cmd() {
+  local sub="${1:-}" mode=print into=""; shift || true
+  [ "$sub" = hook ] || { m live_usage >&2; return 2; }
+  while [ $# -gt 0 ]; do case "$1" in --print) mode=print; shift ;; --json) mode=json; shift ;; --install-into) into="${2:-}"; [ -n "$into" ] || { m live_usage >&2; return 2; }; mode=into; shift 2 ;; *) m live_usage >&2; return 2 ;; esac; done
+  # 1) nguồn đã kiểm → bản chép ở $TD
+  local src="" dest tmp tf
+  if [ -n "$TRUST" ]; then
+    tf="$(trust_files)"; src="${tf:+$tf/live-hook.mjs}"
+    if [ -z "$src" ] || ! file_safe "$src"; then m live_nohook "$(cur_tag)" "${tf:-${TRUST_ERR:-not verified}}" >&2; return 1; fi
+  fi
+  td_parent_ok "$TD" || { m td_unsafe "$TD" >&2; return 1; }
+  ( umask 077; mkdir -p "$TD" ) 2>/dev/null || true
+  path_safe "$TD" || { m td_unsafe "$TD" >&2; return 1; }
+  case "$(cd -P "$TD" && pwd)/" in "$HOME_PHYS"/*) m td_in_install "$TD" "$HOME_DIR" >&2; return 1 ;; esac
+  dest="$TD/live-hook.mjs"; tmp="$(mktemp "$TD/live-hook.XXXXXX")" || { m td_unsafe "$TD" >&2; return 1; }
+  if [ -n "$src" ]; then cat -- "$src" > "$tmp"; else rd current/tools/live-hook.mjs > "$tmp"; fi
+  if ! head -c 400 "$tmp" | grep -q 'gen-chibi — bộ chuyển hooks của Claude Code'; then rm -f -- "$tmp"; m live_nohook "$(cur_tag)" "current/tools/live-hook.mjs" >&2; return 1; fi
+  chmod 600 "$tmp" && mv -f -- "$tmp" "$dest"
+  # 2) token live (dữ liệu của app — đọc bằng user của app, đúng dạng mới dùng)
+  local tok; tok="$(rd data/live-token | tr -d ' \r\n')" || tok=""
+  case "$tok" in gcl_*) ;; *) tok="" ;; esac
+  case "$tok" in *[!A-Za-z0-9_-]*) tok="" ;; esac
+  [ "${#tok}" -ge 36 ] || { m live_notoken "$HOME_DIR" >&2; return 1; }
+  # 3) lệnh hook: node TUYỆT ĐỐI (ứng dụng mở từ Dock / menu không thấy PATH của terminal) + tệp đã chép + địa chỉ app trên máy này
+  local nb; nb="$(command -v node 2>/dev/null)" || nb=""
+  [ -n "$nb" ] || { m live_nonode >&2; nb=node; }
+  local cmd jcmd ev js="" sep=""
+  cmd="GC_LIVE_URL=$(shq "$URL") GC_LIVE_TOKEN=$tok $(shq "$nb") $(shq "$dest")"; jcmd="$(cfg_esc "$cmd")"
+  for ev in $LIVE_EVENTS; do
+    case "$ev" in PreToolUse|PostToolUse|PostToolUseFailure) js="$js$sep"'    "'"$ev"'": [{ "matcher": "*", "hooks": [{ "type": "command", "command": "'"$jcmd"'", "timeout": 2 }] }]' ;;
+      *) js="$js$sep"'    "'"$ev"'": [{ "hooks": [{ "type": "command", "command": "'"$jcmd"'", "timeout": 2 }] }]' ;; esac
+    sep=$',\n'
+  done
+  js=$'{\n  "hooks": {\n'"$js"$'\n  }\n}'
+  [ -z "$IS_ROOT" ] || m live_root "$TD" >&2
+  case "$mode" in
+    json) printf '%s\n' "$js"; return 0 ;;
+    print) m live_head; printf '\n%s\n\n' "$js"; m live_foot "$dest" "$URL"; return 0 ;;
+  esac
+  # 4) --install-into: ghép vào settings.json của Claude Code (cần node — chính hook cũng cần)
+  [ "$nb" != node ] || { m live_in_bad "$into" "node" >&2; return 1; }
+  case "$into" in /*) ;; "~/"*) into="$HOME/${into#\~/}" ;; *) into="$ORIG_PWD/$into" ;; esac
+  local dp; dp="$(dirname "$into")"
+  [ -d "$dp" ] || ( umask 077; mkdir -p "$dp" ) || { m live_in_bad "$into" "folder" >&2; return 1; }
+  dp="$(cd -P "$dp" && pwd)"
+  case "$dp/" in "$HOME_PHYS"/*) m live_in_bad "$into" "inside the install folder" >&2; return 1 ;; esac
+  if [ -L "$into" ]; then m live_in_bad "$into" "symlink" >&2; return 1; fi
+  if [ -e "$into" ] && [ ! -f "$into" ]; then m live_in_bad "$into" "not a regular file" >&2; return 1; fi
+  local res; res="$(printf '%s' "$js" | ( cd / && "$nb" -e '
+const fs = require("fs"), path = require("path"), file = process.argv[1], add = JSON.parse(require("fs").readFileSync(0, "utf8")).hooks;
+const out = m => { process.stdout.write(m); process.exit(m.startsWith("ok") ? 0 : 3); };
+let cur = {}, had = false, st = null;
+try { st = fs.lstatSync(file); } catch (e) { if (e.code !== "ENOENT") out("bad read"); }
+if (st) { if (st.isSymbolicLink() || !st.isFile()) out("bad symlink"); had = true; const raw = fs.readFileSync(file, "utf8");
+  if (raw.trim()) { try { cur = JSON.parse(raw); } catch (e) { out("bad not JSON"); } }
+  if (!cur || typeof cur !== "object" || Array.isArray(cur)) out("bad not a JSON object");
+  if (cur.hooks !== undefined && (!cur.hooks || typeof cur.hooks !== "object" || Array.isArray(cur.hooks))) out("bad hooks is not an object"); }
+const mine = h => h && typeof h.command === "string" && /live-hook\.mjs/.test(h.command) && /GC_LIVE_TOKEN=/.test(h.command);
+const hooks = Object.assign({}, cur.hooks || {});
+Object.keys(hooks).forEach(ev => { if (!Array.isArray(hooks[ev])) return; hooks[ev] = hooks[ev].map(g => g && Array.isArray(g.hooks) ? Object.assign({}, g, { hooks: g.hooks.filter(h => !mine(h)) }) : g).filter(g => !(g && Array.isArray(g.hooks) && !g.hooks.length)); if (!hooks[ev].length) delete hooks[ev]; });
+Object.keys(add).forEach(ev => { hooks[ev] = (Array.isArray(hooks[ev]) ? hooks[ev] : []).concat(add[ev]); });
+const next = JSON.stringify(Object.assign({}, cur, { hooks }), null, 2) + "\n", dir = path.dirname(file), base = path.basename(file);
+let bak = "";
+if (had) { const t = new Date().toISOString().replace(/[:.]/g, "-"); bak = path.join(dir, base + ".bak-" + t); fs.copyFileSync(file, bak, fs.constants.COPYFILE_EXCL); fs.chmodSync(bak, st.mode & 0o777); }
+const tmp = path.join(dir, "." + base + ".gc-" + process.pid + "-" + Date.now());
+const fd = fs.openSync(tmp, "wx", had ? st.mode & 0o777 : 0o600); fs.writeSync(fd, next); fs.fsyncSync(fd); fs.closeSync(fd);
+try { const s2 = fs.lstatSync(file); if (s2.isSymbolicLink()) { fs.unlinkSync(tmp); out("bad symlink"); } } catch (e) { /* vẫn chưa có tệp */ }
+fs.renameSync(tmp, file);
+out("ok " + bak);
+' "$into" ) 2>/dev/null)" || true
+  case "$res" in
+    "ok ") m live_in_new "$into" ;;
+    ok\ *) m live_in_ok "$into" "${res#ok }" ;;
+    *) m live_in_bad "$into" "${res#bad }" >&2; return 1 ;;
+  esac
 }
 
 trust_boot ${1+"$@"}   # root được lệnh cũ gọi từ trong thư mục cài → lắp lệnh đã kiểm rồi chuyển sang (không quay lại)
@@ -2731,5 +2838,6 @@ case "${1:-help}" in
   token|github-token) shift; token_cmd "${1:-}" ;;
   lang|language) shift; lang_cmd "${1:-}" ;;
   agent) shift; agent_cmd ${1+"$@"} ;;
+  live) shift; live_cmd ${1+"$@"}; exit $? ;;
   *) usage ;;
 esac

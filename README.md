@@ -203,6 +203,25 @@ Your own tunnel or proxy, LAN: use `genchibi online proxy <domain>` (or set `GC_
 ### Agents update the app themselves
 MCP tools `get_app_version` (running version, latest version on GitHub, release notes), `update_app` (downloads the new version, checks SHA-256, backs up, restarts; if the new version fails, it returns to the old one automatically), `rollback_app` (needs `confirm: "ROLLBACK"`).
 
+## Live stage: watch your agent work (v0.24)
+
+One chibi character acts out every real step of an AI agent while you chat with it: it walks to the bookshelf to
+read, to the desk to type, to the test lab to run tests (and grabs a fire extinguisher from its satchel when the
+tests keep failing), calls helpers through the door, sips coffee while waiting for you and naps if you take too long.
+Studio › System › **Live stage**. Sound is off until you turn it on.
+
+Connect Claude Code — on the machine where Claude Code runs:
+
+```bash
+genchibi live hook --install-into ~/.claude/settings.json   # merge the hooks (backup kept); restart Claude Code
+genchibi live hook                                          # or just print the snippet and paste it yourself
+```
+
+The hook script is a copy kept outside the install folder (Docker installs take it from the SHA-256-verified
+release), it never blocks Claude Code and sends only the kind of step — never prompts, file contents, paths,
+commands or results. The live token in the snippet can only send Live events. Other agents call the MCP tool
+`live_event`. Details: [docs/LIVE.md](docs/LIVE.md).
+
 ## Core AI (LLM API)
 
 Studio › System › AI settings: choose OpenRouter, DeepSeek, MiniMax or a custom OpenAI-compatible endpoint, paste the API key (encrypted with AES-256-GCM on the machine, never sent back to the browser). "Test model" runs a trial script and scores it: valid JSON, number of fixes needed, latency, tokens.

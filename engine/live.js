@@ -22,6 +22,8 @@
   var KINDS = ['session_start', 'prompt', 'think', 'read', 'search', 'edit', 'write', 'run', 'test_run', 'test_pass', 'test_fail',
     'delegate_start', 'delegate_end', 'wait_user', 'error', 'limit', 'release', 'idle', 'stop'];
   var LABEL_MAX = 48;
+  // hook của Claude Code được nối (một nguồn: server/live.js đoạn cấu hình + cli/genchibi LIVE_EVENTS — test-live so hai bên)
+  var HOOK_EVENTS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'Notification', 'Stop', 'SubagentStart', 'SubagentStop', 'PreCompact', 'SessionEnd'];
   // câu tóm tắt mặc định theo loại (msgid — Studio dịch lúc hiển thị). Bậc leo thang: [bậc 0, bậc 1, bậc 2]
   var SUMMARY = {
     session_start: [N_('Sẵn sàng làm việc!')],
@@ -44,6 +46,28 @@
     release: [N_('Phát hành! 3… 2… 1…')],
     stop: [N_('Xong phiên. Chào nhé!')]
   };
+  // NHÃN NGƯỜI ĐỌC (bong bóng): câu tả việc bằng lời thường, CHỌN từ bảng theo (loại, nhóm công cụ, loại trợ lý) — không bao giờ in tên công cụ,
+  // tên loại trợ lý hay nhãn / nội dung agent gửi (nhãn đã làm sạch chỉ hiện ở bảng sự kiện). msgid → Studio dịch theo ngôn ngữ giao diện
+  var TOOL_PHRASE = {
+    search: { Grep: N_('Lục tìm trong code'), Glob: N_('Đi tìm tệp'), LS: N_('Đi tìm tệp'), WebSearch: N_('Tra cứu trên mạng'), WebFetch: N_('Đọc một trang web'), ToolSearch: N_('Tìm đồ nghề phù hợp') },
+    read: { Skill: N_('Đọc sách hướng dẫn'), NotebookRead: N_('Đọc sổ ghi chép') },
+    edit: { NotebookEdit: N_('Sửa sổ ghi chép') },
+    run: { mcp: N_('Nhờ công cụ bên ngoài') },
+    think: { TodoWrite: N_('Lên kế hoạch'), ExitPlanMode: N_('Chốt kế hoạch'), EnterPlanMode: N_('Lập kế hoạch') }
+  };
+  var SUBS = ['explore', 'plan', 'review', 'test', 'general', 'other'];
+  var SUB_PHRASE = { explore: N_('Gọi trợ lý đi trinh sát'), plan: N_('Gọi trợ lý lập kế hoạch'), review: N_('Gọi trợ lý soát lại'), test: N_('Gọi trợ lý chạy thử') };
+  var PLAN_TOOLS = { TodoWrite: 1, ExitPlanMode: 1, EnterPlanMode: 1 };
+  // (loại, công cụ, loại trợ lý, bậc) → msgid. Bậc 0 theo công cụ; bậc leo thang = câu hài của sân khấu (SUMMARY)
+  function phrase(kind, tool, sub, level) {
+    var L = SUMMARY[kind] || SUMMARY.idle, lv = Math.max(0, Math.min(level || 0, L.length - 1));
+    if (lv === 0 && kind === 'delegate_start' && own(SUB_PHRASE, sub)) return SUB_PHRASE[sub];
+    if (lv === 0 && own(TOOL_PHRASE, kind) && typeof tool === 'string' && own(TOOL_PHRASE[kind], tool)) return TOOL_PHRASE[kind][tool];
+    return L[lv];
+  }
+  function phraseIds() { var o = {}; Object.keys(SUMMARY).forEach(function (k) { SUMMARY[k].forEach(function (x) { o[x] = 1; }); }); Object.keys(TOOL_PHRASE).forEach(function (k) { Object.keys(TOOL_PHRASE[k]).forEach(function (t) { o[TOOL_PHRASE[k][t]] = 1; }); }); Object.keys(SUB_PHRASE).forEach(function (k) { o[SUB_PHRASE[k]] = 1; }); o[WAKE] = 1; return Object.keys(o); }
+  var WAKE = N_('Hả?! Có việc!');
+
   // LUẬT LÀM SẠCH NHÃN (redact) — nhãn chỉ để tóm tắt việc đang làm, KHÔNG BAO GIỜ là nội dung tệp / lệnh / bí mật:
   //   R1 ký tự điều khiển, xuống dòng → khoảng trắng; NFC
   //   R2 cả nhãn TRÔNG NHƯ LỆNH (bắt đầu bằng tên chương trình dòng lệnh, hoặc có | && || ; $( ` > < $VAR) → bỏ cả nhãn (dùng câu mặc định)
@@ -91,7 +115,7 @@
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { error: N_('sự kiện phải là object JSON') };
     if (typeof raw.kind !== 'string' || KINDS.indexOf(raw.kind) < 0) return { error: N_('kind không hợp lệ — một trong: {list}', { list: KINDS.join(', ') }) };
     if (raw.label !== undefined && typeof raw.label !== 'string') return { error: N_('label phải là chuỗi') };
-    var ev = { kind: raw.kind, label: redact(raw.label || ''), tool: cleanTool(raw.tool), agent: redact(typeof raw.agent === 'string' ? raw.agent.slice(0, 40) : '').slice(0, 24) };
+    var ev = { kind: raw.kind, label: redact(raw.label || ''), tool: cleanTool(raw.tool), agent: redact(typeof raw.agent === 'string' ? raw.agent.slice(0, 40) : '').slice(0, 24), sub: SUBS.indexOf(raw.sub) >= 0 ? raw.sub : '' };
     if (typeof raw.at === 'number' && isFinite(raw.at) && now && Math.abs(raw.at - now) < 864e5) ev.at = Math.round(raw.at);
     return { ev: ev };
   }
@@ -129,6 +153,8 @@
   var CLS = { read: 'shelf', search: 'shelf', edit: 'desk', write: 'desk', run: 'desk', test_run: 'lab', idle: 'rest', wait_user: 'rest' };
   var PRIO = { idle: 0, wait_user: 0, think: 1, read: 2, search: 2, edit: 2.5, write: 2.5, run: 2.5 };   // còn lại: 3 — sửa / chạy lệnh là việc chính của agent: không bị bỏ khi sân khấu chạy chậm hơn agent
   var MERGE = { shelf: 1, desk: 1, rest: 1, think: 1, prompt: 1 };   // lớp được gộp (test / giao việc / lỗi: mỗi lần một nhịp riêng — leo thang đếm từng lần)
+  var CRITICAL = { error: 1, test_fail: 1, test_pass: 1, release: 1, wait_user: 1, prompt: 1, limit: 1, delegate_start: 1, delegate_end: 1, session_start: 1, stop: 1, test_run: 1 };
+  function critical(kind) { return own(CRITICAL, kind); }
   function prio(kind) { return own(PRIO, kind) ? PRIO[kind] : 3; }
   function clsOf(kind) { return own(CLS, kind) ? CLS[kind] : kind; }
   function hash(n) { var x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }   // giả ngẫu nhiên tất định theo chỉ số
@@ -145,10 +171,8 @@
     D.state = st;
 
     function zoneAt(x) { var best = null, bd = 1e9; Object.keys(ZONES).forEach(function (z) { var d = Math.abs(ZONES[z].x - x); if (d < bd) { bd = d; best = z; } }); return bd < 24 ? best : null; }
-    function bubbleOf(kind, level, label) {
-      var L = SUMMARY[kind] || [''], id = L[Math.min(level, L.length - 1)];
-      return { id: id, text: label && level === 0 ? label : '' };   // nhãn của agent (đã làm sạch) chỉ ở bậc đầu; leo thang = câu hài của sân khấu
-    }
+    // bong bóng: câu của bảng (phrase) + bộ đếm sự kiện đã gộp (n) — không bao giờ nhãn / tên công cụ của agent
+    function bubbleOf(kind, level, a) { return { id: phrase(kind, a && a.tool, a && a.sub, level), n: a && a.count > 1 ? a.count : 0 }; }
     function emit(s) {
       s.i = seq++;
       s.x0 = st.x; s.propIn = st.prop;
@@ -172,13 +196,13 @@
       cur = null;
     }
     // ---- hoạt động → ý định (intent). Ý định được mở thành bước LÚC bắt đầu (từ trạng thái lúc đó) → không bao giờ nhảy cóc
-    function plan(kind, count, label, evs, t) {
-      var I = [], lvl = 0, a = { kind: kind, cls: clsOf(kind), count: count, label: label, evs: evs, t0: t, prio: prio(kind), level: 0, intents: I };
+    function plan(q, t) {
+      var kind = q.kind, count = q.count, I = [], lvl = 0, a = { kind: kind, cls: clsOf(kind), count: count, label: q.label, tool: q.tool, sub: q.sub, evs: q.evs, t0: t, prio: prio(kind), level: 0, intents: I, summary: q.summary || 0 };
       var need = null, zone = null, emo = 'work', clip = 'lvIdle', dwell = MIN_DWELL + 0.3, extra = {};
       switch (kind) {
         case 'session_start': zone = 'center'; clip = 'lvWave'; emo = 'proud'; dwell = 1.6; break;
         case 'prompt': need = 'phone'; clip = 'lvPhone'; emo = 'unsure'; dwell = 1.6; extra.after = 'putBack'; break;
-        case 'think': clip = 'lvPonder'; emo = 'think'; dwell = 1.4; break;
+        case 'think': if (PLAN_TOOLS[q.tool]) { need = 'notebook'; clip = 'lvNote'; emo = 'work'; dwell = 1.6; extra.after = 'putBack'; } else { clip = 'lvPonder'; emo = 'think'; dwell = 1.4; } break;
         case 'read': zone = 'shelf'; need = 'book'; clip = 'lvRead'; emo = 'think'; break;
         case 'search': zone = 'shelf'; need = 'magnifier'; clip = 'lvMagnify'; emo = 'work'; break;
         case 'edit': zone = 'desk'; clip = 'lvType'; emo = 'work'; break;
@@ -249,8 +273,8 @@
       if (I.main && (act.cls === 'shelf' || act.cls === 'desk')) act.level = Math.max(act.level, act.count >= 10 ? 2 : act.count >= 4 ? 1 : 0);
       var dir = I.dir == null ? st.dir : I.dir;
       var s = emit({ type: 'perform', t0: t, t1: t + (I.main || !hurry ? I.dwell : Math.max(0.8, I.dwell * 0.7)), clip: I.clip, fast: I.fast || act.level >= 1, emo: I.emo, dir: dir, act: act.kind, level: act.level, main: !!I.main, seat: !!I.seat,
-        bubble: I.main ? bubbleOf(act.kind, act.level, act.label) : act.level >= 1 || act.kind === 'test_fail' ? bubbleOf(act.kind, act.level, '') : null, world: I.world || null, count: act.count });
-      if (I.main) act.performed = t;
+        bubble: I.main ? bubbleOf(act.kind, act.level, act) : act.level >= 1 || act.kind === 'test_fail' ? bubbleOf(act.kind, act.level, null) : null, world: I.world || null, count: act.count });
+      if (I.main) { act.performed = t; s.evs = act.evs; }   // sự kiện do nhịp này diễn (cùng mảng với hoạt động — sự kiện gộp sau vẫn ghi vào)
       if (I.helper === 1) spawnHelper(t + 0.6, act.label);
       if (I.helper === -1) releaseHelper(t);
       return s;
@@ -278,32 +302,43 @@
     };
     // ---- hàng đợi: gộp cùng lớp, trần 5 mục (bỏ mục ưu tiên thấp cũ nhất)
     D.push = function (ev, at) {
-      var e = { id: ev.id != null ? ev.id : ++evSeq, kind: ev.kind, label: ev.label || '', at: at };
+      var e = { id: ev.id != null ? ev.id : ++evSeq, kind: ev.kind, label: ev.label || '', tool: ev.tool || '', sub: ev.sub || '', at: at };
       D.log.push({ id: e.id, kind: e.kind, at: at, step: null, merged: false });
       if (D.log.length > D.keep * 2) D.log.splice(0, D.log.length - D.keep * 2);
       // đang làm đúng lớp này (và đã vào phần diễn chính) → gộp vào: thêm thời gian, tăng bậc hài
-      if (act && !D.queue.length && act.cls === clsOf(e.kind) && MERGE[act.cls] && !act.done) {
+      if (act && !D.queue.length && act.cls === clsOf(e.kind) && MERGE[act.cls] && !act.done && (!critical(e.kind) || act.kind === e.kind)) {
         act.count++; act.evs.push(e.id); D.log[D.log.length - 1].merged = true;
         if (!act.wait) act.absorb = (act.absorb || 0) + 1;   // chờ thêm một lần "chờ" = vẫn đang chờ, không làm lại
+        if (cur && cur.main && cur.bubble) cur.bubble.n = act.count;   // bộ đếm trên bong bóng tăng ngay (chỉ hiển thị — không đổi kế hoạch)
         return;
       }
       var last = D.queue[D.queue.length - 1], c2 = clsOf(e.kind);
-      if (last && last.cls === c2 && MERGE[c2] && (last.kind === e.kind || c2 === 'shelf' || c2 === 'desk' || c2 === 'rest')) {
+      if (last && last.cls === c2 && MERGE[c2] && (last.kind === e.kind || ((c2 === 'shelf' || c2 === 'desk' || c2 === 'rest') && !critical(e.kind) && !critical(last.kind)))) {
         last.count++; last.evs.push(e.id); if (e.kind === 'run') last.kind = 'run'; D.log[D.log.length - 1].merged = true; return;
       }
-      D.queue.push({ kind: e.kind, cls: clsOf(e.kind), count: 1, label: e.label, evs: [e.id], at: at, prio: prio(e.kind) });
+      D.queue.push({ kind: e.kind, cls: clsOf(e.kind), count: 1, label: e.label, tool: e.tool, sub: e.sub, evs: [e.id], at: at, prio: prio(e.kind) });
+      // DIỄN TÓM TẮT khi agent nhanh hơn sân khấu: hàng đợi dài → gộp hai việc THƯỜNG (đọc / tìm / sửa / chạy / nghĩ) gần nhau thành một nhịp có bộ đếm;
+      // việc QUAN TRỌNG (lỗi, test đỏ / xanh, phát hành, chờ bạn, giao việc…) không bao giờ bị bỏ hay gộp — hàng đợi dài ra thì sân khấu tăng tốc (hurry)
       while (D.queue.length > 5) {
-        var low = 0; D.queue.forEach(function (q, i) { if (q.prio < D.queue[low].prio) low = i; });   // bỏ việc ưu tiên thấp nhất (cũ nhất trong số đó)
-        var gone = D.queue.splice(low, 1)[0], nxt = D.queue[Math.min(low, D.queue.length - 1)];
-        if (nxt) nxt.evs = gone.evs.concat(nxt.evs);
+        var idx = []; D.queue.forEach(function (q, i) { if (!critical(q.kind)) idx.push(i); });
+        if (idx.length < 2) break;
+        var lo = idx[0]; idx.forEach(function (i) { if (D.queue[i].prio < D.queue[lo].prio) lo = i; });
+        var k = idx.indexOf(lo), into = idx[k + 1] != null ? idx[k + 1] : idx[k - 1];
+        var gone = D.queue[lo], keep = D.queue[into];
+        keep.count += gone.count; keep.evs = lo < into ? gone.evs.concat(keep.evs) : keep.evs.concat(gone.evs); keep.summary = (keep.summary || 1) + (gone.summary || 1);
+        D.queue.splice(lo, 1);
+      }
+      // trần cứng: quá 12 việc quan trọng dồn lại → gộp hai việc LIỀN NHAU cùng loại (vẫn diễn, bộ đếm ghi đủ) — không bao giờ bỏ
+      for (var qi = D.queue.length - 1; D.queue.length > 12 && qi > 0; qi--) {
+        if (D.queue[qi].kind === D.queue[qi - 1].kind) { D.queue[qi - 1].count += D.queue[qi].count; D.queue[qi - 1].evs = D.queue[qi - 1].evs.concat(D.queue[qi].evs); D.queue.splice(qi, 1); }
       }
     };
     function startNext(t) {
       // việc ưu tiên thấp đã cũ (> 8 s) mà phía sau còn việc: bỏ qua cho sân khấu đuổi kịp agent (sự kiện vẫn ghi vào việc kế)
-      while (D.queue.length > 1 && D.queue[0].prio < 2.5 && t - D.queue[0].at > 8) { var old = D.queue.shift(); D.queue[0].evs = old.evs.concat(D.queue[0].evs); }
-      while (D.queue.length > 1 && D.queue[0].kind === 'think') { var th = D.queue.shift(); D.queue[0].evs = th.evs.concat(D.queue[0].evs); }   // nghĩ thoáng qua khi việc khác đã chờ
+      while (D.queue.length > 1 && !critical(D.queue[0].kind) && D.queue[0].prio < 2.5 && t - D.queue[0].at > 8 && !critical(D.queue[1].kind)) { var old = D.queue.shift(); D.queue[0].evs = old.evs.concat(D.queue[0].evs); D.queue[0].count += old.count; D.queue[0].summary = (D.queue[0].summary || 1) + 1; }
+      while (D.queue.length > 1 && D.queue[0].kind === 'think' && !PLAN_TOOLS[D.queue[0].tool]) { var th = D.queue.shift(); D.queue[0].evs = th.evs.concat(D.queue[0].evs); }   // nghĩ thoáng qua khi việc khác đã chờ
       var q = D.queue.shift();
-      act = plan(q.kind, q.count, q.label, q.evs, t);
+      act = plan(q, t);
       st.idleSince = 0;
       q.evs.forEach(function (id) { var L = D.log.filter(function (x) { return x.id === id; })[0]; if (L && L.step == null) L.step = seq; });
     }
@@ -316,14 +351,14 @@
         if (lv <= 2) {
           if (st.prop !== 'mug') { act.intents.push({ type: 'stow', keep: 'mug' }, { type: 'take', prop: 'mug' }); return null; }
           var C3 = ['lvSip', 'lvWatch', 'lvYawn'][lv];
-          return emit({ type: 'perform', t0: t, t1: t + (lv === 2 ? 1.8 : 2.2), clip: C3, emo: ['lazy', 'unsure', 'lazy'][lv], dir: 0, act: act.kind, level: lv, bubble: bubbleOf(act.kind, lv, ''), wait: true });
+          return emit({ type: 'perform', t0: t, t1: t + (lv === 2 ? 1.8 : 2.2), clip: C3, emo: ['lazy', 'unsure', 'lazy'][lv], dir: 0, act: act.kind, level: lv, bubble: bubbleOf(act.kind, lv, null), wait: true });
         }
         // ngủ gật trên sofa: cất ly → đi tới sofa → ngồi → ngủ (lặp từng đoạn 4,4 s)
         if (st.prop) { act.intents.push({ type: 'stow', keep: null }); return null; }
         if (Math.abs(st.x - ZONES.sofa.x) > 2) { act.intents.push({ type: 'walk', zone: 'sofa' }); return null; }
         var prev = cur || D.steps[D.steps.length - 1];
         if (!prev || (prev.clip !== 'lvNap' && prev.clip !== 'lvSitDown')) return emit({ type: 'perform', t0: t, t1: t + 0.7, clip: 'lvSitDown', emo: 'sleep', dir: -1, act: act.kind, level: 3, seat: true, wait: true });
-        return emit({ type: 'perform', t0: t, t1: t + 4.4, clip: 'lvNap', emo: 'sleep', dir: -1, act: act.kind, level: 3, bubble: bubbleOf(act.kind, 3, ''), seat: true, wait: true });
+        return emit({ type: 'perform', t0: t, t1: t + 4.4, clip: 'lvNap', emo: 'sleep', dir: -1, act: act.kind, level: 3, bubble: bubbleOf(act.kind, 3, null), seat: true, wait: true });
       }
       // không việc gì: đứng thở; quá 12 s → tự đi nghỉ (idle)
       if (!st.idleSince) st.idleSince = t;
@@ -338,10 +373,16 @@
       var q = D.queue[0];
       if (!q) return null;
       var wake = s.clip === 'lvNap' || s.clip === 'lvSlump' || s.clip === 'lvSitDown';
-      if (s.type === 'walk') return (act && act.prio < q.prio) || s.act === 'hold' ? t : null;   // đổi hướng giữa đường: đi tiếp từ chỗ đang đứng
+      if (s.type === 'walk') return (act && act.prio < q.prio && act.prio < 2 && !critical(act.kind)) || s.act === 'hold' ? t : null;   // đổi hướng giữa đường: đi tiếp từ chỗ đang đứng (việc quan trọng thì đi cho tới nơi)
       if (s.type !== 'perform') return null;                                                   // lấy / cất đồ: làm cho xong
       if (s.hold || s.wait || wake) return t;
       return Math.max(t, s.t0 + Math.min(s.t1 - s.t0, act && act.prio < q.prio ? 0.6 : MIN_DWELL));
+    }
+    // việc bị cắt TRƯỚC nhịp diễn chính (đang đi tới khu thì có việc gấp hơn): sự kiện của nó chuyển sang việc kế — không sự kiện nào mất
+    function abandon() {
+      if (!act) return;
+      if (act.performed == null && act.evs && act.evs.length && D.queue.length) { var q0 = D.queue[0]; q0.evs = act.evs.concat(q0.evs); q0.count += act.count; q0.summary = (q0.summary || 1) + 1; act.evs = []; }
+      act.intents = []; act.wait = false;
     }
     // ---- chạy tới giờ t
     D.advance = function (t) {
@@ -352,7 +393,7 @@
           if (act && act.absorb && cur.type === 'perform' && cur.main) {
             var lv = act.cls === 'shelf' || act.cls === 'desk' ? (act.count >= 10 ? 2 : act.count >= 4 ? 1 : 0) : act.level;
             var add = act.absorb * 0.5; act.absorb = 0;
-            if (lv > act.level && cur.t1 > t) { act.level = lv; finish(cur, Math.max(t, cur.t0 + 0.4)); act.intents.unshift({ type: 'perform', clip: cur.clip, emo: lv >= 2 ? 'panic' : 'work', dwell: MIN_DWELL + 0.6, main: true, dir: cur.dir }); continue; }
+            if (lv > act.level && cur.t1 > t) { var c0 = cur; act.level = lv; finish(cur, Math.max(t, cur.t0 + 0.4)); act.intents.unshift(Object.assign({}, act.mainI || {}, { type: 'perform', clip: c0.clip, emo: lv >= 2 ? 'panic' : 'work', dwell: MIN_DWELL + 0.6, main: true, dir: c0.dir, world: null })); continue; }
             cur.t1 = Math.min(cur.t0 + MAX_DWELL, cur.t1 + add);
             if (cur.t1 < t) cur.t1 = t;
           }
@@ -361,10 +402,10 @@
             if (c > t) return;           // chưa tới lúc cắt
             if (cur.type === 'perform' && (cur.clip === 'lvNap' || cur.clip === 'lvSlump' || cur.clip === 'lvSitDown')) {
               finish(cur, t); act = act || { kind: 'hold', intents: [] };
-              emit({ type: 'perform', t0: t, t1: t + 0.8, clip: 'lvWake', emo: 'shock', dir: -1, act: 'wake', bubble: { id: N_('Hả?! Có việc!'), text: '' } });
-              act.intents = []; act.wait = false; continue;
+              emit({ type: 'perform', t0: t, t1: t + 0.8, clip: 'lvWake', emo: 'shock', dir: -1, act: 'wake', bubble: { id: WAKE, n: 0 } });
+              abandon(); continue;
             }
-            finish(cur, c); if (act) { act.intents = []; act.wait = false; } continue;
+            finish(cur, c); abandon(); continue;
           }
           if (cur.t1 > t) return;
           var tEnd = cur.t1; finish(cur, tEnd);
@@ -396,6 +437,9 @@
     return D;
   }
   var HELPER_SPOTS = [700, 860, 420, 1010, 760, 470, 930, 240];
+
+  // chữ trong bong bóng: câu của bảng (dịch qua tr) + "×N" khi một nhịp gộp nhiều sự kiện
+  function bubbleText(b, tr) { if (!b) return ''; var t = tr ? tr(b.id) : b.id; return b.n > 1 ? t + ' ×' + b.n : t; }
 
   /* ------------------------------------------------------------ 4. NHÂN VẬT AGENT + VẼ */
   // nhân vật đại diện agent: dựng từ ma-nơ-canh của bộ khung (mũ len xanh, áo hoodie cam) — không đăng ký vào thư viện
@@ -551,6 +595,25 @@
       var tl = tlOf(s), u = Math.max(0, Math.min(tl.T, t - s.t0));
       return C.finalAt(tl, u, 0);
     }
+    // MÁY QUAY (tất định, êm): trung bình trượt 1,2 s của "đích" (x diễn viên + độ zoom theo loại bước) — hàm thuần của lịch sử bước và t,
+    // không trạng thái → hai lần vẽ cùng t ra cùng khung. Đi xa: lùi máy (zoom nhỏ); đứng làm việc: tiến gần; phóng tên lửa: lùi rộng
+    function zoomOf(s, t) {
+      if (!s) return 1;
+      if (s.world === 'launch' || (s.act === 'release' && s.type === 'perform')) return 1.0;
+      if (s.type === 'walk') return Math.abs(s.x1 - s.x0) > 420 ? 1.0 : 1.12;
+      if (s.seat || s.wait) return 1.22;
+      return 1.32;
+    }
+    function camAt(t) {
+      if (o.camera === false) return { x: W / 2, y: H / 2, z: 1 };
+      var n = 12, sx = 0, sz = 0;
+      for (var i = 0; i < n; i++) { var u = Math.max(0, t - 1.2 * i / (n - 1)), s = D.stepAt(u); sx += D.xAt(u); sz += zoomOf(s, u); }
+      var z = sz / n, cx = sx / n, hw = W / 2 / z, hh = H / 2 / z;
+      cx = Math.max(hw, Math.min(W - hw, cx));
+      var bottom = Math.min(H, GROUND + 0.2 * H / z), cy = Math.max(hh, Math.min(H - hh, bottom - hh));
+      return { x: cx, y: cy, z: z };
+    }
+    function camTf(c) { return 'translate(' + f1(W / 2) + ' ' + f1(H / 2) + ') scale(' + c.z.toFixed(4) + ') translate(' + f1(-c.x) + ' ' + f1(-c.y) + ')'; }
     function sample(t) {
       var s = D.stepAt(t);
       if (!s) return null;
@@ -564,10 +627,10 @@
       var x = D.xAt(t), seatLift = 0;
       var held = propHeld(s, t), bagOpen = (s.type === 'takeOut' && s.clip === 'lvRummage') || (s.type === 'putBack' && s.clip === 'lvStow');
       var bub = null;
-      for (var i = D.steps.indexOf(s); i >= 0 && i > D.steps.indexOf(s) - 6; i--) { var q = D.steps[i]; if (q.bubble && t - q.t0 < 3.2) { bub = { id: q.bubble.id, text: q.bubble.text, t0: q.t0, kind: q.act, level: q.level || 0 }; break; } }
+      for (var i = D.steps.indexOf(s); i >= 0 && i > D.steps.indexOf(s) - 6; i--) { var q = D.steps[i]; if (q.bubble && t - q.t0 < 3.2) { bub = { id: q.bubble.id, n: q.bubble.n || 0, t0: q.t0, kind: q.act, level: q.level || 0 }; break; } }
       var helpers = [];
       D.helpers.forEach(function (h) { var a = D.helperAt(h, t); if (a) helpers.push(a); });
-      return { t: t, step: s, pose: pose, layers: layers, view: view, sig: sig, x: x, y: GROUND - seatLift, K: K, prop: held, bagOpen: bagOpen, bagLevel: s.bagLevel || 0, bubble: bub, helpers: helpers, world: worldState(D, t), emo: s.emo };
+      return { t: t, step: s, pose: pose, layers: layers, view: view, sig: sig, x: x, y: GROUND - seatLift, K: K, prop: held, bagOpen: bagOpen, bagLevel: s.bagLevel || 0, bubble: bub, helpers: helpers, world: worldState(D, t), emo: s.emo, cam: camAt(t) };
     }
     // diễn viên → chuỗi SVG (lớp vẽ của engine + túi đeo sau lớp thân + đạo cụ trước bàn tay phải)
     function actorSVG(F) {
@@ -579,11 +642,15 @@
       });
       return '<g transform="translate(' + f1(F.x - 100 * K) + ' ' + f1(F.y - 228 * K) + ') scale(' + K + ')">' + out + '</g>';
     }
+    // trợ lý (tầng ảnh + tầng thở, L-42): một transform mỗi khung — đi thì nhún + lắc lư (bước chân hoạt hình), đứng thì thở
+    function helperTf(h, t) {
+      var k = 0.72, ph = t * 9 + h.id, bob = h.walking ? Math.abs(Math.sin(ph)) * 7 : Math.sin(t * 2.2 + h.id) * 1.2, sy = h.walking ? 1 - Math.abs(Math.cos(ph)) * 0.04 : 1 + Math.sin(t * 2.2 + h.id) * 0.012, rot = h.walking ? Math.sin(ph) * 6 : 0;
+      return 'translate(' + f1(h.x) + ' ' + f1(GROUND - 34 - bob) + ') rotate(' + f1(rot) + ') scale(' + (h.dir < 0 ? -k : k) + ' ' + (k * sy).toFixed(4) + ')';
+    }
     function helperSVG(h, t, imageOf) {
-      var k = 0.62, bob = h.walking ? Math.abs(Math.sin(t * 9 + h.id)) * 5 : Math.sin(t * 2.2 + h.id) * 1.2, sy = h.walking ? 1 : 1 + Math.sin(t * 2.2 + h.id) * 0.012;
-      var img = imageOf ? imageOf(h) : '';
+      var g = helperTf(h, t), img = imageOf ? imageOf(h) : '';
       // ảnh SVG của nhân vật: hộp RIG.box (−24, −18, 248 × 258), chân ở (100, 228)
-      return '<g transform="translate(' + f1(h.x) + ' ' + f1(GROUND - 34 - bob) + ') scale(' + (h.dir < 0 ? -k : k) + ' ' + f1(k * sy) + ')"><ellipse cx="0" cy="2" rx="40" ry="7" fill="rgba(20,24,22,.18)"/>' +
+      return '<g transform="' + g + '"><ellipse cx="0" cy="2" rx="40" ry="7" fill="rgba(20,24,22,.18)"/>' +
         (img ? '<image href="' + img + '" x="-124" y="-246" width="248" height="258"/>' : '<circle cx="0" cy="-130" r="60" fill="#ccc"/>') + '</g>';
     }
     function bubbleSVG(F, text) {
@@ -594,16 +661,19 @@
         '<text x="' + f1(bx + w / 2) + '" y="' + f1(by + 30) + '" text-anchor="middle" font-family="system-ui, sans-serif" font-size="23" font-weight="600" fill="' + INK + '">' + esc(text) + '</text></g>';
     }
     // khung SVG hoàn chỉnh (Node / ảnh tĩnh / test). tr(msgid) dịch bong bóng; imageOf(helper) → URL ảnh trợ lý (tuỳ chọn)
+    var IMG = {};   // ảnh trợ lý mặc định (Node / ảnh tĩnh): SVG của chính engine dạng data URL, dựng một lần mỗi màu
+    function imageOfDefault(h) { return IMG[h.tint] || (IMG[h.tint] = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(GC.svgString(agentAsset(h.tint), 'work', { noShadow: true }))); }
     function svg(t, opt) {
-      opt = opt || {};
+      opt = opt || {}; if (!opt.imageOf) opt = Object.assign({}, opt, { imageOf: imageOfDefault });
       var F = sample(t);
       if (!F) return '';
-      var tx = F.bubble ? (F.bubble.text || (opt.tr ? opt.tr(F.bubble.id) : F.bubble.id)) : '';
+      var tx = bubbleText(F.bubble, opt.tr);
       return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H + '"' + (opt.size ? ' width="' + opt.size + '" height="' + Math.round(opt.size * H / W) + '"' : '') + '>' +
+        '<rect width="' + W + '" height="' + H + '" fill="#e9dcc4"/><g transform="' + camTf(F.cam) + '">' +
         backdropSVG() + dynamicSVG(F.world, t) + F.helpers.map(function (h) { return helperSVG(h, t, opt.imageOf); }).join('') +
-        '<ellipse cx="' + f1(F.x) + '" cy="' + (GROUND + 2) + '" rx="' + f1(44 * K) + '" ry="' + f1(8 * K) + '" fill="rgba(20,24,22,.22)"/>' + actorSVG(F) + bubbleSVG(F, tx) + '</svg>';
+        '<ellipse cx="' + f1(F.x) + '" cy="' + (GROUND + 2) + '" rx="' + f1(44 * K) + '" ry="' + f1(8 * K) + '" fill="rgba(20,24,22,.22)"/>' + actorSVG(F) + bubbleSVG(F, tx) + '</g></svg>';
     }
-    return { sample: sample, svg: svg, actorSVG: actorSVG, helperSVG: helperSVG, bubbleSVG: bubbleSVG, asset: A, tlOf: tlOf };
+    return { sample: sample, svg: svg, actorSVG: actorSVG, helperSVG: helperSVG, helperTf: helperTf, bubbleSVG: bubbleSVG, camAt: camAt, camTf: camTf, asset: A, tlOf: tlOf };
   }
 
   // ---- dòng sự kiện ghi sẵn (JSONL: { kind, label?, tool?, dt } — dt = giây sau sự kiện trước) → [{ ev, at }]
@@ -620,7 +690,7 @@
   }
 
   GC.live = {
-    KINDS: KINDS, SUMMARY: SUMMARY, ZONES: ZONES, PROPS: PROPS, BAG: BAG, SPEED: SPEED, MIN_DWELL: MIN_DWELL, MAX_DWELL: MAX_DWELL, HELPERS_MAX: HELPERS_MAX, W: W, H: H, GROUND: GROUND, K: K, LABEL_MAX: LABEL_MAX,
+    KINDS: KINDS, HOOK_EVENTS: HOOK_EVENTS, SUMMARY: SUMMARY, SUBS: SUBS, CRITICAL: CRITICAL, phrase: phrase, phraseIds: phraseIds, bubbleText: bubbleText, ZONES: ZONES, PROPS: PROPS, BAG: BAG, SPEED: SPEED, MIN_DWELL: MIN_DWELL, MAX_DWELL: MAX_DWELL, HELPERS_MAX: HELPERS_MAX, W: W, H: H, GROUND: GROUND, K: K, LABEL_MAX: LABEL_MAX,
     redact: redact, cleanEvent: cleanEvent, director: director, stage: stage, agentAsset: agentAsset, parseJSONL: parseJSONL,
     backdropSVG: backdropSVG, dynamicSVG: dynamicSVG, worldState: worldState, propHeld: propHeld, PROP_ART: PROP_ART, satchelArt: satchelArt
   };

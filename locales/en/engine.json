@@ -785,5 +785,21 @@
  "Vịt cao su": "Rubber duck",
  "Sách (từ giá)": "Book (from the shelf)",
  "Hả?! Có việc!": "Huh?! Work!",
- "thiếu ma-nơ-canh của bộ khung": "the frame mannequin is missing"
+ "thiếu ma-nơ-canh của bộ khung": "the frame mannequin is missing",
+ "Lục tìm trong code": "Digging through the code",
+ "Đi tìm tệp": "Looking for files",
+ "Tra cứu trên mạng": "Looking it up online",
+ "Đọc một trang web": "Reading a web page",
+ "Tìm đồ nghề phù hợp": "Looking for the right gear",
+ "Đọc sách hướng dẫn": "Reading a how-to book",
+ "Đọc sổ ghi chép": "Reading the lab notes",
+ "Sửa sổ ghi chép": "Editing the lab notes",
+ "Nhờ công cụ bên ngoài": "Calling in outside help",
+ "Lên kế hoạch": "Making a plan",
+ "Chốt kế hoạch": "Settling the plan",
+ "Lập kế hoạch": "Drafting a plan",
+ "Gọi trợ lý đi trinh sát": "Sending a helper to scout",
+ "Gọi trợ lý lập kế hoạch": "Asking a helper to plan",
+ "Gọi trợ lý soát lại": "Asking a helper to review",
+ "Gọi trợ lý chạy thử": "Asking a helper to test"
 }
