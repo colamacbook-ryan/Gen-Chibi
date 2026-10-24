@@ -1,4 +1,5 @@
 bad-apisock.yml	"use_api_socket:"
+bad-b69.yml	line 4: !!b%69nary aW5jbHVkZQ==: [
 bad-bin.yml	line 3: !!binary ZXh0ZW5kcw==: {file: 
 bad-c1.yml	"build:"
 bad-c2.yml	"build:"
@@ -44,8 +45,10 @@ bad-root.yml	source: / (the Docker socket
 bad-sock.yml	source: /var/run/docker.sock (the Docker socket
 bad-sockenv.yml	DOCKER_HOST: unix:///var/run/docker.sock (the Docker socket
 bad-tab.yml	"build:"
+bad-tag.yml	line 3: image: !!str example/login (YAML tags
+bad-utf16.yml	the file is not plain UTF-8 text
 bad-var.yml	Docker Compose could not resolve it
-bad-verbatim.yml	line 3: image: !<tag:yaml.org,2002:str> example/login (
+bad-verbatim.yml	line 3: image: !<tag:yaml.org,2002:str> example/login (YAML tags
 bad-volfrom.yml	"volumes_from:"
 bad-xext.yml	source: @INSTALL@/data (a path in the install folder
 bad-yamldir.yml	line 1: %YAML 1.1 (
