@@ -1146,8 +1146,8 @@
    "id": "Q11",
    "guard": "🟠 vòng 8 C: chữ thô có extends (đường tuyệt đối — compose chép thẳng vào, khoá biến mất) → từ chối",
    "file": "cli/genchibi",
-   "find": "LC_ALL=C grep -qiwE 'extends|include|env_file|label_file|binary'",
-   "replace": "LC_ALL=C grep -qiwE 'include|env_file|label_file|binary'",
+   "find": "LC_ALL=C grep -qiwE 'extends|include|env_file|label_file'",
+   "replace": "LC_ALL=C grep -qiwE 'include|env_file|label_file'",
    "test": [
     "bash",
     "tools/test-root.sh"
@@ -1158,20 +1158,8 @@
    "id": "Q12",
    "guard": "🟠 vòng 8 C: chữ thô có include (đường tuyệt đối) → từ chối",
    "file": "cli/genchibi",
-   "find": "LC_ALL=C grep -qiwE 'extends|include|env_file|label_file|binary'",
-   "replace": "LC_ALL=C grep -qiwE 'extends|env_file|label_file|binary'",
-   "test": [
-    "bash",
-    "tools/test-root.sh"
-   ],
-   "expect": "từ chối đúng lý do"
-  },
-  {
-   "id": "Q13",
-   "guard": "🟠 vòng 8 C: tag !!binary (khoá extends viết bằng base64) → từ chối",
-   "file": "cli/genchibi",
-   "find": "LC_ALL=C grep -qiwE 'extends|include|env_file|label_file|binary'",
-   "replace": "LC_ALL=C grep -qiwE 'extends|include|env_file|label_file'",
+   "find": "LC_ALL=C grep -qiwE 'extends|include|env_file|label_file'",
+   "replace": "LC_ALL=C grep -qiwE 'extends|env_file|label_file'",
    "test": [
     "bash",
     "tools/test-root.sh"
@@ -1194,8 +1182,8 @@
    "id": "Q15",
    "guard": "🟠 vòng 8 C: \\ cuối dòng (nối chuỗi có nháy kép) → từ chối",
    "file": "cli/genchibi",
-   "find": "|\\\\.?$|^%|!<' \\",
-   "replace": "|^%|!<' \\",
+   "find": "|\\\\.?$|^%' \\",
+   "replace": "|^%' \\",
    "test": [
     "bash",
     "tools/test-root.sh"
@@ -1206,20 +1194,8 @@
    "id": "Q16",
    "guard": "🟠 vòng 8 C: chỉ thị YAML (%TAG / %YAML) → từ chối",
    "file": "cli/genchibi",
-   "find": "|^%|!<' \\",
-   "replace": "|!<' \\",
-   "test": [
-    "bash",
-    "tools/test-root.sh"
-   ],
-   "expect": "từ chối đúng lý do"
-  },
-  {
-   "id": "Q17",
-   "guard": "🟠 vòng 8 C: tag nguyên văn !<…> (tag:…:bin%61ry) → từ chối",
-   "file": "cli/genchibi",
-   "find": "|^%|!<' \\",
-   "replace": "|^%' \\",
+   "find": "|\\\\.?$|^%' \\",
+   "replace": "|\\\\.?$' \\",
    "test": [
     "bash",
     "tools/test-root.sh"
@@ -1326,8 +1302,8 @@
    "id": "Q26",
    "guard": "🔴 vòng 8: chữ thô có env_file (compose 2.38 chép tệp vào environment bất chấp --no-env-resolution, khoá biến mất) → từ chối",
    "file": "cli/genchibi",
-   "find": "LC_ALL=C grep -qiwE 'extends|include|env_file|label_file|binary'",
-   "replace": "LC_ALL=C grep -qiwE 'extends|include|label_file|binary'",
+   "find": "LC_ALL=C grep -qiwE 'extends|include|env_file|label_file'",
+   "replace": "LC_ALL=C grep -qiwE 'extends|include|label_file'",
    "test": [
     "bash",
     "tools/test-root.sh"
@@ -1338,8 +1314,8 @@
    "id": "Q27",
    "guard": "🔴 vòng 8: chữ thô có label_file (compose 2.38 chép tệp vào labels, khoá biến mất) → từ chối",
    "file": "cli/genchibi",
-   "find": "LC_ALL=C grep -qiwE 'extends|include|env_file|label_file|binary'",
-   "replace": "LC_ALL=C grep -qiwE 'extends|include|env_file|binary'",
+   "find": "LC_ALL=C grep -qiwE 'extends|include|env_file|label_file'",
+   "replace": "LC_ALL=C grep -qiwE 'extends|include|env_file'",
    "test": [
     "bash",
     "tools/test-root.sh"
@@ -1441,6 +1417,78 @@
     "tools/test-root.sh"
    ],
    "expect": "in các dòng mới của kết quả"
+  },
+  {
+   "id": "Q36",
+   "guard": "🔴 vòng 9b: tag YAML ngoài !reset / !override (!!binary, !!b%69nary, !<…>, !!str) → từ chối",
+   "file": "cli/genchibi",
+   "find": "      case \"$t\" in '!reset'|'!override') ;; *) bad=1; m ov_bad_tag",
+   "replace": "      case \"$t\" in *) ;; *) bad=1; m ov_bad_tag",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "từ chối đúng lý do"
+  },
+  {
+   "id": "Q37",
+   "guard": "🟡 vòng 9b: tệp không phải UTF-8 thường (BOM UTF-16 / UTF-32, byte NUL) → từ chối (compose đọc được UTF-16)",
+   "file": "cli/genchibi",
+   "find": "  case \"$b\" in fffe*|feff*|0000feff*) m ov_bad_enc; return 1 ;; esac\n  LC_ALL=C tr -d '\\000' < \"$1\" | cmp -s - \"$1\" || { m ov_bad_enc; return 1; }\n",
+   "replace": "",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "từ chối đúng lý do"
+  },
+  {
+   "id": "Q38",
+   "guard": "🟡 vòng 9b: đường /proc / /sys / /dev/fd → từ chối",
+   "file": "cli/genchibi",
+   "find": "/proc/*|/sys/*|/dev/fd/*|/dev/stdin/*|/dev/stdout/*|/dev/stderr/*) true ;;",
+   "replace": "/QQQ/*) true ;;",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "bind tới /proc"
+  },
+  {
+   "id": "Q39",
+   "guard": "🟡 vòng 9b: nguồn bind chưa có trên máy → từ chối",
+   "file": "cli/genchibi",
+   "find": "            elif [ ! -e \"$val\" ]; then bad=1; m ov_bad_missing",
+   "replace": "            elif false; then bad=1; m ov_bad_missing",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "nguồn bind chưa có trên máy"
+  },
+  {
+   "id": "Q40",
+   "guard": "🟡 vòng 9b: ACL mở rộng trên nguồn bind → từ chối",
+   "file": "cli/genchibi",
+   "find": "        if [ ! -L \"$p\" ] && command -v getfacl",
+   "replace": "        if false && command -v getfacl",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "nguồn bind chưa có trên máy"
+  },
+  {
+   "id": "Q41",
+   "guard": "🟡 vòng 9b: root không che được thư mục cài → đóng (không lùi về chỉ quét chữ)",
+   "file": "cli/genchibi",
+   "find": "  if [ -n \"${IS_ROOT:-}\" ] && ! ov_can_hide && !",
+   "replace": "  if false && ! ov_can_hide && !",
+   "test": [
+    "bash",
+    "tools/test-root.sh"
+   ],
+   "expect": "root không che được thư mục cài"
   }
  ]
 }
