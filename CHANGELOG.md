@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.24.0 — Live stage: a character acts out your AI agent's real work
+Ryan: "mỗi bước làm việc của bạn trong quá trình xử lý và phản hồi luôn đi kèm với việc điều khiển 1 nhân vật trên sân khấu" *(every step the agent takes while working drives a character on a stage)*, with logical, continuous moves and a satchel for the tools.
+
+### New
+- **Live stage (Studio › System › Live stage).** One chibi character acts out every real step of your AI agent — reading, searching, editing, testing, delegating, waiting — walking between desk, bookshelf, test lab, coffee corner, sofa, door and launch pad. Tools come out of its satchel and go back in; a gentle camera follows it; speech bubbles use plain words in your language (never file names, commands or tool names) with a counter like "Editing ×5". Repeated test failures escalate (sweat → hammer → rubber duck → fire extinguisher); long waits go from coffee to a nap. Sound is optional (off by default).
+- **Connect Claude Code:** `genchibi live hook --install-into ~/.claude/settings.json`. The hook script is a copy kept outside the install folder (Docker: from the verified release), your settings are merged with a backup, and the hook never blocks Claude Code and never sends prompts, file contents, paths, commands or results. Checked against a real Claude Code 2.1.310 session.
+- **Task switch:** agents call `live_task` when they start a different task (a golden rule in the MCP instructions, `start_here` and the agent skill). The character claps a clapperboard, puts its props away, changes its hat badge and walks to that task's corner; the Studio shows "Working on: …".
+- When the agent is faster than the stage, quick steps are folded into one action with a counter; errors, test results, releases and "waiting for you" always get their own beat.
+- For other agents: MCP tools `live_event` and `live_task`; `POST /api/live/event` with the owner token or a per-install live token that can do nothing else; an SSE stream for the page. Labels are cleaned of paths, commands, secrets and emails.
+
+### Security
+- The live token lives in a private file next to the hook (never on a command line) and has its own rate limit; rotating it is one click.
+- The Studio only shows the `genchibi live hook` command (never a hook command line served by the app), `--install-into` refuses other users' folders under sudo and never follows links, and Live streams close when you sign out.
+
+### Known limits
+- The hook sees tool calls, not the model's thinking or typing; the stage shows "thinking" in between.
+- An agent in the cloud can only reach your stage when gen-chibi is online with a domain.
+
 ## v0.23.2 — Real vertical video, smoother export, more MCP tools for agents
 The last technical round before Ryan tries everything from scratch (fresh install → `admin` / `admin` → owner account → domain → MCP check).
 
