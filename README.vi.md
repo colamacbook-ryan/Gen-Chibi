@@ -225,7 +225,7 @@ một việc khác việc đang làm, nó gọi `live_task` trước (`code`, `d
 `plan`, `review`, `release`, `chat`, `other` + tiêu đề ngắn). Nhân vật đập bảng clapper, cất hết đồ, đổi dấu trên mũ rồi
 đi về góc của việc đó; Studio hiện "Đang làm: …" và gắn việc cho các sự kiện sau. Gửi lại cùng việc thì không có gì xảy ra.
 
-**Lời mời (v0.24.1):** agent nối qua MCP gọi được `live_setup` để nhận kế hoạch và MỘT lệnh dựng Sân khấu Live trên máy
+**Lời mời (v0.24.1):** agent nối qua MCP (kết nối của chủ máy và agent bạn đã duyệt — OAuth, quyền ghi) gọi được `live_setup` để nhận kế hoạch và MỘT lệnh dựng Sân khấu Live trên máy
 của nó. Luật vàng: agent phải **hỏi người dùng trước**, không bao giờ chạy lén. Lệnh tải tệp hook từ bản phát hành GitHub
 chính thức của đúng phiên bản này và kiểm SHA-256 trước khi ghi — và chỉ được tải từ đúng tiền tố
 `https://github.com/colamacbook-ryan/Gen-Chibi/releases/download/v<version>/` (URL khác: từ chối và báo người dùng); app chỉ cấp token live riêng cho agent đó (liệt kê ở

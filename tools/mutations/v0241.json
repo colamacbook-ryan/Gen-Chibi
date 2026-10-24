@@ -231,15 +231,15 @@
   },
   {
    "id": "M20",
-   "guard": "live_setup chỉ chủ máy (link / dock → FORBIDDEN)",
+   "guard": "live_setup: link có khoá / dock → FORBIDDEN (OAuth mcp:write được phép)",
    "file": "server/mcp.js",
-   "find": "if (ctx && (ctx.viaLink || ctx.channel === 'ui')) return toolError('Only the owner can set up the Live stage",
-   "replace": "if (false) return toolError('Only the owner can set up the Live stage",
+   "find": "if (ctx && ((ctx.viaLink && !ctx.viaOAuth) || ctx.channel === 'ui')) return toolError(",
+   "replace": "if (false) return toolError(",
    "test": [
     "node",
     "tools/test-live.mjs"
    ],
-   "expect": "live_setup chỉ chủ máy"
+   "expect": "live_setup: chủ máy + agent chủ đã duyệt"
   },
   {
    "id": "M21",
@@ -276,6 +276,18 @@
     "tools/test-live.mjs"
    ],
    "expect": "hết chỗ token"
+  },
+  {
+   "id": "M24",
+   "guard": "agent OAuth mcp:write (đã duyệt) gọi được live_setup",
+   "file": "server/mcp.js",
+   "find": "if (ctx && ((ctx.viaLink && !ctx.viaOAuth) || ctx.channel === 'ui')) return toolError(",
+   "replace": "if (ctx && (ctx.viaLink || ctx.channel === 'ui')) return toolError(",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "live_setup: chủ máy + agent chủ đã duyệt"
   }
  ]
 }

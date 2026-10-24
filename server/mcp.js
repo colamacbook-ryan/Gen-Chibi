@@ -703,8 +703,9 @@ class MCP {
       case 'get_app_version': case 'update_app': case 'rollback_app': return this.appTool(name, args, ctx || {});
       case 'live_setup': {
         if (!this.liveSetup) return toolError('The Live stage is not available in this process.', { code: 'NOT_FOUND' });
-        // chỉ chủ máy (như các tool đặc quyền khác): link có khoá và AI trong dock của Studio không cấp được token live
-        if (ctx && (ctx.viaLink || ctx.channel === 'ui')) return toolError('Only the owner can set up the Live stage for an agent (MCP with the owner token or owner OAuth, or stdio) — not through a link or the Studio AI dock', { code: 'FORBIDDEN' });
+        // chủ máy + agent chủ đã duyệt qua OAuth (mcp:write / mcp:owner — trường hợp chính: agent ở máy khác / trên cloud). Link có khoá và AI
+        // trong dock của Studio không cấp được token live (mcp:read đã bị cổng chỉ-đọc chặn trước)
+        if (ctx && ((ctx.viaLink && !ctx.viaOAuth) || ctx.channel === 'ui')) return toolError('Only the owner and agents the owner approved (OAuth with write access) can set up the Live stage — not through a link key or the Studio AI dock', { code: 'FORBIDDEN' });
         const r = this.liveSetup(args || {}, ctx || {});
         if (!r.ok) return toolError(r.why, { code: r.reason === 'NOT_REACHABLE' || r.reason === 'RATE' ? 'UNAVAILABLE' : r.reason === 'CONFLICT' ? 'CONFLICT' : r.reason === 'INTERNAL' ? 'INTERNAL' : 'BAD_REQUEST' });
         return json(r);

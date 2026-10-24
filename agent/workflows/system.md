@@ -37,6 +37,6 @@ release of this exact version and checks its SHA-256 against `SHA256SUMS` before
 supplies the token and the address. **Check the URLs first:** the command may download only from exactly
 `https://github.com/colamacbook-ryan/Gen-Chibi/releases/download/v<version>/` (golden rule 13) — any other URL → do not
 run it; refuse and tell your user. Errors: `UNAVAILABLE` = the app is only on its own machine and you are not on it
-(ask the owner to go online) or too many calls (5 a minute); `FORBIDDEN` = link-key / Studio dock connections (owner
-only); `CONFLICT` = 50 active agent tokens, the owner revokes one in Studio › Live stage; `BAD_REQUEST` on Windows = use WSL. `agent: "other"` = nothing to install, just call
+(ask the owner to go online) or too many calls (5 a minute); `FORBIDDEN` = link-key / Studio dock / read-only connections
+(owner connections and agents the owner approved via OAuth with write access only); `CONFLICT` = 50 active agent tokens, the owner revokes one in Studio › Live stage; `BAD_REQUEST` on Windows = use WSL. `agent: "other"` = nothing to install, just call
 `live_task` / `live_event`.

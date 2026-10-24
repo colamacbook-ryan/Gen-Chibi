@@ -534,15 +534,16 @@ const { classify } = await import(HOOK);
   const M = new MCP({ engine: GC, store: new Store(MH), version: 't', live: { accept: () => ({ ev: { id: 1 } }) }, liveSetup: stub });
   const call = (args, ctx) => M.handle({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'live_setup', arguments: args } }, ctx);
   const ro = await call({}, scopeCtx('mcp:read')), far = await call({}, {}), near = await call({}, { local: true });
-  const n0 = calls, lk = await call({}, { viaLink: true, local: true }), wr = await call({}, scopeCtx('mcp:write')), dock = await call({}, { channel: 'ui', local: true });
-  ok([lk, wr, dock].every(x => x.result.isError && /FORBIDDEN/.test(x.result.content[0].text)) && calls === n0,
-    'live_setup chỉ chủ máy: link có khoá · OAuth mcp:write (kênh link) · AI trong dock Studio → FORBIDDEN, không cấp token', [lk, wr, dock].map(x => x.result.content[0].text.slice(0, 60)).join(' | '));
+  const n0 = calls, lk = await call({}, { viaLink: true, local: true }), dock = await call({}, { channel: 'ui', local: true });
+  const n1 = calls, wr = await call({}, Object.assign(scopeCtx('mcp:write'), { local: true })), ow = await call({}, Object.assign(scopeCtx('mcp:owner'), { local: true }));
+  ok([lk, dock].every(x => x.result.isError && /FORBIDDEN/.test(x.result.content[0].text)) && n1 === n0 && !wr.result.isError && JSON.parse(wr.result.content[0].text).command && !ow.result.isError && calls === n1 + 2,
+    'live_setup: chủ máy + agent chủ đã duyệt (OAuth mcp:write / mcp:owner) gọi được · link có khoá · AI trong dock Studio → FORBIDDEN, không cấp token', [lk, dock, wr].map(x => x.result.content[0].text.slice(0, 60)).join(' | '));
   const M2 = new MCP({ engine: GC, store: new Store(MH), version: 't', live: { accept: () => ({ ev: { id: 1 } }) }, liveSetup: () => ({ ok: false, reason: 'CONFLICT', why: 'there are already 50 active agent live tokens — revoke one' }) });
   const cf = await M2.handle({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'live_setup', arguments: {} } }, { local: true });
   ok(cf.result.isError && /\[CONFLICT\]/.test(cf.result.content[0].text), 'live_setup: hết chỗ token → [CONFLICT]', cf.result.content[0].text.slice(0, 100));
   const sh = JSON.parse((await M.handle({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'start_here', arguments: {} } }, {})).result.content[0].text);
   const shRo = JSON.parse((await M.handle({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'start_here', arguments: {} } }, scopeCtx('mcp:read'))).result.content[0].text);
-  ok(ro.result.isError && /FORBIDDEN/.test(ro.result.content[0].text) && calls === 2 && far.result.isError && /UNAVAILABLE/.test(far.result.content[0].text) && !near.result.isError && JSON.parse(near.result.content[0].text).command
+  ok(ro.result.isError && /FORBIDDEN/.test(ro.result.content[0].text) && n0 === 2 && far.result.isError && /UNAVAILABLE/.test(far.result.content[0].text) && !near.result.isError && JSON.parse(near.result.content[0].text).command
     && TOOLS.some(t => t.name === 'live_setup' && t.annotations.readOnlyHint === false),
     'MCP live_setup: kết nối mcp:read → FORBIDDEN (không chạm tới kế hoạch) · khác máy không public → [UNAVAILABLE] · cùng máy → kế hoạch có lệnh', ro.result.content[0].text.slice(0, 120));
   const R13 = /Live stage: invite, never install silently/;

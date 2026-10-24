@@ -228,7 +228,7 @@ an agent starts a task that differs from the current one it calls `live_task` fi
 claps a clapperboard, puts its props away, changes its hat badge and walks to that task's corner; the Studio shows
 "Working on: …" and tags the following events with the task. The same task again does nothing.
 
-**Invitation (v0.24.1):** an agent connected over MCP can call `live_setup` to get a plan and one command that puts
+**Invitation (v0.24.1):** an agent connected over MCP (owner connections and agents you approved — OAuth, write access) can call `live_setup` to get a plan and one command that puts
 the Live stage on its own machine. Golden rule: it must **ask its user first** and never run it silently. The command
 downloads the hook from this version's official GitHub release and checks its SHA-256 before writing anything — and it
 may download only from exactly `https://github.com/colamacbook-ryan/Gen-Chibi/releases/download/v<version>/` (any other URL: refuse and tell your user); the app

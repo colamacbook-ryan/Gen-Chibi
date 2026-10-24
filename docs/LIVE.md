@@ -114,7 +114,8 @@ invitation (`live`) on connections that can write. Declining changes nothing.
   gen-chibi skill installed from the verified release). A compromised app could return the same command shape pointing
   at another repository whose `SHA256SUMS` matches its own tarball, so the agent / user must check the prefix against
   that independent copy: any other URL → refuse and tell the user. `curl` runs with `--proto '=https' --proto-redir '=https'`.
-- Owner only: link-key connections and the Studio AI dock get `FORBIDDEN`. At most 5 calls a minute per connection, and
+- Owner connections and agents you approved (OAuth, write access) — the main case is an agent on another machine or in
+  the cloud. Link-key connections, the Studio AI dock and `mcp:read` get `FORBIDDEN`. At most 5 calls a minute per connection, and
   at most 50 active agent tokens (then `CONFLICT`: revoke one in Studio › Live stage — nothing is evicted).
 - The command downloads the release tarball of **this exact version** from the official GitHub release, checks it against
   that release's `SHA256SUMS` and only then extracts `tools/live-hook.mjs` — the app never serves code to the agent's
