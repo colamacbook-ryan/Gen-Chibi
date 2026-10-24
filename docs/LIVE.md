@@ -92,9 +92,36 @@ Golden rule 12 (agent/GUIDE.md §3 — the single list `server/rules.js` turns i
 differs from the current one it calls `live_task { task, title? }` first. Tasks: code · debug · test · research · read ·
 write · design · plan · review · release · chat · other. The title (≤ 60 characters) passes the label rule and is shown
 only in the event table. Also accepted as `POST /api/live/event { kind: "task", task, title }` (live token). Same task
-again → `{ same: true }`, nothing is broadcast. The beat: put every prop away → take the clapperboard out of the satchel →
+with the same title again → `{ same: true }`, nothing is broadcast; same task with a new title → broadcast with `retitle: true`
+(the "Working on" chip updates, no new beat). The current task is remembered per channel (each agent token, the install's
+live token, MCP, the owner) and forgotten on `session_start` / `stop`. The beat: put every prop away → take the clapperboard out of the satchel →
 clap (the hat badge changes; bubble "New task: Debugging") → put it back → walk empty-handed to the task's corner.
 Claude Code hooks cannot know the task type: Claude Code gets the rule through the skill / MCP instructions.
+
+## Invitation: `live_setup` (v0.24.1 — "offer, ask the owner")
+
+When an agent is connected over MCP, gen-chibi *invites* it to put the Live stage on its own machine — it never installs
+anything by itself. Golden rule 13 (same single source as rule 12, so it is in `initialize`, `start_here` and the skill):
+call `live_setup` and **ask your user before running its command; never run it silently**. `start_here` carries the
+invitation (`live`) on connections that can write. Declining changes nothing.
+
+- `live_setup { agent: claude-code | other, os: linux | macos | windows, name? }` is a write tool (`mcp:read` → `FORBIDDEN`).
+- It returns a plan: what is installed and where (`~/.local/lib/gen-chibi-live/`: `live-hook.mjs`, `live-token`,
+  `live-url`), the settings it changes (`~/.claude/settings.json`, backup kept), **one** command, how to undo, the address
+  events go to and what is sent (only step kinds).
+- The command downloads the release tarball of **this exact version** from the official GitHub release, checks it against
+  that release's `SHA256SUMS` and only then extracts `tools/live-hook.mjs` — the app never serves code to the agent's
+  machine (no `curl | sh`). Only two things come from the app, both format-checked: the token (`gcl_` + 43 chars) and the
+  address (a plain `https://` origin, or `http://127.0.0.1:<port>`). The token is written by the shell's `printf` builtin
+  into a 0600 file — it is never an argument of any process; the installed hook commands contain no token.
+- Address: the owner's public URL when gen-chibi is online. Otherwise only `http://127.0.0.1` works, so a connection that
+  does not come from the same machine gets `[UNAVAILABLE]` with the requirement ("put gen-chibi online or run the agent on
+  this machine") and **no token is issued**. Windows → run Claude Code in WSL. `agent: other` → nothing to install, call
+  `live_task` / `live_event`.
+- Each call issues a **separate agent token** (only its SHA-256 is stored, in `data/live-agents.json`, 0600), with its own
+  rate bucket. Studio › System › Live stage lists them (name, created, last event) with **Revoke**; a revoked token gets
+  401 immediately.
+- Undo: `node ~/.local/lib/gen-chibi-live/live-hook.mjs --uninstall-claude ~/.claude/settings.json` then remove the folder.
 
 ## Bubbles: plain words only
 

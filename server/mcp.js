@@ -141,6 +141,7 @@ const TOOLS = [
   // storyboard + phim HTML: CÙNG tệp với Studio › Tạo tác › Xuất bản (studio/film-html.js — một nguồn)
   { name: 'get_storyboard', title: 'Storyboard of a work', description: 'The storyboard of a work, the same file as Studio › Create › Publish › Storyboard: one SVG (title, logline, a 2-column grid: still of each shot + description + the first lines of dialogue). Returned as an image/svg+xml resource — save it as <work>-storyboard.svg. lang = language of the few interface words in it (en | vi; default: the machine\'s interface language).', inputSchema: obj({ work: { type: 'string', description: 'work id (list_works)' }, lang: { type: 'string', enum: ['en', 'vi'] } }, ['work']), annotations: { readOnlyHint: true } },
   { name: 'export_film_html', title: 'Export the film (HTML)', description: 'The film of a work as ONE standalone .html file, the same file as Studio › Create › Publish › Film (HTML): player + engine + the assets, motion packs and sound packs the work uses; opens offline in any browser, no install. Shots that are not ready (preview_shot) are skipped by the player. AI voices: embeds only the clips the owner has ALREADY dubbed (no new requests, nothing spent); other lines use the browser voice / blip. Returned as a text/html resource (save it as the given file name). lang = language of the player buttons (en | vi; default: the machine\'s interface language) · dialog = auto | bubble | caption (default auto) · voices = false leaves the AI clips out (smaller file). Clips that would push the file over ' + FILM_MAX_MB + ' MB are left out (voicesDropped in the result); over the limit without clips → [BAD_REQUEST]. Read-only connections (mcp:read) always get the film without AI clips.', inputSchema: obj({ work: { type: 'string', description: 'work id (list_works)' }, lang: { type: 'string', enum: ['en', 'vi'] }, dialog: { type: 'string', enum: ['auto', 'bubble', 'caption'] }, voices: { type: 'boolean' } }, ['work']), annotations: { readOnlyHint: true } },
+  { name: 'live_setup', title: 'Invitation: set up the Live stage on your machine (ask your user first)', description: Rules.LIVE.setup, inputSchema: obj({ agent: { type: 'string', enum: ['claude-code', 'other'] }, os: { type: 'string', enum: ['linux', 'macos', 'windows'] }, name: { type: 'string', description: 'a short name for this agent / machine, shown to the owner next to its token' } }), annotations: { readOnlyHint: false, idempotentHint: false, destructiveHint: false, openWorldHint: true } },
   { name: 'live_task', title: 'Switch task (Live stage)', description: Rules.LIVE.task, inputSchema: obj({ task: { type: 'string', enum: ['code', 'debug', 'test', 'research', 'read', 'write', 'design', 'plan', 'review', 'release', 'chat', 'other'] }, title: { type: 'string', description: Rules.LIVE.title } }, ['task']), annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false } },
   { name: 'live_event', title: 'Report a live work step (Live stage)', description: Rules.LIVE.tool, inputSchema: obj({ kind: { type: 'string', enum: ['session_start', 'prompt', 'think', 'read', 'search', 'edit', 'write', 'run', 'test_run', 'test_pass', 'test_fail', 'delegate_start', 'delegate_end', 'wait_user', 'error', 'limit', 'release', 'idle', 'stop'] }, label: { type: 'string', description: Rules.LIVE.label }, tool: { type: 'string', description: 'your tool name for this step (optional, ≤ 24 chars)' } }, ['kind']), annotations: { readOnlyHint: false, idempotentHint: false, destructiveHint: false } },
   { name: 'get_app_version', title: 'App version', description: 'The running version, the latest version on GitHub Releases, release notes, the version you can roll back to and the update history. check=false to skip asking GitHub.', inputSchema: obj({ check: { type: 'boolean', description: 'ask GitHub for the latest version (default true)' } }), annotations: { readOnlyHint: true, openWorldHint: true } },
@@ -280,8 +281,9 @@ const ownEn = (GC, x, s) => GC.isGenLabs(x) ? MSG.en(s) : s;
 class MCP {
   // system (tuỳ chọn): { updater, restartSoon } — để agent tự kiểm và cập nhật phiên bản; smokeMs: hạn chót dựng thử gói động tác (test hạ xuống)
   // uiLang (tuỳ chọn): hàm trả NGÔN NGỮ MẶC ĐỊNH CỦA MÁY (main.js: settings().uiLang) — lời thoại mặc định của tác phẩm agent tạo qua MCP (newWorkLang). Thiếu → 'en' (ADR 0007)
-  constructor({ engine, store, version, system, smokeMs, voice, uiLang, filmMaxMB, live }) {
-    this.live = live || null;   // server/live.js (Sân khấu sống) — chỉ có ở bản chạy server
+  constructor({ engine, store, version, system, smokeMs, voice, uiLang, filmMaxMB, live, liveSetup }) {
+    this.live = live || null;
+    this.liveSetup = liveSetup || null;   // main.js: kế hoạch + token riêng của agent (server/live-setup.js)   // server/live.js (Sân khấu sống) — chỉ có ở bản chạy server
     this.filmMaxMB = filmMaxMB > 0 ? filmMaxMB : FILM_MAX_MB;   // trần cỡ phim HTML (test đặt nhỏ để kiểm nhánh bỏ clip / từ chối)
     this.voice = voice || null;   // server/voice.js (giọng AI) — chỉ có ở bản chạy server
     this.uiLang = typeof uiLang === 'function' ? uiLang : () => uiLang;
@@ -699,6 +701,12 @@ class MCP {
       }
       case 'list_events': return json(this.store.listEvents().map(e => ({ id: e.id, title: e.title, author: e.author, savedAt: e.savedAt, steps: (e.event && e.event.steps || e.steps || []).length })));
       case 'get_app_version': case 'update_app': case 'rollback_app': return this.appTool(name, args, ctx || {});
+      case 'live_setup': {
+        if (!this.liveSetup) return toolError('The Live stage is not available in this process.', { code: 'NOT_FOUND' });
+        const r = this.liveSetup(args || {}, ctx || {});
+        if (!r.ok) return toolError(r.why, { code: r.reason === 'NOT_REACHABLE' ? 'UNAVAILABLE' : r.reason === 'INTERNAL' ? 'INTERNAL' : 'BAD_REQUEST' });
+        return json(r);
+      }
       case 'live_task': {
         if (!this.live) return toolError('The Live stage is not available in this process.', { code: 'NOT_FOUND' });
         const r = this.live.accept({ kind: 'task', task: args.task, title: args.title, agent: 'mcp' }, 'mcp');
@@ -949,7 +957,7 @@ class MCP {
     // tác phẩm đã có (CNS-047): giao phim / storyboard ra file, xem lịch sử; khôi phục chỉ gợi ý cho kết nối GHI được
     if (works.length) next.push('list_works, then get_storyboard / export_film_html to hand a finished work over as a file; list_work_versions shows its history' + (conn.can_write ? ' (restore_work_version brings an older version back, only when the owner asks)' : ''));
     return { app: 'gen-chibi', version: this.version, protocol: 'MCP ' + PROTOCOLS[0], instructions: Rules.START.read,
-      connection: conn, rules: Rules.forConnection(ctx, TOOLS), topics: Agent.topics(), state: st, next_steps: next,
+      connection: conn, rules: Rules.forConnection(ctx, TOOLS), live: this.liveSetup && !(ctx && ctx.readOnly) ? Rules.START.live : undefined, topics: Agent.topics(), state: st, next_steps: next,
       errors: Rules.START.errors };
   }
   // chuẩn gói động tác cho agent: từ vựng LẤY LÚC CHẠY từ engine (không chép tay — STD-10) + ví dụ chạy được

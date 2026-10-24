@@ -228,6 +228,11 @@ an agent starts a task that differs from the current one it calls `live_task` fi
 claps a clapperboard, puts its props away, changes its hat badge and walks to that task's corner; the Studio shows
 "Working on: …" and tags the following events with the task. The same task again does nothing.
 
+**Invitation (v0.24.1):** an agent connected over MCP can call `live_setup` to get a plan and one command that puts
+the Live stage on its own machine. Golden rule: it must **ask its user first** and never run it silently. The command
+downloads the hook from this version's official GitHub release and checks its SHA-256 before writing anything; the app
+only supplies a per-agent live token (listed in the Live page, with Revoke) and its address.
+
 ## Core AI (LLM API)
 
 Studio › System › AI settings: choose OpenRouter, DeepSeek, MiniMax or a custom OpenAI-compatible endpoint, paste the API key (encrypted with AES-256-GCM on the machine, never sent back to the browser). "Test model" runs a trial script and scores it: valid JSON, number of fixes needed, latency, tokens.

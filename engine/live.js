@@ -329,6 +329,7 @@
     D.push = function (ev, at) {
       var e = { id: ev.id != null ? ev.id : ++evSeq, kind: ev.kind, label: ev.label || '', tool: ev.tool || '', sub: ev.sub || '', task: ev.task || '', at: at };
       D.log.push({ id: e.id, kind: e.kind, at: at, step: null, merged: false });
+      if (e.kind === 'session_start' || e.kind === 'stop') D.taskReq = null;   // phiên mới / kết thúc: việc kế tiếp luôn có nhịp "việc mới"
       if (e.kind === 'task') {   // cùng việc với việc đang / sắp làm → không làm gì (không lặp nhịp "việc mới")
         if (TASKS.indexOf(e.task) < 0 || e.task === D.taskReq) { D.log[D.log.length - 1].merged = true; D.log[D.log.length - 1].noop = true; return; }
         D.taskReq = e.task;

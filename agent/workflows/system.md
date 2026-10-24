@@ -26,3 +26,14 @@ Golden rule: when you start a task that differs from the current one, call `live
 labels; shown only in the event table). Calling it again with the same task does nothing. The stage plays a "new task"
 beat (clapperboard, the character puts its props away, changes its hat badge and walks to the task's corner) and the
 Studio shows "Working on: …".
+
+## Live stage on your machine (`live_setup`) — ask your user first
+
+When the owner wants to watch you work, call `live_setup` `{ "agent": "claude-code", "os": "linux", "name": "laptop" }`.
+It returns a plan — `installs`, `changes`, `command`, `undo`, `url`, `requirement` — and issues a live token for you
+alone (the owner can revoke it in Studio › System › Live stage). **Show the plan to your user and ask before running
+`command`. Never run it silently; if they decline, do nothing.** The command downloads the hook from the official GitHub
+release of this exact version and checks its SHA-256 against `SHA256SUMS` before writing anything; the app only
+supplies the token and the address. Errors: `UNAVAILABLE` = the app is only on its own machine and you are not on it
+(ask the owner to go online); `BAD_REQUEST` on Windows = use WSL. `agent: "other"` = nothing to install, just call
+`live_task` / `live_event`.

@@ -225,6 +225,11 @@ một việc khác việc đang làm, nó gọi `live_task` trước (`code`, `d
 `plan`, `review`, `release`, `chat`, `other` + tiêu đề ngắn). Nhân vật đập bảng clapper, cất hết đồ, đổi dấu trên mũ rồi
 đi về góc của việc đó; Studio hiện "Đang làm: …" và gắn việc cho các sự kiện sau. Gửi lại cùng việc thì không có gì xảy ra.
 
+**Lời mời (v0.24.1):** agent nối qua MCP gọi được `live_setup` để nhận kế hoạch và MỘT lệnh dựng Sân khấu Live trên máy
+của nó. Luật vàng: agent phải **hỏi người dùng trước**, không bao giờ chạy lén. Lệnh tải tệp hook từ bản phát hành GitHub
+chính thức của đúng phiên bản này và kiểm SHA-256 trước khi ghi; app chỉ cấp token live riêng cho agent đó (liệt kê ở
+trang Live, có nút Thu hồi) và địa chỉ của app.
+
 ## Core AI (LLM API)
 
 Studio › Cài đặt AI: chọn OpenRouter, DeepSeek, MiniMax hoặc địa chỉ tuỳ chỉnh chuẩn OpenAI, dán API key (mã hoá AES-256-GCM trên máy, không bao giờ trả về trình duyệt). "Kiểm tra model" chạy một kịch bản thử và chấm: JSON đúng chuẩn, số lần phải sửa, độ trễ, token.

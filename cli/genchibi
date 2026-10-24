@@ -2805,7 +2805,7 @@ if (fd >= 0) { const st = fs.fstatSync(fd); if (!st.isFile()) out("bad not a reg
   if (raw.trim()) { try { cur = JSON.parse(raw); } catch (e) { out("bad not JSON"); } }
   if (!cur || typeof cur !== "object" || Array.isArray(cur)) out("bad not a JSON object");
   if (cur.hooks !== undefined && (!cur.hooks || typeof cur.hooks !== "object" || Array.isArray(cur.hooks))) out("bad hooks is not an object"); }
-const mine = h => h && typeof h.command === "string" && /live-hook\.mjs/.test(h.command) && /GC_LIVE_(URL|TOKEN)=/.test(h.command);
+const mine = h => h && typeof h.command === "string" && /live-hook\.mjs/.test(h.command) && (/GC_LIVE_(URL|TOKEN)=/.test(h.command) || /\/gen-chibi(-live)?\/live-hook\.mjs/.test(h.command));
 const hooks = Object.assign({}, cur.hooks || {});
 Object.keys(hooks).forEach(ev => { if (!Array.isArray(hooks[ev])) return; hooks[ev] = hooks[ev].map(g => g && Array.isArray(g.hooks) ? Object.assign({}, g, { hooks: g.hooks.filter(h => !mine(h)) }) : g).filter(g => !(g && Array.isArray(g.hooks) && !g.hooks.length)); if (!hooks[ev].length) delete hooks[ev]; });
 Object.keys(add).forEach(ev => { hooks[ev] = (Array.isArray(hooks[ev]) ? hooks[ev] : []).concat(add[ev]); });

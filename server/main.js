@@ -127,7 +127,18 @@ const ai = new AI({ dataDir: DATA, secrets, engine });
 const voice = new Voice({ dataDir: DATA, secrets });   // giọng AI (Google Gemini TTS) — dùng chung kho bí mật với AI đạo diễn
 const LIVE_CMD = 'genchibi live hook --install-into ~/.claude/settings.json';   // Studio chỉ chỉ lệnh CLI (tệp hook đã kiểm + token ghi tệp 0600) — không bao giờ một dòng lệnh do app soạn
 const live = new LiveHub({ dir: DATA, engine, log, pingMs: TESTING ? +process.env.GC_LIVE_PING_MS || 0 : 0 });
-const mcp = new MCP({ engine, store, version: VERSION, system: { updater, restartSoon }, voice, live, uiLang: () => settings().uiLang });   // uiLang: lời thoại mặc định của tác phẩm agent tạo qua MCP (/mcp luôn 'en' ở tầng HTTP) — CNS-151
+// live_setup (INT-21 g): kế hoạch cố định + token riêng của agent; địa chỉ = publicUrl (đang online) hoặc 127.0.0.1 khi agent gọi từ CHÍNH máy này
+const LiveSetup = require('./live-setup');
+function liveSetup(args, ctx) {
+  const o = { version: VERSION, repo: REPO, publicUrl: online.publicUrl() || '', port: HOST_PORT, local: !!ctx.local, os: args.os, agent: args.agent,
+    releaseBase: TESTING && process.env.GC_TEST_RELEASE_BASE ? process.env.GC_TEST_RELEASE_BASE : '' };
+  const pre = LiveSetup.plan(Object.assign({ token: 'gcl_' + 'x'.repeat(43) }, o));
+  if (!pre.ok || !pre.install) return pre;
+  const a = live.createAgent(typeof args.name === 'string' ? args.name : 'agent');
+  log('[live] issued a live token for agent "' + a.name + '" (live_setup)');
+  return Object.assign(LiveSetup.plan(Object.assign({ token: a.token }, o)), { tokenId: a.id, tokenName: a.name });
+}
+const mcp = new MCP({ engine, store, version: VERSION, system: { updater, restartSoon }, voice, live, liveSetup, uiLang: () => settings().uiLang });   // uiLang: lời thoại mặc định của tác phẩm agent tạo qua MCP (/mcp luôn 'en' ở tầng HTTP) — CNS-151
 // OAuth 2.1 cho MCP từ xa (v0.19): mọi URL dựng từ publicUrl — đọc LÚC CHẠY từ online-config (v0.21: data/online.json; .env GC_PUBLIC_URL kế thừa).
 // Thiếu hoặc không phải gốc (có đường dẫn) thì OAuth tắt, /mcp vẫn 401 như cũ. publicUrl đang bật TẠM thì không gỡ kết nối của địa chỉ cũ (trả về còn dùng)
 const oauth = new OAuth({ dir: DATA, publicUrl: () => online.publicUrl(), pruneOk: () => !online.pending(), warn: log, accessTtl: process.env.GC_OAUTH_ACCESS_TTL, redirects: String(process.env.GC_OAUTH_REDIRECTS || '').split(',').map(x => x.trim()).filter(Boolean) });
@@ -232,7 +243,7 @@ function serveStatic(req, res, urlPath) {
 // POST /api/live/event: JSON nhỏ (≤ 4 KB), Content-Type JSON + X-GC-Request (chống CSRF như mọi lệnh), trần tần suất theo kênh — nhãn KHÔNG vào log
 async function liveEvent(req, res, who) {
   if (req.headers['x-gc-request'] !== '1') return fail(res, 403, 'thiếu header X-GC-Request');
-  if (who !== 'live' && !originOK(req)) return fail(res, 403, originMsg(req));
+  if (who === 'owner' && !originOK(req)) return fail(res, 403, originMsg(req));
   if (!/^application\/json\b/i.test(String(req.headers['content-type'] || ''))) return fail(res, 415, 'cần Content-Type: application/json');
   if (+req.headers['content-length'] > 4096) { res.setHeader('Connection', 'close'); return fail(res, 413, 'dữ liệu gửi lên quá lớn (tối đa 4 KB)'); }
   let b; try { b = await body(req, 4096); } catch (e) { return fail(res, e.code || 400, e.message); }
@@ -433,6 +444,10 @@ async function route(req, res) {
   // Đã đặt token: mọi /api (trừ health) và /mcp đều cần token, bất kể Host hay địa chỉ. Studio đăng nhập bằng token.
   // /mcp còn nhận access token OAuth (Authorization: Bearer): phạm vi → kênh SẴN CÓ (scopeCtx). Không có / sai token → 401 + WWW-Authenticate trỏ metadata để agent tự khám phá.
   let mcpCtx = { viaLink }, oauthGrant = null;
+  // live_setup: agent gọi từ CHÍNH máy này (không link, không edge, không header proxy). Docker: cổng chỉ publish loopback (compose đã kiểm) → request vào thẳng
+  // container với Host localhost / 127.0.0.1 là từ máy chủ (peer là cổng bridge của Docker, không phải 127.x)
+  const noProxy = !(req.headers['x-forwarded-for'] || req.headers.forwarded || req.headers['cf-connecting-ip'] || req.headers['x-real-ip']);
+  const mcpLocal = !viaLink && !req.gcEdge && (isDirectLocal(req.headers, req.socket.remoteAddress) || (IN_DOCKER && noProxy && LOCAL_HOSTS.has(hostName)));
   if (p === '/mcp' && !viaLink) {
     const b = bearerOf(req), owner = auth.tokenOk(b);   // /mcp: K / O / T — phiên cookie (S) KHÔNG mở /mcp
     oauthGrant = !owner && oauth.enabled ? oauth.verify(b) : null;   // token OAuth hợp lệ luôn được áp phạm vi của nó (quyền ít hơn token chủ)
@@ -441,7 +456,7 @@ async function route(req, res) {
     else if (!owner) return send(res, 401, { error: oauth.enabled ? VI('cần token của bản cài hoặc kết nối OAuth (xem WWW-Authenticate)') : 'cần token của bản cài', hint: 'gen-chibi now always requires the owner token: on the server run `genchibi agent connect` for the connection settings (Authorization: Bearer <token>), or use `genchibi mcp` (stdio, reads the token itself)' }, null, oauth.enabled ? { 'WWW-Authenticate': 'Bearer resource_metadata="' + oauth.metaUrl + '"' } : undefined);
   }
   // Sân khấu sống: token live của bản cài (hooks Claude Code) CHỈ mở đúng POST /api/live/event — không đọc được gì, không qua được đường nào khác
-  if (p === '/api/live/event' && m === 'POST' && live.tokenOk(req)) return liveEvent(req, res, 'live');
+  if (p === '/api/live/event' && m === 'POST') { const lw = live.tokenWho(req); if (lw) return liveEvent(req, res, lw); }   // token của bản cài hoặc token riêng của một agent (live_setup)
   if (p.startsWith('/api/') && p !== '/api/health' && !p.startsWith('/api/auth/')) {
     const who = auth.ownerOf(req);
     if (!who && auth.adminOf(req)) return send(res, 403, { error: 'phiên admin chỉ dùng để khởi tạo tài khoản chủ', gate: 'init', stage: setup.stage });
@@ -474,6 +489,7 @@ async function route(req, res) {
     if (!oauthGrant && !originOK(req)) return fail(res, 403, 'Origin không được phép');
     if (!/^application\/json\b/i.test(String(req.headers['content-type'] || ''))) return fail(res, 415, 'MCP cần Content-Type: application/json');
     const msg = await body(req, 2 * 1024 * 1024);
+    mcpCtx = Object.assign({}, mcpCtx, { local: mcpLocal && !oauthGrant });
     mcpSeen(msg, req, viaLink, oauthGrant);   // wizard bước 3 "kiểm thật": agent nào vừa gọi MCP (tên, lúc, kênh)
     if (Array.isArray(msg)) {
       if (msg.length > 20) return fail(res, 413, 'MCP: một lô JSON-RPC tối đa 20 lời gọi');   // lô lớn × lời gọi nặng = chặn server lâu (CNS-061)
@@ -501,6 +517,9 @@ async function route(req, res) {
   if (p === '/api/live/event' && m === 'POST') return liveEvent(req, res, 'owner');
   if (p === '/api/live/stream' && m === 'GET') { const since = +(req.headers['last-event-id'] || url.searchParams.get('since') || 0); return live.stream(req, res, Number.isFinite(since) ? since : 0, () => !!auth.ownerOf(req)); }
   if (p === '/api/live/info' && m === 'GET') return send(res, 200, { url: 'http://127.0.0.1:' + HOST_PORT, token: live.token(), command: LIVE_CMD, docker: IN_DOCKER, recent: live.recent(0).slice(-50) });
+  if (p === '/api/live/agents' && m === 'GET') return send(res, 200, { agents: live.listAgents() });
+  const lam = /^\/api\/live\/agents\/([a-f0-9]{16})\/revoke$/.exec(p);
+  if (lam && m === 'POST') { if (!live.revokeAgent(lam[1])) return fail(res, 404, 'không có token agent này'); log('[live] owner revoked an agent live token'); return send(res, 200, { agents: live.listAgents() }); }
   if (p === '/api/live/token' && m === 'POST') { live.rotate(); log('[live] owner rotated the live token'); return send(res, 200, { token: live.token(), command: LIVE_CMD }); }
   if (p === '/api/online' || p.startsWith('/api/online/')) return goOnline.route(req, res, p, m, { send, body, lang: langOf(req) });   // Go online (v0.21): S / T (đã qua cổng /api ở trên) — server/online.js
   if (p === '/api/settings' && m === 'PUT') {

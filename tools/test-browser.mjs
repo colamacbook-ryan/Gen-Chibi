@@ -4273,6 +4273,21 @@ if (want('live')) {
       fs.writeFileSync(path.join(OUT, 'live-demo.webm'), Buffer.from(webm.b64, 'base64'));
       console.log('  ✓ Live bằng chứng: ' + shots.length + ' khung + contact-sheet.png + live-demo.webm (' + webm.frames + ' khung VP9, ' + webm.sec.toFixed(1) + ' s, tua ×3, GenMux) → ' + OUT);
     }
+    // token riêng của agent (live_setup, v0.24.1): Studio liệt kê (tên · tạo lúc · sự kiện cuối) và Thu hồi
+    {
+      const OT = process.env.GC_API_TOKEN || fs.readFileSync(path.join(LHOME, 'data', 'owner-token'), 'utf8').trim();
+      const ms = await (await fetch('http://127.0.0.1:7670/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + OT }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'live_setup', arguments: { name: 'browser box', os: 'linux' } } }) })).json();
+      const tid = JSON.parse(ms.result.content[0].text).tokenId;
+      const p2 = await ctx.newPage(); p2.on('pageerror', e => errsL.push(String(e)));
+      await p2.goto('http://localhost:7670/xuong'); await p2.waitForSelector('#liveAgents tr[data-agent="' + tid + '"]', { timeout: 15000 });
+      const row = await p2.textContent('#liveAgents tr[data-agent="' + tid + '"]');
+      await p2.click('#liveAgents button[data-revoke="' + tid + '"]');
+      await p2.waitForFunction(id => !document.querySelector('#liveAgents tr[data-agent="' + id + '"]'), tid, { timeout: 10000 });
+      const ag = (await (await fetch('http://127.0.0.1:7670/api/live/agents', { headers: { Authorization: 'Bearer ' + OT } })).json()).agents.find(a => a.id === tid);
+      if (!/browser box/.test(row) || !ag || !ag.revoked) throw new Error('Studio danh sách token agent: ' + row + ' ' + JSON.stringify(ag));
+      console.log('  ✓ Live token agent: live_setup cấp token → Studio liệt kê "browser box" (tạo lúc, sự kiện cuối) · nút Thu hồi → hàng biến mất, server ghi đã thu hồi');
+      await p2.close();
+    }
     if (errsL.length) throw new Error('lỗi trang: ' + errsL.slice(0, 3).join(' | '));
     await ctx.close();
   } catch (e) { fail = 1; console.log('  ✗ Live:', e && e.stack || e); }

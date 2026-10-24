@@ -759,7 +759,7 @@ echo "2o) xuất video (v0.22): bộ ghép MP4 (ftyp → moov → mdat, không e
 node tools/test-video.mjs || exit 1
 home_check tools/test-video.mjs
 echo "2p) Sân khấu sống (INT-21): làm sạch nhãn (đường dẫn / lệnh / token / email / chuỗi dài) · đạo diễn không dịch chuyển tức thời (2000 dãy ngẫu nhiên) · đạo cụ chỉ ra / về túi · gộp loạt · leo thang · tất định · không giật tư thế · hooks luôn thoát 0, không gửi nội dung · token live chỉ mở POST /api/live/event · trần tần suất · SSE · MCP live_event — phần trình duyệt: GC_ONLY=live node tools/test-browser.mjs"
-(echo > /dev/tcp/127.0.0.1/7764) 2>/dev/null && { echo "Cổng 7764 đang bị chiếm"; exit 1; }
+for P in 7764 7766; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done
 node tools/test-live.mjs || exit 1
 home_check tools/test-live.mjs
 
@@ -816,10 +816,10 @@ const L = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n")
 const by = id => L.find(r => r.id === id);
 const ok = (c, m) => { if (!c) { console.log("   ✗", m); process.exit(1); } };
 ok(by(1).result.protocolVersion === "2025-06-18", "bắt tay");
-ok(by(2).result.tools.length === 60, "60 tool");
+ok(by(2).result.tools.length === 61, "61 tool");
 ok(!by(3).result.isError && JSON.parse(by(3).result.content[0].text).saved, "lưu nhân vật hợp lệ");
 ok(by(4).result.isError, "chặn linh kiện lạ");
-console.log("   ✓ MCP: bắt tay, 60 tool, lưu hợp lệ, chặn linh kiện lạ");
+console.log("   ✓ MCP: bắt tay, 61 tool, lưu hợp lệ, chặn linh kiện lạ");
 const spec = JSON.parse(by(5).result.content[0].text);
 ok(spec.slots[0].slot === "hat" && spec.example && spec.views.q45, "get_part_spec có khung + ví dụ");
 ok(!by(6).result.isError && /<svg/.test(by(6).result.content[1].resource.text), "preview_part trả bàn soát SVG");
@@ -945,6 +945,7 @@ echo "4j) đột biến v0.23 (CNS-273): mọi rào A.5 có một đột biến 
 node tools/mutate.mjs --check || exit 1
 node tools/mutate.mjs --check --data tools/mutations/v0231.json || exit 1
 node tools/mutate.mjs --check --data tools/mutations/v024.json || exit 1   # v0.24 Sân khấu Live (chạy thật: --data tools/mutations/v024.json --jobs 3)
+node tools/mutate.mjs --check --data tools/mutations/v0241.json || exit 1   # v0.24.1 live_setup + token agent
 
 echo "4k) mô hình root v0.23.1 (CNS-233 / CNS-257 / CNS-234 / CNS-235): máy kiểu Ryan (lệnh root cũ → tự lắp bản đã kiểm SHA, update / rollback / status / online bằng root) · container bị chiếm (canary) · override đã duyệt · khôi phục cùng máy / máy khác · doctor · root thật (setpriv thật)"
 for P in 7981 7983 7985 7987 7989; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done

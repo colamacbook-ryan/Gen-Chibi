@@ -113,8 +113,8 @@
    "id": "L10",
    "guard": "token live chỉ mở POST /api/live/event",
    "file": "server/main.js",
-   "find": "if (p === '/api/live/event' && m === 'POST' && live.tokenOk(req)) return liveEvent(req, res, 'live');",
-   "replace": "if (p.startsWith('/api/live/') && live.tokenOk(req)) return liveEvent(req, res, 'live');",
+   "find": "if (p === '/api/live/event' && m === 'POST') { const lw = live.tokenWho(req); if (lw) return liveEvent(req, res, lw); }",
+   "replace": "if (p.startsWith('/api/live/')) { const lw = live.tokenWho(req); if (lw) return liveEvent(req, res, lw); }",
    "test": [
     "node",
     "tools/test-live.mjs"
@@ -245,8 +245,8 @@
    "id": "L21",
    "guard": "trần tần suất riêng theo token live",
    "file": "server/live.js",
-   "find": "const w = this.gate(who === 'live' ? this.tokKey : who || 'owner');",
-   "replace": "const w = this.gate(who || 'owner');",
+   "find": "const chan = who === 'live' ? this.tokKey : who || 'owner', w = this.gate(chan);",
+   "replace": "const chan = who === 'live' ? this.tokKey : who || 'owner', w = this.gate(who || 'owner');",
    "test": [
     "node",
     "tools/test-live.mjs"
@@ -257,8 +257,8 @@
    "id": "L22",
    "guard": "SSE đóng khi mất quyền",
    "file": "server/live.js",
-   "find": "try { if (c.alive && !c.alive()) {",
-   "replace": "try { if (false) {",
+   "find": "try { if (c.alive && !c.alive()) { this.clients.delete(c); c.res.end(); return; } c.res.write(': ping",
+   "replace": "try { if (false) { this.clients.delete(c); c.res.end(); return; } c.res.write(': ping",
    "test": [
     "node",
     "tools/test-live.mjs"
@@ -341,7 +341,7 @@
    "id": "L29",
    "guard": "server: cùng việc không phát lại",
    "file": "server/live.js",
-   "find": "if (c.ev.task === this.lastTask) return { same: true }; ",
+   "find": "if (lt.title === c.ev.title) return { same: true }; ",
    "replace": "",
    "test": [
     "node",

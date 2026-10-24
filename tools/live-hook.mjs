@@ -7,8 +7,11 @@
 // MỘT sự kiện { kind, tool, agent, at, sub? } tới app — KHÔNG BAO GIỜ gửi nội dung: không prompt, không đường dẫn, không lệnh, không kết quả tool.
 // Không bao giờ chặn hay làm hỏng agent: đọc stdin tối đa 250 ms, gửi tối đa 300 ms, luôn thoát 0, không in gì ra stdout
 // (stdout của vài hook được Claude Code chèn vào ngữ cảnh), lỗi chỉ ghi stderr khi GC_LIVE_DEBUG=1.
-//   GC_LIVE_URL   địa chỉ app (mặc định http://127.0.0.1:7480)
-//   GC_LIVE_TOKEN token live của bản cài (Studio › Hệ thống › Live › Kết nối Claude Code) — chỉ mở POST /api/live/event
+//   địa chỉ app: GC_LIVE_URL → tệp live-url cạnh tệp này → http://127.0.0.1:7480
+//   token: GC_LIVE_TOKEN (chỉ thử tay / test) → tệp live-token (0600) cạnh tệp này — không bao giờ trên dòng lệnh
+// Chế độ cài (lệnh của live_setup / người dùng gọi, tệp này đã tải từ bản phát hành chính thức + kiểm SHA-256):
+//   node live-hook.mjs --install-claude <settings.json>     ghép hooks Live (sao lưu, ghi nguyên tử, từ chối symlink / không phải JSON object)
+//   node live-hook.mjs --uninstall-claude <settings.json>   gỡ đúng các hook Live
 // Dùng như thư viện (test): import { classify } from './live-hook.mjs'
 import fs from 'fs';
 import path from 'path';
@@ -110,6 +113,45 @@ function post(url, token, ev, ms) {
     req.end(data);
   });
 }
+function hereDir() { return path.dirname(fs.realpathSync(fileURLToPath(import.meta.url))); }
+function side(name) { try { return fs.readFileSync(path.join(hereDir(), name), 'utf8').trim(); } catch (e) { return ''; } }
+const URL_OK = /^(https:\/\/[A-Za-z0-9.-]{1,253}(:\d{1,5})?|http:\/\/(127\.0\.0\.1|localhost):\d{1,5})$/;
+const HOOK_EVENTS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'Notification', 'Stop', 'SubagentStart', 'SubagentStop', 'PreCompact', 'SessionEnd'];
+const mine = h => h && typeof h.command === 'string' && /live-hook\.mjs/.test(h.command) && (/GC_LIVE_(URL|TOKEN)=/.test(h.command) || /\/gen-chibi(-live)?\/live-hook\.mjs/.test(h.command));
+// --install-claude / --uninstall-claude: một lần mở O_NOFOLLOW, đọc từ fd, sao lưu từ bộ đệm (wx, quyền gốc), ghi tạm (wx) rồi rename
+export function editSettings(file, install) {
+  const C = fs.constants, dir = path.dirname(file), base = path.basename(file);
+  let cur = {}, had = false, mode = 0o600, buf = null, fd = -1;
+  if (install) {
+    const tok = side('live-token'), url = side('live-url');
+    if (!/^gcl_[A-Za-z0-9_-]{32,}$/.test(tok)) return 'refused: no valid live-token next to the hook';
+    if (url && !URL_OK.test(url)) return 'refused: live-url is not an https origin or a local address';
+  }
+  try { fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); } catch (e) { return 'refused: ' + e.code; }
+  if (fs.lstatSync(dir).isSymbolicLink()) return 'refused: settings folder is a symlink';
+  try { fd = fs.openSync(file, C.O_RDONLY | C.O_NOFOLLOW | (C.O_NONBLOCK || 0)); } catch (e) { if (e.code === 'ELOOP') return 'refused: symlink'; if (e.code !== 'ENOENT') return 'refused: ' + e.code; }
+  if (fd >= 0) {
+    const st = fs.fstatSync(fd); if (!st.isFile()) { fs.closeSync(fd); return 'refused: not a regular file'; }
+    had = true; mode = st.mode & 0o777; buf = fs.readFileSync(fd); fs.closeSync(fd);
+    const raw = buf.toString('utf8');
+    if (raw.trim()) { try { cur = JSON.parse(raw); } catch (e) { return 'refused: not JSON'; } }
+    if (!cur || typeof cur !== 'object' || Array.isArray(cur)) return 'refused: not a JSON object';
+    if (cur.hooks !== undefined && (!cur.hooks || typeof cur.hooks !== 'object' || Array.isArray(cur.hooks))) return 'refused: hooks is not an object';
+  } else if (!install) return 'ok: nothing to remove';
+  const hooks = Object.assign({}, cur.hooks || {});
+  Object.keys(hooks).forEach(ev => { if (!Array.isArray(hooks[ev])) return; hooks[ev] = hooks[ev].map(g => g && Array.isArray(g.hooks) ? Object.assign({}, g, { hooks: g.hooks.filter(h => !mine(h)) }) : g).filter(g => !(g && Array.isArray(g.hooks) && !g.hooks.length)); if (!hooks[ev].length) delete hooks[ev]; });
+  if (install) {
+    const q = x => "'" + String(x).replace(/'/g, "'\\''") + "'", cmd = q(process.execPath) + ' ' + q(path.join(hereDir(), 'live-hook.mjs'));
+    HOOK_EVENTS.forEach(ev => { const g = { hooks: [{ type: 'command', command: cmd, timeout: 2 }] }; hooks[ev] = (hooks[ev] || []).concat([/^(Pre|Post)ToolUse/.test(ev) ? Object.assign({ matcher: '*' }, g) : g]); });
+  }
+  const next = Object.assign({}, cur); if (Object.keys(hooks).length) next.hooks = hooks; else delete next.hooks;
+  let bak = '';
+  if (had) { bak = path.join(dir, base + '.bak-' + new Date().toISOString().replace(/[:.]/g, '-')); fs.writeFileSync(bak, buf, { flag: 'wx', mode }); fs.chmodSync(bak, mode); }
+  const tmp = path.join(dir, '.' + base + '.gc-' + process.pid + '-' + Date.now()), w = fs.openSync(tmp, 'wx', mode);
+  fs.writeSync(w, JSON.stringify(next, null, 2) + '\n'); fs.fchmodSync(w, mode); fs.fsyncSync(w); fs.closeSync(w);
+  fs.renameSync(tmp, file);
+  return 'ok: ' + (install ? 'Live hooks written to ' : 'Live hooks removed from ') + file + (bak ? ' (backup: ' + bak + ')' : '') + (install ? ' — restart Claude Code' : '');
+}
 async function main() {
   const dbg = process.env.GC_LIVE_DEBUG === '1', say = m => { if (dbg) process.stderr.write('[live-hook] ' + m + '\n'); };
   try {
@@ -120,13 +162,19 @@ async function main() {
     const raw = await readStdin(250);
     let h = null; try { h = JSON.parse(raw); } catch (e) { say('stdin is not JSON'); return; }
     const ev = classify(h); if (!ev) return;
-    const ok = await post(process.env.GC_LIVE_URL || 'http://127.0.0.1:7480', token, ev, 300);
+    const url = process.env.GC_LIVE_URL || side('live-url') || 'http://127.0.0.1:7480';
+    const ok = await post(url, token, ev, 300);
     say(ev.kind + (ok ? ' sent' : ' not delivered'));
   } catch (e) { say(String(e && e.message || e)); }
 }
 // chạy trực tiếp (không phải import trong test): so ĐƯỜNG THẬT — đúng cả khi đường có dấu cách / ký tự mã hoá % / đi qua symlink (macOS /Users/John Smith)
 function isMain() { try { return !!process.argv[1] && fs.realpathSync(fileURLToPath(import.meta.url)) === fs.realpathSync(process.argv[1]); } catch (e) { return false; } }
-if (isMain()) {
+if (isMain() && (process.argv[2] === '--install-claude' || process.argv[2] === '--uninstall-claude')) {
+  // chế độ cài: in kết quả, mã thoát 0 = xong, 3 = từ chối (không đổi gì)
+  let r; try { r = process.argv[3] ? editSettings(path.resolve(process.argv[3]), process.argv[2] === '--install-claude') : 'refused: missing settings.json path'; } catch (e) { r = 'refused: ' + (e.code || e.message); }
+  (r.startsWith('ok') ? process.stdout : process.stderr).write('gen-chibi live: ' + r + '\n');
+  process.exit(r.startsWith('ok') ? 0 : 3);
+} else if (isMain()) {
   process.on('uncaughtException', () => process.exit(0)); process.on('unhandledRejection', () => process.exit(0));
   main().finally(() => process.exit(0));
 }

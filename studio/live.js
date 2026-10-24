@@ -143,8 +143,8 @@
     var replayBtn = h('button', { class: 'btn sm primary', id: 'liveReplay', type: 'button', onclick: replay }, _t('Phát lại phiên mẫu'));
     var nowLbl = h('span', { class: 'note', id: 'liveNow', style: 'margin-left:auto;white-space:nowrap' });
     var taskChip = h('span', { class: 'chip info', id: 'liveTask', hidden: true });   // "Đang làm: …" — theo dấu việc trên mũ (đổi ở nhịp clap)
-    var shownTask = null;
-    function onTask(tk) { if (tk === shownTask) return; shownTask = tk; taskChip.hidden = !tk; taskChip.textContent = tk ? _t('Đang làm: {task}', { task: _t(LV.TASK_LABEL[tk]) }) : ''; }
+    var shownTask = null, titles = {};   // tiêu đề việc (đã làm sạch ở server) — đổi tiêu đề cùng việc thì chip cập nhật, không nhịp mới
+    function onTask(tk, force) { if (tk === shownTask && !force) return; shownTask = tk; taskChip.hidden = !tk; taskChip.textContent = tk ? _t('Đang làm: {task}', { task: _t(LV.TASK_LABEL[tk]) }) + (titles[tk] ? ' · ' + titles[tk] : '') : ''; }
     left.appendChild(h('div', { class: 'row' }, status, taskChip, replayBtn, speedSel, soundBtn, nowLbl));
     left.appendChild(stageBox);
     left.appendChild(h('div', { class: 'note', text: _t('Mỗi bước thật của agent (đọc, tìm, sửa, chạy test, giao việc, chờ bạn…) điều khiển nhân vật. Bong bóng chỉ tóm tắt việc đang làm — không bao giờ hiện nội dung tệp, lệnh hay bí mật.') }));
@@ -157,7 +157,7 @@
     var tableTask = null;   // việc hiện hành theo dòng sự kiện: mỗi sự kiện sau một lần đổi việc được gắn việc đó
     function row(ev, local) {
       count++; document.getElementById('liveCount').textContent = String(count);
-      if (ev.kind === 'task' && LV.TASK_LABEL[ev.task]) tableTask = ev.task;
+      if (ev.kind === 'task' && LV.TASK_LABEL[ev.task]) { tableTask = ev.task; titles[ev.task] = ev.title || ''; if (ev.task === shownTask) onTask(shownTask, true); }
       var tr = h('tr', { 'data-kind': ev.kind, 'data-id': String(ev.id), 'data-task': tableTask || '' },
         h('td', { class: 'id', text: (local ? 'D' : '') + ev.id }), h('td', { class: 'nw mono', text: hhmmss(ev.ts || Date.now()) }),
         h('td', { class: 'nw' }, h('span', { class: 'chip ' + (KIND_CHIP[ev.kind] || ''), text: _t(KIND_LABEL[ev.kind] || ev.kind) })),
@@ -186,7 +186,25 @@
         h('div', { class: 'row' }, h('span', { class: 'note', text: _t('Token live') }), tok,
           h('button', { class: 'btn sm', type: 'button', onclick: function () { shown = !shown; tok.textContent = shown ? v.token : v.token.slice(0, 8) + '…'; } }, _t('Hiện / ẩn')),
           h('button', { class: 'btn sm', type: 'button', id: 'liveRotate', onclick: function () { B.api('POST', 'api/live/token', {}).then(function (r) { renderConn({ token: r.token }); toast(_t('Đã đổi token live — chạy lại lệnh genchibi live hook.')); }).catch(function (e) { toast(e.message); }); } }, _t('Đổi token'))),
-        h('div', { class: 'note', text: _t('Agent khác (không phải Claude Code): gọi tool MCP live_event ở mỗi bước.') })));
+        h('div', { class: 'note', text: _t('Agent khác (không phải Claude Code): gọi tool MCP live_event ở mỗi bước.') }),
+        agentsBox));
+      loadAgents();
+    }
+    // token riêng của từng agent (live_setup): tên · tạo lúc · sự kiện cuối · Thu hồi (token đã thu hồi không gửi được nữa)
+    var agentsBox = h('div', { class: 'stack', id: 'liveAgents' });
+    function loadAgents() {
+      B.api('GET', 'api/live/agents').then(function (r) {
+        clear(agentsBox);
+        agentsBox.appendChild(h('div', { class: 'note', text: _t('Agent tự nối (live_setup — agent phải hỏi người dùng trước khi cài)') }));
+        var list = (r.agents || []).filter(function (a) { return !a.revoked; });
+        if (!list.length) { agentsBox.appendChild(h('div', { class: 'note', text: _t('Chưa có agent nào.') })); return; }
+        var tb = h('tbody');
+        list.forEach(function (a) {
+          tb.appendChild(h('tr', { 'data-agent': a.id }, h('td', { text: a.name }), h('td', { class: 'nw mono', text: a.created ? a.created.slice(0, 16).replace('T', ' ') : '—' }), h('td', { class: 'nw mono', text: a.last ? a.last.slice(0, 16).replace('T', ' ') : '—' }),
+            h('td', null, h('button', { class: 'btn sm danger', type: 'button', 'data-revoke': a.id, onclick: function () { B.api('POST', 'api/live/agents/' + a.id + '/revoke', {}).then(function () { toast(_t('Đã thu hồi token của agent')); loadAgents(); }).catch(function (e) { toast(e.message); }); } }, _t('Thu hồi')))));
+        });
+        agentsBox.appendChild(h('table', { class: 'grid' }, h('thead', null, h('tr', null, h('th', null, _t('Tên')), h('th', null, _t('Tạo lúc')), h('th', null, _t('Sự kiện cuối')), h('th', null, ''))), tb));
+      }).catch(function () { /* bản xem thử: không có */ });
     }
 
     // ---- nguồn sự kiện: SSE đọc bằng fetch (mang được header đăng nhập bằng token)

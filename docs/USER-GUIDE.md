@@ -318,6 +318,13 @@ tool `live_task` (task type + short title). The character claps a clapperboard t
 away, changes the badge on its hat and walks to the task's corner; "Working on: …" appears above the stage and the
 event table tags each event with the task. Claude Code learns the rule from the gen-chibi skill / MCP instructions.
 
+**Agents invite themselves (v0.24.1).** An agent connected over MCP can call `live_setup`: it gets a plan (what is
+installed where, what changes in `~/.claude/settings.json`, how to undo, where events go) and ONE command. Golden rule:
+the agent **must ask you before running it**; if you decline nothing changes. The command only downloads the hook from
+the official GitHub release and checks its SHA-256. Each agent gets its own token: the **Agents that set themselves up** table on
+the Live stage page shows name, created, last event and a **Revoke** button. While gen-chibi is not online, only an
+agent on the same machine can connect.
+
 ## Frequently asked questions
 - **Do assets the AI creates need approval?** No — they are saved as **drafts** in the work's project and usable right away. Only when you want them in a sale bundle do you click **Publish**.
 - **Does a shared HTML film expose the engine?** The player sits in the film file under a licence **for viewing that film only**. To share without the player, use **Export video** (v0.22); a future SaaS edition will also offer a player hosted by Gen Labs.

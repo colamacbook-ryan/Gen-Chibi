@@ -314,6 +314,12 @@ tiêu đề ngắn). Nhân vật lục túi lấy bảng clapper đập một c�
 "Đang làm: …" hiện trên sân khấu và bảng sự kiện gắn việc cho từng sự kiện. Claude Code học luật này qua skill gen-chibi /
 chỉ dẫn MCP.
 
+**Lời mời agent tự nối (v0.24.1).** Agent nối qua MCP có thể gọi `live_setup`: nó nhận một kế hoạch (cài gì, ở đâu, đổi
+gì trong `~/.claude/settings.json`, cách gỡ, gửi tới địa chỉ nào) và MỘT lệnh. Luật vàng: agent **phải hỏi bạn trước khi
+chạy**; bạn từ chối thì không có gì thay đổi. Lệnh chỉ tải tệp hook từ bản phát hành GitHub chính thức và kiểm SHA-256.
+Mỗi agent có token riêng: bảng **Agent tự nối** trong trang Sân khấu Live hiện tên, lúc tạo, sự kiện cuối và nút
+**Thu hồi**. gen-chibi chưa lên mạng thì chỉ agent chạy trên cùng máy mới nối được.
+
 ## Câu hỏi thường gặp
 - **AI tự tạo asset có cần duyệt không?** Không — lưu dạng **nháp** trong dự án của tác phẩm và dùng ngay. Chỉ khi muốn đưa vào gói bán bạn mới bấm **Phát hành**.
 - **Phim HTML gửi đi có lộ engine không?** Bộ phát nằm trong tệp phim với giấy phép **chỉ để xem phim đó**. Muốn chia sẻ mà không kèm bộ phát thì dùng **Xuất video** (v0.22); bản SaaS sau này còn có trình phát do Gen Labs lưu trữ.

@@ -58,5 +58,6 @@
  "Cầu stdio của app (chạy trong app) không chạy được ({error})": "App's stdio bridge (inside the app) does not run ({error})",
  "chỉ lệnh genchibi setup check trên máy chủ (token của bản cài) gửi được kết quả này": "only genchibi setup check on the server (install token) can send this result",
  "cần Content-Type: application/json": "Content-Type must be application/json",
- "dữ liệu gửi lên quá lớn (tối đa 4 KB)": "request body too large (max 4 KB)"
+ "dữ liệu gửi lên quá lớn (tối đa 4 KB)": "request body too large (max 4 KB)",
+ "không có token agent này": "no such agent token"
 }

@@ -2136,5 +2136,10 @@
  "Đã đổi token live — chạy lại lệnh genchibi live hook.": "Live token rotated — run genchibi live hook again.",
  "Đổi việc": "Task switch",
  "Đang làm: {task}": "Working on: {task}",
- "Việc": "Task"
+ "Việc": "Task",
+ "Agent tự nối (live_setup — agent phải hỏi người dùng trước khi cài)": "Agents that set themselves up (live_setup — the agent must ask its user before installing)",
+ "Chưa có agent nào.": "No agents yet.",
+ "Đã thu hồi token của agent": "Agent token revoked",
+ "Tạo lúc": "Created",
+ "Sự kiện cuối": "Last event"
 }

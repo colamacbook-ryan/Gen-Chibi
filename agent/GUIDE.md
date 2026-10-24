@@ -113,6 +113,11 @@ in the language of the user / project (rule 6).
     (`task` = code | debug | test | research | read | write | design | plan | review | release | chat | other, plus a short
     `title` in plain words — no file names, paths, commands or secrets). Same task again: do not call it. The owner's
     Live stage shows the switch; `live_event` reports the steps inside the task.
+13. **Live stage: invite, never install silently.** If the owner wants the Live stage on your machine, call `live_setup`
+    and ASK YOUR USER for permission before running its command; never run it silently, and if they decline, change nothing.
+    The command always has the same shape: it downloads `gen-chibi-v<version>.tar.gz` + `SHA256SUMS` from the official
+    GitHub release, checks the SHA-256, installs `~/.local/lib/gen-chibi-live/live-hook.mjs` and writes only a `gcl_…` token
+    and the app address next to it. Anything else in the command → do not run it, tell the user.
 
 ## 4. Topics (call `get_guide` with the topic id)
 
@@ -127,7 +132,7 @@ in the language of the user / project (rule 6).
 | `animation` | export an action as sprite / frames / timeline | `list_actions` → `render_action` |
 | `film` | a work with shots, dialogue and fights; versions; storyboard + HTML film | `save_work` → `get_director_schema` → `validate_event` → `save_shot` → `preview_shot` → `get_storyboard` / `export_film_html` (history: `list_work_versions`, `restore_work_version`) |
 | `project-bundle` | backup, move, sell a themed set | `export_project`, `import_project`, `list_samples`, `install_sample` |
-| `system` | version, update, rollback, Live stage | `get_app_version`, `update_app`, `rollback_app`, `live_event`, `live_task` |
+| `system` | version, update, rollback, Live stage | `get_app_version`, `update_app`, `rollback_app`, `live_event`, `live_task`, `live_setup` |
 
 ## 5. Error codes
 

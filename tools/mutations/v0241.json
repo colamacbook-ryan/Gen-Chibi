@@ -1,0 +1,185 @@
+{
+ "_": "gen-chibi v0.24.1 — đột biến cho live_setup (INT-21 g \"Đề nghị, có hỏi chủ\"), token riêng từng agent, việc hiện hành theo kênh, bình theo token sau khởi động lại, alive() lúc phát. Chạy: node tools/mutate.mjs --data tools/mutations/v0241.json [--jobs N --wrap \"bash netns.sh\"] [ID…]; kiểm nhanh: --check. © 2026 Gen Labs — All rights reserved.",
+ "mutations": [
+  {
+   "id": "M01",
+   "guard": "loadToken đặt tokKey (bình theo token ngay sau khởi động lại)",
+   "file": "server/live.js",
+   "find": "this.tok = t; this.tokKey = tokKeyOf(t); return t;",
+   "replace": "this.tok = t; return t;",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "loadToken đặt tokKey"
+  },
+  {
+   "id": "M02",
+   "guard": "việc hiện hành quên khi session_start / stop",
+   "file": "server/live.js",
+   "find": "if (c.ev.kind === 'session_start' || c.ev.kind === 'stop') this.lastTask.delete(chan);",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "việc hiện hành theo kênh"
+  },
+  {
+   "id": "M03",
+   "guard": "việc hiện hành THEO KÊNH (agent B không bị A làm 'cùng việc')",
+   "file": "server/live.js",
+   "find": "const chan = who === 'live' ? this.tokKey : who || 'owner', w = this.gate(chan);",
+   "replace": "const chan = 'one', w = this.gate(who === 'live' ? this.tokKey : who || 'owner');",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "việc hiện hành theo kênh"
+  },
+  {
+   "id": "M04",
+   "guard": "cùng việc đổi tiêu đề → phát retitle",
+   "file": "server/live.js",
+   "find": "c.ev.retitle = true;",
+   "replace": "return { same: true };",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "việc hiện hành theo kênh"
+  },
+  {
+   "id": "M05",
+   "guard": "accept() kiểm alive() trước khi phát SSE",
+   "file": "server/live.js",
+   "find": "if (c.alive && !c.alive()) { this.clients.delete(c); c.res.end(); return; } c.res.write(frame);",
+   "replace": "c.res.write(frame);",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "accept() kiểm alive()"
+  },
+  {
+   "id": "M06",
+   "guard": "lệnh live_setup kiểm SHA-256 trước khi ghi",
+   "file": "server/live-setup.js",
+   "find": "[ \"$W\" = \"$G\" ]",
+   "replace": "true",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "tarball bị tráo"
+  },
+  {
+   "id": "M07",
+   "guard": "token không nằm trong argv (chỉ printf builtin → tệp)",
+   "file": "server/live-setup.js",
+   "find": "--install-claude \"$HOME/.claude/settings.json\" )'",
+   "replace": "--install-claude \"$HOME/.claude/settings.json\" ' + o.token + ' )'",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "token: một lần duy nhất"
+  },
+  {
+   "id": "M08",
+   "guard": "token / url của agent ghi với umask 077",
+   "file": "server/live-setup.js",
+   "find": "( umask 077; printf",
+   "replace": "( printf",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "chạy đúng MỘT lệnh"
+  },
+  {
+   "id": "M09",
+   "guard": "app chỉ localhost + agent khác máy → NOT_REACHABLE",
+   "file": "server/live-setup.js",
+   "find": "(o.local ? 'http://127.0.0.1:' + o.port : '')",
+   "replace": "('http://127.0.0.1:' + o.port)",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "từ chối có lý do"
+  },
+  {
+   "id": "M10",
+   "guard": "live_setup là tool GHI (mcp:read → FORBIDDEN)",
+   "file": "server/mcp.js",
+   "find": "readOnlyHint: false, idempotentHint: false, destructiveHint: false, openWorldHint: true",
+   "replace": "readOnlyHint: true, idempotentHint: false, destructiveHint: false, openWorldHint: true",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "MCP live_setup"
+  },
+  {
+   "id": "M11",
+   "guard": "token agent đã thu hồi không còn nhận",
+   "file": "server/live.js",
+   "find": "a = this.agents.find(x => !x.revoked && safeEq(x.hash, hh));",
+   "replace": "a = this.agents.find(x => safeEq(x.hash, hh));",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "thu hồi token agent"
+  },
+  {
+   "id": "M12",
+   "guard": "live-agents.json chỉ lưu băm",
+   "file": "server/live.js",
+   "find": "hash: sha(t), created:",
+   "replace": "hash: sha(t), token: t, created:",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "token agent: live-agents.json"
+  },
+  {
+   "id": "M13",
+   "guard": "luật 13 (mời, hỏi chủ) trong GUIDE §3 → mọi bề mặt",
+   "file": "agent/GUIDE.md",
+   "find": "13. **Live stage: invite, never install silently.**",
+   "replace": "13. **Live stage.**",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "luật 13"
+  },
+  {
+   "id": "M14",
+   "guard": "start_here mời Live chỉ khi kết nối được ghi",
+   "file": "server/mcp.js",
+   "find": "live: this.liveSetup && !(ctx && ctx.readOnly) ? Rules.START.live : undefined",
+   "replace": "live: Rules.START.live",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "luật 13"
+  },
+  {
+   "id": "M15",
+   "guard": "Studio thấy 'sự kiện cuối' của token agent",
+   "file": "server/live.js",
+   "find": "if (a) { a.last = new Date(now).toISOString(); this.flushSoon(); }",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-live.mjs"
+   ],
+   "expect": "hook gửi bằng token RIÊNG"
+  }
+ ]
+}
