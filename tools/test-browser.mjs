@@ -382,7 +382,17 @@ if (want('core')) {
     const [sb] = await Promise.all([q.waitForEvent('download'), q.click('button:has-text("Storyboard SVG")')]);
     const sbText = require('fs').readFileSync(await sb.path(), 'utf8');
     if (!/<image [^>]*href="data:image\/svg\+xml;base64,/.test(sbText) || !/Cảnh Một/.test(sbText)) throw new Error('storyboard thiếu ảnh phân cảnh / tiêu đề');
-    console.log('  ✓ Xuất thành phẩm: phim HTML độc lập mở không cần server và diễn được; storyboard có ảnh + lời thoại');
+    // CNS-047: MCP export_film_html / get_storyboard = ĐÚNG tệp Studio vừa xuất (cùng tác phẩm, cùng ngôn ngữ giao diện vi, không giọng AI) — một nguồn studio/film-html.js
+    {
+      const wid = await q.evaluate(() => fetch('api/works', { headers: { 'X-GC-Request': '1' } }).then(r => r.json()).then(l => l[0].id));
+      const mcpCall = (name, args) => fetch('http://localhost:7499/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TEST_TOKEN }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }) }).then(r => r.json()).then(j => j.result);
+      const firstDiff = (a, b) => { let i = 0; while (i < a.length && a[i] === b[i]) i++; return i + ': studio «' + a.slice(Math.max(0, i - 60), i + 80) + '» ≠ mcp «' + b.slice(Math.max(0, i - 60), i + 80) + '»'; };
+      const studioFilm = require('fs').readFileSync(filmPath, 'utf8'), mf = await mcpCall('export_film_html', { work: wid, lang: 'vi' });
+      if (!mf || mf.isError || mf.content[1].resource.text !== studioFilm) throw new Error('MCP export_film_html khác phim Studio xuất: ' + (mf && !mf.isError ? firstDiff(studioFilm, mf.content[1].resource.text) : JSON.stringify(mf).slice(0, 200)));
+      const ms = await mcpCall('get_storyboard', { work: wid, lang: 'vi' });
+      if (!ms || ms.isError || ms.content[1].resource.text !== sbText) throw new Error('MCP get_storyboard khác storyboard Studio: ' + (ms && !ms.isError ? firstDiff(sbText, ms.content[1].resource.text) : JSON.stringify(ms).slice(0, 200)));
+    }
+    console.log('  ✓ Xuất thành phẩm: phim HTML độc lập mở không cần server và diễn được; storyboard có ảnh + lời thoại; MCP export_film_html / get_storyboard ra ĐÚNG từng byte tệp Studio xuất');
     console.log('  ✓ Tạo asset mới: chọn khung → soát → cổng → lưu nhân vật / vật phẩm / bối cảnh vào dự án; Thư viện xếp theo dự án chủ đề');
   } catch (e) { fail = 1; console.log('  ✗ Tạo asset mới / dự án:', e.message); }
   finally { await b4.close(); srv4.kill(); }
@@ -505,6 +515,10 @@ if (want('core')) {
     if (!Array.isArray(FD.soundPacks) || FD.soundPacks.length !== 1 || FD.soundPacks[0].id !== 'tq-am' || FD.project !== 'mau-tam-quoc' || FD.soundPacks[0].sounds['trong-tran'].nodes !== undefined) throw new Error('DATA.soundPacks / project của phim: ' + JSON.stringify(FD.soundPacks && FD.soundPacks.map(x => x.id)) + ' / ' + FD.project);
     if (!/<script>\/\* engine\/sounds\.js \*\//.test(fhtml)) throw new Error('phim xuất ra thiếu engine/sounds.js');
     if (!/player\.setProject\(DATA\.project\)/.test(fhtml)) throw new Error('phim xuất ra không đặt dự án cho bộ phát (player.setProject)');
+    // CNS-047: phim có gói động tác + gói âm của dự án — MCP export_film_html ra ĐÚNG từng byte tệp Studio vừa xuất
+    { const r = await fetch('http://localhost:7494/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TEST_TOKEN }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'export_film_html', arguments: { work: 'tq-vuon-dao-xich-bich', lang: 'vi' } } }) }).then(x => x.json());
+      const mt = r.result && !r.result.isError ? r.result.content[1].resource.text : '';
+      if (mt !== fhtml) { let i = 0; while (i < fhtml.length && fhtml[i] === mt[i]) i++; throw new Error('MCP export_film_html (Tam Quốc) khác phim Studio tại ' + i + ': «' + fhtml.slice(Math.max(0, i - 60), i + 80) + '» ≠ «' + mt.slice(Math.max(0, i - 60), i + 80) + '»'); } }
     // Studio (Tạo tác) nạp gói âm của server lúc mở; lược đồ bảng bước theo dự án của dàn diễn viên; nhãn âm trong ô chọn lấy từ thư viện
     const sbr = await q.evaluate(() => ({ has: GenChibi.sounds.has('trong-tran'), n: GenChibi.sounds.names().length, lbl: GenChibi.sounds.get('wham').label,
       sch: GenChibi.director.schema(GenChibi.assets().filter(a => a.project === 'mau-tam-quoc')).properties.steps.items.properties.sfx.items.enum.length,

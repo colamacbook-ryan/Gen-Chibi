@@ -6,7 +6,7 @@ import { tmpdir } from 'os';
 import path from 'path';
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const require = createRequire(import.meta.url);
-const { MCP, LIMITS, ZONES, cleanContext, cleanAnchors } = require(ROOT + '/server/mcp.js'), { Store } = require(ROOT + '/server/store.js'), { loadEngine } = require(ROOT + '/server/engine-node.js');
+const { MCP, LIMITS, ZONES, cleanContext, cleanAnchors } = require(ROOT + '/server/mcp.js'), Rules = require(ROOT + '/server/rules.js'), { Store } = require(ROOT + '/server/store.js'), { loadEngine } = require(ROOT + '/server/engine-node.js');
 let fail = 0; const ok = (c, m) => { if (c) console.log('   ✓', m); else { fail = 1; console.log('   ✗', m); } };
 const fresh = () => { const store = new Store(mkdtempSync(path.join(tmpdir(), 'gc-dockcore-'))), m = new MCP({ engine: loadEngine(ROOT), store, version: 't', system: {} }); return { store, m, GC: m.GC }; };
 const J = r => r.structuredContent || JSON.parse(r.content[0].text);
@@ -124,7 +124,7 @@ try {
     const legacy = clone(frame); legacy.id = 'cu-trong-khung'; legacy.pack = 'gen.khung'; legacy.key = 'gen.khung/cu-trong-khung'; legacy.status = 'published';
     store.saveAsset('gen.khung/cu-trong-khung', legacy, 'cũ'); m.sync();
     ok(GC.ASSETS['local.my/cu-trong-khung'] && GC.ASSETS['local.my/cu-trong-khung'].status === 'draft', 'bản ghi cũ nằm trong pack khung: nạp thành bản sao "draft"');
-    ok(/ALWAYS start as DRAFT/.test(ZONES.xuong.role.join(' ')) && !/draft by default/i.test(ZONES.xuong.role.join(' ')), 'lời dặn khu Xưởng nói đúng: bản sao từ khung luôn là NHÁP');
+    ok(/ALWAYS start as DRAFT/.test(Rules.ROLES.xuong.join(' ')) && !/draft by default/i.test(Rules.ROLES.xuong.join(' ')), 'lời dặn khu Xưởng nói đúng: bản sao từ khung luôn là NHÁP');
   }
 
   /* ---------------------------------------------------------------- CNS-118: ranh giới tin cậy — chỉ dẫn hệ thống tĩnh, dữ liệu trong tin user bọc JSON */

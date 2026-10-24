@@ -71,7 +71,7 @@ Three entrances, **one** gate: no path writes straight into the store.
 
 | Who creates | Through | Gate |
 |---|---|---|
-| External agents (Claude Code, Claude web/desktop, Cursor…) | MCP — 53 tools (`genchibi agent tools`) | `saveAssetChecked` / `savePartChecked` |
+| External agents (Claude Code, Claude web/desktop, Cursor…) | MCP — 58 tools (`genchibi agent tools`) | `saveAssetChecked` / `savePartChecked` |
 | The AI in the Studio chatroom (LLM API: OpenRouter, DeepSeek, MiniMax…) | A function-calling loop over **the same MCP tool set** (except the system tools and the AI-voice tools that use requests — `render_voice`, `design_voice`: owner only), with the same MCP instructions | as above |
 | Studio users / HTTP API callers | `PUT /api/assets`, `POST /api/parts` → the same two functions | as above |
 

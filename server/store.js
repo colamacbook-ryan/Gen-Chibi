@@ -162,6 +162,23 @@ class Store {
     writeJSON(file, rec);
     return rec;
   }
+  // phiên bản CŨ của tác phẩm (versions/works~<id>/<n>.json, saveWork ghi trước mỗi lần lưu) — mới nhất trước; bản đang dùng là works/<id>.json
+  // số phiên bản cũ có trên đĩa, mới nhất trước — CHỈ từ tên tệp (không đọc nội dung)
+  workVersionNumbers(id) {
+    if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(String(id))) return [];
+    let files = []; try { files = fs.readdirSync(path.join(this.verDir, 'works~' + id)).filter(f => /^[1-9][0-9]{0,8}\.json$/.test(f)); } catch (e) { return []; }
+    return files.map(f => +f.slice(0, -5)).sort((a, b) => b - a);
+  }
+  // nội dung các phiên bản cũ: sắp theo SỐ trong tên tệp, chỉ đọc `limit` bản mới nhất (lịch sử dài không làm chậm list_work_versions)
+  workVersions(id, limit) {
+    return this.workVersionNumbers(id).slice(0, limit > 0 ? limit : 200).map(n => this.workVersion(id, n)).filter(Boolean);
+  }
+  workVersion(id, n) {
+    if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(String(id)) || !Number.isInteger(n) || n < 1) return null;
+    const w = readJSON(path.join(this.verDir, 'works~' + id, n + '.json'), null);
+    if (w && this.workMigrate) this.workMigrate(w);
+    return w && w.id === id ? w : null;
+  }
   // luồng hội thoại của trợ lý AI (dock cột phải) theo ĐỐI TƯỢNG: tác phẩm / asset / dự án / khu — data/chats/<loại>-<id>.json.
   // Có trần số tin + kích thước: luồng dài mãi không phình đĩa và không phình lời gọi LLM. id asset "pack/id" đổi "/" thành "~" (như tên tệp asset).
   chatFile(kind, id) {

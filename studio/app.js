@@ -5,6 +5,7 @@
 (function () {
   'use strict';
   var GC = window.GenChibi, LIB = GC.LIB, R = GC.render;
+  var FH = window.GCFilmHTML;   // phim HTML + storyboard + tiện ích chữ: studio/film-html.js (một nguồn với MCP — CNS-047)
   // NGÔN NGỮ (ADR 0007, engine/i18n.js): msgid = chuỗi tiếng Việt hiện có. _t = câu giao diện · _l = nhãn DỮ LIỆU (engine / người dùng:
   // có bản dịch thì dịch, không thì giữ nguyên, không ghi "thiếu") · N_ = đánh dấu chuỗi ở bảng hằng cấp module — dịch lúc HIỂN THỊ bằng _t().
   var I18N = GC.i18n, _t = I18N.t, _pt = I18N.pt, _l = I18N.label, N_ = I18N.N;   // _pt(ngữ cảnh, msgid): một chữ Việt, hai nghĩa tiếng Anh
@@ -1411,67 +1412,14 @@
   function stillURL(shot) { var svg = GC.film.still(shot); return svg ? svgURL(svg) : ''; }
   // Gói phụ thuộc của một nhóm asset "của tôi": nhân vật + trang bị nhân vật đang mặc + cảnh + linh kiện / phông tự vẽ đang dùng.
   // Dùng cho: tải gói dự án, xuất phim HTML độc lập (người xem không cần bản cài).
-  function bundleOf(chars, items, scenes) {
-    var ch = {}, it = {}, sc = {}, parts = {};
-    function part(p) { if (p && p.pack === MY_PACK && p.data) parts[(p.kind === 'scenery' ? 'sc:' : '') + p.slot + ':' + p.id] = p.data; }
-    function addItem(x) { if (!x || x.pack !== MY_PACK || it[x.key]) return; it[x.key] = x; part(GC.getPart(x.equip.slot, x.equip.part)); }
-    (chars || []).forEach(function (a) {
-      if (!a || (a.pack !== MY_PACK && !a.savedAt) || ch[a.key]) return;   // "của tôi" + bản đã chỉnh lưu trong kho (asset gốc đã nằm trong script)
-      ch[a.key] = a;
-      LIB_SLOTS().forEach(function (sl) { var ref = GC.partRef(a, sl); part(ref && GC.getPart(sl, ref, a.pack)); });
-      Object.keys((a.look && a.look.equip) || {}).forEach(function (sl) { addItem(GC.ITEMS[a.look.equip[sl]] || GC.getItem(a.look.equip[sl], MY_PACK)); });
-    });
-    (items || []).forEach(addItem);
-    (scenes || []).forEach(function (x) {
-      if (!x || x.pack !== MY_PACK || sc[x.key]) return;
-      sc[x.key] = x;
-      Object.keys(x.layers).map(function (k) { return x.layers[k].part; }).concat(x.deco.map(function (d) { return d.part; })).forEach(function (ref) {
-        Object.keys(LIB.parts).forEach(function (k) { var q = LIB.parts[k]; if (q.kind === 'scenery' && q.pack + '/' + q.id === ref) part(q); });
-      });
-    });
-    var vals = function (o) { return Object.keys(o).map(function (k) { return o[k]; }); };
-    return { characters: vals(ch), items: vals(it), scenes: vals(sc), parts: vals(parts) };
-  }
+  function bundleOf(chars, items, scenes) { return FH.bundleOf(GC, chars, items, scenes); }
   /* ---- Xuất thành phẩm của tác phẩm ---- */
-  // cắt theo code point (không chẻ đôi emoji → encodeURIComponent không ném lỗi); bỏ ký tự điều khiển (XML không cho phép)
-  function cut(t, n) { var a = Array.from(String(t == null ? '' : t)); return a.length > n ? a.slice(0, n - 1).join('') + '…' : a.join(''); }
-  function xml(t) { return String(t == null ? '' : t).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\uFFFE\uFFFF]/g, '').replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '$1').replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-  function wrapText(t, n, max) {   // ngắt dòng theo số ký tự (đủ dùng cho tiếng Việt đơn giản), tối đa max dòng
-    var out = [], line = '';
-    String(t || '').replace(/\s+/g, ' ').trim().split(' ').forEach(function (w) {
-      if ((line + ' ' + w).trim().length > n) { out.push(line); line = w; } else line = (line + ' ' + w).trim();
-    });
-    if (line) out.push(line);
-    if (out.length > max) { out = out.slice(0, max); out[max - 1] = cut(out[max - 1], Array.from(out[max - 1]).length - 1); }
-    return out;
-  }
-  // Storyboard: một SVG — đầu trang (tên, logline) + lưới 2 cột: ảnh phân cảnh, mô tả, lời thoại
-  function storyboard(W) {
-    var COLS = 2, CW = 560, IH = 315, TH = 150, GAP = 24, M = 32, HEAD = 96;
-    var rows = Math.max(1, Math.ceil(W.shots.length / COLS)), Wd = M * 2 + COLS * CW + (COLS - 1) * GAP, Hd = HEAD + rows * (IH + TH + GAP) + M;
-    var o = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ' + Wd + ' ' + Hd + '" font-family="Arial, Helvetica, sans-serif">' +
-      '<rect width="100%" height="100%" fill="#f6f4ef"/>' +
-      '<text x="' + M + '" y="52" font-size="28" font-weight="700" fill="#1c1b1e">' + xml(W.title) + '</text>' +
-      '<text x="' + M + '" y="80" font-size="14" fill="#5e5a53">' + xml(cut(W.logline || '', 140)) + '</text>' +
-      '<text x="' + (Wd - M) + '" y="52" font-size="12" fill="#8e897f" text-anchor="end">Storyboard · ' + xml(_t('{n} phân cảnh', { n: W.shots.length })) + ' · gen-chibi · © 2026 Gen Labs</text>';
-    W.shots.forEach(function (s, i) {
-      var x = M + (i % COLS) * (CW + GAP), y = HEAD + Math.floor(i / COLS) * (IH + TH + GAP), svg = GC.film.still(s);
-      var names = {}; GC.film.actors(s).forEach(function (a) { names[a.id] = a.name; });
-      o += '<rect x="' + x + '" y="' + y + '" width="' + CW + '" height="' + (IH + TH) + '" rx="10" fill="#fff" stroke="#e6e2d9"/>';
-      o += svg ? '<image x="' + (x + 1) + '" y="' + (y + 1) + '" width="' + (CW - 2) + '" height="' + IH + '" preserveAspectRatio="xMidYMid slice" href="data:image/svg+xml;base64,' + b64(svg) + '"/>'
-        : '<rect x="' + (x + 1) + '" y="' + (y + 1) + '" width="' + (CW - 2) + '" height="' + IH + '" fill="#efece5"/><text x="' + (x + CW / 2) + '" y="' + (y + IH / 2) + '" font-size="14" fill="#8e897f" text-anchor="middle">' + xml(_t('chưa có bối cảnh')) + '</text>';
-      o += '<circle cx="' + (x + 22) + '" cy="' + (y + 22) + '" r="14" fill="#2e8b5e"/><text x="' + (x + 22) + '" y="' + (y + 27) + '" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">' + (i + 1) + '</text>';
-      var ty = y + IH + 24;
-      o += '<text x="' + (x + 14) + '" y="' + ty + '" font-size="16" font-weight="700" fill="#1c1b1e">' + xml(s.title) + '</text>';
-      wrapText(s.description, 74, 2).forEach(function (l, k) { o += '<text x="' + (x + 14) + '" y="' + (ty + 20 + k * 17) + '" font-size="12.5" fill="#5e5a53">' + xml(l) + '</text>'; });
-      var lines = (s.event ? s.event.steps : []).slice(0, 4).map(function (st) { return (names[st.actor] || st.actor) + ': ' + st.say; });
-      if (s.event && s.event.steps.length > 4) lines[3] = lines[3] + '  (+' + (s.event.steps.length - 4) + ')';
-      if (!lines.length) lines = [_t('(chưa có lời thoại)')];
-      lines.forEach(function (l, k) { o += '<text x="' + (x + 14) + '" y="' + (ty + 62 + k * 17) + '" font-size="12" fill="#1c1b1e" font-style="italic">' + xml(cut(l, 80)) + '</text>'; });
-    });
-    return o + '</svg>';
-  }
-  function b64(s) { return btoa(unescape(encodeURIComponent(s))); }
+  // tiện ích chữ: studio/film-html.js (dùng chung với MCP)
+  function cut(t, n) { return FH.cut(t, n); }
+  function xml(t) { return FH.xml(t); }
+  function wrapText(t, n, max) { return FH.wrapText(t, n, max); }
+  // Storyboard: một SVG (studio/film-html.js — MỘT nguồn với MCP get_storyboard)
+  function storyboard(W) { return FH.storyboard(GC, W, _t); }
   // Phim HTML độc lập: engine + thư viện đang nạp + asset "của tôi" mà tác phẩm dùng + bộ phát — một tệp, mở bằng trình duyệt là xem
   // âm thanh phim: bật / tắt tiếng + kiểu giọng, nhớ theo máy (engine/audio.js)
   var AudioPref = {
@@ -1493,7 +1441,7 @@
   }
   // kiểu lời thoại của sân khấu, nhớ theo máy như âm thanh (engine/player.js: opts.dialog / setDialog):
   // tự động = bong bóng khi có chỗ sạch (không che đầu ai), không thì phụ đề dải dưới · bong bóng = luôn bong bóng · phụ đề = luôn phụ đề
-  var DIALOG_MODES = [['auto', N_('Lời thoại: tự động')], ['bubble', N_('Lời thoại: bong bóng')], ['caption', N_('Lời thoại: phụ đề')]];
+  var DIALOG_MODES = FH.DIALOG_MODES;   // msgid (studio/film-html.js — một nguồn với phim xuất)
   var StagePref = {
     get: function () {
       var p; try { p = JSON.parse(localStorage.getItem('gc-stage') || '{}') || {}; } catch (e) { p = {}; }
@@ -1919,16 +1867,10 @@
         } }, _t('Lưu giọng')) : null));
   }
   // ngôn ngữ + giọng vùng của tác phẩm (lưu trong tác phẩm: lang vi | en | zh, accent theo ngôn ngữ; thiếu thì tiếng Việt, giọng đầu tiên)
-  function workLang(W) { var l = GC.voices.lang(W && W.lang); return { lang: l, accent: GC.voices.accent(l, W && W.accent) }; }
-  // thẻ <html lang> của phim xuất theo ngôn ngữ phim (trình đọc màn hình + phông chữ + gợi ý dịch của trình duyệt): vi · en · zh-CN (phổ thông) · zh-TW (Đài Loan) · zh-HK (Quảng Đông)
-  function htmlLang(L) { return L.lang === 'en' ? 'en' : L.lang === 'zh' ? (L.accent === 'tw' ? 'zh-TW' : 'zh-CN') : L.lang === 'yue' ? 'zh-HK' : 'vi'; }
+  function workLang(W) { return FH.workLang(GC, W); }
   // gói âm (không phải khung) mà tác phẩm cần: thuộc dự án của tác phẩm, hoặc có âm được gọi tên trong lời thoại / gói động tác đi kèm — GC.sounds.bundleDeps, MỘT hàm
   // cho cả ba bộ đóng gói (phim xuất, sao lưu, gói bán — CNS-101)
-  function filmSoundPacks(W, motionPacks) {
-    var S = GC.sounds; if (!S) return [];
-    var want = {}; S.bundleDeps({ shots: W.shots, motionPacks: motionPacks || [] }).packs.forEach(function (id) { want[id] = 1; });
-    return S.packs().filter(function (p) { return !p.frame && (want[p.id] || (W.project && p.project === W.project)); }).map(function (p) { return S.pack(p.id); });
-  }
+  function filmSoundPacks(W, motionPacks) { return FH.soundPacks(GC, W, motionPacks); }
   // mã engine nhúng / nạp theo phim: mọi <script src="engine|kinds/…"> của trang Studio, đúng thứ tự (studio/* — kể cả studio/video/* — KHÔNG bao giờ vào phim, CNS-228)
   function filmSrcs() { return Array.prototype.map.call(document.scripts, function (x) { return x.getAttribute('src') || ''; }).filter(function (x) { return /^(engine|kinds)\//.test(x); }); }
   // MỘT nguồn dữ liệu phim (CNS-219): phim HTML (exportFilm) và video (studio/video/client.js → trang xuất video) cùng lấy ở đây — asset tác phẩm dùng,
@@ -1936,21 +1878,16 @@
   // pre (tuỳ chọn) = kết quả filmVoices đã hỏi (hộp "thiếu giọng AI" ở Sân khấu final) — khỏi hỏi lại.
   // → Promise<{ srcs, data, film, ui, dict, have, total }>   (phần gom asset chạy NGAY lúc gọi, như trước; phần giọng AI chờ filmVoices)
   function filmPayload(W, pre) {
-    var L = workLang(W), chars = [], scenes = [], P = window.GCVPayload;
-    if (!P) return Promise.reject(new Error(_t('Không tải được {f}', { f: 'studio/video/payload.js' })));
-    W.shots.forEach(function (s) { chars = chars.concat(GC.film.actors(s)); var sc = GC.film.scene(s); if (sc) scenes.push(sc); });
-    var data = bundleOf(chars, [], scenes);
-    // gói động tác có hành động phim dùng tới (đòn của bộ chủ đề) — đòn của khung đã nằm trong mã bộ phát
-    var motionPacks = GC.choreo ? P.motionPacks(W, GC.choreo.packs()) : [];
-    // gói âm phim dùng (v0.18): gói của dự án tác phẩm + gói gọi tên trong step.sfx / sự kiện của gói động tác đi theo — mở file:// vẫn nghe đúng; bộ chuẩn gen.am nằm sẵn trong engine/sounds.js
-    var soundPacks = filmSoundPacks(W, motionPacks);
-    var srcs = filmSrcs();
+    var L = workLang(W), srcs = filmSrcs();
     if (srcs.indexOf('engine/player.js') < 0) return Promise.reject(new Error(_t('Thiếu engine/player.js')));
     // kèm các clip giọng AI ĐÃ có của từng câu (hỏi "dry": không đọc mới, không tốn lượt) — phim mở bằng file:// vẫn có giọng AI, không gọi mạng
+    // dữ liệu phim gom NGAY lúc gọi (studio/film-html.js — MỘT nguồn với MCP export_film_html); clip giọng AI điền vào khi filmVoices xong
+    var P = FH.payload(GC, W, { dialog: StagePref.get().dialog });
     return (pre ? Promise.resolve(pre) : filmVoices(W, L)).then(function (vo) {
-      // phần chọn khoá / chốt giọng / dựng film: studio/video/payload.js — CÙNG hàm job CI dùng (CNS-246)
-      return P.build({ W: W, data: data, motionPacks: motionPacks, soundPacks: soundPacks, voiceOf: GC.audio ? function (a) { return GC.audio.voiceOf(a, L); } : null,
-        lang: L, vo: vo, dialog: StagePref.get().dialog, srcs: srcs, ui: I18N.lang(), dict: Lang.playerDict(I18N.lang()) });
+      // NGÔN NGỮ (ADR 0007): chữ trình phát theo ngôn ngữ giao diện LÚC XUẤT (dict), video dùng CÙNG luật (CNS-224)
+      var UI = I18N.lang();
+      P.data.voices = vo.voices; P.data.voiceTotal = vo.total;
+      return { srcs: srcs, data: P.data, film: P.film, ui: UI, dict: Lang.playerDict(UI), have: vo.have, total: vo.total };
     });
   }
   // pre (tuỳ chọn) = kết quả filmVoices đã hỏi (hộp "thiếu giọng AI" ở Sân khấu final) — khỏi hỏi lại
@@ -1961,22 +1898,7 @@
     Promise.all([Promise.all(srcs.map(function (f) { return fetch(f).then(function (r) { if (!r.ok) throw new Error(_t('Không tải được {f}', { f: f })); return r.text(); }); })), filmPayload(W, pre)])
       .then(function (res) {
         var texts = res[0], P = res[1], data = P.data, film = P.film, UI = P.ui, vo = { have: P.have, total: P.total };
-        var safe = function (t) { return t.replace(/<\/script/gi, '<\\/script').replace(/<!--/g, '<\\!--'); };
-        // chữ của trang phim (nút, nhãn) dịch ngay ở đây theo cùng ngôn ngữ UI của payload
-        var vopt = [['auto', _t('Giọng: tự động')], ['tts', _t('Giọng: máy đọc')], ['blip', _t('Giọng: blip')], ['off', _t('Giọng: tắt')]];
-        var TXT = { aiAuto: _t('Giọng: tự động (có giọng AI)'), aiNote: _t('Giọng AI {n}/{total}'), aiLack: _t('{n} câu chưa có giọng AI — phần còn lại đọc bằng giọng máy / blip.'),
-          lines: _t('{n} lời thoại'), none: _t('Tác phẩm chưa có phân cảnh nào sẵn sàng.') };
-        var html = '<!doctype html>\n<!--\n  ' + _t('Phim "{title}" — làm bằng gen-chibi.', { title: xml(W.title) }) + '\n  ' + _t('Bộ phát (engine/*, kinds/*) © 2026 Gen Labs — All rights reserved. Giấy phép: CHỈ ĐỂ XEM phim này.') + '\n  ' + _t('Không trích xuất, sao chép, sửa đổi hay tái sử dụng mã bộ phát cho mục đích khác.') + '\n  ' + _t('Riêng phông chữ lời thoại Be Vietnam Pro (engine/fonts.js) © 2021 The Be Vietnam Pro Project Authors — SIL Open Font License 1.1 (toàn văn nằm trong chính tệp này).') + '\n-->\n<html lang="' + htmlLang({ lang: data.lang, accent: data.accent }) + '">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>' + xml(W.title) + ' — gen-chibi</title>\n' +
-          '<meta name="generator" content="gen-chibi ' + xml(String((Store.info || {}).version || '')) + ' · Gen Labs">\n<style>' + FILM_CSS + '</style>\n</head>\n<body>\n' +
-          '<main class="film"><header><div><h1>' + xml(W.title) + '</h1><p>' + xml(W.logline || '') + '</p></div><span class="badge">' + xml(_t('{n} phân cảnh', { n: W.shots.length })) + '</span></header>\n' +
-          '<div class="screen"><div id="stage"></div><button id="big" class="big" aria-label="' + xml(_t('Xem phim')) + '">▶</button></div>\n' +
-          '<div class="bar"><button id="play">' + xml(_t('▶ Xem')) + '</button><button id="stop">' + xml(_t('■ Dừng')) + '</button><button id="full">' + xml(_t('⛶ Toàn màn hình')) + '</button><button id="mute" aria-label="' + xml(_t('Bật / tắt tiếng')) + '">🔊</button>' +
-          '<select id="voice" aria-label="' + xml(_t('Giọng nhân vật')) + '">' + vopt.map(function (o) { return '<option value="' + o[0] + '">' + xml(o[1]) + '</option>'; }).join('') + '</select><span id="ainote" class="ainote" hidden></span>' +
-          '<select id="dialog" aria-label="' + xml(_t('Kiểu lời thoại')) + '">' + DIALOG_MODES.map(function (m) { return '<option value="' + m[0] + '">' + xml(_t(m[1])) + '</option>'; }).join('') + '</select><span id="prog"></span></div>\n' +
-          '<ol id="chapters"></ol>\n<footer>' + xml(_t('Làm bằng gen-chibi · Bộ phát © 2026 Gen Labs — chỉ để xem phim này')) + '</footer></main>\n' +
-          texts.map(function (t, i) { return '<script>/* ' + srcs[i] + ' */\n' + safe(t) + '\n</script>'; }).join('\n') + '\n' +
-          '<script>\n(function (I) { if (!I) return; I.add(' + jsonForScript(UI) + ', ' + jsonForScript(P.dict) + '); I.setLang(' + jsonForScript(UI) + '); })(window.GenChibi && window.GenChibi.i18n);\nvar TXT = ' + jsonForScript(TXT) + ';\n</script>\n' +
-          '<script>\nvar DATA = ' + jsonForScript(data) + ';\nvar FILM = ' + jsonForScript(film) + ';\n' + FILM_BOOT + '\n</script>\n</body>\n</html>\n';
+        var html = FH.html({ W: W, data: data, film: film, ui: UI, dict: P.dict, srcs: srcs, texts: texts, version: (Store.info || {}).version || '', t: _t });   // MỘT nguồn với MCP export_film_html (studio/film-html.js)
         var bytes = new Blob([html]).size, sz = bytes >= 1048576 ? (bytes / 1048576).toFixed(1) + ' MB' : Math.round(bytes / 1024) + ' KB';
         download(slugify(W.title) + '.html', html, 'text/html');
         toast(_t('Đã xuất phim "{title}" ({sz}) · {have}/{total} câu có giọng AI{x} — mở bằng trình duyệt bất kỳ để xem.', { title: W.title, sz: sz, have: vo.have, total: vo.total, x: vo.total && vo.have < vo.total ? _t(' (câu còn lại dùng giọng máy đọc hoặc blip — bấm Lồng tiếng AI trước khi xuất để có đủ)') : '' }));
@@ -2104,63 +2026,6 @@
       });
     });
   }
-  var FILM_CSS = [
-    '*{box-sizing:border-box}html,body{margin:0;background:#121214;color:#ece9e2;font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}',
-    '.film{max-width:min(1200px,96vw);margin:0 auto;padding:24px 0 40px;display:grid;gap:14px}',
-    'header{display:flex;align-items:flex-end;gap:16px}header h1{margin:0;font-size:26px;letter-spacing:-.01em}header p{margin:4px 0 0;color:#a8a49d}',
-    '.badge{margin-left:auto;font-size:12px;color:#a8a49d;border:1px solid #34333a;border-radius:12px;padding:2px 10px;white-space:nowrap}',
-    '.ainote{font-size:12px;color:#a8a49d;border:1px solid #34333a;border-radius:12px;padding:2px 10px;white-space:nowrap;cursor:help}',
-    '.screen{position:relative;border-radius:10px;overflow:hidden;box-shadow:0 20px 60px rgb(0 0 0/.45)}.screen .gcp{border-radius:0}',
-    '.big{position:absolute;inset:0;margin:auto;width:84px;height:84px;border-radius:50%;border:0;background:rgb(255 255 255/.92);color:#121214;font-size:30px;cursor:pointer;z-index:9;box-shadow:0 8px 30px rgb(0 0 0/.35)}',
-    '.big[hidden]{display:none}',
-    '.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.bar button{background:#232227;color:#ece9e2;border:1px solid #34333a;border-radius:6px;padding:6px 12px;font:inherit;cursor:pointer}',
-    '.bar button:hover{background:#2c2b31}#prog{margin-left:auto;color:#a8a49d;font-variant-numeric:tabular-nums}',
-    '.bar select{background:#232227;color:#ece9e2;border:1px solid #34333a;border-radius:6px;padding:6px 8px;font:inherit}',
-    '#chapters{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}',
-    '#chapters button{width:100%;text-align:left;background:#1b1b1e;color:inherit;border:1px solid #2a2a2f;border-radius:8px;padding:8px 10px;font:inherit;cursor:pointer;display:grid;gap:2px}',
-    '#chapters button:hover{border-color:#4a4950}#chapters b{font-size:13px}#chapters span{font-size:12px;color:#8a857e}',
-    'footer{color:#6f6b64;font-size:12px;text-align:center;margin-top:8px}',
-    ':fullscreen .screen,.screen:fullscreen{display:grid;place-items:center;background:#000}.screen:fullscreen #stage{width:min(100vw,177.78vh)}'
-  ].join('\n');
-  var FILM_BOOT = [
-    '(function () {',
-    '  var GC = window.GenChibi, $ = function (id) { return document.getElementById(id); };',
-    '  GC.pack({ id: "local.my", name: "Của tôi", owner: "Người tạo", group: "mine", license: "Thuộc người tạo" }, function () {});',   // i18n-ignore(siêu dữ liệu gói trong phim, không hiện ra)
-    '  DATA.parts.forEach(function (p) { GC.registerDataPart("local.my", p); });',
-    '  DATA.items.forEach(function (x) { GC.registerItem("local.my", x); });',
-    '  DATA.scenes.forEach(function (x) { GC.registerScene("local.my", x); });',
-    '  DATA.characters.forEach(function (a) { GC.registerAsset(a.pack, a); });',
-    '  (DATA.soundPacks || []).forEach(function (p) { if (GC.sounds) GC.sounds.registerPack(p); });',   // gói âm TRƯỚC gói động tác (sự kiện gọi tên âm)
-    '  (DATA.motionPacks || []).forEach(function (m) { GC.choreo.registerPack("local.my", m); });',
-    '  var rs = GC.film.readiness(FILM), ready = rs.filter(function (x) { return x.ok; }).map(function (x) { return x.shot; });',
-    // giọng AI nhúng sẵn (DATA.voices: khoá câu → data: URI) chỉ dùng khi chọn "tự động"; chọn máy đọc / blip / tắt thì bỏ qua. Không gọi mạng.
-    '  var VO = DATA.voices || {}, aiN = Object.keys(VO).length, aiT = DATA.voiceTotal || 0;',
-    '  var F = GC.i18n ? GC.i18n.fmt : function (s) { return s; };',
-    '  if (aiN) $("voice").options[0].text = TXT.aiAuto;',
-    // chưa đủ clip: nhãn nhỏ cạnh ô Giọng nói rõ phần còn lại đọc bằng giọng máy / blip (chỉ khi đang ở "tự động" — chọn máy đọc / blip thì clip AI không dùng)
-    '  function aiNote() { var n = $("ainote"), lack = aiT - aiN; n.hidden = !(aiN && lack > 0 && $("voice").value === "auto"); n.textContent = F(TXT.aiNote, { n: aiN, total: aiT }); n.title = F(TXT.aiLack, { n: lack }); }',
-    '  var player = GC.film.player($("stage"), { onProgress: function (t) { $("prog").textContent = t; }, onEnd: function () { $("big").hidden = false; }, dialog: FILM.dialog || "auto", lang: DATA.lang, accent: DATA.accent,',
-    '    voiceClip: function (line) { return $("voice").value === "auto" && aiN ? VO[GC.film.clipKey(line)] || null : null; },',
-    // phim có giọng AI + đang ở "tự động": câu thiếu clip chỉ đọc bằng giọng máy hạng tốt, không thì blip (không để robot lẫn với giọng AI); chọn "máy đọc" thì đọc như cũ
-    '    needGood: function () { return $("voice").value === "auto" && aiN > 0; } });',
-    '  if (DATA.project) player.setProject(DATA.project);',   // dự án của tác phẩm → chọn gói âm (assets xuất ra không mang project)
-    '  $("dialog").value = player.dialog(); $("dialog").onchange = function () { player.setDialog($("dialog").value); };',
-    '  player.show(ready[0] || FILM.shots[0]);',
-    '  function play(from) { $("big").hidden = true; player.play(ready.slice(from || 0), FILM.title); }',
-    '  $("big").onclick = $("play").onclick = function () { play(0); };',
-    '  $("stop").onclick = function () { player.stop(); $("big").hidden = false; };',
-    '  var A = GC.audio; if (A) { $("mute").onclick = function () { A.setMuted(!A.muted); $("mute").textContent = A.muted ? "🔇" : "🔊"; }; $("voice").onchange = function () { A.setVoiceMode($("voice").value); aiNote(); }; aiNote(); } else { $("mute").hidden = $("voice").hidden = true; }',
-    '  $("full").onclick = function () { var s = document.querySelector(".screen"); (s.requestFullscreen || s.webkitRequestFullscreen || function () {}).call(s); };',
-    '  document.addEventListener("keydown", function (e) { if (e.code === "Space" && e.target === document.body) { e.preventDefault(); if ($("big").hidden) $("stop").onclick(); else play(0); } });',
-    '  ready.forEach(function (s, i) {',
-    '    var li = document.createElement("li"), b = document.createElement("button"), t = document.createElement("b"), d = document.createElement("span");',
-    '    t.textContent = (i + 1) + ". " + s.title; d.textContent = s.description || F(TXT.lines, { n: s.event.steps.length });',
-    '    b.appendChild(t); b.appendChild(d); b.onclick = function () { play(i); window.scrollTo({ top: 0, behavior: "smooth" }); };',
-    '    li.appendChild(b); $("chapters").appendChild(li);',
-    '  });',
-    '  if (!ready.length) $("prog").textContent = TXT.none;',
-    '})();'
-  ].join('\n');
 
   /* ---- Bảng bước (v0.16, Q9 — ADR 0006): soạn kịch bản phân cảnh KHÔNG cần AI ----
    * Mỗi hàng là một bước event.steps[i]. Mọi ô chọn sinh từ lược đồ đạo diễn GC.director.schema(dàn diễn viên) — không chép tay danh sách;
@@ -3523,7 +3388,7 @@
       .map(function (f) { return '<script src="' + f + '"></script>'; }).join('\n');
   }
   // JSON đặt trong <script> của mã nhúng: escape < > & và U+2028/2029 — tên do agent đặt chứa "</script>" không thoát ra được
-  function jsonForScript(x) { return JSON.stringify(x).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029'); }
+  function jsonForScript(x) { return FH.jsonForScript(x); }
   function mcpCall(tool, args) { return '// ' + _t('Agent (MCP) hoặc Trợ lý AI trong Studio gọi:') + '\n' + tool + ' ' + JSON.stringify(args, null, 2); }
 
   /* ============================================================ THƯ VIỆN: thành phẩm theo nhóm, lấy về dùng */

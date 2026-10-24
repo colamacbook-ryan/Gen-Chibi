@@ -49,10 +49,15 @@ function examples() {
   try { files = fs.readdirSync(path.join(DIR, 'examples')).filter(f => f.endsWith('.json')).sort(); } catch { return {}; }
   return files.reduce((o, f) => (o[f.replace(/\.json$/, '')] = JSON.parse(read('examples/' + f)), o), {});
 }
-// luật vàng: các dòng đánh số của mục 3 trong GUIDE.md (để start_here trả ngắn gọn, không chép tay lần hai)
+// luật vàng: các mục đánh số của mục 3 trong GUIDE.md — MỘT nguồn luật cho mọi bề mặt (server/rules.js: MCP initialize, start_here, AI chatroom).
+// Một luật = dòng đánh số + các dòng thụt lề nối tiếp (trước v0.23.2 chỉ lấy dòng đầu → luật bị cắt giữa câu)
 function rules() {
-  const s = read('GUIDE.md'), a = s.indexOf('## 3.'), b = s.indexOf('\n## ', a + 4);
-  return s.slice(a, b).split('\n').filter(l => /^\d+\. /.test(l)).map(l => l.replace(/^\d+\.\s*/, '').replace(/\*\*/g, ''));
+  const s = read('GUIDE.md'), a = s.indexOf('## 3.'), b = s.indexOf('\n## ', a + 4), out = [];
+  s.slice(a, b).split('\n').forEach(l => {
+    if (/^\d+\. /.test(l)) out.push(l.replace(/^\d+\.\s*/, ''));
+    else if (out.length && /^\s+\S/.test(l)) out[out.length - 1] += ' ' + l.trim();
+  });
+  return out.map(r => r.replace(/\*\*/g, ''));
 }
 
 // ---- xuất schema tool cho framework function-calling (agent không có MCP client)
