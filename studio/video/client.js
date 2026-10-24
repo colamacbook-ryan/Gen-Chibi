@@ -101,7 +101,7 @@
     return new Promise(function (resolve, reject) {
       var d = dims(opts), f = document.createElement('iframe'), win = null, settled = false;
       f.src = PAGE; f.title = 'gen-chibi video export'; f.tabIndex = -1; f.setAttribute('aria-hidden', 'true'); f.setAttribute('data-gc-video', opts.pass);
-      var sh = Math.round(d.w * 9 / 16);   // sân khấu luôn 16:9 theo chiều ngang của khung ra (9:16 = phim ngang đặt giữa khung dọc, Q37 a)
+      var sh = opts.aspect === '9:16' ? d.h : Math.round(d.w * 9 / 16);   // sân khấu = khung ra (9:16 = khung dọc thật, máy quay bám người nói — Q37 b)
       f.style.cssText = 'position:fixed;left:-30000px;top:0;width:' + d.w + 'px;height:' + Math.max(sh, 1) + 'px;border:0;pointer-events:none;background:#121214';
       // trang xuất không lên tiếng trong 20 s (bị chặn nhúng, tệp thiếu, lỗi nạp) → báo lỗi thay vì chờ mãi
       var loadT = setTimeout(function () { done(reject, err('load')); }, 20000);

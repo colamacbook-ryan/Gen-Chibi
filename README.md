@@ -169,7 +169,7 @@ Every example is run for real through the gates in CI: the "agent from zero" tes
 No MCP client: `POST /mcp` JSON-RPC with curl, `GET /mcp?guide=<topic>`, `GET /mcp?tools=openai|gemini`.
 Errors carry stable codes: `[VALIDATION_FAILED]`, `NOT_FOUND`… plus `structuredContent.error.details[].path`.
 
-53 tools, by group:
+58 tools, by group:
 - **Start:** `start_here`, `get_guide`
 - **Characters:** `get_catalog` · `list/get/validate/save/render_character`
 - **Parts:** `get_part_spec` · `preview_part` · `save_part`
@@ -177,7 +177,7 @@ Errors carry stable codes: `[VALIDATION_FAILED]`, `NOT_FOUND`… plus `structure
 - **Scenes:** `list/validate/save/render_scene`
 - **Motion packs:** `list_actions` · `list_motion_packs` · `get_motion_pack` · `get_motion_spec` · `validate/save_motion_pack` · `render_action` (sprite sheet / frames / timeline)
 - **Sound library:** `list_sounds` · `get_sound_spec` · `get_sound_pack` · `validate_sound_pack` · `save_sound_pack` · `delete_sound_pack` (owner only) · `lint_sound_track` (the 7 mixing rules S1–S7)
-- **Film:** `get_director_schema` · `validate_event` · `save_event` · `list_events` · `list/get/save_work` · `save_shot` · `preview_shot` · `render_voice` (reads dialogue with a Google AI voice by role + language + accent — works as soon as the owner pastes a key) · `design_voice` (designs a voice for one role: old man, old woman, warrior general…)
+- **Film:** `get_director_schema` · `validate_event` · `save_event` · `list/get_event` · `list/get/save_work` · `list_work_versions` · `restore_work_version` (non-destructive) · `get_storyboard` · `export_film_html` (the same files as Studio › Publish) · `save_shot` · `preview_shot` · `render_voice` (reads dialogue with a Google AI voice by role + language + accent — works as soon as the owner pastes a key) · `design_voice` (designs a voice for one role: old man, old woman, warrior general…)
 - **Projects & samples:** `list/save_project` · `export/import_project` · `list_samples` · `install_sample`
 - **System:** `get_app_version` · `update_app` · `rollback_app`
 

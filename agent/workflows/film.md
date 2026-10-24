@@ -37,7 +37,26 @@
 ## Existing works and loose scripts
 - `list_works` / `get_work` with `{ "id" }` — read a work (all shots, events) before editing it; edit a shot with `save_shot` + `shot.id`.
 - `save_event` with `{ "event", "author" }` stores a loose script (no work) for the owner to turn into a shot in the Studio;
-  `list_events` lists them. Prefer `save_shot` when you know the work.
+  `list_events` lists them, `get_event` with `{ "id" }` returns one in full. Prefer `save_shot` when you know the work.
+
+## Versions of a work (history, restore)
+- Every `save_work` / `save_shot` keeps the previous state as a version. `list_work_versions` with `{ "work" }` lists them, newest first
+  (`version`, `savedAt`, `title`, `shots`, `shotTitles`, `current`).
+- `restore_work_version` with `{ "work", "version" }` brings an older version back — **only when the owner asks**. It never loses anything:
+  the current state is kept as a version first and the restored content becomes a NEW version (restore again to undo).
+  It restores the content (title, logline, script, shots, project, dialogue language / accent, chosen voices); the owner's review stays,
+  and an Approved shot whose content changes goes back to Draft. The old shots pass today's gates like `save_shot` (characters, scene, actions
+  must still exist; script and sound rules for the restored project) — otherwise `[VALIDATION_FAILED]` at `shots[i].<field>` and nothing changes.
+  Read-only connections (`mcp:read`) get `[FORBIDDEN]`.
+
+## Hand the film over (storyboard, HTML film)
+- `get_storyboard` with `{ "work" }` → the same SVG as Studio › Create › Publish › Storyboard (a still of each shot + description + first lines),
+  as an `image/svg+xml` resource — save it as `<work>-storyboard.svg`.
+- `export_film_html` with `{ "work" }` → the same single `.html` file as Studio › Create › Publish › Film (HTML): player + engine + the assets the
+  work uses, plays offline in any browser. It embeds only the AI voice clips the owner already dubbed (nothing is spent); `voices: false` leaves them out.
+  Save the `text/html` resource under the returned `file` name. Clips that would push the file over the size limit are left out (`voicesDropped`);
+  read-only connections always get the film without AI clips. Optional: `lang` (`en` | `vi`, the player's buttons), `dialog` (`auto` | `bubble` | `caption`).
+  Only ready shots play — check `preview_shot` first.
 
 ## Owner's review notes (read them before fixing a film)
 - `get_work` returns `review`: `{ "shots": { "<shot id>": { "status": "draft" | "fix" | "ok", "notes": [{ "id", "text", "step"?, "at", "by" }] } }, "note" }` (`by`: `owner` | `ai` | `agent` | `system` — set by the server).
@@ -51,7 +70,7 @@
 ## Staging tips
 - Fighters stand in the front row (`left`, `midLeft`, `center`, `midRight`, `right`), at least one spot apart.
 - Change `spot` between steps so people move; mix dialogue with short actions (≤ 3 attacks per shot).
-- The owner plays and exports the film (HTML) in Studio › Create (Tạo tác).
+- The owner plays and exports the film (HTML) in Studio › Create (Tạo tác) — or you hand it over with `export_film_html` (above).
 - Video files (MP4 / WebM for YouTube / TikTok) are exported **only by the owner, in their own browser** (Studio › Create › a work › Publish › Export video).
   There is no MCP tool for video in this version — do not promise a video file; tell the owner to press *Export video* (Chrome / Edge on a computer).
 

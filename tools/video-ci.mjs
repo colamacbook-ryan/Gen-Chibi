@@ -1,7 +1,7 @@
 // Job CI xuất video (CNS-215 / CNS-216): Chrome CÓ SẴN của runner (windows-latest / macos-latest) xuất 1 phân cảnh Fun Office bằng WebCodecs THẬT,
 // lưu tệp, kiểm cấu trúc bằng tools/media-inspect.js (+ ffprobe nếu có). Không npm, không Playwright: CDP qua WebSocket có sẵn của Node 22 (tools/cdp.mjs).
 //   node tools/video-ci.mjs [--require-mp4] [--hidden] [--quality 720p|1080p] [--frame 16x9|9x16] [--out <thư mục>]
-//     --quality / --frame  chất lượng + khung hình (9x16 = phim ngang đặt giữa khung dọc, Q37 a) — kiểm cỡ khung của TỆP ra (CNS-239)
+//     --quality / --frame  chất lượng + khung hình (9x16 = khung dọc thật, máy quay bám người nói — Q37 b) — kiểm cỡ khung của TỆP ra (CNS-239)
 //     --require-mp4  TRƯỢT nếu trình duyệt không ra được MP4 avc1 + mp4a (job Windows / macOS — nhánh ưu tiên 1 phải chạy thật)
 //     --require-ffmpeg  TRƯỢT nếu máy không có ffmpeg / ffprobe (job CI cài sẵn) — phép đo lệch tiếng / hình THẬT cần giải mã
 //     --hidden       trong lúc xuất mở một tab khác lên trước → trang xuất ở tab NỀN (bị bóp timer) vẫn phải xong (CNS-221)
@@ -30,22 +30,17 @@ fs.mkdirSync(OUT, { recursive: true });
 const fails = [];
 const check = (cond, msg) => { if (!cond) { fails.push(msg); console.log('   ✗ ' + msg); } return cond; };
 
-/* ---------------------------------------------------------------- payload: Fun Office như filmPayload của Studio (ui en, chữ trình phát nhúng kèm) */
+/* ---------------------------------------------------------------- payload: Fun Office qua CÙNG đường với Studio + MCP (CNS-246)
+ * Nhập gói mẫu vào một kho tạm qua cổng của MCP rồi lấy MCP.filmPayload → FH.payload (studio/film-html.js — chính hàm filmPayload của Studio và
+ * export_film_html gọi). Chữ trình phát en, mã engine theo engine/scripts.json, không clip giọng AI. */
 function payload() {
-  const B = JSON.parse(fs.readFileSync(path.join(ROOT, 'studio/mau/fun-office.json'), 'utf8')), W = B.works[0];
-  const idx = fs.readFileSync(path.join(ROOT, 'studio/index.html'), 'utf8');
-  const srcs = [...idx.matchAll(/<script src="([^"]+)"/g)].map(m => m[1]).filter(s => /^(engine|kinds)\//.test(s));   // như filmSrcs() của Studio
-  const pick = (o, ks) => Object.fromEntries(ks.filter(k => o[k] !== undefined).map(k => [k, o[k]]));
-  const dict = {};
-  for (const f of ['engine', 'engine-data', 'player']) { const p = path.join(ROOT, 'locales/en', f + '.json'); if (fs.existsSync(p)) for (const [k, v] of Object.entries(JSON.parse(fs.readFileSync(p, 'utf8')))) if (k.slice(0, 2) !== '//') dict[k] = v; }
-  return {
-    srcs, ui: 'en', dict, have: 0, total: 0,
-    data: { parts: B.parts || [], motionPacks: [], soundPacks: [], project: B.project.id,
-      characters: B.characters.map(a => Object.assign(pick(a, ['id', 'name', 'version', 'look', 'expressions', 'kind', 'voice', 'role']), { pack: 'local.my' })),
-      items: (B.items || []).map(x => pick(x, ['id', 'name', 'type', 'rarity', 'equip'])), scenes: (B.scenes || []).map(x => pick(x, ['id', 'name', 'layers', 'deco', 'palette', 'time', 'weather', 'spots'])),
-      lang: W.lang || 'en', accent: 'us', voices: {}, voiceTotal: 0 },
-    film: { title: W.title, logline: W.logline || '', dialog: 'auto', shots: W.shots.map(s => ({ id: s.id, title: s.title, description: s.description || '', scene: s.scene, cast: s.cast, event: s.event })) }
-  };
+  const { MCP } = require(path.join(ROOT, 'server/mcp.js')), { Store } = require(path.join(ROOT, 'server/store.js')), { loadEngine } = require(path.join(ROOT, 'server/engine-node.js'));
+  const m = new MCP({ engine: loadEngine(ROOT), store: new Store(fs.mkdtempSync(path.join(os.tmpdir(), 'gc-video-ci-store-'))), version: 'ci', system: {} });
+  const B = JSON.parse(fs.readFileSync(path.join(ROOT, 'studio/mau/fun-office.json'), 'utf8')), imp = m.importProject(B, {});
+  if (imp.errors && imp.errors.length) throw new Error('nhập Fun Office: ' + JSON.stringify(imp.errors).slice(0, 300));
+  const P = m.filmPayload(B.works[0].id, { lang: 'en', dialog: 'auto' });
+  delete P.w;
+  return P;
 }
 
 // mẫu dấu tiếng (nhiễu trắng tất định 2048 mẫu, im lặng 0,2 s hai bên) dập vào PCM phim ở trang xuất: đầu phim + gần cuối → đo lệch tiếng / hình trên tệp THẬT

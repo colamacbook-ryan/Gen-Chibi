@@ -13,6 +13,8 @@
  *              (data: URL — blob: / createImageBitmap làm bẩn canvas) → canvas → VideoEncoder; tiếng → AudioEncoder; ghép bằng GenMux
  * Ngân sách (L-42, CNS-221): mỗi khung nhả luồng chính bằng MessageChannel (không setTimeout — tab ẩn bị bóp); hàng đợi bộ mã hoá ≤ 4 khung;
  * WebM ghi luồng (≤ 1 cluster trong bộ nhớ, phần đã xong gom thành Blob); MP4 giữ cả tệp (trần độ dài do client đặt theo chất lượng).
+ * v0.23.2: 9:16 = khung dọc thật (bộ phát opts.aspect '9:16', máy quay bám người nói — Q37 b) · CHỤP THEO LỚP (B5, CNS-248): phông sau đệm theo khung máy quay,
+ * mảnh sân khấu (mỗi diễn viên / tiền cảnh một tài liệu SVG nhỏ, không phông chữ, dùng lại khi không đổi), lớp lời thoại raster lại chỉ khi đổi.
  */
 (function () {
   'use strict';
@@ -74,21 +76,25 @@
    * Ngân sách luồng chính (spec §3: long task ≤ 100 ms — CNS-221): CSS của trang (gồm phông Be Vietnam Pro nhúng, ~67 KB) chỉ thoát XML + mã hoá URL
    * MỘT lần cho cả lượt (đầu / đuôi data: URL đóng sẵn); mỗi khung chỉ mã hoá phần DOM. Không cloneNode cả sân khấu mỗi khung (hàng nghìn nút DOM rác
    * mỗi khung → GC lớn của Oilpan dừng luồng ~80 ms): giá trị đang chuyển động chép TẠM vào style của chính phần tử sống, tuần tự hoá, rồi trả style cũ. */
-  var CSS = null, PRE = null;
-  function allCSS() {
-    if (CSS === null) CSS = Array.prototype.map.call(document.querySelectorAll('style'), function (s) { return s.textContent; }).join('\n') + '\n*{animation:none!important;transition:none!important}';
-    return CSS;
+  var CSS = {}, PRE = {}, LAYERED = false;
+  // font = false: bỏ phông lời thoại nhúng (style#gc-fonts, ~60 KB base64) — lớp sân khấu khi chụp theo lớp không có chữ (lời thoại / thẻ tên nằm ở lớp trên)
+  function allCSS(font) {
+    var k = font === false ? 'n' : 'f';
+    if (CSS[k] == null) CSS[k] = Array.prototype.filter.call(document.querySelectorAll('style'), function (s) { return k === 'f' || s.id !== 'gc-fonts'; }).map(function (s) { return s.textContent; }).join('\n') +
+      '\n*{animation:none!important;transition:none!important}' + (LAYERED ? '\n.gcp-cam>img.bg{visibility:hidden!important}' : '');   // chụp theo lớp: phông sau vẽ thẳng lên canvas (bgLayer)
+    return CSS[k];
   }
   function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
   function escAttr(s) { return esc(s).replace(/"/g, '&quot;'); }
   // đầu + đuôi của data: URL cho khung W×H — mã hoá sẵn một lần (urlText theo từng ký tự: nối phần đã mã hoá với nhau vẫn đúng)
-  function frameShell(W, H) {
-    if (!PRE || PRE.w !== W || PRE.h !== H) {
+  function frameShell(W, H, font) {
+    var k = font === false ? 'n' : 'f', P = PRE[k];
+    if (!P || P.w !== W || P.h !== H) {
       var head = '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '"><foreignObject x="0" y="0" width="' + W + '" height="' + H + '">' +
-        '<div xmlns="http://www.w3.org/1999/xhtml"><style>' + esc(allCSS()) + '</style>';
-      PRE = { w: W, h: H, head: 'data:image/svg+xml;charset=utf-8,' + urlText(head), tail: urlText('</div></div></foreignObject></svg>'), bytes: head.length + 40 };
+        '<div xmlns="http://www.w3.org/1999/xhtml"><style>' + esc(allCSS(font)) + '</style>';
+      P = PRE[k] = { w: W, h: H, head: 'data:image/svg+xml;charset=utf-8,' + urlText(head), tail: urlText('</div></div></foreignObject></svg>'), bytes: head.length + 40 };
     }
-    return PRE;
+    return P;
   }
   // mã hoá TỐI THIỂU cho data: URL (thay encodeURIComponent cả chuỗi), MỘT lượt: % # \t \n \r (bộ phân tích URL bỏ ký tự trắng điều khiển, # mở fragment) và
   // ký tự ngoài ASCII → %XX UTF-8 (như encodeURIComponent). Chuỗi mỗi khung luôn là chuỗi 1 byte/ký tự (chữ Việt trong bong bóng không biến cả chuỗi
@@ -99,7 +105,10 @@
   function urlText(s) { return s.replace(URL_RE, urlChar); }
   var XS = null;
   // → phần DOM của khung (chuỗi XHTML): sân khấu sống + giá trị đang chuyển động (transition / animation) chép thành style tĩnh
-  function snapshot(box, W, H) {
+  // skip (chụp theo lớp): <img class="bg"> phông sau — không nằm trong tài liệu khung (vẽ riêng ở canvas đệm, MỘT lần mỗi lần máy quay đổi khung — bgLayer)
+  // split: → { slices: [{ el, z, s }] lớp sân khấu từng mảnh (xem dưới), top: lớp trên (lời thoại, chớp sáng, lớp phủ, thẻ tiêu đề) };
+  // lớp trên có mix-blend-mode (lớp màu của màn đấu — trộn với sân khấu bên dưới) thì không tách được → { all }. Không split → { all }
+  function snapshot(box, W, H, skip, split) {
     var props = new Map();
     document.getAnimations().forEach(function (a) {
       var e = a.effect, t = e && e.target; if (!t || e.pseudoElement || !box.contains(t)) return;
@@ -114,22 +123,95 @@
       ks.forEach(function (p) { var css = p.replace(/[A-Z]/g, function (c) { return '-' + c.toLowerCase(); }); v.push([css, cs.getPropertyValue(css)]); });
       vals.push([el, v]);
     });
+    // z-index của từng con của máy quay (thứ tự vẽ các mảnh) — đọc TRƯỚC khi ghi style tạm: tính style giữa lúc ghi / trả style sẽ khởi động chuyển tiếp CSS
+    // giả (left / top của diễn viên) → timeline lượt dựng lệch lượt dò
+    var camEl = split ? box.querySelector('.gcp-shk > .gcp-cam') : null, zs = camEl ? Array.prototype.map.call(camEl.children, function (c) { return parseInt(getComputedStyle(c).zIndex, 10) || 0; }) : null;
     vals.forEach(function (x) { var el = x[0]; saved.push([el, el.getAttribute('style')]); x[1].forEach(function (pv) { el.style.setProperty(pv[0], pv[1]); }); });
-    var body;
+    var out;
     try {
       XS = XS || new XMLSerializer();
-      var inner = '', kids = box.childNodes;
-      for (var i = 0; i < kids.length; i++) inner += XS.serializeToString(kids[i]);
       // gốc sân khấu: như bản sao cũ — bỏ id, giữ class + style, đặt cỡ khung
-      var cls = box.getAttribute('class'), sty = (box.getAttribute('style') || '') + ';position:relative;left:0;top:0;width:' + W + 'px;height:' + H + 'px;overflow:hidden;border-radius:0';
-      body = '<div' + (cls ? ' class="' + escAttr(cls) + '"' : '') + ' style="' + escAttr(sty) + '">' + inner;
+      var cls = box.getAttribute('class'), sty = (box.getAttribute('style') || '') + ';position:relative;left:0;top:0;width:' + W + 'px;height:' + H + 'px;overflow:hidden;border-radius:0' + (LAYERED ? ';background:transparent' : '');
+      var root = '<div' + (cls ? ' class="' + escAttr(cls) + '"' : '') + ' style="' + escAttr(sty) + '">', kids = box.childNodes, shk = null, topS = '', i;
+      if (split) {
+        for (i = 0; i < kids.length; i++) { if (kids[i].classList && kids[i].classList.contains('gcp-shk')) shk = kids[i]; else topS += XS.serializeToString(kids[i]); }
+        if (topS.indexOf('mix-blend-mode') >= 0) split = false;   // lớp trên trộn màu với sân khấu: không tách được
+      }
+      if (split) {
+        // lớp sân khấu: MỖI con của .gcp-cam (diễn viên, tiền cảnh, hiệu ứng) một tài liệu riêng, giữ nguyên chuỗi tổ tiên (gốc → rung → máy quay) nên đúng chỗ;
+        // vẽ theo z-index rồi thứ tự DOM — đúng thứ tự vẽ trong ngữ cảnh xếp chồng của máy quay. Phông sau (skip) đã vẽ ở canvas đệm
+        var cam = shk && shk.querySelector('.gcp-cam'), slices = [];
+        if (cam) {
+          var open = XS.serializeToString(shk.cloneNode(false)).replace(/<\/div>$/, '') + XS.serializeToString(cam.cloneNode(false)).replace(/<\/div>$/, ''), cs = cam.children;
+          for (i = 0; i < cs.length; i++) {
+            if (cs[i] === skip) continue;
+            slices.push({ el: cs[i], z: cam === camEl && zs ? zs[i] : 0, k: i, s: root + open + XS.serializeToString(cs[i]) + '</div></div>' });
+          }
+          slices.sort(function (a, b) { return a.z - b.z || a.k - b.k; });
+        }
+        out = { slices: slices, top: root + topS };
+      } else {
+        var inner = '';
+        for (i = 0; i < kids.length; i++) inner += XS.serializeToString(kids[i]);
+        var src = skip && skip.getAttribute('src'), at = src ? inner.indexOf(' src="' + src + '"') : -1;
+        if (at >= 0) inner = inner.slice(0, at) + inner.slice(at + src.length + 7);
+        out = { all: root + inner };
+      }
     } finally {
       for (var j = saved.length - 1; j >= 0; j--) { if (saved[j][1] == null) saved[j][0].removeAttribute('style'); else saved[j][0].setAttribute('style', saved[j][1]); }
     }
-    return body;
+    return out;
   }
-  function svgImage(body, W, H) {
-    var sh = frameShell(W, H), img = new Image();   // data: URL + HTMLImageElement: canvas vẫn sạch (spike taint.mjs)
+  /* ---- CHỤP THEO LỚP (v0.23.2, B5 — CNS-248): phông sau của bối cảnh (ảnh SVG tĩnh, phần nặng nhất khi raster) KHÔNG nằm trong tài liệu SVG của từng khung.
+   * Vẽ nó lên một canvas đệm ĐÚNG chỗ trên màn hình (hộp bao của <img class="bg"> sau máy quay + rung — chỉ có dịch + phóng, không xoay) MỘT lần; khung sau
+   * máy quay đứng yên chỉ chép canvas đệm (~1 ms). Máy quay đổi khung / bối cảnh mới → vẽ lại, theo dải (mỗi dải một tác vụ — ngân sách long task).
+   * Lớp trên (diễn viên, tiền cảnh, hiệu ứng, lời thoại) vẫn là foreignObject như cũ, nền trong suốt — cùng thứ tự vẽ như bộ phát sống. */
+  var BG = null;
+  function bgRect(box) {
+    var bg = box.querySelector('.gcp-cam>img.bg');
+    if (!bg || !bg.complete || !bg.naturalWidth) return null;
+    var r = bg.getBoundingClientRect(), b = box.getBoundingClientRect();
+    return { el: bg, src: bg.getAttribute('src'), x: r.left - b.left, y: r.top - b.top, w: r.width, h: r.height };
+  }
+  // → Promise<canvas đệm> (đủ cỡ khung, đã tô màu nền sân khấu + phông sau); bands = số dải khi phải vẽ lại; st = thống kê
+  async function bgLayer(R0, W, H, bands, st) {
+    var key = R0 ? [R0.x, R0.y, R0.w, R0.h].map(function (v) { return v.toFixed(3); }).join(',') : 'none';
+    if (BG && BG.el === (R0 && R0.el) && BG.key === key) { st.bgHit++; return BG.cv; }
+    var cv = BG ? BG.cv : new OffscreenCanvas(W, H), g = cv.getContext('2d', { alpha: false });
+    BG = { el: R0 && R0.el, key: key, cv: cv };
+    g.fillStyle = '#f4f1ea'; g.fillRect(0, 0, W, H);   // nền .gcp của bộ phát (lộ ra khi sân khấu rung)
+    st.bgDraw++;
+    if (!R0) return cv;
+    for (var bi = 0, bh = Math.ceil(H / bands); bi < bands; bi++) {
+      var y0 = bi * bh, hh = Math.min(bh, H - y0), d0 = R.now();
+      g.save(); g.beginPath(); g.rect(0, y0, W, hh); g.clip();
+      g.drawImage(R0.el, R0.x, R0.y, R0.w, R0.h); g.restore(); g.getImageData(0, y0, 1, 1);   // ép raster dải này ngay ở tác vụ này
+      st.maxBg = Math.max(st.maxBg, R.now() - d0);
+      await VC.yieldReal();
+    }
+    return cv;
+  }
+  // lớp trên (lời thoại, chớp sáng, lớp phủ, thẻ tiêu đề): đổi ít (từ đang đọc, bong bóng mở / đóng) → chuỗi giống khung trước thì dùng lại raster cũ (0 tài liệu SVG
+  // mới). Đổi thì dựng lại vào canvas đệm trong suốt, theo dải
+  var TOP = null, SLICES = new WeakMap();   // SLICES: phần tử của máy quay → { s: chuỗi khung trước, img: ảnh đã dựng }
+  async function topLayer(body, W, H, bands, st) {
+    if (TOP && TOP.body === body) { st.topHit++; return TOP.cv; }
+    var cv = TOP ? TOP.cv : new OffscreenCanvas(W, H), g = cv.getContext('2d');
+    TOP = { body: body, cv: cv };
+    st.topDraw++;
+    var img = await svgImage(body, W, H, true);
+    await VC.yieldReal();
+    g.clearRect(0, 0, W, H);
+    for (var bi = 0, bh = Math.ceil(H / bands); bi < bands; bi++) {
+      var y0 = bi * bh, hh = Math.min(bh, H - y0), d0 = R.now();
+      g.drawImage(img, 0, y0, W, hh, 0, y0, W, hh); g.getImageData(0, y0, 1, 1);
+      st.maxTop = Math.max(st.maxTop, R.now() - d0);
+      await VC.yieldReal();
+    }
+    return cv;
+  }
+  function svgImage(body, W, H, font) {
+    var sh = frameShell(W, H, font), img = new Image();   // data: URL + HTMLImageElement: canvas vẫn sạch (spike taint.mjs)
     img.src = sh.head + urlText(body) + sh.tail;
     return img.decode().then(function () { return img; });
   }
@@ -262,9 +344,11 @@
     mark('start');
     var fps = o.fps || 30, dry = o.pass === 'dry', vertical = o.aspect === '9:16', hd = o.quality !== '720p';
     var OW = vertical ? (hd ? 1080 : 720) : (hd ? 1920 : 1280), OH = vertical ? (hd ? 1920 : 1280) : (hd ? 1080 : 720);
-    var SW = OW, SH = Math.round(SW * 9 / 16), SY = vertical ? Math.round((OH - SH) / 2) : 0;   // sân khấu 16:9 theo chiều ngang; 9:16 = đặt giữa khung dọc (Q37 a)
+    // sân khấu = cả khung ra. 9:16 = KHUNG DỌC thật (v0.23.2, Q37 b): bộ phát dựng sân khấu dọc, máy quay cắt cửa sổ dọc bám người nói (engine/player.js cameraV)
+    var SW = OW, SH = vertical ? OH : Math.round(SW * 9 / 16), SY = 0;
     // raster SVG theo dải ngang, mỗi dải một tác vụ (TQ 1080p một lần vẽ cả khung: tới ~110 ms luồng chính; 4 dải: ~20–35 ms mỗi dải — spec §3)
     var BANDS = SW * SH > 1280 * 720 ? 4 : SW * SH > 1080 * 608 ? 3 : 2;
+    LAYERED = o.layers !== false;   // chụp theo lớp (B5); o.layers = false chỉ để đo đối chứng (một tài liệu SVG cho cả khung như v0.22)
     var srcs = P.srcs || [];
     if (!srcs.length || !srcs.every(function (s) { return SRC_RE.test(s) && s.indexOf('..') < 0; }) || srcs.indexOf('engine/player.js') < 0) throw fail('payload', 'payload.srcs không hợp lệ');
     if (!P.data || !P.film || !Array.isArray(P.film.shots)) throw fail('payload', 'payload thiếu data / film');
@@ -291,7 +375,7 @@
     if (A && o.debug) { var say0 = A.say; A.say = function (text, voice, hooks) { says.push({ t: VC.t, text: String(text), clip: !!(hooks && hooks.clip) }); return say0.apply(this, arguments); }; }
     // bộ phát: y như phim HTML (FILM_BOOT) — giọng AI nhúng sẵn theo khoá câu, không gọi mạng
     var VO = D.voices || {}, ended = false, endAt = 0;
-    var player = live.player = GC.film.player(box, { dialog: FILM.dialog || 'auto', lang: D.lang, accent: D.accent,
+    var player = live.player = GC.film.player(box, { dialog: FILM.dialog || 'auto', lang: D.lang, accent: D.accent, aspect: vertical ? '9:16' : undefined,
       voiceClip: function (line) { return VO[GC.film.clipKey(line)] || null; }, onEnd: function () { ended = true; endAt = VC.t; } });
     if (D.project) player.setProject(D.project);
     var ready = GC.film.readiness(FILM).filter(function (x) { return x.ok; }).map(function (x) { return x.shot; });
@@ -353,9 +437,9 @@
       });
     }
     // vòng khung hình
-    var st = { frames: 0, warmFrames: 0, advance: 0, snap: 0, decode: 0, maxDraw: 0, maxSnap: 0, maxTiny: 0, tiny: 0, raster: 0, encode: 0, svgBytes: 0, maxFrameMs: 0, heapPeak: 0 };
+    var st = { bgHit: 0, bgDraw: 0, maxBg: 0, topHit: 0, topDraw: 0, maxTop: 0, sliceHit: 0, sliceDraw: 0, frames: 0, warmFrames: 0, advance: 0, snap: 0, decode: 0, maxDraw: 0, maxSnap: 0, maxTiny: 0, tiny: 0, raster: 0, encode: 0, svgBytes: 0, maxFrameMs: 0, heapPeak: 0 };
     var cues = [], open = new Map(), firstDialogFrame = -1, dialogRun = 0, cover = null, coverAt = -1, texts = new Set(), shotMarks = [], lastPlan = null;
-    var frames = o.frames || 0, mem = performance.memory;
+    var frames = o.frames || 0, mem = performance.memory, vfacts = { frames: 0, out: 0, lost: 0, spk: 0, spkCut: 0, faces: 0, faceCut: 0, allFaces: 0, allCut: 0, ex: [] };
     for (var i = 0; ; i++) {
       if (cancelled) throw fail('cancelled', 'cancelled');
       if (errBox.e) throw fail('encode', String(errBox.e && errBox.e.message || errBox.e));
@@ -377,32 +461,80 @@
       if (vis.length && firstDialogFrame < 0) firstDialogFrame = i;
       dialogRun = vis.length ? dialogRun + 1 : 0;
       if (o.debug) texts.add(box.textContent.replace(/\s+/g, ' ').trim());
+      // khung dọc (chỉ test — o.debug): bong bóng / phụ đề đang hiện phải nằm TRỌN trong khung; người đang nói phải ở trong khung (Q37 b)
+      // mọi khung (cả lúc chuyển máy, đi lại, màn đấu): bao nhiêu lần một khuôn mặt bị mép khung cắt — chỉ đo, không chặn
+      if (o.debug && vertical) {
+        var bxa = box.getBoundingClientRect(), bga = box.querySelector('.gcp-cam>img.bg'), cra = bga ? bga.getBoundingClientRect() : bxa, aa = box.querySelectorAll('.gcp-actor');
+        for (var q3 = 0; q3 < aa.length; q3++) {
+          var r3 = aa[q3].getBoundingClientRect(), g0 = Math.max(cra.left, r3.left + r3.width * 59 / 248), g1 = Math.min(cra.right, r3.left + r3.width * 186 / 248);
+          if (g1 <= g0) continue;
+          vfacts.allFaces++; if (!(g0 >= bxa.left - 1 && g1 <= bxa.right + 1) && !(g1 <= bxa.left + 1 || g0 >= bxa.right - 1)) vfacts.allCut++;
+        }
+      }
+      if (o.debug && vertical && vis.length) {
+        var bxr = box.getBoundingClientRect(), bubs = box.querySelectorAll('.gcp-bub.on, .gcp-cap.on'), spk = box.querySelector('.gcp-actor.speaking');
+        vfacts.frames++;
+        for (var q = 0; q < bubs.length; q++) { var br = bubs[q].getBoundingClientRect(); if (br.left < bxr.left - 2 || br.right > bxr.right + 2 || br.top < bxr.top - 2 || br.bottom > bxr.bottom + 2) { vfacts.out++; if (vfacts.ex.length < 5) vfacts.ex.push([i, Math.round(br.left - bxr.left), Math.round(br.top - bxr.top), Math.round(br.width), Math.round(br.height)]); } }
+        if (spk) { var sr = spk.getBoundingClientRect(), scx = (sr.left + sr.right) / 2; if (scx < bxr.left || scx > bxr.right) { vfacts.lost++; if (vfacts.ex.length < 5) vfacts.ex.push([i, 'speaker', Math.round(scx - bxr.left)]); } }
+        // mặt (khung xương đầu 35–162 trên hộp diễn viên x −24, rộng 248, phần nằm trong cảnh): trọn trong / trọn ngoài / bị mép khung cắt — mặt người nói không bao giờ bị cắt
+        var bgEl = box.querySelector('.gcp-cam>img.bg'), cr = bgEl ? bgEl.getBoundingClientRect() : bxr, acts = box.querySelectorAll('.gcp-actor');
+        for (var q2 = 0; q2 < acts.length; q2++) {
+          var ar = acts[q2].getBoundingClientRect(), f0 = Math.max(cr.left, ar.left + ar.width * 59 / 248), f1 = Math.min(cr.right, ar.left + ar.width * 186 / 248);
+          if (f1 <= f0) continue;
+          var inF = f0 >= bxr.left - 1 && f1 <= bxr.right + 1, outF = f1 <= bxr.left + 1 || f0 >= bxr.right - 1;
+          if (acts[q2] === spk) { vfacts.spk++; if (!inF) { vfacts.spkCut++; if (vfacts.ex.length < 5) vfacts.ex.push([i, 'speaker-face', Math.round(f0 - bxr.left), Math.round(f1 - bxr.left), (box.querySelector('.gcp-cam') || {}).style.transform, Array.prototype.map.call(acts, function (x) { return [x === spk ? 'S' : '', x.style.left, x.style.top, x.style.width]; })]); } }
+          else { vfacts.faces++; if (!inF && !outF) vfacts.faceCut++; }   // mọi lần một người khác có mặt trên sân khấu: bao nhiêu lần bị mép cắt
+        }
+      }
       if (!dry) {
         await VC.yieldReal();   // bộ phát (advance) và chụp ở hai tác vụ khác nhau
         var f1b = R.now();
-        var body = snapshot(box, SW, SH); st.svgBytes += body.length + frameShell(SW, SH).bytes;
+        var bgR = LAYERED ? bgRect(box) : null;
+        // chụp theo lớp (B5): phông sau (canvas đệm, vẽ lại khi máy quay đổi khung) · lớp sân khấu (tài liệu SVG mỗi khung, KHÔNG nhúng phông chữ) · lớp trên
+        // (lời thoại…, raster lại chỉ khi đổi). Lớp trên trộn màu với sân khấu (mix-blend-mode) → một tài liệu cho cả khung như cũ (nền vẫn từ canvas đệm)
+        var snap = snapshot(box, SW, SH, bgR && bgR.el, LAYERED), split = !!snap.slices, body = split ? null : snap.all, parts = [], pimg = [];
+        st.svgBytes += split ? snap.top.length + snap.slices.reduce(function (n, x) { return n + x.s.length + frameShell(SW, SH, false).bytes; }, 0) : body.length + frameShell(SW, SH).bytes;
         var f2 = R.now(); st.snap += f2 - f1b;
-        await VC.yieldReal();
-        var img = await svgImage(body, SW, SH); body = null;
-        // vẽ thử 1 px: trình duyệt tính style + bố cục của tài liệu SVG ở lần vẽ ĐẦU — tách khỏi dải raster đầu (ngân sách long task)
         if (!tiny) tiny = new OffscreenCanvas(1, 1).getContext('2d');
-        await VC.yieldReal(); var ty = R.now(); tiny.drawImage(img, 0, 0, 1, 1, 0, 0, 1, 1); tiny.getImageData(0, 0, 1, 1); st.maxTiny = Math.max(st.maxTiny, R.now() - ty); st.tiny += R.now() - ty;
+        // vẽ thử 1 px: trình duyệt tính style + bố cục của tài liệu SVG ở lần vẽ ĐẦU — tách khỏi dải raster (ngân sách long task)
+        var decodeOne = async function (str, font) {
+          var im = await svgImage(str, SW, SH, font);   // giải mã = tác vụ riêng của trình duyệt (dựng tài liệu SVG)
+          await VC.yieldReal(); var ty = R.now(); tiny.drawImage(im, 0, 0, 1, 1, 0, 0, 1, 1); tiny.getImageData(0, 0, 1, 1); st.maxTiny = Math.max(st.maxTiny, R.now() - ty); st.tiny += R.now() - ty;
+          return im;
+        };
+        if (split) {
+          // mảnh nào chuỗi giống hệt khung trước (tiền cảnh khi máy quay đứng yên…) → dùng lại ảnh đã dựng, không tài liệu SVG mới
+          for (var si = 0; si < snap.slices.length; si++) {
+            var sl = snap.slices[si], prev = SLICES.get(sl.el);
+            if (prev && prev.s === sl.s) { st.sliceHit++; parts.push(prev.img); pimg.push(prev.hasImg); continue; }
+            var sim = await decodeOne(sl.s, false), hasImg = sl.s.indexOf('<img') >= 0; SLICES.set(sl.el, { s: sl.s, img: sim, hasImg: hasImg }); st.sliceDraw++; parts.push(sim); pimg.push(hasImg);
+          }
+        } else if (body) { parts.push(await decodeOne(body, true)); pimg.push(true); body = null; }
         await VC.yieldReal();
         var f2b = R.now(); st.decode += f2b - f2;
-        g.fillStyle = '#121214'; g.fillRect(0, 0, OW, OH);
-        if (vertical) { g.fillStyle = '#ece9e2'; g.font = '800 ' + Math.round(OW / 17) + 'px "Be Vietnam Pro", system-ui, sans-serif'; g.textAlign = 'center'; g.fillText(String(FILM.title || ''), OW / 2, SY - Math.round(OW / 9), OW * 0.9); }
+        var topc = split ? await topLayer(snap.top, SW, SH, 2, st) : null; snap = null;
+        if (LAYERED) { var bgc = await bgLayer(bgR, SW, SH, BANDS * 2, st); g.drawImage(bgc, 0, SY); await VC.yieldReal(); }
+        else { g.fillStyle = '#121214'; g.fillRect(0, 0, OW, OH); }
+        var fbg = R.now();
         // ảnh mới trong sân khấu (phông / tiền cảnh của bối cảnh vừa vào): lần raster ĐẦU phải giải mã + vẽ ảnh SVG lồng bên trong (đo: Tam Quốc ~150–190 ms
-        // một dải) → 3 khung kế tiếp raster bằng dải mịn gấp 4; sau đó trình duyệt đã nhớ ảnh, về số dải thường
+        // một dải) → 3 khung kế tiếp raster bằng dải mịn gấp 4; sau đó trình duyệt đã nhớ ảnh, về số dải thường. Chụp theo lớp: mỗi mảnh vẽ theo dải riêng
         var imgs = box.getElementsByTagName('img');
         for (var ii = 0; ii < imgs.length; ii++) if (!seenImg.has(imgs[ii])) { seenImg.add(imgs[ii]); warm = 3; }
-        var nb = warm > 0 ? BANDS * 4 : BANDS; if (warm > 0) { warm--; st.warmFrames++; }
-        var md = 0, bt = [];
-        for (var bi = 0, bh = Math.ceil(SH / nb); bi < nb; bi++) {
-          var y0 = bi * bh, hh = Math.min(bh, SH - y0), d0 = R.now();
-          g.drawImage(img, 0, y0, SW, hh, 0, SY + y0, SW, hh); g.getImageData(0, SY + y0, 1, 1);   // ép raster dải này ngay ở tác vụ này
-          md = Math.max(md, R.now() - d0); bt.push(R.now());
-          if (bi < nb - 1) await VC.yieldReal();
+        // chụp theo lớp: mỗi mảnh (một diễn viên / tiền cảnh) raster một tác vụ; dải mịn khởi động chỉ cho mảnh có ảnh lồng (<img>)
+        var nb0 = warm > 0 ? BANDS * 4 : split ? 1 : BANDS, nb; if (warm > 0) { warm--; st.warmFrames++; }
+        var md = 0, bt = [], tk = R.now();
+        for (var pi2 = 0; pi2 < parts.length; pi2++) {
+          nb = pimg[pi2] ? nb0 : split ? 1 : nb0;
+          for (var bi = 0, bh = Math.ceil(SH / nb); bi < nb; bi++) {
+            var y0 = bi * bh, hh = Math.min(bh, SH - y0), d0 = R.now();
+            g.drawImage(parts[pi2], 0, y0, SW, hh, 0, SY + y0, SW, hh); g.getImageData(0, SY + y0, 1, 1);   // ép raster dải này ngay ở tác vụ này
+            md = Math.max(md, R.now() - d0); bt.push(R.now());
+            // nhả luồng khi tác vụ này đã dài ~16 ms (mảnh nhỏ gộp chung một tác vụ — bớt bước nhả, bớt thời gian xuất; ngân sách long task vẫn giữ)
+            if ((bi < nb - 1 || pi2 < parts.length - 1) && (!split || R.now() - tk > 16)) { await VC.yieldReal(); tk = R.now(); }
+          }
         }
+        parts = pimg = null;
+        if (topc) g.drawImage(topc, 0, SY);
         var f3 = R.now(); st.raster += f3 - f2; st.maxDraw = Math.max(st.maxDraw, md); st.maxSnap = Math.max(st.maxSnap, f2 - f1b);
         await VC.yieldReal();   // raster SVG (mỗi dải ≤ ~50 ms, luồng chính) và mã hoá ở các tác vụ khác nhau → long task ≤ 100 ms (CNS-221)
         // ảnh bìa (Q43): khung có thoại đầu tiên, khi bong bóng đã hiện rõ (~0,4 s)
@@ -421,7 +553,7 @@
       st.frames++;
       st.maxFrameMs = Math.max(st.maxFrameMs, R.now() - f0);
       if (i < 3) mark('frame' + i);
-      if (o.debug && R.now() - f0 > 40) (st.slow = st.slow || []).push([i, Math.round(performance.timeOrigin + f0), Math.round(f1 - f0), Math.round(R.now() - f0), dry ? null : [f1, f1b, f2, f2b].concat(bt, [f3, R.now()]).map(function (x) { return Math.round(x - f0); })]);
+      if (o.debug && R.now() - f0 > 40) (st.slow = st.slow || []).push([i, Math.round(performance.timeOrigin + f0), Math.round(f1 - f0), Math.round(R.now() - f0), dry ? null : [f1, f1b, f2, f2b, fbg].concat(bt, [f3, R.now()]).map(function (x) { return Math.round(x - f0); })]);
       if (mem && i % 15 === 0) st.heapPeak = Math.max(st.heapPeak, mem.usedJSHeapSize);
       if (i % 10 === 0) post({ type: 'gc-video-progress', phase: o.pass, frame: i, frames: frames, shot: shotMarks.length, shots: ready.length });
       await VC.yieldReal();   // nhả luồng chính mỗi khung (MessageChannel — CNS-221)
@@ -432,7 +564,7 @@
     VC.beforeFire = null;
     var base = { type: 'gc-video-done', pass: o.pass, frames: nFrames, durationMs: durMs, endAt: endAt, shots: shotMarks, firstDialogFrame: firstDialogFrame,
       cues: cues.map(function (c) { return { from: c.from, to: c.to, text: c.text }; }) };
-    if (o.debug) { base.texts = Array.from(texts); base.says = says; base.slow = st.slow || []; base.t0 = performance.timeOrigin + t00; base.tmarks = tmarks; }
+    if (o.debug) { base.vfacts = vfacts; base.texts = Array.from(texts); base.says = says; base.slow = st.slow || []; base.t0 = performance.timeOrigin + t00; base.tmarks = tmarks; }
     if (dry) { base.stats = { wallMs: R.now() - t00, perFrameMs: (R.now() - t00) / Math.max(1, nFrames) }; return base; }
     // kết: tiếng tới hết độ dài hình, đóng bộ mã hoá, ghép
     var endSamples = Math.round(durMs / 1000 * 48000);
@@ -466,7 +598,7 @@
     base.coverFrame = coverAt;
     var wall = R.now() - t00;
     base.stats = { wallMs: wall, xRealtime: wall / durMs, perFrameMs: { advance: st.advance / nFrames, snap: st.snap / nFrames, raster: st.raster / nFrames, encode: st.encode / nFrames, total: wall / nFrames },
-      maxFrameMs: st.maxFrameMs, warmFrames: st.warmFrames, maxDrawMs: st.maxDraw, maxSnapMs: st.maxSnap, maxTinyMs: st.maxTiny, tinyMs: st.tiny / nFrames, decodeMs: st.decode / nFrames, cssKB: allCSS().length / 1024, svgKB: st.svgBytes / nFrames / 1024, heapPeak: st.heapPeak, mux: mux, audioFed: feeder.pos, audioEnd: endSamples, audio: aStats };
+      maxFrameMs: st.maxFrameMs, warmFrames: st.warmFrames, maxDrawMs: st.maxDraw, maxSnapMs: st.maxSnap, maxTinyMs: st.maxTiny, layers: LAYERED ? { bgHit: st.bgHit, bgDraw: st.bgDraw, maxBgMs: st.maxBg, topHit: st.topHit, topDraw: st.topDraw, maxTopMs: st.maxTop, sliceHit: st.sliceHit, sliceDraw: st.sliceDraw } : null, tinyMs: st.tiny / nFrames, decodeMs: st.decode / nFrames, cssKB: allCSS(true).length / 1024, svgKB: st.svgBytes / nFrames / 1024, heapPeak: st.heapPeak, mux: mux, audioFed: feeder.pos, audioEnd: endSamples, audio: aStats };
     return base;
   }
 })();

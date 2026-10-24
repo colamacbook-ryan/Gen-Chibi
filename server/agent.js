@@ -49,20 +49,27 @@ function examples() {
   try { files = fs.readdirSync(path.join(DIR, 'examples')).filter(f => f.endsWith('.json')).sort(); } catch { return {}; }
   return files.reduce((o, f) => (o[f.replace(/\.json$/, '')] = JSON.parse(read('examples/' + f)), o), {});
 }
-// luật vàng: các dòng đánh số của mục 3 trong GUIDE.md (để start_here trả ngắn gọn, không chép tay lần hai)
+// luật vàng: các mục đánh số của mục 3 trong GUIDE.md — MỘT nguồn luật cho mọi bề mặt (server/rules.js: MCP initialize, start_here, AI chatroom).
+// Một luật = dòng đánh số + các dòng thụt lề nối tiếp (trước v0.23.2 chỉ lấy dòng đầu → luật bị cắt giữa câu)
 function rules() {
-  const s = read('GUIDE.md'), a = s.indexOf('## 3.'), b = s.indexOf('\n## ', a + 4);
-  return s.slice(a, b).split('\n').filter(l => /^\d+\. /.test(l)).map(l => l.replace(/^\d+\.\s*/, '').replace(/\*\*/g, ''));
+  const s = read('GUIDE.md'), a = s.indexOf('## 3.'), b = s.indexOf('\n## ', a + 4), out = [];
+  s.slice(a, b).split('\n').forEach(l => {
+    if (/^\d+\. /.test(l)) out.push(l.replace(/^\d+\.\s*/, ''));
+    else if (out.length && /^\s+\S/.test(l)) out[out.length - 1] += ' ' + l.trim();
+  });
+  return out.map(r => r.replace(/\*\*/g, ''));
 }
 
 // ---- xuất schema tool cho framework function-calling (agent không có MCP client)
 // openai: [{ type: 'function', function: { name, description, parameters } }] · gemini: { functionDeclarations: [...] } (bỏ khoá
 // JSON Schema Gemini không nhận) · mcp: nguyên dạng tools/list
-function cleanSchema(s, drop) {
-  if (Array.isArray(s)) return s.map(x => cleanSchema(x, drop));
+// gem: Gemini không nhận type dạng mảng (["object", "null"]) → type đầu tiên khác null + nullable: true
+function cleanSchema(s, drop, gem) {
+  if (Array.isArray(s)) return s.map(x => cleanSchema(x, drop, gem));
   if (!s || typeof s !== 'object') return s;
   const o = {};
-  Object.keys(s).forEach(k => { if (drop.indexOf(k) < 0) o[k] = cleanSchema(s[k], drop); });
+  Object.keys(s).forEach(k => { if (drop.indexOf(k) < 0) o[k] = k === 'type' ? s[k] : cleanSchema(s[k], drop, gem); });
+  if (gem && Array.isArray(o.type)) { const t = o.type.filter(x => x !== 'null'); if (t.length < o.type.length) o.nullable = true; o.type = t[0] || 'string'; }
   if (o.type === 'object' && !o.properties) o.properties = {};
   return o;
 }
@@ -71,7 +78,7 @@ function toolsExport(TOOLS, format) {
   if (f === 'mcp') return { tools: TOOLS };
   const desc = t => (t.title ? t.title + ' — ' : '') + t.description;
   if (f === 'openai') return TOOLS.map(t => ({ type: 'function', function: { name: t.name, description: desc(t), parameters: cleanSchema(t.inputSchema, ['$schema']) } }));
-  if (f === 'gemini') return { functionDeclarations: TOOLS.map(t => ({ name: t.name, description: desc(t), parameters: cleanSchema(t.inputSchema, ['$schema', 'additionalProperties']) })) };
+  if (f === 'gemini') return { functionDeclarations: TOOLS.map(t => ({ name: t.name, description: desc(t), parameters: cleanSchema(t.inputSchema, ['$schema', 'additionalProperties'], true) })) };
   return null;
 }
 

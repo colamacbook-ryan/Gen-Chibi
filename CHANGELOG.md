@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.23.2 — Real vertical video, smoother export, more MCP tools for agents
+The last technical round before Ryan tries everything from scratch (fresh install → `admin` / `admin` → owner account → domain → MCP check).
+
+### Video
+- **9:16 is now a true vertical film.** The camera frames whoever is speaking at a large size, keeps the speaker's face fully in the frame, avoids cutting through other faces, and lays out speech bubbles and captions to fit the tall frame (captions keep clear of the bottom where TikTok / Shorts put their buttons). 16:9 is unchanged.
+- **Exporting keeps the Studio responsive.** The background and speech bubbles are drawn once and reused. On our 2-CPU test machine at 1080p the Studio was blocked for at most about 60–90 ms at a time during an export (before: up to about 120 ms).
+- **Each work remembers its own export settings** (frame, quality, format) — they travel with project bundles and backups. Settings saved in the browser by v0.22 are moved into the work once.
+
+### Agents (MCP)
+- **Versions:** agents can list a work's versions and restore one. Restoring never loses anything — the current state is kept as a version first — and the old shots must still pass today's checks, otherwise nothing changes. Read-only connections cannot restore.
+- **Storyboard and HTML film:** agents can export a work's storyboard (SVG) and its standalone HTML film — the same files the Studio's buttons make. AI voice clips are included only if they fit the size limit, and never for read-only connections.
+- New `get_event` tool; `list_projects` also counts motion packs, sound packs and works; `save_work` reads and writes the work's video settings.
+- **One source of rules:** MCP, `start_here` and the Studio AI chatroom now get the same golden rules, written once, and each only sees the rules for tools it can use. Rules are no longer cut off mid-sentence.
+
+### Hardening follow-ups (after v0.23.1)
+- Approved overrides refuse YAML tags other than `!reset` / `!override`, NUL bytes and UTF-16 / UTF-32 byte-order marks, and host paths under `/proc`, `/sys` or `/dev/fd`. Bind sources must already exist and carry no extended ACLs. As root, an override is refused when the install folder cannot be hidden while Docker Compose reads it.
+
+### For developers
+- One film-payload builder (`studio/film-html.js`) for the Studio, MCP `export_film_html` and the CI video job.
+- Browser tests wait for the server to answer instead of sleeping a fixed time.
+
 ## v0.23.1 — Hardening: the app can no longer reach root through its own files; `genchibi doctor`; restore keeps the install id on the same machine
 Before Ryan tests from scratch (INT-20 (e): "hoàn thiện hết các vấn đề kỹ thuật đi rồi tôi mới test" — *"finish all the technical issues first, then I'll test"*). No new features in the Studio.
 
