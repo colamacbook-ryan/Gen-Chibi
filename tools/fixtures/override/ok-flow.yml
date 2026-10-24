@@ -1,0 +1,8 @@
+services:
+  login:
+    image: example/login
+    ports: ["127.0.0.1:8081:80"]
+    command: ["sh", "-c", "echo hi"]
+    environment: {HASH: "${LOGIN_SECRET}", MODE: prod}
+    volumes: [logindata:/data, "/etc/ssl/certs:/certs:ro"]
+volumes: {logindata: {}}

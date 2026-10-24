@@ -1,5 +1,5 @@
 services:
   login:
     image: example/login
-    command: |
-      sh -c x
+? "inc\lude"
+: - @INSTALL@/inc.yml

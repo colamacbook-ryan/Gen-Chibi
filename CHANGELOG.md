@@ -1,12 +1,35 @@
 # Changelog
 
+## v0.23.2 — Real vertical video, smoother export, more MCP tools for agents
+The last technical round before Ryan tries everything from scratch (fresh install → `admin` / `admin` → owner account → domain → MCP check).
+
+### Video
+- **9:16 is now a true vertical film.** The camera frames whoever is speaking at a large size, keeps the speaker's face fully in the frame, avoids cutting through other faces, and lays out speech bubbles and captions to fit the tall frame (captions keep clear of the bottom where TikTok / Shorts put their buttons). 16:9 is unchanged.
+- **Exporting keeps the Studio responsive.** The background and speech bubbles are drawn once and reused. On our 2-CPU test machine at 1080p the Studio was blocked for at most about 60–90 ms at a time during an export (before: up to about 120 ms).
+- **Each work remembers its own export settings** (frame, quality, format) — they travel with project bundles and backups. Settings saved in the browser by v0.22 are moved into the work once.
+
+### Agents (MCP)
+- **Versions:** agents can list a work's versions and restore one. Restoring never loses anything — the current state is kept as a version first — and the old shots must still pass today's checks, otherwise nothing changes. Read-only connections cannot restore.
+- **Storyboard and HTML film:** agents can export a work's storyboard (SVG) and its standalone HTML film — the same files the Studio's buttons make. AI voice clips are included only if they fit the size limit, and never for read-only connections.
+- New `get_event` tool; `list_projects` also counts motion packs, sound packs and works; `save_work` reads and writes the work's video settings.
+- **One source of rules:** MCP, `start_here` and the Studio AI chatroom now get the same golden rules, written once, and each only sees the rules for tools it can use. Rules are no longer cut off mid-sentence.
+
+### Hardening follow-ups (after v0.23.1)
+- Approved overrides refuse YAML tags other than `!reset` / `!override`, NUL bytes and UTF-16 / UTF-32 byte-order marks, and host paths under `/proc`, `/sys` or `/dev/fd`. Bind sources must already exist and carry no extended ACLs. As root, an override is refused when the install folder cannot be hidden while Docker Compose reads it.
+
+### For developers
+- One film-payload builder (`studio/film-html.js`) for the Studio, MCP `export_film_html` and the CI video job.
+- Browser tests wait for the server to answer instead of sleeping a fixed time.
+
 ## v0.23.1 — Hardening: the app can no longer reach root through its own files; `genchibi doctor`; restore keeps the install id on the same machine
 Before Ryan tests from scratch (INT-20 (e): "hoàn thiện hết các vấn đề kỹ thuật đi rồi tôi mới test" — *"finish all the technical issues first, then I'll test"*). No new features in the Studio.
 
 ### Read before updating (Docker installs)
-- **If you have a `docker-compose.override.yml`, `start` / `update` stop until you decide once.** Run the command `genchibi` prints (`… override approve` or `… override off`, an absolute path so it works with `sudo`). Running containers are not touched before you decide. `approve` refuses an override that uses `build:`, `env_file:`, `extends`, `include`, `configs` / `secrets` files, or bind mounts with a relative path, a variable, a link or a path inside the install folder — move those to an image or an absolute path outside the install folder first. Variables like `${LOGIN_SECRET}` are taken once at approval; changing their value in `.env` later asks again.
-- **Overrides must be plain block YAML (one key per line).** Flow style (`[...]`, `{...}`), anchors / `<<`, tags, block text (`|`, `>`), quoted keys, tabs, and bind paths that are relative, use a variable or point inside the install folder are refused, one line per problem. Rewrite e.g. `ports: ["8080:80"]` as a block list. The file must be plain ASCII (no CR line endings, no non-ASCII characters — comments included); every line is `key:`, `key: value`, `- value`, `- key:` or `- key: value`, so continuation lines are refused; a bind path needs an existing parent folder and no `.` / `..` parts; `develop:` is refused. Every variable the override uses is taken once at approval (except `GC_UID` / `GC_GID` / `GC_PORT` / `GC_BIND` / `GC_EDGE_DIR`, which genchibi computes itself).
-- **An old Node (non-Docker) install without a mode record may be treated as Docker** until you run the installer again with `--native`; `genchibi` prints that line.
+- **If you have a `docker-compose.override.yml`, `start` / `update` stop until you decide once.** Run the command `genchibi` prints (`… override approve` or `… override off`, an absolute path so it works with `sudo`). Running containers are not touched before you decide.
+- **Docker Compose itself reads your override.** `override approve` resolves it together with the verified compose files (`docker compose config`) and checks only what the override adds in Compose's own output — so comments, flow lists, anchors and Windows line endings are fine. Refused: `build`, `env_file`, `extends`, `include`, `develop`, `use_api_socket`, `provider`, `volumes_from`; the Docker socket anywhere; host paths that are relative, inside the install folder, contain `.` / `..`, have a missing parent folder, are links, or are `/`. Shown as warnings (you can still approve): `privileged`, host `pid` / `ipc` / `network_mode` / `userns_mode`, `cap_add`, `devices`, `security_opt`. Variables the override uses are taken once at approval.
+- **As root, Docker Compose reads the override in a private view where the install folder is an empty, read-only folder**, so an override cannot pull in install-folder files however it is spelled. Also refused in the override text: explicit `? ` keys, `\` before a line break or a non-ASCII byte, and the NEL / LS / PS line-break characters. More warnings (still approvable): `device_cgroup_rules`, `group_add`, `runtime`, writable binds of system folders (`/etc`, `/root`, `/proc`, `/sys`, `/boot`, `/run`, `/var/lib/docker`). `override approve` lists the lines the override adds (with service and key), and shows the new lines when the result changes later.
+- **Bind folders must be owned by root or by you and not writable by the app account** (checked at approval and on every run), so the app cannot swap them for a link after you approve.
+- **genchibi runs exactly the approved result**, re-checks it on every `start` / `update`, and asks again if anything changed (the file, a variable value, or the verified compose files). Approval needs the Docker Compose plugin.
 - **The first `genchibi` after the app is on v0.23.1 needs github.com once**: it downloads the release package, checks it against `SHA256SUMS`, and replaces itself. Offline, `stop`, `logs` and `mcp` still work.
 - **With the edge Caddy on, the first `update` / `rollback` recreates the app container too** (a short interruption). Certificates are copied once to a folder outside the install folder.
 
@@ -24,8 +47,8 @@ Before Ryan tests from scratch (INT-20 (e): "hoàn thiện hết các vấn đ�
 - **A backup restored on the same machine keeps its install id**, so *Go offline* can still remove this machine's own Cloudflare tunnel and DNS record. A backup from another machine (or made before v0.23.1) still gets a new id.
 
 ### For developers
-- `tools/mutations/v0231.json`: 106 mutations, each must turn a named test red. Old-command fixtures come from real tags (`tools/fixtures/old-cli/`, `old-compose/`) — a hand-written fixture hid a bug in an earlier round (L-83).
-- `tools/test.sh` checks after every group that no test wrote to the real `$HOME`, and lints that every `genchibi` call in a test sets `HOME`. Every refused override fixture is first checked to be accepted by a real `docker compose config`, so each one is a real bypass.
+- `tools/mutations/v0231.json`: 120 mutations, each must turn a named test red. Old-command fixtures come from real tags (`tools/fixtures/old-cli/`, `old-compose/`) — a hand-written fixture hid a bug in an earlier round (L-83).
+- `tools/test.sh` checks after every group that no test wrote to the real `$HOME`, and lints that every `genchibi` call in a test sets `HOME`. Every refused override fixture (45+) is a case a real `docker compose config` accepts.
 - A browser test that failed when the quota reset fell on the next day (Vietnamese dates are written `23-10`) is fixed.
 
 ### Not in this release (v0.23.2)

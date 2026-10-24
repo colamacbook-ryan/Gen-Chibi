@@ -1,0 +1,2 @@
+include:
+  - @INSTALL@/inc.yml

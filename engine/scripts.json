@@ -27,7 +27,7 @@
   "studio": [
     "studio/gif.js",
     "studio/dock.js",
-    "studio/video/payload.js",
+    "studio/film-html.js",
     "studio/video/client.js",
     "studio/live.js",
     "studio/app.js"

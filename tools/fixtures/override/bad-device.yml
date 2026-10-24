@@ -1,5 +1,11 @@
+services:
+  login:
+    image: example/login
+    volumes:
+      - vd:/x
 volumes:
-  d:
+  vd:
     driver_opts:
       o: bind
+      type: none
       device: ./x

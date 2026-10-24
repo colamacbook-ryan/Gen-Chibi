@@ -9,7 +9,9 @@ for p in 7493 7494; do curl -s -o /dev/null "http://127.0.0.1:$p/" && { echo "  
 GC_HOME="$T/a" GC_PORT=7493 GC_NO_AUTOCHECK=1 GC_API_TOKEN=tok123 GC_MCP_KEY=$K GC_ALLOWED_HOSTS='mcp.example.com,*.trycloudflare.com' node "$ROOT/server/main.js" >/dev/null 2>&1 & A=$!
 GC_HOME="$T/b" GC_PORT=7494 GC_NO_AUTOCHECK=1 GC_MCP_KEY=$K node "$ROOT/server/main.js" >/dev/null 2>&1 & B=$!
 trap 'kill $A $B 2>/dev/null; rm -rf "$T"' EXIT
-sleep 1.2
+# chờ cả hai server trả lời HTTP (≤ 30 s) — không ngủ cố định (máy vừa khởi động / đang tải nặng: 1,2 s không đủ → mọi kiểm "nhận 000")
+for p in 7493 7494; do for i in $(seq 1 300); do [ "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$p/api/health")" != 000 ] && break; sleep 0.1; done
+  [ "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$p/api/health")" != 000 ] || { echo "   ✗ server :$p không lên sau 30 s"; exit 1; }; done
 c() { local want="$1" name="$2"; shift 2; local got; got="$(curl -s -o /dev/null -w '%{http_code}' "$@")"
   if [ "$got" = "$want" ]; then echo "   ✓ $name ($got)"; else echo "   ✗ $name: muốn $want, nhận $got"; F=1; fi; }
 J=(-H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}')

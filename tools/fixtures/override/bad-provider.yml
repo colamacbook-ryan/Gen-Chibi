@@ -1,0 +1,6 @@
+services:
+  login:
+    provider:
+      type: model
+      options:
+        model: x

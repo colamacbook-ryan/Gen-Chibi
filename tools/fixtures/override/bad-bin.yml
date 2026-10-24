@@ -1,0 +1,3 @@
+services:
+  login:
+    !!binary ZXh0ZW5kcw==: {file: @INSTALL@/inc.yml, service: inc}

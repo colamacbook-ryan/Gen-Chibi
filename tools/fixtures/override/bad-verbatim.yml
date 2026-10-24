@@ -1,0 +1,3 @@
+services:
+  login:
+    image: !<tag:yaml.org,2002:str> example/login

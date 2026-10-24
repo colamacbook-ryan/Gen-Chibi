@@ -1,0 +1,5 @@
+# override của Ryan: trang đăng nhập đứng trước app
+services:
+  login:
+    image: example/login   # bản ổn định
+    restart: unless-stopped

@@ -1,0 +1,4 @@
+services:
+  login:
+    image: example/login
+!!b%69nary aW5jbHVkZQ==: [@INSTALL@/inc.yml]

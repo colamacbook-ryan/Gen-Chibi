@@ -86,6 +86,7 @@ const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
 const SCRIPTS = JSON.parse(readFileSync(path.join(ROOT, 'engine/scripts.json'), 'utf8'));   // một nguồn danh sách mã engine (CNS-054)
 // server con do test dựng: tắt hết khi thoát — kể cả khi test sập giữa chừng (L-55: server sót lại khiến lần chạy sau dùng nhầm dữ liệu cũ)
 const kids = []; const kid = c => { kids.push(c); return c; };
+const up = async (...ports) => { for (const p of ports) { const t0 = Date.now(); for (;;) { try { await new Promise((res, rej) => { const q = require('http').get({ host: '127.0.0.1', port: +p, path: '/api/health' }, r => { r.resume(); res(); }); q.on('error', rej); q.setTimeout(2000, () => q.destroy(new Error('timeout'))); }); break; } catch (e) { if (Date.now() - t0 > 30000) throw new Error('server :' + p + ' không lên sau 30 s'); await new Promise(r => setTimeout(r, 100)); } } } };   // server lên = trả lời HTTP bất kỳ
 // GC_ONLY=voice node tools/test-browser.mjs → chỉ chạy nhóm "giọng AI" (lặp nhanh khi làm giọng); không đặt = chạy cả bộ như CI
 const ONLY = process.env.GC_ONLY || '';
 // v0.23 (B6, CNS-032): CI chạy bộ này theo NHÓM song song (ma trận trong .github/workflows/browser.yml) — GC_ONLY nhận một nhóm hoặc danh sách
@@ -103,7 +104,7 @@ let fail = 0;
 const home = mkdtempSync(path.join(tmpdir(), 'gc-'));
 if (want('core')) {
 const srv = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home, GC_PORT: '7496', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
-await new Promise(r => setTimeout(r, 1200));
+await up(7496);   // chờ server trả lời (≤ 30 s), không ngủ cố định — máy vừa khởi động / đang tải nặng thì 1,2 s không đủ
 const b = await pw.chromium.launch();
 const p = await b.newPage();
 try {
@@ -149,7 +150,7 @@ if (want('auth')) {
   const srv2 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home2, GC_PORT: '7497', GC_NO_AUTOCHECK: '1', GC_API_TOKEN: 'tok-test-123', GC_CLIENT_IP_HEADER: 'x-forwarded-for' }, stdio: 'ignore' }));
   const home2l = mkdtempSync(path.join(tmpdir(), 'gc-'));
   const srv2l = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home2l, GC_PORT: '7669', GC_NO_AUTOCHECK: '1', GC_API_TOKEN: 'tok-legacy-456', GC_PUBLIC_URL: 'https://chibi.example.test', GC_ALLOWED_HOSTS: 'chibi.example.test' }, stdio: 'ignore' }));
-  await new Promise(r => setTimeout(r, 1500));
+  await up(7497, 7669);   // chờ server trả lời (≤ 30 s), không ngủ cố định — máy vừa khởi động / đang tải nặng thì 1,2 s không đủ
   autoLogin(false); const b2 = await pw.chromium.launch(); autoLogin(true);
   const errs2 = []; let q = null;
   const PWB = 'mot cum tu de nho cho studio', SUB = '#gcLogin button[type=submit]';
@@ -254,7 +255,7 @@ if (want('auth')) {
 if (want('core')) {
   const home3 = mkdtempSync(path.join(tmpdir(), 'gc-'));
   const srv3 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home3, GC_PORT: '7498', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
-  await new Promise(r => setTimeout(r, 1200));
+  await up(7498);   // chờ server trả lời (≤ 30 s), không ngủ cố định — máy vừa khởi động / đang tải nặng thì 1,2 s không đủ
   const b3 = await pw.chromium.launch();
   const q = await b3.newPage({ viewport: { width: 1500, height: 950 } });
   const errs = []; q.on('pageerror', e => errs.push(e.message));
@@ -313,7 +314,7 @@ if (want('core')) {
 if (want('core')) {
   const home4 = mkdtempSync(path.join(tmpdir(), 'gc-'));
   const srv4 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home4, GC_PORT: '7499', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
-  await new Promise(r => setTimeout(r, 1200));
+  await up(7499);   // chờ server trả lời (≤ 30 s), không ngủ cố định — máy vừa khởi động / đang tải nặng thì 1,2 s không đủ
   const b4 = await pw.chromium.launch();
   const q = await b4.newPage({ viewport: { width: 1500, height: 950 } });
   const errs = []; q.on('pageerror', e => errs.push(e.message));
@@ -381,7 +382,17 @@ if (want('core')) {
     const [sb] = await Promise.all([q.waitForEvent('download'), q.click('button:has-text("Storyboard SVG")')]);
     const sbText = require('fs').readFileSync(await sb.path(), 'utf8');
     if (!/<image [^>]*href="data:image\/svg\+xml;base64,/.test(sbText) || !/Cảnh Một/.test(sbText)) throw new Error('storyboard thiếu ảnh phân cảnh / tiêu đề');
-    console.log('  ✓ Xuất thành phẩm: phim HTML độc lập mở không cần server và diễn được; storyboard có ảnh + lời thoại');
+    // CNS-047: MCP export_film_html / get_storyboard = ĐÚNG tệp Studio vừa xuất (cùng tác phẩm, cùng ngôn ngữ giao diện vi, không giọng AI) — một nguồn studio/film-html.js
+    {
+      const wid = await q.evaluate(() => fetch('api/works', { headers: { 'X-GC-Request': '1' } }).then(r => r.json()).then(l => l[0].id));
+      const mcpCall = (name, args) => fetch('http://localhost:7499/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TEST_TOKEN }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }) }).then(r => r.json()).then(j => j.result);
+      const firstDiff = (a, b) => { let i = 0; while (i < a.length && a[i] === b[i]) i++; return i + ': studio «' + a.slice(Math.max(0, i - 60), i + 80) + '» ≠ mcp «' + b.slice(Math.max(0, i - 60), i + 80) + '»'; };
+      const studioFilm = require('fs').readFileSync(filmPath, 'utf8'), mf = await mcpCall('export_film_html', { work: wid, lang: 'vi' });
+      if (!mf || mf.isError || mf.content[1].resource.text !== studioFilm) throw new Error('MCP export_film_html khác phim Studio xuất: ' + (mf && !mf.isError ? firstDiff(studioFilm, mf.content[1].resource.text) : JSON.stringify(mf).slice(0, 200)));
+      const ms = await mcpCall('get_storyboard', { work: wid, lang: 'vi' });
+      if (!ms || ms.isError || ms.content[1].resource.text !== sbText) throw new Error('MCP get_storyboard khác storyboard Studio: ' + (ms && !ms.isError ? firstDiff(sbText, ms.content[1].resource.text) : JSON.stringify(ms).slice(0, 200)));
+    }
+    console.log('  ✓ Xuất thành phẩm: phim HTML độc lập mở không cần server và diễn được; storyboard có ảnh + lời thoại; MCP export_film_html / get_storyboard ra ĐÚNG từng byte tệp Studio xuất');
     console.log('  ✓ Tạo asset mới: chọn khung → soát → cổng → lưu nhân vật / vật phẩm / bối cảnh vào dự án; Thư viện xếp theo dự án chủ đề');
   } catch (e) { fail = 1; console.log('  ✗ Tạo asset mới / dự án:', e.message); }
   finally { await b4.close(); srv4.kill(); }
@@ -390,7 +401,7 @@ if (want('core')) {
 if (want('core')) {
   const home5 = mkdtempSync(path.join(tmpdir(), 'gc-'));
   const srv5 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home5, GC_PORT: '7494', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
-  await new Promise(r => setTimeout(r, 1200));
+  await up(7494);   // chờ server trả lời (≤ 30 s), không ngủ cố định — máy vừa khởi động / đang tải nặng thì 1,2 s không đủ
   const b5 = await pw.chromium.launch();
   const q = await b5.newPage({ viewport: { width: 1440, height: 900 } });
   const errs = []; q.on('pageerror', e => errs.push(e.message));
@@ -504,6 +515,10 @@ if (want('core')) {
     if (!Array.isArray(FD.soundPacks) || FD.soundPacks.length !== 1 || FD.soundPacks[0].id !== 'tq-am' || FD.project !== 'mau-tam-quoc' || FD.soundPacks[0].sounds['trong-tran'].nodes !== undefined) throw new Error('DATA.soundPacks / project của phim: ' + JSON.stringify(FD.soundPacks && FD.soundPacks.map(x => x.id)) + ' / ' + FD.project);
     if (!/<script>\/\* engine\/sounds\.js \*\//.test(fhtml)) throw new Error('phim xuất ra thiếu engine/sounds.js');
     if (!/player\.setProject\(DATA\.project\)/.test(fhtml)) throw new Error('phim xuất ra không đặt dự án cho bộ phát (player.setProject)');
+    // CNS-047: phim có gói động tác + gói âm của dự án — MCP export_film_html ra ĐÚNG từng byte tệp Studio vừa xuất
+    { const r = await fetch('http://localhost:7494/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TEST_TOKEN }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'export_film_html', arguments: { work: 'tq-vuon-dao-xich-bich', lang: 'vi' } } }) }).then(x => x.json());
+      const mt = r.result && !r.result.isError ? r.result.content[1].resource.text : '';
+      if (mt !== fhtml) { let i = 0; while (i < fhtml.length && fhtml[i] === mt[i]) i++; throw new Error('MCP export_film_html (Tam Quốc) khác phim Studio tại ' + i + ': «' + fhtml.slice(Math.max(0, i - 60), i + 80) + '» ≠ «' + mt.slice(Math.max(0, i - 60), i + 80) + '»'); } }
     // Studio (Tạo tác) nạp gói âm của server lúc mở; lược đồ bảng bước theo dự án của dàn diễn viên; nhãn âm trong ô chọn lấy từ thư viện
     const sbr = await q.evaluate(() => ({ has: GenChibi.sounds.has('trong-tran'), n: GenChibi.sounds.names().length, lbl: GenChibi.sounds.get('wham').label,
       sch: GenChibi.director.schema(GenChibi.assets().filter(a => a.project === 'mau-tam-quoc')).properties.steps.items.properties.sfx.items.enum.length,
@@ -759,7 +774,7 @@ if (want('core')) {
 if (want('core')) {
   const home5s = mkdtempSync(path.join(tmpdir(), 'gc-'));
   const srv5s = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home5s, GC_PORT: '7573', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
-  await new Promise(r => setTimeout(r, 1200));
+  await up(7573);   // chờ server trả lời (≤ 30 s), không ngủ cố định — máy vừa khởi động / đang tải nặng thì 1,2 s không đủ
   const b5s = await pw.chromium.launch(), q = await b5s.newPage({ viewport: { width: 1440, height: 900 } }), errs = [];
   q.on('pageerror', e => errs.push(e.message));
   try {
@@ -871,7 +886,7 @@ if (want('bubble')) {
   const fs = require('fs');
   const home9 = mkdtempSync(path.join(tmpdir(), 'gc-'));
   const srv9 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home9, GC_PORT: '7495', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
-  await new Promise(r => setTimeout(r, 1200));
+  await up(7495);   // chờ server trả lời (≤ 30 s), không ngủ cố định — máy vừa khởi động / đang tải nặng thì 1,2 s không đủ
   const b9 = await pw.chromium.launch();
   const URL9 = 'http://localhost:7495/';
   // ---- thư viện đo chạy TRONG trang (một bản duy nhất cho mọi lượt) ----
@@ -1196,7 +1211,7 @@ if (want('lib')) {
   const fs = require('fs'), crypto = require('crypto'), GV = require('../engine/voices.js'), SND = require('../engine/sounds.js'), TQ = JSON.parse(fs.readFileSync(path.join(ROOT, 'kinds/sound/tq-am.json'), 'utf8'));
   const home11 = mkdtempSync(path.join(tmpdir(), 'gc-')), PORT11 = 7662, URL11 = 'http://localhost:' + PORT11 + '/', SHOTS = process.env.GC_SHOTS || '', SCHEME = process.env.GC_SCHEME === 'light' ? 'light' : 'dark';
   const srv11 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home11, GC_PORT: String(PORT11), GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
-  await new Promise(r => setTimeout(r, 1200));
+  await up(PORT11);   // chờ server trả lời (≤ 30 s), không ngủ cố định — máy vừa khởi động / đang tải nặng thì 1,2 s không đủ
   const b11 = await pw.chromium.launch({ args: ['--allow-file-access-from-files'] });
   const ctx11 = await b11.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true, colorScheme: SCHEME });
   await ctx11.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://localhost:' + PORT11 });
@@ -1625,7 +1640,7 @@ if (want('voice')) {
   const fs = require('fs'), crypto = require('crypto'), GV = require('../engine/voices.js');
   const home10 = mkdtempSync(path.join(tmpdir(), 'gc-')), PORT10 = 7660, URL10 = 'http://localhost:' + PORT10 + '/', SHOTS = process.env.GC_SHOTS || '';
   const srv10 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home10, GC_PORT: String(PORT10), GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
-  await new Promise(r => setTimeout(r, 1200));
+  await up(PORT10);   // chờ server trả lời (≤ 30 s), không ngủ cố định — máy vừa khởi động / đang tải nặng thì 1,2 s không đủ
   const b10 = await pw.chromium.launch({ args: ['--allow-file-access-from-files'] });
   const ctx10 = await b10.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
   const WORK = 'mau-ngay-dau-di-lam', HDR = { 'Content-Type': 'application/json', 'X-GC-Request': '1' };
@@ -2449,7 +2464,7 @@ if (want('dock')) {
   }).listen(7571, '127.0.0.1');
   const home11 = mkdtempSync(path.join(tmpdir(), 'gc-'));
   const srv11 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home11, GC_PORT: '7570', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
-  await new Promise(r => setTimeout(r, 1200));
+  await up(7570);   // chờ server trả lời (≤ 30 s), không ngủ cố định — máy vừa khởi động / đang tải nặng thì 1,2 s không đủ
   const U11 = 'http://localhost:7570/', H11 = { 'Content-Type': 'application/json', 'X-GC-Request': '1' };
   const b11 = await pw.chromium.launch();
   const errs11 = [];
@@ -2717,7 +2732,7 @@ if (want('dock')) {
     await q.close();
     console.log('  ✓ Bảng tác phẩm: tìm (hoa / thường, bỏ dấu, theo tên · id · tên dự án) · lọc theo dự án · lọc theo trạng thái (Trống / Cần sửa / Đã duyệt) · bộ đếm "n / m tác phẩm" · báo "không khớp"');
     const home12 = mkdtempSync(path.join(tmpdir(), 'gc-')), srv12 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home12, GC_PORT: '7572', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
-    await new Promise(r => setTimeout(r, 1200));
+    await up(7572);   // chờ server trả lời (≤ 30 s), không ngủ cố định — máy vừa khởi động / đang tải nặng thì 1,2 s không đủ
     q = await open11(ctx11, 'http://localhost:7572/xuong');
     const gate = await q.textContent('#dock .dock-gate'); if (!/Chưa có API key LLM/.test(gate) || !(await q.isDisabled('#dock button.send'))) throw new Error('chưa có key: thiếu lời nhắc / nút gửi chưa khoá: ' + gate);
     await q.click('#dock .dock-gate button:has-text("Mở Cài đặt AI")'); await q.waitForSelector('text=Cài đặt AI >> nth=0');
@@ -2736,7 +2751,7 @@ if (want('oauth')) {
   const home13 = mkdtempSync(path.join(tmpdir(), 'gc-')), srv13 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home13, GC_PORT: '7664', GC_NO_AUTOCHECK: '1', GC_API_TOKEN: TOK, GC_PUBLIC_URL: H, GC_OAUTH_REDIRECTS: ALT }, stdio: 'ignore' }));
   const home14 = mkdtempSync(path.join(tmpdir(), 'gc-')), srv14 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home14, GC_PORT: '7665', GC_NO_AUTOCHECK: '1' }, stdio: 'ignore' }));
   const home15 = mkdtempSync(path.join(tmpdir(), 'gc-')), srv15 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home15, GC_PORT: '7666', GC_NO_AUTOCHECK: '1', GC_PUBLIC_URL: H }, stdio: 'ignore' }));
-  await new Promise(r => setTimeout(r, 1500));
+  await up(7664, 7665, 7666);   // chờ server trả lời (≤ 30 s), không ngủ cố định — máy vừa khởi động / đang tải nặng thì 1,2 s không đủ
   autoLogin(false); const B = 'http://127.0.0.1:7664', b13 = await pw.chromium.launch(); autoLogin(true);   // nhóm này tự lo đăng nhập (token trong trang Cấp phép, phiên khi cần)
   const own = { 'Content-Type': 'application/json', 'X-GC-Request': '1', Authorization: 'Bearer ' + TOK };
   const reg = async (base, name, uri) => (await fetch(base + '/oauth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client_name: name, redirect_uris: [uri || CB] }) })).json();
@@ -2898,7 +2913,7 @@ if (want('online')) {
   srvA.stdout.on('data', d => { logA += d; }); srvA.stderr.on('data', d => { logA += d; });
   const homeB = mkdtempSync(path.join(tmpdir(), 'gc-'));
   const srvB = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: homeB, GC_PORT: String(PB), GC_NO_AUTOCHECK: '1', GC_PUBLIC_URL: 'https://legacy.example.test', GC_ALLOWED_HOSTS: 'legacy.example.test' }, stdio: 'ignore' }));
-  await new Promise(r => setTimeout(r, 1500));
+  await up(PA, PB);   // chờ server trả lời (≤ 30 s), không ngủ cố định — máy vừa khởi động / đang tải nặng thì 1,2 s không đủ
   legacyVi(true); const b20 = await pw.chromium.launch();
   const errs20 = [], VI = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ]/;
   const found = [], shotList = [];
@@ -3127,7 +3142,7 @@ if (want('online')) {
 if (want('i18n')) {
   const home16 = mkdtempSync(path.join(tmpdir(), 'gc-'));
   const srv16 = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: home16, GC_PORT: '7668', GC_NO_AUTOCHECK: '1', GC_LANG: '' }, stdio: 'ignore' }));
-  await new Promise(r => setTimeout(r, 1200));
+  await up(7668);   // chờ server trả lời (≤ 30 s), không ngủ cố định — máy vừa khởi động / đang tải nặng thì 1,2 s không đủ
   legacyVi(false); const b16 = await pw.chromium.launch(); legacyVi(true);   // nhóm này tự chọn ngôn ngữ: không đặt sẵn gc-lang=vi
   const U = 'http://localhost:7668/', errs16 = [];
   const ready = async q => q.waitForFunction(() => /^v\d/.test((document.getElementById('verChip') || {}).textContent), null, { timeout: 8000 });

@@ -137,10 +137,10 @@ const sect = async f => { try { await f(); } catch (e) { if (!process.env.GC_KEE
     console.log('   ✓ âm nào dùng được = một hàm: lược đồ / lời nhắc đạo diễn / get_director_schema / list_sounds / S6 / bộ phát cùng theo dự án của TÁC PHẨM (dàn diễn viên chỉ dự phòng) — nhân vật Tam Quốc trong phim dự án khác không được mời trong-tran');
   });
 
-  // ---------- 3. MCP: 53 tool, 7 tool âm thanh (danh sách · chuẩn · gói · kiểm · lưu · gỡ · chấm luật), lưu bền, nạp lại, rào khi bỏ âm đang gọi
+  // ---------- 3. MCP: 58 tool, 7 tool âm thanh (danh sách · chuẩn · gói · kiểm · lưu · gỡ · chấm luật), lưu bền, nạp lại, rào khi bỏ âm đang gọi
   await sect(async () => {
     const dir = tmpDir(), { GC, S, store, m } = fresh(dir), call = (t, a) => m.callTool(t, a);
-    no(TOOLS.length !== 54 || ['list_sounds', 'get_sound_spec', 'get_sound_pack', 'validate_sound_pack', 'save_sound_pack', 'delete_sound_pack', 'lint_sound_track'].some(t => !TOOLS.some(x => x.name === t && x.description.length > 150 && /sound/i.test(x.description))), 'MCP: 54 tool, 7 tool âm thanh có mô tả rõ (tiếng Anh — CNS-067)');
+    no(TOOLS.length !== 59 || ['list_sounds', 'get_sound_spec', 'get_sound_pack', 'validate_sound_pack', 'save_sound_pack', 'delete_sound_pack', 'lint_sound_track'].some(t => !TOOLS.some(x => x.name === t && x.description.length > 150 && /sound/i.test(x.description))), 'MCP: 59 tool, 7 tool âm thanh có mô tả rõ (tiếng Anh — CNS-067)');
     no(TOOLS.filter(t => /sound|lint/.test(t.name)).some(t => t.inputSchema.type !== 'object' || t.inputSchema.additionalProperties !== false), 'inputSchema của tool âm thanh phải là object đóng');
     // list_sounds
     let r = J(await call('list_sounds', {}));
@@ -242,7 +242,7 @@ const sect = async f => { try { await f(); } catch (e) { if (!process.env.GC_KEE
     no(cat.sounds.count !== 64 || cat.sounds.cats.length !== 8 || cat.sounds.rules.length !== 7 || !/^S1: /.test(cat.sounds.rules[0]) || cat.sounds.list !== 'list_sounds' || cat.sounds.lint !== 'lint_sound_track', 'get_catalog: thư viện âm (nhóm, số âm, gói, luật S1–S7 lấy từ engine)');
     no(sh0.state.soundPacks !== 2 || sh0.state.sounds !== 64 || !sh0.topics.some(t => t.id === 'sound'), 'start_here: số gói âm / số âm + chủ đề hướng dẫn "sound"');
     no(J(await call('get_motion_spec', {})).sfx.length !== 64, 'get_motion_spec: tên âm lấy từ thư viện (không còn 17 tên cứng)');
-    console.log('   ✓ MCP: 53 tool · list_sounds (nhóm / thẻ / chữ / dự án) · get_sound_spec = engine · get_sound_pack (names) · validate_sound_pack (path, trùng tên, không lưu) · save_sound_pack (phiên bản, bản xuất sạch, nạp lại, giữ dự án, cảnh báo bỏ âm) · lint_sound_track (4 dạng đầu vào, lỗi path, cảnh báo ok) · save_shot / save_work chạy S1–S7 · catalog / start_here');
+    console.log('   ✓ MCP: 58 tool · list_sounds (nhóm / thẻ / chữ / dự án) · get_sound_spec = engine · get_sound_pack (names) · validate_sound_pack (path, trùng tên, không lưu) · save_sound_pack (phiên bản, bản xuất sạch, nạp lại, giữ dự án, cảnh báo bỏ âm) · lint_sound_track (4 dạng đầu vào, lỗi path, cảnh báo ok) · save_shot / save_work chạy S1–S7 · catalog / start_here');
   });
 
   // ---------- 3b. CNS-100: gói dùng chung KHÔNG có cue; link MCP / AI chatroom bắt buộc project, không ghi đè gói dự án khác; save trả nhắc; gỡ gói chỉ chủ máy

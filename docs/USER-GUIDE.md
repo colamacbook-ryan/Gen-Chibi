@@ -226,7 +226,7 @@ A Data Console style table (desktop): one row per sound — **sound ID** (the na
 - Run **`genchibi agent connect`**: prints ready-made connect configs for Claude Code, the Claude app, Cursor, Gemini CLI, Codex CLI and a `curl` command (it never prints the token). Since v0.21 every install has an owner token, so agents on this machine that use HTTP send it as `Authorization: Bearer` — agents connected before v0.21 without a token must be connected again with these configs; `genchibi mcp` (stdio) reads the token itself.
 - To have the agent "know the ropes" from the start: **`genchibi agent skill claude`** (or `cursor`, `gemini`, `codex`, `generic`) — installs the guide as a skill / `AGENTS.md` / `GEMINI.md` in the folder you are in (or `--dir`). If you already have your own `AGENTS.md` / `GEMINI.md`, the command stops and does not overwrite them (add `--force` to replace).
 - Tell the agent: **"call `start_here` first"**. The agent receives the Library status, 11 golden rules, 10 guide topics (characters, parts, equipment, scenes, motion packs, sound, animation, film, project bundles, system), then follows step-by-step procedures with runnable examples.
-- 53 tools; agents go through **the same gates** as the Studio. Errors come back with a code (`[VALIDATION_FAILED]`, `NOT_FOUND`…) and point at the exact wrong field — agents can fix things themselves.
+- 58 tools; agents go through **the same gates** as the Studio. Errors come back with a code (`[VALIDATION_FAILED]`, `NOT_FOUND`…) and point at the exact wrong field — agents can fix things themselves.
 - An agent without an MCP client can still use it over plain HTTP (see `agent/GUIDE.md` section 1).
 
 ### Go online: domain, HTTPS and MCP in one step (beta, v0.21)

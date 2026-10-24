@@ -1,0 +1,4 @@
+services:
+  login:
+    image: example/login
+    use_api_socket: true

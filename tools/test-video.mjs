@@ -560,22 +560,48 @@ console.log('   — work.video: cổng kiểm, xoá, gói dự án / nhập lạ
   if (bad === b0) ok('work.video: lưu / đọc qua cổng saveWorkChecked · giá trị / khoá lạ → 422 kèm đường dẫn (không đổi dữ liệu) · null → xoá · gói dự án mang theo, nhập lại giữ nguyên, gói sai báo lỗi · Studio migrate localStorage một lần');
 }
 
-/* ---------------------------------------------------------------- MỘT bộ dựng payload cho Studio + job CI (CNS-246) */
+/* ---------------------------------------------------------------- MỘT bộ dựng payload cho Studio + MCP + job CI (CNS-219 / CNS-246): studio/film-html.js FH.payload */
 {
-  const b0 = bad, PL = require(path.join(ROOT, 'studio/video/payload.js')), app = fs.readFileSync(path.join(ROOT, 'studio/app.js'), 'utf8'), vci = fs.readFileSync(path.join(ROOT, 'tools/video-ci.mjs'), 'utf8');
+  const b0 = bad, app = fs.readFileSync(path.join(ROOT, 'studio/app.js'), 'utf8'), vci = fs.readFileSync(path.join(ROOT, 'tools/video-ci.mjs'), 'utf8'), mcpS = fs.readFileSync(path.join(ROOT, 'server/mcp.js'), 'utf8');
   const fp = app.slice(app.indexOf('function filmPayload('), app.indexOf('function exportFilm('));
-  no(!/P\.build\(\{/.test(fp) || !/P\.motionPacks\(W, /.test(fp) || /pick\(a, \[/.test(fp), 'filmPayload của Studio dựng payload bằng GCVPayload.build / motionPacks (không chọn khoá tại chỗ)');
-  no(!/require\(path\.join\(ROOT, 'studio\/video\/payload\.js'\)\)/.test(vci) || !/PAYLOAD\.build\(\{/.test(vci) || /\bpick\(a, \[|const pick = /.test(vci) || /matchAll\(\/<script src=/.test(vci), 'tools/video-ci.mjs dùng CÙNG bộ dựng (studio/video/payload.js) + engine/scripts.json — không còn payload chép tay');
-  // hành vi: khoá được chọn, giọng chốt (có voiceOf), gói động tác chỉ khi phim dùng đòn của gói (bỏ khoá kho)
-  const W = { title: 'T', logline: 'L', project: 'p1', shots: [{ id: 's1', title: 'A', scene: 'sc', cast: ['a'], event: { steps: [{ actor: 'a', say: 'hi', action: 'slash9' }] }, extra: 1 }] };
-  const r = PL.build({ W, data: { parts: [], items: [{ id: 'i', name: 'I', type: 't', secret: 1 }], scenes: [{ id: 'sc', name: 'S', layers: {}, key: 'local.my/sc' }], characters: [{ id: 'a', pack: 'local.my', name: 'A', look: {}, savedAt: 'x', persona: 'p' }] },
-    motionPacks: PL.motionPacks(W, [{ id: 'm1', actions: { slash9: {} }, pack: 'local.my', key: 'k', version: 3, note: 'n' }, { id: 'm2', actions: { other: {} } }]), soundPacks: [],
-    voiceOf: () => ({ id: 'v1', role: 'hero' }), lang: { lang: 'en', accent: 'us' }, vo: { voices: { k: 'clip' }, have: 1, total: 2 }, dialog: 'bubble', srcs: ['engine/player.js'], ui: 'en', dict: {} });
-  no(JSON.stringify(r.data.characters) !== '[{"id":"a","pack":"local.my","name":"A","look":{},"voice":{"id":"v1","role":"hero"}}]', 'nhân vật: chỉ khoá phim cần + giọng chốt — ' + JSON.stringify(r.data.characters));
-  no(JSON.stringify(r.data.items) !== '[{"id":"i","name":"I","type":"t"}]' || JSON.stringify(r.data.scenes) !== '[{"id":"sc","name":"S","layers":{}}]', 'đồ / cảnh: chỉ khoá phim cần');
-  no(JSON.stringify(r.data.motionPacks) !== '[{"id":"m1","actions":{"slash9":{}}}]', 'gói động tác: chỉ gói có đòn phim dùng, bỏ khoá kho — ' + JSON.stringify(r.data.motionPacks));
-  no(r.film.dialog !== 'bubble' || r.film.shots[0].extra !== undefined || r.film.shots[0].description !== '' || r.data.project !== 'p1' || r.data.voiceTotal !== 2 || r.have !== 1 || r.total !== 2, 'film / dự án / đếm giọng AI');
-  if (bad === b0) ok('một bộ dựng payload (studio/video/payload.js) cho phim HTML, video của Studio và job CI (CNS-246): chọn khoá, chốt giọng, gói động tác theo đòn dùng tới');
+  no(!/FH\.payload\(GC, W, /.test(fp) || /pick\(|motionPacks = /.test(fp), 'filmPayload của Studio dựng dữ liệu phim bằng FH.payload (studio/film-html.js) — không chọn khoá tại chỗ');
+  no(!/m\.filmPayload\(/.test(vci) || /\bpick\(a, \[|const pick = |video\/payload\.js/.test(vci) || fs.existsSync(path.join(ROOT, 'studio/video/payload.js')), 'tools/video-ci.mjs lấy payload qua MCP.filmPayload → FH.payload (không còn bộ dựng thứ hai / payload chép tay)');
+  no(!/filmPayload\(id, args, vo, snap\) \{[\s\S]{0,800}FH\.payload\(this\.GC, w, /.test(mcpS) || !/const P = this\.filmPayload\(id, args, vo, \{ w, srcs \}\)/.test(mcpS), 'MCP export_film_html (filmHTML) dựng qua CÙNG filmPayload → FH.payload');
+  // hành vi: payload thật của Fun Office qua MCP (như job CI) — đủ hình như Studio, chữ trình phát en, mã engine = engine/scripts.json
+  const { MCP } = require(path.join(ROOT, 'server/mcp.js')), { Store } = require(path.join(ROOT, 'server/store.js')), GC = require(path.join(ROOT, 'server/engine-node.js')).loadEngine(ROOT);
+  const m = new MCP({ engine: GC, store: new Store(fs.mkdtempSync(path.join(TMP, 'pl-'))), version: 't', system: {} });
+  const B = JSON.parse(fs.readFileSync(path.join(ROOT, 'studio/mau/fun-office.json'), 'utf8')), imp = m.importProject(B, { overwrite: true });
+  const P = m.filmPayload(B.works[0].id, { lang: 'en', dialog: 'auto' }), SCR = JSON.parse(fs.readFileSync(path.join(ROOT, 'engine/scripts.json'), 'utf8')).engine;
+  no(imp.errors.length || P.ui !== 'en' || !Object.keys(P.dict).length || JSON.stringify(P.srcs) !== JSON.stringify(SCR) || P.film.shots.length !== B.works[0].shots.length || P.film.dialog !== 'auto'
+    || !P.data.characters.length || P.data.characters.some(a => Object.keys(a).some(k => ['id', 'pack', 'name', 'version', 'look', 'expressions', 'kind', 'voice', 'role'].indexOf(k) < 0)) || !P.data.characters.every(a => a.voice && a.voice.role),
+    'MCP.filmPayload (Fun Office, en): đủ srcs / data / film / ui / dict, chỉ khoá phim cần, giọng chốt có vai — ' + JSON.stringify([imp.errors, P.ui, P.srcs.length]).slice(0, 200));
+  // FH.payload với GC giả (đơn vị): chỉ gói động tác có đòn phim dùng, bỏ khoá kho; đồ / cảnh / nhân vật chỉ giữ khoá phim cần; giọng chốt theo voiceOf
+  { const FH = require(path.join(ROOT, 'studio/film-html.js'));
+    const item = { id: 'it', key: 'local.my/it', pack: 'local.my', name: 'I', type: 't', equip: { slot: 'hand', part: 'x' }, secret: 1 };
+    const char = { id: 'a', key: 'local.my/a', pack: 'local.my', name: 'A', look: { equip: { hand: 'it' } }, savedAt: 'x', persona: 'p', stray: 1 };
+    const scene = { id: 'sc', key: 'local.my/sc', pack: 'local.my', name: 'S', layers: {}, deco: [], stray: 1 };
+    const fake = { LIB: { slots: {}, parts: {} }, partRef: () => null, getPart: () => null, ITEMS: {}, getItem: id => id === 'it' ? item : null,
+      voices: { lang: l => l || 'vi', accent: (l, x) => x || 'us' }, film: { actors: () => [char], scene: () => scene },
+      choreo: { packs: () => [{ id: 'm1', actions: { slash9: {} }, pack: 'local.my', key: 'k', version: 3, savedAt: 'y', note: 'n' }, { id: 'm2', actions: { other: {} }, pack: 'local.my' }] } };
+    const W = { title: 'T', logline: 'L', project: 'p1', lang: 'en', shots: [{ id: 's1', title: 'A', scene: 'sc', cast: ['a'], event: { steps: [{ actor: 'a', say: 'hi', action: 'slash9' }] }, extra: 1 }] };
+    const r = FH.payload(fake, W, { voices: { voices: { k: 'clip' }, total: 2 }, dialog: 'bubble', voiceOf: () => ({ id: 'v1', role: 'hero' }) });
+    no(JSON.stringify(r.data.motionPacks) !== '[{"id":"m1","actions":{"slash9":{}}}]', 'FH.payload: chỉ gói động tác có đòn phim dùng (m2 bị bỏ), bỏ khoá kho pack / key / version / savedAt / note — ' + JSON.stringify(r.data.motionPacks));
+    no(JSON.stringify(r.data.items) !== '[{"id":"it","name":"I","type":"t","equip":{"slot":"hand","part":"x"}}]', 'FH.payload: đồ chỉ giữ id / name / type / rarity / equip (khoá lạ bị bỏ) — ' + JSON.stringify(r.data.items));
+    no(JSON.stringify(r.data.scenes) !== '[{"id":"sc","name":"S","layers":{},"deco":[]}]', 'FH.payload: cảnh chỉ giữ khoá phim cần — ' + JSON.stringify(r.data.scenes));
+    no(JSON.stringify(r.data.characters) !== '[{"id":"a","pack":"local.my","name":"A","look":{"equip":{"hand":"it"}},"voice":{"id":"v1","role":"hero"}}]', 'FH.payload: nhân vật chỉ giữ khoá phim cần + giọng chốt — ' + JSON.stringify(r.data.characters));
+    no(r.film.dialog !== 'bubble' || r.film.shots[0].extra !== undefined || r.film.shots[0].description !== '' || r.data.project !== 'p1' || r.data.voiceTotal !== 2 || r.data.lang !== 'en', 'FH.payload: film / dự án / ngôn ngữ / đếm giọng AI'); }
+  // MCP save_work nhận / trả `video` (cổng cleanVideo); kết nối chỉ đọc (mcp:read) → FORBIDDEN
+  { const J = r => r.structuredContent || JSON.parse(r.content[0].text), wid = B.works[0].id;
+    const s1 = J(await m.callTool('save_work', { id: wid, video: { aspect: '9:16', quality: '720p' } }, {})), g1 = J(await m.callTool('get_work', { id: wid }, {}));
+    const s2 = await m.callTool('save_work', { id: wid, video: { aspect: 'square' } }, {}), s3 = J(await m.callTool('save_work', { id: wid, video: null }, {})), g3 = J(await m.callTool('get_work', { id: wid }, {}));
+    const ro = await m.callTool('save_work', { id: wid, video: { aspect: '16:9' } }, { readOnly: true });
+    no(!s1.saved || JSON.stringify(s1.video) !== '{"aspect":"9:16","quality":"720p"}' || JSON.stringify(g1.video) !== '{"aspect":"9:16","quality":"720p"}', 'MCP save_work{video} → trả + get_work đọc lại — ' + JSON.stringify([s1.video, g1.video]));
+    no(!s2.isError || !/video\.aspect/.test(JSON.stringify(s2)) || !s3.saved || g3.video !== undefined, 'MCP save_work: video sai → lỗi kèm video.aspect; video: null → xoá');
+    no(!ro.isError || !/FORBIDDEN/.test(JSON.stringify(ro)) || JSON.stringify(m.store.getWork(wid).video) !== undefined, 'MCP save_work qua kết nối chỉ đọc (mcp:read) → FORBIDDEN, không ghi');
+    const ag = require(path.join(ROOT, 'server/agent.js')), gem = JSON.stringify(ag.toolsExport(require(path.join(ROOT, 'server/mcp.js')).TOOLS || [], 'gemini'));
+    const sw = (require(path.join(ROOT, 'server/mcp.js')).TOOLS || []).find(t => t.name === 'save_work');
+    no(!sw || JSON.stringify(sw.inputSchema.properties.video.type) !== '["object","null"]' || /"type":\[/.test(gem) || !/"nullable":true/.test(gem), 'schema save_work.video cho phép null (MCP / OpenAI: type ["object","null"]; Gemini: type object + nullable)'); }
+  if (bad === b0) ok('một bộ dựng payload (studio/film-html.js FH.payload) cho phim HTML của Studio, video, MCP export_film_html và job CI (CNS-219 / CNS-246)');
 }
 
 process.exit(bad ? 1 : 0);
