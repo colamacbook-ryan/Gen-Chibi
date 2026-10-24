@@ -297,7 +297,11 @@ try {
   let view = await (await fetch(M + '/api/oauth', { headers: own })).json();
   ok(view.enabled && view.mcpUrl === H + '/mcp' && view.register === true && view.tokenSet === true && view.clients.length > 3 && view.scopes.length === 3, 'GET /api/oauth: bật, URL, công tắc tự đăng ký, danh sách client, 3 mức');
   const dumped = JSON.stringify(view);
-  ok(![S['mcp:owner'], S['mcp:write'], S['mcp:read'], R, tt].some(x => dumped.includes(x.j.access_token) || dumped.includes(x.j.refresh_token)) && !/secret|hash|sha256/i.test(dumped), 'Cài đặt KHÔNG bao giờ hiện token / băm / secret');
+  // giá trị token thật không lọt + không trường nào TÊN secret / hash / sha256 (quét KHOÁ, không quét giá trị: mã client ngẫu nhiên có thể tình cờ chứa "hash" — CI đỏ ngẫu nhiên v0.24.1)
+  const leakTok = [S['mcp:owner'], S['mcp:write'], S['mcp:read'], R, tt].filter(x => dumped.includes(x.j.access_token) || dumped.includes(x.j.refresh_token)).length;
+  const badKeys = []; (function walk(o) { if (o && typeof o === 'object') Object.keys(o).forEach(k => { if (/secret|hash|sha256/i.test(k)) badKeys.push(k); walk(o[k]); }); })(view);
+  const hexLike = (dumped.match(/\b[0-9a-f]{64}\b/g) || []).length;   // băm SHA-256 dạng hex không được lộ ở bất kỳ giá trị nào
+  ok(!leakTok && !badKeys.length && !hexLike, 'Cài đặt KHÔNG bao giờ hiện token / băm / secret' + (leakTok || badKeys.length || hexLike ? ' — token lộ ' + leakTok + ', khoá ' + badKeys.join(',') + ', hex64 ' + hexLike : ''));
   const rowW = view.clients.find(c => c.id === S['mcp:write'].g.client.client_id);
   ok(rowW && rowW.status === 'active' && rowW.scope === 'mcp:write' && rowW.name === 'Claude' && rowW.hosts[0].host === 'claude.ai' && rowW.hosts[0].known && rowW.approvedAt && rowW.lastUsedAt && rowW.createdAt, 'bảng client: tên, domain callback, phạm vi, ngày cấp, lần dùng cuối, trạng thái active');
   ok(view.clients.some(c => c.status === 'pending') && view.clients.find(c => c.status === 'pending').expiresAt, 'client chưa cấp phép: trạng thái pending + hạn tự xoá');
