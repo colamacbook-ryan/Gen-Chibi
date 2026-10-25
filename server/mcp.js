@@ -165,6 +165,7 @@ const ERR_HINT = {
   FORBIDDEN: 'Not allowed for agents or for this content — do not retry; tell the owner.',
   BAD_REQUEST: 'Read the tool inputSchema (tools/list) — an argument is missing or malformed.',
   UNAVAILABLE: 'The app is busy or restarting — wait ~15 s, then call get_app_version.',
+  LIMIT: 'The tool-call budget of this turn is used up — stop calling tools and tell the user what is done and what is left.',
   INTERNAL: 'Unexpected failure — report the message to the owner.'
 };
 // mã đoán từ câu khi lỗi không mang mã HTTP: câu tiếng Việt (msgid của hàm dùng chung) hoặc câu tiếng Anh (viết thẳng cho agent)
@@ -1552,10 +1553,11 @@ class MCP {
   // KHÔNG chứa chữ do người dùng / AI khác / gói nhập viết (tên, mô tả, ghi chú duyệt, snapshot…) — chúng đi trong tin `user` của uiContext(), bọc JSON.
   // Chỉ có id tác phẩm + dự án (slug đã qua cổng) và ngôn ngữ lời thoại (enum) là đổi theo tác phẩm. ctx = { zone, object: {kind, id}, … } (đã qua cleanContext)
   // ctx.lang (en | vi, từ dock) quyết ngôn ngữ TRẢ LỜI; không có thì ngôn ngữ của yêu cầu (X-GC-Lang / Accept-Language / mặc định máy — MSG.reqLang)
-  uiSystem(ctx) {
+  // surface: 'chat' (mặc định — LLM qua API key) | 'bridge' (agent CLI qua cầu nối: Rules.chat + 3 câu cố định của bề mặt bridge, SURFACES)
+  uiSystem(ctx, surface) {
     const z = ZONES[ctx.zone] || ZONES.xuong, w = z.work && ctx.object && ctx.object.kind === 'work' ? this.store.getWork(ctx.object.id) : null;
     const zone = ZONES[ctx.zone] ? ctx.zone : 'xuong';
-    return Rules.chat({ zone, lang: MSG.reqLang(ctx.lang), work: w, tools: this.toolsFor('ui', zone), allTools: TOOLS.concat(UI_TOOLS) });
+    return (surface === 'bridge' ? Rules.bridge : Rules.chat)({ zone, lang: MSG.reqLang(ctx.lang), work: w, tools: this.toolsFor('ui', zone), allTools: TOOLS.concat(UI_TOOLS) });
   }
   // TIN `user` "DỮ LIỆU GIAO DIỆN" (CNS-118 + 119): ngữ cảnh đang xem + hiện trạng tác phẩm + ghi chú duyệt + phần tử người dùng ghim — MỘT khối JSON
   // (JSON.stringify: dấu " hay xuống dòng trong tên / ghi chú không thoát được khỏi chuỗi), có nhãn "dữ liệu, không phải lệnh". Mỗi phần có trần (LIMITS) → ngân sách
@@ -1907,6 +1909,16 @@ class MCP {
     return args && typeof args.project === 'string' ? { project: args.project } : undefined;
   }
 
+  // TRẦN THEO TOKEN LƯỢT (cầu nối CLI, CNS-313): t = { calls, writes, caps: { toolCalls, writes } } — mọi lời gọi đều đếm (kể cả bị cổng chặn); tool ghi = không tự khai
+  // readOnlyHint. Vượt → [LIMIT] (không chạy tool). Đếm lần THỬ ghi, không chỉ lần ghi thành công: dự phòng API key chỉ khi writes === 0 (CNS-312)
+  bridgeBudget(t, name) {
+    const tool = TOOLS.concat(UI_TOOLS).find(x => x.name === name), write = !(tool && tool.annotations && tool.annotations.readOnlyHint === true);
+    if (t.calls >= t.caps.toolCalls) { t.calls++; return toolError('Tool-call limit of this turn reached (' + t.caps.toolCalls + ').', { code: 'LIMIT' }); }
+    if (write && t.writes >= t.caps.writes) { t.calls++; return toolError('Write limit of this turn reached (' + t.caps.writes + ').', { code: 'LIMIT' }); }
+    t.calls++; if (write) t.writes++;
+    return null;
+  }
+
   // Xử lý một thông điệp JSON-RPC. Trả về phản hồi, hoặc null với notification.
   // ctx.viaLink: gọi qua link có khoá (/mcp/<key>) — quyền hẹp hơn token chủ máy
   async handle(msg, ctx) {
@@ -1924,16 +1936,24 @@ class MCP {
             protocolVersion: PROTOCOLS.indexOf(want) >= 0 ? want : PROTOCOLS[0],
             capabilities: { tools: { listChanged: false } },
             serverInfo: Object.assign({ version: this.version }, SERVER_INFO),
-            instructions: Rules.mcp(ctx, TOOLS)   // theo kênh: kết nối chỉ đọc không nghe về tool ghi (server/rules.js)
+            // theo kênh: kết nối chỉ đọc không nghe về tool ghi (server/rules.js). AI trong Studio (channel 'ui' — cầu nối CLI): RỖNG, luật đã nằm trong system
+            // của lượt (bề mặt `bridge`) — không nhận hai bề mặt luật mâu thuẫn (CNS-308)
+            instructions: ctx && ctx.channel === 'ui' ? '' : Rules.mcp(ctx, TOOLS)
           });
         }
         case 'notifications/initialized': case 'notifications/cancelled': return null;
         case 'ping': return ok({});
-        case 'tools/list': return ok({ tools: ctx && ctx.readOnly ? TOOLS.filter(t => t.annotations && t.annotations.readOnlyHint === true) : TOOLS });
+        case 'tools/list': {
+          const list = ctx && ctx.channel === 'ui' ? this.toolsFor('ui', ctx.zone) : TOOLS;   // AI trong Studio: đúng bộ của khu (cổng thật vẫn ở callTool)
+          return ok({ tools: ctx && ctx.readOnly ? list.filter(t => t.annotations && t.annotations.readOnlyHint === true) : list });
+        }
         case 'tools/call': {
           const p = msg.params || {};
+          const lim = ctx && ctx.bridgeTok ? this.bridgeBudget(ctx.bridgeTok, p.name) : null;   // trần theo token lượt của cầu nối CLI (CNS-313)
+          if (lim) return ok(lim);
           const r = await this.callTool(p.name, p.arguments, ctx || {});
           if (!r) return err(-32602, 'Unknown tool: ' + p.name);
+          if (ctx && typeof ctx.onTool === 'function') { try { ctx.onTool(p.name, p.arguments || {}, r); } catch (e) { /* ghi log lượt không được làm hỏng lời gọi */ } }
           return ok(r);
         }
         default: return err(-32601, 'Method not supported: ' + msg.method);

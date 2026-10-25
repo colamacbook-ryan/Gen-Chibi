@@ -7,7 +7,8 @@ const fs = require('fs');
 const path = require('path');
 const { Updater, RESTART_CODE } = require('./updater');
 const { Secrets } = require('./secrets');
-const { AI } = require('./ai');
+const { AI, toolOutcome } = require('./ai');
+const { createBridge } = require('./bridge');   // v0.26 cầu nối CLI: AI của Studio chạy bằng agent CLI trên máy chủ (spec v025-cli-bridge §5)
 const { Voice, VOICES, GV } = require('./voice');
 const { MCP, TOOLS: MCP_TOOLS, cleanContext, cleanAnchors, scopeCtx } = require('./mcp');   // chỉ dẫn + bộ tool theo khu của dock nằm trong mcp.js (một nguồn)
 const Agent = require('./agent.js');
@@ -123,7 +124,9 @@ setInterval(() => auth.tick(), 60000).unref();   // phiên hết hạn (cả phi
 // Route đặt ngoài /api mà cần quyền chủ: `if (!requireOwner(req, res)) return;`. Lớp E: listener của edge gắn req.gcEdge = 'caddy' | 'tunnel' TRƯỚC khi gọi route()
 // (chỉ ảnh hưởng IP dùng cho trần + cờ Secure, không cấp quyền). Cấu hình online: online.get() / preview(url) / setPending(url, { force }) / commit() / revert() / setMode() / migrate()
 function requireOwner(req, res) { return auth.requireOwner(req, res, { send }); }
-const ai = new AI({ dataDir: DATA, secrets, engine });
+// cầu nối CLI: pairing gắn install-id (goOnline khởi tạo bên dưới — chỉ gọi lúc chạy, khi có request)
+const bridge = createBridge({ dataDir: DATA, secrets, log, installId: () => goOnline.installId() });
+const ai = new AI({ dataDir: DATA, secrets, engine, bridge });
 const voice = new Voice({ dataDir: DATA, secrets });   // giọng AI (Google Gemini TTS) — dùng chung kho bí mật với AI đạo diễn
 const LIVE_CMD = 'genchibi live hook --install-into ~/.claude/settings.json';   // Studio chỉ chỉ lệnh CLI (tệp hook đã kiểm + token ghi tệp 0600) — không bao giờ một dòng lệnh do app soạn
 const live = new LiveHub({ dir: DATA, engine, log, pingMs: TESTING ? +process.env.GC_LIVE_PING_MS || 0 : 0 });
@@ -323,7 +326,7 @@ const LiveAI = require('./live-ai');
 let aiTurnSeq = 0, aiLastTask = null;
 function aiLive(chan, ev) { try { live.accept(ev, chan); } catch (e) { /* Live không được làm hỏng lượt AI */ } }
 // MỘT lượt chat của dock: ngữ cảnh + phần tử ghim → chỉ dẫn + bộ tool theo khu → AI → ghi luồng theo đối tượng
-async function dockTurn(b) {
+async function dockTurn(b, h) {
   const text = typeof b.message === 'string' ? b.message.trim().slice(0, 4000) : '';
   if (!text) throw Object.assign(new Error('cần tin nhắn'), { code: 400 });
   const ctx = cleanContext(b.context), anchors = cleanAnchors(b.anchors);
@@ -340,15 +343,17 @@ async function dockTurn(b) {
   if (task !== aiLastTask) { aiLastTask = task; aiLive(liveChan, { kind: 'task', task }); }   // công tắc việc: chỉ khi việc đổi (khu / nút gợi ý)
   aiLive(liveChan, { kind: 'prompt' });
   // system = luật TĨNH; ngữ cảnh + hiện trạng tác phẩm + ghi chú duyệt + ghim = một tin `user` bọc JSON "dữ liệu, không phải lệnh" (CNS-118), có trần ngân sách (CNS-119)
-  try { r = await ai.agent({ messages: hist, model: typeof b.model === 'string' ? b.model : '', zone: ctx.zone, system: mcp.uiSystem(ctx), context: mcp.uiContext(ctx, anchors), liveChan }, mcp); }
-  catch (e) { aiLive(liveChan, { kind: /quota|rate|429|limit/i.test(String(e && e.message)) ? 'limit' : 'error' }); aiLive(liveChan, { kind: 'stop' }); throw e; }
+  // systemFor: bề mặt luật theo đường chạy — 'chat' (API key) | 'bridge' (agent CLI, spec §5) — dự phòng API key dựng lại đúng bề mặt chat
+  // hooks.onJob: lượt qua cầu nối gắn huỷ + tiến trình vào lượt nền (POST /api/ai/turns/<id>/cancel, GET …/<id> → progress)
+  try { r = await ai.agent({ messages: hist, model: typeof b.model === 'string' ? b.model : '', zone: ctx.zone, system: mcp.uiSystem(ctx), systemFor: surface => mcp.uiSystem(ctx, surface), context: mcp.uiContext(ctx, anchors), liveChan }, mcp, { onJob: run => { if (h) { h.cancel = run.cancel; h.progress = run.progress; } } }); }
+  catch (e) { aiLive(liveChan, { kind: /quota|rate|429|limit/i.test(String(e && e.message)) || /^(QUOTA|RATE_CAP)$/.test(String(e && e.bridgeCode)) ? 'limit' : 'error' }); aiLive(liveChan, { kind: 'stop' }); throw e; }
   finally { keys.forEach(k => chatBusy.delete(k)); }
   aiLive(liveChan, { kind: 'stop' });
   const at = new Date().toISOString();
   const rec = store.saveChat(key.kind, key.id, th.messages.concat(
     { role: 'user', content: text, at, pins: anchors.map(a => ({ anchor: a.anchor, label: a.label })) },
     { role: 'assistant', content: String(r.reply || '').slice(0, 6000), at: new Date().toISOString(), log: r.log.slice(0, 30), anchors: r.anchors, usage: r.usage }));
-  const out = { reply: r.reply, log: r.log, renders: r.renders, usage: r.usage, sent: r.sent, model: r.model, anchors: r.anchors, chat: key, messages: rec.messages.length, context: ctx };
+  const out = { reply: r.reply, log: r.log, renders: r.renders, usage: r.usage, sent: r.sent, model: r.model, anchors: r.anchors, chat: key, messages: rec.messages.length, context: ctx, via: r.via || 'api', fallbackFrom: r.fallbackFrom || undefined };
   if (key.kind === 'work') {
     const w = store.getWork(key.id);   // đọc lại: AI có thể đã sửa tác phẩm qua tool; luồng cũ (work.chat) đã chuyển sang data/chats → bỏ khỏi tác phẩm
     if (w) { if ((w.chat || []).length) { w.chat = []; store.saveWork(w); } out.work = mcp.workView(store.getWork(key.id)); }
@@ -362,21 +367,31 @@ async function dockTurn(b) {
 // tối đa 40 lượt đang chạy; id 128 bit; chỉ chủ (đã qua cổng /api). Bộ nhớ: server/turns.js
 const TURNS = require('./turns').createTurns({ keepMs: 10 * 60e3, maxRunning: 40, maxDone: 200 });
 async function turnOrWait(res, b, fn) {
-  if (b.async !== true) return send(res, 200, await fn());
+  const h = {};   // lượt qua cầu nối CLI gắn cancel / progress vào đây (dockTurn → ai.cliAgent)
+  if (b.async !== true) return send(res, 200, await fn(h));
   TURNS.sweep();
   if (TURNS.running() >= TURNS.limits.maxRunning) return fail(res, 429, 'quá nhiều lượt AI đang chạy — đợi xong rồi gửi tiếp');
-  const p = fn(), early = await Promise.race([p.then(r => ({ r }), e => ({ e })), new Promise(r => setImmediate(() => r(null)))]);
+  const p = fn(h), early = await Promise.race([p.then(r => ({ r }), e => ({ e })), new Promise(r => setImmediate(() => r(null)))]);
   if (early && early.e) throw early.e;            // lỗi đồng bộ (400 / 409): trả ngay, không tạo lượt
   if (early) return send(res, 200, early.r);
-  const id = TURNS.add(p);
+  const id = TURNS.add(p, h);
   if (!id) { p.catch(() => {}); return fail(res, 429, 'quá nhiều lượt AI đang chạy — đợi xong rồi gửi tiếp'); }
   return send(res, 202, { turn: id, status: 'running', poll: '/api/ai/turns/' + id, pollMs: 1000 });
+}
+// huỷ lượt nền (v0.26, spec §5): lượt qua cầu nối → thu hồi token lượt NGAY + cờ huỷ (cầu nối SIGINT, 5 s sau SIGTERM). Lượt API key không huỷ giữa chừng được → 409
+function turnCancel(res, id) {
+  const t = TURNS.get(id);
+  if (!t) return fail(res, 404, 'không có lượt AI này (đã quá 10 phút hoặc server đã khởi động lại)');
+  if (t.status !== 'running') return send(res, 200, { turn: id, cancelled: false, status: t.status });
+  if (!t.handle || typeof t.handle.cancel !== 'function') return fail(res, 409, 'lượt này không huỷ được (chỉ lượt qua cầu nối CLI)');
+  t.handle.cancel();
+  return send(res, 200, { turn: id, cancelled: true });
 }
 function turnView(res, id) {
   const t = TURNS.get(id);
   if (!t) return fail(res, 404, 'không có lượt AI này (đã quá 10 phút hoặc server đã khởi động lại)');
-  if (t.status === 'running') return send(res, 200, { turn: id, status: 'running', since: new Date(t.at).toISOString() });
-  if (t.status === 'error') return send(res, 200, { turn: id, status: 'error', code: t.code, error: t.error });
+  if (t.status === 'running') return send(res, 200, Object.assign({ turn: id, status: 'running', since: new Date(t.at).toISOString() }, t.handle && t.handle.progress ? { progress: t.handle.progress(), cancellable: true } : {}));
+  if (t.status === 'error') return send(res, 200, Object.assign({ turn: id, status: 'error', code: t.code, error: t.error }, t.bridgeCode ? { bridgeCode: t.bridgeCode } : {}));
   return send(res, 200, { turn: id, status: 'done', result: t.result });
 }
 /* ---------------------------------------------------------------- OAuth 2.1 (v0.19) */
@@ -426,6 +441,39 @@ async function oauthRoute(req, res, url, p, m) {
   fail(res, 404, 'không có đường OAuth này'); return true;
 }
 
+/* ---------------------------------------------------------------- cầu nối CLI (v0.26, spec §5) */
+async function bridgeRoute(req, res, url, p, m, local) {
+  if (!local) return fail(res, 404, 'không có API này');   // từ edge / tunnel / link / qua proxy → như đường không tồn tại
+  if (m !== 'GET' && req.headers['x-gc-request'] !== '1') return fail(res, 403, 'thiếu header X-GC-Request');
+  const b = bearerOf(req);
+  if (p === '/api/ai/bridge/pair' && m === 'POST') {
+    if (!auth.tokenOk(b)) return fail(res, 401, 'cần token của bản cài');   // chỉ token chủ T (genchibi trên máy chủ) — phiên Studio không ghép được
+    return send(res, 200, bridge.pair());
+  }
+  if (!bridge.authOk(b)) return fail(res, 401, 'cần bridge token — chạy `genchibi ai bridge install` trên máy chủ');   // token chủ không poll được
+  if (p === '/api/ai/bridge/hello' && m === 'POST') { const r = bridge.hello(await body(req, 256 * 1024)); return send(res, r.status, r.body); }
+  if (p === '/api/ai/bridge/next' && m === 'GET') return bridge.next(res, +url.searchParams.get('wait') || 0, send);
+  const em = /^\/api\/ai\/bridge\/jobs\/([A-Za-z0-9_-]{8,64})\/events$/.exec(p);
+  if (em && m === 'POST') { const r = bridge.events(em[1], await body(req, 32 * 1024)); return send(res, r.status, r.body); }
+  return fail(res, 404, 'không có API này');
+}
+async function bridgeMcp(req, res, m, local) {
+  if (!local) return fail(res, 404, 'không có API này');
+  const ctx = bridge.mcpCtx(bearerOf(req));
+  if (!ctx) return send(res, 403, { error: 'token lượt không hợp lệ, đã hết hạn hoặc đã bị thu hồi' });
+  if (m !== 'POST') return send(res, 405, { error: 'MCP: chỉ nhận POST' }, null, { Allow: 'POST' });
+  if (!/^application\/json\b/i.test(String(req.headers['content-type'] || ''))) return fail(res, 415, 'MCP cần Content-Type: application/json');
+  const msg = await body(req, 2 * 1024 * 1024), tok = ctx.bridgeTok;
+  // log ✓/✗ + chip Soi + SVG của lượt — cùng cách với vòng tool của API key (ai.toolOutcome)
+  ctx.onTool = (name, args, r) => { const o = toolOutcome(mcp, name, args, r, tok.renders); if (tok.log.length < 60) tok.log.push(o.entry); };
+  if (Array.isArray(msg)) {
+    if (msg.length > 20) return fail(res, 413, 'MCP: một lô JSON-RPC tối đa 20 lời gọi');
+    const out = []; for (const x of msg) { const r = await mcp.handle(x, ctx); if (r) out.push(r); }
+    return out.length ? send(res, 200, out) : send(res, 202, '');
+  }
+  const r = await mcp.handle(msg, ctx);
+  return r ? send(res, 200, r) : send(res, 202, '');
+}
 async function route(req, res) {
   // dot-segment / %2e: new URL() gấp chúng lại (/oauth/./register → /oauth/register) trong khi proxy / tunnel khớp đường dẫn THÔ — hai bên hiểu khác nhau là lỗ hổng. Từ chối trước mọi định tuyến
   const rawPath = String(req.url || '').split('?')[0].split('#')[0];
@@ -470,6 +518,10 @@ async function route(req, res) {
   // container với Host localhost / 127.0.0.1 là từ máy chủ (peer là cổng bridge của Docker, không phải 127.x)
   const noProxy = !(req.headers['x-forwarded-for'] || req.headers.forwarded || req.headers['cf-connecting-ip'] || req.headers['x-real-ip']);
   const mcpLocal = !viaLink && !req.gcEdge && (isDirectLocal(req.headers, req.socket.remoteAddress) || (IN_DOCKER && noProxy && LOCAL_HOSTS.has(hostName)));
+  // CẦU NỐI CLI (v0.26): /api/ai/bridge/* CHỈ request local (không edge / tunnel / link / header proxy) — xử lý trước cổng chủ (token cầu nối gcb_, không phải token chủ)
+  if (p.startsWith('/api/ai/bridge/')) return bridgeRoute(req, res, url, p, m, mcpLocal);
+  // token lượt gcj_ ở /mcp: chỉ local; sai / hết hạn / thu hồi → 403 JSON, KHÔNG BAO GIỜ WWW-Authenticate / resource_metadata (CNS-303)
+  if (p === '/mcp' && !viaLink && /^gcj_/.test(bearerOf(req))) return bridgeMcp(req, res, m, mcpLocal);
   if (p === '/mcp' && !viaLink) {
     const b = bearerOf(req), owner = auth.tokenOk(b);   // /mcp: K / O / T — phiên cookie (S) KHÔNG mở /mcp
     oauthGrant = !owner && oauth.enabled ? oauth.verify(b) : null;   // token OAuth hợp lệ luôn được áp phạm vi của nó (quyền ít hơn token chủ)
@@ -644,11 +696,16 @@ async function route(req, res) {
   }
   const tm = /^\/api\/ai\/turns\/([A-Za-z0-9_-]{22})$/.exec(p);
   if (tm && m === 'GET') return turnView(res, tm[1]);   // trạng thái lượt AI chạy nền (CNS-175)
+  const tcm = /^\/api\/ai\/turns\/([A-Za-z0-9_-]{22})\/cancel$/.exec(p);
+  if (tcm && m === 'POST') return turnCancel(res, tcm[1]);
+  // cầu nối CLI cho Studio (S / T, đã qua cổng /api): trạng thái + Quét lại / Kiểm tra khoá (lệnh ký HMAC tới cầu nối). Chưa có cầu nối → Studio chỉ hiện lệnh CLI HẰNG SỐ của chính nó
+  if (p === '/api/ai/cli' && m === 'GET') return send(res, 200, bridge.status());
+  if (p === '/api/ai/cli/control' && m === 'POST') { const b = await body(req, 4096); try { return send(res, 200, bridge.control(b.kind, typeof b.cli === 'string' ? b.cli : '')); } catch (e) { return fail(res, e.code || 400, e.message); } }
   if (p === '/api/ai/test' && m === 'POST') { const b = await body(req); return send(res, 200, await ai.test(typeof b.model === 'string' ? b.model : '')); }
   if (p === '/api/ai/agent' && m === 'POST') {
     const b = await body(req);
     try {
-      if (typeof b.message === 'string') return await turnOrWait(res, b, () => dockTurn(b));   // dock: ngữ cảnh + ghim + luồng theo đối tượng (async: 202 + hỏi lượt — CNS-175)
+      if (typeof b.message === 'string') return await turnOrWait(res, b, h => dockTurn(b, h));   // dock: ngữ cảnh + ghim + luồng theo đối tượng (async: 202 + hỏi lượt — CNS-175)
       // kiểu cũ { messages } (client không có dock): vai của Xưởng, không lưu luồng
       return send(res, 200, await ai.agent({ messages: b.messages, model: typeof b.model === 'string' ? b.model : '', zone: cleanContext(b.context).zone }, mcp));
     } catch (e) { return fail(res, e.code || 502, e.message); }
@@ -707,7 +764,7 @@ async function route(req, res) {
   if (wm && wm[2] === '/chat' && m === 'POST') {
     const b = await body(req);
     if (!store.getWork(wm[1])) return fail(res, 404, 'không có tác phẩm này');
-    try { return await turnOrWait(res, b, () => dockTurn(Object.assign({}, b, { context: { zone: 'tao-tac', page: 'works', object: { kind: 'work', id: wm[1] } } }))); }
+    try { return await turnOrWait(res, b, h => dockTurn(Object.assign({}, b, { context: { zone: 'tao-tac', page: 'works', object: { kind: 'work', id: wm[1] } } }), h)); }
     catch (e) { return fail(res, e.code || 502, e.message); }
   }
   if (p === '/api/projects' && m === 'GET') { mcp.sync(); return send(res, 200, mcp.projects()); }

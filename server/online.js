@@ -872,7 +872,7 @@ function createOnline(opts) {
     if (!watch) { watch = setInterval(() => { if (!running) d.tunnel.set(intent() !== 'off'); }, 2000); if (watch.unref) watch.unref(); }
   }
 
-  return { route, checkRoute, view, init, intent, idle, migrate, ownerReady, waitingOwner, busy, internetCheck, resetAfterRestore, machineMark, noteMachine, files, tunnelPort, _flow: () => flow };
+  return { route, checkRoute, view, init, intent, idle, migrate, ownerReady, waitingOwner, busy, internetCheck, resetAfterRestore, machineMark, noteMachine, files, tunnelPort, installId, _flow: () => flow };   // installId: pairing cầu nối CLI gắn với nó (v0.26)
 }
 
 module.exports = { createOnline, flowWaitsOwner, isPublicIp, isCloudflareIp, probeUrl, resolveFresh, traceIp, snippets, ANTHROPIC, CF_IPS, FLOWS };

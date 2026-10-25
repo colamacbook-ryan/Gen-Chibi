@@ -16,7 +16,9 @@ const SURFACES = {
     readOnly: 'mcp:read: route says the connection is read-only; golden rules that name a write tool are left out (tools/list hides those tools too)' },
   start_here: { reader: 'any agent, first call', parts: ['golden (same filter as mcp: read-only → no write tools)', 'read', 'errors', 'connection note'] },
   chat: { reader: 'the owner\'s own LLM in the Studio dock (any model)', parts: ['chat base', 'reply language', 'zone role', 'anchor syntax', 'data rule', 'open work (Create area)', 'product', 'route', 'golden'],
-    note: 'tools = the zone\'s set (mcp.toolsFor); golden rules that name a write tool outside the zone (rollback_app, save_shot in the Library…) are left out; no system / paid-voice tools; the owner approves on the spot' }
+    note: 'tools = the zone\'s set (mcp.toolsFor); golden rules that name a write tool outside the zone (rollback_app, save_shot in the Library…) are left out; no system / paid-voice tools; the owner approves on the spot' },
+  bridge: { reader: 'an agent CLI on the owner\'s machine (agy, Claude Code) driven by the Studio dock through the CLI bridge', parts: ['chat (same zone filter)', 'BRIDGE (3 fixed lines)'],
+    note: 'MCP initialize.instructions is EMPTY for this channel (CNS-308) — the rules travel in the turn prompt only; no live_task / live_setup rules (those tools are in no zone)' }
 };
 
 const PRODUCT = 'gen-chibi is a factory of chibi assets made from code: characters, items, scenes, motion packs (poses + animated actions), sound packs (cartoon sound effects) and films. You write JSON; the system checks it (gates), renders and stores it.';
@@ -134,6 +136,14 @@ function chat(o) {
   return lines.join('\n');
 }
 
+// ---- bề mặt bridge: AI trong Studio chạy bằng agent CLI trên máy owner (v0.26, spec §5 "Một nguồn luật") = chat + 3 câu cố định
+const BRIDGE = [
+  'You only have the gen-chibi tools (an MCP server named genchibi). There is no shell, no file access and no web access in this session — do not try them.',
+  'Tool names may carry the prefix of your CLI (for example mcp__genchibi__save_character or mcp_genchibi_save_character) — they are the same gen-chibi tools.',
+  'Your final message is shown to the user in the Studio chatroom; tool results you produced are shown there too.'
+];
+function bridge(o) { return chat(o) + '\nCLI BRIDGE:\n' + BRIDGE.join('\n'); }
+
 // ---- tool live_event (Sân khấu sống, INT-21): chữ dặn agent về nhãn — server lọc lại bằng engine/live.js redact() dù agent làm sai
 const LIVE = {
   tool: 'Tells the owner\'s Live stage what you are doing RIGHT NOW so the chibi character acts it out (Studio › System › Live stage). Call it at each real step: kind = session_start | prompt | think | read | search | edit | write | run | test_run | test_pass | test_fail | delegate_start | delegate_end | wait_user | error | limit | release | idle | stop. Fire-and-forget, rate-limited (about 10 per second; UNAVAILABLE = slow down). Never let it slow your real work.',
@@ -144,4 +154,4 @@ const LIVE = {
   label: 'optional SHORT plain-words summary (at most 48 characters, e.g. "Reading the setup guide") — never file contents, paths, commands, URLs, emails or secrets: the server strips them and shows its own caption'
 };
 
-module.exports = { LIVE, SURFACES, PRODUCT, ROLES, DATA_HEAD, START, CONNECTION_NOTE, route, golden, forConnection, writeToolsOf, mcp, chat, workInstructions, replyRule };
+module.exports = { LIVE, SURFACES, PRODUCT, ROLES, DATA_HEAD, START, CONNECTION_NOTE, BRIDGE, route, golden, forConnection, writeToolsOf, mcp, chat, bridge, workInstructions, replyRule };

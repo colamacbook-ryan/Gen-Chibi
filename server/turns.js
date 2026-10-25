@@ -23,14 +23,15 @@ function createTurns(o) {
     for (let i = 0; i < done - o.maxDone; i++) map.delete(old[i][0]);
   }
   const running = () => { let n = 0; for (const x of map.values()) if (x.status === 'running') n++; return n; };
-  // p: Promise của lượt. Trả id (128 bit) — null khi đã đủ maxRunning lượt đang chạy
-  function add(p) {
+  // p: Promise của lượt. h (tuỳ chọn, v0.26 cầu nối CLI): { cancel(), progress() } do lượt gắn vào khi chạy — GET lượt trả progress, POST …/cancel gọi cancel.
+  // Trả id (128 bit) — null khi đã đủ maxRunning lượt đang chạy
+  function add(p, h) {
     sweep();
     if (running() >= o.maxRunning) return null;
-    const id = crypto.randomBytes(16).toString('base64url'), t = { status: 'running', at: o.now(), doneAt: 0 };
+    const id = crypto.randomBytes(16).toString('base64url'), t = { status: 'running', at: o.now(), doneAt: 0, handle: h || null };
     map.set(id, t);
     // doneAt đặt CÙNG lúc đổi trạng thái (không để .finally): lượt "xong" mà doneAt còn 0 sẽ bị sweep() coi là quá hạn
-    p.then(r => { t.doneAt = o.now(); t.status = 'done'; t.result = r; }, e => { t.doneAt = o.now(); t.status = 'error'; t.code = e && e.code >= 400 && e.code < 600 ? e.code : 502; t.error = String((e && e.message) || e); })
+    p.then(r => { t.doneAt = o.now(); t.status = 'done'; t.result = r; }, e => { t.doneAt = o.now(); t.status = 'error'; t.code = e && e.code >= 400 && e.code < 600 ? e.code : 502; t.error = String((e && e.message) || e); if (e && e.bridgeCode) t.bridgeCode = e.bridgeCode; })
       .then(sweep);
     return id;
   }

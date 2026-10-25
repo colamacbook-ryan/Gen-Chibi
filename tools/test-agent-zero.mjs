@@ -55,16 +55,20 @@ const Rules = require(path.join(ROOT, 'server/rules.js'));
     const writeTools = Rules.writeToolsOf(TOOLS), chans = { owner: {}, link: { viaLink: true }, 'mcp:read': MM.scopeCtx('mcp:read'), 'mcp:write': MM.scopeCtx('mcp:write'), 'mcp:owner': MM.scopeCtx('mcp:owner'), studio: { channel: 'ui' } };
     for (const [k, ctx] of Object.entries(chans)) {
       const ins = (await m.handle({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} }, ctx)).result.instructions, sh = m.startHere(ctx);
-      ok(ins === Rules.mcp(ctx, TOOLS), 'initialize (' + k + '): instructions phải đúng Rules.mcp — có chữ ngoài nguồn');
+      // AI trong Studio (channel 'ui' — cầu nối CLI v0.26): instructions RỖNG, luật chỉ đi trong system của lượt (bề mặt bridge — CNS-308)
+      ok(ctx.channel === 'ui' ? ins === '' : ins === Rules.mcp(ctx, TOOLS), 'initialize (' + k + '): instructions phải đúng Rules.mcp (kênh ui: rỗng) — có chữ ngoài nguồn');
       ok(JSON.stringify(sh.rules) === JSON.stringify(Rules.forConnection(ctx, TOOLS)) && sh.instructions === Rules.START.read && sh.errors === Rules.START.errors && Object.values(Rules.CONNECTION_NOTE).includes(sh.connection.note), 'start_here (' + k + '): luật / lời dặn / ghi chú kênh phải lấy từ rules.js');
       if (ctx.readOnly) ok(!writeTools.some(n => ins.includes(n)) && !/save_/.test(ins), 'kết nối chỉ đọc không được nghe về tool ghi: ' + writeTools.filter(n => ins.includes(n)).join(', '));
       if (ctx.readOnly) { const sr = sh.rules.join('\n'); ok(sh.rules.length >= 5 && !writeTools.some(n => sr.includes(n)) && !/save_/.test(sr), 'start_here (mcp:read): luật vàng lọc như initialize — không nhắc tool ghi: ' + writeTools.filter(n => sr.includes(n)).join(', ')); }
-      else ok(Rules.golden().every(r => ins.includes(r)), 'initialize (' + k + '): thiếu luật vàng');
+      else if (ctx.channel !== 'ui') ok(Rules.golden().every(r => ins.includes(r)), 'initialize (' + k + '): thiếu luật vàng');
     }
     for (const z of Object.keys(MM.ZONES)) for (const lang of ['en', 'vi']) {
       const ctx = MM.cleanContext({ zone: z, lang, object: { kind: 'work', id: 'phim-luat' } }), w = MM.ZONES[z].work ? m.store.getWork('phim-luat') : null;
       const zt = m.toolsFor('ui', z), sys = m.uiSystem(ctx), zn = zt.map(t => t.name), wAll = Rules.writeToolsOf(TOOLS.concat(MM.UI_TOOLS));
       ok(sys === Rules.chat({ zone: z, lang, work: w, tools: zt, allTools: TOOLS.concat(MM.UI_TOOLS) }), 'AI chatroom (' + z + '/' + lang + '): chỉ dẫn hệ thống phải đúng Rules.chat');
+      const bsys = m.uiSystem(ctx, 'bridge');
+      ok(bsys === Rules.bridge({ zone: z, lang, work: w, tools: zt, allTools: TOOLS.concat(MM.UI_TOOLS) }) && bsys.startsWith(sys) && Rules.BRIDGE.every(l => bsys.includes(l)) && !/live_(task|setup|event)/.test(bsys) && Rules.SURFACES.bridge,
+        'cầu nối CLI (' + z + '/' + lang + '): bề mặt bridge = Rules.chat + 3 câu cố định (SURFACES.bridge), không live_*');
       // luật vàng lọc theo bộ tool của khu: không luật nào nhắc tool ghi ngoài khu (Tạo tác không nghe về rollback_app / xoá cảnh qua luật 9); vẫn đủ phần lớn luật, vừa ngân sách
       const got = Agent.rules().filter(r => sys.includes(r)), off = wAll.filter(n => !zn.includes(n) && got.some(r => new RegExp('\\b' + n + '\\b').test(r)));
       ok(!off.length && got.length >= 8 && !/rollback_app/.test(sys) && sys.length <= MM.LIMITS.llm / 2, 'AI chatroom (' + z + '): luật vàng phải lọc theo bộ tool của khu — nhắc tool ngoài khu: ' + off.join(', ') + ' · ' + got.length + ' luật · ' + sys.length + ' ký tự');
