@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.24.2 — Videos made from the sample kit may be monetized
+- **Sample terms (Q48):** films / videos made from a Gen Labs sample may now be posted and monetized (ads, creator funds, sponsorships, paid courses) with the credit line "Made with gen-chibi · Gen Labs"; the sample characters and assets may not be resold, redistributed, or used as a logo / brand. Characters you create are still yours without restriction.
+
 ## v0.24.1 — Live stage setup for any connected agent (it asks its user first)
 Ryan: "khi kết nối mcp về thì … yêu cầu agent đó tải app sân khấu về máy sở tại của nó rồi cài và liên kết vào để biểu diễn tại chỗ" *(when an agent connects over MCP, have it install the stage link on its own machine)* — chosen form: an invitation, and the agent must ask its user first.
 

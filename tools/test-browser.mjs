@@ -696,7 +696,7 @@ if (want('core')) {
       const meta = JSON.parse(js.buf.toString());
       if (meta.format !== 'gen-chibi.anim/1' || meta.frames.length !== meta.frameCount) throw new Error('JSON timeline: ' + JSON.stringify(meta).slice(0, 160));
       // nhân vật của bộ mẫu Gen Labs: giấy phép là điều khoản bộ mẫu, KHÔNG phải "thuộc người tạo"; gói của bộ mẫu tải về mang dấu sample
-      if (meta.license.indexOf('Bộ mẫu Gen Labs — xem, thử, làm phim; được đăng phim / video làm từ bộ mẫu kèm dòng ghi công "Made with gen-chibi · Gen Labs"; không bán lại, không phân phối lại tệp hay asset của bộ mẫu') < 0 || /thuộc người tạo/.test(meta.license) || !meta.sample || meta.sample.owner !== 'Gen Labs') throw new Error('giấy phép JSON của nhân vật bộ mẫu: ' + JSON.stringify([meta.license, meta.sample]));
+      if (meta.license.indexOf('Bộ mẫu Gen Labs — xem, thử, làm phim; được đăng và kiếm tiền từ phim / video làm từ bộ mẫu kèm dòng ghi công "Made with gen-chibi · Gen Labs"; không bán lại, không phân phối lại nhân vật hay asset của bộ mẫu, không dùng làm logo / thương hiệu') < 0 || /thuộc người tạo/.test(meta.license) || !meta.sample || meta.sample.owner !== 'Gen Labs') throw new Error('giấy phép JSON của nhân vật bộ mẫu: ' + JSON.stringify([meta.license, meta.sample]));
       const [tqp] = await Promise.all([q.waitForEvent('download'), q.click('[data-pack="local.my/tq-dong-tac"] button:text-is("Tải gói (.json)")')]);
       const tqj = JSON.parse(require('fs').readFileSync(await tqp.path(), 'utf8'));
       if (!tqj.sample || tqj.sample.owner !== 'Gen Labs' || !/không bán lại/.test(tqj.sample.license) || tqj.key) throw new Error('tải gói bộ mẫu thiếu dấu sample: ' + JSON.stringify(tqj.sample));
@@ -4130,7 +4130,7 @@ if (want('video') || want('video-ui')) {
       await pg.click('.libcard.proj[title="mau-tam-quoc"]'); await pg.waitForTimeout(800);
       const ban = await pg.evaluate(() => [...document.querySelectorAll('.banner')].map(b => b.textContent).filter(t => /Gen Labs/.test(t)).join(' | '));
       const upd = await pg.evaluate(() => [...document.querySelectorAll('button')].some(b => /Update sample/.test(b.textContent)));
-      const TERMS_EN = "view, try and make films; films / videos made from the sample may be posted with the credit line \"Made with gen-chibi · Gen Labs\"; no resale, no redistribution of the sample's files or assets";
+      const TERMS_EN = "view, try and make films; films / videos made from the sample may be posted and monetized with the credit line \"Made with gen-chibi · Gen Labs\"; don't resell or redistribute the sample characters or assets themselves, or use them as a logo / brand";
       if (ban.indexOf(TERMS_EN) < 0 || /view, try and film only|trial films only/.test(ban) || upd) throw new Error('điều khoản bộ mẫu (bản cài câu cũ): ' + JSON.stringify([ban, upd]));
       await pg.close();
       await openWork(qv, 'fo-one', 'en'); await openPanel(qv);

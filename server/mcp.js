@@ -1185,7 +1185,7 @@ class MCP {
     this.sync();
     const P = S.listProjects().find(p => p.id === id);
     if (!P) throw Object.assign(new Error(tr(VI, 'Không có dự án {id} (list_projects)', { id })), { code: 404 });
-    if (sale && P.sample) throw Object.assign(new Error(tr(VI, 'Bộ mẫu của {owner} — xem, thử, làm phim; được đăng phim / video làm từ bộ mẫu kèm dòng ghi công "Made with gen-chibi · Gen Labs"; không bán lại, không phân phối lại tệp hay asset của bộ mẫu; bộ mẫu không được xuất gói bán. Dựng bộ của bạn trong một dự án riêng rồi phát hành.', { owner: P.sample.owner || 'Gen Labs' })), { code: 403 });
+    if (sale && P.sample) throw Object.assign(new Error(tr(VI, 'Bộ mẫu của {owner} — xem, thử, làm phim; được đăng và kiếm tiền từ phim / video làm từ bộ mẫu kèm dòng ghi công "Made with gen-chibi · Gen Labs"; không bán lại, không phân phối lại nhân vật hay asset của bộ mẫu, không dùng làm logo / thương hiệu; bộ mẫu không được xuất gói bán. Dựng bộ của bạn trong một dự án riêng rồi phát hành.', { owner: P.sample.owner || 'Gen Labs' })), { code: 403 });
     const clean = r => { const o = this.canonRefs(r); ['version', 'savedAt', 'note', '_note', 'key'].forEach(k => delete o[k]); return o; };   // gói luôn ghi tên thư viện mới
     const inP = r => (r.project || '') === id && (!sale || GC.statusOf(r.status) === 'published');
     const allA = S.listAssets().filter(a => a.pack === MY_PACK), allI = S.listItems(), allS = S.listScenes(), dataParts = S.listParts();
@@ -1230,7 +1230,7 @@ class MCP {
     if (sale) { const art = sampleArt(GC); out.soundPacks.forEach(m => { const hit = soundSigs(GC, m).map(h => art.get('sound:' + h)).find(Boolean), k = 'sound:' + m.id; if (hit && !prov[k]) { prov[k] = { owner: hit.owner }; marked.push(k); } }); }
     if (sale && marked.length) {
       const owner = prov[marked[0]].owner || 'Gen Labs', names = marked.slice(0, 6).map(k => k.split(':').pop()).join(', ') + (marked.length > 6 ? '…' : '');
-      throw Object.assign(new Error(tr(VI, 'Gói bán đang dùng {n} mục của bộ mẫu {owner} ({names}) — bộ mẫu: xem, thử, làm phim; được đăng phim / video làm từ bộ mẫu kèm dòng ghi công "Made with gen-chibi · Gen Labs"; không bán lại, không phân phối lại tệp hay asset của bộ mẫu; không được đưa vào gói bán. Thay bằng linh kiện / trang bị / cảnh của riêng bạn rồi xuất lại.', { n: marked.length, owner, names })), { code: 403, sample: marked });
+      throw Object.assign(new Error(tr(VI, 'Gói bán đang dùng {n} mục của bộ mẫu {owner} ({names}) — bộ mẫu: xem, thử, làm phim; được đăng và kiếm tiền từ phim / video làm từ bộ mẫu kèm dòng ghi công "Made with gen-chibi · Gen Labs"; không bán lại, không phân phối lại nhân vật hay asset của bộ mẫu, không dùng làm logo / thương hiệu; không được đưa vào gói bán. Thay bằng linh kiện / trang bị / cảnh của riêng bạn rồi xuất lại.', { n: marked.length, owner, names })), { code: 403, sample: marked });
     }
     if (marked.length) out.provenance = marked.reduce((o, k) => (o[k] = prov[k], o), {});
     // gói cần những thư viện nào (khung, chủ đề…) để mở được ở bản cài khác

@@ -389,7 +389,7 @@ else {
 /* ---------------------------------------------------------------- điều khoản bộ mẫu: MỘT câu ở mọi nơi (Q47 — chủ duyệt; CNS-240, review bảo mật 🟠) */
 {
   const b0 = bad, rd = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
-  const VI = "xem, thử, làm phim; được đăng phim / video làm từ bộ mẫu kèm dòng ghi công \"Made with gen-chibi · Gen Labs\"; không bán lại, không phân phối lại tệp hay asset của bộ mẫu", EN = "view, try and make films; films / videos made from the sample may be posted with the credit line \"Made with gen-chibi · Gen Labs\"; no resale, no redistribution of the sample's files or assets";
+  const VI = "xem, thử, làm phim; được đăng và kiếm tiền từ phim / video làm từ bộ mẫu kèm dòng ghi công \"Made with gen-chibi · Gen Labs\"; không bán lại, không phân phối lại nhân vật hay asset của bộ mẫu, không dùng làm logo / thương hiệu", EN = "view, try and make films; films / videos made from the sample may be posted and monetized with the credit line \"Made with gen-chibi · Gen Labs\"; don't resell or redistribute the sample characters or assets themselves, or use them as a logo / brand";
   const app = rd('studio/app.js'), tq = JSON.parse(rd('studio/mau/tam-quoc.json')), vpv = JSON.parse(rd('studio/mau/van-phong-vui.json')), fo = JSON.parse(rd('studio/mau/fun-office.json'));
   const en = JSON.parse(rd('locales/en/studio.json')), enS = JSON.parse(rd('locales/en/server-msg.json')), mcp = rd('server/mcp.js'), man = rd('ASSET_MANIFEST.md');
   no(app.indexOf("var SAMPLE_TERMS = N_('" + VI + "')") < 0 || en[VI] !== EN, 'SAMPLE_TERMS (app.js) = câu điều khoản chung + bản tiếng Anh');

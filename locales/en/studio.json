@@ -1976,7 +1976,7 @@
  "Chọn khung khác": "Choose another frame",
  "Xuất lại": "Export again",
  "Bản này chỉ xuất video trên Chrome hoặc Edge ở máy tính — Firefox, Safari và trình duyệt điện thoại chưa được hỗ trợ.": "This version exports video only in Chrome or Edge on a computer — Firefox, Safari and phone browsers aren't supported yet.",
- "xem, thử, làm phim; được đăng phim / video làm từ bộ mẫu kèm dòng ghi công \"Made with gen-chibi · Gen Labs\"; không bán lại, không phân phối lại tệp hay asset của bộ mẫu": "view, try and make films; films / videos made from the sample may be posted with the credit line \"Made with gen-chibi · Gen Labs\"; no resale, no redistribution of the sample's files or assets",
+ "xem, thử, làm phim; được đăng và kiếm tiền từ phim / video làm từ bộ mẫu kèm dòng ghi công \"Made with gen-chibi · Gen Labs\"; không bán lại, không phân phối lại nhân vật hay asset của bộ mẫu, không dùng làm logo / thương hiệu": "view, try and make films; films / videos made from the sample may be posted and monetized with the credit line \"Made with gen-chibi · Gen Labs\"; don't resell or redistribute the sample characters or assets themselves, or use them as a logo / brand",
  "Bản sao lưu của gói bộ mẫu — {SAMPLE_TERMS}": "Backup of a sample pack — {SAMPLE_TERMS}",
  "Tác phẩm dùng bộ mẫu Gen Labs: {SAMPLE_TERMS}. Dòng ghi công có sẵn trong mô tả (.txt).": "This work uses a Gen Labs sample: {SAMPLE_TERMS}. The credit line is already in the description (.txt).",
  "Đã huỷ xuất video — không xoá được tệp dở \"{name}\" trong thư mục \"{dir}\", hãy xoá tay.": "Video export cancelled — couldn't delete the partial file \"{name}\" in the folder \"{dir}\"; please delete it by hand.",

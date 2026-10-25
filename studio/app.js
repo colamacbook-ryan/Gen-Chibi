@@ -3664,7 +3664,7 @@
   var MANNEQUIN = 'gen.khung/ma-no-canh';
   // điều khoản của bộ mẫu Gen Labs (gói / hoạt ảnh xuất ra từ bộ mẫu mang dấu này — nhập lại vẫn bị chặn bán theo dấu nội dung)
   // MỘT câu điều khoản bộ mẫu Gen Labs (Q47, CNS-240) — cùng câu ở studio/mau/*.json, ASSET_MANIFEST.md, server/mcp.js, tài liệu
-  var SAMPLE_TERMS = N_('xem, thử, làm phim; được đăng phim / video làm từ bộ mẫu kèm dòng ghi công "Made with gen-chibi · Gen Labs"; không bán lại, không phân phối lại tệp hay asset của bộ mẫu');
+  var SAMPLE_TERMS = N_('xem, thử, làm phim; được đăng và kiếm tiền từ phim / video làm từ bộ mẫu kèm dòng ghi công "Made with gen-chibi · Gen Labs"; không bán lại, không phân phối lại nhân vật hay asset của bộ mẫu, không dùng làm logo / thương hiệu');
   // smp (tuỳ chọn): dấu bộ mẫu của dự án chứa gói → bản tải về ghi rõ sample { owner, license }
   function motionPackOut(P, smp) {
     var o = clone(P); ['pack', 'key', 'version', 'savedAt', 'note'].forEach(function (k) { delete o[k]; });

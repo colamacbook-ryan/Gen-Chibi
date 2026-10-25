@@ -20,4 +20,4 @@
 ## Samples (Gen Labs)
 - `list_samples` → bundled sample projects, installed or not, and whether an update exists.
 - `install_sample` with `{ "id": "<sample id>" }` (`"overwrite": true` to update an installed sample).
-- Samples: view, try and make films; films / videos made from the sample may be posted with the credit line "Made with gen-chibi · Gen Labs"; no resale, no redistribution of the sample's files or assets — not for sale.
+- Samples: view, try and make films; films / videos made from the sample may be posted and monetized with the credit line "Made with gen-chibi · Gen Labs"; don't resell or redistribute the sample characters or assets themselves, or use them as a logo / brand — not for sale.
