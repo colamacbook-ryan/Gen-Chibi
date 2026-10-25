@@ -231,6 +231,22 @@ chính thức của đúng phiên bản này và kiểm SHA-256 trước khi ghi
 `https://github.com/colamacbook-ryan/Gen-Chibi/releases/download/v<version>/` (URL khác: từ chối và báo người dùng); app chỉ cấp token live riêng cho agent đó (liệt kê ở
 trang Live, có nút Thu hồi) và địa chỉ của app.
 
+## Giọng đọc local miễn phí (TTS trên máy bạn, v0.25.1)
+
+Studio, trợ lý AI và mọi agent đang nối đọc lời thoại bằng **máy TTS miễn phí trên chính máy bạn** trước, rồi mới tới giọng Google Gemini (chỉ chủ máy, cần key), cuối cùng là giọng trình duyệt. Máy TTS kiểu OpenAI nào cũng được (`POST /v1/audio/speech` trả WAV); danh sách giọng đọc lúc chạy từ `GET /v1/voices` hoặc `GET /v1/audio/voices`.
+
+| Ngôn ngữ | Bộ đọc gợi ý (Apache-2.0, bạn tự cài) | Địa chỉ mặc định trong Docker | Model |
+|---|---|---|---|
+| Tiếng Việt, tiếng Anh | VieNeu-TTS | `http://host.docker.internal:8000` | `vieneu` |
+| Tiếng Trung | Kokoro-FastAPI (giọng `zf_xiaobei`) | `http://host.docker.internal:8880` | `kokoro` |
+| Tiếng Quảng Đông | (giữ Google Gemini) | | |
+
+- **Cho máy TTS chỉ nghe trên máy này.** Kokoro-FastAPI: `docker run -d --name kokoro -p 127.0.0.1:8880:8880 ghcr.io/remsky/kokoro-fastapi-cpu:latest`. VieNeu-TTS: chạy server kiểu OpenAI của nó, nghe `127.0.0.1`, cổng `8000` (xem README của VieNeu). gen-chibi không mang mã / model của chúng — tự kiểm license (Apache-2.0).
+- **macOS / Windows (Docker Desktop):** `host.docker.internal` tới được `127.0.0.1` của máy — không cần làm gì thêm. **Linux:** compose của app trỏ `host.docker.internal` về cầu Docker, không tới được máy TTS chỉ nghe `127.0.0.1`; hoặc cho máy TTS nghe địa chỉ cầu (`172.17.0.1`, vẫn không ra Internet), hoặc chạy nó thành container cùng mạng Docker và dùng tên container (vd `http://kokoro:8880`). Cài thẳng (không Docker): `http://127.0.0.1:<cổng>`.
+- **Studio › Hệ thống › Cài đặt AI › Giọng đọc local:** mỗi ngôn ngữ — bật / tắt, địa chỉ, model, giọng mặc định (chọn từ danh sách máy TTS báo), trạng thái (sống / không phản hồi, số giọng) và số câu hôm nay. Chỉ nhận địa chỉ trên máy này hoặc mạng riêng (loopback, `host.docker.internal`, 10.x / 172.16–31.x / 192.168.x, tên container), kiểm lại lúc nối; agent không bao giờ đặt hay gửi được địa chỉ.
+- **Trần mỗi ngày** (chỉ câu mới; câu đã lưu miễn phí): 500 câu / ngày cho cả máy (đổi ở cùng bảng), và theo kênh: 200 cho OAuth `mcp:write`, 200 cho trợ lý AI trong Studio, 100 cho link MCP có khoá.
+- Giọng theo vai của nhân vật (giọng vùng × giới cho tiếng Việt) ở `kinds/voice/local-tts.json`; giọng máy TTS không có thì rơi về giọng mặc định của ngôn ngữ, kèm cảnh báo.
+
 ## Core AI (LLM API)
 
 Studio › Cài đặt AI: chọn OpenRouter, DeepSeek, MiniMax hoặc địa chỉ tuỳ chỉnh chuẩn OpenAI, dán API key (mã hoá AES-256-GCM trên máy, không bao giờ trả về trình duyệt). "Kiểm tra model" chạy một kịch bản thử và chấm: JSON đúng chuẩn, số lần phải sửa, độ trễ, token.

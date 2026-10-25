@@ -234,6 +234,22 @@ downloads the hook from this version's official GitHub release and checks its SH
 may download only from exactly `https://github.com/colamacbook-ryan/Gen-Chibi/releases/download/v<version>/` (any other URL: refuse and tell your user); the app
 only supplies a per-agent live token (listed in the Live page, with Revoke) and its address.
 
+## Free local voices (TTS on your machine, v0.25.1)
+
+The Studio, the AI assistant and every connected agent read dialogue with a **free TTS server on your own machine** first, then Google Gemini voices (owner only, needs a key), then the browser voice. Any OpenAI-style TTS server works (`POST /v1/audio/speech` returning WAV); the voice list is read at run time from `GET /v1/voices` or `GET /v1/audio/voices`.
+
+| Language | Suggested engine (Apache-2.0, you install it) | Default address in Docker | Model |
+|---|---|---|---|
+| Vietnamese, English | VieNeu-TTS | `http://host.docker.internal:8000` | `vieneu` |
+| Mandarin | Kokoro-FastAPI (voice `zf_xiaobei`) | `http://host.docker.internal:8880` | `kokoro` |
+| Cantonese | (stays on Google Gemini) | | |
+
+- **Start the TTS server listening on this machine only.** Kokoro-FastAPI: `docker run -d --name kokoro -p 127.0.0.1:8880:8880 ghcr.io/remsky/kokoro-fastapi-cpu:latest`. VieNeu-TTS: run its OpenAI-compatible server bound to `127.0.0.1`, port `8000` (see its README). gen-chibi does not ship their code or models — check their licenses (Apache-2.0) yourself.
+- **macOS / Windows (Docker Desktop):** `host.docker.internal` reaches the host's `127.0.0.1` — nothing else to do. **Linux:** the app's compose file maps `host.docker.internal` to the Docker bridge, which cannot reach a server bound only to `127.0.0.1`; either bind the TTS server to the bridge address (`172.17.0.1`, still not public) or run it as a container and use its container name (e.g. `http://kokoro:8880`) after putting it on the same Docker network. Native install (no Docker): `http://127.0.0.1:<port>`.
+- **Studio › System › AI settings › Local voices:** per language — on / off, address, model, default voice (picked from the list the server reports), status (up / not answering, number of voices) and today's usage. Only addresses on this machine or a private network are accepted (loopback, `host.docker.internal`, 10.x / 172.16–31.x / 192.168.x, a container name), re-checked when connecting; agents can never set or pass an address.
+- **Daily caps** (new lines only; cached lines are free): 500 lines / day for the whole machine (change it in the same panel), and per channel: 200 for OAuth `mcp:write`, 200 for the Studio AI assistant, 100 for a keyed MCP link.
+- Voices follow the character's role (accent × gender for Vietnamese) from `kinds/voice/local-tts.json`; a voice the server does not have falls back to the language's default voice with a warning.
+
 ## Core AI (LLM API)
 
 Studio › System › AI settings: choose OpenRouter, DeepSeek, MiniMax or a custom OpenAI-compatible endpoint, paste the API key (encrypted with AES-256-GCM on the machine, never sent back to the browser). "Test model" runs a trial script and scores it: valid JSON, number of fixes needed, latency, tokens.

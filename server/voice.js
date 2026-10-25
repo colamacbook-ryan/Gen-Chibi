@@ -2,6 +2,9 @@
 // đọc lại không tốn lượt gọi. Model đọc giọng quét lúc chạy (STD-10): mọi model "*-tts" key này gọi được, mới nhất trước;
 // model nào hết hạn mức (429) thì khoá tới giờ Google báo rồi chuyển model kế — gói miễn phí chỉ ~10 câu / ngày / model.
 // Hết hẳn thì báo lỗi có giờ thử lại; Studio / bộ phát rơi về giọng trình duyệt. Key mã hoá trong kho bí mật, không trả về trình duyệt.
+// v0.25.1 (INT-23): giọng đọc TTS LOCAL miễn phí (server/tts-local.js) đứng TRƯỚC Gemini: cấu hình theo ngôn ngữ (chủ máy đặt), quét giọng lúc chạy,
+// mọi kênh agent dùng được (có trần / ngày), cùng đường chuẩn hoá + lưu đệm clip. Thứ tự một câu: clip đã có → local (cấu hình + sống) →
+// Gemini (có key + kênh được chi tiêu: chỉ chủ máy) → lỗi (Studio / bộ phát rơi về giọng trình duyệt như cũ).
 // © 2026 Gen Labs — All rights reserved.
 'use strict';
 const fs = require('fs');
@@ -9,6 +12,7 @@ const path = require('path');
 const crypto = require('crypto');
 const https = require('https');
 const { agentFor } = require('./net');
+const TL = require('./tts-local');
 // câu lỗi: msgid tiếng Việt (câu ghép = mẫu tr(VI, …)), dịch ở rìa — Studio theo người gọi, MCP sang tiếng Anh (ADR 0007)
 const MSG = require('./i18n-msg'), { VI, tr } = MSG;
 
@@ -113,10 +117,17 @@ const voiceGone = (r, err) => { const t = String((err && err.message) || ''); re
 const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 const nextDay = () => { const d = new Date(); d.setUTCHours(24, 0, 0, 0); return d.getTime(); };   // trần ngày tính theo ngày UTC (cùng sổ usage)
 const fail = (code, msg, extra) => Object.assign(new Error(msg), { code }, extra || {});
+// TTS local: trần câu MỚI / ngày (câu lưu đệm không tính). Toàn máy mặc định 500 (chủ máy đổi 0–5000, 0 = không giới hạn);
+// mỗi kênh agent thêm trần riêng NHỎ hơn — link có khoá (ai có link là gọi được) chặt nhất. owner = Studio / stdio / token / OAuth mcp:owner
+const LOCAL_CAP = 500;
+const LOCAL_CHAN_CAP = { owner: 0, oauth: 200, ui: 200, link: 100 };   // 0 = chỉ trần toàn máy
+const LOCAL_ALIVE_MS = 5 * 60e3, LOCAL_DEAD_MS = 30e3;   // nhớ kết quả quét: sống 5 phút, chết 30 giây (không thử lại mỗi câu)
+const ROOT = path.join(__dirname, '..');
 
 class Voice {
   // http (tuỳ chọn, cho test): { get(url) → {status, json}, post(url, body) → {status, json} } — mặc định gọi Google thật bằng key trong kho
-  constructor({ dataDir, secrets, http }) {
+  // localHttp (tuỳ chọn, cho test): hàm request(method, url, body, opts) thay lời gọi mạng thật tới máy TTS local · inDocker: {host} = host.docker.internal
+  constructor({ dataDir, secrets, http, localHttp, inDocker }) {
     this.dir = path.join(dataDir, 'voices');
     this.file = path.join(dataDir, 'voice.json');
     this.libFile = path.join(dataDir, 'voice-lib.json');
@@ -124,6 +135,9 @@ class Voice {
     this._models = null; this._modelsAt = 0;
     this._busy = Promise.resolve();
     this.http = http || { get: u => get(u, this.key(), 30000), post: (u, b) => post(u, this.key(), b, 90000) };
+    this.localHttp = localHttp || TL.request;
+    this.inDocker = inDocker === undefined ? process.env.GC_IN_DOCKER === '1' : !!inDocker;
+    this._lprobe = {}; this._lbusy = Promise.resolve(); this._lwarned = new Set();
     fs.mkdirSync(this.dir, { recursive: true });
   }
   read() { try { return JSON.parse(fs.readFileSync(this.file, 'utf8')); } catch { return {}; } }
@@ -132,7 +146,9 @@ class Voice {
   // designs: { "<vai>|<ngôn ngữ>|<giọng vùng>": { voice: "voice_…", at, preview } } — giọng vai đã thiết kế trong project Google của chủ máy
   // bad: { giọng: hết hạn (ms) } — giọng Google báo không còn; tự gỡ sau 24 giờ (dữ liệu cũ badVoices: [] bỏ qua — CNS-087)
   // dailyCap: trần câu đọc / thiết kế mỗi ngày (mặc định 200, 0 = không giới hạn) — chặn chi tiền ngoài ý muốn (CNS-090, Q13)
-  config() { const c = Object.assign({ enabled: null, model: '', blocked: {}, bad: {}, usage: {}, designs: {}, dailyCap: 200 }, this.read()); delete c.badVoices; return c; }
+  // local: { <ngôn ngữ>: { enabled, base_url, model, voice } } — chủ máy đặt (không có = giá trị khởi tạo của kinds/voice/local-tts.json)
+  // localCap: trần câu TTS local / ngày toàn máy · localUsage: { ngày: { all, owner, oauth, ui, link } }
+  config() { const c = Object.assign({ enabled: null, model: '', blocked: {}, bad: {}, usage: {}, designs: {}, dailyCap: 200, local: {}, localCap: LOCAL_CAP, localUsage: {} }, this.read()); delete c.badVoices; return c; }
   isBad(v, c) { const u = (c || this.config()).bad[v]; return !!u && u > Date.now(); }
   isOn() { const c = this.config(); return c.enabled !== false && !!this.key(); }
   // key riêng cho giọng; chưa có thì dùng key Gemini đã nhập ở AI đạo diễn (cùng một key Google AI Studio)
@@ -145,7 +161,7 @@ class Voice {
       blocked: Object.keys(c.blocked).filter(m => c.blocked[m] > now).map(m => ({ model: m, until: new Date(c.blocked[m]).toISOString() })),
       today: (c.usage[day] || 0), dailyCap: c.dailyCap, bad: Object.keys(c.bad).filter(v => c.bad[v] > now).map(v => ({ voice: v, until: new Date(c.bad[v]).toISOString() })),
       cached: this.cachedCount(), voices: VOICES.filter(v => !this.isBad(v.name, c)), keyUrl: 'https://aistudio.google.com/apikey',
-      roles: GV.roleList().map(r => Object.assign(r, { design: GV.canDesign(r.id) })), langs: GV.langList(), designs };
+      roles: GV.roleList().map(r => Object.assign(r, { design: GV.canDesign(r.id) })), langs: GV.langList(), designs, local: this.localPublic(c) };
   }
   setConfig(b) {
     const c = this.config();
@@ -154,8 +170,123 @@ class Voice {
     if (b.clearKey === true) this.secrets.set('voice.gemini', '');
     if (b.dailyCap !== undefined && Number.isFinite(+b.dailyCap)) c.dailyCap = Math.max(0, Math.min(5000, Math.round(+b.dailyCap)));
     if (b.clearBad === true) c.bad = {};
+    if (b.localCap !== undefined && Number.isFinite(+b.localCap)) c.localCap = Math.max(0, Math.min(5000, Math.round(+b.localCap)));
+    if (b.local && typeof b.local === 'object') this.setLocal(c, b.local);   // ném 400 khi địa chỉ / model / giọng sai — không ghi gì
     this.write(c);
     return this.publicConfig();
+  }
+
+  /* ---------------------------------------------------------------- TTS local (v0.25.1, INT-23) */
+  // cấu hình hiệu lực mỗi ngôn ngữ: chủ máy đặt → giá trị khởi tạo (kinds/voice/local-tts.json) → không có (yue: giữ Gemini)
+  localLangs(c) {
+    const cc = c || this.config(), map = TL.voiceMap(ROOT), host = this.inDocker ? 'host.docker.internal' : '127.0.0.1', out = {};
+    Object.keys(GV.LANGS).forEach(l => {
+      const o = hasOwn(cc.local || {}, l) ? cc.local[l] : null, d = (map.defaults || {})[l];
+      if (o && typeof o === 'object') out[l] = { enabled: o.enabled !== false && !!o.base_url, base_url: String(o.base_url || ''), model: String(o.model || ''), voice: String(o.voice || ''), source: 'owner' };
+      else if (d) out[l] = { enabled: true, base_url: String(d.base_url || '').replace('{host}', host), model: String(d.model || ''), voice: String(d.voice || ''), source: 'default' };
+      else out[l] = { enabled: false, base_url: '', model: '', voice: '', source: 'none' };
+    });
+    return out;
+  }
+  // chủ máy đổi cấu hình MỘT ngôn ngữ: { lang, enabled?, base_url?, model?, voice?, reset? } — base_url qua safeBase (chỉ máy này / mạng riêng)
+  setLocal(c, b) {
+    const L = typeof b.lang === 'string' && hasOwn(GV.LANGS, b.lang) ? b.lang : '';
+    if (!L) throw fail(400, 'Ngôn ngữ TTS local không hợp lệ (vi, en, zh, yue)');
+    c.local = Object.assign({}, c.local);
+    if (b.reset === true) { delete c.local[L]; delete this._lprobe[L]; return; }
+    const cur = this.localLangs(c)[L], next = { enabled: cur.enabled, base_url: cur.base_url, model: cur.model, voice: cur.voice };
+    if (typeof b.enabled === 'boolean') next.enabled = b.enabled;
+    if (b.base_url !== undefined) next.base_url = String(b.base_url || '').trim() ? TL.safeBase(b.base_url) : '';
+    if (b.model !== undefined) { const m = String(b.model || '').trim(); if (m && !/^[A-Za-z0-9._:\/-]{1,80}$/.test(m)) throw fail(400, 'Tên model TTS không hợp lệ'); next.model = m; }
+    if (b.voice !== undefined) { const v = String(b.voice || '').trim(); if (v && !/^[^\u0000-\u001f"<>\\]{1,80}$/.test(v)) throw fail(400, 'Tên giọng TTS không hợp lệ'); next.voice = v; }
+    if (next.enabled && !next.base_url) throw fail(400, 'Bật TTS local cần địa chỉ máy TTS (vd http://127.0.0.1:8000)');
+    if (next.base_url) next.base_url = TL.safeBase(next.base_url);   // giá trị khởi tạo cũng qua cổng (không tin tệp)
+    c.local[L] = next; delete this._lprobe[L];
+  }
+  localDay(c) { const day = new Date().toISOString().slice(0, 10), u = ((c || this.config()).localUsage || {})[day] || {}; return { all: u.all || 0, owner: u.owner || 0, oauth: u.oauth || 0, ui: u.ui || 0, link: u.link || 0 }; }
+  // trần TTS local: toàn máy + theo kênh — 429 kèm giờ đặt lại (cap: true, local: true)
+  localCapCheck(c, chan) {
+    const u = this.localDay(c), cap = c.localCap, cc = LOCAL_CHAN_CAP[chan] || 0, at = new Date(nextDay()).toISOString();
+    if (cap > 0 && u.all >= cap) throw fail(429, tr(VI, 'Đã chạm trần {n} câu TTS local hôm nay của máy (Cài đặt AI › Giọng đọc local)', { n: cap }), { retryAt: at, cap: true, local: true });
+    if (cc > 0 && u[chan] >= cc) throw fail(429, tr(VI, 'Kênh này đã dùng hết {n} câu TTS local hôm nay', { n: cc }), { retryAt: at, cap: true, local: true });
+  }
+  // quét máy TTS của một ngôn ngữ (nhớ: sống 5 phút, chết 30 giây) → { alive, voices, error, at, base }
+  async localProbe(lang, force) {
+    const cfg = this.localLangs()[lang];
+    if (!cfg || !cfg.enabled) return { alive: false, voices: null, error: 'off', at: Date.now(), base: '' };
+    const hit = this._lprobe[lang];
+    if (!force && hit && hit.base === cfg.base_url && Date.now() - hit.at < (hit.alive ? LOCAL_ALIVE_MS : LOCAL_DEAD_MS)) return hit;
+    let base; try { base = TL.safeBase(cfg.base_url); } catch (e) { return (this._lprobe[lang] = { alive: false, voices: null, error: e.message, at: Date.now(), base: cfg.base_url }); }
+    const r = await TL.probe(base, this.localHttp);
+    return (this._lprobe[lang] = Object.assign(r, { at: Date.now(), base: cfg.base_url }));
+  }
+  async localCheckAll(force) {
+    const L = this.localLangs();
+    await Promise.all(Object.keys(L).filter(l => L[l].enabled).map(l => this.localProbe(l, force).catch(() => null)));
+    return this.publicConfig();
+  }
+  // trạng thái cho Studio (Cài đặt AI › Giọng đọc local) — chỉ từ bộ nhớ, không gọi mạng
+  localPublic(c) {
+    const L = this.localLangs(c), u = this.localDay(c);
+    return { cap: c.localCap, chanCaps: Object.assign({}, LOCAL_CHAN_CAP), today: u,
+      langs: Object.keys(L).map(l => { const x = L[l], p = this._lprobe[l] && this._lprobe[l].base === x.base_url ? this._lprobe[l] : null;
+        return { lang: l, provider: x.enabled ? 'local' : 'gemini', enabled: x.enabled, source: x.source, base_url: x.base_url, model: x.model, voice: x.voice,
+          alive: p ? p.alive : null, voices: p && p.voices ? p.voices.length : null, voiceIds: p && p.voices ? p.voices.slice(0, 200).map(v => v.id) : [],
+          error: p && !p.alive ? String(p.error || '').slice(0, 120) : '', checkedAt: p ? new Date(p.at).toISOString() : null, warn: (this._lwarn || {})[l] || '' }; }) };
+  }
+  // cho agent (start_here): ngôn ngữ nào có TTS local, đã thấy sống chưa — không gọi mạng
+  localSummary() {
+    const L = this.localLangs(), out = {};
+    Object.keys(L).forEach(l => { const p = this._lprobe[l]; out[l] = !L[l].enabled ? 'off' : !p ? 'unchecked' : p.alive ? 'up' : 'down'; });
+    return out;
+  }
+  // kế hoạch đọc local của MỘT câu (không gọi mạng): null nếu ngôn ngữ không bật local. Khoá clip theo DANH TÍNH (máy TTS + model + giọng mặc định +
+  // ngôn ngữ / vùng / vai + giọng đã chốt của nhân vật + chữ) — tính được khi không có mạng (xuất phim, đếm "giọng AI x/y")
+  localPlan({ lang, accent, role, voice, text }) {
+    if (typeof lang !== 'string' || !hasOwn(GV.LANGS, lang)) return null;
+    const cfg = this.localLangs()[lang];
+    if (!cfg || !cfg.enabled) return null;
+    const ac = GV.accent(lang, accent), R = hasOwn(GV.ROLES, role) ? GV.ROLES[role] : null, rid = R ? role : 'nam-tre';
+    const id = crypto.createHash('sha256').update(JSON.stringify(['local', TL.voiceMap(ROOT).rev || 0, cfg.base_url, cfg.model, cfg.voice, lang, ac, rid, String(voice || ''), text])).digest('hex').slice(0, 40);
+    return { lang, accent: ac, role: rid, gender: R ? R.gender : 'm', castVoice: String(voice || ''), cfg, id, file: this.clipPath(id) };
+  }
+  // giọng local cho kế hoạch: ứng viên của bản đồ vai có trên máy TTS (xoay theo giọng đã chốt — mỗi nhân vật ổn định) → giọng mặc định → giọng đầu danh sách
+  localVoice(plan, list) {
+    const tiers = TL.candidates(TL.voiceMap(ROOT), plan.lang, plan.accent, plan.gender, plan.role), h = hashN(plan.castVoice || plan.role), cand = [].concat.apply([], tiers);
+    if (!list) return { voice: tiers.length ? tiers[0][h % tiers[0].length] : plan.cfg.voice, warn: '' };   // máy TTS không liệt kê giọng: gửi thẳng
+    for (const t of tiers) {   // tầng đầu tiên có giọng thật trên máy TTS; trong tầng xoay theo giọng đã chốt (mỗi nhân vật ổn định)
+      const have = t.map(v => TL.findVoice(list, v)).filter((v, i, a) => v && a.indexOf(v) === i);
+      if (have.length) return { voice: have[h % have.length], warn: '' };
+    }
+    const dv = plan.cfg.voice && TL.findVoice(list, plan.cfg.voice), fb = dv || (list[0] && list[0].id) || plan.cfg.voice;
+    return { voice: fb, warn: cand.length ? tr(VI, 'Máy TTS ({lang}) không có giọng nào hợp vai {role} ({want}) — dùng giọng mặc định {voice}', { lang: plan.lang, role: plan.role, want: cand.slice(0, 3).join(', '), voice: fb }) : '' };
+  }
+  async localLine(plan, t, chan) {
+    const st = await this.localProbe(plan.lang);
+    if (!st.alive) throw fail(503, tr(VI, 'Máy TTS local ({lang}) không phản hồi ({err})', { lang: plan.lang, err: String(st.error || '?').slice(0, 80) }), { local: true });
+    const pv = this.localVoice(plan, st.voices);
+    if (pv.warn) { this._lwarn = Object.assign({}, this._lwarn, { [plan.lang]: pv.warn }); const k = plan.lang + '|' + plan.role + '|' + pv.voice; if (!this._lwarned.has(k)) { this._lwarned.add(k); console.warn('[voice] ' + MSG.en(pv.warn)); } }
+    const job = this._lbusy.then(() => this.localRender(plan, t, chan, pv));
+    this._lbusy = job.catch(() => {});
+    return job;
+  }
+  async localRender(plan, t, chan, pv) {
+    if (fs.existsSync(plan.file)) return { id: plan.id, cached: true, seconds: this.seconds(plan.file), provider: 'local' };
+    this.localCapCheck(this.config(), chan);   // kiểm trần TRONG hàng đợi, ngay trước lời gọi (TOCTOU — như Gemini)
+    const t0 = Date.now(), base = TL.safeBase(plan.cfg.base_url);
+    let r;
+    try { r = await this.localHttp('POST', base + '/v1/audio/speech', { model: plan.cfg.model || undefined, voice: pv.voice, input: t, response_format: 'wav', stream: false }, { timeout: 60000, max: TL.MAX_BYTES, accept: 'audio/wav' }); }
+    catch (e) {
+      if (e && e.code !== 400) this._lprobe[plan.lang] = { alive: false, voices: null, error: String(e.code || e.message).slice(0, 80), at: Date.now(), base: plan.cfg.base_url };   // chết giữa chừng: nhớ 30 giây
+      throw fail(e && e.code === 400 ? 400 : 503, tr(VI, 'Máy TTS local ({lang}) lỗi: {err}', { lang: plan.lang, err: String((e && (e.code || e.message)) || e).slice(0, 80) }), { local: true });
+    }
+    if (r.status < 200 || r.status >= 300) throw fail(502, tr(VI, 'Máy TTS local ({lang}) trả lỗi {code}', { lang: plan.lang, code: r.status }), { local: true });
+    let w; try { w = TL.readWav(r.buf, wavInfo); } catch (e) { throw Object.assign(e, { local: true }); }
+    fs.writeFileSync(plan.file + '.tmp', wavOf(tidy(w.pcm, w.rate), w.rate)); fs.renameSync(plan.file + '.tmp', plan.file);
+    const cc = this.config(), day = new Date().toISOString().slice(0, 10), u = this.localDay(cc);
+    u.all++; if (hasOwn(LOCAL_CHAN_CAP, chan)) u[chan]++;
+    cc.localUsage = { [day]: u }; this.write(cc);
+    return Object.assign({ id: plan.id, cached: false, provider: 'local', localVoice: pv.voice, ms: Date.now() - t0, seconds: this.seconds(plan.file) }, pv.warn ? { warning: pv.warn } : {});
   }
   // dán key → kiểm ngay bằng lệnh liệt kê model (MIỄN PHÍ, không tốn lượt đọc) → đúng thì lưu + bật, sai thì giữ key cũ và báo rõ
   async connect(apiKey) {
@@ -310,9 +441,11 @@ class Voice {
     const day = new Date().toISOString().slice(0, 10), used = c.usage[day] || 0;
     if (c.dailyCap > 0 && used >= c.dailyCap) throw fail(429, tr(VI, 'Đã chạm trần {n} câu giọng AI hôm nay (Cài đặt AI › Giọng AI › Trần câu / ngày)', { n: c.dailyCap }), { retryAt: new Date(nextDay()).toISOString(), cap: true });
   }
-  // đọc một câu → { id, cached, model, seconds }; cùng giọng + cách nói + chữ → cùng clip (không gọi lại API)
-  // role → cách nói của vai (style); state + bubble → cảm xúc; dry: chỉ lấy clip đã có (xuất phim), không bao giờ gọi Google
-  async line({ text, voice, role, state, bubble, dry }) {
+  // đọc một câu → { id, cached, model, seconds, provider }; cùng giọng + cách nói + chữ → cùng clip (không gọi lại API)
+  // role → cách nói của vai (style); state + bubble → cảm xúc; dry: chỉ lấy clip đã có (xuất phim), không bao giờ gọi Google / máy TTS
+  // lang + accent: ngôn ngữ của câu → TTS local của ngôn ngữ đó (không gửi lang = chỉ Gemini, như trước v0.25.1)
+  // chan: kênh người gọi — owner (Studio / stdio / token / mcp:owner) được chi tiêu Gemini; oauth / link / ui chỉ dùng TTS local miễn phí (trần riêng)
+  async line({ text, voice, role, state, bubble, dry, lang, accent, chan }) {
     const t = cleanText(text);
     if (!t) throw fail(400, 'Câu thoại trống');
     if (t.length > 240) throw fail(400, 'Câu thoại dài quá 240 ký tự');
@@ -320,9 +453,18 @@ class Voice {
     if (!vid) throw fail(400, tr(VI, 'Không có giọng "{voice}" (chọn trong danh sách giọng AI)', { voice: String(voice).slice(0, 40) }));
     const R = hasOwn(GV.ROLES, role) ? GV.ROLES[role] : null, style = [R ? R.style : '', tagsOf(state, bubble)].filter(Boolean).join(', ');
     const id = this.idOf(t, vid, style), file = this.clipPath(id);
-    if (fs.existsSync(file)) return { id, cached: true, seconds: this.seconds(file) };
+    if (fs.existsSync(file)) return { id, cached: true, seconds: this.seconds(file), provider: 'gemini' };
+    const lp = this.localPlan({ lang, accent, role, voice: vid, text: t });
+    if (lp && fs.existsSync(lp.file)) return { id: lp.id, cached: true, seconds: this.seconds(lp.file), provider: 'local' };
     if (dry) throw fail(404, 'Câu này chưa đọc bằng giọng AI');
-    if (c0.enabled === false) throw fail(409, 'Giọng AI đang tắt (Cài đặt AI › Giọng AI)');
+    const ch = hasOwn(LOCAL_CHAN_CAP, chan) ? chan : 'owner';
+    let lerr = null;
+    if (lp) { try { return await this.localLine(lp, t, ch); } catch (e) { lerr = e; } }   // local hỏng / hết trần → thử Gemini (nếu kênh được chi tiêu)
+    const withLocal = e => { if (lerr) e.message += tr(VI, ' (TTS local: {err})', { err: lerr.message }); return e; };
+    // Gemini TỐN lượt / tiền: chỉ chủ máy (CNS-082). Kênh khác: lỗi của TTS local (có retryAt khi hết trần), hoặc "chỉ dùng được TTS local"
+    if (ch !== 'owner') throw lerr || fail(403, 'Kênh này chỉ đọc được bằng TTS local miễn phí — máy chưa bật TTS local cho ngôn ngữ này (chủ máy: Cài đặt AI › Giọng đọc local)', { paidOnly: true });
+    if (c0.enabled === false) throw withLocal(fail(409, 'Giọng AI đang tắt (Cài đặt AI › Giọng AI)'));
+    if (!this.key()) throw withLocal(fail(409, 'Chưa có API key Google AI Studio (Cài đặt AI › Giọng AI)'));
     if (this.isBad(vid, c0)) throw fail(400, tr(VI, 'Giọng {id} tạm không dùng được (Google báo không còn) — tự thử lại sau 24 giờ hoặc Cài đặt AI › Thử lại giọng hỏng', { id: vid }));
     this.capCheck(c0);
     // một lời gọi Google mỗi lúc (gói miễn phí giới hạn số câu / phút / model)
@@ -332,8 +474,8 @@ class Voice {
   }
   // câu này đã có clip chưa? (không gọi Google, không ném lỗi, không tốn lượt) — dùng đếm "giọng AI x/y" ở danh sách tác phẩm; cùng khoá clip với line()
   has(p) { return !!this.clipFile(p); }
-  // tệp clip ĐÃ có của một câu (cùng khoá với line()) hoặc null — không gọi Google, không ném lỗi. MCP export_film_html nhúng clip này (như Studio xuất phim)
-  clipFile({ text, voice, role, state, bubble }) {
+  // tệp clip ĐÃ có của một câu (cùng khoá với line(): Gemini rồi TTS local của lang) hoặc null — không gọi mạng, không ném lỗi. MCP export_film_html nhúng clip này (như Studio xuất phim)
+  clipFile({ text, voice, role, state, bubble, lang, accent }) {
     try {
       const t = cleanText(text);
       if (!t || t.length > 240) return null;
@@ -341,7 +483,9 @@ class Voice {
       if (!vid) return null;
       const R = hasOwn(GV.ROLES, role) ? GV.ROLES[role] : null, style = [R ? R.style : '', tagsOf(state, bubble)].filter(Boolean).join(', ');
       const f = this.clipPath(this.idOf(t, vid, style));
-      return f && fs.existsSync(f) ? f : null;
+      if (f && fs.existsSync(f)) return f;
+      const lp = this.localPlan({ lang, accent, role, voice: vid, text: t });
+      return lp && fs.existsSync(lp.file) ? lp.file : null;
     } catch { return null; }
   }
   seconds(file) { try { const w = wavInfo(fs.readFileSync(file)); return w ? +(w.data.length / (w.rate * 2)).toFixed(2) : null; } catch { return null; } }
@@ -394,7 +538,7 @@ class Voice {
       else { const m = /rate=(\d+)/.exec(inl.mimeType || ''); pcm = raw; rate = m ? +m[1] : 24000; }   // audio/L16;rate=24000 = PCM 16-bit thô
       fs.writeFileSync(file + '.tmp', wavOf(tidy(pcm, rate), rate)); fs.renameSync(file + '.tmp', file);
       const cc = this.config(), day = new Date().toISOString().slice(0, 10); cc.usage = { [day]: (cc.usage[day] || 0) + 1 }; this.write(cc);
-      return { id, cached: false, model, ms: Date.now() - t0, seconds: this.seconds(file) };
+      return { id, cached: false, model, ms: Date.now() - t0, seconds: this.seconds(file), provider: 'gemini' };
     }
     // vừa thử hết mà model nào cũng hết hạn mức / quá tải → báo kèm giờ sớm nhất dùng lại được (Studio rơi về giọng trình duyệt)
     if (last && (last.code === 429 || last.code === 503)) throw quotaErr(soonest(order));
@@ -402,4 +546,4 @@ class Voice {
   }
 }
 
-module.exports = { Voice, VOICES, STATE_TAGS, BUBBLE_TAGS, tagsOf, cleanText, wavInfo, wavOf, tidy, GV, interactive };
+module.exports = { Voice, LOCAL_CAP, LOCAL_CHAN_CAP, VOICES, STATE_TAGS, BUBBLE_TAGS, tagsOf, cleanText, wavInfo, wavOf, tidy, GV, interactive };

@@ -745,6 +745,9 @@ home_check tools/test-frame-ids.mjs
 echo "2k) giọng AI (Google Gemini TTS) với mạng giả: lưu đệm, đổi model khi hết hạn mức, thẻ cảm xúc, không lộ key"
 node tools/test-voice.js || exit 1
 home_check tools/test-voice.js
+echo "2k2) giọng đọc TTS local miễn phí (v0.25.1, INT-23) với máy TTS giả kiểu OpenAI (127.0.0.1): đường local · quét giọng VieNeu / Kokoro · vai → giọng (không có → mặc định + cảnh báo) · máy chết → Gemini / lỗi · WAV rác / quá 20 MB / treo → từ chối · base_url chỉ máy này / mạng riêng (cả lúc nối) · agent không đặt được base_url · trần ngày toàn máy + theo kênh · dock Tạo tác"
+node tools/test-tts-local.mjs || exit 1
+home_check tools/test-tts-local.mjs
 echo "2m) thư viện âm thanh: cổng kiểm gói âm (từng luật một ca sai, không mã, ≤ 60 node) · trùng tên chỉ ra gói giữ tên · 17 tên cũ · tự gán = bảng cũ · luật ghép S1–S7 · gói Tam Quốc"
 node tools/test-sounds.js || exit 1
 home_check tools/test-sounds.js
@@ -951,6 +954,7 @@ node tools/mutate.mjs --check --data tools/mutations/v0231.json || exit 1
 node tools/mutate.mjs --check --data tools/mutations/v024.json || exit 1   # v0.24 Sân khấu Live (chạy thật: --data tools/mutations/v024.json --jobs 3)
 node tools/mutate.mjs --check --data tools/mutations/v0241.json || exit 1   # v0.24.1 live_setup + token agent
 node tools/mutate.mjs --check --data tools/mutations/v025.json || exit 1   # v0.25 phần A: Live ở đỉnh dock + cổng khu trong callTool
+node tools/mutate.mjs --check --data tools/mutations/v0251.json || exit 1   # v0.25.1 TTS local: RIFF, mạng riêng, trần ngày, agent không đặt base_url
 
 echo "4k) mô hình root v0.23.1 (CNS-233 / CNS-257 / CNS-234 / CNS-235): máy kiểu Ryan (lệnh root cũ → tự lắp bản đã kiểm SHA, update / rollback / status / online bằng root) · container bị chiếm (canary) · override đã duyệt · khôi phục cùng máy / máy khác · doctor · root thật (setpriv thật)"
 for P in 7981 7983 7985 7987 7989; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done

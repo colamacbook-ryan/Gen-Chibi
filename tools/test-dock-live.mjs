@@ -33,7 +33,8 @@ const mk = p => { const d = fs.mkdtempSync(path.join(os.tmpdir(), p)); tmp.push(
 {
   const evs = [];
   const M = new MCP({ engine: GC, store: new Store(mk('gc-dl-mcp-')), version: 't', live: { accept: (e, who) => { evs.push([who, e]); return { ev: e }; } }, liveSetup: () => ({ ok: true }) });
-  const OUT = ['rollback_app', 'update_app', 'live_task', 'live_event', 'live_setup', 'render_voice', 'design_voice', 'delete_sound_pack', 'get_storyboard', 'nope_tool'];
+  // render_voice: v0.25.1 có ở khu Tạo tác (chỉ TTS local miễn phí) — ngoài khu đó vẫn bị cổng chặn (tools/test-tts-local.mjs)
+  const OUT = ['rollback_app', 'update_app', 'live_task', 'live_event', 'live_setup', 'design_voice', 'delete_sound_pack', 'get_storyboard', 'nope_tool'];
   const res = [];
   for (const z of Object.keys(ZONES).concat(['khu-la'])) for (const n of OUT) res.push([z, n, await M.callTool(n, { confirm: 'ROLLBACK', kind: 'read', task: 'code' }, { channel: 'ui', zone: z })]);
   const leaked = res.filter(([, , r]) => !(r && r.isError && /\[FORBIDDEN\]/.test(r.content[0].text)));

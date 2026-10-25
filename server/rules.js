@@ -16,7 +16,7 @@ const SURFACES = {
     readOnly: 'mcp:read: route says the connection is read-only; golden rules that name a write tool are left out (tools/list hides those tools too)' },
   start_here: { reader: 'any agent, first call', parts: ['golden (same filter as mcp: read-only → no write tools)', 'read', 'errors', 'connection note'] },
   chat: { reader: 'the owner\'s own LLM in the Studio dock (any model)', parts: ['chat base', 'reply language', 'zone role', 'anchor syntax', 'data rule', 'open work (Create area)', 'product', 'route', 'golden'],
-    note: 'tools = the zone\'s set (mcp.toolsFor); golden rules that name a write tool outside the zone (rollback_app, save_shot in the Library…) are left out; no system / paid-voice tools; the owner approves on the spot' }
+    note: 'tools = the zone\'s set (mcp.toolsFor); golden rules that name a write tool outside the zone (rollback_app, save_shot in the Library…) are left out; no system / paid-voice tools (render_voice in the Create area = free local TTS only); the owner approves on the spot' }
 };
 
 const PRODUCT = 'gen-chibi is a factory of chibi assets made from code: characters, items, scenes, motion packs (poses + animated actions), sound packs (cartoon sound effects) and films. You write JSON; the system checks it (gates), renders and stores it.';
@@ -53,6 +53,7 @@ function mcp(ctx, tools) {
 const START = {
   read: 'Read the golden rules below; follow get_guide procedures literally.',
   live: 'Live stage invitation: the owner can watch your work as a chibi character. If your user wants it, call live_setup — it returns a plan and ONE command; ASK YOUR USER before running anything (golden rule). If they decline, nothing changes.',
+  voices: 'Voices: render_voice uses the owner\'s FREE local TTS first for languages marked "up" (or "unchecked") in voices.local — every write connection may use it within a daily line cap; Google voices are owner-only. Never send a TTS address; on [UNAVAILABLE] / retryAt stop and tell the owner.',
   errors: 'Failed calls start with [CODE] (VALIDATION_FAILED, NOT_FOUND, CONFLICT, FORBIDDEN, BAD_REQUEST, UNAVAILABLE, INTERNAL) and carry structuredContent.error.details[].path.'
 };
 const CONNECTION_NOTE = {
@@ -120,7 +121,8 @@ const ROLES = {
   "tao-tac": [
     "ROLE: AI DIRECTOR of the open work (script → shots → dialogue → review). Shots use assets from the Library; if something is MISSING, create it yourself in the Workshop from the frame (in the work's project) before using it. Everything you write shows up in the work's Shots tab; the owner's review notes are in UI DATA (work.review) and in the Review tab (get_work › review) — fix accordingly when asked.",
     "PROPOSED EDITS: to change a shot DESCRIPTION or its STEP LIST when the user has not said \"just do it\", use propose_edit (the owner sees a diff and clicks Apply / Dismiss); only save_shot directly when the user asked for it clearly.",
-    "REVIEW RIGHTS: you CANNOT set \"Approved\" (the server blocks it), cannot delete / edit the owner's notes, cannot delete reviews, cannot delete shots — you only set Draft / Needs changes and ADD notes (labelled AI). To delete a shot, tell the user to click it themselves in the Shots tab."],
+    "REVIEW RIGHTS: you CANNOT set \"Approved\" (the server blocks it), cannot delete / edit the owner's notes, cannot delete reviews, cannot delete shots — you only set Draft / Needs changes and ADD notes (labelled AI). To delete a shot, tell the user to click it themselves in the Shots tab.",
+    "VOICES: render_voice reads one line with the owner's FREE local TTS only (provider local; daily cap for this dock) — Google voices are the owner's Dub button on the Final stage. Never pass a TTS address; on [UNAVAILABLE] or [FORBIDDEN] stop and tell the user."],
   "he-thong": [
     "ROLE: general assistant on the System page (AI settings, Updates) — answer how to use gen-chibi (start_here / get_guide), point to the right area; asset creation works as for the Workshop staff."]
 };

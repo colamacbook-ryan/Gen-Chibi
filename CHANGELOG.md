@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.25.1 — Free voices from a TTS engine on your own machine
+Ryan: "thế có thể dùng tạm giọng tts từ máy local mà" *(we can use a TTS voice from the local machine for now)*.
+
+### New
+- **Local TTS voices, free, before Google.** Point each language at an OpenAI-style TTS server on your machine — suggested: VieNeu-TTS for Vietnamese / English (`:8000`, model `vieneu`) and Kokoro-FastAPI for Mandarin (`:8880`, voice `zf_xiaobei`); Cantonese stays on Google. Order for every line: a clip already made → local TTS (if set up and answering) → Google Gemini (owner only, with a key) → the browser voice. Clips go through the same clean-up and cache as Google clips, so film export and the "AI voice x/y" count include them.
+- **Studio › System › AI settings › Local voices**: per language — on / off, address, model, default voice (from the list the server reports at run time), status (up / not answering, number of voices), lines used today against the caps, and a Check again button.
+- **Every agent channel may use it**: the owner, OAuth `mcp:write`, a keyed MCP link and the Studio AI assistant (`render_voice` in the Create area). Daily caps on new lines: 500 per machine (adjustable), 200 for OAuth `mcp:write`, 200 for the Studio assistant, 100 for a keyed link. Google voices keep the old rule: owner only. `start_here` reports which languages have a local voice, and a new golden rule tells agents to use it and never loop.
+- Voices follow the character's role (accent × gender for Vietnamese); a voice the server does not have falls back to the language's default with a warning, never an error.
+
+### Security
+- The TTS address is set by the owner only (Studio / the owner's API); agents get FORBIDDEN if they send an address, provider or model. Only `http(s)` to this machine, `host.docker.internal`, a private IP or a Docker container name is accepted, and the resolved address is checked again when connecting. No proxy, no redirects, a 60 s timeout, replies over 20 MB are dropped, and audio must be a real RIFF / WAVE 16-bit PCM file.
+- The Docker compose file adds `host.docker.internal:host-gateway` (outbound only; no new ports).
+
+### Tests
+- The video-export smoothness test now explains main-thread stalls with Long Animation Frames: stalls in Studio code keep the hard 100 ms budget, while browser-internal stalls (GC, raster, image decode) are reported against a 250 ms ceiling.
+
 ## v0.25.0 — The Live stage sits on top of the AI assistant
 Ryan: "cái sân khấu live phải luôn hiển thị trên đầu khung chatroom của assistant thì mới hợp lý" *(the Live stage should always show at the top of the assistant chat)*.
 

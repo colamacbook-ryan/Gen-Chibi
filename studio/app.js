@@ -1534,7 +1534,13 @@
     set: function (c) { this.cfg = c; this.cfgP = Promise.resolve(c); this.blockedUntil = 0; this.blockedCap = false; this.told = {}; this.resetCasts(); },   // sau khi dán key / bật / tắt / đổi trần ngày / gỡ giọng hỏng: giọng đã chọn tính lại
     // quên mọi giọng đã chọn (cast cả dàn, thư viện giọng, cast từng vai) — sau khi thiết kế giọng, đổi key, gỡ giọng hỏng: lần hỏi kế tiếp tính lại với đủ giọng
     resetCasts: function () { this.casts = {}; this.libs = {}; this.roleCasts = {}; this.roleFlight = {}; },
-    ready: function () { var c = this.cfg; return !!(c && c.hasKey && c.enabled !== false && !c.off); },
+    // sẵn sàng đọc giọng AI: Gemini (có key, đang bật) HOẶC TTS local (v0.25.1) đang bật + chưa thấy chết cho ngôn ngữ lang (không truyền = ngôn ngữ nào cũng được)
+    ready: function (lang) { return this.gemReady() || this.localReady(lang); },
+    gemReady: function () { var c = this.cfg; return !!(c && c.hasKey && c.enabled !== false && !c.off); },
+    localReady: function (lang) {
+      var ls = (this.cfg && this.cfg.local && this.cfg.local.langs) || [];
+      return ls.some(function (x) { return x.enabled && x.alive !== false && (!lang || x.lang === lang); });
+    },
     // một thông báo mỗi loại trong 60 giây (hết lượt không được bắn toast từng câu)
     tell: function (kind, msg) { var t = this.told[kind] || 0; if (Date.now() - t < 60000) return; this.told[kind] = Date.now(); toast(msg); },
     // câu báo hết lượt (429): cap = chạm TRẦN câu / ngày của máy (đặt ở Cài đặt AI, hết lúc 00:00) — khác với hết lượt của Google (gói miễn phí / model).
@@ -1546,6 +1552,7 @@
     },
     quotaText: function (e) {
       var at = atMs(e && e.retryAt), c = this.cfg;
+      if (e && e.cap && e.local) return _t('Đã chạm trần TTS local hôm nay (Cài đặt AI › Giọng đọc local){x2}', { x2: at ? _t(' — đọc tiếp lúc {clockOf}', { clockOf: clockOf(at) }) : '' });
       if (e && e.cap) return _t('Đã chạm trần {x} hôm nay (Cài đặt AI){x2}', { x: c && c.dailyCap > 0 ? _t('{dailyCap} câu', { dailyCap: c.dailyCap }) : _t('số câu'), x2: at ? _t(' — đọc tiếp lúc {clockOf}', { clockOf: clockOf(at) }) : '' });
       if (this.isMinute(e)) return _t('Google giới hạn mỗi phút{x}', { x: at ? _t(' — thử lại lúc {clockSec}', { clockSec: clockSec(at) }) : '' });
       return at ? _t('Hết lượt hôm nay — thử lại lúc {clockOf}', { clockOf: clockOf(at) }) : _t('Hết lượt giọng AI');
@@ -1635,7 +1642,7 @@
       var self = this;
       if (!W || !a || !String(line.say || '').trim()) return null;
       return this.load().then(function () {
-        if (!self.ready()) { if (spend) self.tell('nokey', _t('Giọng AI chưa sẵn sàng (chưa có key hoặc đang tắt) — dùng giọng máy đọc. Dán key ở Cài đặt AI › Giọng AI.')); return null; }
+        if (!self.ready(L.lang)) { if (spend) self.tell('nokey', _t('Giọng AI chưa sẵn sàng (chưa có key hoặc đang tắt) — dùng giọng máy đọc. Dán key ở Cài đặt AI › Giọng AI.')); return null; }
         return self.castOf(W, L.lang, L.accent).then(function (cast) {
           var p = self.paramsOf(L, a, line, cast);
           return p ? self.get(p, !spend).then(function (r) { self.markHas(W, L); return r.buf; }) : null;
@@ -2651,7 +2658,7 @@
       return st.total ? _t('Xong {done}/{total} câu ({mix}){x}', { done: st.done, total: st.total, mix: mix, x: st.failed ? ' — ' + st.error : '' }) : _t('Chưa có câu thoại nào sẵn sàng để lồng tiếng.');
     }
     function paintDub() {
-      var ready = AiVoice.ready();
+      var ready = AiVoice.ready(W ? workLang(W).lang : ''), local = !!W && AiVoice.localReady(workLang(W).lang);
       dubB.textContent = dubbing ? _t('Dừng lồng tiếng') : _t('Lồng tiếng AI');
       dubB.disabled = !dubbing && (!ready || !W || designing);
       dubB.title = ready ? _t('Đọc từng câu của phim bằng giọng AI Google rồi lưu lại. Câu đã đọc không tốn lại; gói miễn phí chỉ có vài chục lượt mỗi ngày — hết lượt thì dừng, lần sau bấm lại sẽ đọc tiếp.') : _t('Cần key Google ở Cài đặt AI › Giọng AI');
@@ -2659,7 +2666,7 @@
       if (!ready && !dubbing) {
         if (AiVoice.cfg) dubNote.appendChild(h('span', { text: (AiVoice.cfg.hasKey ? _t('Giọng AI đang tắt · ') : _t('Chưa có key Google · ')) }));
         dubNote.appendChild(h('button', { class: 'btn sm', onclick: function () { go({ page: 'ai', focus: 'voice' }); } }, _t('Dán key ở Cài đặt AI ›')));
-      } else dubNote.appendChild(h('span', { text: _t('câu chưa đọc tốn lượt Google; câu đã đọc thì miễn phí') }));
+      } else dubNote.appendChild(h('span', { text: local ? _t('đọc bằng TTS local miễn phí trên máy này (hỏng thì sang Google); câu đã đọc thì lưu lại') : _t('câu chưa đọc tốn lượt Google; câu đã đọc thì miễn phí') }));
       var miss = W ? AiVoice.missingFor(W, workLang(W)) : [];   // server chỉ chọn giọng cho 48 diễn viên đầu; người thừa đọc bằng giọng máy
       castNote.hidden = !miss.length; castNote.textContent = miss.length ? _t('{n} diễn viên vượt {CAST_MAX} chưa có giọng AI — câu của họ dùng giọng máy đọc.', { n: miss.length, CAST_MAX: CAST_MAX }) : '';
       clear(dubBox); dubBox.hidden = !dubSt;
@@ -2684,7 +2691,7 @@
       return _t('Xong{left}{x} · đã chọn lại giọng cả dàn', { left: left, x: st.failed ? ' — ' + st.error : '' });
     }
     function paintRegion() {
-      var L = workLang(W), cfg = AiVoice.cfg, ready = AiVoice.ready(), jobs = W && cfg ? AiVoice.regionOf(W, L) : [], todo = jobs.filter(function (j) { return !j.done; });
+      var L = workLang(W), cfg = AiVoice.cfg, ready = AiVoice.gemReady(), jobs = W && cfg ? AiVoice.regionOf(W, L) : [], todo = jobs.filter(function (j) { return !j.done; });
       regionNote.textContent = !W ? '' : !cfg ? _t('đang đọc trạng thái giọng AI…')
         : !jobs.length ? _t('chưa có vai nào để thiết kế giọng vùng (tác phẩm chưa có diễn viên, hoặc chỉ có vai trẻ em — Google chặn thiết kế giọng trẻ em)')
         : _t('giọng vùng có ở {n}/{n2} vai (đã thiết kế) · vai chưa thiết kế đọc giọng chung của ngôn ngữ', { n: jobs.length - todo.length, n2: jobs.length });
@@ -5610,10 +5617,58 @@
         h('span', { class: 'note', text: _t('nghe và thiết kế giọng theo vai ở đó; trang này chỉ giữ key, bật / tắt, trần câu / ngày') })));
     }
 
-    function refresh() { return AiVoice.load(true).then(function () { if (dead) return; paintState(); }); }
+    /* ---- panel 2: giọng đọc TTS LOCAL miễn phí (v0.25.1, INT-23) — mỗi ngôn ngữ một máy TTS kiểu OpenAI; địa chỉ chỉ chủ máy đặt ở đây ---- */
+    var lChip = h('span', { class: 'r' }), lBody = h('div', { class: 'pad stack', style: 'gap:8px;min-width:0' });
+    host.appendChild(h('div', { class: 'panel', id: 'voice-local' }, h('h3', null, _t('Giọng đọc local (miễn phí)'), lChip), lBody));
+    var LOCAL_LANG = { vi: N_('Tiếng Việt'), en: N_('Tiếng Anh'), zh: N_('Tiếng Trung'), yue: N_('Tiếng Quảng Đông') };
+    function putLocal(body, btn, msgEl) {
+      if (btn) btn.disabled = true;
+      return Store.api('PUT', 'api/voice', body).then(function (r) { AiVoice.set(r); if (!dead) { paintLocal(); paintState(); } toast(_t('Đã lưu giọng đọc local.')); })
+        .catch(function (e) { if (btn) btn.disabled = false; if (msgEl) { msgEl.textContent = e.message; msgEl.className = 'note bad'; } else toast(e.message); });
+    }
+    function paintLocal() {
+      var c = AiVoice.cfg, lc = c && c.local;
+      clear(lBody); clear(lChip);
+      if (!lc) { lBody.appendChild(h('div', { class: 'note', text: _t('Máy chủ chưa có giọng đọc local (bản cũ).') })); return; }
+      var on = lc.langs.filter(function (x) { return x.enabled; }), up = on.filter(function (x) { return x.alive; });
+      lChip.appendChild(h('span', { class: up.length ? 'chip ok' : on.length ? 'chip warn' : 'chip', text: _t('{up}/{on} ngôn ngữ sống', { up: up.length, on: on.length }) }));
+      lBody.appendChild(h('div', { class: 'note', text: _t('Máy chủ TTS kiểu OpenAI chạy trên máy này (VieNeu-TTS, Kokoro-FastAPI — Apache-2.0, bạn tự cài). Có thì giọng đọc đi local TRƯỚC, miễn phí, rồi mới tới Google; agent nào cũng dùng được trong trần ngày. Địa chỉ chỉ nhận máy này / mạng riêng.') }));
+      var msgEl = h('div', { class: 'note', role: 'status', 'aria-live': 'polite' });
+      var tb = h('tbody');
+      lc.langs.forEach(function (x) {
+        var dl = h('datalist', { id: 'lvoices-' + x.lang }); (x.voiceIds || []).forEach(function (v) { dl.appendChild(h('option', { value: v })); });
+        var en = h('input', { type: 'checkbox', checked: !!x.enabled, 'aria-label': _t('Bật TTS local cho {lang}', { lang: _l(LOCAL_LANG[x.lang] || x.lang) }) });
+        var bu = h('input', { type: 'text', value: x.base_url, placeholder: 'http://127.0.0.1:8000', 'aria-label': _t('Địa chỉ máy TTS'), style: 'width:100%;min-width:140px', class: 'mono' });
+        var mo = h('input', { type: 'text', value: x.model, placeholder: 'vieneu', 'aria-label': 'Model', style: 'width:76px', class: 'mono' });
+        var vo = h('input', { type: 'text', value: x.voice, placeholder: _t('(giọng đầu tiên)'), list: 'lvoices-' + x.lang, 'aria-label': _t('Giọng mặc định'), style: 'width:100px', class: 'mono' });
+        var st = !x.enabled ? [_t('Google'), 'chip'] : x.alive === true ? [_t('sống'), 'chip ok'] : x.alive === false ? [_t('không phản hồi'), 'chip warn'] : [_t('chưa kiểm'), 'chip'];
+        var save = h('button', { class: 'btn sm primary', onclick: function () { putLocal({ local: { lang: x.lang, enabled: en.checked, base_url: bu.value, model: mo.value, voice: vo.value } }, save, msgEl); } }, _t('Lưu'));
+        var reset = h('button', { class: 'btn sm', title: _t('Về giá trị khởi tạo'), onclick: function () { putLocal({ local: { lang: x.lang, reset: true } }, reset, msgEl); } }, _t('Mặc định'));
+        tb.appendChild(h('tr', null, h('td', { class: 'k' }, h('label', { class: 'row', style: 'gap:6px;flex-wrap:nowrap' }, en, h('span', { text: _l(LOCAL_LANG[x.lang] || x.lang) }))),
+          h('td', { class: 'nw' }, h('span', { class: st[1], title: x.error || x.warn || '', text: st[0] })), h('td', null, bu, dl), h('td', null, mo), h('td', null, vo),
+          h('td', { class: 'v nw', text: x.voices == null ? '—' : String(x.voices) }), h('td', { class: 'nw' }, save, ' ', reset)));
+        if (x.warn) tb.appendChild(h('tr', null, h('td'), h('td', { colspan: '6', class: 'note warn', text: x.warn })));
+      });
+      lBody.appendChild(h('div', { style: 'overflow-x:auto;max-width:100%' }, h('table', { class: 'grid' }, h('thead', null, h('tr', null, h('th', { text: _t('Ngôn ngữ') }), h('th', { text: _t('Trạng thái') }), h('th', { text: _t('Địa chỉ máy TTS') }),
+        h('th', { text: 'Model' }), h('th', { text: _t('Giọng mặc định') }), h('th', { text: _t('Số giọng') }), h('th'))), tb)));
+      lBody.appendChild(msgEl);
+      // dùng hôm nay / trần: toàn máy + từng kênh agent (link có khoá chặt nhất)
+      var u = lc.today || {}, cc = lc.chanCaps || {}, part = function (k, lab) { return _t('{lab} {n}/{cap}', { lab: lab, n: u[k] || 0, cap: cc[k] > 0 ? cc[k] : '∞' }); };
+      var capIn = h('input', { type: 'number', min: '0', max: '5000', step: '1', value: String(lc.cap), 'aria-label': _t('Trần TTS local / ngày'), style: 'width:100px' });
+      var capB = h('button', { class: 'btn sm', onclick: function () {
+        var n = Number(capIn.value);
+        if (capIn.value.trim() === '' || !isFinite(n) || n < 0 || n > 5000 || Math.floor(n) !== n) { msgEl.textContent = _t('Nhập số nguyên từ 0 đến 5000 (0 = không giới hạn).'); msgEl.className = 'note bad'; return; }
+        putLocal({ localCap: n }, capB, msgEl);
+      } }, _t('Lưu trần'));
+      var chk = h('button', { class: 'btn sm', onclick: function () { chk.disabled = true; Store.api('POST', 'api/voice/local/check', {}).then(function (r) { AiVoice.set(r); if (!dead) paintLocal(); }).catch(function (e) { chk.disabled = false; toast(e.message); }); } }, _t('Kiểm tra lại'));
+      lBody.appendChild(h('div', { class: 'row', style: 'flex-wrap:wrap;gap:8px' },
+        h('span', { class: 'mono', style: 'font-size:12px', text: _t('hôm nay {n}/{cap} câu', { n: u.all || 0, cap: lc.cap > 0 ? lc.cap : '∞' }) + ' · ' + [part('owner', _t('chủ máy')), part('ui', _t('dock')), part('oauth', 'OAuth'), part('link', 'link')].join(' · ') }),
+        h('span', { class: 'note', text: _t('Trần / ngày') }), capIn, capB, chk));
+    }
+    function refresh() { return AiVoice.load(true).then(function () { if (dead) return; paintState(); paintLocal(); }); }
     host.refresh = refresh;
     host.destroy = function () { dead = true; GC.audio.hush(); };
-    if (AiVoice.cfg) paintState(); else body.appendChild(h('div', { class: 'note', style: 'grid-column:1/-1', text: _t('Đang đọc trạng thái giọng AI…') }));
+    if (AiVoice.cfg) { paintState(); paintLocal(); } else body.appendChild(h('div', { class: 'note', style: 'grid-column:1/-1', text: _t('Đang đọc trạng thái giọng AI…') }));
     refresh();
     return host;
   }
