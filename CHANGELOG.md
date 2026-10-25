@@ -1,5 +1,13 @@
 # Changelog
 
+## Chưa phát hành
+*(v0.26.0 dự kiến — cầu nối CLI, INT-22; chưa phát hành: chờ đo P0 trên máy Ryan cho agy)*
+
+### New
+- **The Studio's AI can run on an agent CLI on your own machine** (Antigravity CLI `agy`, Claude Code) instead of an API key: `genchibi ai bridge install` → `login <cli>` → `enable <cli>`, then AI settings › AI route › *Agent CLI on this machine*. See [docs/AI-BRIDGE.md](docs/AI-BRIDGE.md).
+- The CLI runs on the host (never in the app container) inside a **bubblewrap sandbox** (no host files, no D-Bus, network only through an allowlist proxy), with its **own HOME** and a per-turn MCP token. A CLI only runs once its lock is **verified with system evidence**: a sandbox self-test plus a canary on a fake local API (the CLI must refuse shell / file / web tools itself, and planted CLAUDE.md / AGENTS.md / memory must never reach the model). Every turn is watched; a violation stops it and marks the CLI *failed* until you enable it again on the host.
+- Host limits (900 s per turn, 100 turns per hour, one at a time) — the Studio can only lower them. Cancel a CLI turn from the Studio; optional fallback to your API key when the CLI fails before writing anything.
+
 ## v0.25.0 — The Live stage sits on top of the AI assistant
 Ryan: "cái sân khấu live phải luôn hiển thị trên đầu khung chatroom của assistant thì mới hợp lý" *(the Live stage should always show at the top of the assistant chat)*.
 

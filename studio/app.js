@@ -5627,6 +5627,69 @@
     if (focusVoice) { delete r.focus; try { localStorage.setItem(routeKey(APP), JSON.stringify(r)); } catch (e) { /* bỏ qua */ } }   // vào từ nút "Dán key ở Cài đặt AI": cuộn tới panel giọng + trỏ vào ô key
     $('view').appendChild(box);
     Store.api('GET', 'api/ai').then(render).catch(function (e) { box.appendChild(h('div', { class: 'panel empty', text: e.message })); });
+    // v0.26 (INT-22, spec v025-cli-bridge §6): ĐƯỜNG CHẠY AI — API key hoặc "Agent CLI trên máy này" (cầu nối CLI chạy agy / Claude Code trên máy chủ).
+    // Chưa có cầu nối → chỉ hiện LỆNH HẰNG SỐ của chính trang này (không bao giờ lệnh do server soạn). Model chỉ lấy từ registry của cầu nối.
+    // Trần: Studio chỉ HẠ được dưới trần máy chủ; nâng = lệnh trên máy chủ. Khoá: Đạt / Chưa kiểm / Hỏng + bằng chứng còn thiếu (registry).
+    var BR_INSTALL = 'genchibi ai bridge install', BR_CONFIG = 'genchibi ai bridge config --turn-sec <s> --per-hour <n>';
+    function cliPanel(cfg) {
+      var b = cfg.bridge || { paired: false, clis: {}, caps: {} }, caps = b.caps || {}, clis = b.clis || {}, names = ['agy', 'claude'];
+      var modeSel = h('select', { id: 'aiMode' }, h('option', { value: 'api', text: _t('API key (nhà cung cấp LLM)') }), h('option', { value: 'cli', text: _t('Agent CLI trên máy này') }));
+      modeSel.value = cfg.primary === 'cli' ? 'cli' : 'api';
+      var cliSel = h('select', { id: 'aiCli' });
+      names.forEach(function (n) { var c = clis[n] || {}; cliSel.appendChild(h('option', { value: n, text: (c.label || n) + (c.enabled ? '' : ' · ' + _t('chưa bật trên máy chủ')) })); });
+      cliSel.value = (cfg.cli && cfg.cli.name) || 'agy';
+      var modelSel = h('select', { id: 'aiCliModel' });
+      function paintModels() {
+        clear(modelSel); var c = clis[cliSel.value] || {}, ms = c.models || [];
+        modelSel.appendChild(h('option', { value: '', text: ms.length ? _t('mặc định của CLI') : _t('chưa xác định (cầu nối chưa quét)') }));
+        ms.forEach(function (m) { modelSel.appendChild(h('option', { value: m, text: m })); });
+        modelSel.value = cfg.cli && cfg.cli.name === cliSel.value && ms.indexOf(cfg.cli.model) >= 0 ? cfg.cli.model : '';
+      }
+      cliSel.onchange = paintModels; paintModels();
+      var fb = h('input', { type: 'checkbox', id: 'aiFallback', checked: !!cfg.fallback }), ro = h('input', { type: 'checkbox', id: 'aiReadOnly', checked: !!cfg.readOnly });
+      var turn = h('input', { type: 'number', id: 'aiTurnSec', min: '30', max: String(caps.turnSec || 900), step: '30', value: String((cfg.capsEff && cfg.capsEff.turnSec) || caps.turnSec || 900), style: 'width:90px' });
+      var perH = h('input', { type: 'number', id: 'aiPerHour', min: '1', max: String(caps.perHour || 100), value: String((cfg.capsEff && cfg.capsEff.perHour) || caps.perHour || 100), style: 'width:90px' });
+      var saveB = h('button', { class: 'btn primary', id: 'aiCliSave', onclick: function () {
+        Store.api('PUT', 'api/ai', { primary: modeSel.value, cli: cliSel.value, cliModel: modelSel.value, fallback: fb.checked, readOnly: ro.checked, caps: { turnSec: +turn.value, perHour: +perH.value } })
+          .then(function (c) { toast(_t('Đã lưu cài đặt AI.')); render(c); }).catch(function (e) { toast(e.message); });
+      } }, _t('Lưu'));
+      var ctl = function (kind, cli) { Store.api('POST', 'api/ai/cli/control', { kind: kind, cli: cli || '' }).then(function () { toast(_t('Đã gửi lệnh cho cầu nối — xem lại sau ít giây.')); setTimeout(function () { Store.api('GET', 'api/ai').then(render); }, 4000); }).catch(function (e) { toast(e.message); }); };
+      var st = h('div', { class: 'stack', style: 'gap:6px' });
+      if (!b.paired) {
+        st.appendChild(h('div', { class: 'note', text: _t('Chưa có cầu nối CLI trên máy chủ. Chạy lệnh này trên máy chủ (bằng user giữ đăng nhập agy / Claude Code, không sudo):') }));
+        st.appendChild(h('div', { class: 'mono', id: 'aiBridgeCmd', text: BR_INSTALL }));
+      } else {
+        st.appendChild(h('div', { class: 'row' }, h('span', { class: 'chip ' + (b.online ? 'ok' : 'bad'), id: 'aiBridgeOnline', text: b.online ? _t('Cầu nối online') : _t('Cầu nối tắt') }),
+          h('span', { class: 'note', text: _t('lần poll cuối {t} · phiên bản {v} · proto {p}', { t: b.lastPoll ? fmtTime(b.lastPoll) : '—', v: b.version || '—', p: b.proto == null ? '—' : b.proto }) }),
+          b.upgrade ? h('span', { class: 'chip bad', text: _t('Lệch giao thức — chạy genchibi update trên máy chủ') }) : null));
+        var t = h('table', { class: 'grid', id: 'aiCliTable' });
+        t.appendChild(h('tr', null, ['CLI', _t('Phiên bản'), _t('Đăng nhập'), _t('Hộp cát'), _t('Khoá'), _t('Quét lúc'), _t('Bật trên máy chủ'), ''].map(function (c) { return h('th', { text: c }); })));
+        names.forEach(function (n) {
+          var c = clis[n] || { installed: false, confinement: 'unverified', missing: [] }, lk = c.confinement === 'verified' ? ['ok', _t('Đạt (hộp cát hệ điều hành + CLI tự chặn)')] : c.confinement === 'failed' ? ['bad', _t('Hỏng')] : ['warn', _t('Chưa kiểm')];
+          var miss = (c.missing || []).join(' · ');
+          t.appendChild(h('tr', null, h('td', { class: 'v', text: c.label || n }), h('td', { class: 'v', text: c.installed ? c.version || '—' : _t('không thấy') }),
+            h('td', null, h('span', { class: 'chip ' + (c.login === 'ok' ? 'ok' : c.login === 'missing' ? 'bad' : ''), text: c.login === 'ok' ? _t('đã đăng nhập') : c.login === 'missing' ? _t('chưa đăng nhập') : _t('không rõ') })),
+            h('td', null, h('span', { class: 'chip ' + (c.sandbox === 'ok' && c.selftest !== false ? 'ok' : 'bad'), text: c.sandbox === 'ok' ? (c.selftest === false ? _t('tự kiểm hỏng') : 'bubblewrap') : c.sandbox === 'missing' ? _t('thiếu bubblewrap') : c.sandbox || '—' })),
+            h('td', null, h('span', { class: 'chip ' + lk[0], text: lk[1] }), miss ? h('div', { class: 'note', text: _t('còn thiếu: {x}', { x: miss }) }) : null,
+              n === 'agy' && c.confinement !== 'verified' ? h('div', { class: 'note', text: _t('agy chưa cho bằng chứng tự khoá — dùng Claude Code hoặc API key') }) : null),
+            h('td', { class: 'nw note', text: c.at ? fmtTime(c.at) : '—' }), h('td', null, h('span', { class: 'chip ' + (c.enabled ? 'ok' : ''), text: c.enabled ? _t('đã bật') : _t('chưa') })),
+            h('td', { class: 'nw' }, h('button', { class: 'btn sm', disabled: !b.online, title: _t('Kiểm tra khoá bằng API giả — không tốn quota'), onclick: function () { ctl('verify', n); } }, _t('Kiểm tra khoá')))));
+        });
+        st.appendChild(h('div', { class: 'scroll' }, t));
+        st.appendChild(h('div', { class: 'row' }, h('button', { class: 'btn', disabled: !b.online, onclick: function () { ctl('probe', ''); } }, _t('Quét lại')),
+          h('button', { class: 'btn', disabled: !(cfg.primary === 'cli' && cfg.cliReady), onclick: function () { runTest(''); } }, _t('Thử (bài đo AI đạo diễn)'))));
+        st.appendChild(h('div', { class: 'note', text: _t('Bật một CLI trên máy chủ: genchibi ai bridge login <cli> rồi genchibi ai bridge enable <cli>.') }));
+      }
+      return h('div', { class: 'panel', id: 'aiRoute' }, h('h3', null, _t('Đường chạy AI'), h('span', { class: 'r note', text: _t('API key hoặc agent CLI trên máy chủ (agy, Claude Code)') })),
+        h('div', { class: 'pad kv' }, h('label', { text: _t('AI chạy bằng') }), modeSel,
+          h('label', { text: 'Agent CLI' }), h('div', { class: 'row' }, cliSel, modelSel),
+          h('label', { text: _t('Trạng thái') }), st,
+          h('label', { text: _t('Dự phòng') }), h('label', { class: 'note' }, fb, _t(' dùng API key bên dưới khi CLI lỗi trước khi ghi gì (cầu nối tắt, chưa đăng nhập, hết quota, khoá chưa đạt)')),
+          h('label', { text: _t('AI chỉ đọc') }), h('label', { class: 'note' }, ro, _t(' trợ lý chỉ được dùng tool đọc / xem (cả hai đường)')),
+          h('label', { text: _t('Trần') }), h('div', { class: 'stack', style: 'gap:4px' }, h('div', { class: 'row' }, turn, h('span', { class: 'note', text: _t('giây / lượt') }), perH, h('span', { class: 'note', text: _t('lượt / giờ') })),
+            h('div', { class: 'note', text: _t('Chỉ hạ được dưới trần máy chủ ({s} s / lượt, {n} lượt / giờ). Nâng trên máy chủ:', { s: caps.turnSec || 900, n: caps.perHour || 100 }) }), h('div', { class: 'mono', text: BR_CONFIG })),
+          h('span'), h('div', { class: 'row' }, saveB)));
+    }
     function render(cfg) {
       clear(box);
       var P = cfg.providers;
@@ -5647,6 +5710,7 @@
         if (clearB.getAttribute('data-confirm') !== '1') { clearB.setAttribute('data-confirm', '1'); clearB.textContent = _t('Bấm lần nữa để xoá key'); return; }
         Store.api('PUT', 'api/ai', { provider: prov.value, clearKey: true }).then(function (c) { toast(_t('Đã xoá API key.')); render(c); });
       } }, _t('Xoá key'));
+      box.appendChild(cliPanel(cfg));
       box.appendChild(h('div', { class: 'panel' }, h('h3', null, _t('Nhà cung cấp LLM'), h('span', { class: 'r note', text: _t('API chuẩn OpenAI · key mã hoá trên máy') })),
         h('div', { class: 'pad kv' }, h('label', { text: _t('Nhà cung cấp') }), prov, h('label', { text: _t('Địa chỉ API') }), base,
           h('label', { text: 'API key' }), h('div', { class: 'stack', style: 'gap:4px' }, key, link), h('label', { text: 'Model' }), model,

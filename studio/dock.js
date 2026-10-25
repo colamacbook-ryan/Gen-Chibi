@@ -473,28 +473,32 @@
   /* ============================================================ cấu hình AI (có key chưa) */
   function loadCfg() {
     if (B.Store.mode !== 'server') { S.cfg = { off: true }; paintGate(); return; }
-    B.Store.api('GET', 'api/ai').then(function (c) { S.cfg = { hasKey: !!c.hasKey, model: c.model || '', provider: (c.providers && c.providers[c.provider] || {}).label || c.provider }; S.zones = c.zones || S.zones; paintGate(); paintCtx(); paintLog(); tokens(); }, function () { S.cfg = { hasKey: false, model: '' }; paintGate(); });
+    B.Store.api('GET', 'api/ai').then(function (c) { S.cfg = { hasKey: !!c.hasKey, model: c.model || '', provider: (c.providers && c.providers[c.provider] || {}).label || c.provider, mode: c.primary === 'cli' ? 'cli' : 'api', cliReady: !!c.cliReady, cli: (c.cli && c.cli.name) || '' }; S.zones = c.zones || S.zones; paintGate(); paintCtx(); paintLog(); tokens(); }, function () { S.cfg = { hasKey: false, model: '' }; paintGate(); });
   }
-  function aiReady() { return !!(S.cfg && !S.cfg.off && S.cfg.hasKey && S.cfg.model); }
+  // v0.26 (CNS-316): đường Agent CLI sẵn sàng = cầu nối online + CLI đã bật trên máy chủ + khoá Đạt (server tính cliReady); đường API = key + model
+  function aiReady() { var c = S.cfg; return !!(c && !c.off && (c.mode === 'cli' ? c.cliReady : c.hasKey && c.model)); }
   function paintGate() {
     if (!ready) return;
     clear(E.gate);
     var c = S.cfg;
     if (!c) { E.gate.hidden = true; return; }
     if (c.off) E.gate.appendChild(h('div', { class: 'banner warn', role: 'status' }, h('span', { text: _t('Trợ lý AI cần bản cài trên máy (server) và một API key LLM. Bản xem thử trong trình duyệt chỉ cho xem.') })));
-    else if (!c.hasKey || !c.model) E.gate.appendChild(h('div', { class: 'banner warn', role: 'status' },
+    else if (c.mode === 'cli' && !c.cliReady) E.gate.appendChild(h('div', { class: 'banner warn', role: 'status' },
+      h('span', { text: _t('Agent CLI trên máy này chưa sẵn sàng (cầu nối tắt, CLI chưa bật hoặc khoá chưa đạt) — xem Cài đặt AI.') }),
+      h('button', { type: 'button', class: 'btn sm primary', onclick: function () { B.go({ page: 'ai' }); } }, _t('Mở Cài đặt AI ›'))));
+    else if (c.mode !== 'cli' && (!c.hasKey || !c.model)) E.gate.appendChild(h('div', { class: 'banner warn', role: 'status' },
       h('span', { text: !c.hasKey ? _t('Chưa có API key LLM — dán key ở Cài đặt AI để trợ lý trả lời.') : _t('Chưa chọn model — chọn model ở Cài đặt AI.') }),
       h('button', { type: 'button', class: 'btn sm primary', onclick: function () { B.go({ page: 'ai' }); } }, _t('Mở Cài đặt AI ›'))));
     E.gate.hidden = !E.gate.firstChild;
     E.send.disabled = S.busy || !aiReady();
-    E.send.title = aiReady() ? _t('Gửi (Ctrl/⌘ + Enter)') : _t('Cần API key + model ở Cài đặt AI');
+    E.send.title = aiReady() ? _t('Gửi (Ctrl/⌘ + Enter)') : c.mode === 'cli' ? _t('Cần Agent CLI sẵn sàng ở Cài đặt AI') : _t('Cần API key + model ở Cài đặt AI');
   }
 
   /* ============================================================ gửi */
   function send(text) {
     text = String(text == null ? E.ta.value : text).trim();
     if (!text || S.busy) return;
-    if (!aiReady()) { paintGate(); toast(_t('Chưa có API key / model — mở Cài đặt AI.')); return; }
+    if (!aiReady()) { paintGate(); toast(S.cfg && S.cfg.mode === 'cli' ? _t('Agent CLI chưa sẵn sàng — mở Cài đặt AI.') : _t('Chưa có API key / model — mở Cài đặt AI.')); return; }
     var pins = S.pins.slice(), sentCtx = ctxPayload(), key = S.key, quickTask = S.quick && S.quick.text === text ? S.quick.task : '';   // nút gợi ý gửi nguyên câu → việc của nút lên công tắc Live
     S.quick = null;
     S.msgs.push({ role: 'user', content: text, pins: pins.map(function (p) { return { anchor: p.anchor, label: p.label }; }) });

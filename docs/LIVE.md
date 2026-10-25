@@ -159,8 +159,12 @@ invitation (`live`) on connections that can write. Declining changes nothing.
   acts at a time (others are marked `quiet` and only counted).
 - **Area gate in `callTool`** (CNS-302): for `ctx.channel === 'ui'` any tool outside the area's set
   (`rollback_app`, `update_app`, `live_*`, `render_voice`, `import_project`, another area's tools…) is `FORBIDDEN` — one gate
-  for every path (today's API-key loop, the CLI bridge later). The Studio AI's instructions never mention `live_task` /
+  for every path (the API-key loop and the CLI bridge). The Studio AI's instructions never mention `live_task` /
   `live_setup` (CNS-308): the server reports its steps itself.
+- **CLI bridge turns (v0.26, [AI-BRIDGE.md](AI-BRIDGE.md))** act exactly like API-key turns: `dockTurn` emits the session
+  events, and every MCP call the CLI makes with its per-turn token goes through `callTool` with the turn's `liveChan`, so the
+  same tool events reach the stage. The CLI runs with its own HOME (no hooks), so your own Claude Code Live hook never
+  fires for a bridge turn — one actor, one channel.
 
 ## Bubbles: plain words only
 
