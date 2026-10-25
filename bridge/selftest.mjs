@@ -51,6 +51,8 @@ const cannot = (fn) => { try { fn(); return false; } catch (e) { return e.code |
 {
   let ifs = []; try { ifs = fs.readFileSync('/proc/net/dev', 'utf8').split('\n').slice(2).map(l => l.split(':')[0].trim()).filter(Boolean); } catch (e) { /* bỏ */ }
   put('netns-lo-only', ifs.length === 1 && ifs[0] === 'lo', 'interfaces: ' + ifs.join(','));
+  let ns = ''; try { ns = fs.readlinkSync('/proc/self/ns/net'); } catch (e) { /* bỏ */ }
+  put('netns-private', !!ns && !!A.netns && ns !== A.netns, 'net namespace ' + ns + (A.netns ? ' vs bridge ' + A.netns : ''));
 }
 const tcp = (host, port) => new Promise(r => {
   const s = net.connect({ host, port, timeout: 1500 });

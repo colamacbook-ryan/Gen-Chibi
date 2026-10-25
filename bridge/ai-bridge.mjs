@@ -106,12 +106,19 @@ export const loadRegistry = paths => { const r = readJSON(paths.registry, {}); i
 export const saveRegistry = (paths, reg) => { reg.at = new Date().toISOString(); writePrivate(paths.registry, JSON.stringify(reg, null, 1) + '\n'); };
 
 /* ---------------------------------------------------------------- adapter theo CLI (spec §4.2–§4.3) */
-// tên tool MCP của genchibi theo cách từng CLI đặt tiền tố; tên trần chỉ khi chính MCP genchibi của lượt đã liệt kê nó (proxy thấy tools/list)
-const GC_TOOL = /^(?:mcp__genchibi__|mcp_genchibi_|genchibi[/_.:]|mcp\(genchibi\/)([a-z0-9_]+)\)?$/i;
-export function isGenchibiTool(name, listed) {
-  if (typeof name !== 'string' || !name) return false;
-  if (GC_TOOL.test(name)) return true;
-  return !!(listed && listed.has(name) && /^[a-z0-9_]+$/.test(name));
+// tên tool MCP của genchibi: CHỈ nhận đúng tiền tố MCP của CLI đó (security review: không tin danh sách tools/list của app — container có thể liệt kê
+// tên trùng tool có sẵn của CLI như run_command / read_file). Tiền tố của agy là ĐẦU VÀO cho P0 (fixture dùng mcp_genchibi_). Phần sau tiền tố trùng tên
+// tool cấm / tool có sẵn đã biết của BẤT KỲ CLI nào → từ chối (đóng khi nghi ngờ)
+const BUILTIN_TOOLS = new Set(['bash', 'read', 'write', 'edit', 'multiedit', 'glob', 'grep', 'webfetch', 'websearch', 'task', 'notebookedit', 'todowrite',
+  'run_command', 'read_file', 'write_file', 'read_url', 'execute_url', 'command', 'shell', 'list_dir', 'view_file', 'replace_file_content', 'search_web', 'browser']);
+export function isGenchibiTool(name, cli) {
+  const A = ADAPTERS[cli];
+  if (typeof name !== 'string' || !name || !A || !A.mcpPrefix) return false;
+  const m = A.mcpPrefix.exec(name);
+  if (!m) return false;
+  const bare = m[1].toLowerCase();
+  if (BUILTIN_TOOLS.has(bare) || Object.values(ADAPTERS).some(x => x.forbidden.some(([f]) => f.toLowerCase() === bare))) return false;
+  return true;
 }
 // lời nhắc gửi qua stdin (không bao giờ trên argv): system đặt đầu, rồi dữ liệu giao diện, lịch sử, tin cuối
 function promptText(job, withSystem) {
@@ -126,7 +133,7 @@ function promptText(job, withSystem) {
 const blocks = c => (Array.isArray(c) ? c : []);
 export const ADAPTERS = {
   claude: {
-    name: 'claude', bins: ['claude'], label: 'Claude Code', staticInit: true,
+    name: 'claude', bins: ['claude'], label: 'Claude Code', staticInit: true, mcpPrefix: /^mcp__genchibi__([a-z0-9_]{1,64})$/,
     // help 2.1.299 / 2.1.303: thiếu một flag bắt buộc → unverified (không chạy)
     required: ['--print', '--output-format', '--tools', '--allowedTools', '--strict-mcp-config', '--mcp-config', '--permission-mode', '--permission-prompts', '--restricted'],
     requiredWords: ['dontAsk'],
@@ -172,7 +179,7 @@ export const ADAPTERS = {
     // KIỂM INIT mỗi lượt (spec §4.2, `direct`): sai một điều → SIGTERM + CONFINEMENT
     checkInit(ev, entry, { expectMcp }) {
       const o = ev.raw || {}, bad = [], base = entry.baseline || {}, nm = x => (typeof x === 'string' ? x : x && x.name) || '?';
-      blocks(o.tools).forEach(t => { if (!GC_TOOL.test(nm(t)) || !/^mcp__genchibi__/.test(nm(t))) bad.push('tool:' + nm(t)); });
+      blocks(o.tools).forEach(t => { if (!isGenchibiTool(nm(t), 'claude')) bad.push('tool:' + nm(t)); });
       const sv = blocks(o.mcp_servers);
       if (expectMcp ? !(sv.length === 1 && sv[0].name === 'genchibi' && sv[0].status === 'connected') : sv.length) bad.push('mcp_servers:' + sv.map(s => nm(s) + '=' + (s && s.status)).join(','));
       if (Array.isArray(o.mcp_server_errors) ? o.mcp_server_errors.length : o.mcp_server_errors) bad.push('mcp_server_errors');
@@ -195,7 +202,7 @@ export const ADAPTERS = {
     loginCheck: home => (fs.existsSync(path.join(home, '.claude', '.credentials.json')) ? { status: 'ok', confidence: 'indirect', raw: '.claude/.credentials.json present' } : { status: 'unknown', confidence: 'indirect', raw: 'no .claude/.credentials.json (keyring or not logged in — P0)' })
   },
   agy: {
-    name: 'agy', bins: ['agy'], label: 'Antigravity CLI', staticInit: false,
+    name: 'agy', bins: ['agy'], label: 'Antigravity CLI', staticInit: false, mcpPrefix: /^mcp_genchibi_([a-z0-9_]{1,64})$/,   // tiền tố: giả định, P0 T-07 xác nhận
     required: ['--print', '--output-format', '--input-format', '--print-timeout', '--disable-slash-commands'],
     requiredWords: ['stream-json'],
     optional: ['--model', '--sandbox'],
@@ -323,21 +330,30 @@ export function sandboxEnv(home, binDir, extra) {
 /* ---------------------------------------------------------------- proxy allowlist (ngoài hộp) + MCP giả + API giả */
 // routes: { <host>: handler(req, res, url, body) } cho request HTTP thường (absolute-URI); CONNECT chỉ tới allow (cổng 443). Mọi thứ khác → 403 + ghi lại
 export function startProxy({ sock, allow, routes, onDeny }) {
-  const stats = { denied: [], hits: {} };
+  // bảng route không prototype (security review: host `constructor` / `__proto__` không được trỏ tới hàm của Object.prototype)
+  const R = Object.create(null);
+  Object.keys(routes || {}).forEach(k => { if (typeof routes[k] === 'function') R[k.toLowerCase()] = routes[k]; });
+  const stats = { denied: [], hits: Object.create(null) };
   const deny = (host, port, how) => { if (stats.denied.length < 50) stats.denied.push({ host: String(host).slice(0, 120), port: String(port || ''), how, at: new Date().toISOString() }); if (onDeny) onDeny(host, how); };
   const srv = http.createServer((req, res) => {
     let u; try { u = new URL(req.url); } catch (e) { u = null; }
-    const host = u ? u.hostname.toLowerCase() : '', h = u && u.protocol === 'http:' && (!u.port || u.port === '80') ? routes[host] : null;
-    if (!h) { deny(host || String(req.headers.host || ''), u && u.port, 'http'); res.writeHead(403, { 'Content-Type': 'application/json' }); return res.end('{"error":"blocked by gen-chibi bridge proxy"}'); }
+    const host = u ? u.hostname.toLowerCase() : '', h = u && u.protocol === 'http:' && (!u.port || u.port === '80') && Object.prototype.hasOwnProperty.call(R, host) ? R[host] : null;
+    if (typeof h !== 'function') { deny(host || String(req.headers.host || ''), u && u.port, 'http'); res.writeHead(403, { 'Content-Type': 'application/json' }); return res.end('{"error":"blocked by gen-chibi bridge proxy"}'); }
     stats.hits[host] = (stats.hits[host] || 0) + 1;
     const chunks = []; let n = 0;
     req.on('data', d => { n += d.length; if (n <= 4 * 1024 * 1024) chunks.push(d); });
-    req.on('end', () => { if (n > 4 * 1024 * 1024) { res.writeHead(413); return res.end(); } Promise.resolve(h(req, res, u, Buffer.concat(chunks))).catch(() => { try { res.writeHead(502); res.end(); } catch (e) { /* đã gửi */ } }); });
+    const bad = () => { try { if (!res.headersSent) res.writeHead(502); res.end(); } catch (e) { /* đã gửi */ } };
+    req.on('end', () => {
+      if (n > 4 * 1024 * 1024) { res.writeHead(413); return res.end(); }
+      let p; try { p = h(req, res, u, Buffer.concat(chunks)); } catch (e) { return bad(); }   // handler ném đồng bộ → 502, proxy vẫn sống
+      Promise.resolve(p).catch(bad);
+    });
   });
+  srv.on('clientError', (e, c) => { try { c.end('HTTP/1.1 400 Bad Request\r\n\r\n'); } catch (x) { /* bỏ */ } });
   srv.on('connect', (req, c, head) => {
     const m = /^([A-Za-z0-9.-]{1,253}):(\d{1,5})$/.exec(String(req.url || '')), host = m ? m[1].toLowerCase() : '', port = m ? m[2] : '';
     c.on('error', () => {});
-    if (!m || port !== '443' || !allow.includes(host)) { deny(host || String(req.url).slice(0, 80), port, 'connect'); return c.end('HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n'); }
+    if (!m || port !== '443' || !Array.isArray(allow) || !allow.includes(host)) { deny(host || String(req.url).slice(0, 80), port, 'connect'); return c.end('HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n'); }
     stats.hits[host] = (stats.hits[host] || 0) + 1;
     const up = net.connect(443, host, () => { c.write('HTTP/1.1 200 Connection Established\r\n\r\n'); if (head && head.length) up.write(head); up.pipe(c); c.pipe(up); });
     up.on('error', () => c.destroy());
@@ -349,9 +365,9 @@ export function startProxy({ sock, allow, routes, onDeny }) {
 }
 const sendJSON = (res, code, obj, extra) => { const b = Buffer.from(JSON.stringify(obj)); res.writeHead(code, Object.assign({ 'Content-Type': 'application/json', 'Content-Length': b.length }, extra || {})); res.end(b); };
 const rpcList = b => { try { const j = JSON.parse(b.toString('utf8') || 'null'); return Array.isArray(j) ? j : j ? [j] : []; } catch (e) { return []; } };
-// /mcp → app (đúng một đường, POST/GET). Đếm tools/call (trần ở MÁY CHỦ), ghi tên tool app liệt kê, bỏ WWW-Authenticate; 401 / 403 → báo để giết CLI (CNS-303)
+// /mcp → app (đúng một đường, POST/GET). Đếm tools/call (trần ở MÁY CHỦ), bỏ WWW-Authenticate; 401 / 403 → báo để giết CLI (CNS-303)
 export function mcpToApp({ app, maxCalls, onAuthFail }) {
-  const st = { calls: 0, listed: new Set(), authFail: 0 };
+  const st = { calls: 0, authFail: 0 };
   const h = (req, res, u, body) => {
     if (u.pathname !== '/mcp' || u.search || (req.method !== 'POST' && req.method !== 'GET')) return sendJSON(res, 403, { error: 'only POST/GET /mcp' });
     const msgs = rpcList(body), calls = msgs.filter(m => m && m.method === 'tools/call');
@@ -361,7 +377,7 @@ export function mcpToApp({ app, maxCalls, onAuthFail }) {
       return sendJSON(res, 200, out.length === 1 ? out[0] : out);
     }
     st.calls += calls.length;
-    const isList = msgs.some(m => m && m.method === 'tools/list'), target = new URL(app);
+    const target = new URL(app);
     const hd = { Host: target.host, Accept: req.headers.accept || 'application/json' };
     ['content-type', 'authorization', 'mcp-session-id', 'mcp-protocol-version'].forEach(k => { if (req.headers[k]) hd[k] = req.headers[k]; });
     if (body.length) hd['Content-Length'] = body.length;
@@ -369,7 +385,6 @@ export function mcpToApp({ app, maxCalls, onAuthFail }) {
       const ch = []; r.on('data', d => ch.push(d)); r.on('end', () => {
         const b = Buffer.concat(ch);
         if (r.statusCode === 401 || r.statusCode === 403) { st.authFail++; if (onAuthFail) onAuthFail(r.statusCode); return sendJSON(res, 403, { error: 'mcp token rejected' }); }
-        if (isList) rpcList(b).forEach(m => blocks(m && m.result && m.result.tools).forEach(t => { if (t && typeof t.name === 'string') st.listed.add(t.name); }));
         const out = {}; ['content-type', 'mcp-session-id'].forEach(k => { if (r.headers[k]) out[k] = r.headers[k]; });   // KHÔNG chép www-authenticate / set-cookie / link
         out['Content-Length'] = b.length; res.writeHead(r.statusCode, out); res.end(b);
       });
@@ -595,7 +610,8 @@ export async function selftest(name, paths, reg) {
   const rh = realOr(paths.home), top = p => { const r = path.relative(rh, p); return r && !r.startsWith('..') && !path.isAbsolute(r) ? r.split(path.sep)[0] : ''; };
   const skeleton = [...new Set([home, e.real, realOr(process.execPath)].map(top).filter(Boolean))];
   let probe = []; try { probe = fs.readdirSync(rh).filter(n => !skeleton.includes(n)).slice(0, 64); } catch (err) { /* bỏ */ }
-  const arg = JSON.stringify({ realHome: rh, skeleton, probe, uid: process.getuid(), lan: lan.slice(0, 2), env: Object.keys(envIn) });
+  let netns = ''; try { netns = fs.readlinkSync('/proc/self/ns/net'); } catch (err) { /* bỏ */ }   // netns của cầu nối: trong hộp phải KHÁC (--unshare-all gồm net)
+  const arg = JSON.stringify({ realHome: rh, skeleton, probe, netns, uid: process.getuid(), lan: lan.slice(0, 2), env: Object.keys(envIn) });
   let line = '';
   const r = await sandboxRun({ paths, entry: e, home, binds: [e.real], cmd: [realOr(process.execPath), '/work/.gc/selftest.mjs', arg], env: envIn, allow: A.hosts, routes: { [MCP_HOST]: stub.handler }, timeoutMs: 30000, homeRo: homeRoFiles(name, home), onLine: (j, l) => { if (j && Array.isArray(j.checks)) line = l; } });
   let res; try { res = JSON.parse(line); } catch (err) { res = { ok: false, checks: [{ id: 'run', ok: false, detail: ('exit ' + r.code + ' ' + r.stderr).slice(0, 300) }] }; }
@@ -685,8 +701,16 @@ export async function verifyCli(name, paths, log = () => {}) {
 }
 
 /* ---------------------------------------------------------------- chạy một lượt (job đã kiểm) */
+// vi phạm giam giữ trong lượt → CLI bị đánh dấu `failed` trong registry: mọi lượt sau bị từ chối tới khi owner `enable` lại (kiểm lại từ đầu)
+export function markFailed(paths, cli, why) {
+  const r = loadRegistry(paths), e = r.clis[cli];
+  if (!e) return;
+  e.confinement = { status: 'failed', evidence: [], missing: ['turn ' + new Date().toISOString() + ': ' + String(why).slice(0, 200)], at: new Date().toISOString(), cli_version: e.version || '' };
+  saveRegistry(paths, r);
+}
 // post(phase, body) → phản hồi của app ({ cancel }). Trả { phase: 'done', text } | { phase: 'error', code, detail }
-export async function runJob(v, { paths, reg, caps, app, post, onFail }) {
+export async function runJob(v, { paths, reg, caps, app, post, onFail: report = () => {} }) {
+  const onFail = why => { markFailed(paths, v.job.cli, why); report(why); };
   const { job, gcj } = v, A = ADAPTERS[job.cli], e = reg.clis[job.cli], home = paths.cliHome(job.cli), c = effCaps(caps, job.caps);
   const fail = (code, detail) => ({ phase: 'error', code, detail: String(detail || '').slice(0, 300) });
   if (!hasBwrap(e) || !(e.sandbox.selftest || []).length || e.sandbox.selftest.some(x => !x.ok)) return fail('NO_SANDBOX', 'bubblewrap / sandbox selftest not passed — genchibi ai bridge enable ' + job.cli);
@@ -713,7 +737,7 @@ export async function runJob(v, { paths, reg, caps, app, post, onFail }) {
           if (A.staticInit) { const b = A.checkInit(x, e, { expectMcp: job.kind === 'agent' }); if (b.length) violate('init: ' + b.join(' '), ctl); }
         } else if (x.t === 'tool') {
           if (A.staticInit && !sawInit) violate('tool before init', ctl);
-          else if (!isGenchibiTool(x.name, mcp.st.listed)) violate('non-genchibi tool ' + (x.name || '(unnamed)'), ctl);
+          else if (!isGenchibiTool(x.name, job.cli)) violate('non-genchibi tool ' + (x.name || '(unnamed)'), ctl);
           else streamTools++;
         } else if (x.t === 'text') text += x.text;
         else if (x.t === 'result') { resultText = x.text; isErr = x.isError; }
@@ -732,7 +756,7 @@ export async function runJob(v, { paths, reg, caps, app, post, onFail }) {
   if (r.stop === 'MCP_DENIED') return fail('CONFINEMENT', 'MCP token rejected by the app (401/403) — CLI stopped');
   const final = resultText || text;
   if (r.code !== 0 || isErr) return fail(A.classify({ retries, resultText: final, stderr: r.stderr, stdoutErr: r.stdoutErr }), ('exit ' + r.code).slice(0, 40));
-  return { phase: 'done', text: final.slice(0, 60000), calls: mcp.st.calls };
+  return { phase: 'done', text: final.slice(0, 60000), calls: mcp.st.calls, argv: r.args };   // argv: để kiểm (test) không có token / nội dung trên dòng lệnh
 }
 
 /* ---------------------------------------------------------------- vòng long-poll ra app (§5) */
@@ -792,10 +816,7 @@ export async function serve({ paths, log = console.log, stopSignal = { stop: fal
       if (starts.length >= caps.perHour) { await post('error', { code: 'RATE_CAP', detail: 'host cap ' + caps.perHour + ' turns / hour' }); continue; }
       starts.push(now);
       log('[bridge] turn ' + v.id.slice(0, 6) + ' ' + v.job.cli + ' ' + v.job.kind);
-      const out = await runJob(v, { paths, reg, caps, app: cfg.app, post, onFail: why => {
-        const r2 = loadRegistry(paths); if (r2.clis[v.job.cli]) { r2.clis[v.job.cli].confinement = { status: 'failed', evidence: [], missing: ['turn ' + new Date().toISOString() + ': ' + String(why).slice(0, 200)], at: new Date().toISOString(), cli_version: r2.clis[v.job.cli].version }; saveRegistry(paths, r2); }
-        log('[bridge] CONFINEMENT ' + v.job.cli + ': ' + why);
-      } }).catch(e => ({ phase: 'error', code: e.code || 'CLI_ERROR', detail: String(e.message).slice(0, 200) }));
+      const out = await runJob(v, { paths, reg, caps, app: cfg.app, post, onFail: why => log('[bridge] CONFINEMENT ' + v.job.cli + ': ' + why) }).catch(e => ({ phase: 'error', code: e.code || 'CLI_ERROR', detail: String(e.message).slice(0, 200) }));
       await post(out.phase, out.phase === 'done' ? { text: out.text } : { code: out.code, detail: out.detail });
     } catch (e) {
       log('[bridge] app unreachable (' + (e.code || e.message) + ') — retrying');

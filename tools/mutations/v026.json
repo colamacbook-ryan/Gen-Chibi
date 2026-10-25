@@ -1,0 +1,395 @@
+{
+ "_": "gen-chibi v0.26 — đột biến cho cầu nối CLI (spec v025-cli-bridge §9 mutation + security review). Chạy: node tools/mutate.mjs --data tools/mutations/v026.json [--jobs N --wrap \"bash netns.sh\"] [ID…]; kiểm nhanh: --check. Phần hộp cát cần bwrap thật (máy không có → test bỏ qua phần đó, đột biến B01–B04 sống: chạy trên máy có bwrap). © 2026 Gen Labs — All rights reserved.",
+ "mutations": [
+  {
+   "id": "B01",
+   "guard": "hộp cát: --unshare-all (netns riêng)",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "'--unshare-all', '--die-with-parent'",
+   "replace": "'--unshare-user', '--unshare-pid', '--unshare-ipc', '--unshare-uts', '--die-with-parent'",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "hộp cát thật",
+   "timeout": 600
+  },
+  {
+   "id": "B02",
+   "guard": "hộp cát: --tmpfs /home",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "'--tmpfs', '/tmp', '--tmpfs', '/home', '--tmpfs', '/run'",
+   "replace": "'--tmpfs', '/tmp', '--tmpfs', '/run'",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "hộp cát thật",
+   "timeout": 600
+  },
+  {
+   "id": "B03",
+   "guard": "hộp cát: không bind HOME thật",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "a.push('--bind', o.home, o.home);",
+   "replace": "a.push('--bind', path.resolve(o.home, '../../../../..'), path.resolve(o.home, '../../../../..'));",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "hộp cát thật",
+   "timeout": 600
+  },
+  {
+   "id": "B04",
+   "guard": "hộp cát: --clearenv",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "'--new-session', '--cap-drop', 'ALL', '--clearenv',",
+   "replace": "'--new-session', '--cap-drop', 'ALL',",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "hộp cát thật",
+   "timeout": 600
+  },
+  {
+   "id": "B05",
+   "guard": "thư mục lượt ngoài HOME (CNS-301)",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "if (inside(real, realOr(paths.home))) throw",
+   "replace": "if (false) throw",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "thư mục lượt ở $XDG_RUNTIME_DIR",
+   "timeout": 600
+  },
+  {
+   "id": "B06",
+   "guard": "claude --strict-mcp-config",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "'--restricted', '--strict-mcp-config', '--mcp-config'",
+   "replace": "'--restricted', '--mcp-config'",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "dựng lệnh",
+   "timeout": 600
+  },
+  {
+   "id": "B07",
+   "guard": "claude --tools \"\"",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "'--tools', '', '--allowedTools'",
+   "replace": "'--allowedTools'",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "dựng lệnh",
+   "timeout": 600
+  },
+  {
+   "id": "B08",
+   "guard": "claude --restricted",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "a.push('--restricted', '--strict",
+   "replace": "a.push('--strict",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "dựng lệnh",
+   "timeout": 600
+  },
+  {
+   "id": "B09",
+   "guard": "claude --safe-mode khi P0 / canary cho dùng",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "if (safeMode && f.has('--safe-mode')) a.push('--safe-mode');",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "dựng lệnh",
+   "timeout": 600
+  },
+  {
+   "id": "B10",
+   "guard": "claude --permission-mode dontAsk",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "'--permission-mode', 'dontAsk'",
+   "replace": "'--permission-mode', 'acceptEdits'",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "dựng lệnh",
+   "timeout": 600
+  },
+  {
+   "id": "B11",
+   "guard": "job: trường lạ (URL MCP, MCP stdio, argv) bị từ chối",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "if (extra.length) throw bErr('BAD_JOB', 'unknown field '",
+   "replace": "if (false) throw bErr('BAD_JOB', 'unknown field '",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "kiểm job",
+   "timeout": 600
+  },
+  {
+   "id": "B12",
+   "guard": "MCP chỉ HTTP (không stdio)",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "genchibi: { type: 'http', url: MCP_URL,",
+   "replace": "genchibi: { type: 'stdio', command: '/bin/sh', url: MCP_URL,",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "dựng lệnh",
+   "timeout": 600
+  },
+  {
+   "id": "B13",
+   "guard": "token lượt không lên argv",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "cmd: [e.real].concat(A.argv({ entry: e, job, turnSec: c.turnSec, safeMode: e.safe_mode === true })),",
+   "replace": "cmd: [e.real].concat(A.argv({ entry: e, job, turnSec: c.turnSec, safeMode: e.safe_mode === true }), ['--debug-token=' + gcj]),",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "lượt thường trong hộp cát",
+   "timeout": 600
+  },
+  {
+   "id": "B14",
+   "guard": "kiểm init của Claude mỗi lượt",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "if (A.staticInit) { const b = A.checkInit(",
+   "replace": "if (false) { const b = A.checkInit(",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "giám sát từng lượt",
+   "timeout": 600
+  },
+  {
+   "id": "B15",
+   "guard": "giám sát agy: tool không thuộc genchibi → giết",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "else if (!isGenchibiTool(x.name, job.cli)) violate(",
+   "replace": "else if (false) violate(",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "giám sát từng lượt",
+   "timeout": 600
+  },
+  {
+   "id": "B16",
+   "guard": "model từ chối KHÔNG phải bằng chứng (CNS-305)",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "if (!res) ev.missing.push('no CLI tool_result for ' + x.name);",
+   "replace": "if (!res) ev.evidence.push('model refused ' + x.name);",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "canary bắt gian",
+   "timeout": 600
+  },
+  {
+   "id": "B17",
+   "guard": "HMAC của job",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "if (!crypto.timingSafeEqual(want, Buffer.from(e.sig, 'hex'))) throw",
+   "replace": "if (false) throw",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "kiểm job",
+   "timeout": 600
+  },
+  {
+   "id": "B18",
+   "guard": "security review #1: chỉ nhận tiền tố MCP của CLI",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "const m = A.mcpPrefix.exec(name);\n  if (!m) return false;",
+   "replace": "const m = A.mcpPrefix.exec(name) || [name, name];",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "tên tool genchibi",
+   "timeout": 600
+  },
+  {
+   "id": "B19",
+   "guard": "security review #1: tên sau tiền tố trùng tool cấm / có sẵn",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "if (BUILTIN_TOOLS.has(bare) || Object.values(ADAPTERS).some(x => x.forbidden.some(([f]) => f.toLowerCase() === bare))) return false;",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "tên tool genchibi",
+   "timeout": 600
+  },
+  {
+   "id": "B20",
+   "guard": "security review #2: bảng route không prototype",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "Object.prototype.hasOwnProperty.call(R, host) ? R[host] : null",
+   "replace": "(routes || {})[host]",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "proxy (security review #2)",
+   "timeout": 600
+  },
+  {
+   "id": "B21",
+   "guard": "security review #2: handler ném lỗi → 502, proxy sống",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "let p; try { p = h(req, res, u, Buffer.concat(chunks)); } catch (e) { return bad(); }",
+   "replace": "let p = h(req, res, u, Buffer.concat(chunks));",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "proxy (security review #2)",
+   "timeout": 600
+  },
+  {
+   "id": "B22",
+   "guard": "proxy bỏ WWW-Authenticate (CNS-303)",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "['content-type', 'mcp-session-id'].forEach(k => { if (r.headers[k]) out[k] = r.headers[k]; });",
+   "replace": "Object.assign(out, r.headers);",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "MCP → app",
+   "timeout": 600
+  },
+  {
+   "id": "B23",
+   "guard": "401 / 403 của /mcp → giết CLI",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "if (r.statusCode === 401 || r.statusCode === 403) { st.authFail++;",
+   "replace": "if (false) { st.authFail++;",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "MCP 401",
+   "timeout": 600
+  },
+  {
+   "id": "B24",
+   "guard": "trần lấy từ máy chủ, Studio chỉ hạ (CNS-322)",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "out[k] = Math.min(host[k], Math.round(v));",
+   "replace": "out[k] = Math.round(v);",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "trần ở máy chủ",
+   "timeout": 600
+  },
+  {
+   "id": "B25",
+   "guard": "Linux không bwrap → không chạy CLI nào (CNS-323)",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "if (!hasBwrap(e) || !(e.sandbox.selftest || []).length || e.sandbox.selftest.some(x => !x.ok)) return fail('NO_SANDBOX'",
+   "replace": "if (false) return fail('NO_SANDBOX'",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "không có hộp cát",
+   "timeout": 600
+  },
+  {
+   "id": "B26",
+   "guard": "giám sát agy: MCP nhiều hơn sự kiện tool (parser mù)",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "else if (mcp.st.calls > streamTools)",
+   "replace": "else if (false)",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "giám sát từng lượt",
+   "timeout": 600
+  },
+  {
+   "id": "B27",
+   "guard": "proxy: CONNECT chỉ tới allowlist",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "|| !Array.isArray(allow) || !allow.includes(host)) {",
+   "replace": ") {",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "proxy allowlist",
+   "timeout": 600
+  },
+  {
+   "id": "B28",
+   "guard": "agy: tệp lạ trong /work → failed",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "if (r.extraFiles.length) { violation =",
+   "replace": "if (false) { violation =",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "giám sát từng lượt",
+   "timeout": 600
+  },
+  {
+   "id": "B29",
+   "guard": "settings.json của agy kiểm băm trước mỗi lượt (CNS-324)",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "if (got !== want[f.rel] || got !== sha(f.data)) return f.rel;",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "settings.json của agy bị đổi",
+   "timeout": 600
+  },
+  {
+   "id": "B30",
+   "guard": "huỷ: cờ cancel ở nhịp beat",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "if (res && res.cancel && !cancelled) { cancelled = true; ctl.stop('CANCELLED', true); }",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "huỷ (cờ cancel",
+   "timeout": 600
+  }
+ ]
+}
