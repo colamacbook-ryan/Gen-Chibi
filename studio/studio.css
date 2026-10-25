@@ -415,6 +415,8 @@ body.dock-drag { user-select: none; cursor: col-resize; }
 .dock-lv-bar .btn.ic { height: 22px; min-width: 22px; padding: 0 5px; }
 .dock-lv-body { position: relative; overflow: hidden; background: #f3ead9; }
 .dock-lv-body svg { display: block; width: 100%; height: 100%; }
+.dock-lv-empty { position: absolute; inset: 0; display: grid; place-items: center; padding: 0 18px; text-align: center; font-size: 12px; }
+.dock-lv-empty[hidden] { display: none; }
 .dock-lv-grip { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; cursor: ns-resize; }
 .dock-lv-grip:hover, .dock-lv-grip:focus-visible { background: color-mix(in srgb, var(--accent) 35%, transparent); outline: none; }
 .dock-lv.folded .dock-lv-body { display: none; }

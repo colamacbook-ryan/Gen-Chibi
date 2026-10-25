@@ -79,12 +79,27 @@ const mk = p => { const d = fs.mkdtempSync(path.join(os.tmpdir(), p)); tmp.push(
   let n429 = 0; for (let i = 0; i < 80; i++) if (H.accept({ kind: 'read' }, 'studio-ai:3').code === 429) n429++;
   ok(ext.ev.chan === 'mcp' && own.ev.chan === 'owner' && n429 > 0 && !H.accept({ kind: 'read' }, 'mcp').error && H.accept({ kind: 'read' }, 'studio-ai:9').code === 429,
     'bình tần suất riêng của AI trong Studio (mọi lượt chung một bình): cạn bình (' + n429 + ' lần 429) không làm nghẹt kênh MCP');
-  const fake = () => { const r = { ended: 0, head: 0, writeHead() { r.head++; }, write() {}, end() { r.ended++; }, on() {} }; return r; };
-  const rq = { on() {}, headers: {} }, s1 = fake(), s2 = fake(), s3 = fake();
-  H.stream(rq, s1, 0, () => true, 'S:a'); H.stream(rq, s2, 0, () => true, 'S:a'); H.stream(rq, s3, 0, () => true, 'S:a');
-  const others = Array.from({ length: CLIENTS_MAX }, () => fake()); others.forEach((r, i) => H.stream(rq, r, 0, () => true, 'T:' + i));
-  ok(CLIENTS_MAX === 16 && PER_VIEWER === 2 && s1.ended === 1 && !s2.ended && !s3.ended && others.slice(0, 14).every(r => !r.ended) && others.slice(14).every(r => r.ended === 1) && H.clients.size === 16,
-    'người xem SSE: tối đa 16 · mỗi phiên / token ≤ 2 luồng — luồng thứ 3 của cùng người xem đóng luồng CŨ NHẤT (không 429 cho luồng mới) · người thứ 17 → 429', JSON.stringify({ s1: s1.ended, size: H.clients.size }));
+  // người xem SSE: ≤ 16 · mỗi phiên / token ≤ 2 luồng — luồng thứ 3 nhận 429 + Retry-After khi hai luồng cũ còn TRẺ (≤ 30 s); luồng cũ đã sống > 30 s thì bị thay
+  // (tab bỏ quên) · người xem không rõ ('') chung một nhóm 'anon' trần 2 · không có vòng đá nhau
+  const fake = () => { const r = { ended: 0, code: 0, retry: null, writeHead(c, h) { r.code = c; r.retry = h && h['Retry-After']; }, write() {}, end() { r.ended++; }, on() {} }; return r; };
+  let VT = 1e9; const HV = new LiveHub({ dir: mk('gc-dl-view-'), engine: GC, now: () => VT }); clearInterval(HV.beat);
+  const rq = { on() {}, headers: {} }, v = Array.from({ length: 5 }, fake);
+  HV.stream(rq, v[0], 0, () => true, 'S:a'); VT += 1000; HV.stream(rq, v[1], 0, () => true, 'S:a'); VT += 1000; HV.stream(rq, v[2], 0, () => true, 'S:a'); HV.stream(rq, v[3], 0, () => true, 'S:a');
+  const young = v.slice(0, 4).map(r => r.code + (r.ended ? 'x' : '')).join(',');
+  VT += 31000; HV.stream(rq, v[4], 0, () => true, 'S:a');
+  const anon = Array.from({ length: 3 }, fake); anon.forEach(r => HV.stream(rq, r, 0, () => true, ''));
+  const others = Array.from({ length: 14 }, fake); others.forEach((r, i) => HV.stream(rq, r, 0, () => true, 'T:' + i));
+  ok(CLIENTS_MAX === 16 && PER_VIEWER === 2 && young === '200,200,429x,429x' && +v[2].retry >= 25 && v[0].ended === 1 && v[4].code === 200 && !v[1].ended
+    && anon.map(r => r.code).join() === '200,200,429' && others.slice(0, 12).every(r => r.code === 200) && others.slice(12).every(r => r.code === 429) && HV.clients.size === 16,
+    'người xem SSE: tối đa 16 · mỗi phiên / token ≤ 2 luồng — luồng 3, 4 khi hai luồng cũ còn trẻ → 429 + Retry-After ' + v[2].retry + ' s (không đá nhau) · luồng cũ > 30 s mới bị thay · không rõ người xem → nhóm anon trần 2', young + ' · ' + JSON.stringify({ v0: v[0].ended, v4: v[4].code, anon: anon.map(r => r.code), size: HV.clients.size }));
+  HV.close();
+  // stop / error / limit của AI trong Studio KHÔNG bị bình tần suất làm rơi → lượt dẫn luôn được nhả, lượt sau không bị "quiet" 60 s
+  const HT = new LiveHub({ dir: mk('gc-dl-term-'), engine: GC }); clearInterval(HT.beat);
+  HT.accept({ kind: 'session_start' }, 'studio-ai:1'); let drained = 0; for (let i = 0; i < 200 && drained < 5; i++) if (HT.accept({ kind: 'read' }, 'studio-ai:1').code === 429) drained++;
+  const er = HT.accept({ kind: 'error' }, 'studio-ai:1'), st = HT.accept({ kind: 'stop' }, 'studio-ai:1'), lead = HT.aiLead, nx = HT.accept({ kind: 'session_start' }, 'studio-ai:2');
+  ok(drained === 5 && st.ev && er.ev && lead === null && (nx.code === 429 || (nx.ev && !nx.ev.quiet)) && (!HT.aiLead || HT.aiLead.chan === 'studio-ai:2'),
+    'bình của AI trong Studio cạn: stop / error vẫn qua (lượt dẫn được nhả ngay) — lượt sau không bị "quiet"', JSON.stringify({ st: !!st.ev, nx, lead: HT.aiLead }));
+  HT.close();
   H.close();
 }
 

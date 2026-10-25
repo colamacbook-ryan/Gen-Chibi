@@ -4321,6 +4321,11 @@ if (want('live')) {
     // chiều cao có TRƯỚC khi vẽ (trước cả khi có Player) → khung chat không bị xô khi sân khấu dựng xong
     const geo = await p1.evaluate(() => ({ body: document.getElementById('dockLiveBody').getBoundingClientRect().height, log: document.querySelector('.dock-log').getBoundingClientRect().top, dockTop: document.getElementById('dockLive').getBoundingClientRect().top - document.getElementById('dock').getBoundingClientRect().top }));
     if (geo.body !== 132 || geo.dockTop > 2) throw new Error('sân khấu ở đỉnh dock, cao mặc định 132 px: ' + JSON.stringify(geo));
+    // chưa có sự kiện nào → chưa dựng Player (0 chi phí ở trang không có hoạt động), chỉ có lời "chưa có hoạt động"
+    await sleep(2500);
+    const empty0 = await p1.evaluate(() => ({ stage: !!document.getElementById('dockLiveStage'), empty: !document.getElementById('dockLiveEmpty').hidden }));
+    if (empty0.stage || !empty0.empty) throw new Error('chưa có sự kiện mà đã dựng sân khấu: ' + JSON.stringify(empty0));
+    await post('session_start');
     await p1.waitForSelector('#dockLiveStage', { timeout: 15000 });
     if (await p1.evaluate(() => document.querySelector('.dock-log').getBoundingClientRect().top) !== geo.log) throw new Error('khung chat lệch khi sân khấu dựng xong');
     await until(async () => (await F(p1)).role === 'leader' && (await F(p1)).status === 'on', 8000, 'tab đầu thành leader, SSE nối');
@@ -4345,6 +4350,12 @@ if (want('live')) {
     const h0 = await L(p1); await sleep(2000); const h1 = await L(p1);
     await setHidden(p1, false);
     if (h1.stats.frames !== h0.stats.frames || h1.running || h1.stats.why !== 'hidden') throw new Error('tab ẩn mà vòng vẽ vẫn chạy: ' + JSON.stringify([h0.stats, h1.stats, h1.running]));
+    // Studio đang xuất video (GCVideo.busy) → sân khấu dock nhường luồng chính (ngân sách B5): vòng vẽ dừng tới khi xuất xong
+    await p1.evaluate(() => { window.GCVideo.busy = 1; window.dispatchEvent(new CustomEvent('gc-video-busy', { detail: true })); });
+    await post('edit'); await sleep(300); const vb0 = await L(p1); await sleep(1500); const vb1 = await L(p1);
+    await p1.evaluate(() => { window.GCVideo.busy = 0; window.dispatchEvent(new CustomEvent('gc-video-busy', { detail: false })); });
+    if (vb1.stats.frames !== vb0.stats.frames || vb1.running || vb1.stats.why !== 'video') throw new Error('đang xuất video mà sân khấu dock vẫn vẽ: ' + JSON.stringify([vb0.stats, vb1.stats]));
+    await until(async () => (await L(p1)).running, 5000, 'xuất xong → sân khấu chạy lại');
     // ---- thu gọn → dừng + nhớ sau khi tải lại; chiều cao kéo được 96–240 và nhớ
     await p1.click('#dockLiveFold'); await sleep(200);
     const c0 = await L(p1); await post('read'); await sleep(2000); const c1 = await L(p1);
@@ -4361,7 +4372,7 @@ if (want('live')) {
     await p1.reload(); await p1.waitForSelector('#dockLiveStage', { timeout: 10000 });
     const hh = await p1.evaluate(() => ({ h: window.GCDock.live().h, px: document.getElementById('dockLiveBody').getBoundingClientRect().height }));
     if (minH !== 96 || hh.h !== 128 || hh.px !== 128) throw new Error('chiều cao 96–240 nhớ theo máy: min ' + minH + ' · sau tải lại ' + JSON.stringify(hh));
-    console.log('  ✓ Live ở dock: tab ẩn → 0 khung trong 2 s (vòng vẽ dừng) · thu gọn → thanh ' + Math.round(barH) + ' px, 0 khung, nhớ sau khi tải lại · chiều cao kẹp 96–240, nhớ theo máy');
+    console.log('  ✓ Live ở dock: tab ẩn → 0 khung trong 2 s (vòng vẽ dừng) · đang xuất video → dừng, xuất xong chạy lại · thu gọn → thanh ' + Math.round(barH) + ' px, 0 khung, nhớ sau khi tải lại · chiều cao kẹp 96–240, nhớ theo máy');
     // ---- MỘT SSE cho cả trình duyệt: 3 tab → 1 leader, server thấy 1 người xem; leader đóng → tab khác nhận, sự kiện vẫn tới
     await until(async () => (await F(p1)).status === 'on', 8000, 'p1 nghe lại');
     const p2 = await open(), p3 = await open();
@@ -4407,11 +4418,34 @@ if (want('live')) {
     if (s1.shown !== 'mcp' || !cnt) throw new Error('bộ chọn kênh: ' + JSON.stringify(s1));
     await pv.selectOption('#dockLiveChan', 'auto');
     console.log('  ✓ bộ chọn kênh: ghim "Agent qua MCP" → sân khấu chỉ diễn kênh đó, sự kiện kênh khác hiện chấm đếm (' + cnt + ') · chan công khai từ server');
+    // ---- BroadcastChannel giả mạo (phòng thủ nhiều lớp): tab theo sau làm sạch LẠI mọi sự kiện — kind lạ bị bỏ, nhãn redact, chan / via lạ về mặc định
+    {
+      const st2 = await Promise.all(rest.map(F)), li = st2.findIndex(x => x.role === 'leader'), lead2 = rest[li], fol = rest[1 - li], id0 = st2[1 - li].lastId;
+      await lead2.evaluate(id => { const c = new BroadcastChannel('gc-live'); c.postMessage({ t: 'ev', ev: { id: id + 1000, kind: '<img src=x onerror=alert(1)>', label: 'x' } }); c.postMessage({ t: 'ev', ev: { id: 'x', kind: 'read' } }); c.close(); }, id0);
+      await sleep(400); const after1 = await F(fol);
+      await lead2.evaluate(id => { const c = new BroadcastChannel('gc-live'); c.postMessage({ t: 'ev', ev: { id: id + 2000, kind: 'read', label: 'Reading /etc/shadow for ryan@x.io', chan: '<b>evil</b>', via: 'evil', html: '<script>' } }); c.close(); }, id0);
+      await sleep(400); const last = await fol.evaluate(() => window.GCLiveFeed.last());
+      if (after1.lastId !== id0 || !last || last.id !== id0 + 2000 || /etc|shadow|ryan@/.test(last.label) || last.chan !== 'owner' || last.via !== 'owner' || 'html' in last) throw new Error('BroadcastChannel giả mạo lọt: ' + JSON.stringify({ id0, after1: after1.lastId, last }));
+      console.log('  ✓ BroadcastChannel giả mạo: kind lạ / id hỏng bị bỏ · sự kiện hợp lệ được làm sạch lại (nhãn "' + last.label + '", chan / via lạ → owner, trường lạ bị bỏ)');
+    }
     if (SHOTS) {
       for (const k of ['session_start', 'prompt', 'read', 'search', 'edit', 'test_run', 'test_fail']) { await post(k); await sleep(250); }
       await sleep(1500); await pv.screenshot({ path: path.join(SHOTS, 'studio-dock-live-expanded.png') });
       await pv.locator('#dock').screenshot({ path: path.join(SHOTS, 'dock-live-expanded-closeup.png') });
       console.log('  ✓ ảnh Studio có sân khấu ở dock (mở + thu gọn) → ' + SHOTS);
+    }
+    // ---- không có navigator.locks (http qua IP LAN): mỗi tab một SSE — 4 tab cùng phiên KHÔNG đá nhau: 2 luồng, 2 tab nhận 429 + Retry-After và chờ
+    {
+      const ctxS = await bD.newContext({ viewport: { width: 1440, height: 900 } });
+      await ctxS.addInitScript(() => { try { Object.defineProperty(Navigator.prototype, 'locks', { get: () => undefined, configurable: true }); } catch (e) { /* bỏ */ } });
+      const solo = [];
+      for (let i = 0; i < 4; i++) { const q = await ctxS.newPage(); q.on('pageerror', e => errsD.push(String(e))); await q.goto(DB + '/xuong'); await q.waitForSelector('#dockLive', { timeout: 20000 }); solo.push(q); }
+      await sleep(4000); const vA = await viewers(), sA = await Promise.all(solo.map(F));
+      await sleep(8000); const vB = await viewers(), sB = await Promise.all(solo.map(F));
+      const conn = sB.reduce((n, x) => n + x.connects, 0), on = sB.filter(x => x.status === 'on').length;
+      if (sB.some(x => x.role !== 'solo') || conn > 5 || on !== 2 || vA !== vB || sB.reduce((n, x) => n + x.connects, 0) !== sA.reduce((n, x) => n + x.connects, 0)) throw new Error('4 tab solo cùng phiên đá nhau: ' + JSON.stringify({ vA, vB, conn, on, sA: sA.map(x => x.connects + '/' + x.status), sB: sB.map(x => x.connects + '/' + x.status) }));
+      console.log('  ✓ 4 tab không có navigator.locks (một SSE mỗi tab) cùng phiên: ổn định 12 s — ' + on + ' luồng mở, 2 tab nhận 429 + Retry-After và chờ · tổng ' + conn + ' lần nối (không vòng nối lại)');
+      await ctxS.close();
     }
     if (errsD.length) throw new Error('lỗi trang: ' + errsD.slice(0, 3).join(' | '));
     await ctx.close();

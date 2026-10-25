@@ -11,7 +11,9 @@ const path = require('path');
 const crypto = require('crypto');
 
 const RING = 300, CLIENTS_MAX = 16, PER_VIEWER = 2, AGENTS_MAX = 50;   // v0.25: một SSE mỗi trình duyệt (tab leader) — 16 người xem, mỗi phiên / token ≤ 2 luồng (CNS-307)
-const AI_LEAD_MS = 60000;   // một lượt AI trong Studio diễn tại một thời điểm; lượt dẫn im lặng quá 60 s thì nhường
+const AI_LEAD_MS = 60000;
+const EVICT_AGE_MS = 30000, ANON_KEY = 'anon';   // luồng cũ chỉ bị thay khi đã sống > 30 s (không đá nhau mãi) · luồng không rõ người xem chung một trần nhỏ
+const AI_TERMINAL = ['stop', 'error', 'limit'];   // sự kiện kết thúc lượt AI trong Studio luôn qua bình (lượt dẫn phải được nhả)   // một lượt AI trong Studio diễn tại một thời điểm; lượt dẫn im lặng quá 60 s thì nhường
 const RATE = { cap: 60, perSec: 10 };          // mỗi kênh: dồn tối đa 60 sự kiện, hồi 10 / giây (Claude Code đọc 20 tệp trong 2 s vẫn lọt)
 
 function sha(t) { return crypto.createHash('sha256').update(String(t)).digest('hex'); }
@@ -84,7 +86,8 @@ class LiveHub {
   // who: 'live' (token của bản cài) · 'agent:<id>' · 'mcp' · 'owner' · 'studio-ai:<lượt>' (AI trong Studio — server/main.js dockTurn + mcp.callTool)
   accept(raw, who) {
     const ai = /^studio-ai:[0-9]{1,12}$/.test(String(who));
-    const chan = who === 'live' ? this.tokKey : who || 'owner', w = this.gate(ai ? 'studio-ai' : chan);   // AI trong Studio: một bình riêng cho mọi lượt
+    const chan = who === 'live' ? this.tokKey : who || 'owner';
+    const w = ai && raw && AI_TERMINAL.indexOf(raw.kind) >= 0 ? 0 : this.gate(ai ? 'studio-ai' : chan);   // AI trong Studio: một bình riêng cho mọi lượt; stop / error / limit không bao giờ bị rơi
     if (w) return { error: 'too many live events — slow down', code: 429, retry: w };
     const now = this.now(), c = this.L.cleanEvent(raw, now);
     if (!c.ev) return { error: c.error, code: 400 };
@@ -101,7 +104,9 @@ class LiveHub {
     const ev = Object.assign({ id: ++this.seq, ts: now, via, chan: who === 'live' ? 'hook' : ai || /^agent:[a-f0-9]{16}$/.test(String(who)) || who === 'mcp' ? String(who) : 'owner' }, c.ev);
     if (ai) {   // một lượt diễn tại một thời điểm: lượt khác chỉ cộng số đếm (quiet) — Studio không đưa vào đạo diễn
       const L = this.aiLead;
-      if (!L || L.chan === who || now - L.at > AI_LEAD_MS) this.aiLead = { chan: who, at: now }; else ev.quiet = true;
+      const term = AI_TERMINAL.indexOf(c.ev.kind) >= 0;
+      if (L && L.chan !== who && now - L.at <= AI_LEAD_MS) ev.quiet = true;
+      else if (!term || (L && L.chan === who)) this.aiLead = { chan: who, at: now };   // sự kiện kết thúc không giành lại vai dẫn
       if (!ev.quiet && (c.ev.kind === 'stop' || c.ev.kind === 'limit')) this.aiLead = null;
     }
     this.ring.push(ev); if (this.ring.length > RING) this.ring.shift();
@@ -114,15 +119,22 @@ class LiveHub {
   recent(since) { return this.ring.filter(e => e.id > (since || 0)); }
   // SSE: gửi bù sự kiện sau since (Last-Event-ID / ?since=), rồi phát tiếp. Tối đa 16 người xem cùng lúc, mỗi người xem ≤ 2 luồng
   // alive(): quyền của người xem còn không (main.js: auth.ownerOf(req)) — kiểm ở mỗi nhịp
-  // key: người xem (phiên / token chủ, đã băm ở main.js) — quá PER_VIEWER luồng thì đóng luồng CŨ NHẤT của người đó (không trả 429 cho luồng mới)
+  // key: người xem (phiên / token chủ, đã băm ở main.js; không rõ → một nhóm 'anon' chung trần) — quá PER_VIEWER luồng: đóng luồng CŨ NHẤT của người đó
+  // NẾU nó đã sống > 30 s (tab bỏ quên), còn không thì luồng MỚI nhận 429 + Retry-After — các tab không đá nhau thành vòng nối lại vô tận
   stream(req, res, since, alive, key) {
-    const mine = [...this.clients].filter(c => key && c.key === key);
-    while (mine.length >= PER_VIEWER) { const o = mine.shift(); this.clients.delete(o); try { o.res.end(); } catch (e) { /* đã đóng */ } }
-    if (this.clients.size >= CLIENTS_MAX) { res.writeHead(429, { 'Content-Type': 'application/json; charset=utf-8', 'Retry-After': '5' }); return res.end(JSON.stringify({ error: 'too many live viewers (max ' + CLIENTS_MAX + ')' })); }
+    key = key || ANON_KEY;
+    const now = this.now(), too = (msg, sec) => { res.writeHead(429, { 'Content-Type': 'application/json; charset=utf-8', 'Retry-After': String(sec) }); return res.end(JSON.stringify({ error: msg })); };
+    const mine = [...this.clients].filter(c => c.key === key).sort((a, b) => a.at - b.at);
+    if (mine.length >= PER_VIEWER) {
+      const o = mine[0], age = now - o.at;
+      if (age <= EVICT_AGE_MS) return too('this viewer already has ' + PER_VIEWER + ' live streams open — one per browser is enough', Math.max(5, Math.ceil((EVICT_AGE_MS - age) / 1000) + 1));
+      this.clients.delete(o); try { o.res.end(); } catch (e) { /* đã đóng */ }
+    }
+    if (this.clients.size >= CLIENTS_MAX) return too('too many live viewers (max ' + CLIENTS_MAX + ')', 5);
     res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no', 'X-Content-Type-Options': 'nosniff', Connection: 'keep-alive' });
     res.write('retry: 2000\n\n');
     this.recent(since).forEach(ev => res.write('id: ' + ev.id + '\nevent: live\ndata: ' + JSON.stringify(ev) + '\n\n'));
-    const c = { res, alive, key: key || '' };
+    const c = { res, alive, key, at: now };
     this.clients.add(c);
     const done = () => this.clients.delete(c);
     req.on('close', done); res.on('close', done); res.on('error', done);
@@ -130,4 +142,4 @@ class LiveHub {
   close() { clearInterval(this.beat); if (this.flushT) { clearTimeout(this.flushT); this.flushT = null; try { this.saveAgents(); } catch (e) { /* bỏ qua */ } } this.clients.forEach(c => { try { c.res.end(); } catch (e) { /* bỏ qua */ } }); this.clients.clear(); }
 }
 
-module.exports = { LiveHub, RATE, CLIENTS_MAX, PER_VIEWER, AGENTS_MAX };
+module.exports = { LiveHub, RATE, CLIENTS_MAX, PER_VIEWER, AGENTS_MAX, EVICT_AGE_MS };

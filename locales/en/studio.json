@@ -2152,5 +2152,6 @@
  "Kênh trên sân khấu": "Channel on the stage",
  "Mở trang Sân khấu Live": "Open the Live stage page",
  "Thu gọn / mở sân khấu": "Collapse / expand the stage",
- "Kéo để đổi chiều cao sân khấu (phím ↑ ↓)": "Drag to change the stage height (↑ ↓ keys)"
+ "Kéo để đổi chiều cao sân khấu (phím ↑ ↓)": "Drag to change the stage height (↑ ↓ keys)",
+ "Chưa có hoạt động — nhân vật lên sân khấu khi AI trong Studio hoặc một agent làm việc.": "Nothing happening yet — the character takes the stage when the Studio AI or an agent works."
 }

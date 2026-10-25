@@ -157,8 +157,13 @@
     })();
     p.cancel = function () { ctl.cancelled = true; if (ctl.kill) ctl.kill(); };
     GCV.current = p;
+    // đang xuất: báo cho phần vẽ khác của Studio nhường luồng chính (sân khấu Live ở dock dừng vòng vẽ — ngân sách B5 / L-42)
+    GCV.busy = (GCV.busy || 0) + 1; busyEvent();
+    p.then(endBusy, endBusy);
     return p;
   };
+  function busyEvent() { try { window.dispatchEvent(new CustomEvent('gc-video-busy', { detail: GCV.busy > 0 })); } catch (e) { /* trình duyệt cũ */ } }
+  function endBusy() { GCV.busy = Math.max(0, (GCV.busy || 1) - 1); busyEvent(); }
   function GCVTextSlug(s) { var x = String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40); return /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/.test(x) ? x + '-gc' : x; }   // như slugify của Studio
 
   GCV.exportWork = function (W, opts, onProgress) {

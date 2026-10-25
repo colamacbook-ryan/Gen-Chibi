@@ -315,7 +315,7 @@ function threadOf(key) {
 // người xem SSE của Live (để trần ≤ 2 luồng mỗi phiên / token): băm, không giữ token
 function viewerKey(req) {
   const b = bearerOf(req); if (b && auth.tokenOk(b)) return 'T:' + require('crypto').createHash('sha256').update(b).digest('hex').slice(0, 16);
-  const s = auth.sessionOf(req); return s ? 'S:' + String(s.hash).slice(0, 16) : '';
+  const s = auth.sessionOf(req); return s ? 'S:' + String(s.hash).slice(0, 16) : 'anon';   // không rõ người xem: nhóm chung, trần 2 luồng (server/live.js)
 }
 // AI TRONG STUDIO lên Sân khấu Live (v0.25, spec §8): mỗi lượt dock một kênh 'studio-ai:<n>' — session_start → task (khu / nút gợi ý) → prompt → …tool (mcp.callTool)… → stop | error.
 // Không gửi chữ người dùng: prompt không nhãn; task không tiêu đề (tên khu đã có trên chip)

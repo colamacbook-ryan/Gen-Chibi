@@ -142,7 +142,12 @@ invitation (`live`) on connections that can write. Declining changes nothing.
 - **One SSE per browser** (`studio/live-feed.js`, CNS-307): a leader tab chosen with `navigator.locks` holds the stream and
   relays events over `BroadcastChannel('gc-live')`; when no tab wants the stage the leader closes it; when the leader tab
   closes, the next tab takes the lock and reconnects with `?since=`. No locks / BroadcastChannel (plain-http LAN address)
-  → one stream per tab. Server: at most 16 viewers, at most 2 streams per session / token (a third closes the oldest).
+  → one stream per tab. Server: at most 16 viewers, at most 2 streams per session / token: a third stream replaces the
+  oldest only if that one has lived > 30 s (a forgotten tab), otherwise it gets 429 + `Retry-After` — tabs never kick each
+  other into a reconnect loop (the client honours `Retry-After` and keeps its back-off when the server closes the stream);
+  streams with no known viewer share one capped `anon` group. Every event is cleaned again in the browser (engine
+  `cleanEvent`: known kinds only, labels redacted, unknown fields dropped) — also those relayed over BroadcastChannel.
+  While the Studio exports a video the dock stage stops drawing (main-thread budget).
 - **Channels** (CNS-318): every event carries a public `chan` — `studio-ai:<n>`, `hook`, `agent:<id>`, `mcp`, `owner` —
   for the dock's channel menu (Auto follows the newest channel, holding it ≥ 10 s).
 - **The Studio's own AI** (CNS-309/310): `dockTurn` emits `session_start` → `task` (only when it changes; from the area or
@@ -150,7 +155,8 @@ invitation (`live`) on connections that can write. Declining changes nothing.
   per tool when `ctx.channel === 'ui'` (labels = the tool's title, never its arguments): `validate_*` → `test_run` then
   `test_pass` / `test_fail` · `render_*` / `preview_*` → `run` · `save_*` / `propose_edit` / `import_*` → `write` (new) or
   `edit` · `list_*` / `get_*` / `start_here` → `read` · other read-only tools → `search` · failed tool → `error`. Its own
-  rate bucket; only one Studio-AI turn acts at a time (others are marked `quiet` and only counted).
+  rate bucket (`stop` / `error` / `limit` always pass it, so the acting turn is always released); only one Studio-AI turn
+  acts at a time (others are marked `quiet` and only counted).
 - **Area gate in `callTool`** (CNS-302): for `ctx.channel === 'ui'` any tool outside the area's set
   (`rollback_app`, `update_app`, `live_*`, `render_voice`, `import_project`, another area's tools…) is `FORBIDDEN` — one gate
   for every path (today's API-key loop, the CLI bridge later). The Studio AI's instructions never mention `live_task` /

@@ -65,8 +65,8 @@
    "id": "V06",
    "guard": "một lượt studio-ai diễn tại một thời điểm",
    "file": "server/live.js",
-   "find": "else ev.quiet = true;",
-   "replace": "else ev.quiet = false;",
+   "find": "if (L && L.chan !== who && now - L.at <= AI_LEAD_MS) ev.quiet = true;",
+   "replace": "if (false) ev.quiet = true;",
    "test": [
     "node",
     "tools/test-dock-live.mjs"
@@ -77,8 +77,8 @@
    "id": "V07",
    "guard": "≤ 2 luồng SSE mỗi người xem, đóng luồng cũ nhất",
    "file": "server/live.js",
-   "find": "while (mine.length >= PER_VIEWER)",
-   "replace": "while (false)",
+   "find": "if (mine.length >= PER_VIEWER) {",
+   "replace": "if (false) {",
    "test": [
     "node",
     "tools/test-dock-live.mjs"
@@ -249,6 +249,87 @@
     "tools/test-browser.mjs"
    ],
    "expect": "giữ 1 suất",
+   "env": {
+    "GC_ONLY": "live"
+   }
+  },
+  {
+   "id": "V20",
+   "guard": "luồng cũ chỉ bị thay khi đã sống > 30 s (không đá nhau)",
+   "file": "server/live.js",
+   "find": "if (age <= EVICT_AGE_MS) return too(",
+   "replace": "if (false) return too(",
+   "test": [
+    "node",
+    "tools/test-dock-live.mjs"
+   ],
+   "expect": "người xem SSE"
+  },
+  {
+   "id": "V21",
+   "guard": "stop / error / limit của AI trong Studio qua bình",
+   "file": "server/live.js",
+   "find": "const w = ai && raw && AI_TERMINAL.indexOf(raw.kind) >= 0 ? 0 : this.gate(ai ? 'studio-ai' : chan);",
+   "replace": "const w = this.gate(ai ? 'studio-ai' : chan);",
+   "test": [
+    "node",
+    "tools/test-dock-live.mjs"
+   ],
+   "expect": "bình của AI trong Studio cạn"
+  },
+  {
+   "id": "V22",
+   "guard": "người xem không rõ: nhóm anon chung trần",
+   "file": "server/live.js",
+   "find": "key = key || ANON_KEY;",
+   "replace": "key = key || String(Math.random());",
+   "test": [
+    "node",
+    "tools/test-dock-live.mjs"
+   ],
+   "expect": "người xem SSE"
+  },
+  {
+   "id": "V23",
+   "guard": "client nghe Retry-After / nhịp lùi (tick không nối sớm)",
+   "file": "studio/live-feed.js",
+   "find": "if (Date.now() < retryAt) return;",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-browser.mjs"
+   ],
+   "expect": "4 tab solo cùng phiên đá nhau",
+   "env": {
+    "GC_ONLY": "live"
+   }
+  },
+  {
+   "id": "V24",
+   "guard": "tab theo sau làm sạch lại sự kiện từ BroadcastChannel",
+   "file": "studio/live-feed.js",
+   "find": "    var ev = sanitize(raw);\n",
+   "replace": "    var ev = raw && typeof raw.id === 'number' ? raw : null;\n",
+   "test": [
+    "node",
+    "tools/test-browser.mjs"
+   ],
+   "expect": "BroadcastChannel giả mạo lọt",
+   "env": {
+    "GC_ONLY": "live"
+   }
+  },
+  {
+   "id": "V25",
+   "guard": "đang xuất video → sân khấu dock nhường luồng chính",
+   "file": "studio/dock.js",
+   "find": "window.GCVideo && window.GCVideo.busy > 0 ? 'video' : ",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-browser.mjs"
+   ],
+   "expect": "đang xuất video mà sân khấu dock vẫn vẽ",
    "env": {
     "GC_ONLY": "live"
    }

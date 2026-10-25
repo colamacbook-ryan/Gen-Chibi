@@ -29,8 +29,8 @@
    "id": "M03",
    "guard": "việc hiện hành THEO KÊNH (agent B không bị A làm 'cùng việc')",
    "file": "server/live.js",
-   "find": "const chan = who === 'live' ? this.tokKey : who || 'owner', w = this.gate(ai ? 'studio-ai' : chan);",
-   "replace": "const chan = 'one', w = this.gate(ai ? 'studio-ai' : (who === 'live' ? this.tokKey : who || 'owner'));",
+   "find": "const chan = who === 'live' ? this.tokKey : who || 'owner';",
+   "replace": "const chan = 'one';",
    "test": [
     "node",
     "tools/test-live.mjs"

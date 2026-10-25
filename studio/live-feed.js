@@ -14,9 +14,9 @@
   var bc = null; try { bc = typeof BroadcastChannel === 'function' ? new BroadcastChannel('gc-live') : null; } catch (e) { bc = null; }
   var locks = typeof navigator !== 'undefined' && navigator.locks && typeof navigator.locks.request === 'function' ? navigator.locks : null;
   var shared = !!(bc && locks);
-  var S = { role: shared ? 'follower' : 'solo', status: 'off', lastId: 0, connects: 0, open: false };
+  var S = { role: shared ? 'follower' : 'solo', status: 'off', lastId: 0, connects: 0, retries: 0, open: false };
   var wants = {};   // (leader) tab → { want, at }
-  var ctl = null, retry = 0, retryT = 0;
+  var ctl = null, retry = 0, retryT = 0, retryAt = 0;
 
   function now() { return Date.now(); }
   function myWant() {
@@ -25,19 +25,35 @@
     return false;
   }
   function setStatus(st) { if (S.status === st) return; S.status = st; statusSubs.forEach(function (f) { try { f(st); } catch (e) { /* bỏ */ } }); if (S.role === 'leader' && bc) bc.postMessage({ t: 'status', st: st }); }
-  function deliver(ev) {
-    if (!ev || typeof ev.id !== 'number' || ev.id <= S.lastId) return;
+  // phòng thủ nhiều lớp: sự kiện (từ SSE hay từ tab khác qua BroadcastChannel) được làm sạch LẠI bằng engine (kind trong KINDS, nhãn redact) trước khi vẽ;
+  // chỉ giữ các trường công khai đã biết
+  var LV = window.GenChibi && window.GenChibi.live, VIA = ['hook', 'agent', 'mcp', 'owner', 'studio-ai'], CHAN_RE = /^(hook|mcp|owner|agent:[a-f0-9]{16}|studio-ai:[0-9]{1,12})$/;
+  function sanitize(raw) {
+    if (!raw || typeof raw !== 'object' || typeof raw.id !== 'number' || !isFinite(raw.id) || raw.id < 1 || !LV) return null;
+    var c = LV.cleanEvent(raw, typeof raw.ts === 'number' ? raw.ts : 0);
+    if (!c.ev) return null;
+    var ev = c.ev; ev.id = Math.floor(raw.id); ev.ts = typeof raw.ts === 'number' && isFinite(raw.ts) ? raw.ts : Date.now();
+    ev.via = VIA.indexOf(raw.via) >= 0 ? raw.via : 'owner'; ev.chan = typeof raw.chan === 'string' && CHAN_RE.test(raw.chan) ? raw.chan : 'owner';
+    if (raw.quiet === true) ev.quiet = true;
+    if (raw.retitle === true) ev.retitle = true;
+    return ev;
+  }
+  function deliver(raw) {
+    var ev = sanitize(raw);
+    if (!ev || ev.id <= S.lastId) return;
     S.lastId = ev.id; ring.push(ev); if (ring.length > RING) ring.shift();
     subs.slice().forEach(function (f) { try { f(ev); } catch (e) { /* người nghe hỏng không làm hỏng luồng */ } });
   }
   // ---- leader / solo: luồng SSE (fetch để mang header đăng nhập bằng token)
   function connect() {
     if (ctl || !B || B.mode !== 'server' || typeof ReadableStream === 'undefined') return;
+    if (Date.now() < retryAt) return;   // đang chờ nhịp lùi / Retry-After: nhịp 2 s của tick() không được nối sớm
     clearTimeout(retryT);
-    var my = ctl = new AbortController(); S.connects++; S.open = true;
+    var my = ctl = new AbortController(), wait = 0, t0 = 0; S.connects++; S.open = true;
     fetch('api/live/stream?since=' + S.lastId, { headers: B.headers(), signal: my.signal }).then(function (r) {
+      if (r.status === 429) { wait = Math.min(120, Math.max(1, +r.headers.get('retry-after') || 30)) * 1000; throw new Error('HTTP 429'); }   // server bảo chờ: nghe đúng lời
       if (!r.ok || !r.body) throw new Error('HTTP ' + r.status);
-      setStatus('on'); retry = 0;
+      setStatus('on'); t0 = Date.now();   // KHÔNG đặt lại nhịp lùi ở đây: server đóng luồng ngay thì lần nối sau vẫn phải chờ lâu hơn
       var rd = r.body.getReader(), dec = new TextDecoder(), buf = '';
       return (function pump() {
         return rd.read().then(function (x) {
@@ -47,7 +63,7 @@
             var fr = buf.slice(0, i); buf = buf.slice(i + 2);
             var data = fr.split('\n').filter(function (l) { return l.indexOf('data: ') === 0; }).map(function (l) { return l.slice(6); }).join('\n');
             if (!data) continue;
-            var ev = null; try { ev = JSON.parse(data); } catch (e) { continue; }
+            var ev = null; try { ev = sanitize(JSON.parse(data)); } catch (e) { continue; }
             if (ev && ev.id > S.lastId) { deliver(ev); if (bc && S.role === 'leader') bc.postMessage({ t: 'ev', ev: ev }); }
           }
           return pump();
@@ -56,7 +72,10 @@
     }).catch(function () {
       if (ctl !== my) return;   // đã đóng có chủ ý
       ctl = null; S.open = false; setStatus('retry');
-      retryT = setTimeout(evaluate, Math.min(15000, 1000 * Math.pow(2, retry++)));
+      if (t0 && Date.now() - t0 > 30000) retry = 0;   // luồng đã sống lâu rồi mới đứt (mạng / server khởi động lại): nối lại nhanh
+      S.retries++;
+      var d = wait || Math.min(15000, 1000 * Math.pow(2, retry++)); retryAt = Date.now() + d;
+      retryT = setTimeout(evaluate, d);
     });
   }
   function disconnect() { if (!ctl) return; var c = ctl; ctl = null; S.open = false; try { c.abort(); } catch (e) { /* bỏ */ } setStatus('paused'); }
@@ -108,7 +127,8 @@
       return function () { subs = subs.filter(function (f) { return f !== fn; }); };
     },
     onStatus: function (fn) { statusSubs.push(fn); try { fn(S.status); } catch (e) { /* bỏ */ } return function () { statusSubs = statusSubs.filter(function (f) { return f !== fn; }); }; },
-    state: function () { return { role: S.role, status: S.status, lastId: S.lastId, connects: S.connects, open: S.open, shared: shared, ring: ring.length }; }
+    last: function () { return ring.length ? Object.assign({}, ring[ring.length - 1]) : null; },   // chỉ đọc (test)
+    state: function () { return { role: S.role, status: S.status, lastId: S.lastId, connects: S.connects, retries: S.retries, open: S.open, shared: shared, ring: ring.length }; }
   };
   window.GCLiveFeed = API;
 })();

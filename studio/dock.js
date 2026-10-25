@@ -559,7 +559,7 @@
   function lvSave() { try { localStorage.setItem('gc-dock-live', JSON.stringify({ h: LVD.h, folded: LVD.folded, pin: LVD.pin })); } catch (e) { /* bỏ qua */ } }
   function lvFolded() { return LVD.folded || LVD.forced; }
   // vì sao không vẽ (rỗng = được vẽ) — test đọc lý do
-  function lvWhy() { return !S.open ? 'closed' : lvFolded() ? (LVD.forced ? 'live-page' : 'folded') : document.hidden ? 'hidden' : !LVD.inView ? 'offscreen' : REDUCED.matches ? 'reduced' : ''; }
+  function lvWhy() { return window.GCVideo && window.GCVideo.busy > 0 ? 'video' : !S.open ? 'closed' : lvFolded() ? (LVD.forced ? 'live-page' : 'folded') : document.hidden ? 'hidden' : !LVD.inView ? 'offscreen' : REDUCED.matches ? 'reduced' : ''; }
   // nhóm kênh: AI trong Studio (mọi lượt) | từng kênh ngoài (hook / agent:<id> / mcp / owner)
   function lvGroup(ch) { return /^studio-ai:/.test(ch) ? 'studio-ai' : ch || 'owner'; }
   function lvMatch(sel, g) { return sel === 'ext' ? g !== 'studio-ai' : sel === g; }
@@ -606,8 +606,10 @@
     lvKick();
   }
   // Player dựng LÚC RẢNH (requestIdleCallback) — không chen vào lúc trang đang tải (L-42); xong thì lvKick lại
+  // chưa từng có sự kiện nào → chưa dựng Player (0 chi phí ở trang không có hoạt động; sân khấu hiện lời "chưa có hoạt động")
   function lvEnsure() {
     if (LVD.P || !window.GCLive || !E.lvBox) return !!LVD.P;
+    if (LVD.lastEvt <= -1e9) return false;
     if (!LVD.building) {
       LVD.building = true;
       var ric = window.requestIdleCallback || function (f) { return setTimeout(f, 200); };
@@ -619,6 +621,7 @@
     if (LVD.P || !window.GCLive || !E.lvBox) return;
     if (!LVD.D) LVD.D = GC.live.director({ x0: GC.live.ZONES.center.x });
     LVD.P = window.GCLive.Player(E.lvBox, LVD.D, { id: 'dockLiveStage', raster: 1 });
+    if (E.lvEmpty) E.lvEmpty.hidden = true;
     LVD.P.svg.setAttribute('preserveAspectRatio', 'xMidYMax slice');   // dải thấp: giữ sàn + nhân vật, cắt trần
   }
   function lvStop(why) {
@@ -676,8 +679,9 @@
     E.lvOpenB = h('button', { type: 'button', class: 'btn sm ic', id: 'dockLiveOpen', onclick: function () { B.go({ page: 'live' }); } }, '⤢');
     E.lvFoldB = h('button', { type: 'button', class: 'btn sm ic', id: 'dockLiveFold', 'aria-controls': 'dockLiveBody', onclick: function () { if (!LVD.forced) lvFold(!LVD.folded, true); } }, '▴');
     E.lvBox = h('div', { class: 'dock-lv-box', style: 'position:absolute;inset:0' });
+    E.lvEmpty = h('div', { class: 'dock-lv-empty note', id: 'dockLiveEmpty' });
     E.lvGrip = h('div', { class: 'dock-lv-grip', id: 'dockLiveGrip', role: 'separator', 'aria-orientation': 'horizontal', tabindex: '0', 'aria-valuemin': String(LV_MIN), 'aria-valuemax': String(LV_MAX) });
-    E.lvBody = h('div', { class: 'dock-lv-body', id: 'dockLiveBody', style: 'height:' + LVD.h + 'px' }, E.lvBox, E.lvGrip);
+    E.lvBody = h('div', { class: 'dock-lv-body', id: 'dockLiveBody', style: 'height:' + LVD.h + 'px' }, E.lvBox, E.lvEmpty, E.lvGrip);
     E.lv = h('section', { class: 'dock-lv', id: 'dockLive' }, h('div', { class: 'dock-lv-bar' }, E.lvDot, E.lvTask, E.lvCnt, E.lvSel, E.lvOpenB, E.lvFoldB), E.lvBody);
     E.lvGrip.addEventListener('pointerdown', function (ev) {
       ev.preventDefault(); E.lvGrip.setPointerCapture(ev.pointerId);
@@ -689,13 +693,14 @@
     E.lvGrip.addEventListener('keydown', function (ev) { var d = ev.key === 'ArrowDown' ? 1 : ev.key === 'ArrowUp' ? -1 : 0; if (!d) return; ev.preventDefault(); lvSetH(LVD.h + d * (ev.shiftKey ? 24 : 8), true); });
     if (typeof IntersectionObserver === 'function') new IntersectionObserver(function (es) { es.forEach(function (e) { LVD.inView = e.isIntersecting; }); lvKick(); }).observe(E.lvBody);
     document.addEventListener('visibilitychange', lvKick);
+    window.addEventListener('gc-video-busy', lvKick);   // Studio đang xuất video: nhường luồng chính
     if (REDUCED.addEventListener) REDUCED.addEventListener('change', lvKick);
     var FD = window.GCLiveFeed;
     if (FD && B.Store.mode === 'server') {
       FD.init({ mode: B.Store.mode, headers: function () { return B.Store.headers(); } });
       FD.subscribe(lvOnEvent, { replay: true });
       FD.onStatus(function (st) { LVD.status = st; lvDotPaint(); });
-      FD.want('dock', function () { return S.open && !lvFolded(); });
+      FD.want('dock', function () { return S.open && !lvFolded() && !(window.GCVideo && window.GCVideo.busy > 0); });
       B.Store.api('GET', 'api/live/agents').then(function (r) { (r.agents || []).forEach(function (a) { LVD.names[a.id] = a.name; }); lvSelPaint(); }).catch(function () { /* không có */ });
     }
     lvApply(); lvSelPaint(); lvTaskPaint();
@@ -714,6 +719,7 @@
     E.lvOpenB.title = _t('Mở trang Sân khấu Live'); E.lvOpenB.setAttribute('aria-label', E.lvOpenB.title);
     E.lvFoldB.title = _t('Thu gọn / mở sân khấu'); E.lvFoldB.setAttribute('aria-label', E.lvFoldB.title);
     E.lvGrip.setAttribute('aria-label', _t('Kéo để đổi chiều cao sân khấu (phím ↑ ↓)'));
+    E.lvEmpty.textContent = _t('Chưa có hoạt động — nhân vật lên sân khấu khi AI trong Studio hoặc một agent làm việc.');
     lvSelPaint(); lvTaskPaint();
   }
 

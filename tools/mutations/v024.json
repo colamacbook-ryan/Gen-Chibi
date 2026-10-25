@@ -245,8 +245,8 @@
    "id": "L21",
    "guard": "trần tần suất riêng theo token live",
    "file": "server/live.js",
-   "find": "const chan = who === 'live' ? this.tokKey : who || 'owner', w = this.gate(ai ? 'studio-ai' : chan);",
-   "replace": "const chan = who === 'live' ? this.tokKey : who || 'owner', w = this.gate(ai ? 'studio-ai' : who || 'owner');",
+   "find": "const w = ai && raw && AI_TERMINAL.indexOf(raw.kind) >= 0 ? 0 : this.gate(ai ? 'studio-ai' : chan);",
+   "replace": "const w = ai && raw && AI_TERMINAL.indexOf(raw.kind) >= 0 ? 0 : this.gate(ai ? 'studio-ai' : who || 'owner');",
    "test": [
     "node",
     "tools/test-live.mjs"
