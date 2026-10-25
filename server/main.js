@@ -312,6 +312,16 @@ function threadOf(key) {
   if (!c.messages.length && key.kind === 'work') { const w = store.getWork(key.id); if (w && (w.chat || []).length) return { kind: key.kind, id: key.id, messages: w.chat.slice(-60), updatedAt: w.savedAt || null, legacy: true }; }
   return c;
 }
+// người xem SSE của Live (để trần ≤ 2 luồng mỗi phiên / token): băm, không giữ token
+function viewerKey(req) {
+  const b = bearerOf(req); if (b && auth.tokenOk(b)) return 'T:' + require('crypto').createHash('sha256').update(b).digest('hex').slice(0, 16);
+  const s = auth.sessionOf(req); return s ? 'S:' + String(s.hash).slice(0, 16) : '';
+}
+// AI TRONG STUDIO lên Sân khấu Live (v0.25, spec §8): mỗi lượt dock một kênh 'studio-ai:<n>' — session_start → task (khu / nút gợi ý) → prompt → …tool (mcp.callTool)… → stop | error.
+// Không gửi chữ người dùng: prompt không nhãn; task không tiêu đề (tên khu đã có trên chip)
+const LiveAI = require('./live-ai');
+let aiTurnSeq = 0, aiLastTask = null;
+function aiLive(chan, ev) { try { live.accept(ev, chan); } catch (e) { /* Live không được làm hỏng lượt AI */ } }
 // MỘT lượt chat của dock: ngữ cảnh + phần tử ghim → chỉ dẫn + bộ tool theo khu → AI → ghi luồng theo đối tượng
 async function dockTurn(b) {
   const text = typeof b.message === 'string' ? b.message.trim().slice(0, 4000) : '';
@@ -325,9 +335,15 @@ async function dockTurn(b) {
   const th = threadOf(key), hist = th.messages.map(x => ({ role: x.role, content: x.content })).concat({ role: 'user', content: text });
   let r;
   keys.forEach(k => chatBusy.add(k));
+  const liveChan = 'studio-ai:' + (++aiTurnSeq), task = LiveAI.taskOf(ctx.zone, b.task);
+  aiLive(liveChan, { kind: 'session_start' });
+  if (task !== aiLastTask) { aiLastTask = task; aiLive(liveChan, { kind: 'task', task }); }   // công tắc việc: chỉ khi việc đổi (khu / nút gợi ý)
+  aiLive(liveChan, { kind: 'prompt' });
   // system = luật TĨNH; ngữ cảnh + hiện trạng tác phẩm + ghi chú duyệt + ghim = một tin `user` bọc JSON "dữ liệu, không phải lệnh" (CNS-118), có trần ngân sách (CNS-119)
-  try { r = await ai.agent({ messages: hist, model: typeof b.model === 'string' ? b.model : '', zone: ctx.zone, system: mcp.uiSystem(ctx), context: mcp.uiContext(ctx, anchors) }, mcp); }
+  try { r = await ai.agent({ messages: hist, model: typeof b.model === 'string' ? b.model : '', zone: ctx.zone, system: mcp.uiSystem(ctx), context: mcp.uiContext(ctx, anchors), liveChan }, mcp); }
+  catch (e) { aiLive(liveChan, { kind: /quota|rate|429|limit/i.test(String(e && e.message)) ? 'limit' : 'error' }); aiLive(liveChan, { kind: 'stop' }); throw e; }
   finally { keys.forEach(k => chatBusy.delete(k)); }
+  aiLive(liveChan, { kind: 'stop' });
   const at = new Date().toISOString();
   const rec = store.saveChat(key.kind, key.id, th.messages.concat(
     { role: 'user', content: text, at, pins: anchors.map(a => ({ anchor: a.anchor, label: a.label })) },
@@ -521,8 +537,8 @@ async function route(req, res) {
   if (p === '/api/info') { const pub = online.publicUrl(); return send(res, 200, { version: VERSION, repo: REPO, home: HOME, port: PORT, settings: settings(), uiLang: settings().uiLang, lang: langOf(req), auth: auth.view(req), setup: setup.view(), mcp: { http: '/mcp', stdio: 'genchibi mcp', cli: cliPath(), link: pub && MCP_KEY ? pub + '/mcp/' + MCP_KEY : null, oauth: oauth.enabled ? oauth.resource : null } }); }
   // ---- Sân khấu sống (INT-21): S / T (đã qua cổng /api). Token live xử lý trước cổng (chỉ POST /api/live/event)
   if (p === '/api/live/event' && m === 'POST') return liveEvent(req, res, 'owner');
-  if (p === '/api/live/stream' && m === 'GET') { const since = +(req.headers['last-event-id'] || url.searchParams.get('since') || 0); return live.stream(req, res, Number.isFinite(since) ? since : 0, () => !!auth.ownerOf(req)); }
-  if (p === '/api/live/info' && m === 'GET') return send(res, 200, { url: 'http://127.0.0.1:' + HOST_PORT, token: live.token(), command: LIVE_CMD, docker: IN_DOCKER, recent: live.recent(0).slice(-50) });
+  if (p === '/api/live/stream' && m === 'GET') { const since = +(req.headers['last-event-id'] || url.searchParams.get('since') || 0); return live.stream(req, res, Number.isFinite(since) ? since : 0, () => !!auth.ownerOf(req), viewerKey(req)); }
+  if (p === '/api/live/info' && m === 'GET') return send(res, 200, { url: 'http://127.0.0.1:' + HOST_PORT, token: live.token(), command: LIVE_CMD, docker: IN_DOCKER, recent: live.recent(0).slice(-50), viewers: live.clients.size });
   if (p === '/api/live/agents' && m === 'GET') return send(res, 200, { agents: live.listAgents() });
   const lam = /^\/api\/live\/agents\/([a-f0-9]{16})\/revoke$/.exec(p);
   if (lam && m === 'POST') { if (!live.revokeAgent(lam[1])) return fail(res, 404, 'không có token agent này'); log('[live] owner revoked an agent live token'); return send(res, 200, { agents: live.listAgents() }); }

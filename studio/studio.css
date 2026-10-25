@@ -404,6 +404,20 @@ body.dock-drag { user-select: none; cursor: col-resize; }
 .dock-head b { font-size: 13px; font-weight: 600; }
 .dock-head .role { font-size: 11px; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); border-radius: 10px; padding: 0 8px; white-space: nowrap; }
 .dock-head .sp, .dock-bar .sp { flex: 1; }
+/* Sân khấu Live ghim ở đỉnh dock (v0.25, spec §8): chiều cao CỐ ĐỊNH trước khi vẽ (96–240 px, nhớ theo máy) → khung chat bên dưới không lệch; thu gọn = thanh 28 px */
+.dock-lv { flex: none; border-bottom: 1px solid var(--line); background: var(--raised); }
+.dock-lv-bar { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px 0 12px; font-size: 11px; }
+.dock-lv-bar .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
+.dock-lv-bar .dot.on { background: var(--ok, #2f8f4e); } .dock-lv-bar .dot.retry { background: var(--warn, #c98a00); }
+.dock-lv-bar .task { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--fg2); }
+.dock-lv-bar select { font-size: 11px; height: 22px; padding: 0 4px; max-width: 132px; }
+.dock-lv-bar .cnt { font: 600 10px var(--font-mono); background: var(--accent); color: #fff; border-radius: 8px; padding: 0 5px; }
+.dock-lv-bar .btn.ic { height: 22px; min-width: 22px; padding: 0 5px; }
+.dock-lv-body { position: relative; overflow: hidden; background: #f3ead9; }
+.dock-lv-body svg { display: block; width: 100%; height: 100%; }
+.dock-lv-grip { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; cursor: ns-resize; }
+.dock-lv-grip:hover, .dock-lv-grip:focus-visible { background: color-mix(in srgb, var(--accent) 35%, transparent); outline: none; }
+.dock-lv.folded .dock-lv-body { display: none; }
 .dock-ctx { display: flex; align-items: flex-start; gap: 6px; padding: 6px 12px; min-height: 34px; border-bottom: 1px solid var(--line); background: var(--raised); font-size: 12px; flex: none; }
 .dock-ctx .lbl { color: var(--muted); white-space: nowrap; }
 .dock-ctx .path { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 4px; min-width: 0; flex: 1; }

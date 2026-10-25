@@ -4293,6 +4293,131 @@ if (want('live')) {
   } catch (e) { fail = 1; console.log('  ✗ Live:', e && e.stack || e); }
   finally { await bL.close(); srvL.kill(); }
 }
+// SÂN KHẤU LIVE Ở ĐỈNH DOCK (v0.25 phần A, spec §8): chiều cao cố định (khung chat lệch 0 px) · thu gọn / chiều cao nhớ theo máy · L-42 (diễn đủ có ngân sách,
+// thở ≤ 12 khung / giây, DỪNG vòng vẽ khi tab ẩn / thu gọn / trang Live) · MỘT SSE cho cả trình duyệt (tab leader + BroadcastChannel) + chuyển leader khi tab leader đóng ·
+// 8 tab → 1 kết nối, Studio vẫn phản hồi · bộ chọn kênh. GC_DOCK_SHOTS=<thư mục>: ảnh Studio có sân khấu (mở + thu gọn)
+if (want('live')) {
+  const DHOME = mkdtempSync(path.join(tmpdir(), 'gc-dock-live-b-')), DB = 'http://localhost:7674', DAPI = 'http://127.0.0.1:7674';
+  const srvD = kid(spawn(process.execPath, [path.join(ROOT, 'server/main.js')], { env: { ...process.env, GC_HOME: DHOME, GC_PORT: '7674', GC_NO_AUTOCHECK: '1', HOME: DHOME, GC_LIVE_PING_MS: '1000' }, stdio: 'ignore' }));
+  for (let i = 0; i < 100; i++) { try { if ((await fetch(DAPI + '/api/health')).ok) break; } catch (e) { /* chưa lên */ } await new Promise(r => setTimeout(r, 100)); }
+  const SHOTS = process.env.GC_DOCK_SHOTS || '';
+  if (SHOTS) fs.mkdirSync(SHOTS, { recursive: true });
+  const post = (kind, extra) => fetch(DAPI + '/api/live/event', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-GC-Request': '1' }, body: JSON.stringify(Object.assign({ kind }, extra || {})) });
+  const mcpEv = (kind) => fetch(DAPI + '/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + process.env.GC_API_TOKEN }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'live_event', arguments: { kind } } }) });
+  const viewers = async () => (await (await fetch(DAPI + '/api/live/info')).json()).viewers;
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const until = async (fn, ms, what) => { const t0 = Date.now(); for (;;) { const v = await fn(); if (v) return v; if (Date.now() - t0 > ms) throw new Error('hết giờ chờ: ' + what); await sleep(100); } };
+  const bD = await pw.chromium.launch();
+  try {
+    const ctx = await bD.newContext({ viewport: { width: 1440, height: 900 } }), errsD = [];
+    const open = async (route) => {
+      const p = await ctx.newPage();
+      p.on('pageerror', e => errsD.push(String(e))); p.on('console', m => { if (m.type() === 'error' && !/Content Security Policy|favicon/.test(m.text())) errsD.push(m.text()); });
+      await p.goto(DB + '/' + (route || 'xuong')); await p.waitForSelector('#dockLive', { timeout: 20000 });
+      return p;
+    };
+    const L = p => p.evaluate(() => window.GCDock.live()), F = p => p.evaluate(() => window.GCLiveFeed.state());
+    const p1 = await open();
+    // chiều cao có TRƯỚC khi vẽ (trước cả khi có Player) → khung chat không bị xô khi sân khấu dựng xong
+    const geo = await p1.evaluate(() => ({ body: document.getElementById('dockLiveBody').getBoundingClientRect().height, log: document.querySelector('.dock-log').getBoundingClientRect().top, dockTop: document.getElementById('dockLive').getBoundingClientRect().top - document.getElementById('dock').getBoundingClientRect().top }));
+    if (geo.body !== 132 || geo.dockTop > 2) throw new Error('sân khấu ở đỉnh dock, cao mặc định 132 px: ' + JSON.stringify(geo));
+    await p1.waitForSelector('#dockLiveStage', { timeout: 15000 });
+    if (await p1.evaluate(() => document.querySelector('.dock-log').getBoundingClientRect().top) !== geo.log) throw new Error('khung chat lệch khi sân khấu dựng xong');
+    await until(async () => (await F(p1)).role === 'leader' && (await F(p1)).status === 'on', 8000, 'tab đầu thành leader, SSE nối');
+    // ---- sự kiện → diễn đủ (có ngân sách) · khung chat lệch 0 px
+    for (const k of ['session_start', 'prompt', 'read', 'read', 'search', 'edit', 'test_run', 'test_fail', 'edit', 'test_run', 'test_pass']) { await post(k, { label: 'Fixing the parser' }); await sleep(120); }
+    await until(async () => (await L(p1)).stats.act > 60, 15000, 'diễn đủ ≥ 60 khung');
+    const logTop = await p1.evaluate(() => document.querySelector('.dock-log').getBoundingClientRect().top);
+    const a = await L(p1), resv = await p1.evaluate(() => window.GenChibi.render.stats().reserved);
+    if (resv !== 1) throw new Error('sân khấu dock khi diễn phải giữ 1 suất trong ngân sách "diễn đủ ≤ 8" (GC.render.stats().reserved = ' + resv + ')');
+    if (logTop !== geo.log) throw new Error('khung chat lệch khi sân khấu diễn: ' + geo.log + ' → ' + logTop);
+    if (a.stats.avgAct > 4 || a.stats.worstAct > 16 || !a.slot) throw new Error('ngân sách diễn đủ (trung bình ≤ 4 ms, tệ nhất ≤ 16 ms, giữ 1 suất diễn đủ): ' + JSON.stringify(a.stats) + ' slot ' + a.slot);
+    // ---- hết kế hoạch → tầng thở ≤ 12 khung / giây, trả suất diễn đủ
+    await until(async () => (await L(p1)).stats.mode === 'breathe', 30000, 'về tầng thở');
+    const b0 = await L(p1); await sleep(2000); const b1 = await L(p1);
+    const fps = (b1.stats.breathe - b0.stats.breathe) / 2, perB = (b1.stats.sumBreathe - b0.stats.sumBreathe) / Math.max(1, b1.stats.breathe - b0.stats.breathe);
+    // spec §8: mục tiêu ≤ 1 ms / khung khi thở (máy rảnh đo ~0.6 ms) — trần CỨNG 2 ms để máy CI 2 CPU đang tải không đỏ oan; số đo in ra để theo dõi
+    if (fps > 12.5 || fps < 5 || b1.stats.act !== b0.stats.act || b1.slot || perB > 2) throw new Error('tầng thở: ' + fps + ' khung/s · ' + perB.toFixed(2) + ' ms/khung · ' + JSON.stringify(b1.stats) + ' slot ' + b1.slot);
+    console.log('  ✓ Live ở đỉnh dock: cao cố định 132 px trước khi vẽ · khung chat lệch 0 px khi diễn · diễn đủ ' + a.stats.act + ' khung: trung bình ' + a.stats.avgAct.toFixed(2) + ' ms, tệ nhất ' + a.stats.worstAct.toFixed(1) + ' ms (giữ 1 suất "diễn đủ ≤ 8") · hết kế hoạch → thở ' + fps + ' khung/s (' + perB.toFixed(2) + ' ms/khung, mục tiêu ≤ 1), trả suất');
+    // ---- tab ẩn → vòng vẽ DỪNG (0 khung trong 2 s)
+    const setHidden = (p, v) => p.evaluate(v => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => v }); Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => v ? 'hidden' : 'visible' }); document.dispatchEvent(new Event('visibilitychange')); }, v);
+    await setHidden(p1, true); await post('edit'); await sleep(300);
+    const h0 = await L(p1); await sleep(2000); const h1 = await L(p1);
+    await setHidden(p1, false);
+    if (h1.stats.frames !== h0.stats.frames || h1.running || h1.stats.why !== 'hidden') throw new Error('tab ẩn mà vòng vẽ vẫn chạy: ' + JSON.stringify([h0.stats, h1.stats, h1.running]));
+    // ---- thu gọn → dừng + nhớ sau khi tải lại; chiều cao kéo được 96–240 và nhớ
+    await p1.click('#dockLiveFold'); await sleep(200);
+    const c0 = await L(p1); await post('read'); await sleep(2000); const c1 = await L(p1);
+    const barH = await p1.evaluate(() => document.getElementById('dockLive').getBoundingClientRect().height);
+    if (!c1.folded || c1.running || c1.stats.frames !== c0.stats.frames || c1.stats.why !== 'folded' || barH > 30) throw new Error('thu gọn: ' + JSON.stringify([c1, barH]));
+    if (SHOTS) await p1.screenshot({ path: path.join(SHOTS, 'studio-dock-live-collapsed.png') });
+    await p1.reload(); await p1.waitForSelector('#dockLive');
+    const rl = await L(p1);
+    if (!rl.folded || rl.running) throw new Error('trạng thái thu gọn không được nhớ sau khi tải lại: ' + JSON.stringify(rl));
+    await p1.click('#dockLiveFold'); await p1.waitForSelector('#dockLiveStage', { timeout: 10000 });
+    await p1.focus('#dockLiveGrip'); for (let i = 0; i < 3; i++) await p1.keyboard.press('ArrowDown');
+    for (let i = 0; i < 30; i++) await p1.keyboard.press('Shift+ArrowUp');
+    const minH = (await L(p1)).h; for (let i = 0; i < 4; i++) await p1.keyboard.press('ArrowDown');
+    await p1.reload(); await p1.waitForSelector('#dockLiveStage', { timeout: 10000 });
+    const hh = await p1.evaluate(() => ({ h: window.GCDock.live().h, px: document.getElementById('dockLiveBody').getBoundingClientRect().height }));
+    if (minH !== 96 || hh.h !== 128 || hh.px !== 128) throw new Error('chiều cao 96–240 nhớ theo máy: min ' + minH + ' · sau tải lại ' + JSON.stringify(hh));
+    console.log('  ✓ Live ở dock: tab ẩn → 0 khung trong 2 s (vòng vẽ dừng) · thu gọn → thanh ' + Math.round(barH) + ' px, 0 khung, nhớ sau khi tải lại · chiều cao kẹp 96–240, nhớ theo máy');
+    // ---- MỘT SSE cho cả trình duyệt: 3 tab → 1 leader, server thấy 1 người xem; leader đóng → tab khác nhận, sự kiện vẫn tới
+    await until(async () => (await F(p1)).status === 'on', 8000, 'p1 nghe lại');
+    const p2 = await open(), p3 = await open();
+    await sleep(2500);
+    const roles = [await F(p1), await F(p2), await F(p3)];
+    const v3 = await viewers();
+    if (roles.filter(r => r.role === 'leader').length !== 1 || roles.filter(r => r.role === 'follower').length !== 2 || v3 !== 1) throw new Error('3 tab: phải đúng 1 leader + 1 luồng SSE: ' + JSON.stringify(roles) + ' viewers ' + v3);
+    const pages = [p1, p2, p3], leader = pages[roles.findIndex(r => r.role === 'leader')], rest = pages.filter(p => p !== leader);
+    await post('search'); const lid = await until(async () => { const s = await Promise.all(rest.map(F)); return s.every(x => x.lastId > 0 && x.lastId === s[0].lastId) && s[0].lastId; }, 5000, 'tab theo sau nhận sự kiện qua BroadcastChannel');
+    await leader.close();
+    const nl = await until(async () => { const s = await Promise.all(rest.map(F)); return s.filter(x => x.role === 'leader').length === 1 && s.find(x => x.role === 'leader').status === 'on' && s; }, 10000, 'tab khác nhận vai leader');
+    await post('edit'); await until(async () => { const s = await Promise.all(rest.map(F)); return s.every(x => x.lastId > lid); }, 5000, 'sự kiện sau khi đổi leader tới mọi tab');
+    const v2 = await until(async () => (await viewers()) === 1 && 1, 5000, 'server còn đúng 1 luồng');
+    console.log('  ✓ một SSE / trình duyệt: 3 tab → 1 leader + 2 tab theo sau, server thấy ' + v3 + ' người xem · leader đóng → tab khác nhận vai trong ≤ 10 s, nối lại bằng ?since, sự kiện tới mọi tab, server vẫn ' + v2 + ' luồng');
+    // ---- 8 tab: vẫn 1 kết nối, Studio phản hồi (không kẹt trần 6 kết nối HTTP/1.1)
+    // như trình duyệt thật: chỉ tab trước mặt là "hiện" — tab nền ẩn (headless coi mọi tab là hiện)
+    for (const p of rest) await setHidden(p, true);
+    const more = []; for (let i = 0; i < 6; i++) { if (more.length) await setHidden(more[more.length - 1], true); more.push(await open()); }
+    const all8 = rest.concat(more);
+    await sleep(2500);
+    const v8 = await viewers(), t8 = await Promise.all(all8.map(p => p.evaluate(async () => { const t = performance.now(); const r = await fetch('api/health'); return r.ok ? performance.now() - t : -1; })));
+    const r8 = await Promise.all(all8.map(F));
+    if (all8.length !== 8 || v8 !== 1 || r8.filter(x => x.role === 'leader').length !== 1 || t8.some(x => x < 0 || x > 3000)) throw new Error('8 tab: ' + JSON.stringify({ v8, t8, roles: r8.map(x => x.role) }));
+    console.log('  ✓ 8 tab Studio → 1 luồng SSE ở server · mọi tab gọi API trong ' + Math.round(Math.max(...t8)) + ' ms (không kẹt trần 6 kết nối HTTP/1.1)');
+    for (const p of more) await p.close();
+    for (const p of rest) await setHidden(p, false);
+    // ---- trang Live đầy đủ → sân khấu dock tự thu (không hai Player cùng diễn — CNS-317); rời trang → mở lại
+    const pv = rest[0];
+    await pv.evaluate(() => { localStorage.setItem('gc-route-xuong', JSON.stringify({ page: 'live' })); });
+    await pv.reload(); await pv.waitForSelector('#liveStage', { timeout: 20000 }); await sleep(300);
+    const onLive = await L(pv), cls = await pv.evaluate(() => document.getElementById('dockLive').classList.contains('folded'));
+    if (!onLive.forced || !cls || onLive.running) throw new Error('trang Live: sân khấu dock phải tự thu: ' + JSON.stringify(onLive));
+    await pv.evaluate(() => { localStorage.setItem('gc-route-xuong', JSON.stringify({ page: 'home' })); }); await pv.reload(); await pv.waitForSelector('#dockLiveStage', { timeout: 15000 });
+    const back = await L(pv);
+    if (back.forced || back.folded) throw new Error('rời trang Live: sân khấu dock phải mở lại (lựa chọn của người dùng không bị đổi): ' + JSON.stringify(back));
+    console.log('  ✓ trên trang Sân khấu Live, sân khấu dock tự thu về thanh 28 px (một Player diễn) · rời trang → mở lại, lựa chọn thu gọn của người dùng giữ nguyên');
+    // ---- bộ chọn kênh: ghim "Agent qua MCP" → sự kiện của chủ chỉ cộng chấm đếm
+    await mcpEv('read'); await pv.waitForSelector('#dockLiveChan option[value="mcp"]', { state: 'attached', timeout: 5000 });   // kênh mới xuất hiện trong bộ chọn khi có sự kiện
+    await pv.selectOption('#dockLiveChan', 'mcp');
+    const s0 = await L(pv); await post('read'); await post('edit'); await mcpEv('search');
+    const s1 = await until(async () => { const x = await L(pv); return x.unseen >= s0.unseen + 2 && x.chans.mcp > (s0.chans.mcp || 0) && x; }, 5000, 'chấm đếm kênh khác');
+    const cnt = await pv.evaluate(() => !document.getElementById('dockLiveCount').hidden && document.getElementById('dockLiveCount').textContent);
+    if (s1.shown !== 'mcp' || !cnt) throw new Error('bộ chọn kênh: ' + JSON.stringify(s1));
+    await pv.selectOption('#dockLiveChan', 'auto');
+    console.log('  ✓ bộ chọn kênh: ghim "Agent qua MCP" → sân khấu chỉ diễn kênh đó, sự kiện kênh khác hiện chấm đếm (' + cnt + ') · chan công khai từ server');
+    if (SHOTS) {
+      for (const k of ['session_start', 'prompt', 'read', 'search', 'edit', 'test_run', 'test_fail']) { await post(k); await sleep(250); }
+      await sleep(1500); await pv.screenshot({ path: path.join(SHOTS, 'studio-dock-live-expanded.png') });
+      await pv.locator('#dock').screenshot({ path: path.join(SHOTS, 'dock-live-expanded-closeup.png') });
+      console.log('  ✓ ảnh Studio có sân khấu ở dock (mở + thu gọn) → ' + SHOTS);
+    }
+    if (errsD.length) throw new Error('lỗi trang: ' + errsD.slice(0, 3).join(' | '));
+    await ctx.close();
+  } catch (e) { fail = 1; console.log('  ✗ Live ở dock:', e && e.stack || e); }
+  finally { await bD.close(); srvD.kill(); }
+}
 // CSP: bộ test vừa đi khắp Studio (mọi khu, dock, xuất phim, âm thanh, Lên mạng…) — không được có vi phạm nào
 { const v = [...new Set(CSP_VIOL)];
   if (v.length) { fail = 1; console.log('  ✗ CSP của Studio chặn ' + v.length + ' thứ Studio cần:\n      ' + v.slice(0, 20).join('\n      ')); }

@@ -131,6 +131,31 @@ invitation (`live`) on connections that can write. Declining changes nothing.
   401 immediately.
 - Undo: `node ~/.local/lib/gen-chibi-live/live-hook.mjs --uninstall-claude ~/.claude/settings.json` then remove the folder.
 
+## In the assistant dock + the Studio's own AI (v0.25)
+
+- **Dock stage** (`studio/dock.js`): pinned at the top of the dock, height fixed before painting (96–240 px, default 132,
+  remembered per device; the chat below shifts 0 px), collapsible to a 28 px bar (remembered). On the full Live page it
+  folds itself (CNS-317). L-42: full acting only while a plan runs (+3 s, at most 20 s after the last event) and it holds one
+  of the 8 "full acting" slots (`GC.render.reserve`); otherwise the breathing tier at ≤ 12 fps (the zones' animated parts
+  stand still); the render loop **stops** when the tab is hidden, the dock is closed/collapsed, the stage is off-screen,
+  and paints one still frame under `prefers-reduced-motion`.
+- **One SSE per browser** (`studio/live-feed.js`, CNS-307): a leader tab chosen with `navigator.locks` holds the stream and
+  relays events over `BroadcastChannel('gc-live')`; when no tab wants the stage the leader closes it; when the leader tab
+  closes, the next tab takes the lock and reconnects with `?since=`. No locks / BroadcastChannel (plain-http LAN address)
+  → one stream per tab. Server: at most 16 viewers, at most 2 streams per session / token (a third closes the oldest).
+- **Channels** (CNS-318): every event carries a public `chan` — `studio-ai:<n>`, `hook`, `agent:<id>`, `mcp`, `owner` —
+  for the dock's channel menu (Auto follows the newest channel, holding it ≥ 10 s).
+- **The Studio's own AI** (CNS-309/310): `dockTurn` emits `session_start` → `task` (only when it changes; from the area or
+  the quick-action button) → `prompt` → … → `stop` (`error` / `limit` before it on failure); `mcp.callTool` emits one event
+  per tool when `ctx.channel === 'ui'` (labels = the tool's title, never its arguments): `validate_*` → `test_run` then
+  `test_pass` / `test_fail` · `render_*` / `preview_*` → `run` · `save_*` / `propose_edit` / `import_*` → `write` (new) or
+  `edit` · `list_*` / `get_*` / `start_here` → `read` · other read-only tools → `search` · failed tool → `error`. Its own
+  rate bucket; only one Studio-AI turn acts at a time (others are marked `quiet` and only counted).
+- **Area gate in `callTool`** (CNS-302): for `ctx.channel === 'ui'` any tool outside the area's set
+  (`rollback_app`, `update_app`, `live_*`, `render_voice`, `import_project`, another area's tools…) is `FORBIDDEN` — one gate
+  for every path (today's API-key loop, the CLI bridge later). The Studio AI's instructions never mention `live_task` /
+  `live_setup` (CNS-308): the server reports its steps itself.
+
 ## Bubbles: plain words only
 
 The bubble text always comes from a fixed phrase table chosen by (kind, tool group, helper group, escalation

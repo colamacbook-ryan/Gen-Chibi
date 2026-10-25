@@ -2141,5 +2141,16 @@
  "Chưa có agent nào.": "No agents yet.",
  "Đã thu hồi token của agent": "Agent token revoked",
  "Tạo lúc": "Created",
- "Sự kiện cuối": "Last event"
+ "Sự kiện cuối": "Last event",
+ "AI trong Studio": "Studio AI",
+ "Agent ngoài": "External agents",
+ "Claude Code (hook)": "Claude Code (hook)",
+ "Agent qua MCP": "Agent over MCP",
+ "Chủ máy": "Owner",
+ "Agent {id}": "Agent {id}",
+ "Tạm dừng (sân khấu thu gọn hoặc tab ẩn)": "Paused (stage collapsed or tab hidden)",
+ "Kênh trên sân khấu": "Channel on the stage",
+ "Mở trang Sân khấu Live": "Open the Live stage page",
+ "Thu gọn / mở sân khấu": "Collapse / expand the stage",
+ "Kéo để đổi chiều cao sân khấu (phím ↑ ↓)": "Drag to change the stage height (↑ ↓ keys)"
 }

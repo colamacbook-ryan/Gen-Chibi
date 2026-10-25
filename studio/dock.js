@@ -436,7 +436,7 @@
   function paintQuick() {
     clear(E.quick);
     var list = B.quick(S.info, S.obj) || [];
-    list.forEach(function (q) { E.quick.appendChild(h('button', { type: 'button', class: 'qk', title: q[1], onclick: function () { E.ta.value = q[1]; autosize(); tokens(); E.ta.focus(); } }, q[0])); });
+    list.forEach(function (q) { E.quick.appendChild(h('button', { type: 'button', class: 'qk', title: q[1], onclick: function () { E.ta.value = q[1]; S.quick = { text: q[1], task: q[2] || '' }; autosize(); tokens(); E.ta.focus(); } }, q[0])); });
     E.quick.hidden = !list.length;
     var p = _l((zoneOf(S.info && S.info.zone) || {}).ask) || _t('Nhắn trợ lý…');
     E.ta.placeholder = _t('{p} · gõ @ để gắn thứ đang xem · Alt+P chỉ vào màn hình', { p: p });
@@ -495,13 +495,14 @@
     text = String(text == null ? E.ta.value : text).trim();
     if (!text || S.busy) return;
     if (!aiReady()) { paintGate(); toast(_t('Chưa có API key / model — mở Cài đặt AI.')); return; }
-    var pins = S.pins.slice(), sentCtx = ctxPayload(), key = S.key;
+    var pins = S.pins.slice(), sentCtx = ctxPayload(), key = S.key, quickTask = S.quick && S.quick.text === text ? S.quick.task : '';   // nút gợi ý gửi nguyên câu → việc của nút lên công tắc Live
+    S.quick = null;
     S.msgs.push({ role: 'user', content: text, pins: pins.map(function (p) { return { anchor: p.anchor, label: p.label }; }) });
     S.busy = true; E.ta.value = ''; S.pins = []; paintPins(); autosize(); paintLog(); paintGate();
     // snapshot lấy lại lúc gửi (tác phẩm vừa sửa → không gửi bản cũ); cắt theo ngân sách chung
     var per = pins.length ? Math.max(300, Math.min(1200, Math.floor(BUDGET / pins.length))) : 0;
     Promise.all(pins.map(function (p) { return Anchors.snapshot(p.anchor, per).then(function (t) { return { anchor: p.anchor, kind: Anchors.parse(p.anchor).kind, id: Anchors.parse(p.anchor).id, label: p.label, snapshot: t }; }); }))
-      .then(function (anchors) { return B.Store.turn('api/ai/agent', { message: text, context: sentCtx, anchors: anchors }); })   // 202 + hỏi lượt: lượt dài không bị proxy cắt ~100 s (CNS-175)
+      .then(function (anchors) { return B.Store.turn('api/ai/agent', Object.assign({ message: text, context: sentCtx, anchors: anchors }, quickTask ? { task: quickTask } : {})); })   // 202 + hỏi lượt: lượt dài không bị proxy cắt ~100 s (CNS-175)
       .then(function (r) {
         if (S.key === key) { S.msgs.push({ role: 'assistant', content: r.reply || '', log: r.log, anchors: r.anchors, renders: r.renders, usage: r.usage }); S.sent = r.sent || null; S.sentKey = key; }
         if (r.work) Works.put(r.work);
@@ -536,9 +537,185 @@
     applyLayout(); savePref();
     if (S.open) { loadCfg(); if (focus) setTimeout(function () { E.ta.focus(); }, 0); }
     else { setPick(false); mentionClose(); }
+    lvKick();
     window.dispatchEvent(new Event('resize'));   // lưới / bộ phát co giãn theo bề rộng mới
   }
   function setWidth(w, save) { S.w = clamp(Math.round(w), W_MIN, Math.min(W_MAX, Math.floor(window.innerWidth * 0.6))); applyLayout(); if (save) savePref(); }
+
+  /* ============================================================ SÂN KHẤU LIVE Ở ĐỈNH DOCK (v0.25, spec §8 — Ryan: "phải luôn hiển thị trên đầu khung chatroom")
+   * Một sân khấu, một diễn viên, theo kênh đang hoạt động (chan công khai của sự kiện); bộ chọn kênh để ghim. Nguồn: GCLiveFeed (một SSE / trình duyệt).
+   * Chiều cao CỐ ĐỊNH trước khi vẽ (96–240, mặc định 132, nhớ theo máy) → khung chat lệch 0 px. Thu gọn = thanh 28 px (nhớ theo máy).
+   * L-42: diễn đủ chỉ khi có kế hoạch (+3 s, tối đa 20 s sau sự kiện cuối) và giữ 1 suất "diễn đủ ≤ 8" (GC.render.reserve); rảnh = tầng thở ≤ 12 khung / giây;
+   * DỪNG HẲN vòng vẽ khi tab ẩn, dock đóng, thu gọn, ra ngoài màn hình, đang ở trang Live (tự thu — CNS-317) hoặc prefers-reduced-motion (vẽ một khung tĩnh). */
+  var LV_MIN = 96, LV_MAX = 240, LV_DEF = 132, LV_HOLD = 10, LV_ACT_TAIL = 3, LV_ACT_MAX = 20, LV_BREATHE_MS = 1000 / 12;
+  var LVD = { h: LV_DEF, folded: false, forced: false, pin: 'auto', P: null, D: null, t0: 0, raf: 0, tm: 0, inView: true, lastEvt: -1e9, planEnd: -1e9, lastPaint: -1e9,
+    shown: null, shownAt: -1e9, unseen: 0, chans: {}, names: {}, task: null, titles: {}, status: 'off', slot: false,
+    stats: { frames: 0, act: 0, breathe: 0, sumAct: 0, sumBreathe: 0, worstAct: 0, worstBreathe: 0, mode: 'stop', why: '' } };
+  function lvNow() { return performance.now() / 1000 - LVD.t0; }
+  function lvLoad() {
+    try { var p = JSON.parse(localStorage.getItem('gc-dock-live') || '{}') || {}; LVD.h = clamp(+p.h || LV_DEF, LV_MIN, LV_MAX); LVD.folded = !!p.folded; LVD.pin = typeof p.pin === 'string' && /^(auto|studio-ai|ext|hook|mcp|owner|agent:[a-f0-9]{16})$/.test(p.pin) ? p.pin : 'auto'; }
+    catch (e) { /* mặc định */ }
+  }
+  function lvSave() { try { localStorage.setItem('gc-dock-live', JSON.stringify({ h: LVD.h, folded: LVD.folded, pin: LVD.pin })); } catch (e) { /* bỏ qua */ } }
+  function lvFolded() { return LVD.folded || LVD.forced; }
+  // vì sao không vẽ (rỗng = được vẽ) — test đọc lý do
+  function lvWhy() { return !S.open ? 'closed' : lvFolded() ? (LVD.forced ? 'live-page' : 'folded') : document.hidden ? 'hidden' : !LVD.inView ? 'offscreen' : REDUCED.matches ? 'reduced' : ''; }
+  // nhóm kênh: AI trong Studio (mọi lượt) | từng kênh ngoài (hook / agent:<id> / mcp / owner)
+  function lvGroup(ch) { return /^studio-ai:/.test(ch) ? 'studio-ai' : ch || 'owner'; }
+  function lvMatch(sel, g) { return sel === 'ext' ? g !== 'studio-ai' : sel === g; }
+  function lvChanLabel(g) {
+    if (g === 'studio-ai') return _t('AI trong Studio');
+    if (g === 'ext') return _t('Agent ngoài');
+    if (g === 'hook') return _t('Claude Code (hook)');
+    if (g === 'mcp') return _t('Agent qua MCP');
+    if (g === 'owner') return _t('Chủ máy');
+    if (/^agent:/.test(g)) return LVD.names[g.slice(6)] || _t('Agent {id}', { id: g.slice(6, 12) });
+    return g;
+  }
+  function lvSelPaint() {
+    if (!E.lvSel) return;
+    var cur = LVD.pin, opts = ['auto', 'studio-ai', 'ext'].concat(Object.keys(LVD.chans).filter(function (g) { return g !== 'studio-ai'; }).sort());
+    if (opts.indexOf(cur) < 0) opts.push(cur);
+    clear(E.lvSel);
+    opts.forEach(function (v) { E.lvSel.appendChild(h('option', { value: v, selected: v === cur ? true : null }, v === 'auto' ? _t('Tự động') : lvChanLabel(v))); });
+    E.lvCnt.hidden = !LVD.unseen; E.lvCnt.textContent = LVD.unseen > 99 ? '99+' : String(LVD.unseen);
+  }
+  function lvTaskPaint() {
+    if (!E.lvTask) return;
+    var g = LVD.shown, tk = LVD.task;
+    E.lvTask.textContent = tk ? _t('Đang làm: {task}', { task: _t(GC.live.TASK_LABEL[tk]) }) + (LVD.titles[tk] ? ' · ' + LVD.titles[tk] : '') + (g ? ' — ' + lvChanLabel(g) : '')
+      : g ? lvChanLabel(g) : _t('Sân khấu Live');
+  }
+  // sự kiện từ GCLiveFeed: đúng kênh đang hiện → đạo diễn; kênh khác → chấm đếm trên bộ chọn
+  function lvOnEvent(ev) {
+    var g = lvGroup(ev.chan), t = lvNow(), isNew = !LVD.chans[g];
+    LVD.chans[g] = (LVD.chans[g] || 0) + 1;
+    if (isNew) lvSelPaint();
+    if (ev.quiet) return;   // lượt AI khác lượt đang diễn: chỉ đếm
+    var sel = LVD.pin;
+    if (sel === 'auto') {   // bám kênh có sự kiện mới nhất, giữ ≥ 10 s trước khi đổi
+      if (!LVD.shown || (LVD.shown !== g && t - LVD.shownAt >= LV_HOLD)) { if (LVD.shown !== g) { LVD.shown = g; LVD.task = null; } }
+      if (LVD.shown === g) LVD.shownAt = t;
+    } else if (lvMatch(sel, g)) LVD.shown = g;
+    if (!(sel === 'auto' ? LVD.shown === g : lvMatch(sel, g))) { LVD.unseen++; lvSelPaint(); return; }
+    if (ev.kind === 'task' && GC.live.TASK_LABEL[ev.task]) { LVD.task = ev.task; LVD.titles[ev.task] = ev.title || ''; }
+    lvTaskPaint();
+    if (!LVD.D) LVD.D = GC.live.director({ x0: GC.live.ZONES.center.x });
+    LVD.D.push({ id: 'k' + ev.id, kind: ev.kind, label: ev.label, tool: ev.tool, sub: ev.sub, task: ev.task }, t);
+    LVD.lastEvt = t;
+    lvKick();
+  }
+  // Player dựng LÚC RẢNH (requestIdleCallback) — không chen vào lúc trang đang tải (L-42); xong thì lvKick lại
+  function lvEnsure() {
+    if (LVD.P || !window.GCLive || !E.lvBox) return !!LVD.P;
+    if (!LVD.building) {
+      LVD.building = true;
+      var ric = window.requestIdleCallback || function (f) { return setTimeout(f, 200); };
+      ric(function () { lvBuildPlayer(); LVD.building = false; lvKick(); }, { timeout: 1500 });
+    }
+    return false;
+  }
+  function lvBuildPlayer() {
+    if (LVD.P || !window.GCLive || !E.lvBox) return;
+    if (!LVD.D) LVD.D = GC.live.director({ x0: GC.live.ZONES.center.x });
+    LVD.P = window.GCLive.Player(E.lvBox, LVD.D, { id: 'dockLiveStage', raster: 1 });
+    LVD.P.svg.setAttribute('preserveAspectRatio', 'xMidYMax slice');   // dải thấp: giữ sàn + nhân vật, cắt trần
+  }
+  function lvStop(why) {
+    if (LVD.raf) cancelAnimationFrame(LVD.raf); if (LVD.tm) clearTimeout(LVD.tm); LVD.raf = LVD.tm = 0;
+    if (LVD.slot && GC.render && GC.render.release) { GC.render.release('dock-live'); LVD.slot = false; }
+    LVD.stats.mode = 'stop'; LVD.stats.why = why;
+  }
+  // bật / tắt vòng vẽ theo trạng thái hiện tại (gọi mỗi khi dock / tab / thu gọn / màn hình / sự kiện đổi)
+  function lvKick() {
+    if (!ready || !E.lv) return;
+    if (window.GCLiveFeed) window.GCLiveFeed.poke();
+    var why = lvWhy();
+    if (why === 'reduced' && lvEnsure()) { lvStop(why); LVD.D.advance(lvNow()); LVD.P.paint(lvNow()); return; }   // chuyển động giảm: một khung tĩnh
+    if (why) { lvStop(why); return; }
+    if (!lvEnsure()) return;
+    if (!LVD.raf && !LVD.tm) LVD.raf = requestAnimationFrame(lvLoop);
+  }
+  function lvLoop() {
+    LVD.raf = LVD.tm = 0;
+    var why = lvWhy(); if (why) { lvStop(why); return; }
+    var t = lvNow(), D = LVD.D, A = D.activity && D.activity();
+    if (D.queue.length || (A && A.intents && A.intents.length)) { var s0 = D.stepAt(t); LVD.planEnd = Math.max(LVD.planEnd, s0 ? s0.t1 : t); }
+    var acting = t - LVD.lastEvt < LV_ACT_MAX && t < Math.max(LVD.lastEvt, LVD.planEnd) + LV_ACT_TAIL;
+    if (acting && !LVD.slot && GC.render && GC.render.reserve) LVD.slot = GC.render.reserve('dock-live');
+    if (acting && GC.render && GC.render.reserve && !LVD.slot) acting = false;   // hết suất "diễn đủ ≤ 8": thở
+    if (!acting && LVD.slot) { GC.render.release('dock-live'); LVD.slot = false; }
+    var a = performance.now();
+    D.advance(t); LVD.P.paint(t, !acting);
+    var cost = performance.now() - a, st = LVD.stats;
+    st.frames++; LVD.lastPaint = t; st.mode = acting ? 'act' : 'breathe'; st.why = '';
+    if (acting) { st.act++; st.sumAct += cost; if (cost > st.worstAct) st.worstAct = cost; }
+    else { st.breathe++; st.sumBreathe += cost; if (cost > st.worstBreathe) st.worstBreathe = cost; }
+    if (acting) LVD.raf = requestAnimationFrame(lvLoop);
+    else LVD.tm = setTimeout(function () { LVD.tm = 0; LVD.raf = requestAnimationFrame(lvLoop); }, LV_BREATHE_MS);   // tầng thở ≤ 12 khung / giây
+  }
+  function lvFold(v, save) {
+    LVD.folded = !!v; if (save) lvSave();
+    lvApply(); lvKick();
+  }
+  function lvApply() {
+    if (!E.lv) return;
+    var f = lvFolded();
+    E.lv.classList.toggle('folded', f);
+    E.lvBody.style.height = LVD.h + 'px';
+    E.lvFoldB.setAttribute('aria-expanded', String(!f)); E.lvFoldB.textContent = f ? '▾' : '▴';
+    E.lvGrip.setAttribute('aria-valuenow', String(LVD.h));
+  }
+  function lvSetH(v, save) { LVD.h = clamp(Math.round(v), LV_MIN, LV_MAX); lvApply(); if (save) lvSave(); }
+  function lvBuild() {
+    lvLoad(); LVD.t0 = performance.now() / 1000;
+    E.lvDot = h('span', { class: 'dot', id: 'dockLiveDot' });
+    E.lvTask = h('span', { class: 'task', id: 'dockLiveTask' });
+    E.lvSel = h('select', { id: 'dockLiveChan', onchange: function () { LVD.pin = E.lvSel.value; LVD.unseen = 0; if (LVD.pin !== 'auto' && LVD.pin !== 'ext') LVD.shown = LVD.pin; lvSave(); lvSelPaint(); lvTaskPaint(); } });
+    E.lvCnt = h('span', { class: 'cnt', id: 'dockLiveCount', hidden: true });
+    E.lvOpenB = h('button', { type: 'button', class: 'btn sm ic', id: 'dockLiveOpen', onclick: function () { B.go({ page: 'live' }); } }, '⤢');
+    E.lvFoldB = h('button', { type: 'button', class: 'btn sm ic', id: 'dockLiveFold', 'aria-controls': 'dockLiveBody', onclick: function () { if (!LVD.forced) lvFold(!LVD.folded, true); } }, '▴');
+    E.lvBox = h('div', { class: 'dock-lv-box', style: 'position:absolute;inset:0' });
+    E.lvGrip = h('div', { class: 'dock-lv-grip', id: 'dockLiveGrip', role: 'separator', 'aria-orientation': 'horizontal', tabindex: '0', 'aria-valuemin': String(LV_MIN), 'aria-valuemax': String(LV_MAX) });
+    E.lvBody = h('div', { class: 'dock-lv-body', id: 'dockLiveBody', style: 'height:' + LVD.h + 'px' }, E.lvBox, E.lvGrip);
+    E.lv = h('section', { class: 'dock-lv', id: 'dockLive' }, h('div', { class: 'dock-lv-bar' }, E.lvDot, E.lvTask, E.lvCnt, E.lvSel, E.lvOpenB, E.lvFoldB), E.lvBody);
+    E.lvGrip.addEventListener('pointerdown', function (ev) {
+      ev.preventDefault(); E.lvGrip.setPointerCapture(ev.pointerId);
+      var y0 = ev.clientY, h0 = LVD.h;
+      function mv(e) { lvSetH(h0 + e.clientY - y0, false); }
+      function up() { E.lvGrip.removeEventListener('pointermove', mv); E.lvGrip.removeEventListener('pointerup', up); lvSave(); }
+      E.lvGrip.addEventListener('pointermove', mv); E.lvGrip.addEventListener('pointerup', up);
+    });
+    E.lvGrip.addEventListener('keydown', function (ev) { var d = ev.key === 'ArrowDown' ? 1 : ev.key === 'ArrowUp' ? -1 : 0; if (!d) return; ev.preventDefault(); lvSetH(LVD.h + d * (ev.shiftKey ? 24 : 8), true); });
+    if (typeof IntersectionObserver === 'function') new IntersectionObserver(function (es) { es.forEach(function (e) { LVD.inView = e.isIntersecting; }); lvKick(); }).observe(E.lvBody);
+    document.addEventListener('visibilitychange', lvKick);
+    if (REDUCED.addEventListener) REDUCED.addEventListener('change', lvKick);
+    var FD = window.GCLiveFeed;
+    if (FD && B.Store.mode === 'server') {
+      FD.init({ mode: B.Store.mode, headers: function () { return B.Store.headers(); } });
+      FD.subscribe(lvOnEvent, { replay: true });
+      FD.onStatus(function (st) { LVD.status = st; lvDotPaint(); });
+      FD.want('dock', function () { return S.open && !lvFolded(); });
+      B.Store.api('GET', 'api/live/agents').then(function (r) { (r.agents || []).forEach(function (a) { LVD.names[a.id] = a.name; }); lvSelPaint(); }).catch(function () { /* không có */ });
+    }
+    lvApply(); lvSelPaint(); lvTaskPaint();
+  }
+  function lvDotPaint() {
+    var st = LVD.status;
+    E.lvDot.className = 'dot ' + (st === 'on' ? 'on' : st === 'retry' ? 'retry' : '');
+    E.lvDot.title = st === 'on' ? _t('Đang nghe') : st === 'retry' ? _t('Mất kết nối — thử lại…') : _t('Tạm dừng (sân khấu thu gọn hoặc tab ẩn)');
+  }
+  function lvRelabel() {
+    if (!E.lv) return;
+    lvDotPaint();
+    if (LVD.P) LVD.P.svg.setAttribute('aria-label', _t('Sân khấu sống'));   // Player dựng lúc ngôn ngữ cũ
+    E.lv.setAttribute('aria-label', _t('Sân khấu Live'));
+    E.lvSel.setAttribute('aria-label', _t('Kênh trên sân khấu'));
+    E.lvOpenB.title = _t('Mở trang Sân khấu Live'); E.lvOpenB.setAttribute('aria-label', E.lvOpenB.title);
+    E.lvFoldB.title = _t('Thu gọn / mở sân khấu'); E.lvFoldB.setAttribute('aria-label', E.lvFoldB.title);
+    E.lvGrip.setAttribute('aria-label', _t('Kéo để đổi chiều cao sân khấu (phím ↑ ↓)'));
+    lvSelPaint(); lvTaskPaint();
+  }
 
   /* ============================================================ dựng giao diện */
   function build() {
@@ -572,7 +749,8 @@
     var head = h('div', { class: 'dock-head' }, E.title, E.role, h('span', { class: 'sp' }), E.clearB, E.foldB);
     var form = h('div', { class: 'dock-compose' }, E.pins, E.ta, E.pop, h('div', { class: 'dock-bar' }, E.pickB, E.atB, h('span', { class: 'sp' }), E.tok, E.send));
     clear(host);
-    host.appendChild(E.sep); host.appendChild(h('div', { class: 'dock-in' }, head, E.ctx, E.gate, E.log, E.quick, form));
+    lvBuild();
+    host.appendChild(E.sep); host.appendChild(h('div', { class: 'dock-in' }, E.lv, head, E.ctx, E.gate, E.log, E.quick, form));
     // kéo đổi độ rộng
     E.sep.addEventListener('pointerdown', function (ev) {
       ev.preventDefault(); E.sep.setPointerCapture(ev.pointerId); document.body.classList.add('dock-drag');
@@ -610,6 +788,7 @@
     E.clearB.title = _t('Xoá luồng hội thoại của đối tượng đang xem'); E.clearB.textContent = _t('Xoá luồng');
     E.foldB.setAttribute('aria-label', _t('Thu gọn trợ lý AI (Alt+J)')); E.foldB.title = _t('Thu gọn (Alt+J)');
     Pick.banner.textContent = _t('Chế độ chỉ: rê vào một phần tử rồi bấm để ghim · Shift+bấm ghim nhiều · Esc thoát');
+    lvRelabel();
   }
 
   /* ============================================================ API cho app.js */
@@ -620,6 +799,7 @@
       var p = loadPref(); S.w = p.w; S.openWide = p.open; S.open = NARROW.matches ? false : p.open;
       build(); ready = true;
       applyLayout(); tokens(); paintGate(); if (S.open) loadCfg();
+      lvKick();
       pend.forEach(function (f) { f(); }); pend = [];
       var spot = null; try { spot = sessionStorage.getItem('gc-spot'); sessionStorage.removeItem('gc-spot'); } catch (e) { /* bỏ qua */ }
       if (spot) waitFor(spot, 4000, function () { Spot.flash(spot); });
@@ -651,6 +831,11 @@
     send: send,
     workChanged: function (w) { Works.put(w); },
     flash: function (a) { return Spot.flash(a); },
+    // trang Live đầy đủ báo mở / đóng: sân khấu dock tự thu về thanh 28 px (không lưu vào lựa chọn của người dùng)
+    livePage: function (on) { LVD.forced = !!on; if (ready) { lvApply(); lvKick(); } },
+    // số đo cho test trình duyệt (L-42): chỉ đọc
+    live: function () { var s = LVD.stats; return { h: LVD.h, folded: LVD.folded, forced: LVD.forced, pin: LVD.pin, shown: LVD.shown, unseen: LVD.unseen, chans: Object.assign({}, LVD.chans), task: LVD.task, status: LVD.status, running: !!(LVD.raf || LVD.tm), slot: LVD.slot,
+      stats: { frames: s.frames, act: s.act, breathe: s.breathe, sumAct: s.sumAct, sumBreathe: s.sumBreathe, avgAct: s.act ? s.sumAct / s.act : 0, avgBreathe: s.breathe ? s.sumBreathe / s.breathe : 0, worstAct: s.worstAct, worstBreathe: s.worstBreathe, mode: s.mode, why: s.why }, steps: LVD.D ? LVD.D.steps.length : 0 }; },
     state: function () { return { open: S.open, w: S.w, pins: S.pins.map(function (p) { return p.anchor; }), key: S.key, busy: S.busy, ctx: ctxPayload(), ready: aiReady() }; }
   };
   window.GCDock = API;

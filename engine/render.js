@@ -83,6 +83,7 @@
 
   /* --------------------------------------------------------- tầng full */
   var fulls = [];
+  var reserved = new Set();   // suất diễn đủ do nơi khác giữ (sân khấu Live ở dock — v0.25): chung ngân sách ≤ 8
   var running = false, last = 0, hidden = false;
   var io = typeof IntersectionObserver === 'function' ? new IntersectionObserver(function (entries) {
     entries.forEach(function (e) { var i = e.target.__gc; if (i) i.visible = e.isIntersecting; });
@@ -93,7 +94,7 @@
 
   function full(el, asset, state, opts) {
     opts = opts || {};
-    if (fulls.length >= API.budget && !opts.force) {
+    if (fulls.length + reserved.size >= API.budget && !opts.force) {
       var d = idle(el, asset, state, opts);
       d.degraded = true;
       return d;
@@ -264,6 +265,9 @@
 
   var API = {
     budget: 8,
+    // giữ / trả một suất diễn đủ cho bộ vẽ ngoài render.js (sân khấu Live ở dock): reserve(id) → false khi đã hết suất
+    reserve: function (id) { if (reserved.has(id)) return true; if (fulls.length + reserved.size >= API.budget) return false; reserved.add(id); return true; },
+    release: function (id) { reserved.delete(id); },
     image: image, idle: idle, full: full, imageURL: imageURL, invalidate: invalidate, injectCSS: injectCSS,
     mount: function (el, asset, state, opts) {
       opts = opts || {};
@@ -271,7 +275,7 @@
       return tier === 'full' ? full(el, asset, state, opts) : tier === 'idle' ? idle(el, asset, state, opts) : image(el, asset, state, opts);
     },
     stats: function () {
-      return { full: fulls.length, fullActive: fulls.filter(function (i) { return i.visible && !i.settled && i.el.isConnected; }).length, cache: cache.size, budget: API.budget };
+      return { full: fulls.length, fullActive: fulls.filter(function (i) { return i.visible && !i.settled && i.el.isConnected; }).length, reserved: reserved.size, cache: cache.size, budget: API.budget };
     },
     get reducedMotion() { return reduce; }
   };

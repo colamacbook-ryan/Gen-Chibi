@@ -325,6 +325,17 @@ the official GitHub release and checks its SHA-256. Each agent gets its own toke
 the Live stage page shows name, created, last event and a **Revoke** button. While gen-chibi is not online, only an
 agent on the same machine can connect.
 
+**The stage on top of the AI assistant (v0.25).** A compact Live stage is pinned at the top of the assistant dock on every
+page. Drag its bottom edge to set the height (96–240 px) and use ▴ / ▾ to collapse it to a 28 px bar showing "Working on: …";
+both are remembered on this device, and the chat below never moves. ⤢ opens the full Live stage page (while that page is
+open, the dock stage folds itself so only one stage plays). The stage follows whoever is working — **the Studio's own AI**
+(every tool it calls: reading, checking, saving…, with a task from the area or the quick-action button you used) or an
+**external agent** — and the channel menu (Auto · Studio AI · External agents · each agent) pins one; a number on the menu
+counts steps on channels you are not watching. It only animates fully while something is happening, then breathes at
+≤ 12 frames a second, and stops completely when the tab is hidden, the dock is closed or the stage is collapsed. All your
+Studio tabs share **one** live connection to the server (one tab listens and passes events to the others; if you close it,
+another tab takes over).
+
 ## Frequently asked questions
 - **Do assets the AI creates need approval?** No — they are saved as **drafts** in the work's project and usable right away. Only when you want them in a sale bundle do you click **Publish**.
 - **Does a shared HTML film expose the engine?** The player sits in the film file under a licence **for viewing that film only**. To share without the player, use **Export video** (v0.22); a future SaaS edition will also offer a player hosted by Gen Labs.

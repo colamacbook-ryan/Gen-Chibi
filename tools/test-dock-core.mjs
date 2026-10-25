@@ -14,7 +14,7 @@ const txt = r => (r.content && r.content[0] && r.content[0].text) || '';
 const clone = x => JSON.parse(JSON.stringify(x));
 const BUNDLE = JSON.parse(readFileSync(ROOT + '/studio/mau/tam-quoc.json', 'utf8')), WID = 'tq-vuon-dao-xich-bich', PID = 'mau-tam-quoc';
 // ba kênh ghi không phải chủ: dock (ui) · MCP có token / stdio · link MCP — và chủ trong Studio (gọi thẳng saveWorkChecked như POST /api/works)
-const CH = { 'dock (ui)': { channel: 'ui' }, 'MCP token / stdio': {}, 'link MCP': { viaLink: true } };
+const CH = { 'dock (ui)': { channel: 'ui', zone: 'tao-tac' }, 'MCP token / stdio': {}, 'link MCP': { viaLink: true } };
 
 try {
   /* ---------------------------------------------------------------- CNS-116: "Đạt" + ghi chú duyệt là của chủ */
@@ -83,6 +83,7 @@ try {
       const { m: m2, store: st2 } = fresh();
       const via = await m2.callTool('import_project', { bundle: clone(ex) }, ctx);
       const got = st2.getWork(WID), j = J(via);
+      if (ctx.channel === 'ui') { ok(via.isError && /FORBIDDEN/.test(via.content[0].text) && !got, name + ': import_project không thuộc khu nào của dock → FORBIDDEN ở cổng khu (v0.25, CNS-302), không nhập gì'); continue; }
       ok(got && !(got.review && Object.values(got.review.shots || {}).some(x => x.status === 'ok')) && (j.errors || []).some(e => e.kind === 'review'), name + ': import_project mang review "Đạt" → không lọt Đạt, báo lỗi review');
     }
   }

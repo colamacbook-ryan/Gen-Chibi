@@ -16,26 +16,40 @@
   function el(tag, attrs) { var e = document.createElementNS(NS, tag); for (var k in attrs || {}) e.setAttribute(k, attrs[k]); return e; }
   function hhmmss(ms) { var d = new Date(ms), p = function (n) { return (n < 10 ? '0' : '') + n; }; return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()); }
 
+  // ảnh phông raster (L-42: máy quay di chuyển cả thế giới mỗi khung → vẽ một ảnh rẻ hơn hàng trăm nét vector) — mỗi tỉ lệ một lần cho cả trang
+  var BG = {};
+  function backdropHref(sc, cb) {
+    var e = BG[sc];
+    if (e) { if (e.href) cb(e.href); else e.wait.push(cb); return; }
+    e = BG[sc] = { href: null, wait: [cb] };
+    var done = function (href) { e.href = href; e.wait.forEach(function (f) { try { f(href); } catch (x) { /* bỏ */ } }); e.wait = []; };
+    var im = new Image();
+    im.onload = function () {
+      try {
+        var cv = document.createElement('canvas'); cv.width = LV.W * sc; cv.height = LV.H * sc;
+        cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
+        if (cv.toBlob && window.URL && URL.createObjectURL) cv.toBlob(function (b) { if (b) done(URL.createObjectURL(b)); else delete BG[sc]; }, 'image/png');
+        else done(cv.toDataURL('image/png'));
+      } catch (x) { delete BG[sc]; /* trình duyệt chặn canvas: giữ phông vector */ }
+    };
+    im.onerror = function () { delete BG[sc]; };
+    im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + LV.W + ' ' + LV.H + '" width="' + LV.W * sc + '" height="' + LV.H * sc + '">' + LV.backdropSVG() + '</svg>');
+  }
+
   // ---- bộ vẽ DOM cho một đạo diễn (dùng chung sample() với bản SVG chuỗi của engine)
   function Player(box, D, opts) {
     opts = opts || {};
-    var S = LV.stage(null, D), svg = el('svg', { viewBox: '0 0 ' + LV.W + ' ' + LV.H, class: 'lv-stage', id: 'liveStage', role: 'img' });
+    var S = LV.stage(null, D), svg = el('svg', { viewBox: '0 0 ' + LV.W + ' ' + LV.H, class: 'lv-stage', id: opts.id || 'liveStage', role: 'img' });
     svg.setAttribute('aria-label', _t('Sân khấu sống'));
     var bg = el('g'), books = el('g'), booksSig = null, dyn = el('g', { class: 'lv-dyn' }), helpers = el('g', { class: 'lv-helpers' }), shadow = el('ellipse', { ry: f(8 * LV.K), rx: f(44 * LV.K), fill: 'rgba(20,24,22,.22)' }), actor = el('g', { class: 'lv-actor' }), bub = el('g', { class: 'lv-bubble' });
     bg.innerHTML = LV.backdropSVG();   // phông tĩnh do engine vẽ (không dữ liệu người dùng)
     // L-42: máy quay di chuyển cả thế giới mỗi khung → phông vector vẽ lại mỗi khung. Raster phông MỘT lần (2×) rồi dùng ảnh: vẽ một ảnh rẻ hơn hàng trăm nét
-    (function () {
-      var im = new Image();
-      im.onload = function () {
-        try {
-          var cv = document.createElement('canvas'); cv.width = LV.W * 2; cv.height = LV.H * 2;
-          cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
-          var pic = el('image', { x: 0, y: 0, width: LV.W, height: LV.H, preserveAspectRatio: 'none' }); pic.setAttribute('href', cv.toDataURL('image/png'));
-          while (bg.firstChild) bg.removeChild(bg.firstChild); bg.appendChild(pic);
-        } catch (e) { /* trình duyệt chặn canvas: giữ phông vector */ }
-      };
-      im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + LV.W + ' ' + LV.H + '" width="' + LV.W * 2 + '" height="' + LV.H * 2 + '">' + LV.backdropSVG() + '</svg>');
-    })();
+    // opts.raster: tỉ lệ ảnh phông (trang Live 2× · sân khấu dock 1× — dải hẹp). Dựng MỘT lần cho mỗi tỉ lệ (dùng lại giữa các lần mở trang / dock),
+    // mã hoá PNG bằng toBlob (bất đồng bộ) → blob: URL (CSP img-src có blob:)
+    backdropHref(opts.raster > 0 ? opts.raster : 2, function (href) {
+      var pic = el('image', { x: 0, y: 0, width: LV.W, height: LV.H, preserveAspectRatio: 'none' }); pic.setAttribute('href', href);
+      while (bg.firstChild) bg.removeChild(bg.firstChild); bg.appendChild(pic);
+    });
     var cam = el('g', { class: 'lv-cam' });   // máy quay: một transform cho cả thế giới (engine/live.js camAt — tất định)
     svg.appendChild(el('rect', { width: LV.W, height: LV.H, fill: '#e9dcc4' })); svg.appendChild(cam);
     cam.appendChild(bg); cam.appendChild(books); cam.appendChild(dyn); cam.appendChild(helpers); cam.appendChild(shadow); cam.appendChild(actor); cam.appendChild(bub);
@@ -59,7 +73,8 @@
       if (!imgCache[h.tint]) imgCache[h.tint] = GC.svgBody(LV.agentAsset(h.tint), 'work', { noShadow: true });
       return imgCache[h.tint];
     }
-    function paint(t) {
+    // lite (tầng thở của sân khấu dock, ≤ 12 khung / giây): phần động của các khu đứng yên (không dựng lại mỗi khung) — chỉ diễn viên thở
+    function paint(t, lite) {
       var F = S.sample(t);
       if (!F) return null;
       cam.setAttribute('transform', S.camTf(F.cam));
@@ -77,7 +92,7 @@
       actor.setAttribute('transform', 'translate(' + f(F.x - 100 * LV.K) + ' ' + f(F.y - 228 * LV.K) + ') scale(' + LV.K + ')');
       shadow.setAttribute('cx', f(F.x)); shadow.setAttribute('cy', LV.GROUND + 2);
       // phần động của các khu: đổi tối đa 15 lần / giây (màn hình, lửa, tên lửa…)
-      var w = F.world, ds = w.desk + w.lab + w.door.toFixed(2) + w.rocket.toFixed(2) + w.fire.toFixed(2) + w.foam.toFixed(2) + (LV.animated(w) ? '|' + Math.floor(t * 15) : '');
+      var w = F.world, ds = w.desk + w.lab + w.door.toFixed(2) + w.rocket.toFixed(2) + w.fire.toFixed(2) + w.foam.toFixed(2) + (LV.animated(w) && !lite ? '|' + Math.floor(t * 15) : '');
       if (ds !== dynSig) { dynSig = ds; dyn.innerHTML = LV.dynamicSVG(w, t, true); }
       if (w.bookOut !== booksSig) { booksSig = w.bookOut; books.innerHTML = LV.booksSVG(w.bookOut); }
       // trợ lý: tầng ảnh (hình tĩnh dựng một lần) + tầng thở (một transform mỗi khung) — ≤ 8
@@ -166,7 +181,8 @@
       tbody.insertBefore(tr, tbody.firstChild);
       while (tbody.childNodes.length > 200) tbody.removeChild(tbody.lastChild);
     }
-    function feed(ev, local) { D.push({ id: (local ? 'D' : '') + ev.id, kind: ev.kind, label: ev.label, tool: ev.tool, sub: ev.sub, task: ev.task }, now()); row(ev, local); }
+    // quiet: lượt AI trong Studio không phải lượt đang diễn (một lượt diễn tại một thời điểm — server/live.js) → chỉ vào bảng, không vào đạo diễn
+    function feed(ev, local) { if (!ev.quiet) D.push({ id: (local ? 'D' : '') + ev.id, kind: ev.kind, label: ev.label, tool: ev.tool, sub: ev.sub, task: ev.task }, now()); row(ev, local); }
 
     // ---- kết nối Claude Code (token live + đoạn settings.json) — chỉ bản cài có server
     var conn = h('div', { class: 'panel', id: 'liveConnect' }, h('h3', null, _t('Kết nối Claude Code')));
@@ -207,35 +223,16 @@
       }).catch(function () { /* bản xem thử: không có */ });
     }
 
-    // ---- nguồn sự kiện: SSE đọc bằng fetch (mang được header đăng nhập bằng token)
-    var alive = true, ctl = null, lastId = 0, retry = 0;
-    function connect() {
-      if (!alive || B.mode !== 'server' || !window.ReadableStream) return;
-      ctl = new AbortController();
-      fetch('api/live/stream?since=' + lastId, { headers: B.headers(), signal: ctl.signal }).then(function (r) {
-        if (!r.ok || !r.body) throw new Error('HTTP ' + r.status);
-        status.className = 'chip ok'; status.textContent = _t('Đang nghe'); retry = 0;
-        var rd = r.body.getReader(), dec = new TextDecoder(), buf = '';
-        return (function pump() {
-          return rd.read().then(function (x) {
-            if (x.done) throw new Error('end');
-            buf += dec.decode(x.value, { stream: true });
-            var i; while ((i = buf.indexOf('\n\n')) >= 0) {
-              var fr = buf.slice(0, i); buf = buf.slice(i + 2);
-              var data = fr.split('\n').filter(function (l) { return l.indexOf('data: ') === 0; }).map(function (l) { return l.slice(6); }).join('\n');
-              if (!data) continue;
-              try { var ev = JSON.parse(data); if (ev.id > lastId) { lastId = ev.id; feed(ev, false); } } catch (e) { /* khung hỏng: bỏ */ }
-            }
-            return pump();
-          });
-        })();
-      }).catch(function () {
-        if (!alive) return;
-        status.className = 'chip warn'; status.textContent = _t('Mất kết nối — thử lại…');
-        setTimeout(connect, Math.min(15000, 1000 * Math.pow(2, retry++)));
+    // ---- nguồn sự kiện: GCLiveFeed (studio/live-feed.js) — MỘT SSE cho cả trình duyệt (tab leader), dock và trang này dùng chung
+    var alive = true, FD = window.GCLiveFeed, unsub = null, unstat = null;
+    if (FD && B.mode === 'server') {
+      unstat = FD.onStatus(function (st) {
+        status.className = 'chip ' + (st === 'on' ? 'ok' : st === 'retry' ? 'warn' : '');
+        status.textContent = st === 'on' ? _t('Đang nghe') : st === 'retry' ? _t('Mất kết nối — thử lại…') : _t('Chưa nối');
       });
+      unsub = FD.subscribe(function (ev) { if (alive) feed(ev, false); }, { replay: true });
+      FD.want('live-page', function () { return alive; });
     }
-    connect();
 
     // ---- phát lại phiên mẫu tại chỗ (không gửi lên server)
     var timers = [];
@@ -265,7 +262,8 @@
     function nearest(x) { var b = null, d = 1e9; Object.keys(LV.ZONES).forEach(function (k) { var e = Math.abs(LV.ZONES[k].x - x); if (e < d) { d = e; b = k; } }); return d < 24 ? b : null; }
     raf = requestAnimationFrame(loop);
     window.__gcLive = { director: D, stats: stats, now: now, feed: feed };   // chỉ đọc cho test trình duyệt
-    B.onLeave(function () { alive = false; cancelAnimationFrame(raf); timers.forEach(clearTimeout); if (ctl) ctl.abort(); delete window.__gcLive; });
+    B.onLeave(function () { alive = false; cancelAnimationFrame(raf); timers.forEach(clearTimeout); if (unsub) unsub(); if (unstat) unstat(); if (FD) FD.unwant('live-page'); delete window.__gcLive; if (window.GCDock && window.GCDock.livePage) window.GCDock.livePage(false); });
+    if (window.GCDock && window.GCDock.livePage) window.GCDock.livePage(true);   // trên trang Live, sân khấu dock tự thu về thanh 28 px (không hai Player cùng diễn — CNS-317)
   }
 
   window.GCLive = { mount: mount, Player: Player };
