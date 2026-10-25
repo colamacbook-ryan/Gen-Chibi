@@ -405,6 +405,58 @@
    "timeout": 600
   },
   {
+   "id": "B33",
+   "guard": "key AI Studio KHÔNG trên argv (tệp env chỉ đọc, không --setenv)",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "files: A.files({ job, gcj }), env: sandboxEnv(home, path.dirname(e.real), A.env({ home })), secretEnv: sec, allow: A.hosts,",
+   "replace": "files: A.files({ job, gcj }), env: sandboxEnv(home, path.dirname(e.real), Object.assign(A.env({ home }), sec)), allow: A.hosts,",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "agy chế độ key",
+   "timeout": 600
+  },
+  {
+   "id": "B34",
+   "guard": "agy: init phải có permission_mode không bypass (T-07)",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "else if (/bypass|skip|danger|auto.?approve|yolo|allow.?all/i.test(pm)) bad.push('permission_mode:' + pm);",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "giám sát từng lượt",
+   "timeout": 600
+  },
+  {
+   "id": "B35",
+   "guard": "agy: call_mcp_tool chỉ tới server genchibi",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "if (sv === 'genchibi' && typeof tl === 'string') name = 'mcp_genchibi_' + tl;",
+   "replace": "if (typeof tl === 'string') name = 'mcp_genchibi_' + tl;",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "giám sát từng lượt",
+   "timeout": 600
+  },
+  {
+   "id": "B36",
+   "guard": "agy: denied_actions là bằng chứng chỉ khi đúng action của tool cấm",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "if (!res && act && denied.includes(act)) ev.evidence.push(",
+   "replace": "if (!res) ev.evidence.push(",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "canary bắt gian",
+   "timeout": 600
+  },
+  {
    "id": "B30",
    "guard": "huỷ: cờ cancel ở nhịp beat",
    "file": "bridge/ai-bridge.mjs",

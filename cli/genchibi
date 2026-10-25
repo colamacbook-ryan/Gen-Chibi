@@ -325,6 +325,7 @@ _en() {
     br_ask_home) F="Also delete the bridge's own CLI logins in %s? [y/N] " ;;
     br_keep_home) F="Kept the bridge's own CLI logins in %s (delete that folder yourself to log them out)." ;;
     br_refreshed) F="CLI bridge files refreshed from verified release %s." ;;
+    br_key_ask) F="Paste a SEPARATE Google AI Studio API key for the bridge (low quota recommended; hidden; agy OAuth instead: genchibi ai bridge login agy --oauth): " ;;
     live_head) F="Claude Code → gen-chibi Live stage. Paste into ~/.claude/settings.json (or a project's .claude/settings.local.json), or let genchibi merge it: genchibi live hook --install-into ~/.claude/settings.json" ;;
     live_foot) F="Hook script: %s (a copy kept outside the install folder; Docker installs take it from the SHA-256-verified release) · app: %s · live token: %s (0600, read by the hook, never on its command line; it can only send Live events — after rotating it in the Studio, run this again)." ;;
     live_in_bad) F="Not writing %s: %s" ;;
@@ -652,6 +653,7 @@ _vi() {
     br_ask_home) F="Xoá luôn đăng nhập CLI riêng của cầu nối trong %s? [c/K] " ;;
     br_keep_home) F="Giữ đăng nhập CLI riêng của cầu nối trong %s (tự xoá thư mục đó để đăng xuất)." ;;
     br_refreshed) F="Đã làm mới tệp cầu nối CLI từ bản phát hành đã kiểm %s." ;;
+    br_key_ask) F="Dán một API key Google AI Studio RIÊNG cho cầu nối (nên đặt trần thấp; nhập ẩn; dùng OAuth của agy thay vào: genchibi ai bridge login agy --oauth): " ;;
     live_head) F="Claude Code → Sân khấu Live của gen-chibi. Dán vào ~/.claude/settings.json (hoặc .claude/settings.local.json của dự án), hoặc để genchibi tự ghép: genchibi live hook --install-into ~/.claude/settings.json" ;;
     live_foot) F="Tệp hook: %s (bản chép nằm ngoài thư mục cài; bản Docker lấy từ gói phát hành đã kiểm SHA-256) · app: %s · token live: %s (0600, hook tự đọc, không nằm trên dòng lệnh; chỉ gửi được sự kiện Live — đổi token ở Studio thì chạy lại lệnh này)." ;;
     live_in_bad) F="Không ghi %s: %s" ;;
@@ -2966,6 +2968,14 @@ br_refresh() {
   m br_refreshed "$(cur_tag)" >&2
   if command -v systemctl >/dev/null 2>&1; then systemctl --user try-restart "$BRIDGE_UNIT_NAME" >/dev/null 2>&1 || true; fi
 }
+# login agy: MẶC ĐỊNH key AI Studio riêng — nhập ẩn, đi qua stdin vào cầu nối (không argv, không env). --oauth: agy đăng nhập TRONG hộp cát (token phạm vi cloud-platform)
+br_login() {
+  local cli="${1:-}" k=""
+  if [ "$cli" = agy ] && [ "${2:-}" != --oauth ]; then
+    if tty_ok; then printf '%s' "$(mn br_key_ask)" > /dev/tty; IFS= read -rs k < /dev/tty || k=""; echo > /dev/tty; else IFS= read -r k || true; fi
+    printf '%s' "$k" | br_node login agy
+  else br_node login ${1+"$@"}; fi
+}
 ai_cmd() {
   [ "${1:-}" = bridge ] || { m ai_usage >&2; return 2; }
   shift; local sub="${1:-}"; shift || true
@@ -2976,7 +2986,8 @@ ai_cmd() {
     start|stop) br_systemd || { m br_no_systemd >&2; return 1; }; systemctl --user "$sub" "$BRIDGE_UNIT_NAME" ;;
     status) br_node status || return 1; if br_systemd; then systemctl --user --no-pager status "$BRIDGE_UNIT_NAME" 2>/dev/null | head -n 3 || true; fi ;;
     logs) journalctl --user -u "$BRIDGE_UNIT_NAME" -n 200 -f 2>&1 | log_san ;;
-    run|probe|login|enable|disable|config) br_node "$sub" ${1+"$@"} ;;
+    login) br_login ${1+"$@"} ;;
+    run|probe|enable|disable|config) br_node "$sub" ${1+"$@"} ;;
     *) m ai_usage >&2; [ -z "$sub" ] && return 0; return 2 ;;
   esac
 }

@@ -5668,7 +5668,9 @@
           var c = clis[n] || { installed: false, confinement: 'unverified', missing: [] }, lk = c.confinement === 'verified' ? ['ok', _t('Đạt (hộp cát hệ điều hành + CLI tự chặn)')] : c.confinement === 'failed' ? ['bad', _t('Hỏng')] : ['warn', _t('Chưa kiểm')];
           var miss = (c.missing || []).join(' · ');
           t.appendChild(h('tr', null, h('td', { class: 'v', text: c.label || n }), h('td', { class: 'v', text: c.installed ? c.version || '—' : _t('không thấy') }),
-            h('td', null, h('span', { class: 'chip ' + (c.login === 'ok' ? 'ok' : c.login === 'missing' ? 'bad' : ''), text: c.login === 'ok' ? _t('đã đăng nhập') : c.login === 'missing' ? _t('chưa đăng nhập') : _t('không rõ') })),
+            h('td', null, h('span', { class: 'chip ' + (c.login === 'ok' ? 'ok' : c.login === 'missing' ? 'bad' : ''), text: c.login === 'ok' ? _t('đã đăng nhập') : c.login === 'missing' ? _t('chưa đăng nhập') : _t('không rõ') }),
+              c.authMode === 'key' ? h('div', { class: 'note', text: _t('key AI Studio riêng') }) : null,
+              c.broadScope ? h('div', { class: 'chip warn', id: 'aiAgyScope', text: _t('token đăng nhập của cầu nối có quyền cloud-platform; khuyên dùng key AI Studio riêng có trần thấp') }) : null),
             h('td', null, h('span', { class: 'chip ' + (c.sandbox === 'ok' && c.selftest !== false ? 'ok' : 'bad'), text: c.sandbox === 'ok' ? (c.selftest === false ? _t('tự kiểm hỏng') : 'bubblewrap') : c.sandbox === 'missing' ? _t('thiếu bubblewrap') : c.sandbox || '—' })),
             h('td', null, h('span', { class: 'chip ' + lk[0], text: lk[1] }), miss ? h('div', { class: 'note', text: _t('còn thiếu: {x}', { x: miss }) }) : null,
               n === 'agy' && c.confinement !== 'verified' ? h('div', { class: 'note', text: _t('agy chưa cho bằng chứng tự khoá — dùng Claude Code hoặc API key') }) : null),

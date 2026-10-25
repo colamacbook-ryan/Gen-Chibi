@@ -81,6 +81,26 @@ export function runBase(paths, uid = process.getuid()) {
   return base;
 }
 
+/* ---------------------------------------------------------------- đăng nhập của CLI (P0 T-07) */
+// agy: 'key' (MẶC ĐỊNH — key AI Studio riêng, tệp lib/agy-gemini.key 0600) | 'oauth' (owner chọn có chủ ý: token phạm vi cloud-platform, tệp trong HOME riêng)
+export const authModeOf = (paths, cli) => { if (cli !== 'agy') return 'oauth'; const a = readJSON(path.join(paths.lib, 'auth.json'), {}); return a.agy === 'oauth' ? 'oauth' : 'key'; };
+export const keyFile = (paths, cli) => path.join(paths.lib, cli + '-gemini.key');
+// biến bí mật cho CLI trong hộp: KHÔNG qua --setenv (argv của bwrap ai cũng đọc được qua /proc) — sandboxRun ghi tệp chỉ đọc /work/.gc/env.json, shim nạp vào env của CLI
+export function secretEnv(paths, cli) {
+  if (cli !== 'agy' || authModeOf(paths, cli) !== 'key') return {};
+  let k = ''; try { k = readPrivate(keyFile(paths, cli)); } catch (e) { throw bErr('AUTH_REQUIRED', 'no AI Studio key — genchibi ai bridge login agy'); }
+  if (!/^[A-Za-z0-9_-]{20,200}$/.test(k)) throw bErr('AUTH_REQUIRED', 'AI Studio key file is malformed — genchibi ai bridge login agy');
+  return { GEMINI_API_KEY: k };
+}
+export function loginState(paths, cli) {
+  if (cli === 'agy') {
+    if (authModeOf(paths, cli) === 'key') return fs.existsSync(keyFile(paths, cli)) ? { status: 'ok', confidence: 'indirect', raw: 'AI Studio key file present (key mode)' } : { status: 'missing', confidence: 'indirect', raw: 'no AI Studio key (key mode)' };
+    const f = path.join(paths.cliHome(cli), ADAPTERS.agy.oauthFile);
+    try { const st = fs.lstatSync(f); return st.isFile() && !(st.mode & 0o077) ? { status: 'ok', confidence: 'indirect', raw: 'plugin-secrets.json 0600 (oauth mode)' } : { status: 'missing', confidence: 'indirect', raw: 'plugin-secrets.json is not a 0600 file' }; } catch (e) { return { status: 'missing', confidence: 'indirect', raw: 'no plugin-secrets.json (oauth mode)' }; }
+  }
+  return ADAPTERS[cli].loginCheck ? ADAPTERS[cli].loginCheck(paths.cliHome(cli)) : { status: 'unknown', confidence: 'indirect' };
+}
+
 /* ---------------------------------------------------------------- cấu hình máy chủ */
 export function loadConfig(paths) {
   const c = readJSON(paths.config, null);
@@ -202,62 +222,83 @@ export const ADAPTERS = {
     loginCheck: home => (fs.existsSync(path.join(home, '.claude', '.credentials.json')) ? { status: 'ok', confidence: 'indirect', raw: '.claude/.credentials.json present' } : { status: 'unknown', confidence: 'indirect', raw: 'no .claude/.credentials.json (keyring or not logged in — P0)' })
   },
   agy: {
-    name: 'agy', bins: ['agy'], label: 'Antigravity CLI', staticInit: false, mcpPrefix: /^mcp_genchibi_([a-z0-9_]{1,64})$/,   // tiền tố: giả định, P0 T-07 xác nhận
+    // LƯỢC ĐỒ ĐO THẬT (gen-relay T-20261025-07, agy 1.4.5 — fixture tools/fixtures/bridge/agy-p0/): init { tools [59 native], permission_mode } ·
+    // step_update { step_index, state, step_type: user_input | agent_response | tool, tool_name, tool_info.parameters, text_delta } · result { status, response, error, denied_actions }
+    name: 'agy', bins: ['agy'], label: 'Antigravity CLI', staticInit: true, mcpPrefix: /^mcp_genchibi_([a-z0-9_]{1,64})$/,
     required: ['--print', '--output-format', '--input-format', '--print-timeout', '--disable-slash-commands'],
     requiredWords: ['stream-json'],
     optional: ['--model', '--sandbox'],
     hosts: ['generativelanguage.googleapis.com', 'cloudcode-pa.googleapis.com', 'daily-cloudcode-pa.googleapis.com', 'oauth2.googleapis.com', 'www.googleapis.com'],
+    loginHosts: ['accounts.google.com', 'oauth2.googleapis.com', 'www.googleapis.com', 'antigravity.google'],
     models: null,   // quét bằng `agy models` trong hộp cát (direct)
-    // biến base URL cho API giả: ĐẦU VÀO cho probe — canary chỉ coi là đạt khi API giả thật sự nhận request (bằng chứng direct)
-    canaryVars: ['GOOGLE_GEMINI_BASE_URL'],
-    env: ({ canary }) => (canary ? { GOOGLE_GEMINI_BASE_URL: FAKE_URL, GEMINI_API_KEY: 'gc-canary-fake-key' } : {}),
+    // đăng nhập: KHÔNG BAO GIỜ mở D-Bus / keyring vào hộp (lộ cả keyring của owner). Chế độ mặc định = key AI Studio riêng (GEMINI_API_KEY, tệp 0600 → env của
+    // CLI qua tệp chỉ đọc trong /work/.gc — không trên argv). OAuth (phạm vi cloud-platform — rộng) chỉ khi owner chọn: login chạy agy TRONG hộp, token rơi vào tệp
+    // ~/.config/antigravity/plugin-secrets.json của HOME riêng (agy tự dùng tệp khi không có D-Bus)
+    oauthFile: '.config/antigravity/plugin-secrets.json',
+    canaryVars: ['AGY_LLM_GATEWAY_URL'],
+    env: ({ canary }) => (canary ? { AGY_LLM_GATEWAY_URL: FAKE_URL, GEMINI_API_KEY: 'gc-canary-fake-key' } : {}),
     canaryEnvOk: () => true,
     argv: ({ entry, job, turnSec }) => {
       const f = new Set(entry.flags || []), a = ['--print', '--input-format', 'stream-json', '--output-format', 'stream-json', '--print-timeout', Math.max(20, turnSec - 20) + 's', '--disable-slash-commands'];
-      if (f.has('--sandbox')) a.push('--sandbox');   // lớp thêm của chính agy (terminal sandbox) — có thì dùng
+      if (f.has('--sandbox')) a.push('--sandbox');   // lớp thêm của chính agy (terminal sandbox) — có thì dùng. KHÔNG BAO GIỜ --dangerously-skip-permissions
       if (job.model) a.push('--model', job.model);
       return a;
     },
-    // stdin: MỘT tin NDJSON rồi đóng (không TTY, không nội dung trên argv) — lược đồ tin là đầu vào cho P0
+    // stdin: MỘT tin NDJSON rồi đóng (không TTY, không nội dung trên argv) — lược đồ tin vào: đầu vào cho P0 (chưa có dump --input-format stream-json)
     stdin: job => JSON.stringify({ type: 'user', message: { role: 'user', content: promptText(job, false) } }) + '\n',
     files: ({ job, gcj }) => {
       const f = [{ rel: 'AGENTS.md', ro: true, data: job.system || '' }];
       if (job.kind === 'agent') f.push({ rel: '.agents/mcp_config.json', ro: true, data: JSON.stringify({ mcpServers: { genchibi: { serverUrl: MCP_URL, headers: { Authorization: 'Bearer ' + gcj } } } }) });
       return f;
     },
-    // cấu hình riêng của cầu nối trong HOME của agy (spec §4.3) — bind CHỈ ĐỌC trong hộp (CNS-324), kiểm băm trước mỗi lượt
     homeFiles: () => [
       { rel: '.gemini/antigravity-cli/settings.json', data: JSON.stringify({ permissions: { deny: ['command(*)', 'read_file(*)', 'write_file(*)', 'read_url(*)', 'execute_url(*)', 'unsandboxed(*)'], ask: [], allow: ['mcp(genchibi/*)'] }, enableTerminalSandbox: true, allowNonWorkspaceAccess: false }, null, 2) + '\n' },
       { rel: '.gemini/config/mcp_config.json', data: JSON.stringify({ mcpServers: {} }, null, 2) + '\n' }],
-    forbidden: [['run_command', { CommandLine: 'touch /work/canary-ran.flag', command: 'touch /work/canary-ran.flag' }], ['read_file', { AbsolutePath: '/work/canary-read.txt', path: '/work/canary-read.txt' }],
-      ['write_file', { TargetFile: '/work/canary-written.txt', path: '/work/canary-written.txt', content: 'x' }], ['read_url', { Url: 'http://' + CANARY_HOST + '/x', url: 'http://' + CANARY_HOST + '/x' }]],
-    // lược đồ stream-json của agy CHƯA được P0 đo → đọc khoan dung nhưng ĐÓNG khi nghi ngờ: bất kỳ thứ gì giống tool đều là sự kiện tool
+    // tool native THẬT của agy 1.4.5 (init.tools); action = tên quyền trong settings / denied_actions
+    forbidden: [['run_command', { CommandLine: 'touch /work/canary-ran.flag' }], ['view_file', { AbsolutePath: '/work/canary-read.txt' }],
+      ['write_to_file', { TargetFile: '/work/canary-written.txt', CodeContent: 'x' }], ['read_url_content', { Url: 'http://' + CANARY_HOST + '/x' }]],
+    denyAction: { run_command: 'command', view_file: 'read_file', write_to_file: 'write_file', read_url_content: 'read_url' },
     parse(o) {
       const out = [];
       if (!o || typeof o !== 'object') return out;
-      const t = String(o.type || o.event || ''), toolName = x => String((x && (x.name || x.tool_name || x.toolName || x.tool || (x.functionCall && x.functionCall.name))) || '');
-      if (/^hook/i.test(t)) { out.push({ t: 'hook', raw: t }); return out; }
-      if (/init|session_start|system/i.test(t) && !/tool/i.test(t)) out.push({ t: 'init', raw: o });
-      blocks(o.message && o.message.content).concat(blocks(o.content), blocks(o.parts)).forEach(b => {
-        if (!b || typeof b !== 'object') return;
-        if (b.type === 'tool_use' || b.functionCall || /tool_?call|function_?call/i.test(String(b.type || ''))) out.push({ t: 'tool', name: toolName(b), id: b.id });
-        else if (b.type === 'tool_result' || b.functionResponse) out.push({ t: 'tool_result', id: b.tool_use_id || b.id, isError: b.is_error === true || !!(b.functionResponse && b.functionResponse.response && b.functionResponse.response.error) });
-        else if (b.type === 'text' || typeof b.text === 'string') out.push({ t: 'text', text: String(b.text || '') });
-      });
-      if (/tool|function/i.test(t)) {
-        if (/result|response|output/i.test(t)) out.push({ t: 'tool_result', id: o.id || o.tool_use_id, isError: o.is_error === true || !!o.error || /denied|error/i.test(String(o.status || '')) });
-        else if (!out.some(e => e.t === 'tool')) out.push({ t: 'tool', name: toolName(o), id: o.id });
+      const ev = String(o.event || o.type || '');
+      if (/^hook/i.test(ev)) { out.push({ t: 'hook', raw: ev }); return out; }
+      if (ev === 'init') { out.push({ t: 'init', raw: o }); return out; }
+      if (ev === 'step_update') {
+        const u = o.step_update || {}, st = String(u.step_type || ''), id = 'step' + u.step_index;
+        if (st === 'tool' || u.tool_name || u.tool_info) {
+          let name = String(u.tool_name || (u.tool_info && u.tool_info.name) || '');
+          const pr = (u.tool_info && u.tool_info.parameters) || {};
+          // MCP qua tool native call_mcp_tool: chỉ server genchibi → tên chuẩn mcp_genchibi_<tool>; server khác / thiếu → giữ call_mcp_tool (bị chặn)
+          if (name === 'call_mcp_tool') { const sv = pr.ServerName || pr.server_name || pr.serverName || pr.server, tl = pr.ToolName || pr.tool_name || pr.toolName || pr.tool; if (sv === 'genchibi' && typeof tl === 'string') name = 'mcp_genchibi_' + tl; }
+          out.push({ t: 'tool', name, id });
+        } else if (typeof u.text_delta === 'string' && st === 'agent_response') out.push({ t: 'text', text: u.text_delta });
+        else if (st && !/^(user_input|agent_response)$/.test(st)) out.push({ t: 'tool', name: '?' + st, id });   // loại bước lạ → đóng khi nghi ngờ
+        return out;
       }
-      if (/^(result|done|final)$/i.test(t)) out.push({ t: 'result', text: String(o.result || o.text || ''), isError: o.is_error === true || !!o.error });
-      if (/^error$/i.test(t)) out.push({ t: 'error', text: JSON.stringify(o).slice(0, 400) });
-      if (/^(assistant|message|text)$/i.test(t) && typeof o.text === 'string') out.push({ t: 'text', text: o.text });
-      if (!out.length) out.push({ t: 'other', type: t });
+      if (ev === 'result') {
+        const r = o.result || {};
+        out.push({ t: 'result', text: String(r.response || ''), isError: r.status !== 'SUCCESS', error: String(r.error || ''), denied: Array.isArray(r.denied_actions) ? r.denied_actions : [] });
+        return out;
+      }
+      if (/error/i.test(ev)) { out.push({ t: 'error', text: JSON.stringify(o).slice(0, 400) }); return out; }
+      if (/tool|function/i.test(ev)) { out.push({ t: 'tool', name: '?' + ev }); return out; }   // sự kiện lạ có "tool" → coi là tool (đóng khi nghi ngờ)
+      out.push({ t: 'other', type: ev });
       return out;
     },
+    // KIỂM INIT (một phần — agy không có cờ tắt tool native): phải có permission_mode và KHÔNG được là chế độ bỏ qua quyền
+    checkInit(ev) {
+      const o = ev.raw || {}, i = o.init || o, pm = i.permission_mode, bad = [];
+      if (typeof pm !== 'string' || !pm) bad.push('permission_mode missing');
+      else if (/bypass|skip|danger|auto.?approve|yolo|allow.?all/i.test(pm)) bad.push('permission_mode:' + pm);
+      if (!Array.isArray(i.tools)) bad.push('tools missing');
+      return bad;
+    },
+    baseline: () => ({ plugins: [], skills: [], slash_commands: [], alien: [] }),
     classify(r) {
-      const m = /AGY_ERROR:(\{.*\})/.exec(r.stderr + '\n' + r.stdoutErr), s = ((m ? m[1] : '') + ' ' + r.resultText + ' ' + r.stderr).toLowerCase();
+      const m = /AGY_ERROR:(\{.*\})/.exec(r.stderr + '\n' + r.stdoutErr), s = ((m ? m[1] : '') + ' ' + r.resultText + ' ' + r.retries.join(' ') + ' ' + r.stderr).toLowerCase();
       if (/429|resource_exhausted|quota|rate/.test(s)) return 'QUOTA';
-      if (/401|unauthenticated|login|sign in|oauth|credential/.test(s)) return 'AUTH_REQUIRED';
+      if (/401|unauthenticated|authentication|login|sign in|oauth|credential/.test(s)) return 'AUTH_REQUIRED';
       return 'CLI_ERROR';
     }
   }
@@ -487,12 +528,13 @@ export async function sandboxRun(o) {
   for (const f of ['shim.mjs', 'selftest.mjs']) { fs.copyFileSync(path.join(HERE, f), path.join(gc, f)); fs.chmodSync(path.join(gc, f), 0o400); }
   const home = o.home, uid = process.getuid(), gid = process.getgid();
   fs.writeFileSync(path.join(gc, 'passwd'), 'gc:x:' + uid + ':' + gid + '::' + home + ':/bin/sh\n', { mode: 0o400 });
+  if (o.secretEnv && Object.keys(o.secretEnv).length) fs.writeFileSync(path.join(gc, 'env.json'), JSON.stringify(o.secretEnv), { mode: 0o400 });   // shim nạp — không trên argv
   fs.chmodSync(gc, 0o500);
   const node = realOr(process.execPath), binds = [node].concat(o.binds || []);
   const proxy = await startProxy({ sock, allow: o.allow || [], routes: o.routes || {}, onDeny: (h, how) => ctl.deny(h, how) });
   const args = bwrapArgs({ home, work, gc, sock, passwd: path.join(gc, 'passwd'), binds, homeRo: o.homeRo, rootRo: o.rootRo, workRo, env: o.env, node, cmd: o.cmd });
   const r = { code: null, signal: null, stop: '', stderr: '', stdoutErr: '', proxy: proxy.stats, extraFiles: [], lines: [], args };
-  const ch = spawn(entry.sandbox.path, args, { cwd: tdir, detached: true, stdio: ['pipe', 'pipe', 'pipe'], env: { PATH: '/usr/bin:/bin', GC_BRIDGE_OUTER: '1' } });   // GC_BRIDGE_OUTER: mồi — lọt vào hộp nghĩa là thiếu --clearenv (selftest bắt)
+  const ch = spawn(entry.sandbox.path, args, { cwd: tdir, detached: !o.interactive, stdio: o.interactive ? 'inherit' : ['pipe', 'pipe', 'pipe'], env: { PATH: '/usr/bin:/bin', GC_BRIDGE_OUTER: '1' } });   // interactive: đăng nhập (owner gõ / dán mã)   // GC_BRIDGE_OUTER: mồi — lọt vào hộp nghĩa là thiếu --clearenv (selftest bắt)
   const timers = [];
   const kill = sig => { try { process.kill(-ch.pid, sig); } catch (e) { /* đã thoát */ } };
   // dừng: lý do đầu tiên thắng. graceful (huỷ): SIGINT → 5 s SIGTERM → 8 s SIGKILL; còn lại SIGTERM ngay (spec §3 lớp 4)
@@ -502,9 +544,10 @@ export async function sandboxRun(o) {
     deny(h, how) { if (o.onDeny) o.onDeny(h, how, ctl); }
   };
   if (o.onStart) o.onStart(ctl);
+  let buf = '';
+  if (!o.interactive) {
   ch.stdin.on('error', () => {});
   ch.stdin.end(o.stdin || '');
-  let buf = '';
   ch.stdout.on('data', d => {
     buf += d; let i;
     while ((i = buf.indexOf('\n')) >= 0) {
@@ -517,6 +560,7 @@ export async function sandboxRun(o) {
     if (buf.length > 1024 * 1024) buf = buf.slice(-65536);
   });
   ch.stderr.on('data', d => { r.stderr = (r.stderr + d).slice(-8000); });
+  }
   if (o.timeoutMs) timers.push(setTimeout(() => ctl.stop('TIMEOUT', false), o.timeoutMs));
   if (o.onBeat) { const iv = setInterval(() => { if (!r.stop) Promise.resolve(o.onBeat(ctl)).catch(() => {}); }, o.beatMs || 1500); timers.push(iv); }
   await new Promise(res => ch.on('close', (code, sig) => { r.code = code; r.signal = sig; res(); }));
@@ -577,7 +621,7 @@ export function probeCli(name, paths, reg, opts = {}) {
   e.missing_flags = A.required.filter(f => !e.flags.includes(f) && !(f === '--print' && e.flags.includes('-p'))).concat(A.requiredWords.filter(w => !e.help.includes(w)).map(w => 'word:' + w));
   if (prev.version && prev.version !== e.version) e.confinement = applyConfinement(e.confinement, { status: 'unverified', evidence: [], missing: ['cli version changed ' + prev.version + ' → ' + e.version], at: e.probed_at });
   if (e.missing_flags.length) e.confinement = applyConfinement(e.confinement, { status: 'unverified', evidence: [], missing: e.missing_flags.map(f => 'flag ' + f), at: e.probed_at });
-  e.login = A.loginCheck ? A.loginCheck(home) : prev.login || { status: 'unknown', confidence: 'indirect' };
+  e.login = loginState(paths, name); e.auth_mode = authModeOf(paths, name);
   e.models = A.models ? Object.assign({}, A.models) : prev.models || { list: [], confidence: 'direct', raw: '' };
   return e;
 }
@@ -586,9 +630,10 @@ export async function probeOnline(name, paths, reg) {
   const A = ADAPTERS[name], e = reg.clis[name];
   if (name !== 'agy' || !e || !e.installed || !hasBwrap(e)) return e;
   const home = paths.cliHome(name);
-  const r = await sandboxRun({ paths, entry: e, home, binds: [e.real], cmd: [e.real, 'models'], env: sandboxEnv(home, path.dirname(e.real), A.env({ home })), allow: A.hosts, routes: {}, timeoutMs: 60000, onLine: () => {}, homeRo: homeRoFiles(name, home) });
+  let sec; try { sec = secretEnv(paths, name); } catch (err) { e.login = { status: 'missing', confidence: 'direct', raw: err.detail }; return e; }
+  const r = await sandboxRun({ paths, entry: e, home, binds: [e.real], cmd: [e.real, 'models'], env: sandboxEnv(home, path.dirname(e.real), A.env({ home })), secretEnv: sec, allow: A.hosts, routes: {}, timeoutMs: 60000, onLine: () => {}, homeRo: homeRoFiles(name, home) });
   const out = r.lines, raw = out.join('\n') + r.stderr;
-  const list = out.filter(l => /^[a-z0-9][a-z0-9._-]{2,80}$/.test(l));
+  const list = out.map(l => l.split(/\s+/)[0]).filter(l => /^[a-z0-9][a-z0-9._-]{2,80}$/.test(l));   // "gemini-3.8-flash-low      Gemini 3.8 Flash (Low)" (T-07)
   e.models = { list, confidence: 'direct', raw: out.join('\n').slice(0, 2000) };
   e.login = r.code === 0 && list.length ? { status: 'ok', confidence: 'direct', raw: 'agy models → ' + list.length + ' models' } : { status: 'missing', confidence: 'direct', raw: (raw || 'exit ' + r.code).slice(0, 400) };
   if (r.proxy.denied.length) e.denied = r.proxy.denied.slice(-20);
@@ -654,9 +699,11 @@ export async function canary(name, paths, reg, opt = {}) {
     if (all.includes(nonce) || stub.st.calls.some(c => c.includes(nonce))) ev.failed.push('context: nonce from CLAUDE.md / AGENTS.md / memory reached the model or MCP');
     else if (api.st.requests) ev.evidence.push('context: nonce absent from model request + MCP args (direct)');
     const forb = api.st.issued.filter(x => !x.mcp);
+    const denied = []; evs.filter(x => x.t === 'result').forEach(x => (x.denied || []).forEach(d => denied.push(String((d && d.action) || ''))));
     forb.forEach(x => {
-      const res = api.st.results.find(y => y.id === x.id);
-      if (!res) ev.missing.push('no CLI tool_result for ' + x.name);
+      const res = api.st.results.find(y => y.id === x.id), act = A.denyAction && A.denyAction[x.name];
+      if (!res && act && denied.includes(act)) ev.evidence.push('selfblock: ' + x.name + ' denied by the CLI (denied_actions: ' + act + ')');
+      else if (!res) ev.missing.push('no CLI tool_result for ' + x.name);
       else if (!res.isError) ev.failed.push('tool ' + x.name + ' was not refused by the CLI');
       else ev.evidence.push('selfblock: ' + x.name + ' refused by the CLI (tool_result error)');
     });
@@ -736,14 +783,16 @@ export async function runJob(v, { paths, reg, caps, app, post, onFail: report = 
   if (!hasBwrap(e) || !(e.sandbox.selftest || []).length || e.sandbox.selftest.some(x => !x.ok)) return fail('NO_SANDBOX', 'bubblewrap / sandbox selftest not passed — genchibi ai bridge enable ' + job.cli);
   const bad = checkHomeFiles(job.cli, home, e);
   if (bad) { onFail('home file changed: ' + bad); return fail('CONFINEMENT', 'bridge config of ' + job.cli + ' changed (' + bad + ')'); }
+  let sec; try { sec = secretEnv(paths, job.cli); } catch (err) { return fail(err.code, err.detail); }
   let cancelled = false, violation = '', text = '', resultText = '', isErr = false, sawInit = false, streamTools = 0, sentText = 0;
+  const toolIds = new Set();
   const retries = [];
   let ctlRef = null;
   const mcp = mcpToApp({ app, maxCalls: c.toolCalls, onAuthFail: () => ctlRef && ctlRef.stop(cancelled ? 'CANCELLED' : 'MCP_DENIED', false) });
   const violate = (why, ctl) => { if (violation) return; violation = why; ctl.stop('CONFINEMENT', false); onFail(why); };
   await post('started', { cli: job.cli, version: e.version });
   const r = await sandboxRun({ paths, entry: e, home, binds: [e.real], cmd: [e.real].concat(A.argv({ entry: e, job, turnSec: c.turnSec, safeMode: e.safe_mode === true })), stdin: A.stdin(job),
-    files: A.files({ job, gcj }), env: sandboxEnv(home, path.dirname(e.real), A.env({ home })), allow: A.hosts, routes: { [MCP_HOST]: job.kind === 'agent' ? mcp.handler : (q, s) => sendJSON(s, 403, { error: 'no MCP for this job' }) },
+    files: A.files({ job, gcj }), env: sandboxEnv(home, path.dirname(e.real), A.env({ home })), secretEnv: sec, allow: A.hosts, routes: { [MCP_HOST]: job.kind === 'agent' ? mcp.handler : (q, s) => sendJSON(s, 403, { error: 'no MCP for this job' }) },
     timeoutMs: c.turnSec * 1000, homeRo: homeRoFiles(job.cli, home), onStart: ctl => { ctlRef = ctl; },
     onDeny: (h, how, ctl) => { if (job.cli === 'agy') violate('proxy blocked ' + how + ' to ' + h, ctl); },
     onBeat: async ctl => { ctlRef = ctl; const res = await post('beat', {}); if (res && res.cancel && !cancelled) { cancelled = true; ctl.stop('CANCELLED', true); } },
@@ -758,9 +807,9 @@ export async function runJob(v, { paths, reg, caps, app, post, onFail: report = 
         } else if (x.t === 'tool') {
           if (A.staticInit && !sawInit) violate('tool before init', ctl);
           else if (!isGenchibiTool(x.name, job.cli)) violate('non-genchibi tool ' + (x.name || '(unnamed)'), ctl);
-          else streamTools++;
+          else if (!x.id || !toolIds.has(x.id)) { streamTools++; if (x.id) toolIds.add(x.id); }   // agy: mỗi bước tool hiện ACTIVE rồi DONE — đếm một lần
         } else if (x.t === 'text') text += x.text;
-        else if (x.t === 'result') { resultText = x.text; isErr = x.isError; }
+        else if (x.t === 'result') { resultText = x.text; isErr = x.isError; if (x.error) retries.push(x.error); }
         else if (x.t === 'retry' || x.t === 'error') retries.push(x.error || x.text || '');
       }
       if (text.length > sentText + 200 && !ctl.stopped()) { post('text', { text: text.slice(-LIMITS.event + 100) }).catch(() => {}); sentText = text.length; }
@@ -812,7 +861,8 @@ export function publicRegistry(reg, enabled, caps) {
     clis[n] = { label: ADAPTERS[n].label, installed: !!e.installed, version: e.version || '', login: (e.login && e.login.status) || 'unknown', sandbox: (e.sandbox && e.sandbox.bwrap) || 'unknown',
       selftest: e.sandbox && e.sandbox.selftest ? e.sandbox.selftest.every(c => c.ok) : null, confinement: (e.confinement && e.confinement.status) || 'unverified',
       missing: ((e.confinement && e.confinement.missing) || []).slice(0, 8).map(s => String(s).slice(0, 160)), evidence: ((e.confinement && e.confinement.evidence) || []).slice(0, 12).map(s => String(s).slice(0, 160)),
-      at: (e.confinement && e.confinement.at) || null, probed_at: e.probed_at || null, enabled: enabled.includes(n), models: ((e.models && e.models.list) || []).slice(0, 40), modelsConfidence: (e.models && e.models.confidence) || null };
+      at: (e.confinement && e.confinement.at) || null, probed_at: e.probed_at || null, enabled: enabled.includes(n), models: ((e.models && e.models.list) || []).slice(0, 40), modelsConfidence: (e.models && e.models.confidence) || null,
+      authMode: e.auth_mode || null, broadScope: n === 'agy' && e.auth_mode === 'oauth' };   // broadScope: token OAuth của agy có phạm vi cloud-platform (T-07) — Studio cảnh báo
   });
   return { clis, caps: { turnSec: caps.turnSec, perHour: caps.perHour, concurrent: caps.concurrent, queue: caps.queue, toolCalls: caps.toolCalls, writes: caps.writes } };
 }
@@ -870,6 +920,27 @@ export async function serve({ paths, log = console.log, stopSignal = { stop: fal
 }
 
 /* ---------------------------------------------------------------- dòng lệnh */
+export const OAUTH_WARN = 'agy OAuth login: the bridge token has the Google scope cloud-platform (full GCP access). Recommended: a separate AI Studio key with a low quota (genchibi ai bridge login agy).';
+// login agy (MẶC ĐỊNH chế độ key): key AI Studio đọc từ STDIN → tệp 0600 (không argv / env của máy chủ)
+export function loginKey(paths, key) {
+  const k = String(key || '').trim();
+  if (!/^[A-Za-z0-9_-]{20,200}$/.test(k)) throw bErr('AUTH_REQUIRED', 'that does not look like an AI Studio API key');
+  writePrivate(keyFile(paths, 'agy'), k + '\n');
+  writePrivate(path.join(paths.lib, 'auth.json'), JSON.stringify({ agy: 'key' }) + '\n');
+}
+// login agy --oauth: agy tương tác TRONG hộp cát (không D-Bus / keyring, HOME riêng) → token rơi vào tệp plugin-secrets.json; kiểm tệp tồn tại + ép 0600
+export async function loginOauth(paths, reg) {
+  const A = ADAPTERS.agy, e = reg.clis.agy, home = paths.cliHome('agy');
+  if (!e || !e.installed) throw bErr('NOT_INSTALLED', 'agy not found');
+  if (!hasBwrap(e)) throw bErr('NO_SANDBOX', 'bubblewrap is needed to log agy in without the desktop keyring');
+  writeHomeFiles('agy', home);
+  await sandboxRun({ paths, entry: e, home, binds: [e.real], cmd: [e.real], env: sandboxEnv(home, path.dirname(e.real), A.env({ home })), allow: [...new Set(A.hosts.concat(A.loginHosts))], routes: {}, interactive: true, homeRo: homeRoFiles('agy', home) });
+  const f = path.join(home, A.oauthFile);
+  let st; try { st = fs.lstatSync(f); } catch (err) { throw bErr('AUTH_REQUIRED', 'agy did not write ' + A.oauthFile + ' — login not completed'); }
+  if (!st.isFile()) throw bErr('AUTH_REQUIRED', A.oauthFile + ' is not a regular file');
+  fs.chmodSync(f, 0o600);
+  writePrivate(path.join(paths.lib, 'auth.json'), JSON.stringify({ agy: 'oauth' }) + '\n');
+}
 // từ chối root (spec §3 lớp 7 — KHÁC `live hook`, vốn chỉ cảnh báo: CNS-315)
 export function refuseRoot(uid) { return uid === 0; }
 function status(paths) {
@@ -877,7 +948,7 @@ function status(paths) {
   let cfg = null; try { cfg = loadConfig(paths); } catch (e) { /* chưa cài */ }
   console.log('app: ' + (cfg ? cfg.app : 'not installed') + ' · caps: ' + caps.turnSec + ' s/turn, ' + caps.perHour + ' turns/hour, ' + caps.toolCalls + ' tool calls/turn');
   console.log('sandbox: bubblewrap ' + ((reg.sandbox && reg.sandbox.bwrap) || 'not probed'));
-  Object.keys(pub.clis).forEach(n => { const c = pub.clis[n]; console.log('  ' + n.padEnd(7) + (c.installed ? c.version : 'not found').padEnd(26) + ' login ' + c.login.padEnd(8) + ' lock ' + c.confinement.padEnd(10) + (c.enabled ? ' enabled' : '') + (c.missing.length ? '\n          missing: ' + c.missing.join(' · ') : '')); });
+  Object.keys(pub.clis).forEach(n => { const c = pub.clis[n]; if (c.broadScope) console.log('  ! ' + OAUTH_WARN); console.log('  ' + n.padEnd(7) + (c.installed ? c.version : 'not found').padEnd(26) + ' login ' + c.login.padEnd(8) + ' lock ' + c.confinement.padEnd(10) + (c.enabled ? ' enabled' : '') + (c.missing.length ? '\n          missing: ' + c.missing.join(' · ') : '')); });
 }
 async function main(argv) {
   const [cmd, ...rest] = argv;
@@ -932,9 +1003,23 @@ async function main(argv) {
       writePrivate(paths.caps, JSON.stringify(c) + '\n'); status(paths); return 0;
     }
     case 'login': {
-      if (!ADAPTERS[one]) { console.error('usage: login <' + Object.keys(ADAPTERS).join('|') + '>'); return 2; }
-      const reg = loadRegistry(paths), e = probeCli(one, paths, reg);
+      if (!ADAPTERS[one]) { console.error('usage: login <' + Object.keys(ADAPTERS).join('|') + '> [--oauth]'); return 2; }
+      const reg = loadRegistry(paths);
+      reg.sandbox = probeSandbox(paths.env);
+      const e = reg.clis[one] = probeCli(one, paths, reg);
       if (!e.installed) { console.error(one + ' not found on PATH'); return 1; }
+      if (one === 'agy') {
+        if (rest[1] === '--oauth') {
+          console.log('! ' + OAUTH_WARN);
+          console.log('Logging agy in INSIDE the sandbox (no desktop keyring): open the URL it prints in your browser, then paste the code here.');
+          await loginOauth(paths, reg); saveRegistry(paths, reg);
+          console.log('✓ agy OAuth login stored in ' + path.join(paths.cliHome('agy'), ADAPTERS.agy.oauthFile) + ' (0600). Next: genchibi ai bridge enable agy');
+          return 0;
+        }
+        loginKey(paths, fs.readFileSync(0, 'utf8')); saveRegistry(paths, reg);
+        console.log('✓ AI Studio key stored (0600, read only by the bridge; it reaches agy through a read-only file in the sandbox, never on a command line). Next: genchibi ai bridge enable agy');
+        return 0;
+      }
       const home = paths.cliHome(one); writeHomeFiles(one, home);
       console.log('Logging ' + one + ' in with its own bridge HOME (' + home + ') — your own ' + one + ' login is not touched.');
       const env = { HOME: home, PATH: '/usr/bin:/bin:' + path.dirname(e.real), TERM: process.env.TERM || 'xterm', LANG: process.env.LANG || 'C.UTF-8' };

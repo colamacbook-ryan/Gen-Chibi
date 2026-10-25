@@ -57,7 +57,8 @@ function cleanRegistry(r) {
     const c = cl[n]; if (!c || typeof c !== 'object') return;
     out.clis[n] = { label: s(c.label, 40), installed: c.installed === true, version: s(c.version, 80), login: s(c.login, 20), sandbox: s(c.sandbox, 20), selftest: c.selftest === true ? true : c.selftest === false ? false : null,
       confinement: ['verified', 'unverified', 'failed'].includes(c.confinement) ? c.confinement : 'unverified', missing: list(c.missing, 8, 160), evidence: list(c.evidence, 12, 160),
-      at: s(c.at, 40) || null, probed_at: s(c.probed_at, 40) || null, enabled: c.enabled === true, models: list(c.models, 40, 80), modelsConfidence: s(c.modelsConfidence, 20) || null };
+      at: s(c.at, 40) || null, probed_at: s(c.probed_at, 40) || null, enabled: c.enabled === true, models: list(c.models, 40, 80), modelsConfidence: s(c.modelsConfidence, 20) || null,
+      authMode: c.authMode === 'key' || c.authMode === 'oauth' ? c.authMode : null, broadScope: c.broadScope === true };
   });
   const cp = r && r.caps && typeof r.caps === 'object' ? r.caps : {};
   ['turnSec', 'perHour', 'concurrent', 'queue', 'toolCalls', 'writes'].forEach(k => { if (Number.isFinite(cp[k]) && cp[k] >= 0 && cp[k] <= 100000) out.caps[k] = Math.round(cp[k]); });

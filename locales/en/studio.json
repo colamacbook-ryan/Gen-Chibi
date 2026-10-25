@@ -2198,5 +2198,7 @@
  "Chỉ hạ được dưới trần máy chủ ({s} s / lượt, {n} lượt / giờ). Nâng trên máy chủ:": "Can only be lowered below the server limits ({s} s / turn, {n} turns / hour). To raise them, on the server:",
  "Agent CLI trên máy này chưa sẵn sàng (cầu nối tắt, CLI chưa bật hoặc khoá chưa đạt) — xem Cài đặt AI.": "The agent CLI on this machine is not ready (bridge off, CLI not enabled or lock not verified) — see AI settings.",
  "Cần Agent CLI sẵn sàng ở Cài đặt AI": "Needs a ready agent CLI in AI settings",
- "Agent CLI chưa sẵn sàng — mở Cài đặt AI.": "The agent CLI is not ready — open AI settings."
+ "Agent CLI chưa sẵn sàng — mở Cài đặt AI.": "The agent CLI is not ready — open AI settings.",
+ "key AI Studio riêng": "separate AI Studio key",
+ "token đăng nhập của cầu nối có quyền cloud-platform; khuyên dùng key AI Studio riêng có trần thấp": "the bridge's login token has the cloud-platform scope; a separate AI Studio key with a low quota is recommended"
 }

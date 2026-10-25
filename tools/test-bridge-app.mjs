@@ -202,6 +202,7 @@ else {
   for (const n of ['claude', 'agy']) fs.writeFileSync(path.join(BIN, n), '#!' + fs.realpathSync(process.execPath) + '\n' + fs.readFileSync(path.join(ROOT, 'tools/fixtures/bridge/fake-' + n + '.mjs'), 'utf8'), { mode: 0o755 });
   const paths = B.bridgePaths({ HOME: H, XDG_RUNTIME_DIR: X, PATH: BIN + ':/usr/bin:/bin' });
   const p2 = await api('POST', '/api/ai/bridge/pair', {});
+  B.loginKey(paths, 'AIzaTESTkey' + 'e'.repeat(28));   // agy mặc định chế độ key (T-07)
   B.writePrivate(paths.config, JSON.stringify({ app: BASE, version: '0.26.0' })); B.writePrivate(paths.token, p2.body.token + '\n'); B.writePrivate(paths.hmac, p2.body.secret + '\n');
   for (const n of ['claude', 'agy']) { fs.mkdirSync(paths.cliHome(n), { recursive: true, mode: 0o700 }); fs.writeFileSync(path.join(paths.cliHome(n), 'fake-mode.json'), JSON.stringify({ script: [['list_characters', {}], ['rollback_app', { confirm: 'ROLLBACK' }]] })); await B.verifyCli(n, paths, undefined, { allowReset: true }); }
   B.writePrivate(paths.enabled, JSON.stringify({ clis: ['claude', 'agy'] }));

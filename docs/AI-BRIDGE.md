@@ -8,7 +8,7 @@ The AI assistant dock and the AI director can run on an **agent CLI that is alre
 
 ```bash
 genchibi ai bridge install        # copies the verified bridge files, pairs with the app, starts a systemd --user service
-genchibi ai bridge login agy      # log agy in once with the bridge's OWN home (your usual agy login is not touched)
+genchibi ai bridge login agy      # paste a SEPARATE Google AI Studio API key (default; hidden prompt, stored 0600, never on a command line)
 genchibi ai bridge enable agy     # sandbox self-test + lock canary with a fake local API (no quota) → "Lock: verified"
 ```
 
@@ -39,6 +39,15 @@ Defaults: 900 s per turn, 100 turns per hour, one turn at a time, queue of 3. Ch
 
 "Fallback" in AI settings uses the API key route when the CLI fails **before any write** (bridge off, not logged in, out of quota, lock not verified). After a `save_*` call there is no fallback.
 
+## agy login: API key (default) or OAuth (opt-in)
+
+Measured on a real machine (agy 1.4.5): agy keeps its OAuth token in the desktop keyring (Secret Service over D-Bus). The sandbox **never** gets D-Bus or the keyring — that would expose all of your keyring. So:
+
+- **Default — a separate AI Studio key** (`genchibi ai bridge login agy`): stored in `~/.local/lib/gen-chibi/bridge/agy-gemini.key` (0600). It reaches agy as `GEMINI_API_KEY` through a read-only file inside the sandbox, never on a command line (a sandbox's command line is readable by other processes). Give that key a low quota.
+- **OAuth — only if you choose it** (`genchibi ai bridge login agy --oauth`): agy runs *inside the sandbox* (no D-Bus, its own HOME), you open the printed URL in your browser and paste the code; agy then stores the token in `~/.local/share/gen-chibi/bridge/agy-home/.config/antigravity/plugin-secrets.json` (forced to 0600). **Warning: that token has the Google scope `cloud-platform` (full Google Cloud access).** The Studio and `genchibi ai bridge status` show this warning while OAuth is in use.
+
+agy is never started with `--dangerously-skip-permissions`; its `init` event must report a `permission_mode` that is not a bypass mode, and MCP calls must go through `call_mcp_tool` to the `genchibi` server only.
+
 ## Status of the agy lock
 
-Whether agy can be verified depends on measurements on a real machine (P0): its stream-json tool events, whether its login survives a separate HOME (file vs. keyring), whether it honours `HTTPS_PROXY` and a fake base URL. Until those pass, `enable agy` reports **Not verified** with the missing evidence, and the Studio says so — use Claude Code or an API key meanwhile.
+Measured (gen-relay T-20261025-07): bubblewrap 0.11.0 with user namespaces works; the stream-json schema (`init` / `step_update` / `result` with `denied_actions`) is what the bridge parses; headless agy auto-denies the `command` permission; `AGY_LLM_GATEWAY_URL` exists, so the fake-API canary is possible. Still unmeasured: the exact `--input-format stream-json` message, the `call_mcp_tool` parameter names, whether agy honours `HTTPS_PROXY`, and whether the gateway override speaks the protocol of the fake API. `enable agy` measures these itself; until they pass it reports **Not verified** with the missing evidence, and the Studio says so — use Claude Code or an API key meanwhile.
