@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.25.0 — The Live stage sits on top of the AI assistant
+Ryan: "cái sân khấu live phải luôn hiển thị trên đầu khung chatroom của assistant thì mới hợp lý" *(the Live stage should always show at the top of the assistant chat)*.
+
+### New
+- **A compact Live stage pinned at the top of the AI assistant dock on every page** — drag to resize (96–240 px), collapsible, remembered per device; it folds itself on the full Live page. A channel menu picks what it follows: Auto · Studio AI · External agents · one agent.
+- **The Studio's own AI acts on the stage**: each tool it calls becomes a step, with a task taken from the area or the quick action. Labels are tool titles, never arguments.
+
+### Changed
+- **One live connection per browser**: a leader tab streams and shares events with your other tabs, and hands over when it closes. The server allows 16 viewers and 2 streams per session or token; extra streams wait instead of kicking each other off.
+
+### Security
+- The assistant's per-area tool limits are enforced inside the MCP tool gate itself: tools outside the area (`rollback_app`, `update_app`, `live_*`, `render_voice`, `import_project` …) return FORBIDDEN on every path.
+- Every live event is cleaned again in the browser (known kinds only, labels redacted), including events shared between tabs.
+
+### Performance (L-42)
+- Full acting only while something happens; otherwise the character breathes at ≤ 12 fps. The stage stops drawing when the tab is hidden, the stage is collapsed, or a video is exporting.
+
+### Next
+- v0.25.1: free voices from a TTS engine on your own machine (VieNeu-TTS for Vietnamese / English, Kokoro for Mandarin).
+- v0.26.0: the assistant runs on an agent CLI on your machine (Antigravity `agy` first), sandboxed with bubblewrap.
+
 ## v0.24.2 — Videos made from the sample kit may be monetized
 - **Sample terms (Q48):** films / videos made from a Gen Labs sample may now be posted and monetized (ads, creator funds, sponsorships, paid courses) with the credit line "Made with gen-chibi · Gen Labs"; the sample characters and assets may not be resold, redistributed, or used as a logo / brand. Characters you create are still yours without restriction.
 
