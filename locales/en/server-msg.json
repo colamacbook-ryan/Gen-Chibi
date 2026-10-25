@@ -327,5 +327,8 @@
  "Tên model TTS không hợp lệ": "Invalid TTS model name",
  "Tên giọng TTS không hợp lệ": "Invalid TTS voice name",
  "Bật TTS local cần địa chỉ máy TTS (vd http://127.0.0.1:8000)": "Turning on local TTS needs a TTS server address (e.g. http://127.0.0.1:8000)",
- "Kênh này chỉ đọc được bằng TTS local miễn phí — máy chưa bật TTS local cho ngôn ngữ này (chủ máy: Cài đặt AI › Giọng đọc local)": "This channel can only read with the free local TTS — this machine has no local TTS for this language (owner: AI settings › Local voices)"
+ "Kênh này chỉ đọc được bằng TTS local miễn phí — máy chưa bật TTS local cho ngôn ngữ này (chủ máy: Cài đặt AI › Giọng đọc local)": "This channel can only read with the free local TTS — this machine has no local TTS for this language (owner: AI settings › Local voices)",
+ "Không tới được server giọng ({lang}, {err}) — nối lại mạng Docker: {hint}": "Cannot reach the voice server ({lang}, {err}) — reconnect the Docker network: {hint}",
+ "Máy TTS local ({lang}) đang bận đọc {n} câu — thử lại sau ít phút": "The local TTS server ({lang}) is busy with {n} lines — try again in a few minutes",
+ "Máy TTS local ({lang}) đọc quá {s} giây — câu dài trên CPU yếu; thử câu ngắn hơn": "The local TTS server ({lang}) took more than {s} seconds — a long line on a slow CPU; try a shorter line"
 }

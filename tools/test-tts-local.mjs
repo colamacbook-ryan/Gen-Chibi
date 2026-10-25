@@ -74,6 +74,8 @@ try {
   ok(['zf_xiaobei', 'zf_xiaoni'].indexOf(speech(K).slice(-1)[0].body.voice) >= 0 && !r3.warning, 'vai nữ tiếng Trung → giọng zf_* có thật, không cảnh báo', speech(K).slice(-1)[0].body.voice);
   // WAV stereo + WAV ghi theo luồng (cỡ data 0xFFFFFFFF) → trộn mono / đọc tới hết tệp, cùng đường chuẩn hoá
   S.mode.speech = 'stereo'; const r4 = await v.line({ text: 'Stereo', voice: 'Charon', role: 'nam-tre', lang: 'vi', chan: 'owner' });
+  S.mode.speech = 'hd'; const r6 = await v.line({ text: 'VieNeu 48 kHz', voice: 'Charon', role: 'nam-tre', lang: 'vi', chan: 'owner' }), w6 = V.wavInfo(fs.readFileSync(v.clipPath(r6.id)));
+  ok(w6.rate === 48000 && w6.ch === 1 && w6.bits === 16 && r6.seconds > 0.3, 'WAV 48 kHz (VieNeu) đi qua đường chuẩn hoá hiện có (cắt lặng + đỉnh), giữ 48 kHz', JSON.stringify([w6.rate, r6.seconds]));
   S.mode.speech = 'streamed'; const r5 = await v.line({ text: 'Theo luồng', voice: 'Charon', role: 'nam-tre', lang: 'vi', chan: 'owner' });
   const w4 = V.wavInfo(fs.readFileSync(v.clipPath(r4.id))), w5 = V.wavInfo(fs.readFileSync(v.clipPath(r5.id)));
   ok(w4.ch === 1 && w4.rate === 22050 && w5.ch === 1 && r5.seconds > 0.3, 'WAV stereo → mono (giữ tần số mẫu), WAV theo luồng đọc được', JSON.stringify({ w4: [w4.ch, w4.rate], s5: r5.seconds }));
@@ -143,8 +145,21 @@ try {
   ok(pvi.alive === true && pvi.voices === 4 && pc.today.all >= 4 && pc.cap === 500 && pc.chanCaps.link === 100 && pc.langs.find(x => x.lang === 'yue').provider === 'gemini', 'Cài đặt AI: mỗi ngôn ngữ provider / sống / số giọng / đã dùng hôm nay / trần', JSON.stringify(pc).slice(0, 300));
   // giá trị khởi tạo: Docker → host.docker.internal, cài thẳng → 127.0.0.1; yue giữ Gemini
   const vd = new V.Voice({ dataDir: mk('gc-ttsl-d-'), secrets: mem(), http: gemHttp, inDocker: true }).localLangs(), vn = new V.Voice({ dataDir: mk('gc-ttsl-n-'), secrets: mem(), http: gemHttp, inDocker: false }).localLangs();
-  ok(vd.vi.base_url === 'http://host.docker.internal:8000' && vd.zh.base_url === 'http://host.docker.internal:8880' && vd.zh.voice === 'zf_xiaobei' && vn.en.base_url === 'http://127.0.0.1:8000' && vn.vi.model === 'vieneu' && !vd.yue.enabled,
-    'giá trị khởi tạo: vi / en → VieNeu :8000, zh → Kokoro :8880 (zf_xiaobei), yue → Gemini; Docker dùng host.docker.internal', JSON.stringify({ vd, vn }).slice(0, 300));
+  ok(vd.vi.base_url === 'http://vieneu-tts-api-cpu:8000' && vd.en.base_url === 'http://vieneu-tts-api-cpu:8000' && vd.zh.base_url === 'http://kokoro:8880' && vd.zh.voice === 'zf_xiaobei' && vn.en.base_url === 'http://127.0.0.1:8001' && vn.vi.model === 'vieneu' && !vd.yue.enabled
+    && !/host\.docker\.internal/.test(JSON.stringify(vd)) && !/extra_hosts/.test(fs.readFileSync(ROOT + '/docker-compose.yml', 'utf8')),
+    'giá trị khởi tạo: Docker → tên container trong gen-chibi_default (vieneu-tts-api-cpu:8000, kokoro:8880 zf_xiaobei), cài thẳng → 127.0.0.1; yue → Gemini; compose không thêm extra_hosts', JSON.stringify({ vd, vn }).slice(0, 300));
+  // tên container không phân giải (mạng Docker tạo lại) → lỗi kèm lệnh sửa; hạn giờ theo độ dài câu (≥ 120 s), hàng đợi có trần
+  v.setConfig({ local: { lang: 'vi', base_url: 'http://tts-mat-mang:8000' } });
+  const eH = await err(() => v.line({ text: 'Mất mạng Docker', voice: 'Charon', role: 'nam-tre', lang: 'vi', chan: 'link' })), ph = v.publicConfig().local.langs.find(x => x.lang === 'vi');
+  ok(eH && /docker network connect gen-chibi_default tts-mat-mang/.test(eH.message) && ph.hint === 'docker network connect gen-chibi_default tts-mat-mang', 'tên container không tới được → "không tới được server giọng" + lệnh docker network connect (lỗi + Cài đặt AI)', eH && eH.message);
+  v.setConfig({ local: { lang: 'vi', base_url: S.url } });
+  const seen = []; const slow = new V.Voice({ dataDir: mk('gc-ttsl-q-'), secrets: mem(), http: gemHttp, inDocker: false,
+    localHttp: (m, u, b, o) => { if (m === 'GET') return TL.request(m, u, b, o); seen.push(o.timeout); return new Promise(() => {}); } });
+  slow.setConfig({ local: { lang: 'vi', base_url: S.url } });
+  const pend = []; for (let i = 0; i < 6; i++) pend.push(slow.line({ text: 'Câu ' + i + ' ' + 'x'.repeat(i * 40), voice: 'Charon', role: 'nam-tre', lang: 'vi', chan: 'link' }).catch(e => e));
+  await new Promise(r => setTimeout(r, 200));
+  const busy = await Promise.race([Promise.all(pend.slice(4)), new Promise(r => setTimeout(() => r(null), 3000))]);
+  ok(seen.length === 1 && seen[0] >= 120000 && busy && busy.every(e => e && e.busy && e.code === 503), 'máy TTS chậm: một câu một lúc (hàng đợi), hạn giờ ≥ 120 s theo độ dài câu, hàng đợi đầy → 503 bận ngay (không treo)', JSON.stringify({ seen, busy: busy && busy.map(e => e && e.message) }));
 } catch (e) { fails++; console.log('   ✗ test-tts-local ném lỗi: ' + (e && e.stack)); }
 finally {
   await S.close(); await K.close();

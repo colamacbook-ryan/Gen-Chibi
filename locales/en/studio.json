@@ -2178,5 +2178,6 @@
  "hôm nay {n}/{cap} câu": "today {n}/{cap} lines",
  "chủ máy": "owner",
  "dock": "dock",
- "Trần / ngày": "Cap / day"
+ "Trần / ngày": "Cap / day",
+ "Không tới được server giọng — nối lại mạng Docker trên máy chủ:": "Cannot reach the voice server — reconnect the Docker network on the server:"
 }

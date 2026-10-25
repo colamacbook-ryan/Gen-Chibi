@@ -121,6 +121,8 @@ const fail = (code, msg, extra) => Object.assign(new Error(msg), { code }, extra
 // mỗi kênh agent thêm trần riêng NHỎ hơn — link có khoá (ai có link là gọi được) chặt nhất. owner = Studio / stdio / token / OAuth mcp:owner
 const LOCAL_CAP = 500;
 const LOCAL_CHAN_CAP = { owner: 0, oauth: 200, ui: 200, link: 100 };   // 0 = chỉ trần toàn máy
+// hạn giờ MỘT câu theo độ dài: CPU yếu đọc chậm (VieNeu ~16 s cho 2,7 s âm thanh) → 120 s + 1,5 s / ký tự, trần 8 phút; hàng đợi ≤ 4 câu / máy TTS
+const localTimeout = t => Math.min(480e3, 120e3 + String(t || '').length * 1500), LOCAL_QUEUE_MAX = 4;
 const LOCAL_ALIVE_MS = 5 * 60e3, LOCAL_DEAD_MS = 30e3;   // nhớ kết quả quét: sống 5 phút, chết 30 giây (không thử lại mỗi câu)
 const ROOT = path.join(__dirname, '..');
 
@@ -137,7 +139,7 @@ class Voice {
     this.http = http || { get: u => get(u, this.key(), 30000), post: (u, b) => post(u, this.key(), b, 90000) };
     this.localHttp = localHttp || TL.request;
     this.inDocker = inDocker === undefined ? process.env.GC_IN_DOCKER === '1' : !!inDocker;
-    this._lprobe = {}; this._lbusy = Promise.resolve(); this._lwarned = new Set();
+    this._lprobe = {}; this._lbusy = {}; this._lwait = {}; this._lwarned = new Set();
     fs.mkdirSync(this.dir, { recursive: true });
   }
   read() { try { return JSON.parse(fs.readFileSync(this.file, 'utf8')); } catch { return {}; } }
@@ -179,11 +181,11 @@ class Voice {
   /* ---------------------------------------------------------------- TTS local (v0.25.1, INT-23) */
   // cấu hình hiệu lực mỗi ngôn ngữ: chủ máy đặt → giá trị khởi tạo (kinds/voice/local-tts.json) → không có (yue: giữ Gemini)
   localLangs(c) {
-    const cc = c || this.config(), map = TL.voiceMap(ROOT), host = this.inDocker ? 'host.docker.internal' : '127.0.0.1', out = {};
+    const cc = c || this.config(), map = TL.voiceMap(ROOT), out = {};
     Object.keys(GV.LANGS).forEach(l => {
       const o = hasOwn(cc.local || {}, l) ? cc.local[l] : null, d = (map.defaults || {})[l];
       if (o && typeof o === 'object') out[l] = { enabled: o.enabled !== false && !!o.base_url, base_url: String(o.base_url || ''), model: String(o.model || ''), voice: String(o.voice || ''), source: 'owner' };
-      else if (d) out[l] = { enabled: true, base_url: String(d.base_url || '').replace('{host}', host), model: String(d.model || ''), voice: String(d.voice || ''), source: 'default' };
+      else if (d) out[l] = { enabled: true, base_url: String((this.inDocker ? d.base_url : d.native_url || d.base_url) || ''), model: String(d.model || ''), voice: String(d.voice || ''), source: 'default' };
       else out[l] = { enabled: false, base_url: '', model: '', voice: '', source: 'none' };
     });
     return out;
@@ -218,6 +220,8 @@ class Voice {
     if (!force && hit && hit.base === cfg.base_url && Date.now() - hit.at < (hit.alive ? LOCAL_ALIVE_MS : LOCAL_DEAD_MS)) return hit;
     let base; try { base = TL.safeBase(cfg.base_url); } catch (e) { return (this._lprobe[lang] = { alive: false, voices: null, error: e.message, at: Date.now(), base: cfg.base_url }); }
     const r = await TL.probe(base, this.localHttp);
+    const host = new URL(base).hostname;
+    if (!r.alive && /^[a-z0-9][a-z0-9_-]*$/.test(host) && host !== 'localhost') r.hint = 'docker network connect gen-chibi_default ' + host;   // mạng Docker tạo lại (compose down / cài lại) làm rơi container TTS ra ngoài
     return (this._lprobe[lang] = Object.assign(r, { at: Date.now(), base: cfg.base_url }));
   }
   async localCheckAll(force) {
@@ -232,7 +236,7 @@ class Voice {
       langs: Object.keys(L).map(l => { const x = L[l], p = this._lprobe[l] && this._lprobe[l].base === x.base_url ? this._lprobe[l] : null;
         return { lang: l, provider: x.enabled ? 'local' : 'gemini', enabled: x.enabled, source: x.source, base_url: x.base_url, model: x.model, voice: x.voice,
           alive: p ? p.alive : null, voices: p && p.voices ? p.voices.length : null, voiceIds: p && p.voices ? p.voices.slice(0, 200).map(v => v.id) : [],
-          error: p && !p.alive ? String(p.error || '').slice(0, 120) : '', checkedAt: p ? new Date(p.at).toISOString() : null, warn: (this._lwarn || {})[l] || '' }; }) };
+          error: p && !p.alive ? String(p.error || '').slice(0, 120) : '', hint: p && !p.alive ? p.hint || '' : '', checkedAt: p ? new Date(p.at).toISOString() : null, warn: (this._lwarn || {})[l] || '' }; }) };
   }
   // cho agent (start_here): ngôn ngữ nào có TTS local, đã thấy sống chưa — không gọi mạng
   localSummary() {
@@ -263,11 +267,18 @@ class Voice {
   }
   async localLine(plan, t, chan) {
     const st = await this.localProbe(plan.lang);
-    if (!st.alive) throw fail(503, tr(VI, 'Máy TTS local ({lang}) không phản hồi ({err})', { lang: plan.lang, err: String(st.error || '?').slice(0, 80) }), { local: true });
+    if (!st.alive) throw fail(503, st.hint ? tr(VI, 'Không tới được server giọng ({lang}, {err}) — nối lại mạng Docker: {hint}', { lang: plan.lang, err: String(st.error || '?').slice(0, 80), hint: st.hint })
+      : tr(VI, 'Máy TTS local ({lang}) không phản hồi ({err})', { lang: plan.lang, err: String(st.error || '?').slice(0, 80) }), { local: true });
     const pv = this.localVoice(plan, st.voices);
     if (pv.warn) { this._lwarn = Object.assign({}, this._lwarn, { [plan.lang]: pv.warn }); const k = plan.lang + '|' + plan.role + '|' + pv.voice; if (!this._lwarned.has(k)) { this._lwarned.add(k); console.warn('[voice] ' + MSG.en(pv.warn)); } }
-    const job = this._lbusy.then(() => this.localRender(plan, t, chan, pv));
-    this._lbusy = job.catch(() => {});
+    // MỘT câu một lúc cho mỗi máy TTS (CPU yếu: VieNeu RTF ~6, đo máy Ryan 2026-10-25) — hàng đợi có trần, đầy thì báo bận ngay (lượt AI / MCP không treo vô hạn)
+    const q = plan.cfg.base_url, waiting = this._lwait[q] || 0;
+    if (waiting >= LOCAL_QUEUE_MAX) throw fail(503, tr(VI, 'Máy TTS local ({lang}) đang bận đọc {n} câu — thử lại sau ít phút', { lang: plan.lang, n: waiting }), { local: true, busy: true });
+    this._lwait[q] = waiting + 1;
+    const job = (this._lbusy[q] || Promise.resolve()).then(() => this.localRender(plan, t, chan, pv));
+    this._lbusy[q] = job.catch(() => {});
+    const done = () => { this._lwait[q] = Math.max(0, (this._lwait[q] || 1) - 1); };
+    job.then(done, done);
     return job;
   }
   async localRender(plan, t, chan, pv) {
@@ -275,9 +286,10 @@ class Voice {
     this.localCapCheck(this.config(), chan);   // kiểm trần TRONG hàng đợi, ngay trước lời gọi (TOCTOU — như Gemini)
     const t0 = Date.now(), base = TL.safeBase(plan.cfg.base_url);
     let r;
-    try { r = await this.localHttp('POST', base + '/v1/audio/speech', { model: plan.cfg.model || undefined, voice: pv.voice, input: t, response_format: 'wav', stream: false }, { timeout: 60000, max: TL.MAX_BYTES, accept: 'audio/wav' }); }
+    try { r = await this.localHttp('POST', base + '/v1/audio/speech', { model: plan.cfg.model || undefined, voice: pv.voice, input: t, response_format: 'wav', stream: false }, { timeout: localTimeout(t), max: TL.MAX_BYTES, accept: 'audio/wav' }); }
     catch (e) {
       if (e && e.code !== 400) this._lprobe[plan.lang] = { alive: false, voices: null, error: String(e.code || e.message).slice(0, 80), at: Date.now(), base: plan.cfg.base_url };   // chết giữa chừng: nhớ 30 giây
+      if (e && e.code === 504) throw fail(504, tr(VI, 'Máy TTS local ({lang}) đọc quá {s} giây — câu dài trên CPU yếu; thử câu ngắn hơn', { lang: plan.lang, s: Math.round(localTimeout(t) / 1000) }), { local: true });
       throw fail(e && e.code === 400 ? 400 : 503, tr(VI, 'Máy TTS local ({lang}) lỗi: {err}', { lang: plan.lang, err: String((e && (e.code || e.message)) || e).slice(0, 80) }), { local: true });
     }
     if (r.status < 200 || r.status >= 300) throw fail(502, tr(VI, 'Máy TTS local ({lang}) trả lỗi {code}', { lang: plan.lang, code: r.status }), { local: true });

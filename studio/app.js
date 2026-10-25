@@ -5648,6 +5648,7 @@
           h('td', { class: 'nw' }, h('span', { class: st[1], title: x.error || x.warn || '', text: st[0] })), h('td', null, bu, dl), h('td', null, mo), h('td', null, vo),
           h('td', { class: 'v nw', text: x.voices == null ? '—' : String(x.voices) }), h('td', { class: 'nw' }, save, ' ', reset)));
         if (x.warn) tb.appendChild(h('tr', null, h('td'), h('td', { colspan: '6', class: 'note warn', text: x.warn })));
+        if (x.enabled && x.alive === false && x.hint) tb.appendChild(h('tr', null, h('td'), h('td', { colspan: '6', class: 'note warn' }, h('span', { text: _t('Không tới được server giọng — nối lại mạng Docker trên máy chủ:') + ' ' }), h('code', { class: 'mono', text: x.hint }))));
       });
       lBody.appendChild(h('div', { style: 'overflow-x:auto;max-width:100%' }, h('table', { class: 'grid' }, h('thead', null, h('tr', null, h('th', { text: _t('Ngôn ngữ') }), h('th', { text: _t('Trạng thái') }), h('th', { text: _t('Địa chỉ máy TTS') }),
         h('th', { text: 'Model' }), h('th', { text: _t('Giọng mặc định') }), h('th', { text: _t('Số giọng') }), h('th'))), tb)));

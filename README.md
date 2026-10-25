@@ -240,12 +240,16 @@ The Studio, the AI assistant and every connected agent read dialogue with a **fr
 
 | Language | Suggested engine (Apache-2.0, you install it) | Default address in Docker | Model |
 |---|---|---|---|
-| Vietnamese, English | VieNeu-TTS | `http://host.docker.internal:8000` | `vieneu` |
-| Mandarin | Kokoro-FastAPI (voice `zf_xiaobei`) | `http://host.docker.internal:8880` | `kokoro` |
+| Vietnamese, English | VieNeu-TTS | `http://vieneu-tts-api-cpu:8000` | `vieneu` |
+| Mandarin | Kokoro-FastAPI (voice `zf_xiaobei`) | `http://kokoro:8880` | `kokoro` |
 | Cantonese | (stays on Google Gemini) | | |
 
-- **Start the TTS server listening on this machine only.** Kokoro-FastAPI: `docker run -d --name kokoro -p 127.0.0.1:8880:8880 ghcr.io/remsky/kokoro-fastapi-cpu:latest`. VieNeu-TTS: run its OpenAI-compatible server bound to `127.0.0.1`, port `8000` (see its README). gen-chibi does not ship their code or models — check their licenses (Apache-2.0) yourself.
-- **macOS / Windows (Docker Desktop):** `host.docker.internal` reaches the host's `127.0.0.1` — nothing else to do. **Linux:** the app's compose file maps `host.docker.internal` to the Docker bridge, which cannot reach a server bound only to `127.0.0.1`; either bind the TTS server to the bridge address (`172.17.0.1`, still not public) or run it as a container and use its container name (e.g. `http://kokoro:8880`) after putting it on the same Docker network. Native install (no Docker): `http://127.0.0.1:<port>`.
+- **Run the TTS servers as containers, published on this machine only, and join them to gen-chibi's network** — the app calls them by container name:
+  `docker run -d --name kokoro -p 127.0.0.1:8880:8880 ghcr.io/remsky/kokoro-fastapi-cpu:latest` then `docker network connect gen-chibi_default kokoro`;
+  for VieNeu-TTS run its OpenAI-compatible API container named `vieneu-tts-api-cpu` (port `8000` inside; publish it on `127.0.0.1` only) and `docker network connect gen-chibi_default vieneu-tts-api-cpu`.
+  gen-chibi does not ship their code or models — check their licenses (Apache-2.0) yourself. Native install (no Docker): `http://127.0.0.1:<port>`.
+- **If the voice server becomes unreachable** (the `gen-chibi_default` network was recreated, e.g. after `docker compose down` or a reinstall), Studio shows the fix; run `docker network connect gen-chibi_default <container>` again.
+- **Slow CPUs:** each line can take tens of seconds; lines are read one at a time per server and cached, so a line is never read twice.
 - **Studio › System › AI settings › Local voices:** per language — on / off, address, model, default voice (picked from the list the server reports), status (up / not answering, number of voices) and today's usage. Only addresses on this machine or a private network are accepted (loopback, `host.docker.internal`, 10.x / 172.16–31.x / 192.168.x, a container name), re-checked when connecting; agents can never set or pass an address.
 - **Daily caps** (new lines only; cached lines are free): 500 lines / day for the whole machine (change it in the same panel), and per channel: 200 for OAuth `mcp:write`, 200 for the Studio AI assistant, 100 for a keyed MCP link.
 - Voices follow the character's role (accent × gender for Vietnamese) from `kinds/voice/local-tts.json`; a voice the server does not have falls back to the language's default voice with a warning.

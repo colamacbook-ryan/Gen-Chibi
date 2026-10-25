@@ -39,10 +39,6 @@ services:
       - "${GC_BIND:-127.0.0.1}:${GC_PORT:-7480}:7480"
     volumes:
       - ./:/install
-    # local TTS (v0.25.1): lets the app reach a TTS server on this machine (VieNeu-TTS, Kokoro-FastAPI) at http://host.docker.internal:<port>.
-    # Outbound only — publishes nothing. On Linux the TTS server must listen on the Docker bridge (e.g. 172.17.0.1), not only 127.0.0.1 (see README).
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:7480/api/health"]

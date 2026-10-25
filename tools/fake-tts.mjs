@@ -47,7 +47,7 @@ export function startFakeTts(mode0) {
         if (s === 'garbage') buf = Buffer.from('<html>not a wav, sorry</html>' + 'x'.repeat(200));
         else if (s === 'float') { buf = wav(24000, 1, 0.6); buf.writeUInt16LE(3, 20); buf.writeUInt16LE(32, 34); }
         else if (s === 'big') buf = Buffer.alloc(21 * 1024 * 1024, 1);
-        else buf = wav(s === 'stereo' ? 22050 : 24000, s === 'stereo' ? 2 : 1, 0.6, { streamed: s === 'streamed' });
+        else buf = wav(s === 'stereo' ? 22050 : s === 'hd' ? 48000 : 24000, s === 'stereo' ? 2 : 1, 0.6, { streamed: s === 'streamed' });
         res.writeHead(200, { 'Content-Type': 'audio/wav', 'Content-Length': buf.length });
         return res.end(buf);
       }
