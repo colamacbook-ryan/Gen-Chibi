@@ -333,6 +333,36 @@
    "env": {
     "GC_ONLY": "live"
    }
+  },
+  {
+   "id": "V26",
+   "guard": "nhịp tim xuất video: khung có script Studio giữ rào cứng 100 ms (phân loại LoAF, v0.25.1)",
+   "file": "tools/test-browser.mjs",
+   "find": "return over(r).reduce((n, e) => n + e.studioMs, 0) >= LOAF_STUDIO_MS ? 'studio' : 'other';",
+   "replace": "return 'other';",
+   "test": [
+    "node",
+    "tools/test-browser.mjs"
+   ],
+   "env": {
+    "GC_ONLY": "video"
+   },
+   "expect": "hbClassify tự kiểm"
+  },
+  {
+   "id": "V27",
+   "guard": "nhịp tim xuất video: khung không do script Studio có trần riêng 250 ms",
+   "file": "tools/test-browser.mjs",
+   "find": "const hbFail = j => j.mine > HB_HARD || j.other.max > HB_OTHER;",
+   "replace": "const hbFail = j => j.mine > HB_HARD;",
+   "test": [
+    "node",
+    "tools/test-browser.mjs"
+   ],
+   "env": {
+    "GC_ONLY": "video"
+   },
+   "expect": "hbClassify tự kiểm"
   }
  ]
 }

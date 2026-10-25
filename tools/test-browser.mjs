@@ -3640,13 +3640,31 @@ if (want('video') || want('video-ui')) {
   const ctlCtx20 = await b20.newContext(), ctl20 = await ctlCtx20.newPage();
   await ctl20.goto('data:text/html,<title>ctl</title>');
   await ctl20.evaluate(() => { window.G = []; let last = performance.now(); setInterval(() => { const n = performance.now(); window.G.push([n - last, performance.timeOrigin + n]); last = n; }, 10); });
-  // gaps: [[ms, mốc cuối tuyệt đối (timeOrigin + now)]] của trang Studio → { raw, mine, top } (top: "thô−đối chứng" của 5 khoảng hở lớn nhất)
-  const hbJudge = async gaps => {
+  // PHÂN LOẠI KHOẢNG HỞ bằng Long Animation Frames (LoAF, v0.25.1): khung dài có MÃ CỦA STUDIO (script nguồn studio/ · engine/ · kinds/ · video/ chạy
+  // ≥ LOAF_STUDIO_MS trong khung) giữ rào CỨNG 100 ms; khung không có script của Studio (scripts: [] — GC / raster / giải mã ảnh của trình duyệt, hoặc chỉ
+  // mã của test) có trần riêng 250 ms và được BÁO (số lần + tối đa) để vẫn thấy. Trình duyệt không có LoAF → như cũ (mọi khoảng hở theo rào 100 ms).
+  // A/B v0.24.2 vs v0.25.0 (8+16 lượt, 2 CPU, nobody): median như nhau; mọi khoảng hở > 100 ms đều là khung không có script.
+  const LOAF_STUDIO_MS = 30, HB_HARD = 100, HB_OTHER = 250;
+  const LOAF_SRC = /\/(studio|engine|kinds|video)\//;
+  // phân loại thuần (tự kiểm ở dưới): rows [{ d, c, m, t }] + loaf { ok, l: [{ s, e, studioMs }] } (mốc tuyệt đối) → { mine, other, all, med }
+  const hbClassify = (rows, loaf) => {
+    const med = (a => a.length ? a[Math.floor(a.length / 2)] : 0)(rows.map(r => r.m).sort((a, b) => a - b));
+    const over = r => loaf.l.filter(e => e.e > r.t - r.d && e.s < r.t), cls = r => { if (!loaf || !loaf.ok) return 'studio'; return over(r).reduce((n, e) => n + e.studioMs, 0) >= LOAF_STUDIO_MS ? 'studio' : 'other'; };
+    let mine = 0, oN = 0, oMax = 0, why = '';
+    rows.forEach(r => { if (r.m <= 50) { mine = Math.max(mine, r.m); return; } if (cls(r) === 'studio') { if (r.m > mine) { mine = r.m; why = loaf && loaf.ok ? over(r).map(e => e.src).filter(Boolean).join(' | ') : ''; } } else if (r.m > HB_HARD) { oN++; oMax = Math.max(oMax, r.m); } else mine = Math.max(mine, r.m); });
+    return { mine, why, other: { n: oN, max: oMax }, all: Math.max(0, ...rows.map(r => r.m)), med, loaf: !!(loaf && loaf.ok) };
+  };
+  const loafOf = async page => page ? page.evaluate(() => window.__gcLoaf ? { ok: true, l: window.__gcLoaf.slice() } : { ok: false }) : { ok: false };
+  // gaps: [[ms, mốc cuối tuyệt đối (timeOrigin + now)]] của trang Studio → { raw, mine, top, other, med } (top: "thô−đối chứng" của 5 khoảng hở lớn nhất)
+  const hbJudge = async (gaps, page) => {
     const G = await ctl20.evaluate(() => window.G.slice()), ov = (d, t) => Math.max(0, ...G.filter(x => x[1] >= t - d && x[1] - x[0] <= t).map(x => x[0]));
-    const rows = gaps.map(([d, t]) => { const c = d > 50 ? ov(d, t) : 0; return { d, c, m: d - c }; });
-    return { raw: Math.max(0, ...rows.map(r => r.d)), mine: Math.max(0, ...rows.map(r => r.m)), n: rows.length,
+    const rows = gaps.map(([d, t]) => { const c = d > 50 ? ov(d, t) : 0; return { d, c, m: d - c, t }; });
+    const k = hbClassify(rows, await loafOf(page));
+    return { raw: Math.max(0, ...rows.map(r => r.d)), mine: k.mine, why: k.why, all: k.all, other: k.other, med: k.med, loaf: k.loaf, n: rows.length,
       top: rows.slice().sort((a, b) => b.d - a.d).slice(0, 5).map(r => Math.round(r.d) + (r.c > 20 ? '−' + Math.round(r.c) : '')).join(' / ') };
   };
+  const hbFail = j => j.mine > HB_HARD || j.other.max > HB_OTHER;
+  const hbNote = (name, j) => console.log('  · nhịp tim ' + name + ': median ' + Math.round(j.med) + ' ms · tối đa do mã Studio ' + Math.round(j.mine) + ' ms (≤ ' + HB_HARD + (j.why && j.mine > 50 ? '; ' + j.why : '') + ')' + (j.loaf ? ' · khung dài KHÔNG do script Studio (GC / raster / giải mã): ' + j.other.n + ' lần, tối đa ' + Math.round(j.other.max) + ' ms (≤ ' + HB_OTHER + ')' : ' · (không có LoAF: mọi khoảng hở theo rào ' + HB_HARD + ' ms)'));
   try {
     const HDR = { 'Content-Type': 'application/json', 'X-GC-Request': '1' };
     for (const f of ['fun-office', 'tam-quoc']) {
@@ -3667,6 +3685,15 @@ if (want('video') || want('video-ui')) {
       if (/^\/clip\/c[0-9a-f]+\.wav$/.test(pth)) return route.fulfill({ status: 200, contentType: 'audio/wav', body: CLIP });
       return json(404, { error: 'mock' });
     });
+    // LoAF (Long Animation Frames) của trang trên cùng: khung ≥ 50 ms + thời gian script CỦA STUDIO trong khung (phân loại khoảng hở nhịp tim — hbClassify)
+    await ctx20.addInitScript(SRC => {
+      if (window !== window.top) return;
+      try {
+        if (!(PerformanceObserver.supportedEntryTypes || []).includes('long-animation-frame')) return;
+        const re = new RegExp(SRC); window.__gcLoaf = [];
+        new PerformanceObserver(l => l.getEntries().forEach(e => { const s = performance.timeOrigin + e.startTime; const mine = (e.scripts || []).filter(x => re.test(x.sourceURL || '')); window.__gcLoaf.push({ s, e: s + e.duration, studioMs: mine.reduce((n, x) => n + x.duration, 0), src: mine.sort((a, b) => b.duration - a.duration).slice(0, 2).map(x => (x.sourceURL || '').split('/').slice(-2).join('/') + ':' + (x.sourceFunctionName || '?') + ' ' + Math.round(x.duration) + 'ms').join(', ') }); if (window.__gcLoaf.length > 5000) window.__gcLoaf.shift(); })).observe({ type: 'long-animation-frame', buffered: true });
+      } catch (e) { delete window.__gcLoaf; }
+    }, LOAF_SRC.source);
     // mọi khung (cả iframe xuất): đếm âm "blip" (dao động PeriodicWave — chỉ giọng blip của engine/audio.js dùng) về cửa sổ trên cùng; long task của trang
     await ctx20.addInitScript(() => {
       const top = window.top; if (window === top) { window.__gcBlip = 0; window.__lt = []; try { new PerformanceObserver(l => l.getEntries().forEach(e => window.__lt.push([Math.round(e.duration), e.startTime]))).observe({ type: 'longtask', buffered: true }); } catch (e) { /* không có */ } }
@@ -3683,7 +3710,34 @@ if (want('video') || want('video-ui')) {
     { const g = await q.evaluate(async () => { const G = []; let last = performance.now(); const t = setInterval(() => { const n = performance.now(); G.push([n - last, performance.timeOrigin + n]); last = n; }, 10);
         await new Promise(r => setTimeout(r, 60)); const b = performance.now(); while (performance.now() - b < 250) { /* bận */ } await new Promise(r => setTimeout(r, 60)); clearInterval(t); return G; });
       const j = await hbJudge(g);
-      if (!(j.raw >= 240) || !(j.mine >= 200)) throw new Error('nhịp tim đối chứng không độc lập với Studio: ' + JSON.stringify(j)); }
+      if (!(j.raw >= 240) || !(j.all >= 200)) throw new Error('nhịp tim đối chứng không độc lập với Studio: ' + JSON.stringify(j)); }
+    // TỰ KIỂM phân loại LoAF: (a) thuần — khung có script Studio 150 ms → đỏ; khung không script 180 ms → không đỏ (≤ 250), 300 ms → đỏ; không LoAF → như cũ
+    {
+      const R = (m, t) => ({ d: m, c: 0, m, t });
+      const A = hbClassify([R(150, 2000)], { ok: true, l: [{ s: 1860, e: 2000, studioMs: 140 }] }), Bn = hbClassify([R(180, 5000)], { ok: true, l: [{ s: 4830, e: 5000, studioMs: 0 }] });
+      const Bt = hbClassify([R(300, 5000)], { ok: true, l: [] }), Bs = hbClassify([R(180, 5000)], { ok: true, l: [{ s: 4830, e: 5000, studioMs: 4 }] }), Nl = hbClassify([R(180, 5000)], { ok: false });
+      if (!hbFail(Object.assign({}, A)) || hbFail(Bn) || !hbFail(Bt) || hbFail(Bs) || !hbFail(Nl) || Bn.other.n !== 1) throw new Error('hbClassify tự kiểm: ' + JSON.stringify({ A, Bn, Bt, Bs, Nl }));
+      // (b) thật: bận ~180 ms trong HÀM CỦA ENGINE (engine/live.js parseJSONL, gọi thẳng làm callback của setTimeout → LoAF gắn nguồn engine/) → mã Studio → ĐỎ;
+      // bận ~180 ms trong mã của test (không phải nguồn Studio) → khung "không do script Studio" → KHÔNG đỏ
+      const lo = await loafOf(q);
+      if (lo.ok) {
+        const run = async kind => hbJudge(await q.evaluate(async kind => {
+          const G = []; let last = performance.now(); const t = setInterval(() => { const n = performance.now(); G.push([n - last, performance.timeOrigin + n]); last = n; }, 10);
+          await new Promise(r => setTimeout(r, 80));
+          if (kind === 'engine') {
+            // dòng JSON hỏng: JSON.parse ném lỗi trong engine — tốn CPU, ít bộ nhớ (không dựng sự kiện); cỡ tự hiệu chỉnh ≈ 180 ms
+            const line = '{x', K = 20000, sample = Array(K).fill(line).join('\n');
+            const b = performance.now(); GenChibi.live.parseJSONL(sample); const per = Math.max(5e-4, (performance.now() - b) / K), big = Array(Math.min(1e6, Math.ceil(180 / per))).fill(line).join('\n');
+            setTimeout(GenChibi.live.parseJSONL.bind(null, big), 0);   // callback LÀ hàm của engine (LoAF ghi nguồn engine/live.js)
+            await new Promise(r => setTimeout(r, 0));
+          } else { await new Promise(r => setTimeout(() => { const b = performance.now(); while (performance.now() - b < 180) { /* bận: mã của test */ } r(); }, 0)); }
+          await new Promise(r => setTimeout(r, 400)); clearInterval(t); return G;
+        }, kind), q);
+        const jE = await run('engine'), jT = await run('test');
+        if (!(jE.mine > HB_HARD) || !hbFail(jE) || hbFail(jT) || !(jT.other.n >= 1) || jT.mine > HB_HARD) throw new Error('tự kiểm LoAF trên trang thật: ' + JSON.stringify({ jE, jT }));
+        console.log('  ✓ tự kiểm nhịp tim (LoAF): bận trong hàm của engine → ' + Math.round(jE.mine) + ' ms tính cho Studio (đỏ) · bận trong mã của test → khung không do script Studio ' + Math.round(jT.other.max) + ' ms (không đỏ, trần ' + HB_OTHER + ') · phân loại thuần đúng 5/5');
+      } else console.log('  ! trình duyệt không có LoAF: nhịp tim giữ rào ' + HB_HARD + ' ms cho mọi khoảng hở (như trước v0.25.1)');
+    }
 
     if (!P3_ONLY) {
     // ---- 1) MỘT payload cho phim HTML và video (CNS-219): xuất phim HTML qua nút thật, so DATA / FILM / ngôn ngữ / bảng chữ với GCVideo.studio.payload(W)
@@ -3740,7 +3794,7 @@ if (want('video') || want('video-ui')) {
     const r = R1.r, ltAll = await q.evaluate(() => window.__lt.slice()), blips = await q.evaluate(() => window.__gcBlip), hb = await q.evaluate(() => { clearInterval(window.__hbT); return window.__hbGaps.slice(); });
     const inProbe = e => probeWin.some(w => e[1] + e[0] >= w[0] && e[1] <= w[1]), lt = ltAll.filter(e => !inProbe(e)).map(e => e[0]), ltProbe = ltAll.filter(inProbe).map(e => e[0]);
     const hbIn = g => probeWin.some(w => g[1] >= w[0] && g[1] - g[0] <= w[1]), hbProbe = hb.filter(hbIn).map(g => g[0]), qTO = await q.evaluate(() => performance.timeOrigin);
-    const hbJ = await hbJudge(hb.filter(g => !hbIn(g)).map(g => [g[0], qTO + g[1]])), hbMax = hbJ.mine;
+    const hbJ = await hbJudge(hb.filter(g => !hbIn(g)).map(g => [g[0], qTO + g[1]]), q), hbMax = hbJ.mine; hbNote('xuất 720p', hbJ);
     const vbytes = Buffer.from(await q.evaluate(async () => { const u = new Uint8Array(await window.__vblob.arrayBuffer()); let s = ''; for (let i = 0; i < u.length; i += 32768) s += String.fromCharCode.apply(null, u.subarray(i, i + 32768)); return btoa(s); }), 'base64');
     const vfile = path.join(home20, R1.files.video.name); fs.writeFileSync(vfile, vbytes);
     // cấu trúc tệp + A/V
@@ -3786,7 +3840,7 @@ if (want('video') || want('video-ui')) {
     const vi = r.texts.concat([srt, txt]).filter(t => VI.test(t));
     if (vi.length) throw new Error('phim tiếng Anh lộ chữ Việt: ' + vi.slice(0, 3).join(' | '));
     // mượt (L-42, CNS-221): long task của trang Studio (gồm iframe cùng nguồn) trong suốt lượt xuất
-    if (!(hb.length > 100) || hbMax > 100) throw new Error('luồng chính của Studio bị chặn ' + hbMax.toFixed(0) + ' ms sau khi trừ khựng cả máy (nhịp tim 10 ms → ngân sách 100 ms, spec §3) — top thô−đối chứng: ' + hbJ.top);
+    if (!(hb.length > 100) || hbFail(hbJ)) throw new Error('luồng chính của Studio bị chặn ' + hbMax.toFixed(0) + ' ms do mã Studio' + (hbJ.why ? ' (' + hbJ.why + ')' : '') + ' / ' + Math.round(hbJ.other.max) + ' ms không do script (trần ' + HB_OTHER + ')' + ' — ' + hbMax.toFixed(0) + ' ms sau khi trừ khựng cả máy (nhịp tim 10 ms → ngân sách 100 ms, spec §3) — top thô−đối chứng: ' + hbJ.top);
     if (R1.phases.join() !== 'prepare,measured,render' || R1.lastProg.shots !== 1) throw new Error('tiến độ: ' + JSON.stringify([R1.phases, R1.lastProg]));
     const pf = r.stats.perFrameMs;
     // thời gian (CNS-238): spec ≤ 3× (4 phân cảnh 1080p); tài liệu hứa ~2–3,5× — CHỈ BÁO (máy test chậm / bận thì lệch)
@@ -3891,10 +3945,10 @@ if (want('video') || want('video-ui')) {
     // mượt (spec §3, CNS-221): Tam Quốc 1080p — phim nặng nhất của bộ mẫu — nhịp tim 10 ms của Studio hở ≤ 100 ms suốt lượt xuất
     // Rào thụt lùi tất định cho các bước giảm tải nằm ở tools/test-video.mjs (không cloneNode sâu, đầu data: URL đóng sẵn, dải raster, nhả 2 bước, chụp theo lớp)
     if (TQ.wallMs / TQ.durationMs > 3.5) console.log('  ! thời gian xuất Tam Quốc 1080p ' + (TQ.wallMs / TQ.durationMs).toFixed(2) + '× thời lượng > 3,5× (chỉ báo — tài liệu hứa ~2–3,5×)');
-    const tqJ = await hbJudge(TQ.gaps);
+    const tqJ = await hbJudge(TQ.gaps, q); hbNote('Tam Quốc 1080p', tqJ);
     // v0.23.2 B5 (CNS-248): CHỤP THEO LỚP — phông sau đệm theo khung máy quay, mảnh sân khấu không nhúng phông chữ (dùng lại mảnh không đổi), lời thoại raster lại
     // chỉ khi đổi → rào CỨNG 100 ms (spec §3). Trước B5 (một tài liệu SVG ~640 phần tử + phông 60 KB mỗi khung): 74–118 ms (2 CPU, user nobody) — rào cũ 250 ms
-    if (!(tqJ.n > 100) || tqJ.mine > 100) throw new Error('Tam Quốc 1080p: luồng chính của Studio bị chặn ' + Math.round(tqJ.mine) + ' ms sau khi trừ khựng cả máy (ngân sách 100 ms, spec §3 — B5) — top thô−đối chứng: ' + tqJ.top + ' · ' + tqJ.n + ' mẫu');
+    if (!(tqJ.n > 100) || hbFail(tqJ)) throw new Error('Tam Quốc 1080p: luồng chính của Studio bị chặn ' + Math.round(tqJ.mine) + ' ms do mã Studio' + (tqJ.why ? ' (' + tqJ.why + ')' : '') + ' / ' + Math.round(tqJ.other.max) + ' ms không do script (trần ' + HB_OTHER + ') sau khi trừ khựng cả máy (ngân sách 100 ms, spec §3 — B5) — top thô−đối chứng: ' + tqJ.top + ' · ' + tqJ.n + ' mẫu');
     const L5 = TQ.layers || {};
     if (!(L5.bgHit > TQ.frames / 2) || !(L5.sliceHit > 0) || !(L5.topHit > L5.topDraw) || !(L5.bgDraw > 0)) throw new Error('chụp theo lớp (B5) phải dùng lại phông đệm / mảnh / lớp lời thoại: ' + JSON.stringify(L5));
     const budget = 1.5 * TQ.size + 200 * 1048576;
@@ -4037,7 +4091,7 @@ if (want('video') || want('video-ui')) {
       || run0.front !== 'Keep this tab in front until it\'s done — the browser slows down hidden tabs.' || hid !== 'This tab was hidden — the browser slowed the export down. Keep this tab in front until it\'s done.' || VI.test(run0.all))
       throw new Error('đang xuất: ' + JSON.stringify([run0, hid]));
     await qv.waitForSelector('.vidpanel [data-v="done"]', { timeout: 240000 });
-    const hbUI = await hbJudge(await qv.evaluate(() => { clearInterval(window.__hbI); return window.__hbG.slice(); }));
+    const hbUI = await hbJudge(await qv.evaluate(() => { clearInterval(window.__hbI); return window.__hbG.slice(); }), qv); hbNote('Fun Office qua nút', hbUI);
     await qv.evaluate(() => { delete document.visibilityState; delete document.hidden; document.dispatchEvent(new Event('visibilitychange')); });
     const dirList = async name => qv.evaluate(async name => { const d = await (await navigator.storage.getDirectory()).getDirectoryHandle(name); const o = {}; for await (const [n, h] of d.entries()) o[n] = (await h.getFile()).size; return o; }, name);
     const out1 = await dirList('ui-out'), ext1 = FMT0.startsWith('MP4') ? 'mp4' : 'webm';
@@ -4045,7 +4099,7 @@ if (want('video') || want('video-ui')) {
     if (Object.keys(out1).sort().join() !== ['first-day-at-work.' + ext1, 'first-day-at-work.jpg', 'first-day-at-work.srt', 'first-day-at-work.txt'].sort().join() || Object.values(out1).some(v => !(v > 0))
       || !/^Done — 4 files saved to the folder "ui-out" · (WEBM|MP4) 1920×1080 · \d+ seconds$/.test(done1.banner) || done1.rows.length !== 4 || VI.test(done1.all)) throw new Error('xong: ' + JSON.stringify([out1, done1]));
     // Fun Office 1080p qua nút: v0.23.2 B5 (chụp theo lớp) → rào CỨNG 100 ms (spec §3; trước B5: thường 50–90, lượt lẻ ~120 ms — rào cũ 250)
-    if (!(hbUI.n > 100) || hbUI.mine > 100) throw new Error('Fun Office 1080p qua nút Xuất video: luồng chính của Studio bị chặn ' + Math.round(hbUI.mine) + ' ms sau khi trừ khựng cả máy (ngân sách 100 ms, spec §3 — B5) — top thô−đối chứng: ' + hbUI.top);
+    if (!(hbUI.n > 100) || hbFail(hbUI)) throw new Error('Fun Office 1080p qua nút Xuất video: luồng chính của Studio bị chặn ' + Math.round(hbUI.mine) + ' ms do mã Studio' + (hbUI.why ? ' (' + hbUI.why + ')' : '') + ' / ' + Math.round(hbUI.other.max) + ' ms không do script (trần ' + HB_OTHER + ') sau khi trừ khựng cả máy (ngân sách 100 ms, spec §3 — B5) — top thô−đối chứng: ' + hbUI.top);
     // Xem thử phát được (tệp vừa ghi); độ dài ≈ phim
     const pv = await qv.evaluate(async () => { const v = document.querySelector('.vidpanel video.vidprev'); if (!v) return { none: true }; v.muted = true;
       if (v.readyState < 2) await Promise.race([new Promise(r => v.addEventListener('loadeddata', r, { once: true })), new Promise(r => setTimeout(r, 10000))]);
