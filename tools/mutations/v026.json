@@ -379,6 +379,32 @@
    "timeout": 600
   },
   {
+   "id": "B31",
+   "guard": "security review #3: từ xa / khởi động chỉ HẠ cấp khoá, không rửa failed",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "return RANK[next.status] < RANK[p.status] ? next : p;",
+   "replace": "return next;",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "security review #3",
+   "timeout": 600
+  },
+  {
+   "id": "B32",
+   "guard": "quét lại (từ xa) giữ selftest — không DoS lượt sau",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "{ sb.selftest = prev.sandbox.selftest; sb.selftest_at = prev.sandbox.selftest_at; }",
+   "replace": "{ }",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "sau \"Quét lại\" từ xa",
+   "timeout": 600
+  },
+  {
    "id": "B30",
    "guard": "huỷ: cờ cancel ở nhịp beat",
    "file": "bridge/ai-bridge.mjs",

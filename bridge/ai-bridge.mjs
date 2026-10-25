@@ -548,11 +548,23 @@ export function probeSandbox(env) {
   const t = run1(p, ['--unshare-all', '--ro-bind', '/usr', '/usr', '--symlink', 'usr/bin', '/bin', '--symlink', 'usr/lib64', '/lib64', '--symlink', 'usr/lib', '/lib', '--', '/usr/bin/true'], { PATH: '/usr/bin:/bin', HOME: '/' });
   return { bwrap: t.code === 0 ? 'ok' : 'userns_off', path: p, version: (v.out || v.err).trim().slice(0, 80), raw: (t.err || '').trim().slice(0, 300) };
 }
+// CHỐT GHI confinement (security review #3): chỉ lệnh LOCAL do owner gõ (`genchibi ai bridge enable <cli>`) được đặt lại / nâng trạng thái khoá.
+// Mọi đường khác (lệnh điều khiển từ Studio — container có thể bị chiếm, quét lúc khởi động, probe) chỉ được HẠ cấp (verified → unverified → failed);
+// kết quả tốt hơn chỉ được BÁO (lastCheck). Nhờ vậy một CLI đã bị giám sát đánh `failed` không bị "rửa" về `verified` sau lưng owner.
+const RANK = { failed: 0, unverified: 1, verified: 2 };
+export function applyConfinement(prev, next, { allowReset } = {}) {
+  if (allowReset) return next;
+  const p = prev && RANK[prev.status] !== undefined ? prev : { status: 'unverified', evidence: [], missing: ['not verified'] };
+  return RANK[next.status] < RANK[p.status] ? next : p;
+}
 // quét MỘT CLI: đường, version, --help (giữ thô), flag, flag bắt buộc, đăng nhập, model; hộp cát chung
 export function probeCli(name, paths, reg, opts = {}) {
   const A = ADAPTERS[name], home = paths.cliHome(name), prev = reg.clis[name] || {};
   const bin = opts.bin || which(A.bins[0], paths.env.PATH, paths.home);
-  const e = { name, label: A.label, path: bin, probed_at: new Date().toISOString(), sandbox: reg.sandbox || probeSandbox(paths.env), confinement: prev.confinement || { status: 'unverified', evidence: [], missing: ['probe'] }, baseline: prev.baseline, safe_mode: prev.safe_mode, denied: prev.denied || [] };
+  // quét lại GIỮ kết quả đã có (selftest, băm tệp cấu hình, đường cơ sở, lastCheck): quét từ xa không được làm mất chúng (lượt sau sẽ bị từ chối vô cớ)
+  const sb = Object.assign({}, reg.sandbox || probeSandbox(paths.env));
+  if (prev.sandbox && prev.sandbox.selftest && prev.sandbox.path === sb.path && sb.bwrap === 'ok') { sb.selftest = prev.sandbox.selftest; sb.selftest_at = prev.sandbox.selftest_at; }
+  const e = { name, label: A.label, path: bin, probed_at: new Date().toISOString(), sandbox: sb, confinement: prev.confinement || { status: 'unverified', evidence: [], missing: ['probe'] }, baseline: prev.baseline, safe_mode: prev.safe_mode, denied: prev.denied || [], homeHashes: prev.homeHashes, lastCheck: prev.lastCheck, models: prev.models, login: prev.login };
   if (!bin) return Object.assign(e, { installed: false, confinement: { status: 'unverified', evidence: [], missing: ['cli not found'], at: e.probed_at } });
   e.installed = true; e.real = realOr(bin);
   fs.mkdirSync(home, { recursive: true, mode: 0o700 }); fs.chmodSync(home, 0o700);
@@ -563,8 +575,8 @@ export function probeCli(name, paths, reg, opts = {}) {
   e.flags = [...new Set((e.help.match(/(?:^|[\s,])(--[a-zA-Z][\w-]*)/g) || []).map(s => s.replace(/^[\s,]+/, '')))];
   if (/(^|\s)-p[\s,]/.test(e.help)) e.flags.push('-p');
   e.missing_flags = A.required.filter(f => !e.flags.includes(f) && !(f === '--print' && e.flags.includes('-p'))).concat(A.requiredWords.filter(w => !e.help.includes(w)).map(w => 'word:' + w));
-  if (prev.version && prev.version !== e.version) e.confinement = { status: 'unverified', evidence: [], missing: ['cli version changed ' + prev.version + ' → ' + e.version], at: e.probed_at };
-  if (e.missing_flags.length) e.confinement = { status: 'unverified', evidence: [], missing: e.missing_flags.map(f => 'flag ' + f), at: e.probed_at };
+  if (prev.version && prev.version !== e.version) e.confinement = applyConfinement(e.confinement, { status: 'unverified', evidence: [], missing: ['cli version changed ' + prev.version + ' → ' + e.version], at: e.probed_at });
+  if (e.missing_flags.length) e.confinement = applyConfinement(e.confinement, { status: 'unverified', evidence: [], missing: e.missing_flags.map(f => 'flag ' + f), at: e.probed_at });
   e.login = A.loginCheck ? A.loginCheck(home) : prev.login || { status: 'unknown', confidence: 'indirect' };
   e.models = A.models ? Object.assign({}, A.models) : prev.models || { list: [], confidence: 'direct', raw: '' };
   return e;
@@ -674,11 +686,19 @@ export async function canary(name, paths, reg, opt = {}) {
   }
 }
 // probe + tự kiểm hộp cát + canary → confinement { status, evidence, missing, at, cli_version, auth_mode } (spec §4.1)
-export async function verifyCli(name, paths, log = () => {}) {
-  const reg = loadRegistry(paths);
+// opts.allowReset: CHỈ lệnh local `enable` (owner gõ trên máy chủ). Không có → kết quả chỉ được hạ cấp trạng thái (applyConfinement), còn lại ghi vào lastCheck
+export async function verifyCli(name, paths, log = () => {}, opts = {}) {
+  const reg = loadRegistry(paths), prevConf = reg.clis[name] && reg.clis[name].confinement;
   reg.sandbox = probeSandbox(paths.env);
   const e = reg.clis[name] = probeCli(name, paths, reg);
-  const at = new Date().toISOString(), done = c => { e.confinement = Object.assign({ at, cli_version: e.version || '', auth_mode: 'fake-key' }, c); saveRegistry(paths, reg); return e; };
+  const at = new Date().toISOString(), staged = {};
+  const done = c => {
+    const next = Object.assign({ at, cli_version: e.version || '', auth_mode: 'fake-key' }, c);
+    e.lastCheck = next;
+    e.confinement = applyConfinement(prevConf, next, { allowReset: !!opts.allowReset });
+    if (e.confinement === next) Object.assign(e, staged);   // đường cơ sở / safe_mode chỉ đổi khi kết quả này thật sự được ghi
+    saveRegistry(paths, reg); return e;
+  };
   if (!e.installed) return done({ status: 'unverified', evidence: [], missing: ['cli not found'] });
   if (e.missing_flags.length) return done({ status: 'unverified', evidence: [], missing: e.missing_flags.map(f => 'flag ' + f) });
   if (e.sandbox.bwrap !== 'ok') return done({ status: 'unverified', evidence: [], missing: ['NO_SANDBOX: bubblewrap ' + e.sandbox.bwrap] });
@@ -690,9 +710,9 @@ export async function verifyCli(name, paths, log = () => {}) {
   await probeOnline(name, paths, reg);
   log('canary ' + name);
   let c = await canary(name, paths, reg, { safeMode: true });
-  e.safe_mode = ADAPTERS[name].staticInit && (e.flags || []).includes('--safe-mode') ? c.mcpConnected : false;
+  staged.safe_mode = ADAPTERS[name].staticInit && (e.flags || []).includes('--safe-mode') ? c.mcpConnected : false;
   if (ADAPTERS[name].staticInit && (e.flags || []).includes('--safe-mode') && !c.mcpConnected) c = await canary(name, paths, reg, { safeMode: false });   // --safe-mode tắt MCP của --mcp-config → bỏ flag (spec §4.2)
-  if (c.base) e.baseline = { plugins: c.base.plugins, skills: c.base.skills, slash_commands: c.base.slash_commands };
+  if (c.base) staged.baseline = { plugins: c.base.plugins, skills: c.base.skills, slash_commands: c.base.slash_commands };
   if (c.proxyDenied.length) e.denied = c.proxyDenied.slice(-20);
   const evidence = ['sandbox: selftest ' + s.checks.length + ' checks (direct)'].concat(c.ev.evidence);
   if (c.ev.failed.length) return done({ status: 'failed', evidence, missing: c.ev.failed });
@@ -767,8 +787,8 @@ export function checkControl(c, { secret, now = Date.now() }) {
   if (!['probe', 'verify'].includes(c.control) || (c.cli !== '' && !ADAPTERS[c.cli]) || (c.control === 'verify' && !c.cli) || !Number.isFinite(c.exp) || c.exp < now) throw bErr('BAD_JOB', 'control');
   return { control: c.control, cli: c.cli };
 }
-async function runControl(c, paths, log) {
-  if (c.control === 'verify') { await verifyCli(c.cli, paths, m => log('[bridge] ' + m)); return; }
+export async function runControl(c, paths, log = () => {}) {
+  if (c.control === 'verify') { await verifyCli(c.cli, paths, m => log('[bridge] ' + m), { allowReset: false }); return; }   // từ xa: chỉ BÁO / hạ cấp, không đặt lại
   const reg = loadRegistry(paths); reg.sandbox = probeSandbox(paths.env);
   for (const n of Object.keys(ADAPTERS)) if (!c.cli || c.cli === n) { reg.clis[n] = probeCli(n, paths, reg); await probeOnline(n, paths, reg); }
   saveRegistry(paths, reg);
@@ -868,7 +888,7 @@ async function main(argv) {
     case 'run': {
       const stop = { stop: false }; ['SIGINT', 'SIGTERM'].forEach(s => process.on(s, () => { stop.stop = true; setTimeout(() => process.exit(0), 200); }));
       const reg = loadRegistry(paths);   // khởi động: quét lại; version CLI đổi → kiểm lại (selftest + canary) trước khi nhận lượt
-      for (const n of loadEnabled(paths)) { const old = reg.clis[n] || {}, now = probeCli(n, paths, reg); if (now.version !== old.version || !(old.sandbox && old.sandbox.selftest)) { console.log('[bridge] re-verifying ' + n); await verifyCli(n, paths, m => console.log('[bridge] ' + m)); } else { const s = await selftest(n, paths, reg); if (!s.ok) { reg.clis[n].confinement = { status: 'failed', evidence: [], missing: s.checks.filter(c => !c.ok).map(c => 'sandbox:' + c.id), at: s.at }; saveRegistry(paths, reg); } } }
+      for (const n of loadEnabled(paths)) { const old = reg.clis[n] || {}, now = probeCli(n, paths, reg); if (now.version !== old.version || !(old.sandbox && old.sandbox.selftest)) { console.log('[bridge] re-verifying ' + n); await verifyCli(n, paths, m => console.log('[bridge] ' + m), { allowReset: false }); } else { const s = await selftest(n, paths, reg); if (!s.ok) { reg.clis[n].confinement = { status: 'failed', evidence: [], missing: s.checks.filter(c => !c.ok).map(c => 'sandbox:' + c.id), at: s.at }; saveRegistry(paths, reg); } } }
       return serve({ paths, stopSignal: stop });
     }
     case 'probe': {
@@ -880,7 +900,7 @@ async function main(argv) {
       if (!ADAPTERS[one]) { console.error('usage: ' + cmd + ' <' + Object.keys(ADAPTERS).join('|') + '>'); return 2; }
       const en = loadEnabled(paths).filter(n => n !== one);
       if (cmd === 'disable') { writePrivate(paths.enabled, JSON.stringify({ clis: en }) + '\n'); status(paths); return 0; }
-      const e = await verifyCli(one, paths, m => console.log('… ' + m));
+      const e = await verifyCli(one, paths, m => console.log('… ' + m), { allowReset: true });   // lệnh LOCAL của owner: được đặt lại khoá (kể cả từ failed)
       writePrivate(paths.enabled, JSON.stringify({ clis: en.concat(one) }) + '\n');
       status(paths);
       return e.confinement.status === 'verified' ? 0 : 5;

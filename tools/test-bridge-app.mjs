@@ -203,7 +203,7 @@ else {
   const paths = B.bridgePaths({ HOME: H, XDG_RUNTIME_DIR: X, PATH: BIN + ':/usr/bin:/bin' });
   const p2 = await api('POST', '/api/ai/bridge/pair', {});
   B.writePrivate(paths.config, JSON.stringify({ app: BASE, version: '0.26.0' })); B.writePrivate(paths.token, p2.body.token + '\n'); B.writePrivate(paths.hmac, p2.body.secret + '\n');
-  for (const n of ['claude', 'agy']) { fs.mkdirSync(paths.cliHome(n), { recursive: true, mode: 0o700 }); fs.writeFileSync(path.join(paths.cliHome(n), 'fake-mode.json'), JSON.stringify({ script: [['list_characters', {}], ['rollback_app', { confirm: 'ROLLBACK' }]] })); await B.verifyCli(n, paths); }
+  for (const n of ['claude', 'agy']) { fs.mkdirSync(paths.cliHome(n), { recursive: true, mode: 0o700 }); fs.writeFileSync(path.join(paths.cliHome(n), 'fake-mode.json'), JSON.stringify({ script: [['list_characters', {}], ['rollback_app', { confirm: 'ROLLBACK' }]] })); await B.verifyCli(n, paths, undefined, { allowReset: true }); }
   B.writePrivate(paths.enabled, JSON.stringify({ clis: ['claude', 'agy'] }));
   const stop = { stop: false }, blog = [];
   const loop = B.serve({ paths, stopSignal: stop, log: m => blog.push(m) });

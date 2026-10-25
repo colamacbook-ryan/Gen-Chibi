@@ -177,7 +177,7 @@ if (sb.bwrap !== 'ok') {
 } else {
   const W = world();
   W.mode('claude', {}); W.mode('agy', {});
-  const ec = await B.verifyCli('claude', W.paths), ea = await B.verifyCli('agy', W.paths);
+  const ec = await B.verifyCli('claude', W.paths, undefined, { allowReset: true }), ea = await B.verifyCli('agy', W.paths, undefined, { allowReset: true });
   const st = ec.sandbox.selftest || [];
   ok(ec.confinement.status === 'verified' && ea.confinement.status === 'verified' && st.length >= 13 && st.every(c => c.ok) && ['clearenv', 'no-real-home', 'home-tmpfs', 'ro-usr', 'ro-etc', 'cap-drop', 'netns-lo-only', 'netns-private', 'no-direct-net', 'proxy-deny', 'proxy-mcp'].every(id => st.some(c => c.id === id && c.ok))
     && ec.confinement.evidence.some(x => /nonce absent/.test(x)) && ec.confinement.evidence.filter(x => /^selfblock/.test(x)).length === 4 && ea.confinement.evidence.filter(x => /^selfblock/.test(x)).length === 4
@@ -186,17 +186,17 @@ if (sb.bwrap !== 'ok') {
     JSON.stringify({ c: ec.confinement, a: ea.confinement, st: st.filter(c => !c.ok) }));
   const reg0 = B.loadRegistry(W.paths);
   // --- canary âm: mỗi cách "gian" → không Đạt
-  const C = async (cli, m) => { W.mode(cli, m); const e = await B.verifyCli(cli, W.paths); return e.confinement.status + ': ' + e.confinement.missing.join(' | '); };
+  const C = async (cli, m) => { W.mode(cli, m); const e = await B.verifyCli(cli, W.paths, undefined, { allowReset: true }); return e.confinement.status + ': ' + e.confinement.missing.join(' | '); };
   const R = { leak: await C('claude', { leakContext: true }), cheatC: await C('claude', { cheat: true, extraTools: [] }), drop: await C('claude', { drop: true }), safeDrop: await C('claude', { safeModeDropsMcp: true }),
     polite: await C('agy', { polite: true }), ignore: await C('agy', { ignoreBaseUrl: true }), cheatA: await C('agy', { cheat: true }), plugin: await C('claude', { extraPlugin: true }) };
   const ecSafe = B.loadRegistry(W.paths).clis.claude;
   ok(/^failed: .*context: nonce/.test(R.leak) && /^failed: .*(not refused|executed|side effect)/.test(R.cheatC) && /^unverified: flag --restricted/.test(R.drop) && /^unverified: .*no CLI tool_result for run_command/.test(R.polite)
     && /^unverified: fake API got no request/.test(R.ignore) && /^failed: .*(read tool executed|side effect)/.test(R.cheatA) && /^failed: .*non-builtin plugin/.test(R.plugin) && /^failed|^verified/.test(R.safeDrop),
     'canary bắt gian: CLI nạp CLAUDE.md của HOME → failed (nonce trong request tới API giả) · CLI thực thi tool cấm → failed (hiệu ứng phụ / nội dung tệp tới model) · thiếu --restricted → unverified · agy "lịch sự từ chối" (không có tool_result do CLI sinh) → unverified, KHÔNG Đạt · agy bỏ qua base URL → unverified · plugin lạ → failed', JSON.stringify(R));
-  W.mode('claude', { safeModeDropsMcp: true }); const eSD = await B.verifyCli('claude', W.paths);
+  W.mode('claude', { safeModeDropsMcp: true }); const eSD = await B.verifyCli('claude', W.paths, undefined, { allowReset: true });
   ok(eSD.confinement.status === 'verified' && eSD.safe_mode === false, '--safe-mode tắt server của --mcp-config → canary chạy lại không có --safe-mode, ghi safe_mode: false (spec §4.2)', JSON.stringify({ c: eSD.confinement, sm: eSD.safe_mode }));
   // khôi phục: cả hai Đạt
-  W.mode('claude', {}); W.mode('agy', {}); await B.verifyCli('claude', W.paths); await B.verifyCli('agy', W.paths);
+  W.mode('claude', {}); W.mode('agy', {}); await B.verifyCli('claude', W.paths, undefined, { allowReset: true }); await B.verifyCli('agy', W.paths, undefined, { allowReset: true });
 
   // --- lượt thường qua app giả (/mcp có token lượt)
   const GCJ = 'gcj_' + 'Q'.repeat(43);
@@ -236,7 +236,7 @@ if (sb.bwrap !== 'ok') {
     'giám sát từng lượt → CONFINEMENT + CLI bị đánh dấu failed: claude init có Bash / hook / skill của user / tool_use lạ giữa lượt · agy phát run_command · tệp lạ trong /work · gọi MCP mà stream không có sự kiện tool (parser mù) · CONNECT ra ngoài allowlist', codes + ' ' + JSON.stringify(V.hide));
   // security review #1 trong lượt thật: app (bị chiếm) liệt kê tool tên run_command / read_file → claude: init có mcp__genchibi__run_command → chặn;
   // agy: model gọi mcp_genchibi_read_file → không phải tool genchibi → chặn
-  await B.verifyCli('claude', W.paths); await B.verifyCli('agy', W.paths);
+  await B.verifyCli('claude', W.paths, undefined, { allowReset: true }); await B.verifyCli('agy', W.paths, undefined, { allowReset: true });
   appTools = ['get_catalog', 'run_command', 'read_file'];
   const evilC = await turn('claude', { script: [['get_catalog', {}]] }), evilA = await turn('agy', { script: [['read_file', {}]] });
   appTools = ['get_catalog'];
@@ -245,14 +245,29 @@ if (sb.bwrap !== 'ok') {
   W.mode('claude', {});
   let refused = ''; try { B.checkEnvelope((() => { const s2 = 'cd'.repeat(32), p = { id: 'jobABCDEF', job: job0('claude'), gcj: GCJ, exp: Date.now() + 60e3 }; return Object.assign(p, { sig: B.signJob(s2, p) }); })(), { secret: 'cd'.repeat(32), reg: { clis: { claude: { confinement: { status: 'failed', missing: ['x'] }, models: { list: [] } } } }, enabled: ['claude'] }); } catch (e) { refused = e.code; }
   ok(refused === 'CONFINEMENT' && regF.clis.claude.confinement.status === 'failed' && regF.clis.agy.confinement.status === 'failed', 'CLI bị đánh dấu failed → lượt sau bị từ chối (CONFINEMENT) cho tới khi enable lại');
-  await B.verifyCli('claude', W.paths); await B.verifyCli('agy', W.paths);
+  // security review #3: lệnh điều khiển TỪ XA (Studio / container) không được "rửa" failed → verified; quét lúc khởi động / probe cũng vậy. Chỉ enable LOCAL đặt lại
+  W.mode('claude', {}); W.mode('agy', {});
+  await B.runControl({ control: 'verify', cli: 'claude' }, W.paths); await B.runControl({ control: 'probe', cli: '' }, W.paths);
+  await B.verifyCli('agy', W.paths);   // mặc định (không allowReset) = như quét lúc khởi động
+  const r3 = B.loadRegistry(W.paths);
+  await B.verifyCli('claude', W.paths, undefined, { allowReset: true }); await B.verifyCli('agy', W.paths, undefined, { allowReset: true });
+  const r4 = B.loadRegistry(W.paths);
+  W.mode('claude', { leakContext: true }); await B.runControl({ control: 'verify', cli: 'claude' }, W.paths); W.mode('claude', {});
+  const r5 = B.loadRegistry(W.paths);
+  ok(r3.clis.claude.confinement.status === 'failed' && r3.clis.agy.confinement.status === 'failed' && r3.clis.claude.lastCheck.status === 'verified' && r3.clis.agy.lastCheck.status === 'verified'
+    && r4.clis.claude.confinement.status === 'verified' && r4.clis.agy.confinement.status === 'verified' && r5.clis.claude.confinement.status === 'failed'
+    && B.applyConfinement({ status: 'unverified' }, { status: 'verified' }).status === 'unverified' && B.applyConfinement({ status: 'verified' }, { status: 'unverified' }).status === 'unverified',
+    'khoá đang failed: lệnh verify / probe từ Studio + quét lúc khởi động KHÔNG đặt lại (chỉ báo ở lastCheck) · enable LOCAL đặt lại về verified · verify từ xa ra kết quả xấu hơn (nonce lọt) → được hạ cấp (security review #3)',
+    JSON.stringify({ r3c: r3.clis.claude.confinement.status, r3a: r3.clis.agy.confinement.status, r4: [r4.clis.claude.confinement.status, r4.clis.agy.confinement.status], r5: r5.clis.claude.confinement.status }));
+  await B.verifyCli('claude', W.paths, undefined, { allowReset: true });
+  await B.runControl({ control: 'probe', cli: '' }, W.paths);   // "Quét lại" từ Studio không được làm mất selftest / băm tệp → các lượt dưới vẫn chạy (không NO_SANDBOX / CONFINEMENT)
   appMode = '401';
   const a401 = await turn('claude', { script: [['get_catalog', {}]], sleep: 0 });
   appMode = 'ok';
   const auth = await turn('claude', { authError: true }), quota = await turn('claude', { quota: true }), agyAuth = await turn('agy', { loggedOut: true }), agyQ = await turn('agy', { quota: true });
   ok(a401.phase === 'error' && a401.code === 'CONFINEMENT' && /401\/403/.test(a401.detail) && auth.code === 'AUTH_REQUIRED' && quota.code === 'QUOTA' && agyAuth.code === 'AUTH_REQUIRED' && agyQ.code === 'QUOTA',
-    'app trả 401 cho /mcp → CLI bị giết (CNS-303) · lỗi đăng nhập / quota của claude (api_retry) và agy (AGY_ERROR) → AUTH_REQUIRED / QUOTA', JSON.stringify({ a401, auth: auth.code, quota: quota.code, agyAuth: agyAuth.code, agyQ: agyQ.code }));
-  await B.verifyCli('claude', W.paths);
+    'sau "Quét lại" từ xa: app trả 401 cho /mcp → CLI bị giết (CNS-303) · lỗi đăng nhập / quota của claude (api_retry) và agy (AGY_ERROR) → AUTH_REQUIRED / QUOTA', JSON.stringify({ a401, auth: auth.code, quota: quota.code, agyAuth: agyAuth.code, agyQ: agyQ.code }));
+  await B.verifyCli('claude', W.paths, undefined, { allowReset: true });
   const can = await turn('claude', { sleep: 20000 }, {}, { cancelAfter: 300 }), tout = await turn('agy', { sleep: 20000 }, { caps: { turnSec: 2 } }, {});
   const tdirs = fs.readdirSync(B.runBase(W.paths));
   ok(can.code === 'CANCELLED' && can.ms < 6000 && tout.code === 'TIMEOUT' && tout.ms < 6000 && tdirs.length === 0,
@@ -262,7 +277,7 @@ if (sb.bwrap !== 'ok') {
   fs.writeFileSync(sp, JSON.stringify({ permissions: { allow: ['command(*)'] } }));
   const tamper = await turn('agy', {});
   ok(tamper.code === 'CONFINEMENT' && /changed/.test(tamper.detail) && B.loadRegistry(W.paths).clis.agy.confinement.status === 'failed', 'settings.json của agy bị đổi → lượt bị chặn, agy failed (băm kiểm trước mỗi lượt)', JSON.stringify(tamper));
-  await B.verifyCli('agy', W.paths);
+  await B.verifyCli('agy', W.paths, undefined, { allowReset: true });
   const inside = await (async () => { W.mode('agy', {}); const e = B.loadRegistry(W.paths).clis.agy, sel = await B.selftest('agy', W.paths, B.loadRegistry(W.paths)); return sel; })();
   ok(inside.ok && !fs.readdirSync(W.H).includes('.cache'), 'selftest lúc khởi động đạt · không có gì ghi vào ~/.cache của HOME (thư mục lượt ở XDG)');
   app.close();
