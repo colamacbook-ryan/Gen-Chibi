@@ -1,0 +1,257 @@
+{
+ "_": "gen-chibi v0.25 phần A — đột biến cho Sân khấu Live ở đỉnh dock (spec §8), cổng khu trong callTool (CNS-302), bề mặt luật (CNS-308). Chạy: node tools/mutate.mjs --data tools/mutations/v025.json [--jobs N --wrap \"bash netns.sh\"] [ID…]; kiểm nhanh: --check. © 2026 Gen Labs — All rights reserved.",
+ "mutations": [
+  {
+   "id": "V01",
+   "guard": "cổng khu ở mcp.callTool (channel ui) — CNS-302",
+   "file": "server/mcp.js",
+   "find": "if (!this.toolsFor('ui', ctx.zone).some(t => t.name === name)) return toolError(",
+   "replace": "if (false) return toolError(",
+   "test": [
+    "node",
+    "tools/test-dock-live.mjs"
+   ],
+   "expect": "cổng khu ở mcp.callTool"
+  },
+  {
+   "id": "V02",
+   "guard": "tool của AI trong Studio phát sự kiện Live (callTool)",
+   "file": "server/mcp.js",
+   "find": "if (ctx.liveChan && this.live) return this.callToolLive(name, args, ctx);",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-dock-live.mjs"
+   ],
+   "expect": "lượt dock (API key, LLM giả) → SSE"
+  },
+  {
+   "id": "V03",
+   "guard": "nhãn = tiêu đề tool, không tham số",
+   "file": "server/mcp.js",
+   "find": "label = (t && t.title) || name,",
+   "replace": "label = JSON.stringify(args).slice(0, 60),",
+   "test": [
+    "node",
+    "tools/test-dock-live.mjs"
+   ],
+   "expect": "không rò"
+  },
+  {
+   "id": "V04",
+   "guard": "công tắc việc chỉ khi đổi",
+   "file": "server/main.js",
+   "find": "if (task !== aiLastTask) {",
+   "replace": "if (true) {",
+   "test": [
+    "node",
+    "tools/test-dock-live.mjs"
+   ],
+   "expect": "công tắc việc chỉ khi đổi"
+  },
+  {
+   "id": "V05",
+   "guard": "việc từ nút gợi ý chỉ nhận giá trị trong bảng",
+   "file": "server/live-ai.js",
+   "find": "if (typeof quick === 'string' && QUICK_TASKS.indexOf(quick) >= 0) return quick;",
+   "replace": "if (typeof quick === 'string' && quick) return quick;",
+   "test": [
+    "node",
+    "tools/test-dock-live.mjs"
+   ],
+   "expect": "bảng ánh xạ"
+  },
+  {
+   "id": "V06",
+   "guard": "một lượt studio-ai diễn tại một thời điểm",
+   "file": "server/live.js",
+   "find": "else ev.quiet = true;",
+   "replace": "else ev.quiet = false;",
+   "test": [
+    "node",
+    "tools/test-dock-live.mjs"
+   ],
+   "expect": "một lượt AI trong Studio"
+  },
+  {
+   "id": "V07",
+   "guard": "≤ 2 luồng SSE mỗi người xem, đóng luồng cũ nhất",
+   "file": "server/live.js",
+   "find": "while (mine.length >= PER_VIEWER)",
+   "replace": "while (false)",
+   "test": [
+    "node",
+    "tools/test-dock-live.mjs"
+   ],
+   "expect": "người xem SSE"
+  },
+  {
+   "id": "V08",
+   "guard": "CLIENTS_MAX 16",
+   "file": "server/live.js",
+   "find": "CLIENTS_MAX = 16,",
+   "replace": "CLIENTS_MAX = 8,",
+   "test": [
+    "node",
+    "tools/test-dock-live.mjs"
+   ],
+   "expect": "người xem SSE"
+  },
+  {
+   "id": "V09",
+   "guard": "bảng ánh xạ phủ 100 % tool (luật 5)",
+   "file": "server/live-ai.js",
+   "find": "if (tool && tool.annotations && tool.annotations.readOnlyHint === true) return 'search';",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-dock-live.mjs"
+   ],
+   "expect": "bảng ánh xạ"
+  },
+  {
+   "id": "V10",
+   "guard": "LLM lỗi → error + stop (lượt dẫn nhường)",
+   "file": "server/main.js",
+   "find": "aiLive(liveChan, { kind: 'stop' }); throw e; }",
+   "replace": "throw e; }",
+   "test": [
+    "node",
+    "tools/test-dock-live.mjs"
+   ],
+   "expect": "LLM lỗi"
+  },
+  {
+   "id": "V11",
+   "guard": "CNS-308: luật nhắc tool ngoài khu bị lọc khỏi chỉ dẫn của AI trong Studio",
+   "file": "server/rules.js",
+   "find": "&& !off.some(n => new RegExp('\\\\b' + n + '\\\\b').test(r))",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-dock-live.mjs"
+   ],
+   "expect": "CNS-308"
+  },
+  {
+   "id": "V12",
+   "guard": "vòng vẽ dừng khi tab ẩn",
+   "file": "studio/dock.js",
+   "find": "document.hidden ? 'hidden' : ",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-browser.mjs"
+   ],
+   "expect": "tab ẩn mà vòng vẽ vẫn chạy",
+   "env": {
+    "GC_ONLY": "live"
+   }
+  },
+  {
+   "id": "V13",
+   "guard": "một SSE mỗi trình duyệt (leader + BroadcastChannel)",
+   "file": "studio/live-feed.js",
+   "find": "var shared = !!(bc && locks);",
+   "replace": "var shared = false;",
+   "test": [
+    "node",
+    "tools/test-browser.mjs"
+   ],
+   "expect": "tab đầu thành leader",
+   "env": {
+    "GC_ONLY": "live"
+   }
+  },
+  {
+   "id": "V14",
+   "guard": "tab theo sau nhận sự kiện qua BroadcastChannel",
+   "file": "studio/live-feed.js",
+   "find": "else if (d.t === 'ev' && S.role === 'follower') deliver(d.ev);",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-browser.mjs"
+   ],
+   "expect": "tab theo sau nhận sự kiện",
+   "env": {
+    "GC_ONLY": "live"
+   }
+  },
+  {
+   "id": "V15",
+   "guard": "sân khấu cao cố định (khung chat không lệch)",
+   "file": "studio/dock.js",
+   "find": "    E.lvBody.style.height = LVD.h + 'px';\n",
+   "replace": "    E.lvBody.style.height = '';\n",
+   "test": [
+    "node",
+    "tools/test-browser.mjs"
+   ],
+   "expect": "cao mặc định 132 px",
+   "env": {
+    "GC_ONLY": "live"
+   }
+  },
+  {
+   "id": "V16",
+   "guard": "tầng thở ≤ 12 khung / giây",
+   "file": "studio/dock.js",
+   "find": "LV_BREATHE_MS = 1000 / 12;",
+   "replace": "LV_BREATHE_MS = 1000 / 60;",
+   "test": [
+    "node",
+    "tools/test-browser.mjs"
+   ],
+   "expect": "tầng thở",
+   "env": {
+    "GC_ONLY": "live"
+   }
+  },
+  {
+   "id": "V17",
+   "guard": "thu gọn nhớ theo máy",
+   "file": "studio/dock.js",
+   "find": "JSON.stringify({ h: LVD.h, folded: LVD.folded, pin: LVD.pin })",
+   "replace": "JSON.stringify({ h: LVD.h, folded: false, pin: LVD.pin })",
+   "test": [
+    "node",
+    "tools/test-browser.mjs"
+   ],
+   "expect": "không được nhớ sau khi tải lại",
+   "env": {
+    "GC_ONLY": "live"
+   }
+  },
+  {
+   "id": "V18",
+   "guard": "trang Live → sân khấu dock tự thu (CNS-317)",
+   "file": "studio/dock.js",
+   "find": "livePage: function (on) { LVD.forced = !!on;",
+   "replace": "livePage: function (on) { LVD.forced = false;",
+   "test": [
+    "node",
+    "tools/test-browser.mjs"
+   ],
+   "expect": "sân khấu dock phải tự thu",
+   "env": {
+    "GC_ONLY": "live"
+   }
+  },
+  {
+   "id": "V19",
+   "guard": "sân khấu dock giữ 1 suất diễn đủ ≤ 8",
+   "file": "engine/render.js",
+   "find": "if (fulls.length + reserved.size >= API.budget) return false; reserved.add(id); return true; },",
+   "replace": "return true; },",
+   "test": [
+    "node",
+    "tools/test-browser.mjs"
+   ],
+   "expect": "giữ 1 suất",
+   "env": {
+    "GC_ONLY": "live"
+   }
+  }
+ ]
+}

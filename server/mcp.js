@@ -50,6 +50,7 @@ const EXAMPLE_SCENERY = {
 
 // LUẬT cho agent (MCP initialize, start_here, AI chatroom): server/rules.js — MỘT nguồn, lõi là luật vàng agent/GUIDE.md §3 (CNS-068)
 const Rules = require('./rules.js');
+const LiveAI = require('./live-ai.js');   // AI trong Studio → Sân khấu Live: bảng ánh xạ khu / tool (spec §8)
 
 // giọng đã chốt của một tác phẩm: { "<lang>|<accent>": { <id nhân vật>: <id giọng> } } — chỉ nhận id đúng dạng (dựng sẵn / thư viện / thiết kế)
 function cleanVoices(v) {
@@ -444,13 +445,31 @@ class MCP {
   }
 
   async callTool(name, args, ctx) {
-    const GC = this.GC;
     args = args || {};
     // kết nối OAuth mcp:read (v0.19): chỉ tool tự khai readOnlyHint — danh sách đã lọc ở tools/list, đây là cổng thật, ĐÓNG khi nghi ngờ (gọi thẳng tên tool, hay tên lạ, đều bị chặn)
     if (ctx && ctx.readOnly) {
       const t = TOOLS.find(x => x.name === name);
       if (!t || !(t.annotations && t.annotations.readOnlyHint === true)) return toolError('This connection is read-only (mcp:read) — tool ' + name + ' writes or spends resources. Ask the owner to change the scope in Studio › System › Agent connections.', { code: 'FORBIDDEN' });
     }
+    // AI TRONG STUDIO (channel 'ui'): CỔNG KHU ở đây — một cổng cho mọi đường (vòng tool của ai.js hôm nay, cầu nối CLI sau này — CNS-302).
+    // Tool ngoài bộ của khu (rollback_app, update_app, live_*, render_voice, tool của khu khác…) → FORBIDDEN, kể cả khi model gọi thẳng tên
+    if (ctx && ctx.channel === 'ui') {
+      if (!this.toolsFor('ui', ctx.zone).some(t => t.name === name)) return toolError('Tool "' + name + '" is not available in this area of the Studio (' + (ZONES[ctx.zone] ? ctx.zone : 'xuong') + ').', { code: 'FORBIDDEN' });
+      if (ctx.liveChan && this.live) return this.callToolLive(name, args, ctx);
+    }
+    return this.callToolCore(name, args, ctx);
+  }
+  // AI trong Studio lên Sân khấu Live (spec §8, CNS-309/310): sự kiện của TOOL phát ở đây — loại theo server/live-ai.js, nhãn = tiêu đề tool (không tham số)
+  async callToolLive(name, args, ctx) {
+    const t = TOOLS.concat(UI_TOOLS).find(x => x.name === name), label = (t && t.title) || name, emit = kind => { if (kind) { try { this.live.accept({ kind, label, tool: name.slice(0, 24) }, ctx.liveChan); } catch (e) { /* Live không được làm hỏng lượt AI */ } } };
+    emit(LiveAI.preKind(name, t));
+    let r;
+    try { r = await this.callToolCore(name, args, ctx); } catch (e) { emit('error'); throw e; }
+    emit(LiveAI.postKind(name, t, r));
+    return r;
+  }
+  async callToolCore(name, args, ctx) {
+    const GC = this.GC;
     switch (name) {
       case 'get_catalog': return json(this.catalog());
       case 'list_characters': {

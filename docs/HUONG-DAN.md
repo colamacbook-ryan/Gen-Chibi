@@ -320,6 +320,15 @@ chạy**; bạn từ chối thì không có gì thay đổi. Lệnh chỉ tải 
 Mỗi agent có token riêng: bảng **Agent tự nối** trong trang Sân khấu Live hiện tên, lúc tạo, sự kiện cuối và nút
 **Thu hồi**. gen-chibi chưa lên mạng thì chỉ agent chạy trên cùng máy mới nối được.
 
+**Sân khấu trên đầu Trợ lý AI (v0.25).** Một sân khấu Live gọn luôn ghim ở đầu dock trợ lý, ở mọi trang. Kéo mép dưới
+để đổi chiều cao (96–240 px); bấm ▴ / ▾ để thu về thanh 28 px chỉ còn "Đang làm: …". Hai lựa chọn này nhớ theo máy, và khung
+chat bên dưới không bao giờ bị xô. ⤢ mở trang Sân khấu Live đầy đủ (khi trang đó mở, sân khấu ở dock tự thu lại để chỉ một
+sân khấu diễn). Sân khấu bám theo ai đang làm — **AI trong Studio** (mỗi tool nó gọi: đọc, kiểm, lưu…, việc lấy theo khu
+hoặc nút gợi ý bạn bấm) hoặc **agent ngoài** — và bộ chọn kênh (Tự động · AI trong Studio · Agent ngoài · từng agent) để ghim
+một kênh; con số trên bộ chọn đếm các bước ở kênh bạn không xem. Sân khấu chỉ diễn đủ khi đang có việc, rảnh thì thở
+≤ 12 khung/giây, và dừng hẳn khi tab ẩn, dock đóng hoặc sân khấu thu gọn. Mọi tab Studio dùng chung **một** kết nối
+Live tới server (một tab nghe rồi chuyển cho các tab khác; đóng tab đó thì tab khác tự nhận).
+
 ## Câu hỏi thường gặp
 - **AI tự tạo asset có cần duyệt không?** Không — lưu dạng **nháp** trong dự án của tác phẩm và dùng ngay. Chỉ khi muốn đưa vào gói bán bạn mới bấm **Phát hành**.
 - **Phim HTML gửi đi có lộ engine không?** Bộ phát nằm trong tệp phim với giấy phép **chỉ để xem phim đó**. Muốn chia sẻ mà không kèm bộ phát thì dùng **Xuất video** (v0.22); bản SaaS sau này còn có trình phát do Gen Labs lưu trữ.

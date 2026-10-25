@@ -26,6 +26,7 @@
   ],
   "studio": [
     "studio/gif.js",
+    "studio/live-feed.js",
     "studio/dock.js",
     "studio/film-html.js",
     "studio/video/client.js",

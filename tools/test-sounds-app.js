@@ -247,7 +247,10 @@ const sect = async f => { try { await f(); } catch (e) { if (!process.env.GC_KEE
 
   // ---------- 3b. CNS-100: gói dùng chung KHÔNG có cue; link MCP / AI chatroom bắt buộc project, không ghi đè gói dự án khác; save trả nhắc; gỡ gói chỉ chủ máy
   await sect(async () => {
-    const dir = tmpDir(), { GC, S, store, m } = fresh(dir), call = (t, a, c) => m.callTool(t, a, c);
+    // v0.25 (CNS-302): cổng khu ở mcp.callTool chặn TRƯỚC mọi tool ngoài khu của dock (save_sound_pack / import_project không thuộc khu nào) →
+    // kênh 'AI chatroom' ở đây kiểm luật kênh BÊN TRONG (callToolCore — lớp phòng thủ thứ hai, cho khi một khu sau này có tool đó); cổng khu kiểm riêng ngay dưới
+    const dir = tmpDir(), { GC, S, store, m } = fresh(dir), call = (t, a, c) => c && c.channel === 'ui' ? m.callToolCore(t, a, c) : m.callTool(t, a, c);
+    for (const t of ['save_sound_pack', 'import_project', 'delete_sound_pack']) { const g = await m.callTool(t, {}, { channel: 'ui', zone: 'tao-tac' }); no(!g.isError || errOf(g).code !== 'FORBIDDEN', 'cổng khu (v0.25): ' + t + ' qua AI chatroom → FORBIDDEN trước mọi luật khác'); }
     const probe = () => JSON.stringify([S.cueFor({ state: 'shock', project: 'mau-tam-quoc' }), S.cueFor({ state: 'normal', project: 'x' }), S.cueFor({ event: 'impact', project: 'bat-ky' }), S.cueFor({ event: 'enter', project: 'bat-ky' }), S.cueFor({ event: 'cut', project: 'bat-ky' }), S.cueFor({ state: 'think', project: '' })]);
     const base0 = probe(), nPacks0 = S.packs().length;
     const evil = () => pk('khoa-la', '', { 'la-1': snd('Lạ', 'hai', { cue: { state: ['shock', 'normal', 'think'], event: ['impact', 'enter', 'cut'] } }) });

@@ -151,12 +151,11 @@ class AI {
   // context: tin `user` DỮ LIỆU GIAO DIỆN (mcp.uiContext: ngữ cảnh + hiện trạng tác phẩm + ghi chú duyệt + ghim, bọc JSON) — chen ngay trước tin cuối của người dùng, không lưu vào luồng.
   // Ngân sách (CNS-119): system + context + lịch sử ≤ mcp.limits().llm ký tự mỗi vòng — lịch sử bị xén từ tin cũ nhất (luôn giữ tin cuối); trả về `sent` (ký tự đã gửi) + `usage` thật
   // lang (tuỳ chọn): ngôn ngữ giao diện của người dùng — cho câu server tự viết vào lời trả lời (dừng sau 10 vòng); bỏ trống = ngôn ngữ của yêu cầu
-  async agent({ messages, model, zone, system, context, lang }, mcp) {
+  async agent({ messages, model, zone, system, context, lang, liveChan }, mcp) {
     const c = this.config();
     if (model) c.model = model;
     if (!c.model) throw Object.assign(new Error('Chưa chọn model'), { code: 400 });
-    const tools = mcp.toolsFor('ui', zone);
-    const allowed = new Set(tools.map(t => t.name));
+    const tools = mcp.toolsFor('ui', zone);   // danh sách cho model; CỔNG KHU thật ở mcp.callTool (ctx.channel 'ui' — CNS-302), không ở đây
     const fns = tools.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.inputSchema } }));
     const hist = (Array.isArray(messages) ? messages : []).slice(-20)
       .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
@@ -182,11 +181,10 @@ class AI {
         const name = call.function && call.function.name;
         let args = {}, text, ok = false, anchors = [];
         try { args = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (e) { args = null; }
-        if (!allowed.has(name)) text = 'Tool "' + name + '" is not available in this area.';
-        else if (!args) text = 'arguments is not valid JSON.';
+        if (!args) text = 'arguments is not valid JSON.';
         else {
           let res;
-          try { res = await mcp.callTool(name, args, { channel: 'ui', zone }); }   // zone: khu Thư viện không tạo asset mới (mcp.libraryGuard)
+          try { res = await mcp.callTool(name, args, { channel: 'ui', zone, liveChan }); }   // zone: cổng khu + khu Thư viện không tạo asset mới (mcp.libraryGuard) · liveChan: sự kiện Live của lượt (spec §8)
           catch (e) { res = { isError: true, content: [{ type: 'text', text: 'Tool failed: ' + MSG.en(String(e.message).slice(0, 300)).slice(0, 300) }] }; }
           ok = !!res && !res.isError;
           if (ok) { try { anchors = mcp.anchorsOf(name, args, res.structuredContent); } catch (e) { anchors = []; } }   // thứ vừa tạo / sửa → chip Soi trong dock

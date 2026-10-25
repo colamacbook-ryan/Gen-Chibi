@@ -886,6 +886,10 @@ home_check tools/test-dock.mjs
 echo "3b3) lõi dock + phòng làm phim: quyền duyệt theo tác giả · bản sao khung luôn nháp · chỉ dẫn tĩnh / dữ liệu bọc JSON · trần ngân sách ngữ cảnh · khu Thư viện không tạo mới"
 node tools/test-dock-core.mjs || exit 1
 home_check tools/test-dock-core.mjs
+echo "3b4) v0.25 Live ở đỉnh dock (spec §8): cổng khu trong mcp.callTool (CNS-302) · bảng ánh xạ khu / tool phủ 100 % (CNS-310) · vòng tool của ai.js phát sự kiện studio-ai qua SSE thật (thứ tự, làm sạch, công tắc việc) · một lượt diễn · ≤ 16 người xem, ≤ 2 luồng / người · CNS-308"
+for P in 7786 7787; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done
+node tools/test-dock-live.mjs || exit 1
+home_check tools/test-dock-live.mjs
 
 echo "4) khoá truy cập"
 bash tools/test-auth.sh || exit 1
@@ -946,6 +950,7 @@ node tools/mutate.mjs --check || exit 1
 node tools/mutate.mjs --check --data tools/mutations/v0231.json || exit 1
 node tools/mutate.mjs --check --data tools/mutations/v024.json || exit 1   # v0.24 Sân khấu Live (chạy thật: --data tools/mutations/v024.json --jobs 3)
 node tools/mutate.mjs --check --data tools/mutations/v0241.json || exit 1   # v0.24.1 live_setup + token agent
+node tools/mutate.mjs --check --data tools/mutations/v025.json || exit 1   # v0.25 phần A: Live ở đỉnh dock + cổng khu trong callTool
 
 echo "4k) mô hình root v0.23.1 (CNS-233 / CNS-257 / CNS-234 / CNS-235): máy kiểu Ryan (lệnh root cũ → tự lắp bản đã kiểm SHA, update / rollback / status / online bằng root) · container bị chiếm (canary) · override đã duyệt · khôi phục cùng máy / máy khác · doctor · root thật (setpriv thật)"
 for P in 7981 7983 7985 7987 7989; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done

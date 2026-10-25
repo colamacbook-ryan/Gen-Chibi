@@ -566,16 +566,17 @@
   // thuộc tính data-anchor (địa chỉ theo ID thật, sống sót khi sắp xếp / lọc / cuộn) + nhãn người đọc — trộn vào attrs của h()
   function anc(attrs, anchor, label) { attrs = attrs || {}; attrs['data-anchor'] = anchor; if (label) attrs['data-anchor-label'] = String(label).slice(0, 80); return attrs; }
   // lời gợi ý nhanh theo khu (chip dưới khung chat của dock)
+  // [nhãn, câu, việc] — việc (live-ai.js QUICK_TASKS) lên công tắc Sân khấu Live khi tin nhắn đúng là câu của nút (v0.25)
   function dockQuick(info, obj) {
     var z = info && info.zone;
-    if (z === 'tao-tac') return obj && obj.kind === 'work' ? [[_t('Viết kịch bản'), _t('Từ ý tưởng trong kịch bản tổng, viết logline + kịch bản hoàn chỉnh rồi lưu (save_work).')],
-      [_t('Chia phân cảnh'), _t('Chia kịch bản thành các phân cảnh (save_shot): mỗi cảnh một bối cảnh trong Thư viện + dàn diễn viên. Thiếu thì tạo ở Xưởng.')],
-      [_t('Viết lời thoại'), _t('Viết lời thoại + diễn xuất cho mọi phân cảnh chưa có (save_shot với event).')],
-      [_t('Sửa theo ghi chú duyệt'), _t('Đọc ghi chú duyệt (get_work › review) và sửa các cảnh đang "Cần sửa" theo đúng ghi chú; đề xuất bằng propose_edit.')],
-      [_t('Kiểm thiếu'), _t('Kiểm tác phẩm còn thiếu gì (nhân vật, bối cảnh, lời thoại) và tự bổ sung.')]] : [[_t('Gợi ý tác phẩm mới'), _t('Gợi ý 3 ý tưởng phim ngắn dùng nhân vật và bối cảnh đang có trong Thư viện.')]];
-    if (z === 'khung') return [[_t('Giải thích khung xương'), _t('Giải thích ngắn bộ khung nhân vật: khớp, 8 hướng, biểu cảm, hoạt động — dùng dữ liệu thật của khung.')], [_t('Tạo gói động tác'), _t('Giúp tôi tạo một gói động tác mới trên khung xương: hỏi tôi muốn đòn gì rồi dựng bằng get_motion_spec → validate → save_motion_pack.')]];
-    if (z === 'thu-vien') return [[_t('Tìm asset'), _t('Liệt kê asset trong Thư viện hợp với yêu cầu của tôi (lọc theo dự án).')], [_t('Ghép trang bị'), _t('Gợi ý trang bị trong Thư viện hợp với nhân vật đang xem và mặc thử.')]];
-    if (z === 'xuong') return [[_t('Tạo nhân vật từ khung'), _t('Tạo một nhân vật mới từ khung ma-nơ-canh: hỏi tôi tên, vai, màu rồi lưu vào dự án đang chọn.')], [_t('Soát nhân vật này'), _t('Soát nhân vật đang xem: cổng kiểm, nhận diện, còn thiếu gì.')]];
+    if (z === 'tao-tac') return obj && obj.kind === 'work' ? [[_t('Viết kịch bản'), _t('Từ ý tưởng trong kịch bản tổng, viết logline + kịch bản hoàn chỉnh rồi lưu (save_work).'), 'write'],
+      [_t('Chia phân cảnh'), _t('Chia kịch bản thành các phân cảnh (save_shot): mỗi cảnh một bối cảnh trong Thư viện + dàn diễn viên. Thiếu thì tạo ở Xưởng.'), 'plan'],
+      [_t('Viết lời thoại'), _t('Viết lời thoại + diễn xuất cho mọi phân cảnh chưa có (save_shot với event).'), 'write'],
+      [_t('Sửa theo ghi chú duyệt'), _t('Đọc ghi chú duyệt (get_work › review) và sửa các cảnh đang "Cần sửa" theo đúng ghi chú; đề xuất bằng propose_edit.'), 'review'],
+      [_t('Kiểm thiếu'), _t('Kiểm tác phẩm còn thiếu gì (nhân vật, bối cảnh, lời thoại) và tự bổ sung.'), 'review']] : [[_t('Gợi ý tác phẩm mới'), _t('Gợi ý 3 ý tưởng phim ngắn dùng nhân vật và bối cảnh đang có trong Thư viện.'), 'plan']];
+    if (z === 'khung') return [[_t('Giải thích khung xương'), _t('Giải thích ngắn bộ khung nhân vật: khớp, 8 hướng, biểu cảm, hoạt động — dùng dữ liệu thật của khung.'), 'chat'], [_t('Tạo gói động tác'), _t('Giúp tôi tạo một gói động tác mới trên khung xương: hỏi tôi muốn đòn gì rồi dựng bằng get_motion_spec → validate → save_motion_pack.'), 'design']];
+    if (z === 'thu-vien') return [[_t('Tìm asset'), _t('Liệt kê asset trong Thư viện hợp với yêu cầu của tôi (lọc theo dự án).'), 'research'], [_t('Ghép trang bị'), _t('Gợi ý trang bị trong Thư viện hợp với nhân vật đang xem và mặc thử.'), 'design']];
+    if (z === 'xuong') return [[_t('Tạo nhân vật từ khung'), _t('Tạo một nhân vật mới từ khung ma-nơ-canh: hỏi tôi tên, vai, màu rồi lưu vào dự án đang chọn.'), 'design'], [_t('Soát nhân vật này'), _t('Soát nhân vật đang xem: cổng kiểm, nhận diện, còn thiếu gì.'), 'review']];
     return [];
   }
   // dữ liệu đổi sau lượt AI (asset / phân cảnh mới…): nạp lại kho + báo các trang đang mở vẽ lại phần của mình
