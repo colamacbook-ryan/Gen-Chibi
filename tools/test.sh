@@ -890,6 +890,14 @@ echo "3b4) v0.25 Live ở đỉnh dock (spec §8): cổng khu trong mcp.callTool
 for P in 7786 7787; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done
 node tools/test-dock-live.mjs || exit 1
 home_check tools/test-dock-live.mjs
+echo "3b5) v0.26 cầu nối CLI (spec v025-cli-bridge §9): dựng lệnh (argv + bwrap, không token / nội dung trên argv) · kiểm job (HMAC, trường lạ, CLI chưa bật / chưa kiểm, model) · kiểm init Claude · tên tool genchibi theo tiền tố · proxy allowlist (route không prototype, bỏ WWW-Authenticate, 401 → giết CLI, trần lời gọi) · hộp cát bwrap THẬT + canary §4.3 / §4.5 + giám sát lượt (không có bwrap → bỏ qua có ghi rõ) · phía app (chỉ local, gcj 403, cổng khu, trần 60 / 30, huỷ, dự phòng chỉ khi chưa ghi, UPGRADE, install-id) · genchibi ai bridge (root, trusted_copy, unit, uninstall)"
+node tools/test-bridge.mjs || exit 1
+home_check tools/test-bridge.mjs
+for P in 7795 7796 7797; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done
+node tools/test-bridge-app.mjs || exit 1
+home_check tools/test-bridge-app.mjs
+node tools/test-bridge-cli.mjs || exit 1
+home_check tools/test-bridge-cli.mjs
 
 echo "4) khoá truy cập"
 bash tools/test-auth.sh || exit 1
@@ -951,6 +959,7 @@ node tools/mutate.mjs --check --data tools/mutations/v0231.json || exit 1
 node tools/mutate.mjs --check --data tools/mutations/v024.json || exit 1   # v0.24 Sân khấu Live (chạy thật: --data tools/mutations/v024.json --jobs 3)
 node tools/mutate.mjs --check --data tools/mutations/v0241.json || exit 1   # v0.24.1 live_setup + token agent
 node tools/mutate.mjs --check --data tools/mutations/v025.json || exit 1   # v0.25 phần A: Live ở đỉnh dock + cổng khu trong callTool
+node tools/mutate.mjs --check --data tools/mutations/v026.json || exit 1   # v0.26 cầu nối CLI (+ 2 lỗi security review)
 
 echo "4k) mô hình root v0.23.1 (CNS-233 / CNS-257 / CNS-234 / CNS-235): máy kiểu Ryan (lệnh root cũ → tự lắp bản đã kiểm SHA, update / rollback / status / online bằng root) · container bị chiếm (canary) · override đã duyệt · khôi phục cùng máy / máy khác · doctor · root thật (setpriv thật)"
 for P in 7981 7983 7985 7987 7989; do (echo > /dev/tcp/127.0.0.1/$P) 2>/dev/null && { echo "Cổng $P đang bị chiếm"; exit 1; }; done

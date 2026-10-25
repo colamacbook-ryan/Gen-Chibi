@@ -759,6 +759,21 @@ export async function runJob(v, { paths, reg, caps, app, post, onFail: report = 
   return { phase: 'done', text: final.slice(0, 60000), calls: mcp.st.calls, argv: r.args };   // argv: để kiểm (test) không có token / nội dung trên dòng lệnh
 }
 
+/* ---------------------------------------------------------------- lệnh điều khiển từ Studio (Quét lại / Kiểm tra khoá) */
+// { id, control: 'probe' | 'verify', cli, exp, sig } — ký HMAC như job (kẻ chiếm cổng khi app tắt không đặt được), tối đa 1 lệnh / 60 s, chỉ làm việc không tốn quota
+export function checkControl(c, { secret, now = Date.now() }) {
+  if (!c || typeof c !== 'object' || Object.keys(c).sort().join() !== 'cli,control,exp,id,sig') throw bErr('BAD_JOB', 'control keys');
+  if (typeof c.sig !== 'string' || !/^[0-9a-f]{64}$/.test(c.sig) || !crypto.timingSafeEqual(Buffer.from(signJob(secret, { id: c.id, control: c.control, cli: c.cli, exp: c.exp }), 'hex'), Buffer.from(c.sig, 'hex'))) throw bErr('BAD_SIG', 'control signature');
+  if (!['probe', 'verify'].includes(c.control) || (c.cli !== '' && !ADAPTERS[c.cli]) || (c.control === 'verify' && !c.cli) || !Number.isFinite(c.exp) || c.exp < now) throw bErr('BAD_JOB', 'control');
+  return { control: c.control, cli: c.cli };
+}
+async function runControl(c, paths, log) {
+  if (c.control === 'verify') { await verifyCli(c.cli, paths, m => log('[bridge] ' + m)); return; }
+  const reg = loadRegistry(paths); reg.sandbox = probeSandbox(paths.env);
+  for (const n of Object.keys(ADAPTERS)) if (!c.cli || c.cli === n) { reg.clis[n] = probeCli(n, paths, reg); await probeOnline(n, paths, reg); }
+  saveRegistry(paths, reg);
+}
+
 /* ---------------------------------------------------------------- vòng long-poll ra app (§5) */
 export function appClient(cfg, token) {
   return (method, p, body, timeoutMs = 40000) => new Promise((resolve, reject) => {
@@ -786,6 +801,7 @@ export async function serve({ paths, log = console.log, stopSignal = { stop: fal
   const cfg = loadConfig(paths), token = readPrivate(paths.token), secret = readPrivate(paths.hmac);
   if (!/^gcb_[A-Za-z0-9_-]{32,64}$/.test(token) || !/^[0-9a-f]{64}$/.test(secret)) throw bErr('NOT_INSTALLED', 'token / hmac malformed — run `genchibi ai bridge install`');
   const call = appClient(cfg, token), starts = [];
+  let lastControl = 0;
   let sentAt = '', backoff = 1000;
   for (;;) {
     if (stopSignal.stop) return 0;
@@ -801,6 +817,14 @@ export async function serve({ paths, log = console.log, stopSignal = { stop: fal
       const n = await call('GET', '/api/ai/bridge/next?wait=25', undefined, 40000);
       backoff = 1000;
       if (n.status === 401) { log('[bridge] app rejected the bridge token — run `genchibi ai bridge install`'); return 4; }
+      if (n.status === 200 && n.body && n.body.control) {
+        try {
+          const c = checkControl(n.body.control, { secret });
+          if (Date.now() - lastControl < 60e3) log('[bridge] control ignored (max one per minute)');
+          else { lastControl = Date.now(); log('[bridge] control ' + c.control + ' ' + (c.cli || 'all')); await runControl(c, paths, log); }
+        } catch (e) { log('[bridge] dropped a control: ' + e.code); }
+        continue;
+      }
       if (n.status === 204 || !n.body || !n.body.envelope) continue;
       const env = n.body.envelope;
       let v;
@@ -862,6 +886,22 @@ async function main(argv) {
       return e.confinement.status === 'verified' ? 0 : 5;
     }
     case 'status': status(paths); return 0;
+    case 'pair-store': {
+      // genchibi ai bridge install: phản hồi của POST /api/ai/bridge/pair đi qua STDIN (không argv / env) → token + bí mật HMAC ghi 0600
+      let j = null; try { j = JSON.parse(fs.readFileSync(0, 'utf8')); } catch (e) { /* bỏ */ }
+      if (!j || !/^gcb_[A-Za-z0-9_-]{32,64}$/.test(j.token || '') || !/^[0-9a-f]{64}$/.test(j.secret || '')) { console.error('pair-store: the app did not return a bridge token'); return 1; }
+      const app = rest[0] || '', ver = rest[1] || '';
+      writePrivate(paths.token, j.token + '\n'); writePrivate(paths.hmac, j.secret + '\n');
+      writePrivate(paths.config, JSON.stringify({ app, version: ver, installedAt: new Date().toISOString() }) + '\n');
+      loadConfig(paths);   // địa chỉ app phải đúng dạng loopback (CNS-314)
+      return 0;
+    }
+    case 'forget': {
+      // gỡ: xoá token / HMAC / cấu hình / registry (không đụng HOME riêng của CLI — genchibi hỏi trước khi xoá nó)
+      for (const f of [paths.token, paths.hmac, paths.config, paths.registry, paths.enabled, paths.caps]) { try { fs.unlinkSync(f); } catch (e) { /* không có */ } }
+      try { fs.rmdirSync(paths.lib); } catch (e) { /* còn tệp khác / không có */ }
+      return 0;
+    }
     case 'config': {
       const c = readJSON(paths.caps, {}), map = { '--turn-sec': 'turnSec', '--per-hour': 'perHour', '--tool-calls': 'toolCalls', '--writes': 'writes' };
       for (let i = 0; i < rest.length; i += 2) {

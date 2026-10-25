@@ -309,6 +309,22 @@ _en() {
     live_notoken) F="The app has no live token yet (%s/data/live-token) — start the app (v0.24 or later) and open Studio › System › Live stage once." ;;
     live_nonode) F="! Node.js is not in PATH on this machine: Claude Code hooks run the script with node — install Node 18+ where Claude Code runs." ;;
     live_root) F="! You ran this as root: the hook script is in %s, which only root can read — if Claude Code runs as another user, run genchibi live hook as that user." ;;
+    ai_usage) F="Usage: genchibi ai bridge install | uninstall | start | stop | status | logs | run | probe [cli] | login <agy|claude> | enable <cli> | disable <cli> | config [--turn-sec N --per-hour N --tool-calls N --writes N]   (the Studio's AI through agent CLIs on this machine)" ;;
+    br_root) F="Refusing to run the CLI bridge as root — run genchibi ai bridge as the user who owns the agy / claude logins (no sudo)." ;;
+    br_no_node) F="The CLI bridge needs Node.js 18 or later on this machine (found: %s). Install Node, then run genchibi ai bridge install again." ;;
+    br_no_bwrap) F="! bubblewrap (bwrap) is missing or user namespaces are off (%s): on Linux every CLI runs only inside the sandbox — install it (Fedora: sudo dnf install bubblewrap), then genchibi ai bridge enable <cli>." ;;
+    br_src) F="No verified CLI bridge files for release %s yet (%s) — update the app to v0.26 or later (genchibi update), then run this again." ;;
+    br_copy) F="Refused to copy %s: the source is not a regular file inside the verified release (symlink / outside / wrong content)." ;;
+    br_pair) F="The app did not pair the bridge (is it running? genchibi status) — nothing was changed." ;;
+    br_installed) F="✓ CLI bridge installed: code %s · app %s · token + HMAC secret in %s (0600)." ;;
+    br_unit) F="✓ user service gen-chibi-ai-bridge.service enabled and started (systemctl --user)." ;;
+    br_no_systemd) F="! No systemd user session here: run the bridge in the foreground with: genchibi ai bridge run" ;;
+    br_next) F="Next (once each): genchibi ai bridge login agy · genchibi ai bridge enable agy (sandbox self-test + lock canary, no quota). Claude Code: login claude · enable claude." ;;
+    br_not_installed) F="The CLI bridge is not installed — run genchibi ai bridge install" ;;
+    br_uninstalled) F="✓ CLI bridge removed (service, code, token, HMAC secret, registry)." ;;
+    br_ask_home) F="Also delete the bridge's own CLI logins in %s? [y/N] " ;;
+    br_keep_home) F="Kept the bridge's own CLI logins in %s (delete that folder yourself to log them out)." ;;
+    br_refreshed) F="CLI bridge files refreshed from verified release %s." ;;
     live_head) F="Claude Code → gen-chibi Live stage. Paste into ~/.claude/settings.json (or a project's .claude/settings.local.json), or let genchibi merge it: genchibi live hook --install-into ~/.claude/settings.json" ;;
     live_foot) F="Hook script: %s (a copy kept outside the install folder; Docker installs take it from the SHA-256-verified release) · app: %s · live token: %s (0600, read by the hook, never on its command line; it can only send Live events — after rotating it in the Studio, run this again)." ;;
     live_in_bad) F="Not writing %s: %s" ;;
@@ -620,6 +636,22 @@ _vi() {
     live_notoken) F="App chưa có token live (%s/data/live-token) — khởi động app (v0.24 trở lên) và mở Studio › Hệ thống › Sân khấu Live một lần." ;;
     live_nonode) F="! Máy này không có Node.js trong PATH: hooks của Claude Code chạy tệp bằng node — cài Node 18+ ở máy chạy Claude Code." ;;
     live_root) F="! Bạn chạy bằng root: tệp hook nằm trong %s, chỉ root đọc được — nếu Claude Code chạy bằng user khác, chạy genchibi live hook bằng user đó." ;;
+    ai_usage) F="Cách dùng: genchibi ai bridge install | uninstall | start | stop | status | logs | run | probe [cli] | login <agy|claude> | enable <cli> | disable <cli> | config [--turn-sec N --per-hour N --tool-calls N --writes N]   (AI của Studio chạy bằng agent CLI trên máy này)" ;;
+    br_root) F="Từ chối chạy cầu nối CLI bằng root — chạy genchibi ai bridge bằng user giữ đăng nhập agy / claude (không sudo)." ;;
+    br_no_node) F="Cầu nối CLI cần Node.js 18 trở lên trên máy này (đang có: %s). Cài Node rồi chạy lại genchibi ai bridge install." ;;
+    br_no_bwrap) F="! Thiếu bubblewrap (bwrap) hoặc user namespace đang tắt (%s): trên Linux mọi CLI chỉ chạy trong hộp cát — cài nó (Fedora: sudo dnf install bubblewrap) rồi genchibi ai bridge enable <cli>." ;;
+    br_src) F="Chưa có tệp cầu nối CLI đã kiểm của bản %s (%s) — cập nhật app lên v0.26 trở lên (genchibi update) rồi chạy lại." ;;
+    br_copy) F="Từ chối chép %s: nguồn không phải tệp thường trong gói phát hành đã kiểm (symlink / ngoài gói / sai nội dung)." ;;
+    br_pair) F="App không ghép được cầu nối (app có đang chạy? genchibi status) — chưa đổi gì." ;;
+    br_installed) F="✓ Đã cài cầu nối CLI: mã %s · app %s · token + bí mật HMAC trong %s (0600)." ;;
+    br_unit) F="✓ Đã bật và chạy dịch vụ user gen-chibi-ai-bridge.service (systemctl --user)." ;;
+    br_no_systemd) F="! Máy này không có phiên systemd của user: chạy cầu nối ở tiền cảnh bằng: genchibi ai bridge run" ;;
+    br_next) F="Tiếp theo (mỗi lệnh một lần): genchibi ai bridge login agy · genchibi ai bridge enable agy (tự kiểm hộp cát + canary khoá, không tốn quota). Claude Code: login claude · enable claude." ;;
+    br_not_installed) F="Chưa cài cầu nối CLI — chạy genchibi ai bridge install" ;;
+    br_uninstalled) F="✓ Đã gỡ cầu nối CLI (dịch vụ, mã, token, bí mật HMAC, registry)." ;;
+    br_ask_home) F="Xoá luôn đăng nhập CLI riêng của cầu nối trong %s? [c/K] " ;;
+    br_keep_home) F="Giữ đăng nhập CLI riêng của cầu nối trong %s (tự xoá thư mục đó để đăng xuất)." ;;
+    br_refreshed) F="Đã làm mới tệp cầu nối CLI từ bản phát hành đã kiểm %s." ;;
     live_head) F="Claude Code → Sân khấu Live của gen-chibi. Dán vào ~/.claude/settings.json (hoặc .claude/settings.local.json của dự án), hoặc để genchibi tự ghép: genchibi live hook --install-into ~/.claude/settings.json" ;;
     live_foot) F="Tệp hook: %s (bản chép nằm ngoài thư mục cài; bản Docker lấy từ gói phát hành đã kiểm SHA-256) · app: %s · token live: %s (0600, hook tự đọc, không nằm trên dòng lệnh; chỉ gửi được sự kiện Live — đổi token ở Studio thì chạy lại lệnh này)." ;;
     live_in_bad) F="Không ghi %s: %s" ;;
@@ -1055,6 +1087,7 @@ trust_fetch() {
     [ ! -f "$w/x/edge/Caddyfile.base" ] || cp "$w/x/edge/Caddyfile.base" "$w/rel/Caddyfile.base"
     [ ! -f "$w/x/cli/genchibi" ] || cp "$w/x/cli/genchibi" "$w/rel/genchibi"
     [ ! -f "$w/x/tools/live-hook.mjs" ] || cp "$w/x/tools/live-hook.mjs" "$w/rel/live-hook.mjs"   # hook Live của Claude Code (v0.24) chạy trên máy chủ: chỉ từ gói đã kiểm
+    if [ -f "$w/x/bridge/ai-bridge.mjs" ]; then mkdir "$w/rel/bridge" && cp "$w/x/bridge/ai-bridge.mjs" "$w/x/bridge/shim.mjs" "$w/x/bridge/selftest.mjs" "$w/rel/bridge/"; fi   # cầu nối CLI (v0.26): chỉ từ gói đã kiểm
     printf '%s\n' "$tag" > "$w/rel/VERSION"; printf '%s\n' "$got" > "$w/rel/SHA256"
     chmod 700 "$w/rel"
     case "$TD/rel/$tag" in "$TD"/rel/v*) rm -rf -- "${TD:?}/rel/$tag" ;; esac
@@ -1097,6 +1130,7 @@ trust_sync() {
     fi
   fi
   trust_install_cli "$t" || true
+  br_refresh   # cầu nối CLI đã cài → mã mới từ gói vừa kiểm (CNS-306)
   return 0
 }
 # Lệnh cũ (≤ v0.23.0) trong PATH = bản chép ĐẦY ĐỦ của cli/genchibi cũ, exec sang current/cli/genchibi (container ghi được) MỖI lần gõ. Lệnh ≤ v0.22 không
@@ -1595,6 +1629,7 @@ update() {
     # compose của bản đang chạy (sau cập nhật, hoặc bản cũ nếu đã tự rollback) — app áp ở lần start tới; edge Caddy (nếu bật) nhận image mới ngay.
     # root: tải + kiểm gói của bản đó trước (trust_sync) — tệp compose / lệnh root mới chỉ từ gói đã kiểm SHA-256
     trust_sync
+    [ -n "${TRUST:-}" ] || br_refresh   # native: làm mới cầu nối từ current/ (TRUST: trust_sync đã làm)
     if [ "$MODE" = docker ]; then sync_compose; if [ -f "$EDGE_MARK" ]; then edge_refresh || true; fi; fi
     status
   fi
@@ -1630,6 +1665,8 @@ uninstall() {
   # câu trả lời xoá dữ liệu: k/K (tiếng Việt, "không") · n/N (tiếng Anh, "no"); mọi câu khác giữ dữ liệu
   if [ "$UI" = vi ]; then case "$a" in k|K) wipe=1 ;; esac; else case "$a" in n|N) wipe=1 ;; esac; fi
   stop || true
+  # cầu nối CLI (v0.26): gỡ dịch vụ + token / HMAC (đăng nhập CLI riêng: hỏi riêng trong br_uninstall — ở đây giữ, in đường để tự xoá)
+  if [ -z "$IS_ROOT" ] && { [ -f "$BRIDGE_CODE/ai-bridge.mjs" ] || [ -f "$BRIDGE_UNIT" ]; }; then br_uninstall --keep-home || true; fi
   # container còn sống thì không xoá tệp dưới chân nó — compose down lỗi → dừng, không xoá gì
   if [ "$MODE" = docker ]; then compose down || { m un_down_fail >&2; exit 1; }; fi
   # trạng thái RIÊNG của bản cài này ($TI: override đã duyệt, compose.env, edge) + bản ghi của nó; lệnh / gói đã kiểm chung chỉ xoá khi không còn bản cài nào (CNS-293)
@@ -2700,6 +2737,7 @@ genchibi — quản lý gen-chibi ($HOME_DIR, chế độ $MODE)
   online [caddy|cloudflare|proxy|quick|recheck|off]   ra Internet một bước: tên miền + HTTPS + MCP (genchibi online --help)
   agent connect|guide|tools|skill   bootstrap cho agent mọi hãng: cấu hình nối, hướng dẫn, schema tool, cài skill
   live hook [--install-into <tệp>]   hooks của Claude Code cho Sân khấu Live: in đoạn settings.json (bản hook đã kiểm + token live), hoặc ghép vào tệp
+  ai bridge install|login|enable|status|…   AI của Studio chạy bằng agent CLI trên máy này (agy, Claude Code) — genchibi ai bridge để xem lệnh
   token [giá-trị|--clear]           đặt token GitHub (repo private) cho tự cập nhật; bỏ trống = nhập ẩn
                                     (KHÔNG phải token chủ: token chủ là GC_API_TOKEN trong .env, hoặc data/owner-token — CLI tự đọc)
   lang [en|vi]                      xem / đặt ngôn ngữ (CLI + giao diện mặc định của Studio)
@@ -2721,6 +2759,7 @@ genchibi — manage gen-chibi ($HOME_DIR, mode $MODE)
   online [caddy|cloudflare|proxy|quick|recheck|off]   go online in one step: domain + HTTPS + MCP (genchibi online --help)
   agent connect|guide|tools|skill   bootstrap for agents of any vendor: connect config, guide, tool schema, skill install
   live hook [--install-into <file>]  Claude Code hooks for the Live stage: print the settings.json snippet (verified hook copy + live token), or merge it
+  ai bridge install|login|enable|status|…   the Studio's AI through agent CLIs on this machine (agy, Claude Code) — genchibi ai bridge for the commands
   token [value|--clear]             set the GitHub token (private repo) for auto-update; empty = hidden prompt
                                     (NOT the owner token: that is GC_API_TOKEN in .env, or data/owner-token — the CLI reads it itself)
   lang [en|vi]                      show / set the language (CLI + Studio default)
@@ -2753,10 +2792,8 @@ live_cmd() {
   ( umask 077; mkdir -p "$TD" ) 2>/dev/null || true
   path_safe "$TD" || { m td_unsafe "$TD" >&2; return 1; }
   case "$(cd -P "$TD" && pwd)/" in "$HOME_PHYS"/*) m td_in_install "$TD" "$HOME_DIR" >&2; return 1 ;; esac
-  dest="$TD/live-hook.mjs"; tmp="$(mktemp "$TD/live-hook.XXXXXX")" || { m td_unsafe "$TD" >&2; return 1; }
-  if [ -n "$src" ]; then cat -- "$src" > "$tmp"; else rd current/tools/live-hook.mjs > "$tmp"; fi
-  if ! head -c 400 "$tmp" | grep -q 'gen-chibi — bộ chuyển hooks của Claude Code'; then rm -f -- "$tmp"; m live_nohook "$(cur_tag)" "current/tools/live-hook.mjs" >&2; return 1; fi
-  chmod 600 "$tmp" && mv -f -- "$tmp" "$dest"
+  dest="$TD/live-hook.mjs"
+  trusted_copy "${src:-current/tools/live-hook.mjs}" "$dest" 'gen-chibi — bộ chuyển hooks của Claude Code' || { m live_nohook "$(cur_tag)" "current/tools/live-hook.mjs" >&2; return 1; }
   # 2) token live (dữ liệu của app — đọc bằng user của app, đúng dạng mới dùng)
   local tok; tok="$(rd data/live-token | tr -d ' \r\n')" || tok=""
   case "$tok" in gcl_*) ;; *) tok="" ;; esac
@@ -2825,6 +2862,125 @@ out("ok " + bak);
   esac
 }
 
+# trusted_copy NGUỒN ĐÍCH DẤU (CNS-320) — MỘT hàm chép mã sẽ CHẠY TRÊN MÁY CHỦ (hook Live, cầu nối CLI) từ nguồn đã kiểm:
+#   TRUST (Docker): nguồn PHẢI nằm trong $TD/rel/v<bản>/ (gói phát hành đã kiểm SHA-256 — trust_fetch giữ lại), tệp thường của chính mình, không symlink
+#   native: nguồn là đường tương đối current/… đọc như dữ liệu bằng user của app (tệp cuối không được là symlink)
+#   nội dung phải mang dòng DẤU trong 600 byte đầu; đích: thư mục an toàn NGOÀI thư mục cài, tệp tạm cùng thư mục (0600) rồi mv. Không bao giờ lấy mã từ app.
+trusted_copy() {
+  local src="$1" dest="$2" mark="$3" d tmp
+  d="$(dirname "$dest")"
+  td_parent_ok "$d" || return 1
+  ( umask 077; mkdir -p "$d" ) 2>/dev/null || return 1
+  path_safe "$d" || return 1
+  case "$(cd -P "$d" && pwd)/" in "$HOME_PHYS"/*) return 1 ;; esac
+  if [ -n "$TRUST" ]; then
+    case "$src" in "$TD"/rel/v*/*) ;; *) return 1 ;; esac
+    case "$src" in *..*) return 1 ;; esac
+    file_safe "$src" || return 1
+  else
+    case "$src" in current/*) ;; *) return 1 ;; esac
+    case "$src" in *..*) return 1 ;; esac
+    [ ! -L "$HOME_DIR/$src" ] || return 1
+  fi
+  tmp="$(mktemp "$d/.gc-copy.XXXXXX")" || return 1
+  if [ -n "$TRUST" ]; then cat -- "$src" > "$tmp" || { rm -f -- "$tmp"; return 1; }
+  else rd "$src" > "$tmp" || { rm -f -- "$tmp"; return 1; }; fi
+  if ! head -c 600 "$tmp" | grep -qF -- "$mark"; then rm -f -- "$tmp"; return 1; fi
+  chmod 600 "$tmp" && mv -f -- "$tmp" "$dest"
+}
+
+# ---------------------------------------------------------------- cầu nối CLI (v0.26, spec v025-cli-bridge §6, INT-22)
+# AI của Studio chạy bằng agent CLI (agy, Claude Code) trên máy này. Mã chạy trên máy chủ = bản chép đã kiểm ở $TD/ai-bridge/ (trusted_copy, như hook Live);
+# dữ liệu (token gcb_ + bí mật HMAC 0600, địa chỉ app CHỐT lúc install, registry) ở ~/.local/lib/gen-chibi/bridge/; HOME riêng của từng CLI ở
+# ~/.local/share/gen-chibi/bridge/<cli>-home. Từ chối root (khác live hook — CNS-315). Token không bao giờ trên argv: phản hồi pair đi qua stdin.
+BRIDGE_CODE="$TD/ai-bridge"
+BRIDGE_LIB="$HOME/.local/lib/gen-chibi/bridge"
+BRIDGE_SHARE="$HOME/.local/share/gen-chibi/bridge"
+BRIDGE_UNIT_NAME="gen-chibi-ai-bridge.service"
+BRIDGE_UNIT="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/$BRIDGE_UNIT_NAME"
+br_nodebin() {
+  local nb; nb="$(command -v node 2>/dev/null)" || nb=""
+  if [ -z "$nb" ] || ! "$nb" -e 'process.exit(+process.versions.node.split(".")[0] >= 18 ? 0 : 1)' 2>/dev/null; then m br_no_node "${nb:-none}" >&2; return 1; fi
+  ( cd "$(dirname "$nb")" && printf '%s/%s' "$(pwd -P)" "$(basename "$nb")" )
+}
+br_node() { local nb; [ -f "$BRIDGE_CODE/ai-bridge.mjs" ] || { m br_not_installed >&2; return 1; }; nb="$(br_nodebin)" || return 1; ( cd "$HOME" && "$nb" "$BRIDGE_CODE/ai-bridge.mjs" ${1+"$@"} ); }
+br_src_dir() { # thư mục nguồn đã kiểm của 3 tệp cầu nối → BR_SRC (TRUST: $TD/rel/<bản>/bridge · native: current/bridge)
+  BR_SRC=""
+  if [ -n "$TRUST" ]; then local tf; tf="$(trust_files)"; [ -n "$tf" ] && [ -f "$tf/bridge/ai-bridge.mjs" ] && BR_SRC="$tf/bridge"
+  else [ -f "$HOME_DIR/current/bridge/ai-bridge.mjs" ] && BR_SRC="current/bridge"; fi
+  [ -n "$BR_SRC" ]
+}
+br_copy_all() {
+  local e f mk
+  for e in ai-bridge.mjs shim.mjs selftest.mjs; do
+    case "$e" in ai-bridge.mjs) mk='gen-chibi — CẦU NỐI CLI trên MÁY CHỦ' ;; shim.mjs) mk='gen-chibi — shim TRONG hộp cát' ;; *) mk='gen-chibi — TỰ KIỂM HỘP CÁT' ;; esac
+    trusted_copy "$BR_SRC/$e" "$BRIDGE_CODE/$e" "$mk" || { m br_copy "$BR_SRC/$e" >&2; return 1; }
+  done
+}
+br_systemd() { command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/dev/null 2>&1; }
+br_install() {
+  local nb tag v bw
+  nb="$(br_nodebin)" || return 1
+  bw="$(command -v bwrap 2>/dev/null)" || bw=""
+  if [ "$(uname -s)" = Linux ]; then
+    if [ -z "$bw" ]; then m br_no_bwrap "bwrap not found" >&2
+    elif ! "$bw" --unshare-all --ro-bind /usr /usr --symlink usr/bin /bin --symlink usr/lib64 /lib64 --symlink usr/lib /lib -- /usr/bin/true 2>/dev/null; then m br_no_bwrap "user namespaces" >&2; fi
+  fi
+  tag="$(cur_tag)"; v="${tag#v}"; [ -n "$v" ] || v="$(rd current/VERSION | tr -d ' 
+')" || v=""
+  br_src_dir || { m br_src "${tag:-?}" "${TRUST:+$TD/rel}${TRUST:-current/bridge}" >&2; return 1; }
+  br_copy_all || return 1
+  # địa chỉ app chốt MỘT lần ở đây (CNS-314) — cầu nối không đọc .env về sau; ghép: phản hồi (token + bí mật) đi qua stdin vào cầu nối, không qua argv
+  local res; res="$(api POST /api/ai/bridge/pair '{}')" || { m br_pair >&2; return 1; }
+  printf '%s' "$res" | ( cd "$HOME" && "$nb" "$BRIDGE_CODE/ai-bridge.mjs" pair-store "$URL" "$v" ) || { m br_pair >&2; return 1; }
+  m br_installed "$BRIDGE_CODE" "$URL" "$BRIDGE_LIB"
+  if br_systemd; then
+    ( umask 077; mkdir -p "$(dirname "$BRIDGE_UNIT")" )
+    printf '%s
+' "[Unit]" "Description=gen-chibi CLI bridge (Studio AI through agent CLIs on this machine)" "After=network-online.target" ""       "[Service]" "Type=simple" "ExecStart=$nb $BRIDGE_CODE/ai-bridge.mjs run" "Restart=on-failure" "RestartSec=5" "RestartPreventExitStatus=2 3 4" "NoNewPrivileges=yes" "UMask=0077" ""       "[Install]" "WantedBy=default.target" > "$BRIDGE_UNIT.tmp" && chmod 600 "$BRIDGE_UNIT.tmp" && mv -f "$BRIDGE_UNIT.tmp" "$BRIDGE_UNIT"
+    systemctl --user daemon-reload && systemctl --user enable --now "$BRIDGE_UNIT_NAME" >/dev/null 2>&1 && m br_unit
+  else m br_no_systemd; fi
+  m br_next
+}
+# gỡ: dịch vụ + mã + token / HMAC / registry; HOME riêng của CLI (đăng nhập) chỉ xoá SAU KHI HỎI (--keep-home: không hỏi, giữ)
+br_uninstall() {
+  local keep=""; [ "${1:-}" = --keep-home ] && keep=1
+  if command -v systemctl >/dev/null 2>&1; then systemctl --user disable --now "$BRIDGE_UNIT_NAME" >/dev/null 2>&1 || true; fi
+  rm -f -- "$BRIDGE_UNIT"
+  if command -v systemctl >/dev/null 2>&1; then systemctl --user daemon-reload >/dev/null 2>&1 || true; fi
+  if [ -f "$BRIDGE_CODE/ai-bridge.mjs" ]; then br_node forget || true; fi
+  rm -f -- "$BRIDGE_CODE/ai-bridge.mjs" "$BRIDGE_CODE/shim.mjs" "$BRIDGE_CODE/selftest.mjs"; rmdir "$BRIDGE_CODE" 2>/dev/null || true
+  m br_uninstalled
+  [ -d "$BRIDGE_SHARE" ] || return 0
+  if [ -z "$keep" ] && ask_yn "$(mn br_ask_home "$BRIDGE_SHARE")"; then
+    case "$BRIDGE_SHARE" in "$HOME"/.local/share/gen-chibi/bridge) rm -rf -- "$BRIDGE_SHARE" ;; esac
+  else m br_keep_home "$BRIDGE_SHARE"; fi
+}
+# update / trust_sync: cầu nối đã cài → chép lại 3 tệp từ gói đã kiểm của bản đang chạy rồi khởi động lại dịch vụ (CNS-306). Mã không bao giờ lấy từ app
+br_refresh() {
+  [ -z "$IS_ROOT" ] || return 0
+  [ -f "$BRIDGE_CODE/ai-bridge.mjs" ] || return 0
+  br_src_dir || return 0
+  if cmp -s "$BR_SRC/ai-bridge.mjs" "$BRIDGE_CODE/ai-bridge.mjs" 2>/dev/null; then return 0; fi
+  br_copy_all || return 0
+  m br_refreshed "$(cur_tag)" >&2
+  if command -v systemctl >/dev/null 2>&1; then systemctl --user try-restart "$BRIDGE_UNIT_NAME" >/dev/null 2>&1 || true; fi
+}
+ai_cmd() {
+  [ "${1:-}" = bridge ] || { m ai_usage >&2; return 2; }
+  shift; local sub="${1:-}"; shift || true
+  [ -z "$IS_ROOT" ] || { m br_root >&2; return 2; }
+  case "$sub" in
+    install) br_install ;;
+    uninstall) br_uninstall ${1+"$@"} ;;
+    start|stop) br_systemd || { m br_no_systemd >&2; return 1; }; systemctl --user "$sub" "$BRIDGE_UNIT_NAME" ;;
+    status) br_node status || return 1; if br_systemd; then systemctl --user --no-pager status "$BRIDGE_UNIT_NAME" 2>/dev/null | head -n 3 || true; fi ;;
+    logs) journalctl --user -u "$BRIDGE_UNIT_NAME" -n 200 -f 2>&1 | log_san ;;
+    run|probe|login|enable|disable|config) br_node "$sub" ${1+"$@"} ;;
+    *) m ai_usage >&2; [ -z "$sub" ] && return 0; return 2 ;;
+  esac
+}
+
 trust_boot ${1+"$@"}   # root được lệnh cũ gọi từ trong thư mục cài → lắp lệnh đã kiểm rồi chuyển sang (không quay lại)
 case "${1:-help}" in mcp|help|-h|--help|override) ;; *) trust_sync ;; esac
 [ -z "$TRUST" ] || stub_fix   # lệnh cũ còn trong PATH (vd owner gõ bằng đường khác) → thay ở mọi lần chạy (CNS-278)
@@ -2848,5 +3004,6 @@ case "${1:-help}" in
   lang|language) shift; lang_cmd "${1:-}" ;;
   agent) shift; agent_cmd ${1+"$@"} ;;
   live) shift; live_cmd ${1+"$@"}; exit $? ;;
+  ai) shift; ai_cmd ${1+"$@"}; exit $? ;;
   *) usage ;;
 esac

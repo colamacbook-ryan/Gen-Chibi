@@ -390,6 +390,253 @@
    ],
    "expect": "huỷ (cờ cancel",
    "timeout": 600
+  },
+  {
+   "id": "A01",
+   "guard": "gcj sai / hết hạn → 403 KHÔNG WWW-Authenticate (CNS-303)",
+   "file": "server/main.js",
+   "find": "if (!ctx) return send(res, 403, { error: 'token lượt không hợp lệ, đã hết hạn hoặc đã bị thu hồi' });",
+   "replace": "if (!ctx) return send(res, 401, { error: 'x' }, null, { 'WWW-Authenticate': 'Bearer resource_metadata=\"http://127.0.0.1:9/x\"' });",
+   "test": [
+    "node",
+    "tools/test-bridge-app.mjs"
+   ],
+   "expect": "lượt dock → job agent ký HMAC",
+   "timeout": 600
+  },
+  {
+   "id": "A02",
+   "guard": "cổng khu ở callTool phủ cả đường CLI (không chỉ ở ai.js — CNS-302)",
+   "file": "server/mcp.js",
+   "find": "if (!this.toolsFor('ui', ctx.zone).some(t => t.name === name)) return toolError(",
+   "replace": "if (false) return toolError(",
+   "test": [
+    "node",
+    "tools/test-bridge-app.mjs"
+   ],
+   "expect": "gcj ở /mcp",
+   "timeout": 600
+  },
+  {
+   "id": "A03",
+   "guard": "trần lượt: Studio chỉ hạ, app ký trần đã kẹp (CNS-322)",
+   "file": "server/bridge.js",
+   "find": "const caps = { turnSec: Math.min(host.turnSec, Number.isFinite(sc.turnSec) && sc.turnSec > 0 ? sc.turnSec : Infinity),",
+   "replace": "const caps = { turnSec: Number.isFinite(sc.turnSec) && sc.turnSec > 0 ? sc.turnSec : host.turnSec,",
+   "test": [
+    "node",
+    "tools/test-bridge-app.mjs"
+   ],
+   "expect": "job: app ký HMAC",
+   "timeout": 600
+  },
+  {
+   "id": "A04",
+   "guard": "dự phòng API key chỉ khi CHƯA ghi (CNS-312)",
+   "file": "server/ai.js",
+   "find": "BRIDGE_FALLBACK.has(e.bridgeCode) && wrote === 0 && this.hasApi(c)",
+   "replace": "BRIDGE_FALLBACK.has(e.bridgeCode) && this.hasApi(c)",
+   "test": [
+    "node",
+    "tools/test-bridge-app.mjs"
+   ],
+   "expect": "dự phòng API key",
+   "timeout": 600
+  },
+  {
+   "id": "A05",
+   "guard": "gcj hết hạn / thu hồi / chưa started → không dùng được",
+   "file": "server/bridge.js",
+   "find": "if (!t || t.revoked || !t.active || now() > t.exp) return null;",
+   "replace": "if (!t) return null;",
+   "test": [
+    "node",
+    "tools/test-bridge-app.mjs"
+   ],
+   "expect": "cầu nối báo done",
+   "timeout": 600
+  },
+  {
+   "id": "A06",
+   "guard": "/api/ai/bridge/* chỉ request local (edge / proxy → 404)",
+   "file": "server/main.js",
+   "find": "if (!local) return fail(res, 404, 'không có API này');   // từ edge",
+   "replace": "if (false) return fail(res, 404, 'không có API này');   // từ edge",
+   "test": [
+    "node",
+    "tools/test-bridge-app.mjs"
+   ],
+   "expect": "/api/ai/bridge/*",
+   "timeout": 600
+  },
+  {
+   "id": "A07",
+   "guard": "token chủ không poll được (chỉ bridge token)",
+   "file": "server/main.js",
+   "find": "if (!bridge.authOk(b)) return fail(res, 401,",
+   "replace": "if (!bridge.authOk(b) && !auth.tokenOk(b)) return fail(res, 401,",
+   "test": [
+    "node",
+    "tools/test-bridge-app.mjs"
+   ],
+   "expect": "/api/ai/bridge/*",
+   "timeout": 600
+  },
+  {
+   "id": "A08",
+   "guard": "initialize.instructions rỗng cho kênh ui (CNS-308)",
+   "file": "server/mcp.js",
+   "find": "instructions: ctx && ctx.channel === 'ui' ? '' : Rules.mcp(ctx, TOOLS)",
+   "replace": "instructions: Rules.mcp(ctx, TOOLS)",
+   "test": [
+    "node",
+    "tools/test-bridge-app.mjs"
+   ],
+   "expect": "gcj ở /mcp",
+   "timeout": 600
+  },
+  {
+   "id": "A09",
+   "guard": "tools/list theo khu cho kênh ui",
+   "file": "server/mcp.js",
+   "find": "const list = ctx && ctx.channel === 'ui' ? this.toolsFor('ui', ctx.zone) : TOOLS;",
+   "replace": "const list = TOOLS;",
+   "test": [
+    "node",
+    "tools/test-bridge-app.mjs"
+   ],
+   "expect": "gcj ở /mcp",
+   "timeout": 600
+  },
+  {
+   "id": "A10",
+   "guard": "trần 60 gọi / 30 ghi theo token lượt (CNS-313)",
+   "file": "server/mcp.js",
+   "find": "if (t.calls >= t.caps.toolCalls) {",
+   "replace": "if (false) {",
+   "test": [
+    "node",
+    "tools/test-bridge-app.mjs"
+   ],
+   "expect": "trần theo token lượt",
+   "timeout": 600
+  },
+  {
+   "id": "A11",
+   "guard": "huỷ thu hồi gcj ngay",
+   "file": "server/bridge.js",
+   "find": "j.cancelled = true; j.tok.revoked = true; j.tok.active = false;",
+   "replace": "j.cancelled = true;",
+   "test": [
+    "node",
+    "tools/test-bridge-app.mjs"
+   ],
+   "expect": "huỷ:",
+   "timeout": 600
+  },
+  {
+   "id": "A12",
+   "guard": "lệch proto → UPGRADE (CNS-306)",
+   "file": "server/bridge.js",
+   "find": "if (b.proto !== PROTO) {",
+   "replace": "if (false) {",
+   "test": [
+    "node",
+    "tools/test-bridge-app.mjs"
+   ],
+   "expect": "hello: lệch proto",
+   "timeout": 600
+  },
+  {
+   "id": "A13",
+   "guard": "đổi install-id → pairing bị xoá (CNS-306)",
+   "file": "server/bridge.js",
+   "find": "if (st.installId !== id) { unpair(",
+   "replace": "if (false) { unpair(",
+   "test": [
+    "node",
+    "tools/test-bridge-app.mjs"
+   ],
+   "expect": "đổi install-id",
+   "timeout": 600
+  },
+  {
+   "id": "A14",
+   "guard": "job complete (AI đạo diễn) không mở MCP",
+   "file": "server/bridge.js",
+   "find": "j.tok.active = !j.cancelled && j.kind === 'agent';",
+   "replace": "j.tok.active = !j.cancelled;",
+   "test": [
+    "node",
+    "tools/test-bridge-app.mjs"
+   ],
+   "expect": "AI đạo diễn qua cầu nối",
+   "timeout": 600
+  },
+  {
+   "id": "C01",
+   "guard": "genchibi ai bridge từ chối root (CNS-315)",
+   "file": "cli/genchibi",
+   "find": "[ -z \"$IS_ROOT\" ] || { m br_root >&2; return 2; }",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-bridge-cli.mjs"
+   ],
+   "expect": "từ chối root",
+   "timeout": 600
+  },
+  {
+   "id": "C02",
+   "guard": "trusted_copy từ chối symlink (CNS-320)",
+   "file": "cli/genchibi",
+   "find": "[ ! -L \"$HOME_DIR/$src\" ] || return 1",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-bridge-cli.mjs"
+   ],
+   "expect": "trusted_copy (CNS-320)",
+   "timeout": 600
+  },
+  {
+   "id": "C03",
+   "guard": "trusted_copy kiểm dấu nội dung",
+   "file": "cli/genchibi",
+   "find": "if ! head -c 600 \"$tmp\" | grep -qF -- \"$mark\"; then rm -f -- \"$tmp\"; return 1; fi",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-bridge-cli.mjs"
+   ],
+   "expect": "trusted_copy (CNS-320)",
+   "timeout": 600
+  },
+  {
+   "id": "C04",
+   "guard": "uninstall xoá token / HMAC",
+   "file": "cli/genchibi",
+   "find": "if [ -f \"$BRIDGE_CODE/ai-bridge.mjs\" ]; then br_node forget || true; fi",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-bridge-cli.mjs"
+   ],
+   "expect": "uninstall:",
+   "timeout": 600
+  },
+  {
+   "id": "C05",
+   "guard": "unit NoNewPrivileges=yes",
+   "file": "cli/genchibi",
+   "find": "\"NoNewPrivileges=yes\" ",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-bridge-cli.mjs"
+   ],
+   "expect": "unit user",
+   "timeout": 600
   }
  ]
 }

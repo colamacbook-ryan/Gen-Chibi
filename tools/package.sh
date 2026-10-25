@@ -9,7 +9,7 @@ OUT="${1:-$ROOT/dist}"
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 mkdir -p "$STAGE/$NAME" "$OUT"
-for p in VERSION CHANGELOG.md LICENSE README.md launcher.js install.sh docker-compose.yml docker-compose.edge.yml edge server engine kinds studio locales cli agent; do
+for p in VERSION CHANGELOG.md LICENSE README.md launcher.js install.sh docker-compose.yml docker-compose.edge.yml edge server engine kinds studio locales cli agent bridge; do
   [ -e "$ROOT/$p" ] && cp -R "$ROOT/$p" "$STAGE/$NAME/"
 done
 # Sân khấu sống: bộ chuyển hooks của Claude Code + công cụ phát lại chạy từ bản cài (đoạn settings.json trỏ tới <bản cài>/tools/live-hook.mjs)
