@@ -38,7 +38,13 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y -qq bubblewrap
           if [ "$(sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null)" = 1 ]; then sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0; fi
           bwrap --version && bwrap --unshare-all --ro-bind /usr /usr --symlink usr/bin /bin --symlink usr/lib64 /lib64 --symlink usr/lib /lib -- /usr/bin/true
-      - run: node tools/mutate.mjs --data tools/mutations/v026.json --jobs 4
+      # B* (cầu nối, không cổng mạng cố định) chạy song song; A* / C* dùng cổng cố định (7795–7797) → tuần tự. C01 (từ chối root) chỉ kiểm được khi test chạy bằng root → sudo
+      - name: đột biến v026 — cầu nối (B*), song song
+        run: node tools/mutate.mjs --data tools/mutations/v026.json --jobs 4 $(node -e 'console.log(require("./tools/mutations/v026.json").mutations.map(m=>m.id).filter(i=>i[0]==="B").join(" "))')
+      - name: đột biến v026 — app (A*) + CLI (C*), tuần tự
+        run: node tools/mutate.mjs --data tools/mutations/v026.json --jobs 1 $(node -e 'console.log(require("./tools/mutations/v026.json").mutations.map(m=>m.id).filter(i=>i[0]!=="B"&&i!=="C01").join(" "))')
+      - name: đột biến v026 — C01 (từ chối root) bằng root
+        run: sudo env "PATH=$PATH" node tools/mutate.mjs --data tools/mutations/v026.json C01
   # v0.22 xuất video (CNS-215 / CNS-216): nhánh MP4 H.264 + AAC (ưu tiên 1) chỉ có ở Chrome / Edge trên Windows / macOS — Chromium Linux (máy Gen) chỉ ra
   # WebM VP9 + Opus. Job này dùng Google Chrome CÓ SẴN của runner (không npm, không Playwright): xuất 1 phân cảnh Fun Office bằng WebCodecs thật, kiểm
   # cấu trúc MP4 (ftyp → moov → mdat, avc1 + mp4a, không edts, tiếng ≈ hình) và TRƯỢT nếu Chrome không ra được avc1 + mp4a. Lượt 2: xuất ở tab nền bị ẩn.

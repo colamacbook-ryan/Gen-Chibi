@@ -59,6 +59,12 @@ const job0 = (cli, extra) => Object.assign({ kind: 'agent', cli, model: '', syst
     && env.PATH === '/usr/bin:/bin:/opt/x' && env.HTTPS_PROXY === 'http://127.0.0.1:18080',
     'tham số bwrap: --unshare-all --die-with-parent --new-session --cap-drop ALL --clearenv · /usr chỉ đọc · tmpfs /home /tmp /run (trước mọi bind vào HOME) · gốc chỉ đọc · /work = thư mục lượt · shim chỉ đọc · socket proxy · env chỉ gồm danh sách cho phép (không token)', s.slice(0, 400) + ' ' + envKeys.join());
   const host = B.DEFAULT_CAPS, e1 = B.effCaps(host, { turnSec: 99999, toolCalls: 9999 }), e2 = B.effCaps(host, { turnSec: 120 });
+  // review 🟠1: turnSec 0,4 → không được thành 0 (= không hẹn giờ); caps không nguyên dương → job bị từ chối; sandboxRun thiếu hẹn giờ → lỗi
+  const e3 = B.effCaps(host, { turnSec: 0.4, toolCalls: 0.4 }), e4 = B.effCaps(Object.assign({}, host, { turnSec: 0, toolCalls: 0 }), {});
+  let noTimer = ''; try { await B.sandboxRun({}); } catch (e) { noTimer = e.code; }
+  let noTimer0 = ''; try { await B.sandboxRun({ timeoutMs: 0 }); } catch (e) { noTimer0 = e.code; }
+  ok(e3.turnSec === B.CAP_RANGE.turnSec[0] && e3.toolCalls === 1 && e4.turnSec === B.CAP_RANGE.turnSec[0] && e4.toolCalls === 1 && noTimer === 'BAD_JOB' && noTimer0 === 'BAD_JOB',
+    'turnSec nhỏ (0,4 / 0) không bao giờ thành "không hẹn giờ": kẹp ≥ ' + B.CAP_RANGE.turnSec[0] + ' s, toolCalls ≥ 1 · sandboxRun thiếu / 0 hẹn giờ → từ chối (review 🟠1)', JSON.stringify({ e3, e4, noTimer, noTimer0 }));
   ok(host.turnSec === 900 && host.perHour === 100 && host.concurrent === 1 && e1.turnSec === 900 && e1.toolCalls === 60 && e2.turnSec === 120,
     'trần ở máy chủ (D10, CNS-322): mặc định 900 s / 100 lượt mỗi giờ / 1 lượt một lúc · Studio chỉ HẠ được (gửi 99999 s → 900 s, 120 s → 120 s)', JSON.stringify({ e1, e2 }));
 }
@@ -74,12 +80,12 @@ const job0 = (cli, extra) => Object.assign({ kind: 'agent', cli, model: '', syst
     mcpUrl: tryE(env(job0('claude', { mcpUrl: 'http://evil/mcp' }))), stdio: tryE(env(job0('claude', { mcp: { command: 'sh' } }))), cmd: tryE(env(job0('claude', { argv: ['--dangerously-skip-permissions'] }))),
     notEnabled: tryE(env(job0('claude')), ['agy']), unverified: tryE(env(job0('agy'))), model: tryE(env(job0('claude', { model: 'opus-evil' }))), cli: tryE(env(job0('codex'))),
     big: tryE(env(job0('claude', { context: 'x'.repeat(39000), system: 'y'.repeat(39000), messages: Array.from({ length: 40 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', content: 'z'.repeat(i === 39 ? 10 : 7000) })).concat([{ role: 'user', content: 'q' }]).slice(-40) }))),
-    expired: tryE(env(job0('claude'), { exp: Date.now() - 1 })), zone: tryE(env(job0('claude', { zone: '../etc' }))), extraEnv: tryE(Object.assign({}, good, { url: 'x' })), msgKey: tryE(env(job0('claude', { messages: [{ role: 'user', content: 'x', name: 'sys' }] })))
+    expired: tryE(env(job0('claude'), { exp: Date.now() - 1 })), capFrac: tryE(env(job0('claude', { caps: { turnSec: 0.4 } }))), capZero: tryE(env(job0('claude', { caps: { toolCalls: 0 } }))), capNeg: tryE(env(job0('claude', { caps: { writes: -3 } }))), zone: tryE(env(job0('claude', { zone: '../etc' }))), extraEnv: tryE(Object.assign({}, good, { url: 'x' })), msgKey: tryE(env(job0('claude', { messages: [{ role: 'user', content: 'x', name: 'sys' }] })))
   };
   ok(R.good === 'OK' && /^BAD_SIG/.test(R.forged) && /^BAD_SIG/.test(R.nosig) && /^BAD_JOB:unknown field mcpUrl/.test(R.mcpUrl) && /^BAD_JOB:unknown field mcp/.test(R.stdio) && /^BAD_JOB:unknown field argv/.test(R.cmd)
     && /^NOT_ENABLED/.test(R.notEnabled) && /^CONFINEMENT:agy: unverified/.test(R.unverified) && /^BAD_JOB:model/.test(R.model) && /^BAD_JOB:cli/.test(R.cli) && /^BAD_JOB:prompt too large/.test(R.big)
-    && /^BAD_JOB:exp/.test(R.expired) && /^BAD_JOB:zone/.test(R.zone) && /^BAD_JOB:envelope/.test(R.extraEnv) && /^BAD_JOB:message/.test(R.msgKey),
-    'kiểm job: sai HMAC / sửa nội dung sau khi ký → bỏ · trường lạ (URL MCP, MCP stdio, argv) → từ chối · CLI chưa bật / chưa kiểm khoá → từ chối · model ngoài registry · CLI lạ · prompt quá trần · hết hạn · khu lạ', JSON.stringify(R));
+    && /^BAD_JOB:exp/.test(R.expired) && ['capFrac', 'capZero', 'capNeg'].every(k => /^BAD_JOB:caps/.test(R[k])) && /^BAD_JOB:zone/.test(R.zone) && /^BAD_JOB:envelope/.test(R.extraEnv) && /^BAD_JOB:message/.test(R.msgKey),
+    'kiểm job: caps không nguyên dương (0,4 / 0 / âm) → từ chối · sai HMAC / sửa nội dung sau khi ký → bỏ · trường lạ (URL MCP, MCP stdio, argv) → từ chối · CLI chưa bật / chưa kiểm khoá → từ chối · model ngoài registry · CLI lạ · prompt quá trần · hết hạn · khu lạ', JSON.stringify(R));
 }
 
 /* ---------------------------------------------------------------- 3. kiểm init của Claude + tên tool genchibi (security review #1) */
@@ -187,6 +193,25 @@ const job0 = (cli, extra) => Object.assign({ kind: 'agent', cli, model: '', syst
   noSb.clis.claude.sandbox = { bwrap: 'ok', path: '/usr/bin/bwrap', selftest: [{ id: 'netns-lo-only', ok: false }] };
   const ns2 = await B.runJob({ id: 'jobNOSANDBOX', gcj: 'gcj_' + 'n'.repeat(43), job: job0('claude') }, { paths: W.paths, reg: noSb, caps: B.DEFAULT_CAPS, app: 'http://127.0.0.1:9', post: async ph => { posted.push(ph); return {}; } }).catch(e => ({ code: 'THROW ' + e.code }));
   ok(ns.code === 'NO_SANDBOX' && ns2.code === 'NO_SANDBOX' && !posted.length, 'không có hộp cát (Linux thiếu bwrap / selftest hỏng) → NO_SANDBOX cho cả Claude, không chạy gì (CNS-323)', JSON.stringify({ ns, ns2, posted }));
+  // review 🟠2: --version / --help (ngoài hộp) chạy với HOME TẠM RỖNG — hook do CLI thù địch cài vào HOME riêng KHÔNG chạy
+  const pw = path.join(W.T, 'pwned'), ch = W.paths.cliHome('claude');
+  fs.mkdirSync(path.join(ch, '.claude'), { recursive: true }); fs.writeFileSync(path.join(ch, '.claude/settings.json'), JSON.stringify({ hooks: { pwn: 'touch ' + pw } }));
+  const pe = B.probeCli('claude', W.paths, { clis: {}, sandbox: { bwrap: 'missing' } });
+  fs.writeFileSync(path.join(ch, '.claude.json'), JSON.stringify({ mcpServers: { evil: { command: 'sh' } } })); fs.writeFileSync(path.join(ch, '.mcp.json'), '{}');
+  const sus = B.homeSuspicious('claude', ch);
+  ok(pe.installed && /2\.1\.303/.test(pe.version) && !fs.existsSync(pw) && sus.includes('.claude.json mcpServers') && sus.includes('.mcp.json'),
+    'probe --version / --help với HOME tạm rỗng: hook trong HOME riêng không chạy · .claude.json có mcpServers / .mcp.json bị nhận ra là cấu hình lạ (review 🟠2)', JSON.stringify({ v: pe.version, pwned: fs.existsSync(pw), sus }));
+  fs.rmSync(path.join(ch, '.claude.json')); fs.rmSync(path.join(ch, '.mcp.json')); fs.rmSync(path.join(ch, '.claude/settings.json'));
+  // review 🟡3: symlink ở thư mục cha trong HOME riêng → không ghi xuyên, symlink bị xoá, lỗi CONFINEMENT
+  const ah = W.paths.cliHome('agy'), real = path.join(W.T, 'owner-gemini'); fs.mkdirSync(path.join(real, 'antigravity-cli'), { recursive: true }); fs.writeFileSync(path.join(real, 'antigravity-cli/settings.json'), 'OWNER');
+  fs.mkdirSync(ah, { recursive: true }); fs.symlinkSync(real, path.join(ah, '.gemini'));
+  let sl = ''; try { B.writeHomeFiles('agy', ah); } catch (e) { sl = e.code + ':' + e.detail; }
+  let sl2 = ''; try { B.safeHomePath(ah, '.gemini/antigravity-cli/settings.json'); } catch (e) { sl2 = e.code; }
+  ok(/^CONFINEMENT:symlink in the bridge home: \.gemini/.test(sl) && fs.readFileSync(path.join(real, 'antigravity-cli/settings.json'), 'utf8') === 'OWNER' && !fs.existsSync(path.join(ah, '.gemini')) && sl2 === '',
+    'HOME riêng có symlink ở thư mục cha (agy-home/.gemini → ~/.gemini thật): không ghi đè cấu hình của owner, symlink bị xoá, CONFINEMENT (review 🟡3)', sl + ' | ' + sl2);
+  // ghi phụ: không còn binary mà đang failed → giữ failed
+  const nb = B.probeCli('claude', B.bridgePaths({ HOME: W.H, XDG_RUNTIME_DIR: W.X, PATH: '/nonexistent' }), { clis: { claude: { confinement: { status: 'failed', missing: ['x'] } } }, sandbox: { bwrap: 'missing' } });
+  ok(!nb.installed && nb.confinement.status === 'failed', 'probe: không thấy binary khi đang failed → vẫn failed (applyConfinement)', JSON.stringify(nb.confinement));
   const cfgBad = []; for (const app of ['http://10.0.0.5:7480', 'https://127.0.0.1:7480', 'http://127.0.0.1', 'http://evil.example:80', 'http://127.0.0.1:7480/mcp']) { fs.mkdirSync(W.paths.lib, { recursive: true }); fs.writeFileSync(W.paths.config, JSON.stringify({ app })); try { B.loadConfig(W.paths); cfgBad.push(app); } catch (e) { /* đúng */ } }
   fs.writeFileSync(W.paths.config, JSON.stringify({ app: 'http://127.0.0.1:7480', version: '0.26.0' }));
   ok(!cfgBad.length && B.loadConfig(W.paths).app === 'http://127.0.0.1:7480', 'địa chỉ app chốt lúc install chỉ là http://127.0.0.1:<cổng> (CNS-314)', cfgBad.join(','));
@@ -210,7 +235,7 @@ if (sb.bwrap !== 'ok') {
     JSON.stringify({ c: ec.confinement, a: ea.confinement, st: st.filter(c => !c.ok) }));
   const reg0 = B.loadRegistry(W.paths);
   // --- canary âm: mỗi cách "gian" → không Đạt
-  const C = async (cli, m) => { W.mode(cli, m); const e = await B.verifyCli(cli, W.paths, undefined, { allowReset: true }); return e.confinement.status + ': ' + e.confinement.missing.join(' | '); };
+  const C = async (cli, m) => { W.mode(cli, m); const bm = path.join(W.BIN, cli + '.mode.json'); if (m.drop) fs.writeFileSync(bm, JSON.stringify({ drop: true })); else fs.rmSync(bm, { force: true }); const e = await B.verifyCli(cli, W.paths, undefined, { allowReset: true }); return e.confinement.status + ': ' + e.confinement.missing.join(' | '); };
   const R = { leak: await C('claude', { leakContext: true }), cheatC: await C('claude', { cheat: true, extraTools: [] }), drop: await C('claude', { drop: true }), safeDrop: await C('claude', { safeModeDropsMcp: true }),
     polite: await C('agy', { polite: true }), ignore: await C('agy', { ignoreBaseUrl: true }), cheatA: await C('agy', { cheat: true }), plugin: await C('claude', { extraPlugin: true }),
     denyOnly: await C('agy', { denyOnlyResult: true }), bypassA: await C('agy', { permMode: 'bypassPermissions' }), autoA: await C('agy', { permMode: 'auto' }), autoC: await C('claude', { permMode: 'auto' }) };
@@ -295,10 +320,14 @@ if (sb.bwrap !== 'ok') {
   ok(a401.phase === 'error' && a401.code === 'CONFINEMENT' && /401\/403/.test(a401.detail) && auth.code === 'AUTH_REQUIRED' && quota.code === 'QUOTA' && agyAuth.code === 'AUTH_REQUIRED' && agyQ.code === 'QUOTA',
     'sau "Quét lại" từ xa: app trả 401 cho /mcp → CLI bị giết (CNS-303) · lỗi đăng nhập / quota của claude (api_retry) và agy (AGY_ERROR) → AUTH_REQUIRED / QUOTA', JSON.stringify({ a401, auth: auth.code, quota: quota.code, agyAuth: agyAuth.code, agyQ: agyQ.code }));
   await B.verifyCli('claude', W.paths, undefined, { allowReset: true });
-  const can = await turn('claude', { sleep: 20000 }, {}, { cancelAfter: 300 }), tout = await turn('agy', { sleep: 20000 }, { caps: { turnSec: 2 } }, {});
+  const can = await turn('claude', { sleep: 20000 }, {}, { cancelAfter: 300 });
+  W.mode('agy', { sleep: 20000 });
+  const ea0 = B.loadRegistry(W.paths).clis.agy, t0 = Date.now();
+  const toutR = await B.sandboxRun({ paths: W.paths, entry: ea0, home: W.paths.cliHome('agy'), binds: [ea0.real], cmd: [ea0.real, '-p', '--input-format', 'stream-json', '--output-format', 'stream-json'], stdin: '{"type":"user","message":{"content":"x"}}\n', env: B.sandboxEnv(W.paths.cliHome('agy'), path.dirname(ea0.real), {}), secretEnv: { GEMINI_API_KEY: KEY }, allow: [], routes: {}, timeoutMs: 2000, onLine() {} });
+  const tout = { code: toutR.stop, ms: Date.now() - t0 };
   const tdirs = fs.readdirSync(B.runBase(W.paths));
   ok(can.code === 'CANCELLED' && can.ms < 6000 && tout.code === 'TIMEOUT' && tout.ms < 6000 && tdirs.length === 0,
-    'huỷ (cờ cancel trong phản hồi nhịp beat ≤ 1,5 s) → SIGINT → dừng ≤ 6 s · quá trần lượt (Studio hạ còn 2 s) → TIMEOUT · thư mục lượt được dọn', JSON.stringify({ can: [can.code, can.ms], tout: [tout.code, tout.ms], tdirs }));
+    'huỷ (cờ cancel trong phản hồi nhịp beat ≤ 1,5 s) → SIGINT → dừng ≤ 6 s · quá hẹn giờ của hộp (2 s) → TIMEOUT · thư mục lượt được dọn', JSON.stringify({ can: [can.code, can.ms], tout: [tout.code, tout.ms], tdirs }));
   // tệp cấu hình của agy bị đổi giữa hai lượt → từ chối + failed (CNS-324: bind chỉ đọc, kiểm băm)
   const sp = path.join(W.paths.cliHome('agy'), '.gemini/antigravity-cli/settings.json');
   fs.writeFileSync(sp, JSON.stringify({ permissions: { allow: ['command(*)'] } }));
@@ -323,6 +352,30 @@ if (sb.bwrap !== 'ok') {
   ok(!oErr && fs.existsSync(oFile) && (fs.statSync(oFile).mode & 0o777) === 0o600 && B.authModeOf(W.paths, 'agy') === 'oauth' && oTurn.phase === 'done' && pubO.clis.agy.broadScope === true && pubO.clis.agy.authMode === 'oauth' && /cloud-platform/.test(B.OAUTH_WARN),
     'agy OAuth (owner chọn): đăng nhập chạy agy TRONG hộp cát không D-Bus → token ở plugin-secrets.json của HOME riêng, ép 0600 · lượt sau chạy được · registry báo broadScope (cảnh báo cloud-platform)', JSON.stringify({ oErr, oTurn: oTurn.phase + ':' + oTurn.code + ':' + oTurn.detail, pub: pubO.clis.agy.broadScope }));
   B.loginKey(W.paths, KEY);
+  // review 🟠2: cấu hình lạ xuất hiện trong HOME riêng của claude giữa hai lượt → lượt bị chặn, failed; settings.json của cầu nối bị sửa → chặn
+  await B.verifyCli('claude', W.paths, undefined, { allowReset: true });
+  const chh = W.paths.cliHome('claude');
+  fs.writeFileSync(path.join(chh, '.claude.json'), JSON.stringify({ mcpServers: { evil: { command: 'sh', args: ['-c', 'id'] } } }));
+  const susTurn = await turn('claude', {});
+  fs.rmSync(path.join(chh, '.claude.json'));
+  await B.verifyCli('claude', W.paths, undefined, { allowReset: true });
+  fs.writeFileSync(path.join(chh, '.claude/settings.json'), JSON.stringify({ hooks: { SessionStart: [{ hooks: [{ type: 'command', command: 'id' }] }] } }));
+  const hookTurn = await turn('claude', {});
+  const susVerify = (fs.writeFileSync(path.join(chh, '.claude/settings.local.json'), '{}'), await B.verifyCli('claude', W.paths, undefined, { allowReset: true }));
+  fs.rmSync(path.join(chh, '.claude/settings.local.json'));
+  await B.verifyCli('claude', W.paths, undefined, { allowReset: true });
+  ok(susTurn.code === 'CONFINEMENT' && /\.claude\.json mcpServers/.test(susTurn.detail) && hookTurn.code === 'CONFINEMENT' && /settings\.json/.test(hookTurn.detail) && susVerify.confinement.status === 'failed' && /settings\.local\.json/.test(susVerify.confinement.missing.join()),
+    'claude: .claude.json có mcpServers / settings.json của cầu nối bị sửa (hook) → lượt bị chặn · settings.local.json lạ → enable ra failed (review 🟠2)', JSON.stringify({ susTurn, hookTurn: hookTurn.detail, v: susVerify.confinement }));
+  // review 🟡4: chữ của CLI có trần 200 KB; gửi 'text' lên app tối đa một lần / 500 ms, không chồng
+  const big = await turn('claude', { bigText: true }), many = await turn('claude', { manyText: true });
+  ok(big.phase === 'error' && big.code === 'CLI_ERROR' && /over 204800/.test(big.detail) && many.phase === 'done' && many.textPosts >= 1 && many.textPosts <= Math.ceil(many.ms / 500) + 1,
+    'chữ CLI > 200 KB → dừng, CLI_ERROR · 12 KB chữ trong ~2 s → ' + many.textPosts + ' lần gửi text (≤ 1 / 500 ms, không chồng) (review 🟡4)', JSON.stringify({ big: [big.code, big.detail], many: [many.phase, many.textPosts, many.ms] }));
+  // review 🟠2: đăng nhập claude chạy TRONG hộp (không ngoài hộp với HOME riêng) → tệp đăng nhập ép 0600
+  W.mode('claude', { loginWrite: true });
+  let lerr = ''; try { await B.loginSandboxed(W.paths, B.loadRegistry(W.paths), 'claude'); } catch (e) { lerr = e.code + ':' + e.detail; }
+  const cred = path.join(chh, '.claude/.credentials.json');
+  ok(!lerr && fs.existsSync(cred) && (fs.statSync(cred).mode & 0o777) === 0o600, 'login claude chạy trong hộp cát (HOME riêng, không D-Bus) → .claude/.credentials.json ép 0600 (review 🟠2)', lerr);
+  W.mode('claude', {});
   const inside = await (async () => { W.mode('agy', {}); const e = B.loadRegistry(W.paths).clis.agy, sel = await B.selftest('agy', W.paths, B.loadRegistry(W.paths)); return sel; })();
   ok(inside.ok && !fs.readdirSync(W.H).includes('.cache'), 'selftest lúc khởi động đạt · không có gì ghi vào ~/.cache của HOME (thư mục lượt ở XDG)');
   app.close();

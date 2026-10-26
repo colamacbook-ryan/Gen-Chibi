@@ -470,6 +470,149 @@
    "timeout": 600
   },
   {
+   "id": "B38",
+   "guard": "review 🟠1: effCaps kẹp turnSec ≥ trần dưới (không thành 0 = không hẹn giờ)",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "out.turnSec = Math.max(CAP_RANGE.turnSec[0], Math.round(+out.turnSec) || CAP_RANGE.turnSec[0]);",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "turnSec nhỏ",
+   "timeout": 600
+  },
+  {
+   "id": "B39",
+   "guard": "review 🟠1: caps của job phải nguyên dương",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "!Number.isInteger(j.caps[k]) || j.caps[k] <= 0",
+   "replace": "!Number.isFinite(j.caps[k])",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "kiểm job",
+   "timeout": 600
+  },
+  {
+   "id": "B40",
+   "guard": "review 🟠1: sandboxRun luôn có hẹn giờ",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "if (!(Number.isFinite(o.timeoutMs) && o.timeoutMs > 0)) throw bErr('BAD_JOB', 'sandboxRun without a timeout');",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "turnSec nhỏ",
+   "timeout": 600
+  },
+  {
+   "id": "B41",
+   "guard": "review 🟠2: probe --version / --help với HOME tạm rỗng",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "const env = { HOME: ph, PATH: '/usr/bin:/bin', LANG: 'C.UTF-8', TERM: 'dumb', CLAUDE_CONFIG_DIR: path.join(ph, '.claude') };",
+   "replace": "const env = { HOME: home, PATH: '/usr/bin:/bin', LANG: 'C.UTF-8', TERM: 'dumb', CLAUDE_CONFIG_DIR: path.join(home, '.claude') };",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "probe --version / --help với HOME tạm rỗng",
+   "timeout": 600
+  },
+  {
+   "id": "B42",
+   "guard": "review 🟠2: cấu hình lạ trong HOME riêng → lượt bị chặn",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "if (sus.length) { onFail('foreign config in the bridge home: ' + sus.join(', '));",
+   "replace": "if (false) { onFail('foreign config in the bridge home: ' + sus.join(', '));",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "claude: .claude.json có mcpServers",
+   "timeout": 600
+  },
+  {
+   "id": "B43",
+   "guard": "review 🟠2: settings.json của claude là tệp của cầu nối (bind chỉ đọc, băm)",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "homeFiles: () => [{ rel: '.claude/settings.json', data: '{}\\n' }],",
+   "replace": "homeFiles: () => [],",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "claude: .claude.json có mcpServers",
+   "timeout": 600
+  },
+  {
+   "id": "B44",
+   "guard": "review 🟡3: symlink ở thư mục cha trong HOME riêng",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "if (st.isSymbolicLink()) { try { fs.unlinkSync(cur); } catch (e) { /* bỏ */ } throw bErr(",
+   "replace": "if (false) { try { fs.unlinkSync(cur); } catch (e) { /* bỏ */ } throw bErr(",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "HOME riêng có symlink",
+   "timeout": 600
+  },
+  {
+   "id": "B45",
+   "guard": "review 🟡4: trần chữ 200 KB",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "if (text.length > TEXT_CAP && !ctl.stopped()) { tooBig = true; ctl.stop('TEXT_CAP', false); }",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "chữ CLI > 200 KB",
+   "timeout": 600
+  },
+  {
+   "id": "B46",
+   "guard": "review 🟡4: tối đa một post text / 500 ms",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "!ctl.stopped() && !textPending && Date.now() - lastTextPost >= 500)",
+   "replace": "!ctl.stopped())",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "chữ CLI > 200 KB",
+   "timeout": 600
+  },
+  {
+   "id": "B47",
+   "guard": "ghi phụ: probe không binary giữ failed",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "confinement: applyConfinement(e.confinement, { status: 'unverified', evidence: [], missing: ['cli not found'], at: e.probed_at }) });",
+   "replace": "confinement: { status: 'unverified', evidence: [], missing: ['cli not found'], at: e.probed_at } });",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "không thấy binary khi đang failed",
+   "timeout": 600
+  },
+  {
+   "id": "B48",
+   "guard": "review 🟠2: tệp đăng nhập sau login trong hộp ép 0600",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "  fs.chmodSync(f, 0o600);\n  if (cli === 'agy')",
+   "replace": "  if (cli === 'agy')",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "login claude chạy trong hộp cát",
+   "timeout": 600
+  },
+  {
    "id": "B30",
    "guard": "huỷ: cờ cancel ở nhịp beat",
    "file": "bridge/ai-bridge.mjs",
@@ -721,6 +864,19 @@
    "guard": "unit NoNewPrivileges=yes",
    "file": "cli/genchibi",
    "find": "\"NoNewPrivileges=yes\" ",
+   "replace": "",
+   "test": [
+    "node",
+    "tools/test-bridge-cli.mjs"
+   ],
+   "expect": "unit user",
+   "timeout": 600
+  },
+  {
+   "id": "C06",
+   "guard": "review 🟡4: unit MemoryMax / TasksMax",
+   "file": "cli/genchibi",
+   "find": "\"MemoryMax=4G\" \"TasksMax=512\" ",
    "replace": "",
    "test": [
     "node",

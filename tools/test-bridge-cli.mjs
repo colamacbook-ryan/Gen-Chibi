@@ -88,9 +88,9 @@ ok(ins.code === 0 && ['ai-bridge.mjs', 'shim.mjs', 'selftest.mjs'].every(f => mo
   && /^gcb_/.test(tok) && /^[0-9a-f]{64}$/.test(hm) && mode(path.join(lib, 'token')) === '600' && mode(path.join(lib, 'hmac')) === '600' && cfg.app === 'http://127.0.0.1:' + PORT && cfg.version === '0.26.0',
   'install: 3 tệp cầu nối chép bằng trusted_copy (0600, đúng nội dung gói) · token gcb_ + bí mật HMAC 0600 · địa chỉ app chốt http://127.0.0.1:' + PORT, ins.out.slice(0, 500));
 const nodeAbs = fs.realpathSync(process.execPath);
-ok(new RegExp('^ExecStart=' + nodeAbs.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&') + ' ' + code.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&') + '/ai-bridge\\.mjs run$', 'm').test(unitTxt) && /^NoNewPrivileges=yes$/m.test(unitTxt) && /^UMask=0077$/m.test(unitTxt) && /^Restart=on-failure$/m.test(unitTxt)
+ok(new RegExp('^ExecStart=' + nodeAbs.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&') + ' ' + code.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&') + '/ai-bridge\\.mjs run$', 'm').test(unitTxt) && /^NoNewPrivileges=yes$/m.test(unitTxt) && /^UMask=0077$/m.test(unitTxt) && /^MemoryMax=4G$/m.test(unitTxt) && /^TasksMax=512$/m.test(unitTxt) && /^Restart=on-failure$/m.test(unitTxt)
   && /--user daemon-reload/.test(sysLog) && /--user enable --now gen-chibi-ai-bridge\.service/.test(sysLog),
-  'unit user gen-chibi-ai-bridge.service: ExecStart = node tuyệt đối + bản chép đã kiểm, Restart=on-failure, NoNewPrivileges=yes, UMask=0077 · systemctl --user enable --now', unitTxt + ' | ' + sysLog);
+  'unit user gen-chibi-ai-bridge.service: ExecStart = node tuyệt đối + bản chép đã kiểm, Restart=on-failure, NoNewPrivileges=yes, UMask=0077, MemoryMax=4G, TasksMax=512 (review 🟡4) · systemctl --user enable --now', unitTxt + ' | ' + sysLog);
 ok(![tok, hm, OWN].some(x => x && (ins.out.includes(x) || sysLog.includes(x) || unitTxt.includes(x) || slog.includes(x))),
   'token cầu nối / bí mật HMAC / token chủ không in ra, không trong lệnh systemctl / unit / log server (ghép qua stdin)');
 const st = await fetch('http://127.0.0.1:' + PORT + '/api/ai/cli', { headers: { Authorization: 'Bearer ' + OWN } }).then(r => r.json());

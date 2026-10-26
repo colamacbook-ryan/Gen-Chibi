@@ -2939,7 +2939,7 @@ br_install() {
   if br_systemd; then
     ( umask 077; mkdir -p "$(dirname "$BRIDGE_UNIT")" )
     printf '%s
-' "[Unit]" "Description=gen-chibi CLI bridge (Studio AI through agent CLIs on this machine)" "After=network-online.target" ""       "[Service]" "Type=simple" "ExecStart=$nb $BRIDGE_CODE/ai-bridge.mjs run" "Restart=on-failure" "RestartSec=5" "RestartPreventExitStatus=2 3 4" "NoNewPrivileges=yes" "UMask=0077" ""       "[Install]" "WantedBy=default.target" > "$BRIDGE_UNIT.tmp" && chmod 600 "$BRIDGE_UNIT.tmp" && mv -f "$BRIDGE_UNIT.tmp" "$BRIDGE_UNIT"
+' "[Unit]" "Description=gen-chibi CLI bridge (Studio AI through agent CLIs on this machine)" "After=network-online.target" ""       "[Service]" "Type=simple" "ExecStart=$nb $BRIDGE_CODE/ai-bridge.mjs run" "Restart=on-failure" "RestartSec=5" "RestartPreventExitStatus=2 3 4" "NoNewPrivileges=yes" "UMask=0077" "MemoryMax=4G" "TasksMax=512" ""       "[Install]" "WantedBy=default.target" > "$BRIDGE_UNIT.tmp" && chmod 600 "$BRIDGE_UNIT.tmp" && mv -f "$BRIDGE_UNIT.tmp" "$BRIDGE_UNIT"
     systemctl --user daemon-reload && systemctl --user enable --now "$BRIDGE_UNIT_NAME" >/dev/null 2>&1 && m br_unit
   else m br_no_systemd; fi
   m br_next
