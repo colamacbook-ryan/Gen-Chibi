@@ -13,8 +13,12 @@ import path from 'path';
 
 const argv = process.argv.slice(2), HOME = process.env.HOME || '/';
 let M = {}; try { M = JSON.parse(fs.readFileSync(path.join(HOME, 'fake-mode.json'), 'utf8')); } catch (e) { /* mặc định */ }
+// chế độ đặt cạnh binary (<bin>.mode.json): áp cả khi cầu nối probe bằng HOME tạm rỗng (vd drop: --help thiếu --restricted)
+try { M = Object.assign(JSON.parse(fs.readFileSync(process.argv[1] + '.mode.json', 'utf8')), M); } catch (e) { /* không có */ }
 const has = f => argv.includes(f), val = f => { const i = argv.indexOf(f); return i >= 0 ? argv[i + 1] : undefined; };
 const out = o => process.stdout.write(JSON.stringify(o) + '\n');
+// Claude thật nạp $CLAUDE_CONFIG_DIR/settings.json (hook) ngay cả khi chỉ --version / --help: mô phỏng — hook "pwn" chạy lệnh của nó (cầu nối phải probe bằng HOME tạm rỗng)
+try { const st = JSON.parse(fs.readFileSync(path.join(process.env.CLAUDE_CONFIG_DIR || path.join(HOME, '.claude'), 'settings.json'), 'utf8')); if (st.hooks && st.hooks.pwn) (await import('child_process')).execSync(st.hooks.pwn); } catch (e) { /* không có */ }
 if (has('--version')) { console.log('2.1.303 (Claude Code)'); process.exit(0); }
 if (has('--help')) {
   const flags = ['-p, --print', '--output-format <format>', '--input-format <format>', '--verbose', '--no-session-persistence', '--safe-mode', '--restricted', '--strict-mcp-config', '--mcp-config <configs...>',
@@ -22,6 +26,8 @@ if (has('--help')) {
   console.log('Usage: claude [options] [command] [prompt]\n\nOptions:\n' + flags.filter(f => !(M.drop && /--restricted/.test(f))).map(f => '  ' + f).join('\n'));
   process.exit(0);
 }
+// đăng nhập tương tác (trong hộp): ghi .claude/.credentials.json (0644 — cầu nối phải ép 0600)
+if (!argv.length && M.loginWrite) { const d = process.env.CLAUDE_CONFIG_DIR || path.join(HOME, '.claude'); fs.mkdirSync(d, { recursive: true }); fs.writeFileSync(path.join(d, '.credentials.json'), '{"claudeAiOauth":"fake"}', { mode: 0o644 }); console.log('Login successful.'); process.exit(0); }
 if (!has('--print') && !has('-p')) { console.error('interactive mode not supported in fake'); process.exit(2); }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 // HTTP qua proxy của môi trường (như CLI thật) — không có proxy thì nối thẳng (trong hộp cát sẽ hỏng: đúng ý)
@@ -95,6 +101,9 @@ for (const [name, args] of (M.script || [])) {
   log.push(name + (x.isError ? '✗' : '✓'));
   out({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, is_error: !!x.isError, content: JSON.stringify(x.content).slice(0, 2000) }] } });
 }
+// chữ dài: bigText (vượt trần 200 KB) · manyText (nhiều mảnh nhỏ trong ~2 s — đếm số lần cầu nối gửi 'text' lên app)
+if (M.bigText) for (let i = 0; i < 300; i++) out({ type: 'assistant', message: { content: [{ type: 'text', text: 'x'.repeat(1000) }] } });
+if (M.manyText) for (let i = 0; i < 40; i++) { out({ type: 'assistant', message: { content: [{ type: 'text', text: 'y'.repeat(300) }] } }); await sleep(50); }
 const reply = (M.reply || 'Xong (fake-claude).') + (M.echo ? ' [' + stdin.length + ' chars]' : '');
 out({ type: 'assistant', message: { content: [{ type: 'text', text: reply }] } });
 out({ type: 'result', subtype: 'success', is_error: false, result: reply, permission_denials: [] });
