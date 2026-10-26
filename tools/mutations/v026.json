@@ -419,15 +419,28 @@
   },
   {
    "id": "B34",
-   "guard": "agy: init phải có permission_mode không bypass (T-07)",
+   "guard": "security review #4: permission_mode của agy theo ALLOWLIST (đổi về danh sách cấm → đỏ)",
    "file": "bridge/ai-bridge.mjs",
-   "find": "else if (/bypass|skip|danger|auto.?approve|yolo|allow.?all/i.test(pm)) bad.push('permission_mode:' + pm);",
-   "replace": "",
+   "find": "else if (!ADAPTERS.agy.permissionModes.includes(pm)) bad.push('permission_mode:' + pm);",
+   "replace": "else if (/bypass|skip|danger|auto.?approve|yolo|allow.?all/i.test(pm)) bad.push('permission_mode:' + pm);",
    "test": [
     "node",
     "tools/test-bridge.mjs"
    ],
-   "expect": "giám sát từng lượt",
+   "expect": "agy (dump THẬT T-07)",
+   "timeout": 600
+  },
+  {
+   "id": "B37",
+   "guard": "security review #4: permission_mode của claude theo ALLOWLIST",
+   "file": "bridge/ai-bridge.mjs",
+   "find": "if (!ADAPTERS.claude.permissionModes.includes(o.permissionMode)) bad.push(",
+   "replace": "if (/bypass/i.test(String(o.permissionMode))) bad.push(",
+   "test": [
+    "node",
+    "tools/test-bridge.mjs"
+   ],
+   "expect": "kiểm init Claude",
    "timeout": 600
   },
   {

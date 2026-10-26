@@ -43,7 +43,7 @@ const safeDrop = M.safeModeDropsMcp && has('--safe-mode');
 if (srv && !safeDrop) { try { await mcp('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'fake-claude', version: '1' } }); mcpTools = (await mcp('tools/list')).result.tools || []; status = 'connected'; } catch (e) { status = 'failed'; } }
 const builtin = noTools ? [] : ['Bash', 'Read', 'Write', 'WebFetch'];
 const tools = builtin.concat(mcpTools.map(t => 'mcp__genchibi__' + t.name), M.extraTools || []);
-out({ type: 'system', subtype: 'init', cwd: process.cwd(), session_id: 'fake', tools, mcp_servers: srv && !safeDrop ? [{ name: 'genchibi', status }] : [], model: val('--model') || 'sonnet', permissionMode: val('--permission-mode'),
+out({ type: 'system', subtype: 'init', cwd: process.cwd(), session_id: 'fake', tools, mcp_servers: srv && !safeDrop ? [{ name: 'genchibi', status }] : [], model: val('--model') || 'sonnet', permissionMode: M.permMode || val('--permission-mode'),
   plugins: [{ name: 'cc-plugin-agents-md', path: 'builtin' }].concat(M.extraPlugin ? [{ name: 'ryan-plugin', path: '/home/ryan/.claude/plugins/x' }] : []), skills: M.userSkill ? ['ryan-agents-skill'] : [], slash_commands: ['compact', 'cost'], ...(M.mcpError ? { mcp_server_errors: ['x'] } : {}) });
 if (M.hook) out({ type: 'system', subtype: 'hook_started', hook_name: 'SessionStart' });
 const stdin = fs.readFileSync(0, 'utf8');

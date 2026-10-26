@@ -154,6 +154,7 @@ const blocks = c => (Array.isArray(c) ? c : []);
 export const ADAPTERS = {
   claude: {
     name: 'claude', bins: ['claude'], label: 'Claude Code', staticInit: true, mcpPrefix: /^mcp__genchibi__([a-z0-9_]{1,64})$/,
+    permissionModes: ['dontAsk'],   // allowlist (security review #4) = chế độ cầu nối đặt bằng --permission-mode; giá trị trong init của Claude thật: CHỜ dump P0
     // help 2.1.299 / 2.1.303: thiếu một flag bắt buộc → unverified (không chạy)
     required: ['--print', '--output-format', '--tools', '--allowedTools', '--strict-mcp-config', '--mcp-config', '--permission-mode', '--permission-prompts', '--restricted'],
     requiredWords: ['dontAsk'],
@@ -199,6 +200,7 @@ export const ADAPTERS = {
     // KIỂM INIT mỗi lượt (spec §4.2, `direct`): sai một điều → SIGTERM + CONFINEMENT
     checkInit(ev, entry, { expectMcp }) {
       const o = ev.raw || {}, bad = [], base = entry.baseline || {}, nm = x => (typeof x === 'string' ? x : x && x.name) || '?';
+      if (!ADAPTERS.claude.permissionModes.includes(o.permissionMode)) bad.push('permission_mode:' + (o.permissionMode === undefined ? 'missing' : o.permissionMode));
       blocks(o.tools).forEach(t => { if (!isGenchibiTool(nm(t), 'claude')) bad.push('tool:' + nm(t)); });
       const sv = blocks(o.mcp_servers);
       if (expectMcp ? !(sv.length === 1 && sv[0].name === 'genchibi' && sv[0].status === 'connected') : sv.length) bad.push('mcp_servers:' + sv.map(s => nm(s) + '=' + (s && s.status)).join(','));
@@ -286,11 +288,13 @@ export const ADAPTERS = {
       out.push({ t: 'other', type: ev });
       return out;
     },
-    // KIỂM INIT (một phần — agy không có cờ tắt tool native): phải có permission_mode và KHÔNG được là chế độ bỏ qua quyền
+    // KIỂM INIT (một phần — agy không có cờ tắt tool native): permission_mode phải thuộc ALLOWLIST đo được (security review #4 — không dùng danh sách cấm:
+    // một chế độ mới như `auto` sẽ lọt). Giá trị khác → lượt failed; lúc probe / enable → unverified tới khi owner tự kiểm lại trên máy chủ
+    permissionModes: ['request-review'],   // agy 1.4.5 headless, đo ở T-20261025-07
     checkInit(ev) {
       const o = ev.raw || {}, i = o.init || o, pm = i.permission_mode, bad = [];
       if (typeof pm !== 'string' || !pm) bad.push('permission_mode missing');
-      else if (/bypass|skip|danger|auto.?approve|yolo|allow.?all/i.test(pm)) bad.push('permission_mode:' + pm);
+      else if (!ADAPTERS.agy.permissionModes.includes(pm)) bad.push('permission_mode:' + pm);
       if (!Array.isArray(i.tools)) bad.push('tools missing');
       return bad;
     },
@@ -721,7 +725,8 @@ export async function canary(name, paths, reg, opt = {}) {
         base = A.baseline(init);
         if (base.alien.length) ev.failed.push('non-builtin plugin: ' + base.alien.join(','));
         const bad = A.checkInit(init, { baseline: base }, { expectMcp: true });
-        if (bad.length) (bad.some(b => /^mcp_servers/.test(b)) && !bad.some(b => !/^mcp_servers/.test(b)) ? ev.missing : ev.failed).push('init: ' + bad.join(' '));
+        // mcp_servers / permission_mode lạ lúc probe / enable → unverified (owner kiểm lại trên máy chủ); thứ khác (tool lạ, plugin lạ…) → failed
+        if (bad.length) (!bad.some(b => !/^(mcp_servers|permission_mode)/.test(b)) ? ev.missing : ev.failed).push('init: ' + bad.join(' '));
         else ev.evidence.push('init: tools ⊆ mcp__genchibi__*, genchibi connected (direct)');
       }
     }

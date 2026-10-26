@@ -85,14 +85,14 @@ const job0 = (cli, extra) => Object.assign({ kind: 'agent', cli, model: '', syst
 /* ---------------------------------------------------------------- 3. kiểm init của Claude + tên tool genchibi (security review #1) */
 {
   const A = B.ADAPTERS.claude, base = { baseline: { plugins: ['cc-plugin-agents-md'], skills: [], slash_commands: ['compact'] } };
-  const init = x => ({ t: 'init', raw: Object.assign({ tools: ['mcp__genchibi__get_catalog'], mcp_servers: [{ name: 'genchibi', status: 'connected' }], plugins: [{ name: 'cc-plugin-agents-md', path: 'builtin' }], skills: [], slash_commands: ['compact'] }, x) });
+  const init = x => ({ t: 'init', raw: Object.assign({ permissionMode: 'dontAsk', tools: ['mcp__genchibi__get_catalog'], mcp_servers: [{ name: 'genchibi', status: 'connected' }], plugins: [{ name: 'cc-plugin-agents-md', path: 'builtin' }], skills: [], slash_commands: ['compact'] }, x) });
   const c = x => A.checkInit(init(x), base, { expectMcp: true }).join(' ');
   const R = { okk: c({}), bash: c({ tools: ['Bash', 'mcp__genchibi__x'] }), nomcp: c({ mcp_servers: [] }), failed: c({ mcp_servers: [{ name: 'genchibi', status: 'failed' }] }), errs: c({ mcp_server_errors: ['boom'] }),
     plugin: c({ plugins: [{ name: 'evil', path: '/home/ryan/x' }] }), skill: c({ skills: ['ryan-agents-skill'] }), slash: c({ slash_commands: ['compact', 'deploy-prod'] }), other: c({ mcp_servers: [{ name: 'genchibi', status: 'connected' }, { name: 'ryan', status: 'connected' }] }),
-    builtinName: c({ tools: ['mcp__genchibi__run_command'] }) };
+    builtinName: c({ tools: ['mcp__genchibi__run_command'] }), pmAuto: c({ permissionMode: 'auto' }), pmFoo: c({ permissionMode: 'foo' }), pmBypass: c({ permissionMode: 'bypassPermissions' }), pmNone: c({ permissionMode: undefined }) };
   const hook = A.parse({ type: 'system', subtype: 'hook_started' }), tool = A.parse({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Bash', id: '1' }] } });
   ok(R.okk === '' && /tool:Bash/.test(R.bash) && /mcp_servers/.test(R.nomcp) && /mcp_servers/.test(R.failed) && /mcp_server_errors/.test(R.errs) && /plugin:evil/.test(R.plugin) && /skills:ryan-agents-skill/.test(R.skill) && /slash_commands:deploy-prod/.test(R.slash)
-    && /mcp_servers/.test(R.other) && /tool:mcp__genchibi__run_command/.test(R.builtinName) && hook[0].t === 'hook' && tool[0].t === 'tool' && tool[0].name === 'Bash',
+    && /mcp_servers/.test(R.other) && /tool:mcp__genchibi__run_command/.test(R.builtinName) && ['pmAuto', 'pmFoo', 'pmBypass', 'pmNone'].every(k => /permission_mode:/.test(R[k])) && hook[0].t === 'hook' && tool[0].t === 'tool' && tool[0].name === 'Bash',
     'kiểm init Claude (direct): có Bash · thiếu / hỏng genchibi · mcp_server_errors · plugin lạ · skill / lệnh của user · server MCP thứ hai → mỗi thứ là một lỗi · sự kiện hook_* nhận ra', JSON.stringify(R));
   const G = (n, c2) => B.isGenchibiTool(n, c2);
   ok(G('mcp__genchibi__save_character', 'claude') && G('mcp_genchibi_list_works', 'agy') && !G('run_command', 'agy') && !G('read_file', 'agy') && !G('save_character', 'claude') && !G('get_catalog', 'agy')
@@ -107,16 +107,17 @@ const job0 = (cli, extra) => Object.assign({ kind: 'agent', cli, model: '', syst
   const evOk = F('p0-ok.ndjson').flatMap(o => A.parse(o)), evTool = F('p0-tool.ndjson').flatMap(o => A.parse(o)), evAuth = F('p0-bwrap.ndjson').flatMap(o => A.parse(o));
   const initOk = evOk.find(x => x.t === 'init'), resOk = evOk.find(x => x.t === 'result'), tools = evTool.filter(x => x.t === 'tool'), resTool = evTool.find(x => x.t === 'result'), resAuth = evAuth.find(x => x.t === 'result');
   const bypass = A.checkInit({ raw: { event: 'init', init: { tools: [], permission_mode: 'bypassPermissions' } } }), noPm = A.checkInit({ raw: { event: 'init', init: { tools: [] } } });
+  const odd = ['auto', 'foo', 'accept-edits', 'Request-Review', 'request-review ', 'plan'].map(m => A.checkInit({ raw: { event: 'init', init: { tools: [], permission_mode: m } } }).join());
   const mcpOk = A.parse({ event: 'step_update', step_update: { step_index: 3, state: 'ACTIVE', step_type: 'tool', tool_name: 'call_mcp_tool', tool_info: { name: 'call_mcp_tool', parameters: { ServerName: 'genchibi', ToolName: 'list_works' } } } })[0];
   const mcpOther = A.parse({ event: 'step_update', step_update: { step_index: 4, state: 'ACTIVE', step_type: 'tool', tool_name: 'call_mcp_tool', tool_info: { name: 'call_mcp_tool', parameters: { ServerName: 'ryan', ToolName: 'list_works' } } } })[0];
   const oddStep = A.parse({ event: 'step_update', step_update: { step_index: 5, state: 'ACTIVE', step_type: 'browser_action' } })[0];
   const cls = A.classify({ retries: [resAuth.error], resultText: '', stderr: fs.readFileSync(path.join(ROOT, 'tools/fixtures/bridge/agy-p0/p0-tool.err'), 'utf8'), stdoutErr: '' });
   ok(initOk && A.checkInit(initOk).length === 0 && initOk.raw.init.tools.length === 60 && evOk.filter(x => x.t === 'text').map(x => x.text).join('') === 'OK\n' && resOk.text === 'OK\n' && !resOk.isError && !evOk.some(x => x.t === 'tool')
     && tools.length === 2 && tools.every(x => x.name === 'run_command' && x.id === 'step2') && !B.isGenchibiTool('run_command', 'agy') && resTool.denied[0].action === 'command'
-    && resAuth.isError && /authentication/.test(resAuth.error) && cls === 'AUTH_REQUIRED' && bypass.join() === 'permission_mode:bypassPermissions' && /permission_mode missing/.test(noPm.join())
+    && resAuth.isError && /authentication/.test(resAuth.error) && cls === 'AUTH_REQUIRED' && bypass.join() === 'permission_mode:bypassPermissions' && /permission_mode missing/.test(noPm.join()) && odd.every(x => /^permission_mode:/.test(x))
     && mcpOk.name === 'mcp_genchibi_list_works' && B.isGenchibiTool(mcpOk.name, 'agy') && mcpOther.name === 'call_mcp_tool' && !B.isGenchibiTool(mcpOther.name, 'agy') && oddStep.t === 'tool' && !B.isGenchibiTool(oddStep.name, 'agy')
     && JSON.stringify(B.ADAPTERS.agy.argv({ entry: { flags: ['--dangerously-skip-permissions'] }, job: job0('agy'), turnSec: 900 })).indexOf('dangerously') < 0,
-    'agy (dump THẬT T-07): init 60 tool (báo cáo ghi 59 — đếm theo dump thô) + permission_mode request-review → kiểm init đạt · text_delta "OK" · run_command là sự kiện tool lạ (bước ACTIVE + DONE cùng id) · denied_actions [command] · bwrap không D-Bus → AUTH_REQUIRED · permission_mode bypass / thiếu → chặn · call_mcp_tool chỉ server genchibi · bước lạ → coi là tool · không bao giờ --dangerously-skip-permissions',
+    'agy (dump THẬT T-07): init 60 tool (báo cáo ghi 59 — đếm theo dump thô) + permission_mode request-review → kiểm init đạt · text_delta "OK" · run_command là sự kiện tool lạ (bước ACTIVE + DONE cùng id) · denied_actions [command] · bwrap không D-Bus → AUTH_REQUIRED · permission_mode ngoài allowlist [request-review] (auto, foo, plan, bypass, thiếu…) → chặn (security review #4) · call_mcp_tool chỉ server genchibi · bước lạ → coi là tool · không bao giờ --dangerously-skip-permissions',
     JSON.stringify({ init: initOk && A.checkInit(initOk), tools, deny: resTool && resTool.denied, cls, mcpOk, mcpOther }));
 }
 
@@ -210,12 +211,12 @@ if (sb.bwrap !== 'ok') {
   const C = async (cli, m) => { W.mode(cli, m); const e = await B.verifyCli(cli, W.paths, undefined, { allowReset: true }); return e.confinement.status + ': ' + e.confinement.missing.join(' | '); };
   const R = { leak: await C('claude', { leakContext: true }), cheatC: await C('claude', { cheat: true, extraTools: [] }), drop: await C('claude', { drop: true }), safeDrop: await C('claude', { safeModeDropsMcp: true }),
     polite: await C('agy', { polite: true }), ignore: await C('agy', { ignoreBaseUrl: true }), cheatA: await C('agy', { cheat: true }), plugin: await C('claude', { extraPlugin: true }),
-    denyOnly: await C('agy', { denyOnlyResult: true }), bypassA: await C('agy', { permMode: 'bypassPermissions' }) };
+    denyOnly: await C('agy', { denyOnlyResult: true }), bypassA: await C('agy', { permMode: 'bypassPermissions' }), autoA: await C('agy', { permMode: 'auto' }), autoC: await C('claude', { permMode: 'auto' }) };
   const ecSafe = B.loadRegistry(W.paths).clis.claude;
   ok(/^failed: .*context: nonce/.test(R.leak) && /^failed: .*(not refused|executed|side effect)/.test(R.cheatC) && /^unverified: flag --restricted/.test(R.drop) && /^unverified: .*no CLI tool_result for run_command/.test(R.polite)
     && /^unverified: fake API got no request/.test(R.ignore) && /^failed: .*(read tool executed|side effect)/.test(R.cheatA) && /^failed: .*non-builtin plugin/.test(R.plugin) && /^failed|^verified/.test(R.safeDrop)
-    && /^verified/.test(R.denyOnly) && /^failed: .*permission_mode:bypassPermissions/.test(R.bypassA),
-    'canary bắt gian (agy qua AGY_LLM_GATEWAY_URL — T-07): agy tự từ chối chỉ ghi ở denied_actions → vẫn là bằng chứng hệ thống, Đạt · permission_mode bypass → failed · CLI nạp CLAUDE.md của HOME → failed (nonce trong request tới API giả) · CLI thực thi tool cấm → failed (hiệu ứng phụ / nội dung tệp tới model) · thiếu --restricted → unverified · agy "lịch sự từ chối" (không có tool_result do CLI sinh) → unverified, KHÔNG Đạt · agy bỏ qua base URL → unverified · plugin lạ → failed', JSON.stringify(R));
+    && /^verified/.test(R.denyOnly) && /^unverified: .*permission_mode:bypassPermissions/.test(R.bypassA) && /^unverified: .*permission_mode:auto/.test(R.autoA) && /^unverified: .*permission_mode:auto/.test(R.autoC),
+    'canary bắt gian (agy qua AGY_LLM_GATEWAY_URL — T-07): agy tự từ chối chỉ ghi ở denied_actions → vẫn là bằng chứng hệ thống, Đạt · permission_mode ngoài allowlist (bypass, auto) lúc enable → unverified (claude + agy) · CLI nạp CLAUDE.md của HOME → failed (nonce trong request tới API giả) · CLI thực thi tool cấm → failed (hiệu ứng phụ / nội dung tệp tới model) · thiếu --restricted → unverified · agy "lịch sự từ chối" (không có tool_result do CLI sinh) → unverified, KHÔNG Đạt · agy bỏ qua base URL → unverified · plugin lạ → failed', JSON.stringify(R));
   W.mode('claude', { safeModeDropsMcp: true }); const eSD = await B.verifyCli('claude', W.paths, undefined, { allowReset: true });
   ok(eSD.confinement.status === 'verified' && eSD.safe_mode === false, '--safe-mode tắt server của --mcp-config → canary chạy lại không có --safe-mode, ghi safe_mode: false (spec §4.2)', JSON.stringify({ c: eSD.confinement, sm: eSD.safe_mode }));
   // khôi phục: cả hai Đạt
@@ -252,12 +253,12 @@ if (sb.bwrap !== 'ok') {
     bash: await turn('claude', { extraTools: ['Bash'] }), hook: await turn('claude', { hook: true }), skill: await turn('claude', { userSkill: true }), emit: await turn('claude', { emitTool: 'Bash' }),
     run: await turn('agy', { runCommand: true }), stray: await turn('agy', { strayFile: true }), hide: await turn('agy', { hideTools: true, script: [['get_catalog', {}]] }), out: await turn('agy', { connectOut: true })
   };
-  V.permA = await turn('agy', { permMode: 'bypassPermissions' }); V.other = await turn('agy', { otherServer: true, script: [['get_catalog', {}]] });
+  V.permA = await turn('agy', { permMode: 'auto' }); V.permC = await turn('claude', { permMode: 'foo' }); V.other = await turn('agy', { otherServer: true, script: [['get_catalog', {}]] });
   const codes = Object.keys(V).map(k => k + '=' + V[k].phase + ':' + V[k].code).join(' ');
   const regF = B.loadRegistry(W.paths);
   ok(Object.values(V).every(x => x.phase === 'error' && x.code === 'CONFINEMENT') && /tool:Bash/.test(V.bash.detail) && /hook/.test(V.hook.detail) && /skills/.test(V.skill.detail) && /non-genchibi tool Bash/.test(V.emit.detail)
-    && /non-genchibi tool run_command/.test(V.run.detail) && /unexpected files/.test(V.stray.detail) && /parser blind/.test(V.hide.detail) && /proxy blocked connect to example.com/.test(V.out.detail) && /permission_mode:bypassPermissions/.test(V.permA.detail) && /non-genchibi tool call_mcp_tool/.test(V.other.detail) && fails.length - before === 10,
-    'giám sát từng lượt → CONFINEMENT + CLI bị đánh dấu failed: claude init có Bash / hook / skill của user / tool_use lạ giữa lượt · agy init permission_mode bypass · agy gọi MCP của server khác · agy phát run_command · tệp lạ trong /work · gọi MCP mà stream không có sự kiện tool (parser mù) · CONNECT ra ngoài allowlist', codes + ' ' + JSON.stringify(V.hide));
+    && /non-genchibi tool run_command/.test(V.run.detail) && /unexpected files/.test(V.stray.detail) && /parser blind/.test(V.hide.detail) && /proxy blocked connect to example.com/.test(V.out.detail) && /permission_mode:auto/.test(V.permA.detail) && /permission_mode:foo/.test(V.permC.detail) && /non-genchibi tool call_mcp_tool/.test(V.other.detail) && fails.length - before === 11,
+    'giám sát từng lượt → CONFINEMENT + CLI bị đánh dấu failed: claude init có Bash / hook / skill của user / tool_use lạ giữa lượt · permission_mode ngoài allowlist (agy auto, claude foo) · agy gọi MCP của server khác · agy phát run_command · tệp lạ trong /work · gọi MCP mà stream không có sự kiện tool (parser mù) · CONNECT ra ngoài allowlist', codes + ' ' + JSON.stringify(V.hide));
   // security review #1 trong lượt thật: app (bị chiếm) liệt kê tool tên run_command / read_file → claude: init có mcp__genchibi__run_command → chặn;
   // agy: model gọi mcp_genchibi_read_file → không phải tool genchibi → chặn
   await B.verifyCli('claude', W.paths, undefined, { allowReset: true }); await B.verifyCli('agy', W.paths, undefined, { allowReset: true });
