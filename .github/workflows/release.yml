@@ -37,8 +37,16 @@ jobs:
           if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$GITHUB_REF_NAME" != "$TAG" ]; then echo "Tag $GITHUB_REF_NAME khác VERSION $TAG"; exit 1; fi
           if gh release view "$TAG" >/dev/null 2>&1; then echo "Đã có Release $TAG — bỏ qua."; echo "skip=1" >> "$GITHUB_OUTPUT"; fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      - name: bubblewrap (hộp cát của cầu nối CLI — v0.26; Ubuntu 24.04 chặn userns qua AppArmor → tắt chặn CHỈ trên máy CI)
+        if: steps.ver.outputs.skip != '1'
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq bubblewrap
+          if [ "$(sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null)" = 1 ]; then sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0; fi
+          bwrap --unshare-all --ro-bind /usr /usr --symlink usr/bin /bin --symlink usr/lib64 /lib64 --symlink usr/lib /lib -- /usr/bin/true
       - name: Kiểm thử
         if: steps.ver.outputs.skip != '1'
+        env:
+          GENCHIBI_REQUIRE_BWRAP: '1'
         run: bash tools/test.sh
       - name: Đóng gói
         if: steps.ver.outputs.skip != '1'

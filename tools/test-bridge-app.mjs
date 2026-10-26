@@ -195,6 +195,8 @@ try { await rd.cancel(); } catch (e) { /* bỏ */ } await pump;
 
 /* ---------------------------------------------------------------- 3. cầu nối THẬT + CLI giả trong hộp cát */
 const sb = B.probeSandbox(process.env);
+// CI (GENCHIBI_REQUIRE_BWRAP=1, ci.yml cài bubblewrap): thiếu hộp cát là LỖI, không được bỏ qua
+if (sb.bwrap !== 'ok' && process.env.GENCHIBI_REQUIRE_BWRAP === '1') ok(false, 'hộp cát thật bắt buộc trên CI (GENCHIBI_REQUIRE_BWRAP=1): bubblewrap ' + sb.bwrap, sb.raw);
 if (sb.bwrap !== 'ok') console.log('   ⚠ BỎ QUA lượt đầu-cuối với cầu nối thật: bubblewrap ' + sb.bwrap + ' — cần bwrap + user namespace (Fedora có sẵn)');
 else {
   const T = mk('gc-tba-e2e-'), H = path.join(T, 'home'), X = path.join(T, 'xdg'), BIN = path.join(T, 'bin');

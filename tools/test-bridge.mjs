@@ -194,6 +194,8 @@ const job0 = (cli, extra) => Object.assign({ kind: 'agent', cli, model: '', syst
 
 /* ---------------------------------------------------------------- 6–9. hộp cát THẬT (bwrap) */
 const sb = B.probeSandbox(process.env);
+// CI (GENCHIBI_REQUIRE_BWRAP=1, ci.yml cài bubblewrap): thiếu hộp cát là LỖI, không được bỏ qua
+if (sb.bwrap !== 'ok' && process.env.GENCHIBI_REQUIRE_BWRAP === '1') ok(false, 'hộp cát thật bắt buộc trên CI (GENCHIBI_REQUIRE_BWRAP=1): bubblewrap ' + sb.bwrap, sb.raw);
 if (sb.bwrap !== 'ok') {
   console.log('   ⚠ BỎ QUA phần hộp cát thật: bubblewrap ' + sb.bwrap + (sb.raw ? ' (' + sb.raw.slice(0, 120) + ')' : '') + ' — selftest, canary, giám sát lượt cần bwrap + user namespace (Fedora có sẵn). Chạy lại trên máy có bwrap.');
 } else {

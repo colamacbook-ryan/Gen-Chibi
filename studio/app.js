@@ -326,7 +326,8 @@
     },
     // LƯỢT AI DÀI (CNS-175, v0.21): Cloudflare cắt request ~100 s không có byte → gửi { async: true }, server trả 202 + id lượt, Studio hỏi
     // GET api/ai/turns/<id> mỗi giây tới khi xong. Kết quả / lỗi y như Store.api (server cũ trả 200 thẳng thì dùng luôn). Mạng chập chờn khi hỏi: thử lại tới 30 lần
-    turn: function (url, body) {
+    // onTick(t, id) (tuỳ chọn, v0.26): mỗi lần hỏi lượt còn chạy — lượt qua cầu nối CLI mang progress { phase, log, text } + cancellable (dock vẽ tiến trình + nút Huỷ)
+    turn: function (url, body, onTick) {
       var self = this;
       return this.api('POST', url, Object.assign({}, body, { async: true })).then(function (r) {
         if (!r || !r.turn || r.status !== 'running') return r;
@@ -336,7 +337,7 @@
             setTimeout(function () {
               self.api('GET', 'api/ai/turns/' + encodeURIComponent(r.turn)).then(function (t) {
                 miss = 0;
-                if (t.status === 'running') return poll();
+                if (t.status === 'running') { if (onTick) { try { onTick(t, r.turn); } catch (e) { /* vẽ lỗi không dừng lượt */ } } return poll(); }
                 if (t.status === 'done') return resolve(t.result);
                 reject(Object.assign(new Error(t.error || _t('Lỗi {status}', { status: t.code })), { status: t.code }));
               }, function (e) { if (e && e.status && e.status !== 502 && e.status !== 503 && e.status !== 504 && e.status !== 524) return reject(e); if (++miss > 30) return reject(e); poll(); });

@@ -2226,5 +2226,8 @@
  "chủ máy": "owner",
  "dock": "dock",
  "Trần / ngày": "Cap / day",
- "Không tới được server giọng — nối lại mạng Docker trên máy chủ:": "Cannot reach the voice server — reconnect the Docker network on the server:"
+ "Không tới được server giọng — nối lại mạng Docker trên máy chủ:": "Cannot reach the voice server — reconnect the Docker network on the server:",
+ "Agent CLI: đang chờ cầu nối nhận lượt…": "Agent CLI: waiting for the bridge to pick up the turn…",
+ "Agent CLI đang làm…": "Agent CLI is working…",
+ "Đang huỷ lượt AI…": "Cancelling the AI turn…"
 }

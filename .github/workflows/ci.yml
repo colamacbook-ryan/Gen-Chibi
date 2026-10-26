@@ -1,7 +1,7 @@
 name: ci
 on:
   push:
-    branches: [main]
+    branches: [main, 'wip-**']   # wip-*: nhánh làm việc của builder (vd wip-v026-bridge) — CI chạy trước khi gộp main
   pull_request:
 permissions:
   contents: read
@@ -13,7 +13,32 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      # v0.26 cầu nối CLI: hộp cát bubblewrap THẬT (selftest, canary, giám sát lượt + đột biến B01–B04, B13–B16, B26–B37 không được "sống" vì bỏ qua).
+      # Ubuntu 24.04: AppArmor chặn user namespace không đặc quyền (kernel.apparmor_restrict_unprivileged_userns=1) → bwrap không chạy; CHỈ trên máy CI tắt chặn này
+      - name: bubblewrap (hộp cát của cầu nối CLI)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq bubblewrap
+          if [ "$(sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null)" = 1 ]; then sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0; fi
+          bwrap --version && bwrap --unshare-all --ro-bind /usr /usr --symlink usr/bin /bin --symlink usr/lib64 /lib64 --symlink usr/lib /lib -- /usr/bin/true
       - run: bash tools/test.sh
+        env:
+          GENCHIBI_REQUIRE_BWRAP: '1'   # thiếu bwrap / userns → test cầu nối ĐỎ, không bỏ qua
+  # v0.26: chạy THẬT mọi đột biến của cầu nối CLI (tools/mutations/v026.json) — mỗi đột biến phải làm đúng test của rào đỏ
+  bridge-mutations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # v0.26 cầu nối CLI: hộp cát bubblewrap THẬT (selftest, canary, giám sát lượt + đột biến B01–B04, B13–B16, B26–B37 không được "sống" vì bỏ qua).
+      # Ubuntu 24.04: AppArmor chặn user namespace không đặc quyền (kernel.apparmor_restrict_unprivileged_userns=1) → bwrap không chạy; CHỈ trên máy CI tắt chặn này
+      - name: bubblewrap (hộp cát của cầu nối CLI)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq bubblewrap
+          if [ "$(sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null)" = 1 ]; then sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0; fi
+          bwrap --version && bwrap --unshare-all --ro-bind /usr /usr --symlink usr/bin /bin --symlink usr/lib64 /lib64 --symlink usr/lib /lib -- /usr/bin/true
+      - run: node tools/mutate.mjs --data tools/mutations/v026.json --jobs 4
   # v0.22 xuất video (CNS-215 / CNS-216): nhánh MP4 H.264 + AAC (ưu tiên 1) chỉ có ở Chrome / Edge trên Windows / macOS — Chromium Linux (máy Gen) chỉ ra
   # WebM VP9 + Opus. Job này dùng Google Chrome CÓ SẴN của runner (không npm, không Playwright): xuất 1 phân cảnh Fun Office bằng WebCodecs thật, kiểm
   # cấu trúc MP4 (ftyp → moov → mdat, avc1 + mp4a, không edts, tiếng ≈ hình) và TRƯỢT nếu Chrome không ra được avc1 + mp4a. Lượt 2: xuất ở tab nền bị ẩn.

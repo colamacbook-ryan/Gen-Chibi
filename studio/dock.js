@@ -465,8 +465,22 @@
     clear(E.log);
     if (!S.msgs.length) E.log.appendChild(h('div', { class: 'dock-empty note' }, emptyText()));
     S.msgs.forEach(function (m) { E.log.appendChild(msgEl(m)); });
-    if (S.busy) E.log.appendChild(h('div', { class: 'msg assistant busy', role: 'status', text: _t('AI đang làm (gọi tool của nhà xưởng)…') }));
+    if (S.busy) { E.busy = h('div', { class: 'msg assistant busy', role: 'status', id: 'dockBusy' }); paintBusy(); E.log.appendChild(E.busy); }
     E.log.scrollTop = E.log.scrollHeight;
+  }
+  // v0.26 P1c (tối thiểu): lượt qua cầu nối CLI — tiến trình (pha, tool ✓/✗ gần nhất, đoạn chữ cuối) + nút Huỷ (POST api/ai/turns/<id>/cancel: thu hồi token lượt ngay).
+  // Vẽ lại CHỈ khối này mỗi lần hỏi lượt (không vẽ lại cả luồng)
+  function paintBusy() {
+    if (!E.busy) return;
+    clear(E.busy);
+    var p = S.prog && S.prog.progress;
+    E.busy.appendChild(h('div', { text: !p ? _t('AI đang làm (gọi tool của nhà xưởng)…') : p.phase === 'queued' ? _t('Agent CLI: đang chờ cầu nối nhận lượt…') : _t('Agent CLI đang làm…') }));
+    if (p && p.log && p.log.length) E.busy.appendChild(h('div', { class: 'note' }, p.log.slice(-4).map(function (l) { return h('div', { text: (l.ok ? '✓ ' : '✗ ') + l.tool }); })));
+    if (p && p.text) E.busy.appendChild(h('div', { class: 'note', text: '… ' + String(p.text).slice(-160) }));
+    if (S.prog && S.prog.cancellable) E.busy.appendChild(h('button', { type: 'button', class: 'btn sm danger', id: 'dockCancel', disabled: !!S.prog.cancelling, onclick: function () {
+      var id = S.prog.turn; S.prog.cancelling = true; paintBusy();
+      B.Store.api('POST', 'api/ai/turns/' + encodeURIComponent(id) + '/cancel', {}).then(function () { toast(_t('Đang huỷ lượt AI…')); }, function (e) { S.prog.cancelling = false; paintBusy(); toast(e.message); });
+    } }, S.prog.cancelling ? _t('Đang huỷ…') : _t('Huỷ')));
   }
   function emptyText() { return _l((zoneOf(S.info && S.info.zone) || {}).intro) || _t('Tôi là trợ lý của gen-chibi — hỏi cách dùng hoặc nhờ làm việc ở khu đang mở.'); }
 
@@ -506,7 +520,7 @@
     // snapshot lấy lại lúc gửi (tác phẩm vừa sửa → không gửi bản cũ); cắt theo ngân sách chung
     var per = pins.length ? Math.max(300, Math.min(1200, Math.floor(BUDGET / pins.length))) : 0;
     Promise.all(pins.map(function (p) { return Anchors.snapshot(p.anchor, per).then(function (t) { return { anchor: p.anchor, kind: Anchors.parse(p.anchor).kind, id: Anchors.parse(p.anchor).id, label: p.label, snapshot: t }; }); }))
-      .then(function (anchors) { return B.Store.turn('api/ai/agent', Object.assign({ message: text, context: sentCtx, anchors: anchors }, quickTask ? { task: quickTask } : {})); })   // 202 + hỏi lượt: lượt dài không bị proxy cắt ~100 s (CNS-175)
+      .then(function (anchors) { return B.Store.turn('api/ai/agent', Object.assign({ message: text, context: sentCtx, anchors: anchors }, quickTask ? { task: quickTask } : {}), function (t, id) { S.prog = { turn: id, progress: t.progress || null, cancellable: !!t.cancellable, cancelling: S.prog && S.prog.turn === id && S.prog.cancelling }; paintBusy(); }); })   // 202 + hỏi lượt: lượt dài không bị proxy cắt ~100 s (CNS-175)
       .then(function (r) {
         if (S.key === key) { S.msgs.push({ role: 'assistant', content: r.reply || '', log: r.log, anchors: r.anchors, renders: r.renders, usage: r.usage }); S.sent = r.sent || null; S.sentKey = key; }
         if (r.work) Works.put(r.work);
@@ -514,7 +528,7 @@
         return Promise.resolve(B.refreshData(r)).catch(function () { /* nạp lại kho lỗi: chip kiểm lại ở lần vẽ sau */ });   // nạp kho TRƯỚC khi vẽ chip → chip của asset vừa tạo không bị báo "không còn"
       })
       .catch(function (e) { if (S.key === key) S.msgs.push({ role: 'assistant', content: _t('Lỗi: {message}', { message: e.message }), err: true }); })
-      .then(function () { S.busy = false; paintLog(); paintGate(); });
+      .then(function () { S.busy = false; S.prog = null; E.busy = null; paintLog(); paintGate(); });
   }
   function autosize() { E.ta.style.height = 'auto'; E.ta.style.height = clamp(E.ta.scrollHeight + 2, 56, 160) + 'px'; }
   function clearThread() {
