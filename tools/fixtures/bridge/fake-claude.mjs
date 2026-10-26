@@ -102,7 +102,7 @@ for (const [name, args] of (M.script || [])) {
   out({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, is_error: !!x.isError, content: JSON.stringify(x.content).slice(0, 2000) }] } });
 }
 // chữ dài: bigText (vượt trần 200 KB) · manyText (nhiều mảnh nhỏ trong ~2 s — đếm số lần cầu nối gửi 'text' lên app)
-if (M.bigText) for (let i = 0; i < 300; i++) out({ type: 'assistant', message: { content: [{ type: 'text', text: 'x'.repeat(1000) }] } });
+if (M.bigText) { for (let i = 0; i < 300; i++) out({ type: 'assistant', message: { content: [{ type: 'text', text: 'x'.repeat(1000) }] } }); await new Promise(r => process.stdout.write('', r)); }   // xả pipe trước khi thoát (process.exit cắt ghi chưa xả)
 if (M.manyText) for (let i = 0; i < 40; i++) { out({ type: 'assistant', message: { content: [{ type: 'text', text: 'y'.repeat(300) }] } }); await sleep(50); }
 const reply = (M.reply || 'Xong (fake-claude).') + (M.echo ? ' [' + stdin.length + ' chars]' : '');
 out({ type: 'assistant', message: { content: [{ type: 'text', text: reply }] } });
