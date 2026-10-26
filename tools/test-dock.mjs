@@ -43,7 +43,8 @@ try {
   ok(has('khung', 'save_motion_pack') && has('khung', 'get_motion_spec') && has('khung', 'render_action') && !has('khung', 'save_shot'), 'Bộ khung: giải thích + gói động tác, không có tool phân cảnh');
   ok(has('thu-vien', 'list_characters') && has('thu-vien', 'save_character') && !has('thu-vien', 'save_part') && !has('thu-vien', 'save_motion_pack') && !has('thu-vien', 'save_shot'), 'Thư viện: tìm + ghép asset, không vẽ linh kiện / phân cảnh');
   ok(has('tao-tac', 'save_shot') && has('tao-tac', 'save_work') && has('tao-tac', 'propose_edit') && has('tao-tac', 'save_character'), 'Tạo tác: AI đạo diễn (phân cảnh + đề xuất sửa + tạo asset thiếu)');
-  ok(['xuong', 'khung', 'thu-vien', 'tao-tac'].every(z => !has(z, 'update_app') && !has(z, 'rollback_app') && !has(z, 'render_voice') && !has(z, 'design_voice')), 'mọi khu: không có tool hệ thống / giọng AI tốn lượt');
+  // v0.25.1 (INT-23): render_voice có ở khu Tạo tác nhưng kênh dock chỉ đọc bằng TTS local miễn phí (tools/test-tts-local.mjs) — design_voice (tốn lượt Google) không khu nào có
+  ok(['xuong', 'khung', 'thu-vien', 'tao-tac'].every(z => !has(z, 'update_app') && !has(z, 'rollback_app') && !has(z, 'design_voice')) && ['xuong', 'khung', 'thu-vien'].every(z => !has(z, 'render_voice')) && has('tao-tac', 'render_voice'), 'mọi khu: không có tool hệ thống / giọng AI tốn lượt (render_voice chỉ ở Tạo tác, chỉ TTS local)');
   ok(!has('xuong', 'propose_edit') && !has('khung', 'propose_edit'), 'propose_edit chỉ có ở khu Tạo tác');
   script = []; await chat('Hỏi về khung', { zone: 'khung', page: 'khung' });
   ok(/CORE FRAME/.test(seen.system) && /NO ONE EDITS IT/.test(seen.system) && /save_motion_pack/.test(seen.system), 'chỉ dẫn khu Bộ khung: giải thích khung + gói động tác, không sửa khung (từ mcp.js)');

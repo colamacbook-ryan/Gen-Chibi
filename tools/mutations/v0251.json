@@ -1,0 +1,125 @@
+{
+ "_": "gen-chibi v0.25.1 — đột biến cho giọng đọc TTS local (INT-23): kiểm WAV, base_url mạng riêng (cả lúc nối), trần ngày toàn máy + theo kênh, agent không đặt được base_url, kênh không phải chủ máy không chi Gemini. Chạy: node tools/mutate.mjs --data tools/mutations/v0251.json [--jobs N --wrap \"bash netns.sh\"] [ID…]; kiểm nhanh: --check. © 2026 Gen Labs — All rights reserved.",
+ "mutations": [
+  {
+   "id": "T01",
+   "guard": "TTS local: kiểm WAV (RIFF / WAVE, PCM 16-bit) trước khi lưu clip",
+   "file": "server/voice.js",
+   "find": "let w; try { w = TL.readWav(r.buf, wavInfo); }",
+   "replace": "let w; try { w = { pcm: r.buf, rate: 24000 }; }",
+   "test": [
+    "node",
+    "tools/test-tts-local.mjs"
+   ],
+   "expect": "WAV garbage → từ chối"
+  },
+  {
+   "id": "T02",
+   "guard": "TTS local: kiểm header RIFF / WAVE",
+   "file": "server/tts-local.js",
+   "find": "if (!Buffer.isBuffer(buf) || buf.length < 44 || buf.toString('ascii', 0, 4) !== 'RIFF' || buf.toString('ascii', 8, 12) !== 'WAVE') throw",
+   "replace": "if (false) throw",
+   "test": [
+    "node",
+    "tools/test-tts-local.mjs"
+   ],
+   "expect": "WAV garbage → từ chối"
+  },
+  {
+   "id": "T03",
+   "guard": "base_url chỉ loopback / host.docker.internal / IP riêng / tên container",
+   "file": "server/tts-local.js",
+   "find": "const ok = NAMED.has(host) || (net.isIP(host) ? privateIp(host) : CONTAINER.test(host));",
+   "replace": "const ok = true;",
+   "test": [
+    "node",
+    "tools/test-tts-local.mjs"
+   ],
+   "expect": "base_url: chỉ nhận loopback"
+  },
+  {
+   "id": "T04",
+   "guard": "lookup có rào: tên phân giải ra IP công khai bị chặn lúc nối",
+   "file": "server/tts-local.js",
+   "find": "if (!list.length || list.some(x => !privateIp(x.address))) return cb(",
+   "replace": "if (false) return cb(",
+   "test": [
+    "node",
+    "tools/test-tts-local.mjs"
+   ],
+   "expect": "tên container phân giải ra IP công khai"
+  },
+  {
+   "id": "T05",
+   "guard": "trần TTS local toàn máy / ngày",
+   "file": "server/voice.js",
+   "find": "if (cap > 0 && u.all >= cap) throw",
+   "replace": "if (false) throw",
+   "test": [
+    "node",
+    "tools/test-tts-local.mjs"
+   ],
+   "expect": "trần toàn máy"
+  },
+  {
+   "id": "T06",
+   "guard": "trần TTS local theo kênh (link 100 / ngày)",
+   "file": "server/voice.js",
+   "find": "if (cc > 0 && u[chan] >= cc) throw",
+   "replace": "if (false) throw",
+   "test": [
+    "node",
+    "tools/test-tts-local.mjs"
+   ],
+   "expect": "trần theo kênh"
+  },
+  {
+   "id": "T07",
+   "guard": "agent gửi base_url / provider / model → FORBIDDEN",
+   "file": "server/mcp.js",
+   "find": "if (sneaky.length) return toolError(",
+   "replace": "if (false) return toolError(",
+   "test": [
+    "node",
+    "tools/test-tts-local.mjs"
+   ],
+   "expect": "agent gửi base_url"
+  },
+  {
+   "id": "T08",
+   "guard": "kênh không phải chủ máy không chi tiêu Gemini khi local hỏng",
+   "file": "server/voice.js",
+   "find": "if (ch !== 'owner') throw lerr ||",
+   "replace": "if (false) throw lerr ||",
+   "test": [
+    "node",
+    "tools/test-tts-local.mjs"
+   ],
+   "expect": "máy TTS chết + kênh link"
+  },
+  {
+   "id": "T09",
+   "guard": "phản hồi máy TTS ≤ 20 MB",
+   "file": "server/tts-local.js",
+   "find": "n += c.length; if (n > max) {",
+   "replace": "n += c.length; if (false) {",
+   "test": [
+    "node",
+    "tools/test-tts-local.mjs"
+   ],
+   "expect": "phản hồi > 20 MB"
+  },
+  {
+   "id": "T10",
+   "guard": "dock: render_voice chỉ ở khu Tạo tác",
+   "file": "server/mcp.js",
+   "find": "'lint_sound_track', 'render_voice'];",
+   "replace": "'lint_sound_track'];",
+   "test": [
+    "node",
+    "tools/test-tts-local.mjs"
+   ],
+   "expect": "render_voice qua link / OAuth mcp:write / dock Tạo tác"
+  }
+ ]
+}

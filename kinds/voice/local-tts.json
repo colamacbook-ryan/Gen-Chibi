@@ -1,0 +1,121 @@
+{
+ "_": "gen-chibi — giọng đọc TTS local (v0.25.1, INT-23): giá trị KHỞI TẠO cho từng ngôn ngữ + bản đồ vai → giọng. Máy chủ TTS kiểu OpenAI (VieNeu-TTS, Kokoro-FastAPI — Apache-2.0, chủ máy tự cài; gen-chibi không mang theo mã / model của chúng). base_url = tên container trong mạng Docker gen-chibi_default (docker network connect gen-chibi_default <tên>); native_url = khi cài thẳng không Docker. Đo trên máy Ryan 2026-10-25: VieNeu 25 giọng qua /v1/voices, 48 kHz; Kokoro /v1/audio/voices, 24 kHz. voice \"\" = giọng ĐẦU TIÊN máy TTS liệt kê (quét lúc chạy, STD-10). Tên giọng ở đây là DỰ KIẾN: giọng không có trên máy TTS (đối chiếu danh sách quét lúc chạy) thì rơi về giọng mặc định của ngôn ngữ + ghi cảnh báo, không lỗi. Chủ máy đổi địa chỉ / model / giọng mặc định ở Studio › Cài đặt AI. rev: tăng khi đổi bản đồ (clip local lưu đệm theo rev). © 2026 Gen Labs — All rights reserved.",
+ "rev": 1,
+ "defaults": {
+  "vi": {
+   "base_url": "http://vieneu-tts-api-cpu:8000",
+   "native_url": "http://127.0.0.1:8001",
+   "model": "vieneu",
+   "voice": ""
+  },
+  "en": {
+   "base_url": "http://vieneu-tts-api-cpu:8000",
+   "native_url": "http://127.0.0.1:8001",
+   "model": "vieneu",
+   "voice": ""
+  },
+  "zh": {
+   "base_url": "http://kokoro:8880",
+   "native_url": "http://127.0.0.1:8880",
+   "model": "kokoro",
+   "voice": "zf_xiaobei"
+  }
+ },
+ "voices": {
+  "vi": {
+   "bac": {
+    "m": [
+     "Hải Đăng",
+     "Quang Sơn",
+     "Binh",
+     "Tuyen"
+    ],
+    "f": [
+     "Mai Anh",
+     "Thùy Dung",
+     "Ngoc",
+     "Ly"
+    ]
+   },
+   "trung": {
+    "m": [
+     "Hue_Nam"
+    ],
+    "f": [
+     "Hue_Nu"
+    ]
+   },
+   "nam": {
+    "m": [
+     "Vinh",
+     "Nguyen",
+     "Son"
+    ],
+    "f": [
+     "Ngọc Trân",
+     "Doan",
+     "DiemMy"
+    ]
+   }
+  },
+  "en": {
+   "us": {
+    "m": [
+     "am_michael",
+     "am_adam",
+     "am_fenrir",
+     "am_puck"
+    ],
+    "f": [
+     "af_heart",
+     "af_bella",
+     "af_nicole",
+     "af_sarah"
+    ]
+   },
+   "uk": {
+    "m": [
+     "bm_george",
+     "bm_lewis",
+     "bm_fable"
+    ],
+    "f": [
+     "bf_emma",
+     "bf_isabella"
+    ]
+   }
+  },
+  "zh": {
+   "*": {
+    "m": [
+     "zm_yunxi",
+     "zm_yunjian",
+     "zm_yunyang",
+     "zm_yunxia"
+    ],
+    "f": [
+     "zf_xiaobei",
+     "zf_xiaoni",
+     "zf_xiaoxiao",
+     "zf_xiaoyi"
+    ]
+   }
+  }
+ },
+ "roles": {
+  "zh": {
+   "be-trai": [
+    "zf_xiaoyi"
+   ],
+   "be-gai": [
+    "zf_xiaoyi"
+   ],
+   "ong-lao": [
+    "zm_yunjian"
+   ],
+   "ke-chuyen": [
+    "zm_yunyang"
+   ]
+  }
+ }
+}

@@ -1653,7 +1653,11 @@ if (want('voice')) {
     dailyCap: 200, bad: [], missing: [], capHit: false, minute: null, designBudget: Infinity, designCap: false, designDelay: 0, designLive: 0, designPeak: 0 };
   const tomorrow = () => { const d = new Date(); d.setHours(24, 0, 0, 0); return d.toISOString(); };   // 00:00 ngày mai giờ máy (retryAt của 429 do trần ngày)
   const cfgOf = () => ({ enabled: M.hasKey && !M.off, off: M.off, model: 'gemini-3.8-flash-tts', hasKey: M.hasKey, keySource: M.hasKey ? M.keySource : '', blocked: M.fresh >= M.budget ? [{ model: 'gemini-3.8-flash-tts', until: M.retryAt }] : [],
-    today: M.today, cached: M.ids.size, keyUrl: 'https://aistudio.google.com/apikey', roles: GV.roleList(), langs: GV.langList(), designs: M.designs, dailyCap: M.dailyCap, bad: M.bad });
+    today: M.today, cached: M.ids.size, keyUrl: 'https://aistudio.google.com/apikey', roles: GV.roleList(), langs: GV.langList(), designs: M.designs, dailyCap: M.dailyCap, bad: M.bad,
+    // v0.25.1 TTS local: máy TTS "không phản hồi" (alive false) → AiVoice.ready() vẫn chỉ theo key Google ở mọi ca cũ của bộ test này
+    local: { cap: 500, chanCaps: { owner: 0, oauth: 200, ui: 200, link: 100 }, today: { all: 3, owner: 1, oauth: 0, ui: 2, link: 0 }, langs: M.local } });
+  M.local = [['vi', 'http://host.docker.internal:8000', 'vieneu', ''], ['en', 'http://host.docker.internal:8000', 'vieneu', ''], ['zh', 'http://host.docker.internal:8880', 'kokoro', 'zf_xiaobei'], ['yue', '', '', '']]
+    .map(([lang, base_url, model, voice]) => ({ lang, provider: base_url ? 'local' : 'gemini', enabled: !!base_url, source: base_url ? 'default' : 'none', base_url, model, voice, alive: base_url ? false : null, voices: null, voiceIds: [], error: base_url ? 'ECONNREFUSED' : '', checkedAt: null, warn: '' }));
   const castOf = (lang, accent, actors) => {
     const taken = {}, out = {};
     actors.forEach(a => {
@@ -1681,6 +1685,7 @@ if (want('voice')) {
       if (body.clearKey) { M.hasKey = false; M.keySource = ''; }
       if (typeof body.dailyCap === 'number') M.dailyCap = body.dailyCap;
       if (body.clearBad === true) M.bad = [];
+      if (body.local) { const x = M.local.find(l => l.lang === body.local.lang); if (!/^http:\/\/(127\.0\.0\.1|host\.docker\.internal)(:\d+)?$/.test(body.local.base_url || '')) return json(400, { error: 'Máy TTS phải ở trên máy này hoặc mạng riêng' }); Object.assign(x, { base_url: body.local.base_url, model: body.local.model, voice: body.local.voice, enabled: body.local.enabled, source: 'owner' }); }
       return json(200, cfgOf());
     }
     if (p === '/cast' && m === 'POST') { M.casts.push(body); return json(200, Object.assign({ cast: castOf(body.lang, body.accent, body.actors || []) }, body.work && M.missing.length ? { missing: M.missing } : {})); }
@@ -1798,8 +1803,22 @@ if (want('voice')) {
     if ((await q.content()).indexOf(M.good) >= 0) throw new Error('key lộ ra DOM');
 
     // ---- 2) Cài đặt AI chỉ còn CÀI ĐẶT (CNS-106): không bảng "Bộ giọng vai", không nút Thiết kế giọng — chỉ có liên kết sang Thư viện › Giọng ----
-    if (await q.$('#voice-panel table') || await q.$('#voice-panel button[aria-label^="Thiết kế giọng"]') || await q.$('#voice-panel button:text-is("Thiết kế giọng")') || await q.$$eval('#voice-panel h3', es => es.some(e => /Bộ giọng vai/.test(e.textContent)))) throw new Error('Cài đặt AI không được còn bảng "Bộ giọng vai" / nút Thiết kế giọng (nơi duy nhất là Thư viện › Giọng)');
+    if (await q.$('#voice-panel .panel:first-child table') || await q.$('#voice-panel button[aria-label^="Thiết kế giọng"]') || await q.$('#voice-panel button:text-is("Thiết kế giọng")') || await q.$$eval('#voice-panel h3', es => es.some(e => /Bộ giọng vai/.test(e.textContent)))) throw new Error('Cài đặt AI không được còn bảng "Bộ giọng vai" / nút Thiết kế giọng (nơi duy nhất là Thư viện › Giọng)');
     if (!/Xem bộ giọng vai → Thư viện › Giọng/.test(await q.textContent('#voiceToLib'))) throw new Error('thiếu liên kết "Xem bộ giọng vai → Thư viện › Giọng"');
+    // ---- 2-local) v0.25.1 Giọng đọc local: bảng 4 ngôn ngữ (trạng thái / địa chỉ / model / giọng / số giọng), dùng hôm nay / trần; Lưu gửi PUT { local }; địa chỉ ngoài → lỗi tại chỗ
+    { await q.waitForSelector('#voice-local table.grid tbody tr', { timeout: 5000 });
+      const rows = await q.$$eval('#voice-local table.grid tbody tr', es => es.map(e => e.textContent));
+      const lt = await q.textContent('#voice-local');
+      if (rows.length !== 4 || !/0\/3 ngôn ngữ sống/.test(lt) || !/không phản hồi/.test(rows[0]) || !/Google/.test(rows[3]) || !/hôm nay 3\/500 câu/.test(lt) || !/link 0\/100/.test(lt)) throw new Error('bảng giọng đọc local thiếu: ' + lt.slice(0, 300));
+      const vi = '#voice-local table.grid tbody tr:first-child';
+      await q.fill(vi + ' input[type="text"]', 'http://8.8.8.8:8000'); await q.click(vi + ' button:text-is("Lưu")');
+      await q.waitForFunction(() => /mạng riêng/.test(document.querySelector('#voice-local').textContent), null, { timeout: 5000 });
+      await q.fill(vi + ' input[type="text"]', 'http://127.0.0.1:8000'); await q.click(vi + ' button:text-is("Lưu")');
+      await poll(async () => M.local[0].base_url === 'http://127.0.0.1:8000' && M.local[0].source === 'owner', 'PUT api/voice { local: vi }', 5000);
+      const lp = M.puts.filter(x => x.local).pop();
+      if (!lp || lp.local.lang !== 'vi' || lp.local.model !== 'vieneu' || lp.local.enabled !== true) throw new Error('Lưu gửi sai: ' + JSON.stringify(lp));
+      await shot(q, 'panel-giong-local', '#voice-local');
+      console.log('  ✓ Cài đặt AI › Giọng đọc local (v0.25.1): 4 ngôn ngữ · trạng thái / địa chỉ / model / giọng · hôm nay / trần theo kênh · địa chỉ ngoài → lỗi tại chỗ · Lưu gửi PUT { local }'); }
     await shot(q, 'panel-giong-ai', '#voice-panel'); await shot(q, 'cai-dat-giong');
 
     // ---- 2a) Thư viện › Giọng = nơi DUY NHẤT của bộ giọng vai: đủ 22 vai, vai trẻ em không thiết kế được (các điều kiện của bảng cũ ở Cài đặt AI, nay kiểm ở đây) ----

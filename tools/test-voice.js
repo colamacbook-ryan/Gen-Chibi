@@ -191,6 +191,7 @@ const rejectAll = (fn, msg) => fn().then(() => no(true, msg + ': phải lỗi'),
   let p4 = [], lib4 = withWav(FX('voices-vi-VN'), Buffer.alloc(0));
   const h4 = { get: async u => /\/voices\?/.test(u) ? lib4 : MODELS, post: async (u, b) => { c4.push({ u, b }); const p = p4.shift(); if (p) return p; return /\/voices$/.test(u) ? designed('voice_abc123xyz') : /\/interactions$/.test(u) ? okI(V.wavOf(pcm(24000), 24000)) : okG(pcm(24000), 'audio/L16;codec=pcm;rate=24000'); } };
   const s4 = mem(); s4.set('voice.gemini', 'k4'); const x = new V.Voice({ dataDir: d4, secrets: s4, http: h4 });
+  for (const l of Object.keys(V.GV.LANGS)) x.setConfig({ local: { lang: l, enabled: false } });   // v0.25.1: phần này kiểm luật GEMINI — TTS local tắt (kiểm riêng ở tools/test-tts-local.mjs)
   // CNS-084: 429 THẬT của Interactions (không RetryInfo, "Please retry in 18h57m29s") → khoá ~18h57m, báo đúng giờ (trước đây: 1 phút)
   p4 = [FX('interactions-429'), FX('interactions-429')];
   e = await rejectAll(() => x.line({ text: 'Câu hết lượt', voice: 'vi-vn-tutor-7', role: 'vo-tuong' }), '429 thật');   // giọng thư viện: chỉ model 3.8 đọc được

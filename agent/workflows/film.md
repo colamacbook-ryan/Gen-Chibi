@@ -26,12 +26,13 @@
    Give each character a voice role when saving it: `voice: { "role": "<id>" }` from `get_catalog` › `voiceRoles`
    (be-trai, be-gai, ong-lao, ba-lao, vo-tuong, quan-su, vua-chua, phan-dien…; without it the role is guessed from role / persona / name).
    `render_voice` with `{ "text", "character": "<key>", "work": "<work id>", "state", "bubble" }` (always pass `work`: the
-   cast is pinned per work, so you get the same voice the Studio and the exported film use) returns the line read by a
+   cast is pinned per work, so you get the same voice the Studio and the exported film use) returns the line read by the
+   owner's FREE LOCAL TTS when one is set up for the language (`provider: "local"`; any write connection, daily line cap) or else by a
    Google AI voice (JSON with `clip`; add `"include_audio": true` for the WAV) — the app picks the voice: designed voice of that role → Google voice library
    (right language, gender, age) → prebuilt voice. `design_voice` with `{ "role", "lang", "accent" }` creates a better voice
    for an adult role (elders, generals, regional accents; costs one Google call; child roles are refused by Google policy).
    It only works when the owner pasted a Google AI Studio key (Studio › System › AI settings › AI voice; Vietnamese UI: Cài đặt AI › Giọng AI). Spending is owner-only: through a
-   shared MCP link `render_voice` only returns lines the owner already voiced and `design_voice` is `FORBIDDEN`. The free tier
+   shared MCP link / OAuth `mcp:write` `render_voice` uses only the local TTS or returns lines the owner already voiced, and `design_voice` is `FORBIDDEN`. The free tier
    allows 10 lines per day per model and the owner sets a daily cap — on `UNAVAILABLE` stop and tell the owner (`retryAt`), do not loop. Lines already read are cached (no quota used).
 
 ## Existing works and loose scripts

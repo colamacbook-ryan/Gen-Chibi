@@ -8,6 +8,22 @@
 - The CLI runs on the host (never in the app container) inside a **bubblewrap sandbox** (no host files, no D-Bus, network only through an allowlist proxy), with its **own HOME** and a per-turn MCP token. A CLI only runs once its lock is **verified with system evidence**: a sandbox self-test plus a canary on a fake local API (the CLI must refuse shell / file / web tools itself, and planted CLAUDE.md / AGENTS.md / memory must never reach the model). Every turn is watched; a violation stops it and marks the CLI *failed* until you enable it again on the host.
 - Host limits (900 s per turn, 100 turns per hour, one at a time) — the Studio can only lower them. Cancel a CLI turn from the Studio; optional fallback to your API key when the CLI fails before writing anything.
 
+## v0.25.1 — Free voices from a TTS engine on your own machine
+Ryan: "thế có thể dùng tạm giọng tts từ máy local mà" *(we can use a TTS voice from the local machine for now)*.
+
+### New
+- **Local TTS voices, free, before Google.** Point each language at an OpenAI-style TTS server on your machine — defaults: VieNeu-TTS for Vietnamese / English (`http://vieneu-tts-api-cpu:8000`, model `vieneu`) and Kokoro-FastAPI for Mandarin (`http://kokoro:8880`, voice `zf_xiaobei`), both reached by container name on the `gen-chibi_default` Docker network; Cantonese stays on Google. On a weak CPU each line takes tens of seconds (VieNeu ~16 s for 2.7 s of audio): lines are read one at a time per server, a line may take up to 120 s plus 1.5 s per character, more than 4 waiting lines → "busy" right away, and every line is cached so it is never read twice. Order for every line: a clip already made → local TTS (if set up and answering) → Google Gemini (owner only, with a key) → the browser voice. Clips go through the same clean-up and cache as Google clips, so film export and the "AI voice x/y" count include them.
+- **Studio › System › AI settings › Local voices**: per language — on / off, address, model, default voice (from the list the server reports at run time), status (up / not answering, number of voices), lines used today against the caps, and a Check again button.
+- **Every agent channel may use it**: the owner, OAuth `mcp:write`, a keyed MCP link and the Studio AI assistant (`render_voice` in the Create area). Daily caps on new lines: 500 per machine (adjustable), 200 for OAuth `mcp:write`, 200 for the Studio assistant, 100 for a keyed link. Google voices keep the old rule: owner only. `start_here` reports which languages have a local voice, and a new golden rule tells agents to use it and never loop.
+- Voices follow the character's role (accent × gender for Vietnamese); a voice the server does not have falls back to the language's default with a warning, never an error.
+
+### Security
+- The TTS address is set by the owner only (Studio / the owner's API); agents get FORBIDDEN if they send an address, provider or model. Only `http(s)` to this machine, `host.docker.internal`, a private IP or a Docker container name is accepted, and the resolved address is checked again when connecting. No proxy, no redirects, a per-line time limit (120 s + 1.5 s per character, at most 8 minutes), replies over 20 MB are dropped, and audio must be a real RIFF / WAVE 16-bit PCM file.
+- If a TTS container falls off the Docker network (the network is recreated), Studio shows "cannot reach the voice server" with the fix: `docker network connect gen-chibi_default <container>`.
+
+### Tests
+- The video-export smoothness test now explains main-thread stalls with Long Animation Frames: stalls in Studio code keep the hard 100 ms budget, while browser-internal stalls (GC, raster, image decode) are reported against a 250 ms ceiling.
+
 ## v0.25.0 — The Live stage sits on top of the AI assistant
 Ryan: "cái sân khấu live phải luôn hiển thị trên đầu khung chatroom của assistant thì mới hợp lý" *(the Live stage should always show at the top of the assistant chat)*.
 

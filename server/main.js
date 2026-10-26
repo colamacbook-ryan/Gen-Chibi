@@ -650,16 +650,20 @@ async function route(req, res) {
   }
   if (p === '/api/ai/bench' && m === 'GET') return send(res, 200, ai.bench());
   // ---- giọng AI (Google Gemini TTS): bật / key / model quét lúc chạy; đọc một câu → clip WAV lưu đệm theo nội dung
-  if (p === '/api/voice' && m === 'GET') return send(res, 200, voice.publicConfig());
+  // GET quét máy TTS local của các ngôn ngữ đang bật (nhớ kết quả: sống 5 phút, chết 30 giây; nối hỏng là thôi ngay) → Studio biết local sống / chết
+  if (p === '/api/voice' && m === 'GET') return send(res, 200, await voice.localCheckAll(false));
   if (p === '/api/voice' && m === 'PUT') {
     const b = await body(req);
     // dán key → kiểm ngay (lệnh liệt kê model, miễn phí) rồi tự bật; sai key thì giữ key cũ, báo rõ
     if (typeof b.apiKey === 'string' && b.apiKey.trim()) { try { return send(res, 200, await voice.connect(b.apiKey)); } catch (e) { return fail(res, e.code >= 400 && e.code < 600 ? e.code : 502, e.message); } }
-    return send(res, 200, voice.setConfig(b));
+    // TTS local: địa chỉ máy TTS CHỈ đặt được ở đây (đường /api chỉ chủ máy mở được) — agent / MCP không có đường đặt (chống SSRF); sai → 400, không ghi gì
+    try { voice.setConfig(b); } catch (e) { return fail(res, e.code >= 400 && e.code < 500 ? e.code : 400, e.message); }
+    return send(res, 200, b.local ? await voice.localCheckAll(true) : voice.publicConfig());
   }
+  if (p === '/api/voice/local/check' && m === 'POST') return send(res, 200, await voice.localCheckAll(true));   // nút "Kiểm tra lại" ở Cài đặt AI › Giọng đọc local
   if (p === '/api/voice/models' && m === 'GET') { try { return send(res, 200, await voice.models()); } catch (e) { return fail(res, e.code || 502, e.message); } }
   // lỗi giọng AI → mã HTTP + retryAt (hết lượt) cho Studio
-  const vfail = (e) => send(res, e.code >= 400 && e.code < 600 ? e.code : 502, Object.assign({ error: e.message }, e.retryAt ? { retryAt: e.retryAt } : {}, e.cap ? { cap: true } : {}));   // cap: chạm trần ngày của chủ máy (khác Google hết lượt)
+  const vfail = (e) => send(res, e.code >= 400 && e.code < 600 ? e.code : 502, Object.assign({ error: e.message }, e.retryAt ? { retryAt: e.retryAt } : {}, e.cap ? { cap: true } : {}, e.local ? { local: true } : {}));   // cap: chạm trần ngày của chủ máy (khác Google hết lượt) · local: lỗi / trần của TTS local
   if (p === '/api/voice/line' && m === 'POST') {
     const b = await body(req);
     // voice = giọng đã cast cho cả tác phẩm (api/voice/cast); không gửi thì chọn theo nhân vật (character) / vai (role) + ngôn ngữ.
@@ -668,7 +672,7 @@ async function route(req, res) {
     if (b.character && !A) return fail(res, 404, 'không có nhân vật ' + String(b.character).slice(0, 60));
     try {
       const v = b.voice && b.voice !== 'auto' && !A && b.role ? { voice: b.voice, role: b.role, lang: b.lang, accent: b.accent } : await voice.pick({ asset: A, voice: b.voice, role: b.role, lang: b.lang, accent: b.accent });
-      const r = await voice.line({ text: b.text, voice: v.voice, role: v.role, state: b.state, bubble: b.bubble, dry: b.dry === true });
+      const r = await voice.line({ text: b.text, voice: v.voice, role: v.role, state: b.state, bubble: b.bubble, dry: b.dry === true, lang: v.lang, accent: v.accent, chan: 'owner' });
       return send(res, 200, Object.assign(r, { voice: v.voice, role: v.role, url: 'api/voice/clip/' + r.id + '.wav' }));
     } catch (e) { return e.code === 404 && b.dry === true ? send(res, 200, { found: false }) : vfail(e); }   // dry: câu chưa đọc không phải lỗi (khỏi rác console khi xuất phim)
   }
