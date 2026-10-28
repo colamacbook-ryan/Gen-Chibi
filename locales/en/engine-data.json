@@ -975,5 +975,6 @@
  "Phòng chuẩn (trong nhà)": "Standard room (indoor)",
  "Bối cảnh khung trong nhà: tường, cửa sổ, nền có lưới tỉ lệ, khối bàn và khối hộp.": "Indoor frame scene: walls, a window, ground with a scale grid, a table block and a box block.",
  "Bối cảnh khung: trời, chân trời, khối nhà, nền có lưới tỉ lệ, tiền cảnh, các khối đạo cụ. Hai vạch đứt là hàng sau và hàng trước.": "Frame scene: sky, horizon, house blocks, ground with a scale grid, foreground, prop blocks. The two dashed lines are the back row and the front row.",
- "Trait · {label}": "Trait · {label}"
+ "Trait · {label}": "Trait · {label}",
+ "Chân dài": "Long legs"
 }

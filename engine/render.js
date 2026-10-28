@@ -19,7 +19,8 @@
 
   function imageURL(asset, state, opts) {
     opts = opts || {};
-    var key = assetSig(asset) + '|' + state + '|' + (opts.crop ? 'c' : 'f') + (opts.noShadow ? 'n' : '') + (opts.director ? JSON.stringify(opts.director) : '');
+    var key = assetSig(asset) + '|' + state + '|' + (opts.crop ? 'c' : 'f') + (opts.noShadow ? 'n' : '') + (opts.director ? JSON.stringify(opts.director) : '') +
+      (opts.outline ? '|o' + JSON.stringify(opts.outline) : '') + (opts.ink ? '|i' + opts.ink : '');   // v0.26: viền nướng + màu INK là một phần của ảnh
     var hit = cache.get(key);
     if (hit) { cache.delete(key); cache.set(key, hit); return hit; }
     var svg = GC.svgString(asset, state, opts);
@@ -109,6 +110,17 @@
       sh.setAttribute('class', 'gc-shadow');
       svg.appendChild(sh);
     }
+    // viền nướng (v0.26, E6): hai tầng hình bóng — dải dán trắng rồi viền ink — mỗi tầng một nhóm theo khớp, nằm DƯỚI mọi lớp thật; transform cập nhật cùng khung xương
+    var olW = null, olK = null;
+    if (opts.outline) {
+      olW = {}; olK = {};
+      [[olW, 'gc-ol-w'], [olK, 'gc-ol-k']].forEach(function (x) {
+        var box = document.createElementNS(NS, 'g');
+        box.setAttribute('class', x[1]);
+        GC.JOINT_IDS.forEach(function (j) { var g = document.createElementNS(NS, 'g'); g.setAttribute('data-j', j); box.appendChild(g); x[0][j] = g; });
+        svg.appendChild(box);
+      });
+    }
     var groups = {};
     GC.RIG.layers.forEach(function (l) {
       var g = document.createElementNS(NS, 'g');
@@ -118,13 +130,15 @@
     });
     el.appendChild(svg);
     var inst = {
-      tier: 'full', el: svg, asset: asset, state: null, resolved: null, groups: groups, shadow: svg.querySelector('.gc-shadow'),
-      cur: GC.neutralPose(), t0: performance.now(), popAt: 0, visible: true,
+      tier: 'full', el: svg, asset: asset, state: null, resolved: null, groups: groups, olW: olW, olK: olK, shadow: svg.querySelector('.gc-shadow'),
+      opts: opts, cur: GC.neutralPose(), t0: performance.now(), popAt: 0, visible: true,
       still: !!opts.still || reduce,
       setState: function (s, director) {
-        var c = GC.compose(this.asset, s, director);
+        var c = GC.compose(this.asset, s, director, opts);
         for (var l in this.groups) this.groups[l].innerHTML = c.layers[l] || '';
         this.resolvedLayers = c.layers;
+        this.ink = c.ink;
+        if (this.olW) outlineFill(this, c.layers, GC.poseAt(this.asset, c.state, 0, true));
         if (this.state !== null && (this.state !== s || director)) { this.t0 = performance.now(); this.popAt = this.t0; }
         this.state = s; this.resolved = c.state; this.director = director;
         var _l = GC.i18n ? GC.i18n.label : function (x) { return x; };   // nhãn theo ngôn ngữ giao diện (ADR 0007); tên do người dùng đặt giữ nguyên
@@ -162,21 +176,34 @@
     return inst;
   }
 
+  // viền nướng của tầng full: dựng lại hình bóng khi NỘI DUNG đổi (đổi trạng thái / biên đạo đổi lớp); mỗi khung chỉ đổi transform của các nhóm khớp
+  function outlineFill(inst, layers, pose) {
+    var ol = GC.normalizeOutline(inst.opts && inst.opts.outline, inst.ink);
+    var parts = ol ? GC.outlineParts(layers, ol, GC.jointScales(pose)) : {};
+    GC.JOINT_IDS.forEach(function (j) {
+      inst.olW[j].innerHTML = parts[j] ? parts[j][0] : '';
+      inst.olK[j].innerHTML = parts[j] ? parts[j][1] : '';
+    });
+  }
+  function outlineMove(inst, chain) {
+    GC.JOINT_IDS.forEach(function (j) { inst.olW[j].setAttribute('transform', chain[j]); inst.olK[j].setAttribute('transform', chain[j]); });
+  }
   function apply(inst, now, k) {
     var D = inst.driver && inst.driver(now);
     if (D) {
-      if (D.sig !== inst.dsig) { inst.dsig = D.sig; for (var gl in inst.groups) inst.groups[gl].innerHTML = D.layers[gl] || ''; }
+      if (D.sig !== inst.dsig) { inst.dsig = D.sig; for (var gl in inst.groups) inst.groups[gl].innerHTML = D.layers[gl] || ''; if (inst.olW) outlineFill(inst, D.layers, D.pose); }
       var kb = D.blend == null ? 1 : D.blend;   // < 1: hoà dần từ dáng đang có (lúc vừa vào biên đạo)
       GC.JOINT_IDS.forEach(function (j) { GC.CHANNELS.forEach(function (ch) { inst.cur[j][ch] += (D.pose[j][ch] - inst.cur[j][ch]) * kb; }); });
       var ch2 = GC.chainTransforms(inst.cur);
       GC.RIG.layers.forEach(function (l) { inst.groups[l[0]].setAttribute('transform', ch2[l[1]]); });
+      if (inst.olW) outlineMove(inst, ch2);
       if (inst.shadow) {
         var kk = Math.max(0.3, 1 - Math.max(0, -inst.cur.root.y) / 110);
         inst.shadow.setAttribute('cx', '100'); inst.shadow.setAttribute('rx', (46 * kk).toFixed(1)); inst.shadow.setAttribute('ry', (7 * kk).toFixed(1)); inst.shadow.style.opacity = kk.toFixed(2);
       }
       return;
     }
-    if (inst.dsig) { inst.dsig = null; for (var l0 in inst.groups) inst.groups[l0].innerHTML = (inst.resolvedLayers || {})[l0] || ''; }   // vừa thôi điều khiển: trả lớp vẽ của trạng thái
+    if (inst.dsig) { inst.dsig = null; for (var l0 in inst.groups) inst.groups[l0].innerHTML = (inst.resolvedLayers || {})[l0] || ''; if (inst.olW) outlineFill(inst, inst.resolvedLayers || {}, inst.cur); }   // vừa thôi điều khiển: trả lớp vẽ của trạng thái
     var t = (now - inst.t0) / 1000;
     var target = GC.poseAt(inst.asset, inst.resolved, t, inst.still);
     // lấy đà + nảy khi đổi trạng thái (squash & stretch)
@@ -196,6 +223,7 @@
     });
     var chain = GC.chainTransforms(inst.cur);
     GC.RIG.layers.forEach(function (l) { inst.groups[l[0]].setAttribute('transform', chain[l[1]]); });
+    if (inst.olW) outlineMove(inst, chain);
     if (inst.shadow) {
       var sd = GC.shadowOf(inst.resolved, inst.cur);
       inst.shadow.setAttribute('cx', sd.cx.toFixed(1)); inst.shadow.setAttribute('rx', sd.rx.toFixed(1)); inst.shadow.setAttribute('ry', sd.ry.toFixed(1));
