@@ -742,6 +742,9 @@ home_check tools/test-motion.js
 echo "2j2) luật id của bộ khung (v0.23 B10, CNS-065): đòn khung không trùng activity / state · id cũ là bí danh ẩn (render / validate y hệt) · tác phẩm / kịch bản lưu chuyển sang id mới · gói không lấy được id cũ lẫn id khung"
 node tools/test-frame-ids.mjs || exit 1
 home_check tools/test-frame-ids.mjs
+echo "2q) golden render (v0.26): ma-nơ-canh + nhân vật Tam Quốc dựng giống hệt từng byte (SHA-256 của svgString) — engine mới không được đổi hình của nhân vật cũ"
+node tools/test-golden.mjs || exit 1
+home_check tools/test-golden.mjs
 echo "2k) giọng AI (Google Gemini TTS) với mạng giả: lưu đệm, đổi model khi hết hạn mức, thẻ cảm xúc, không lộ key"
 node tools/test-voice.js || exit 1
 home_check tools/test-voice.js
