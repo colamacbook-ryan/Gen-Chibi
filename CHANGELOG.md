@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.26.0 — Engine for bold-mascot looks: data packs, baked outlines, long legs
+For Gen-Studio 0.2.0 (art direction Y, "bold mascot"). Every existing character renders byte-for-byte as before (new golden test).
+
+### New
+- **Data packs** (`gen-chibi.pack/1`, `GenChibi.registerDataPack`): a whole look as pure JSON — colour tokens, head shapes, eye styles with their own poses (E9), brow / mouth styles, parts, props, effects, motions, activities and characters. SVG goes through the existing safe filter; numbers use a small safe expression language (no `eval`); a bad pack registers nothing. See `docs/PACK-DATA.md`.
+- **Mood variants** in data parts (`variants.mood`, E4): hair tufts, ears or props change with the face on screen (`replace` or `append`).
+- **Props attached to hands** (`anchor` on `handL` / `handR`, E8): a pointing finger or held item follows the arm instead of stage coordinates.
+- **Baked outline + sticker** (`opts.outline = { color, width, sticker }`, E6): drawn into paths under the real layers, no SVG `filter`. In a 4-character animated test the frame time dropped from 25.7 ms to 16.7 ms against the old `feMorphology` filter; the SVG is about 2.8x larger, so the first decode of a static image is slower (cached after that).
+- **`rig.size` down to 0.6** (E2) and **`rig.legs`** long legs 1–1.8 (E3); **INK colour** per character (`palette.ink`) or per render (`opts.ink`); cel-shading tokens `hairShade hairLight rim robeShade robeLight trimShade glow` in the default palette, derived from the base colours unless set (E7).
+- `checkDataPart` accepts `slot: "head"` with `shape`, and `variants`.
+
+### Tests
+- `tools/test-golden.mjs` (136 renders hashed), `tools/test-pack-data.mjs` (E2–E9, safety, rollback).
+
 ## v0.25.1 — Free voices from a TTS engine on your own machine
 Ryan: "thế có thể dùng tạm giọng tts từ máy local mà" *(we can use a TTS voice from the local machine for now)*.
 

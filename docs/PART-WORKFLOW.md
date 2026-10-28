@@ -112,3 +112,7 @@ A new asset type is not "a new drawing kit" but **a new way of combining on the 
 
 One-way flow: **Workshop → Library → Create → finished product**. The frame is never modified: saving onto the frame (even from the Studio) makes a copy under "Mine".
 Assets created by users or AI are saved as **drafts in the project** and usable right away — there is no approval step (Ryan, 2026-10-18). When the AI director is missing a character / scene, it goes into the Workshop and creates it (in the right project, through the gates).
+
+## 7. Whole packs as JSON (v0.26)
+
+Head shapes, eye / brow / mouth styles, props attached to hand joints, effects, motions, activities, mood variants and the characters themselves can all be written as **data** and registered with `GenChibi.registerDataPack` — see [PACK-DATA.md](PACK-DATA.md).
