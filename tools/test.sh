@@ -745,6 +745,9 @@ home_check tools/test-frame-ids.mjs
 echo "2q) golden render (v0.26): ma-nơ-canh + nhân vật Tam Quốc dựng giống hệt từng byte (SHA-256 của svgString) — engine mới không được đổi hình của nhân vật cũ"
 node tools/test-golden.mjs || exit 1
 home_check tools/test-golden.mjs
+echo "2q2) engine v0.26 (E2–E9): rig.size 0,6 · chân dài · INK cấu hình · token cel dẫn xuất · gói dữ liệu thuần JSON (đầu, kiểu mắt + dáng riêng, mày, miệng, đạo cụ gắn khớp tay, fx, động tác, hoạt động) · biến thể tâm trạng · viền nướng vào path · an toàn + hoàn tác"
+node tools/test-pack-data.mjs || exit 1
+home_check tools/test-pack-data.mjs
 echo "2k) giọng AI (Google Gemini TTS) với mạng giả: lưu đệm, đổi model khi hết hạn mức, thẻ cảm xúc, không lộ key"
 node tools/test-voice.js || exit 1
 home_check tools/test-voice.js
